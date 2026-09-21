@@ -1,4 +1,4 @@
-import { anthropicMediaContent, openAiMediaContent, type LopuMedia } from './chatMedia';
+import { anthropicMediaContent, isLopuImage, openAiMediaContent, type LopuMedia } from './chatMedia';
 import { recordErrorLog } from '../errors/errorLogs';
 import { lopuResultLinks } from '~/utils/lopuLinks';
 import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
@@ -73,7 +73,8 @@ import { friendlyVaultProviderError, resolveVaultTurnModel, vaultProviderTranspo
 //
 // Providers (set either or both env keys):
 //   - Claude OAuth credentials → Claude with native tools
-//   - OPENAI_API_KEY → ChatGPT-compatible chat.completions; LOPU_OPENAI_TOOLS
+//   - OPENAI_API_KEY → Responses for native GPT-5.6 Sol tools, otherwise
+//     ChatGPT-compatible chat.completions; LOPU_OPENAI_TOOLS
 //     = native (function calling) | text (fenced ```tt-tool blocks parsed
 //     out of the streamed text, for endpoints without function calling such
 //     as the local Codex proxy)
@@ -524,7 +525,156 @@ async function* completionAsChunks(completion: unknown, normalize: (content: str
   };
 }
 
+// GPT-5.6 Sol rejects native tools plus reasoning on Chat Completions. Keep
+// this explicit: compatible custom/text endpoints and other model contracts
+// retain their existing transport. Never repair it by dropping chosen effort.
+async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuProviderStream {
+  const { client, choice, signal } = options;
+  const input: OpenAI.Responses.ResponseInput = [
+    ...options.history.map((turn) => ({ role: turn.role, content: turn.text })),
+    {
+      role: 'user',
+      content: [
+        { type: 'input_text', text: options.text || 'Please inspect the attached files.' },
+        ...(options.media || []).map((file): OpenAI.Responses.ResponseInputContent => isLopuImage(file.contentType)
+          ? { type: 'input_image', image_url: `data:${file.contentType};base64,${file.data}`, detail: 'auto' }
+          : { type: 'input_file', filename: file.name, file_data: `data:application/pdf;base64,${file.data}` })
+      ]
+    }
+  ];
+  const tools: OpenAI.Responses.FunctionTool[] = openAiToolDefinitions().map((tool) => ({
+    type: 'function', ...tool.function, strict: false
+  }));
+  const effort = toOpenAiReasoningEffort(choice.effort);
+  const usage: LopuChatUsage = { inputTokens: 0, outputTokens: 0 };
+  const acceptedCallIds = new Set<string>();
+  const acceptedItemIds = new Set<string>();
+  let finalHop = false;
+
+  for (;;) {
+    signal?.throwIfAborted();
+    const stream = await client.responses.create({
+      model: choice.model,
+      instructions: options.systemText,
+      input,
+      tools,
+      tool_choice: finalHop ? 'none' : 'auto',
+      max_output_tokens: LOPU_CHAT_MAX_OUTPUT_TOKENS,
+      stream: true,
+      // Do not create stored provider conversations. Carry encrypted reasoning
+      // between tool hops in this generator only, never in client events/history.
+      store: false,
+      include: ['reasoning.encrypted_content'],
+      ...(effort ? { reasoning: { effort } } : {}),
+      ...(choice.speed === 'fast' ? { service_tier: 'priority' as const } : {})
+    }, signal ? { signal } : {});
+    let completed: OpenAI.Responses.Response | null = null;
+    const started = new Map<string, { id: string; name: string }>();
+    const startedCallItems = new Map<string, string>();
+    for await (const event of stream) {
+      signal?.throwIfAborted();
+      if (event.type === 'response.output_text.delta' && event.delta) {
+        yield { type: 'text', text: event.delta };
+      } else if (event.type === 'response.refusal.delta' && event.delta) {
+        yield { type: 'text', text: event.delta };
+      } else if (event.type === 'response.output_item.added' && event.item.type === 'function_call') {
+        const call = event.item;
+        const prior = call.id ? started.get(call.id) : undefined;
+        if (!call.id || !call.call_id || !call.name ||
+          acceptedCallIds.has(call.call_id) || acceptedItemIds.has(call.id) ||
+          (prior && (prior.id !== call.call_id || prior.name !== call.name)) ||
+          (startedCallItems.has(call.call_id) && startedCallItems.get(call.call_id) !== call.id)) {
+          throw new Error('The selected model returned inconsistent tool call identifiers.');
+        }
+        if (!prior) {
+          started.set(call.id, { id: call.call_id, name: call.name });
+          startedCallItems.set(call.call_id, call.id);
+          yield { type: 'tool_use_start', id: call.call_id, name: call.name };
+        }
+      } else if (event.type === 'response.function_call_arguments.delta') {
+        const call = started.get(event.item_id);
+        if (call && event.delta) yield { type: 'tool_input_delta', ...call, partial: event.delta };
+      } else if (event.type === 'response.completed' || event.type === 'response.incomplete') {
+        completed = event.response;
+      } else if (event.type === 'response.failed' || event.type === 'error') {
+        throw new Error('The selected model could not finish its response.');
+      }
+    }
+    signal?.throwIfAborted();
+    // A dropped stream or unfinished function argument is never permission to
+    // execute a tool or to repeat a possibly accepted provider request.
+    if (!completed || !['completed', 'incomplete'].includes(completed.status)) {
+      throw new Error('The selected model response ended before completion.');
+    }
+    if (completed.usage) {
+      const cached = Math.max(0, Number(completed.usage.input_tokens_details?.cached_tokens) || 0);
+      usage.inputTokens += Math.max(0, (Number(completed.usage.input_tokens) || 0) - cached);
+      usage.outputTokens += Number(completed.usage.output_tokens) || 0;
+      addCacheTokens(usage, cached, undefined);
+    }
+    if (completed.status === 'incomplete') {
+      if (completed.incomplete_details?.reason !== 'max_output_tokens') {
+        throw new Error('The selected model could not finish its response.');
+      }
+      yield { type: 'hop_end', stopReason: 'max_tokens', usage: { ...usage } };
+      return;
+    }
+    const calls = completed.output.filter((item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === 'function_call');
+    if (calls.some((call) => !call.id || !call.call_id || !call.name || (call.status && call.status !== 'completed'))) {
+      throw new Error('The selected model returned an unfinished tool call.');
+    }
+    if (new Set(calls.map((call) => call.call_id)).size !== calls.length || new Set(calls.map((call) => call.id)).size !== calls.length) {
+      throw new Error('The selected model returned duplicate tool call identifiers.');
+    }
+    for (const call of calls) {
+      const prior = started.get(call.id);
+      if ((prior && (prior.id !== call.call_id || prior.name !== call.name)) ||
+        (startedCallItems.has(call.call_id) && startedCallItems.get(call.call_id) !== call.id) ||
+        acceptedCallIds.has(call.call_id) || acceptedItemIds.has(call.id)) {
+        throw new Error('The selected model returned inconsistent tool call identifiers.');
+      }
+    }
+    const parsedCalls = calls.map((call) => {
+      // Validate the entire batch before handing any call to the executor.
+      // Keep provider argument fragments out of persisted error diagnostics.
+      try {
+        return { call, input: JSON.parse(call.arguments) as unknown };
+      } catch {
+        throw new Error('The selected model returned invalid tool arguments.');
+      }
+    });
+    for (const item of completed.output) {
+      // Only custom function tools are offered. Refuse an unexpected hosted
+      // tool surface rather than silently discarding its continuation state.
+      if (item.type !== 'message' && item.type !== 'reasoning' && item.type !== 'function_call') {
+        throw new Error('The selected model returned an unsupported response item.');
+      }
+      input.push(item);
+    }
+    if (calls.length && !finalHop) {
+      for (const { call, input: toolInput } of parsedCalls) {
+        acceptedCallIds.add(call.call_id);
+        acceptedItemIds.add(call.id);
+        if (!call.id || !started.has(call.id)) yield { type: 'tool_use_start', id: call.call_id, name: call.name };
+        yield { type: 'tool_use', id: call.call_id, name: call.name, input: toolInput };
+      }
+      const feed = yield { type: 'hop_end', stopReason: 'tool_use', usage: { ...usage } };
+      if (!feed) return;
+      for (const result of feed.results) input.push({ type: 'function_call_output', call_id: result.id, output: toolResultText(result) });
+      for (const note of feed.notes ?? []) input.push({ role: 'user', content: note });
+      finalHop = feed.finalHop;
+      continue;
+    }
+    const next = yield { type: 'hop_end', stopReason: 'end_turn', usage: { ...usage } };
+    if (!next?.notes?.length) return;
+    for (const note of next.notes) input.push({ role: 'user', content: note });
+  }
+}
+
 async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStream {
+  if (options.toolMode === 'native' && options.choice.model === 'gpt-5.6-sol') {
+    return yield* openAiResponsesProvider(options);
+  }
   const { client, choice, signal, toolMode } = options;
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: options.systemText },
@@ -1162,7 +1312,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   const state = newTurnState();
   yield meta('fallback', null);
   if (explicit) {
-    state.text = 'The selected model could not complete this reply. Check its credential and available usage in Admin → System, then retry. Your model selection has been kept.';
+    state.text = 'The selected model could not complete this reply. The provider could not process the request; please try again. Your model selection has been kept.';
     yield { type: 'delta', text: state.text };
   } else state.text = yield* streamFallbackReply('failed', deps.fallbackPaceMs);
   state.stopReason = 'fallback';

@@ -351,3 +351,9 @@ test('long turns retain all receipts across bounded message segments and model h
  assert.equal(lopuChatStateOf({ archived: true }).archived, true);
  for (const archived of [undefined, false, 'true', 1, null]) assert.equal(lopuChatStateOf({ archived }).archived, undefined);
  });
+
+test('saved recovery streak survives the public assistant metadata projection', () => {
+ const meta = publicLopuMessageMeta({role:'assistant',requestId:'saved',stopReason:'error',continuationSafe:true,recoveryFailures:5});
+ assert.equal(meta?.recoveryFailures,5);
+ assert.equal(publicLopuMessageMeta({role:'user',recoveryFailures:5})?.recoveryFailures,undefined);
+});

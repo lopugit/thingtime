@@ -1,6 +1,10 @@
+import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
+import { isFolderThing, folderThingMatch } from '../../../schemas/folderThing';
+import { postThingReferences, type PostThingReference } from '../../../components/Feed/postThingReferences';
 import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
 import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
 import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { serviceWorkspaceCanRead, workspaceRootFor } from '../serviceWorkspaces/access';
 import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -52,11 +56,15 @@ import {
   ACL_HIDDEN,
   ACL_INHERIT,
   ACL_OWNER,
+	ACL_EXTACCT_PREFIX,
+	ACL_EXT_SOURCED,
   ACL_USER_PREFIX,
   aclCapabilityFor,
 	APP_STORAGE_RESERVED_ID_PREFIX,
 	CASCADE_CHILD_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
+  DEVICE_CONTROL_THINGTIME,
+	EXTERNAL_RESERVED_ID_PREFIX,
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
@@ -302,12 +310,22 @@ export type FeedAuthor = {
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  // set ONLY for third-party authors of synced external posts — the honest
+  // discriminator consumers use instead of routing to a dead /profile/<handle>.
+  // It is the FLAG, not the url, that carries that meaning: a provider need
+  // not give us a link at all (the demo feed never does, and an RSS <item>
+  // with a <guid> but no <link> does not either), so keying "is this a
+  // Thingtime user?" off externalUrl alone silently falls back to the native
+  // profile route for exactly those authors.
+  external?: boolean;
+  externalUrl?: string | null;
 };
 
 // Comments share the post schema (rich comments are ["post","comment"]
 // things), so the payload carries the post vocabulary: body fields, reactions,
 // and a reply count. Legacy-era comments surface with the text-only defaults.
 export type PublicComment = {
+  linkedThings?: Array<PostThingReference & { thing: PublicThing | null }>;
   id: string;
   thingtime: string[];
   author: FeedAuthor | null;
@@ -338,7 +356,21 @@ export type PublicComment = {
   createdAt: string;
 };
 
+// Opt-in, bounded discussion reads never imply unloaded totals are zero.
+export type PublicCommentPageItem = Omit<PublicComment, 'reactionCounts' | 'viewerReactions' | 'votes' | 'commentCount' | 'comments' | 'authorFlair'> & {
+  audience?: ResolvedAudience;
+  comments: [];
+  repliesLoaded: false;
+  attachmentsTruncated?: true;
+};
+export type PublicDiscussion = Omit<PublicPost, 'reactionCounts' | 'viewerReactions' | 'votes' | 'commentCount' | 'commentCounts' | 'comments' | 'shareCount' | 'viewCount' | 'viewStats' | 'authorFlair' | 'subspace' | 'flair'> & {
+  comments: [];
+  repliesLoaded: false;
+  attachmentsTruncated?: true;
+};
+
 export type PublicPost = {
+  linkedThings?: Array<PostThingReference & { thing: PublicThing | null }>;
   audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
@@ -435,6 +467,8 @@ export type PublicSubspaceMod = {
 
 // Generic projection for non-post things (and the unified read endpoint).
 export type PublicThing = {
+  // First-party target comment lists include authorized, bounded media metadata.
+  attachments?: AttachmentPublicMetadata[];
   audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
@@ -473,6 +507,15 @@ export type Viewer = {
   username?: string | null;
   pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' | 'hidden' } | null;
   friendIds?: ReadonlySet<string>;
+  // external-account shareIds the viewer holds connections links to — serves
+  // LEGACY tt:extacct/ audiences; loaded LAZILY (ensureExtAccountIds) only
+  // when a doc under evaluation actually carries the prefix
+  extAccountIds?: ReadonlySet<string>;
+  // external-post shareIds this viewer sources — serves the constant
+  // tt:extsourced audience. Grows only with the posts actually evaluated in
+  // this request (ensureExtSourced), and the feed primes it in bulk from the
+  // membership page it already read.
+  extSourcedPostIds?: ReadonlySet<string>;
   // the viewer's subspace memberships (api/utils/subspaces/gate.ts), loaded
   // beside friendIds so private-subspace posts resolve for real members
   subspaceRoles?: ViewerSubspaceRoles;
@@ -525,6 +568,141 @@ export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
     viewer.groupIds ? Promise.resolve(viewer.groupIds) : groupIdsOf(viewer.id)
   ]);
   return { ...viewer, friendIds, subspaceRoles, groupIds };
+};
+
+// In-flight load of a viewer's linked external-account ids, keyed weakly on
+// the viewer object. The memo has to be the PROMISE, not the finished field:
+// the callers below run concurrently (getThing's chain Promise.all, listThings'
+// page map), so a second caller routinely arrives while the first is still
+// awaiting its query and would otherwise start a duplicate one.
+const extAccountIdsLoad = new WeakMap<object, Promise<void>>();
+
+// Lazily attach the viewer's linked external-account ids the first time a doc
+// carrying a tt:extacct/ audience is evaluated. Deliberately MUTATES the
+// enriched viewer object (single monotone assignment): page loops pass the
+// same viewer reference per doc, so the home-DB links query runs at most once
+// per request path instead of once per external post on the page.
+const ensureExtAccountIds = async (viewer: Viewer): Promise<Viewer> => {
+  if (!viewer?.id || viewer.extAccountIds) return viewer;
+  let load = extAccountIdsLoad.get(viewer);
+  if (!load) {
+    load = (async () => {
+      const home = await getHomeThingsCollection();
+      const links = await home
+        .find({ thingtime: 'external-account-link', ownerId: viewer.id }, { projection: { 'crystal.accountId': 1 } })
+        .toArray();
+      (viewer as { extAccountIds?: ReadonlySet<string> }).extAccountIds = new Set(
+        links.map((link: any) => String(link?.crystal?.accountId || '')).filter(Boolean)
+      );
+    })();
+    extAccountIdsLoad.set(viewer, load);
+  }
+  // A failed load must not be cached: the next evaluation on this request
+  // should get a real attempt rather than replaying a stale rejection.
+  try {
+    await load;
+  } catch (err) {
+    extAccountIdsLoad.delete(viewer);
+    throw err;
+  }
+  return viewer;
+};
+
+const hasExtacctAudience = (doc: ThingDoc): boolean => {
+  const acl = Array.isArray(doc.acl) ? doc.acl : [];
+  return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXTACCT_PREFIX));
+};
+
+const hasExtSourcedAudience = (doc: ThingDoc): boolean => {
+  const acl = Array.isArray(doc.acl) ? doc.acl : [];
+  return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXT_SOURCED));
+};
+
+// Prime the viewer's sourced-post set for a known batch of external post ids.
+// The connections feed already paged the membership docs to build its page, so
+// it seeds the answer for free; other paths (permalinks, comment chains) come
+// through ensureExtSourced below with a single id.
+export const primeExtSourcedPostIds = (viewer: Viewer, postIds: Iterable<string>): void => {
+  if (!viewer?.id) return;
+  const known = new Set(viewer.extSourcedPostIds || []);
+  for (const id of postIds) if (id) known.add(id);
+  (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
+  const asked = extSourcedResolution.get(viewer) || new Map<string, Promise<void>>();
+  const settled = Promise.resolve();
+  for (const id of postIds) if (id) asked.set(id, settled);
+  extSourcedResolution.set(viewer, asked);
+};
+
+// Which post ids we have already resolved for this viewer, held as the
+// RESOLUTION PROMISE rather than a bare "already asked" marker — distinct from
+// the positive set, so a miss is cached too and never re-queried. Keyed weakly
+// on the viewer object, which read paths already thread per request.
+//
+// The promise is load-bearing. ensureExtSourced publishes its memo entry before
+// the membership query it stands for has come back, and its callers run
+// CONCURRENTLY over entries that converge on the same post: getThing checks a
+// comment chain with one Promise.all, and every entry in that chain inherits
+// its acl from the same external post. Those entries sit at different inherit
+// depths, so their chain walks finish at different times — the shallow one can
+// reach the memo, claim the post, and still be awaiting Mongo when a deeper one
+// arrives. A bare marker sends that second caller straight on to canView with
+// the answer not yet loaded, and an unloaded set denies (deliberately, like
+// friendIds), so the viewer's own comment thread on a personal external post
+// intermittently loses its parent/root. Awaiting the same promise makes the
+// memo mean "resolved" instead of "claimed", and collapses the duplicate
+// queries the memo existed to avoid in the first place.
+const extSourcedResolution = new WeakMap<object, Map<string, Promise<void>>>();
+
+// Lazily resolve whether the viewer sources ONE external post, memoised per
+// request path (the same viewer object is threaded through page loops). One
+// indexed existence check per previously-unseen post; the feed path primes
+// instead, so this only ever fires for single-doc reads.
+const ensureExtSourced = async (viewer: Viewer, postId: string): Promise<Viewer> => {
+  if (!viewer?.id || !postId) return viewer;
+  let asked = extSourcedResolution.get(viewer);
+  if (!asked) {
+    asked = new Map<string, Promise<void>>();
+    extSourcedResolution.set(viewer, asked);
+  }
+  let resolving = asked.get(postId);
+  if (!resolving) {
+    resolving = (async () => {
+      await ensureExtAccountIds(viewer);
+      const accountIds = [...(viewer.extAccountIds || [])];
+      if (accountIds.length) {
+        const things = await getThingsCollection();
+        const hit = await things.findOne(
+          // (targetId, thingtime) is already this exact post's membership rows —
+          // one per sourcing account — so parentId is a residual over a handful of
+          // docs on the existing index, not a new one.
+          { thingtime: 'external-post-source', targetId: postId, parentId: { $in: accountIds } } as any,
+          { projection: { _id: 1 } }
+        );
+        if (hit) {
+          const known = new Set(viewer.extSourcedPostIds || []);
+          known.add(postId);
+          (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
+          return;
+        }
+      }
+      // resolved-and-absent still needs an initialized set, or aclAllows can't
+      // tell "loaded, not a member" from "never loaded"
+      if (!viewer.extSourcedPostIds) {
+        (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = new Set<string>();
+      }
+    })();
+    asked.set(postId, resolving);
+  }
+  // A failed probe must not be cached as a resolved answer — drop it so this
+  // request can try again rather than treating a transient DB fault as "not a
+  // member" for the rest of the page.
+  try {
+    await resolving;
+  } catch (err) {
+    asked.delete(postId);
+    throw err;
+  }
+  return viewer;
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
@@ -909,6 +1087,28 @@ const thingtimeOf = (doc: ThingDoc): string[] => {
 
 export const isPostThing = (doc: ThingDoc): boolean => thingtimeOf(doc).includes('post');
 
+// Only http(s) links may be projected out of a synced external post's envelope
+// — those values become real <a href>/<img src> targets in the feed, and the
+// provider behind them can be any RSS feed or fediverse instance a user named.
+// Kept local (not imported from api/utils/connections) so the read path never
+// depends on the connections module.
+const safeExternalLink = (value: unknown): string | null => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? value.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+// Post-like for rendering/interaction surfaces (permalink projection, share
+// targets): native posts PLUS synced third-party posts. Deliberately NOT used
+// by feed queries — those match kinds explicitly, so external posts never
+// enter first-party feeds. New "acts like a post" consumers use this, not a
+// per-callsite or-branch.
+export const isPostLikeThing = (doc: ThingDoc): boolean => isPostThing(doc) || thingtimeOf(doc).includes('external-post');
+
 const crystalOf = (doc: ThingDoc): Record<string, any> => {
   if (isV2(doc)) return doc.crystal || {};
   return { type: doc.type, text: doc.text || '', images: doc.images || [], listing: doc.listing || null };
@@ -947,8 +1147,12 @@ export const postThingMatch = async () => await legacyThingReadsRequired() ? { $
 // posts have no thingtime array, so a 'post' filter must also match kind:'post'.
 // Shared by listThings and things/search so the two never disagree on which
 // legacy posts exist (the single source the era semantics live behind).
-export const thingtimeInClause = async (thingtime: string[]) =>
-  thingtime.includes('post') && await legacyThingReadsRequired() ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] } : { thingtime: { $in: thingtime } };
+export const thingtimeInClause = async (thingtime: string[]) => {
+  const alternatives: Record<string, unknown>[] = [{ thingtime: { $in: thingtime } }];
+  if (thingtime.includes('post') && await legacyThingReadsRequired()) alternatives.push({ kind: 'post' });
+  if (thingtime.includes('folder')) alternatives.push(folderThingMatch());
+  return alternatives.length > 1 ? { $or: alternatives } : alternatives[0];
+};
 
 export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
@@ -1048,12 +1252,14 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) || trimmed.startsWith(ERROR_LOG_ID_PREFIX) ||
 		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(EXTERNAL_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SEEDED_DATA_SUITE_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SEEDED_DATA_APP_RESERVED_ID_PREFIX)
   ) {
 		// Deterministic migration, schema, tier-revision, subscription assignment,
-		// service-quota, app-storage, and seeded suite/app data destinations must
-		// never be squatted or impersonated by generic user-created Things.
+		// service-quota, app-storage, external-connection, and seeded suite/app
+		// data destinations must never be squatted or impersonated by generic
+		// user-created Things.
     return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;
@@ -1096,7 +1302,7 @@ const resolveFolderAssignment = async (
   const folder = (await things.findOne({
     shareId: rawFolderId.trim(),
     ownerId,
-    thingtime: 'folder'
+    ...folderThingMatch()
   } as any)) as any as ThingDoc | null;
   if (!folder) return fail(404, 'Folder not found');
   return { ok: true, folderId: folder.shareId };
@@ -1115,7 +1321,7 @@ const folderAncestryContains = async (ownerId: string, folderId: string, needleI
     if (visited.has(current)) return true; // existing cycle — fail closed
     visited.add(current);
     const doc = (await things.findOne(
-      { shareId: current, ownerId, thingtime: 'folder' } as any,
+      { shareId: current, ownerId, ...folderThingMatch() } as any,
       { projection: { folderId: 1 } } as any
     )) as any as ThingDoc | null;
     if (!doc) return false; // chain ends at root (or a since-deleted parent)
@@ -2318,6 +2524,23 @@ export type PostProjectionOptions = {
   commentSort?: CommentSort | null;
 };
 
+// One Viewer per reference page preserves request-local membership caches.
+// Every source still passes its own live ACL check; the ids only grant the same
+// canonical unlisted links explicitly attached by the author.
+export const resolvePostLinkedThings = async (
+  ids: readonly string[], viewer: Viewer,
+  lookup = batchedThingLookup(), authorize = canViewInherited
+): Promise<ThingDoc[]> => {
+  const uniqueIds = [...new Set(ids)];
+  const linkedViewer: NonNullable<Viewer> = { id: '', ...viewer, linkThingIds: new Set([...(viewer?.linkThingIds || []), ...uniqueIds]) };
+  const docs = await Promise.all(uniqueIds.map(async id => {
+    const doc = await lookup(id);
+    if (!doc || isProtectedThingtime(thingtimeOf(doc)) || thingtimeOf(doc).some(kind => MESSENGER_THINGTIME.includes(kind as any))) return null;
+    return await authorize(doc, linkedViewer, lookup) ? doc : null;
+  }));
+  return docs.filter((doc): doc is ThingDoc => !!doc);
+};
+
 export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer, options: PostProjectionOptions = {}): Promise<PublicPost[]> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const viewerId = viewer?.id || null;
@@ -2348,6 +2571,12 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     // anonymous viewers skip the read entirely and get no viewerSaved field
     viewer?.id ? savedTargetIds(viewer, allDocs.map((doc) => doc.shareId)) : Promise.resolve(new Set<string>())
   ]);
+  const linkedIds = [...new Set([...allDocs, ...Array.from(related.commentsByTarget.values()).flatMap(entries => entries.flatMap(entry => entry.doc ? [entry.doc] : []))].flatMap(doc => postThingReferences(crystalOf(doc).thing).map(item => item.id)))];
+  const linkedDocs = await resolvePostLinkedThings(linkedIds, viewer);
+  const linkedPublic = await toPublicThings(linkedDocs, viewer);
+  const linkedById = new Map(linkedPublic.map(thing => [thing.id, thing]));
+
+
 	const attachmentTargetIds = [
 		...allDocs.map((doc) => doc.shareId),
 		...Array.from(related.commentsByTarget.values()).flatMap((entries) => entries.flatMap((entry) => (entry.doc ? [entry.doc.shareId] : [])))
@@ -2457,6 +2686,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
         commentCrystal.thing && typeof commentCrystal.thing === 'object' && !Array.isArray(commentCrystal.thing)
           ? (commentCrystal.thing as Record<string, any>)
           : null,
+      ...(postThingReferences(commentCrystal.thing).length ? { linkedThings: postThingReferences(commentCrystal.thing).map(reference => ({ ...reference, thing: linkedById.get(reference.id) || null })) } : {}),
       tags: comment.doc?.tags || [],
       reactionCounts: reactionCountsOf(commentReactions),
       viewerReactions: viewerReactionsOf(commentReactions, viewerId),
@@ -2471,6 +2701,30 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 
   const project = (doc: ThingDoc, withShare: boolean): PublicPost => {
     const crystal = crystalOf(doc);
+    // external posts (api/utils/connections) are owned by 'system' — no
+    // Thingtime profile resolves — so their third-party author surfaces from
+    // the synced extended.external envelope on every read path (feed,
+    // permalink, thread root)
+    const external = thingtimeOf(doc).includes('external-post') ? (doc.extended as any)?.external : null;
+    const externalAuthor: FeedAuthor | null = external?.author
+      ? {
+          id: `ext:${external.provider || 'unknown'}:${external.author.handle || external.author.name || 'unknown'}`,
+          username: String(external.author.handle || external.author.name || external.providerName || 'external'),
+          displayName: external.author.name || external.author.handle || external.providerName || null,
+          temporary: false,
+          // Not a Thingtime account — say so explicitly rather than leaving
+          // consumers to infer it from externalUrl, which a provider may not
+          // give us (see FeedAuthor).
+          external: true,
+          // Scheme-checked on the way out as well as on the way in: the
+          // connections sync guards these (connections.ts), but this
+          // projection is what PostCard turns into <a href>/<img src>, so a
+          // row synced before that guard existed must not be able to render a
+          // `javascript:` target. Belt and braces on the boundary that matters.
+          avatarUrl: safeExternalLink(external.author.avatarUrl),
+          externalUrl: safeExternalLink(external.author.url) || safeExternalLink(external.url)
+        }
+      : null;
     const allComments = mergedCommentsOf(doc, related);
     const rootSubspaceId = rootSubspaceOf(doc);
     const comments = pageOf(allComments, RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId, rootSubspaceId));
@@ -2523,7 +2777,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
       type: (crystal.type as PostType) || 'text',
-      author: profiles.get(doc.ownerId) || null,
+      author: externalAuthor || profiles.get(doc.ownerId) || null,
       audience: audiences.get(doc.shareId),
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
@@ -2542,6 +2796,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 			mediaLayout: mediaLayoutOf(crystal),
       listing: redacted ? null : (crystal.listing as MarketplaceListing) || null,
       thing: !redacted && crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
+      ...(postThingReferences(crystal.thing).length ? { linkedThings: postThingReferences(crystal.thing).map(reference => ({ ...reference, thing: redacted ? null : linkedById.get(reference.id) || null })) } : {}),
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
@@ -2591,6 +2846,78 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   };
 
   return docs.map((doc) => project(doc, true));
+};
+
+// A bounded direct-body projection for discussion pages. Callers must first
+// authorize every source. No originals, siblings, replies or engagement rows
+// are read here; those require their own authorized, cursor-bounded request.
+const toPublicDiscussionPage = async (
+  docs: ThingDoc[], viewer: Viewer, projected: PublicThing[]
+): Promise<PublicDiscussion[]> => {
+  if (!docs.length) return [];
+  const byId = new Map(projected.map(thing => [thing.id, thing]));
+  const redacted = (doc: ThingDoc) => doc.subspaceMod?.status === 'removed' && doc.ownerId !== viewer?.id &&
+    !canModerateSubspace(viewer?.subspaceRoles?.get(subspaceIdOfDoc(doc) || '') || null);
+  const readable = docs.filter(doc => !redacted(doc));
+  const references = [...new Set(readable.flatMap(doc => postThingReferences(crystalOf(doc).thing).map(item => item.id)))];
+  const linkedDocs = (await resolvePostLinkedThings(references, viewer)).filter(doc => !doc.appId && !redacted(doc));
+  const linked = new Map((await toPublicThings(linkedDocs, viewer)).map(thing => [thing.id, thing]));
+  const attachments = new Map<string, AttachmentPublicMetadata[]>();
+  if (readable.length) {
+    const things = await getThingsCollection();
+    // $topN retains only 26 documents per source even for legacy roots with
+    // unlimited media. Only canonical inherited, same-owner attachments can
+    // ride the source's authority. Explicit/private ACLs and app rows do not.
+    const groups = await things.aggregate([
+      { $match: withMatch({ thingtime: 'attachment', attachmentState: 'ready', acl: [ACL_INHERIT], appId: { $in: [null] } },
+        { $or: readable.map(doc => ({ targetId: doc.shareId, ownerId: doc.ownerId,
+          attachmentPurpose: thingtimeOf(doc).includes('comment') ? 'comment' : { $in: ['post', null] } })) },
+        visibleRelatedModerationClause(viewer?.id || null)) },
+      { $set: { discussionAttachmentOrder: { $cond: [
+        { $and: [{ $isNumber: '$attachmentSortIndex' }, { $gte: ['$attachmentSortIndex', 0] }, { $lte: ['$attachmentSortIndex', Number.MAX_SAFE_INTEGER] }] },
+        '$attachmentSortIndex', Number.MAX_SAFE_INTEGER] } } },
+      { $group: { _id: '$targetId', docs: { $topN: { n: 26, sortBy: { discussionAttachmentOrder: 1, createdAt: 1, shareId: 1 },
+        output: { shareId: '$shareId', ownerId: '$ownerId', targetId: '$targetId', attachmentSortIndex: '$attachmentSortIndex',
+          crystal: '$crystal', moderation: '$moderation', createdAt: '$createdAt' } } } } }
+    ] as any).toArray();
+    for (const group of groups) {
+      const media = orderAttachmentDocsByStoredSort(group.docs as any[]).flatMap(doc => {
+        const item = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, { ownerView: !!viewer?.id && doc.ownerId === viewer.id });
+        return item ? [item] : [];
+      });
+      attachments.set(group._id, media);
+    }
+  }
+  return docs.map(doc => {
+    const thing = byId.get(doc.shareId)!;
+    const crystal = crystalOf(doc);
+    const hidden = redacted(doc);
+    const media = attachments.get(doc.shareId) || [];
+    // The generic companion must not leak the removed body either.
+    const { comments: _comments, replies: _replies, reactions: _reactions, ...directCrystal } = thing.crystal;
+    thing.crystal = hidden ? { type: crystal.type || 'text' } : directCrystal;
+    if (hidden) { thing.extended = null; thing.geo = null; thing.tags = []; }
+    thing.attachments = media.slice(0, 25);
+    return {
+      id: doc.shareId, thingtime: thing.thingtime, type: (crystal.type as PostType) || 'text', author: thing.author,
+      audience: thing.audience, visibility: thing.visibility as PostVisibility, acl: thing.acl,
+      ...(thing.linkKey ? { linkKey: thing.linkKey } : {}),
+      text: hidden ? '' : String(crystal.text || ''),
+      richText: !hidden && crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText) ? crystal.richText as Record<string, any> : null,
+      images: hidden ? [] : (crystal.images as string[]) || [], attachments: thing.attachments,
+      ...(media.length > 25 ? { attachmentsTruncated: true as const } : {}),
+      mediaLayout: hidden ? null : mediaLayoutOf(crystal), listing: hidden ? null : (crystal.listing as MarketplaceListing) || null,
+      thing: !hidden && crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? crystal.thing as Record<string, any> : null,
+      ...(!hidden && postThingReferences(crystal.thing).length ? { linkedThings: postThingReferences(crystal.thing).map(ref => ({ ...ref, thing: linked.get(ref.id) || null })) } : {}),
+      tags: hidden ? [] : thing.tags, title: !hidden && typeof crystal.title === 'string' ? crystal.title : null,
+      subspaceMod: doc.subspaceMod?.status === 'removed' ? { status: 'removed' as const, removed: true,
+        reason: hidden ? null : doc.subspaceMod.reason || null, removedAt: doc.subspaceMod.removedAt ? new Date(doc.subspaceMod.removedAt).toISOString() : null,
+        pinned: false, locked: doc.subspaceMod.locked === true, nsfw: false, spoiler: false, viewerCanModerate: !hidden && doc.ownerId !== viewer?.id } : null,
+      comments: [] as [], repliesLoaded: false as const,
+      isShare: !!targetIdOf(doc) && thing.thingtime.includes('share'), shareOf: null,
+      extended: hidden ? null : thing.extended, geo: hidden ? null : thing.geo, createdAt: thing.createdAt
+    };
+  });
 };
 
 export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer, resolveAudience = false): Promise<PublicThing[]> => {
@@ -2657,7 +2984,12 @@ export const resolvePublicAudiences = async (
   return new Map(entries);
 };
 
+// Device delivery payloads have dedicated permission, redaction and result-TTL
+// gates. Generic Things access must never become an alternate raw-byte read.
+const isDeviceControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => (DEVICE_CONTROL_THINGTIME as readonly string[]).includes(kind));
+
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
+  if (isDeviceControlThing(doc)) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
@@ -2706,7 +3038,7 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
     const membership = subspaceId ? viewer?.subspaceRoles?.get(subspaceId) || null : null;
     if (!isActiveSubspaceMember(membership) && !canModerateSubspace(membership)) return false;
   }
-  return aclAllows(aclOf(doc), viewer, doc.ownerId);
+  return aclAllows(aclOf(doc), viewer, doc.ownerId, doc.shareId);
 };
 
 // ---------------------------------------------------------------------------
@@ -2733,6 +3065,7 @@ const customEngageBlocks = async (viewer: Viewer, doc: ThingDoc): Promise<boolea
     ? await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing)
     : doc;
   if (!terminal) return true; // broken chain fails closed
+  if (workspaceRootFor(terminal) && await serviceWorkspaceCanRead(terminal, viewer)) return false;
   if (!aclOf(terminal).includes(ACL_CUSTOM)) return false;
   const enriched = await withFriendIds(viewer);
   return customEngageBlocksAcl(enriched, aclOf(terminal), String(terminal.ownerId));
@@ -2755,6 +3088,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
+  if (isDeviceControlThing(doc)) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
 	// vanish for non-owners too
@@ -2769,15 +3103,26 @@ export const canViewInherited = async (
   let ancestorDenied = false;
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), async id => {
     const ancestor = await findByShareId(id);
-    if (ancestor && (attachmentIsBlocked(ancestor as any) ||
+    if (ancestor && (isDeviceControlThing(ancestor) || attachmentIsBlocked(ancestor as any) ||
       (attachmentModerationStatus(ancestor as any) === 'pending' &&
        thingtimeOf(ancestor).some(kind => TEXT_MODERATED_THINGTIMES.has(kind)) && ancestor.ownerId !== viewer?.id))) ancestorDenied = true;
     return ancestor;
   });
   if (ancestorDenied) return false;
   if (terminal) {
+    // tt:extsourced / legacy tt:extacct/ audiences (synced external posts and
+    // their comment chains) resolve live against the viewer's connections —
+    // loaded lazily here and memoised on the viewer object for the request path.
+    // This runs BEFORE the first canView so an unloaded set can never deny a
+    // legitimate external-source viewer, and the memo is in place for the
+    // found-post fallback below (withFoundPostGrant spreads the same viewer).
+    // It also has to precede the hidden-link viewer below, since withThingLink
+    // spreads `viewer` and would otherwise snapshot it before the memo lands.
+    if (hasExtSourcedAudience(terminal)) await ensureExtSourced(viewer, terminal.shareId);
+    if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
     const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
     if (canView(terminal, linkedViewer)) return true;
+    if (!patVisibilityBlocksAcl(viewer, aclOf(terminal)) && await serviceWorkspaceCanRead(terminal, viewer)) return true;
     if (isCustomMongoEndpointActive()) return false;
     return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
   }
@@ -3384,15 +3729,21 @@ export const listUserPosts = async (
 // /post/:id deep-link pages render as full cards; for them the thread context
 // comes along: parent = the thing commented on, root = the top of the thread
 // (each null when deleted or not visible to the viewer).
-export const getThing = async (
+type ThingRead<P> = { ok: true; thing: PublicThing; post: P | null; discussion: (PublicDiscussion & { sourceThingId: string }) | null; parent: PublicPost | null; root: PublicPost | null };
+export function getThing(viewer: string | Viewer, shareId: unknown, app: AppLens, options: PostProjectionOptions & { commentProjection: true }): Promise<Fail | ThingRead<PublicDiscussion>>;
+export function getThing(viewer: string | Viewer, shareId: unknown, app?: AppLens, options?: PostProjectionOptions & { commentProjection?: false }): Promise<Fail | ThingRead<PublicPost>>;
+export function getThing(viewer: string | Viewer, shareId: unknown, app: AppLens, options: PostProjectionOptions & { commentProjection?: boolean }): Promise<Fail | ThingRead<PublicPost | PublicDiscussion>>;
+export async function getThing(
   viewerInput: string | Viewer,
   shareId: unknown,
   app: AppLens = null,
-  options: PostProjectionOptions = {}
-): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
+  options: PostProjectionOptions & { commentProjection?: boolean } = {}
+): Promise<Fail | ThingRead<PublicPost | PublicDiscussion>> {
+  if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
-  if (!doc) return fail(404, 'Thing not found');
+  if (!doc || isDeviceControlThing(doc)) return fail(404, 'Thing not found');
+  if (options.commentProjection && doc.appId) return fail(404, 'Thing not found');
   if (!app) {
     const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
     viewer = withThingLink(viewer, terminal?.shareId || doc.shareId);
@@ -3409,7 +3760,7 @@ export const getThing = async (
   // GET /api/v1/things?target=… inside their namespace instead.
   if (app) {
     await appShapeProjections(app, [doc], [thing]);
-    return { ok: true, thing, post: null, parent: null, root: null };
+    return { ok: true, thing, post: null, discussion: null, parent: null, root: null };
   }
 
   const isComment = thingtimeOf(doc).includes('comment');
@@ -3418,7 +3769,21 @@ export const getThing = async (
 	// aggregates (those resolvers are target-generic), and the parent walk
 	// links the page back to the post the media is bound to.
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
-	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, { ...options, resolveAudience: true }))[0] : null;
+  const isPost = isPostLikeThing(doc) || isComment || isMediaAttachment;
+  if (options.commentProjection || !isPost) {
+    // Generic discussion is new in Things 1.27: keep its default read bounded
+    // too, so an outer Thing detail fetch cannot transmit hidden descendants.
+    if (isCustomMongoEndpointActive() || doc.appId) return { ok: true, thing, post: null, discussion: null, parent: null, root: null };
+    const projected = (await toPublicDiscussionPage([doc], viewer, [thing]))[0];
+    return { ok: true, thing, post: isPost ? projected : null,
+      discussion: isPost ? null : { ...projected, sourceThingId: doc.shareId }, parent: null, root: null };
+  }
+	const projected = (await toPublicPosts([doc], viewer, { ...options, resolveAudience: true }))[0];
+	// Synced external posts retain the same permalink shape as native posts.
+	const post = isPostLikeThing(doc) || isComment || isMediaAttachment ? projected : null;
+  // One stable discussion view per original Thing; no duplicate stored post,
+  // no writes on read, and all existing comments retain their target/ACL.
+  const discussion = null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -3455,10 +3820,11 @@ export const getThing = async (
       root = last ? byId.get(last.shareId) || null : null;
     }
   }
-  return { ok: true, thing, post, parent, root };
-};
+  return { ok: true, thing, post, discussion, parent, root };
+}
 
 export type ListThingsQuery = {
+  commentProjection?: boolean;
   thingtime?: string[];
   targetId?: string | null;
   // folder browse (own-things mode only): 'root' = things not filed anywhere,
@@ -3481,16 +3847,27 @@ export const listThings = async (
   query: ListThingsQuery,
   app: AppLens = null,
   context: { archiveOwnerId?: string } = {}
-): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
+): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null; comments?: PublicCommentPageItem[] }> => {
+  const cursorScope = { targetId: query.targetId || '', viewerId: asViewer(viewerInput)?.id || '', tokenId: asViewer(viewerInput)?.pat?.tokenId || '' };
+  const discussionCursor = query.commentProjection && query.cursor != null ? decodeDiscussionCursor(query.cursor, cursorScope) : null;
+  if (query.commentProjection) {
+    if (app || query.appId != null || isCustomMongoEndpointActive()) return fail(400, 'Discussion projection requires first-party home storage');
+    if (!query.targetId || query.folder || query.thingtime?.length !== 1 || query.thingtime[0] !== 'comment') return fail(400, 'Discussion projection requires target and thingtime=comment');
+    if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 20)) return fail(400, 'limit must be an integer between 1 and 20');
+    if (query.cursor != null && !discussionCursor) return fail(400, 'Invalid discussion cursor');
+    if (!discussionCursorConfigured()) return fail(503, 'Discussion pagination is unavailable');
+  }
   let viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
 
   let match: Record<string, any>;
+  let discussionTarget: ThingDoc | null = null;
   if (query.targetId) {
     if (query.folder) return fail(400, 'folder filtering applies to your own things, not a target listing');
     const target = await findViewableThingAs(query.targetId, viewer, app);
-    if (!target) return fail(404, 'Thing not found');
+    if (!target || (query.commentProjection && target.appId)) return fail(404, 'Thing not found');
+    if (query.commentProjection) discussionTarget = target;
     if (!app) {
       const terminal = await resolveInheritChain(target, d => aclOf(d).includes(ACL_INHERIT), findThing);
       viewer = withThingLink(viewer, terminal?.shareId || target.shareId);
@@ -3539,19 +3916,49 @@ export const listThings = async (
     if (fence) match = withMatch(match, fence);
   }
 
-  const parsed = parseChronoCursor(query.cursor);
+  match = withMatch(match, { thingtime: { $nin: [...DEVICE_CONTROL_THINGTIME] } });
+  if (query.commentProjection) match = withMatch(match, { appId: { $in: [null] }, thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] } });
+  const parsed = query.commentProjection ? discussionCursor : parseChronoCursor(query.cursor);
   const pageMatch = parsed ? withMatch(match, chronoCursorClause(parsed)) : match;
 
   const things = await getThingsCollection();
-  const docs = (await things
+  let docs = (await things
     .find(pageMatch as any)
     .sort({ createdAt: -1, shareId: 1 })
     .limit(limit + 1)
     .toArray()) as any as ThingDoc[];
 
+  if (discussionTarget?.comments?.length) {
+    // Legacy embedded comments have no independent ACL: their authorized
+    // parent is their audience. Merge the old bounded residue into the same
+    // stable cursor window without loading any descendants or migrating on read.
+    const legacySeen = new Set<string>();
+    const legacy = discussionTarget.comments.slice(0, MAX_COMMENTS_PER_POST).flatMap(entry => {
+      const createdAt = new Date(entry.createdAt), id = entry.id;
+      if (typeof id !== 'string' || !id || id.length > MAX_SHARE_ID_CHARS || /[$.\s\u0000-\u001f]/.test(id) || !Number.isFinite(+createdAt) || typeof entry.userId !== 'string' || !entry.userId) return [];
+      if (legacySeen.has(id)) return [];
+      legacySeen.add(id);
+      if (parsed && !(createdAt < parsed.createdAt || (+createdAt === +parsed.createdAt && id > parsed.id))) return [];
+      return [{ shareId: id, ownerId: entry.userId, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+        thingtime: ['comment'], targetId: discussionTarget!.shareId, acl: [ACL_INHERIT],
+        crystal: { text: String(entry.text || '') }, tags: [], createdAt, updatedAt: createdAt } as ThingDoc];
+    });
+    // A partially migrated standalone row is authoritative, even if private;
+    // never resurrect its public embedded predecessor just outside this page.
+    const legacyIds = legacy.map(doc => doc.shareId);
+    const existing = legacyIds.length ? await things.find({ shareId: { $in: legacyIds } } as any).project({ shareId: 1 }).toArray() : [];
+    const storedIds = new Set(existing.map(doc => doc.shareId));
+    docs = [...docs, ...legacy.filter(doc => !storedIds.has(doc.shareId))]
+      .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt) || (a.shareId < b.shareId ? -1 : a.shareId > b.shareId ? 1 : 0))
+      .slice(0, limit + 1);
+  }
+
   const page = docs.slice(0, limit);
   const last = page[page.length - 1];
-  const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
+  const nextCursor = docs.length > limit && last
+    ? query.commentProjection ? encodeDiscussionCursor({ createdAt: new Date(last.createdAt), id: last.shareId }, cursorScope)
+      : `${new Date(last.createdAt).getTime()}_${last.shareId}`
+    : null;
   // Per-doc audience check before projecting. Comments/reactions carry
   // ['tt:inherit'] and short-circuit to the already-viewable target, but a
   // thing attached to a target can carry its OWN acl (e.g. a private share:
@@ -3567,11 +3974,24 @@ export const listThings = async (
     const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
     visible = page.filter((_, index) => verdicts[index]);
   }
-  const projected = await toPublicThings(visible, viewer);
+  const projected = await toPublicThings(visible, viewer, query.commentProjection === true);
+  if (query.commentProjection) {
+    const comments = (await toPublicDiscussionPage(visible, viewer, projected)).map(post => ({ ...post, targetId: targetIdOf(visible.find(doc => doc.shareId === post.id)!) }));
+    return { ok: true, things: projected, nextCursor, comments };
+  }
+  if (query.targetId && !app && !isCustomMongoEndpointActive()) {
+    const comments = visible.filter(doc => thingtimeOf(doc).includes('comment'));
+    const media = await resolvePostAttachments(
+      comments.map(doc => doc.shareId),
+      new Map(comments.map(doc => [doc.shareId, { ownerId: doc.ownerId, purpose: 'comment' as const }])),
+      viewer.id
+    );
+    for (const thing of projected) if (thing.thingtime.includes('comment')) thing.attachments = media.get(thing.id) || [];
+  }
   for (const thing of projected) if (thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive') {
     // Library entries are private root summaries, never history or stored
     // authority. Only the dedicated snapshot route returns archived people.
-    thing.crystal = { name: typeof thing.crystal.name === 'string' ? thing.crystal.name : 'Chat archive' };
+    thing.crystal = { name: typeof thing.crystal.name === 'string' ? thing.crystal.name : 'Chat archive', ...(typeof thing.crystal.title === 'string' ? { title: thing.crystal.title } : {}) };
     thing.acl = ['tt:user']; thing.visibility = 'private'; thing.extended = null; thing.tags = [];
     delete thing.linkKey; delete thing.tokenAcl;
   }
@@ -4164,6 +4584,8 @@ export const addComment = async (
     createdAt: new Date(doc.createdAt).toISOString()
   };
 
+  if (!app && postThingReferences(crystal.thing).length) comment.linkedThings = (await toPublicPosts([doc], viewer))[0].linkedThings;
+
   if (app) {
     // self-author shaped by the acting grant; count fenced to the namespace
     await appShapeProjections(app, [doc], [comment]);
@@ -4194,7 +4616,9 @@ export const sharePost = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const viewerId = viewer.id;
   const original = await findViewableThing(shareId, viewer);
-  if (!original || !isPostThing(original)) return fail(404, 'Post not found');
+  // external posts share like posts (the tt:all-only gate below still keeps
+  // personal external posts unshareable)
+  if (!original || !isPostLikeThing(original)) return fail(404, 'Post not found');
   if (patSandboxBlocks(viewer, original)) return patSandboxFail();
   // custom audiences: sharing is amplification — comment capability required
   if (await customEngageBlocks(viewer, original)) return customEngageFail();
@@ -4725,7 +5149,7 @@ export const deleteThing = async (
 				// deleting a folder never deletes what's inside it — contents (and
 				// subfolders) re-parent to the deleted folder's own parent, so the
 				// worst a folder delete can do to your things is flatten them one level
-				if (thingtimeOf(rootResult.doc).includes('folder')) {
+				if (isFolderThing(rootResult.doc)) {
 					await things.updateMany(
 						{ ownerId: viewer.id, folderId: rootResult.doc.shareId } as any,
 						{ $set: { folderId: rootResult.doc.folderId || null, updatedAt: new Date() } } as any
@@ -4984,7 +5408,7 @@ export const updateThing = async (
     if (isFail(assignment)) return assignment;
     if (
       assignment.folderId &&
-      thingtime.includes('folder') &&
+      isFolderThing(doc) &&
       (await folderAncestryContains(viewer.id, assignment.folderId, doc.shareId))
     ) {
       return fail(400, 'A folder cannot be moved into itself or its own subfolders');
@@ -5297,7 +5721,7 @@ const collectFolderTree = async (
     for (const child of children) {
       if (docs.length >= MAX_FOLDER_TREE_THINGS) return { docs, truncated: true };
       docs.push(child);
-      if (thingtimeOf(child).includes('folder') && !visitedFolders.has(child.shareId)) {
+      if (isFolderThing(child) && !visitedFolders.has(child.shareId)) {
         visitedFolders.add(child.shareId);
         nextFrontier.push(child.shareId);
       }
@@ -5414,7 +5838,7 @@ export const bulkThings = async (
       continue;
     }
     const thingtime = thingtimeOf(doc);
-    const isFolderDoc = thingtime.includes('folder');
+    const isFolderDoc = isFolderThing(doc);
 
     if (op === 'share') {
       const result = await updateThing(viewer, id, sharePatch);
@@ -5490,7 +5914,7 @@ export const bulkThings = async (
         skipped += 1;
       } else {
         copied += 1;
-        if (childKinds.includes('folder')) idMap.set(child.shareId, childCopy.doc.shareId);
+        if (isFolderThing(child)) idMap.set(child.shareId, childCopy.doc.shareId);
       }
     }
     results.push({ id, ok: true, newId: rootCopy.doc.shareId, copied, skipped });

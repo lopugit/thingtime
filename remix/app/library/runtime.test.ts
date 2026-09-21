@@ -45,7 +45,7 @@ test('sandbox input never breaks out of a script and pure tasks run in terminabl
 test('manifest registers the origin-scoped library route and rejects incompatible versions', () => {
 	const manifest = thingtimeCapabilityManifest('https://example.test/path');
 	assert.equal(manifest.origin, 'https://example.test');
-	assert.equal(manifest.features['api.library-request'].version, '1.0.0');
+	assert.equal(manifest.features['api.library-request'].version, '1.2.0');
 	assert.ok(manifest.operations.some((x) => x.path === '/api/v1/library/request' && x.methods.includes('POST')));
 	for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 	for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);

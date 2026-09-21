@@ -1,3 +1,4 @@
+import { initialPageAudience } from './seamlessMode';
 import React from 'react';
 import {
 	Box,
@@ -27,6 +28,7 @@ import { useLopu } from '../Lopu/useLopu';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport, DRAWER_POPUP_Z, LOPU_WINDOW_Z } from '../Nav/Drawer/useDrawer';
 import { defaultsFromArgs, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
 import { BuilderDrawer } from './BuilderDrawer';
+import { BuilderThingMenu } from './BuilderThingMenu';
 import type { BuilderChrome } from './WebpageBlocksRenderer';
 import { useBuilderChrome } from './useBuilderChrome';
 import { findBlock, updateBlock, type WebpageBlock } from './webpageBlocks';
@@ -88,7 +90,7 @@ export default function SeamlessPageEditor({
 	);
 	const [drawerOpen, setDrawerOpen] = React.useState(() => window.innerWidth >= 768);
 	const [pageName, setPageName] = React.useState(draft.resolved?.page?.crystal?.name || 'Untitled page');
-	const [acl, setAcl] = React.useState<string[]>(draft.resolved?.page?.acl || ['tt:user']);
+	const [acl, setAcl] = React.useState<string[]>(() => initialPageAudience(draft.resolved?.source, draft.resolved?.page?.acl));
 	const [preset, setPreset] = React.useState('full');
 	const [running, setRunning] = React.useState(false);
 	const [openControl, setOpenControl] = React.useState<'mode' | 'viewport' | null>(null);
@@ -489,18 +491,11 @@ export default function SeamlessPageEditor({
 							justifyContent="center"
 						>
 							<Flex className="ttBuilderPageLinks" alignItems="center" justifyContent="center" flexWrap="wrap" maxWidth="100%" gap={1}>
+                                {draft.resolved?.page?.id ? <BuilderThingMenu id={draft.resolved.page.id}
+                                disabledReason={draft.dirty || pageName !== draft.resolved.page.crystal?.name || JSON.stringify(acl) !== JSON.stringify(draft.resolved.page.acl) ? 'Save your page before changing settings or transferring its saved content.' : undefined}
+                                onChanged={draft.refresh} onMetadataChanged={thing => { setPageName(thing.crystal?.name || 'Untitled page'); setAcl(thing.acl); }} /> : null}
 								<Button as={Link} to="/builder" size="sm" variant="ghost">
 									← My pages
-								</Button>
-								<Button
-									as="a"
-									href={`/p/${encodeURIComponent(draft.resolved?.page?.id || '')}`}
-									target="_blank"
-									rel="noopener noreferrer"
-									size="sm"
-									variant="ghost"
-								>
-									Go to page ↗
 								</Button>
 							</Flex>
 							{previewControls}

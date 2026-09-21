@@ -21,6 +21,7 @@
 // models; the id is validated for shape here and for ownership on write.
 // `turns` counts persisted assistant replies and `lastModel` remembers the
 // provider-native id that answered last.
+import { canAutomaticallyResume } from '../lopu/continuationCore';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { MAX_CHAT_NAME_CHARS, MAX_MESSAGE_CHARS } from '~/schemas/registry';
@@ -28,7 +29,7 @@ import { prepareAttachmentCascadeForThing, createReadyAttachmentMessageInsertHoo
 import { splitLiveMessageText } from '../devices/deviceLiveAiCore';
 import { hasUserVaultProvider } from '../lopu/userVault';
 import { safeVaultId } from '../lopu/userVaultCore';
-import { getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { getThingsCollection, getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import {
 	AI_MODEL_EFFORT_LABELS,
 	AI_WORKFLOW_BASE_MODELS,
@@ -82,13 +83,14 @@ export const LOPU_CHAT_SOURCE = Object.freeze({
 } as const);
 
 export type LopuChatSettings = {
+ management?: 'client' | 'server';
 	model: string | null; // provider-native id from AI_WORKFLOW_BASE_MODELS; null = catalog default
 	effort: AiModelEffort | null; // null = catalog default (the reply route inherits the admin default effort); 'default' on the wire means the provider's own default
 	speed: AiModelSpeed | null; // null = catalog default (the admin default speed, else 'normal')
 	providerId?: string | null; // one of the owner's Secure Vault provider connections; null/absent = Thingtime's models
 };
 export type LopuChatState = LopuChatSettings & { turns: number; lastModel: string | null; archived?: boolean };
-export type LopuChatSettingsInput = { model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown };
+export type LopuChatSettingsInput = { management?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown };
 export type LopuTurnProvider = NonNullable<PublicLopuMessageMeta['provider']>;
 export type LopuAssistantTurnMeta = {
 	model?: unknown;
@@ -106,6 +108,8 @@ export type LopuAssistantTurnMeta = {
 	balanceMicros?: unknown;
 	toolCalls?: unknown;
 	stopReason?: unknown;
+	continuationSafe?: boolean;
+	recoveryFailures?: number;
 };
 export type LopuHistoryTurn = { role: 'user' | 'assistant'; text: string };
 
@@ -178,7 +182,7 @@ export const lopuChatStateOf = (value: unknown): LopuChatState => {
 	const turns = Number.isSafeInteger(raw.turns) && Number(raw.turns) >= 0 ? Number(raw.turns) : 0;
 	const lastModel = typeof raw.lastModel === 'string' && raw.lastModel.trim() ? raw.lastModel.trim().slice(0, 128) : null;
 	const providerId = safeVaultId(raw.providerId);
-	return { model, effort, speed, providerId, turns, lastModel, ...(raw.archived === true ? { archived: true } : {}) };
+	return { model, effort, speed, providerId, turns, lastModel, ...(raw.management === 'client' || raw.management === 'server' ? { management: raw.management } : {}), ...(raw.archived === true ? { archived: true } : {}) };
 };
 
 const withLopuState = (entry: ChatListEntry, lopu: unknown): LopuChatEntry => ({ ...entry, lopu: lopuChatStateOf(lopu) });
@@ -196,6 +200,11 @@ export type NormalizedLopuChatSettings = { ok: true; settings: LopuChatSettings;
 // `providerId` is shape-checked here (a Secure Vault record id); ownership is
 // verified by the Mongo-backed writers below.
 export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current: LopuChatSettings = EMPTY_LOPU_SETTINGS): Fail | NormalizedLopuChatSettings => {
+	let management = current.management;
+ if (input.management !== undefined) {
+  if (input.management !== 'client' && input.management !== 'server') return fail(400, 'management must be client or server.');
+  management = input.management;
+ }
 	let model = current.model;
 	let effort = current.effort;
 	let speed = current.speed;
@@ -265,8 +274,8 @@ export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current:
 		}
 	}
 
-	const settings: LopuChatSettings = { model, effort, speed, providerId };
-	const changed =
+	const settings: LopuChatSettings = { model, effort, speed, providerId, ...(management ? { management } : {}) };
+	const changed = settings.management !== current.management ||
 		settings.model !== current.model ||
 		settings.effort !== current.effort ||
 		settings.speed !== current.speed ||
@@ -537,6 +546,7 @@ export const updateLopuChat = async (
 		patch['crystal.lopu.effort'] = normalized.settings.effort;
 		patch['crystal.lopu.speed'] = normalized.settings.speed;
 		patch['crystal.lopu.providerId'] = normalized.settings.providerId;
+  if (normalized.settings.management) patch['crystal.lopu.management'] = normalized.settings.management;
 	}
 	if (!Object.keys(patch).length) return fail(400, 'Nothing to update');
 	const things = await getThingsCollection();
@@ -595,7 +605,7 @@ export const deleteLopuChat = async (viewerId: string, chatId: unknown): Promise
 // under the same id is a 409 — the sendMessage rule.
 export const persistLopuUserTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown; attachmentIds?: string[]; unread?: boolean }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; attachmentIds?: string[]; unread?: boolean; continuation?: boolean }
 ): Promise<LopuUserTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -612,7 +622,7 @@ export const persistLopuUserTurn = async (
 	const base = new Date();
 	const rows = parts.map((part, index) =>
 		messageRow(viewerId, chat.shareId, lopuUserMessageShareId(viewerId, requestId, index), part, new Date(base.getTime() + index), {
-			lopu: { role: 'user', requestId, segmentIndex: index, segmentCount: parts.length }
+			lopu: { role: 'user', requestId, segmentIndex: index, segmentCount: parts.length, ...(input.continuation ? { continuation: true } : {}) }
 		})
 	);
 	const things = await getThingsCollection();
@@ -773,6 +783,28 @@ export const loadLopuHistory = async (viewerId: string, chatId: unknown, opts: {
 		{ projection: { shareId: 1 } }
 	).sort({ createdAt: -1 }).limit(10).toArray() : [];
 	return { ok: true, ...folded, ...(attachments.length ? { attachmentIds: attachments.map(row => String(row.shareId)) } : {}) };
+};
+
+/** Only the latest persisted assistant boundary can authorize recovery. */
+export const readLopuContinuation = async (viewerId: string, chatId: string, requestId: string, automatic: boolean) => {
+ const access = await getLopuChat(viewerId, chatId);
+ if (access.ok === false) return access;
+ if (access.settings.archived) return fail(409, 'This conversation is archived.');
+ const things = await getThingsCollection();
+ const latest = await things.findOne({ thingtime: 'chat-message', targetId: chatId,
+  'crystal.threadRootId': null, 'crystal.deletedAt': null, 'crystal.systemType': null
+ } as any, { sort: { createdAt: -1, shareId: 1 }, projection: { crystal: 1 } });
+ const meta = publicLopuMessageMeta(latest?.crystal?.lopu);
+ if (meta?.role !== 'assistant' || meta.requestId !== requestId) return fail(409, 'The conversation has newer work or is still saving.');
+ if (automatic) {
+  const homeThings = await getHomeThingsCollection();
+  const stopped = await homeThings.findOne({ ownerId: viewerId, targetId: chatId, thingtime: 'lopu-background-task', 'crystal.requestId': requestId, cancelRequested: true } as any, { projection: { _id: 1 } });
+  if (stopped) return fail(409, 'This reply was stopped. Continue it manually when ready.');
+ }
+ if (automatic && !canAutomaticallyResume(meta)) {
+  return fail(409, 'This reply needs your review before it can continue.');
+ }
+ return { ok: true as const, meta };
 };
 
 /** Notes are ordinary, membership-gated relational user messages, scoped to one run. */

@@ -697,3 +697,16 @@ test('archive failure rolls back only its own field and never crosses an account
  assert.deepEqual(getLopuStoreSnapshot().chats, []);
  assert.deepEqual(getLopuStoreSnapshot().notices, []);
 });
+
+test('new invite-gated chats can change management without an available model', async () => {
+ resetLopuStoreForTests();
+ const {client}=fakeClient();
+ client.models=async()=>({ok:true,models:MODELS.map(model=>({...model,available:false})),defaults:DEFAULTS,vaultProviders:[],providers:{}});
+ bindLopuApi(client); hydrateLopuStore('invite-gated'); await loadLopuModels();
+ assert.equal(getLopuStoreSnapshot().activeChatId,null);
+ for (const management of ['server','client','server'] as const) {
+  setLopuSettings({management}); assert.equal(getLopuStoreSnapshot().settings.management,management);
+  assert.equal(getLopuStoreSnapshot().settings.model,null);
+ }
+ resetLopuStoreForTests();
+});

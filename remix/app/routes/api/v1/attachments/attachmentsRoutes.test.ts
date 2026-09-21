@@ -531,16 +531,29 @@ test('archive requests carry the exact viewer context into the planner and strea
 		skipped: 0,
 		totalBytes: 3
 	};
+	const rateKeys: string[] = [];
+	let streamOptions: any;
+	let manifestOptions: any;
 	const route = createAttachmentArchiveLoader({
 		getUser: async () => ({ ...user, isAdmin: true }),
-		enforceLimit: allowed as any,
+		enforceLimit: (async (_request: Request, key: string) => {
+			rateKeys.push(key);
+			return allowed();
+		}) as any,
 		enrichViewer: async (viewer) => (viewer?.id ? { ...viewer, groupIds: new Set(['group-1']) } : viewer),
 		plan: async (viewer, id, options) => {
 			observed = { viewer, id, options };
-			return plan;
+			return { ...plan, ownerId: 'someone-else' };
 		},
-		manifest: (value) => ({ ok: true, id: value.id, kind: value.kind, name: value.name, fileName: value.fileName, fileCount: 1, totalBytes: 3, skipped: 0, linkCount: 0, files: [] }),
-		stream: () => new Response('PK').body!
+		manifest: (value, options) => {
+			manifestOptions = options;
+			return { ok: true, id: value.id, kind: value.kind, name: value.name, fileName: value.fileName, fileCount: 1, totalBytes: 3, skipped: 0, linkCount: 0, files: [] };
+		},
+		stream: (_plan, _signal, options) => {
+			streamOptions = options;
+			return new Response('PK').body!;
+		},
+		now: () => 1_000
 	});
 	const response = await route({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1&key=read-key&sharedRoot=page') });
 	assert.equal(response.status, 200);
@@ -553,18 +566,39 @@ test('archive requests carry the exact viewer context into the planner and strea
 	assert.equal(observed.viewer.id, 'user-1');
 	assert.deepEqual([...observed.viewer.linkKeys], ['read-key']);
 	assert.equal(observed.viewer.groupIds.has('group-1'), true);
-	assert.deepEqual(observed.options, { sharedRoot: 'page', isAdmin: true });
+	// a real download presigns, and planning + streaming share one wall clock anchored at request start
+	assert.deepEqual(observed.options, { sharedRoot: 'page', isAdmin: true, presign: true, deadlineAt: 281_000 });
+	assert.deepEqual(streamOptions, { deadlineAt: 281_000 });
 
 	const manifest = await route({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1&manifest=1') });
 	assert.equal(manifest.status, 200);
 	assert.match(manifest.headers.get('Content-Type')!, /application\/json/);
 	assert.deepEqual(await manifest.json(), { ok: true, id: 'post-1', kind: 'post', name: 'Beach day', fileName: 'Beach day.zip', fileCount: 1, totalBytes: 3, skipped: 0, linkCount: 0, files: [] });
-	assert.deepEqual(observed.options, { sharedRoot: null, isAdmin: true });
+	// probes authorize without presigning; an administrator (like the owner) sees the skipped count
+	assert.deepEqual(observed.options, { sharedRoot: null, isAdmin: true, presign: false, deadlineAt: 281_000 });
+	assert.deepEqual(manifestOptions, { revealSkipped: true });
 
 	const head = await route({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1', { method: 'HEAD' }) });
 	assert.equal(head.status, 200);
 	assert.equal(head.body, null);
 	assert.equal(head.headers.get('Content-Type'), 'application/zip');
+	assert.equal(observed.options.presign, false);
+	// downloads and probes draw on separate rate windows
+	assert.deepEqual(rateKeys, ['attachments.archive', 'attachments.archiveManifest', 'attachments.archiveManifest']);
+
+	// a plain viewer who is not the root's owner never receives the skipped count
+	const stranger = createAttachmentArchiveLoader({
+		getUser: async () => user,
+		enforceLimit: allowed as any,
+		enrichViewer: async (viewer) => viewer,
+		plan: async () => ({ ...plan, ownerId: 'someone-else' }),
+		manifest: (_value, options) => {
+			manifestOptions = options;
+			return { ok: true, id: 'post-1', kind: 'post', name: 'x', fileName: 'x.zip', fileCount: 1, totalBytes: 3, skipped: 0, linkCount: 0, files: [] };
+		}
+	});
+	await stranger({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1&manifest=1') });
+	assert.deepEqual(manifestOptions, { revealSkipped: false });
 });
 
 test('archive requests refuse malformed ids and roots before authenticating, and surface planner failures as JSON', async () => {
@@ -594,7 +628,7 @@ test('archive requests refuse malformed ids and roots before authenticating, and
 		enrichViewer: async (viewer) => viewer,
 		plan: async (viewer, _id, options) => {
 			assert.equal(viewer, null);
-			assert.deepEqual(options, { sharedRoot: null });
+			assert.deepEqual({ ...options, deadlineAt: undefined }, { sharedRoot: null, presign: true, deadlineAt: undefined });
 			return { ok: false, status: 404, error: 'Thing not found' };
 		}
 	});
@@ -604,4 +638,22 @@ test('archive requests refuse malformed ids and roots before authenticating, and
 		enforceLimit: (async () => ({ allowed: false, unavailable: true, limit: 0, remaining: 0, resetAt: new Date().toISOString() })) as any
 	});
 	assert.equal((await limited({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1') })).status, 503);
+});
+
+// The filesystem stand-in for private S3 is a laptop convenience: without its
+// directory variable the route is inert (404 for every method) and never
+// reveals which operations exist.
+test('the local object-storage route is inert unless the stand-in directory is configured', async () => {
+	const previous = process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR;
+	delete process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR;
+	try {
+		const { loader, action } = await import('./local-object/_local-object');
+		for (const [handler, method] of [[loader, 'GET'], [loader, 'HEAD'], [action, 'PUT']] as const) {
+			const response = await handler({ request: new Request('https://thingtime.example/api/v1/attachments/local-object?op=get&key=objects%2Fx', { method }) });
+			assert.equal(response.status, 404, method);
+			assert.match(response.headers.get('Cache-Control')!, /no-store/);
+		}
+	} finally {
+		if (previous !== undefined) process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR = previous;
+	}
 });

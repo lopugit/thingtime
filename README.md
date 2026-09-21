@@ -2,6 +2,64 @@
 
 https://thingtime.com
 
+### Builder service workspaces
+
+Insert **Service workspace** from the builder block menu. Its native
+`<tt-service-workspace rootId="your-stable-workspace-id" name="My service business">`
+component creates real Thingtime folders and relational records for customers,
+properties, job templates, scheduled visits, sub-jobs, time logs, equipment,
+resource usage and memberships. The owner is an Admin. Add existing Thingtime
+usernames in Team; Customer/B2B memberships must select their customer account.
+Use Setup to connect the owned builder page to the same live access policy.
+Members sign in with their normal Thingtime account. Removing membership revokes
+workspace, page, comments and attachment access on subsequent requests.
+
+Records open directly; their context menus offer Edit, Duplicate and recoverable
+Delete. Trash includes all record types. Each job and visit has separate comments,
+media titles/descriptions, attachments and optional Before/After groups. Time logs
+use the workspace IANA time zone and reject ambiguous or nonexistent DST times.
+The day/week planner supports dragging, ordering buttons and date controls.
+The bounded workspace API pages 250 records at a time, up to 5,000 records.
+
+Fork-safe maps and Vault setup:
+
+1. Configure a stable `THINGTIME_USER_VAULT_KEY=<base64url-encoded-32-byte-key>`
+   on the server. Never publish its value or rotate it without migrating entries.
+2. In the workspace owner's **Settings → Secure Vault**, save
+   `GOOGLE_MAPS_JAVASCRIPT_API_KEY=<browser-restricted-key>` and
+   `GOOGLE_PLACES_API_KEY=<server-places-key>`. New entries have an Environment
+   selector; existing entries have **Change environment**. Moves preserve the
+   encrypted value and can return an entry to Ungrouped.
+3. Enable Google Maps JavaScript API and Places API (New) with billing in the
+   matching Google project. Restrict the JavaScript key to the intended website
+   referrers and API. That key is intentionally visible to workspace browsers.
+   Keep the Places key server-only, restrict it to Places API, and use supported
+   server restrictions. No Mapbox token is needed for this Google implementation.
+   Website-referrer restrictions do not work on the server Places key. Setup
+   failures are reported with safe guidance for the rejected restriction or
+   disabled service; provider messages and project identifiers are never echoed.
+4. Choose the matching Vault environment in workspace Setup. Automatic selection
+   works when there is exactly one entry of each required name; duplicate matches
+   require an explicit environment. Reload after switching a loaded Maps SDK key.
+   Place searches send only the entered query to Google; map coordinates are
+   fetched on demand, not persisted as a provider-content cache.
+
+The native service-workspace property map uses the Google Maps SDK with the
+specific Google script and service hosts listed in remix/scripts/csp.mjs. The
+application still blocks executable inline scripts and eval. Keep these hosts
+in the production and development policies when deploying a fork, and review
+[Google's Maps domains](https://developers.google.com/maps/domains) if the SDK
+changes its endpoints. Run test:vercel-config and verify:vercel-output to catch
+policy regressions; browser acceptance with restricted keys remains required.
+
+Local regression fixture: run `TT_SERVICE_TEST_LOCAL=1 node --env-file=.env
+--import tsx scripts/test-service-workspace-local.ts` from `remix/` against the
+isolated Mongo replica at `127.0.0.1:18943` (`jimsLocal`). The opt-in test rejects
+other database URLs. Use `npm run web-pms` in the `thingtime-jims-franchise`
+worktree: local web `http://localhost:18940`, HMR 18941, Nitro 18942.
+Tailscale/Funnel was unavailable during validation: the installed CLI launcher
+points to the missing `/Applications/Tailscale.app` executable.
+
 ### Seamless page editor
 
 `/builder?page=<id>` and `/p/<id>` share `LiveWebpage` and its lazy
@@ -845,6 +903,20 @@ the thin control-plane branch carries its own root config with all Git
 deployments disabled, so branches created from it never try to build an absent
 app.
 
+### One-step worktree bootstrap
+
+A fresh linked worktree (Claude Code, Codex, `git worktree add`) has no remix
+dependencies, no ignored env files and no port-specific `.claude/launch.json`.
+`npm run worktree-bootstrap` (`remix/scripts/worktree-bootstrap.cjs`) relinks
+dependencies from the shared pnpm store, copies missing ignored env files from
+the main checkout (never overwriting), writes `.claude/launch.json` with this
+checkout's derived dev ports, points this worktree's `core.hooksPath` at the
+tracked `.githooks`, and prints the ports, PM2 name and local URLs. The tracked
+`post-checkout` hook runs it automatically (in the background, logged to the
+Git directory as `worktree-bootstrap.log`) the first time a linked worktree is
+checked out without dependencies. Flags: `--no-deps`, `--no-env`,
+`--no-launch`, `--no-hooks`, `--quiet`.
+
 ## Electron desktop app
 
 The desktop shell lives in `electron/` and packages the same `remix/` web app
@@ -1206,6 +1278,15 @@ for the catalog size — tranche 2 grew it to 70 archetypes / 350 families /
 2800 components.
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
+
+Admins can also publish a catalog from `/components` → **Import component
+catalog**. Choose a JSON array of component definitions (or an object with a
+`components` array), review the validated count, then select **Publish catalog**.
+This uses the signed-in session, so no password file is needed. Files are capped
+at 32 MiB / 5,000 definitions. Batches respect the API's count, body-size and
+rate limits; stopping or retrying preserves completed work without duplicating
+components. The selected origin must advertise `api.admin-components-seed`
+1.0.0 and `api.webpages-suites-install` 1.1.0 or compatible versions.
 
 ```sh
 # 1. Start the dev stack and register a throwaway user, then restart with
@@ -2018,6 +2099,63 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### Local attachment storage (laptop stand-in for the private bucket)
+
+The private bucket is reached only through Vercel's OIDC role, so a checkout
+without that role cannot upload, preview or download a single byte. For local
+development set one variable in `remix/.env` and restart the dev stack:
+
+```sh
+THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments
+```
+
+`remix/app/api/utils/attachments/localAttachmentStorage.ts` then implements the
+same `AttachmentS3` interface on the filesystem (objects, versions, multipart
+parts under that directory, ignored by git) and mints short-lived HMAC-signed
+URLs to `GET|PUT /api/v1/attachments/local-object`, which it also serves.
+Uploads, image previews, downloads, "download all" archives, copies and
+moderation fetches run unchanged; quota, ACL and moderation gates are exactly
+the production ones. The module refuses to start when `VERCEL`, `VERCEL_ENV`
+or `VERCEL_TARGET_ENV` is set (reported as a non-retryable storage
+configuration failure) and the route answers 404 without the variable, so it
+can never become a storage tier. A relative directory resolves against the dev
+server's working directory (`remix/`); `~` is expanded. Delete the directory to
+reset local media.
+
+The signed URLs are root-relative by default, which is what the browser and
+every server-side reader need. A native app (the Watch recording inbox against
+a simulator build), `curl`, or a smoke script cannot follow a relative URL, so
+for those also set the dev server's origin and restart:
+
+```sh
+THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://127.0.0.1:10000   # this checkout's Nitro port (npm run web-ports)
+```
+
+Exact object versions are immutable, so the stand-in answers with an `ETag`
+and `Last-Modified` and honours `If-None-Match` (304) like a bucket would.
+
+### Seed a local fixture through the API
+
+```sh
+node remix/scripts/seed-fixture.mjs create --files 3 --name demo   # user + folder + public post with 3 stored files
+node remix/scripts/seed-fixture.mjs list
+node remix/scripts/seed-fixture.mjs cleanup remix/.fixtures/demo.json
+```
+
+The script only talks to the real endpoints (register, uploads/parts/complete,
+things, PATCH move) so seeded data shares one code path with real signups
+(FUNDAMENTALS §2). New accounts start with uploads locked: pass
+`--admin-user <name> --admin-password-file <file>` so the script enables uploads
+via `POST /api/v1/admin/users/public-uploads`. Without an admin, `create`
+registers the user and stops at the first refused upload; add
+`ADMIN_USERNAMES=<that username>` to `remix/.env`, restart the dev stack (env
+admins bypass approval, and a name listed there cannot *register*, hence the
+order), then `node remix/scripts/seed-fixture.mjs resume remix/.fixtures/<name>.json`.
+State, including the generated password for logging in as the fixture
+user, lives in `remix/.fixtures/<name>.json` (ignored, mode 0600). Cleanup
+deletes the post (cascading its attachments) and folder and signs the fixture
+session out; there is no account-deletion API, so the user row remains.
+
 ### Poll index headroom during the Watch rollout
 
 Poll writers share production's protected Binary `uniqueKeys_1` constraint and
@@ -2505,6 +2643,101 @@ When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
+
+## Third-party app connections
+
+`/connections` links external accounts (Reddit, YouTube channels, Mastodon,
+Bluesky, Lemmy, Hacker News, GitHub activity, any RSS/Atom feed, plus a
+deterministic demo provider) to a Thingtime account; `/connections/feed`
+browses them with native Thingtime comments/reactions layered on the synced
+posts, and AI feed filters ("warn for sad news" → veiled behind a Show
+button, or hidden) applied server-side.
+
+Fork-safe setup: the shipped providers are keyless public-content APIs and
+need **no configuration**. AI-backed filter classification reuses the Lopu
+provider keys above (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and the Admin AI
+model waterfall; without any key, classification falls back to a
+deterministic keyword heuristic so the feature keeps working. Verify a
+deployment end to end with:
+
+```sh
+pnpm --dir remix run verify:connections
+```
+
+(94 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull, for 96.)
+
+### SSO account linking (Facebook, Instagram, TikTok, YouTube account)
+
+SSO providers use real OAuth sign-in: Connect sends the browser to the
+provider's own login, and the token response is sealed into the linked
+account's secure storage server-side (no token ever reaches a client). Each
+provider stays `configured: false` (UI: "Needs setup") until its app
+credentials are set:
+
+```sh
+# Meta app (facebook provider — scopes public_profile,user_posts)
+FACEBOOK_APP_ID="<meta-app-id>"
+FACEBOOK_APP_SECRET="<meta-app-secret>"
+# Instagram API with Instagram Login (professional accounts)
+INSTAGRAM_APP_ID="<instagram-app-id>"
+INSTAGRAM_APP_SECRET="<instagram-app-secret>"
+# TikTok Login Kit (scopes user.info.basic,video.list)
+TIKTOK_CLIENT_KEY="<tiktok-client-key>"
+TIKTOK_CLIENT_SECRET="<tiktok-client-secret>"
+# Google OAuth client (youtube-account provider — youtube.readonly)
+GOOGLE_CLIENT_ID="<google-oauth-client-id>"
+GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
+# Reddit script app (reddit-account provider — syncs your REAL front page)
+REDDIT_CLIENT_ID="<reddit-app-client-id>"
+REDDIT_CLIENT_SECRET="<reddit-app-secret>"
+# Mastodon app registered on ONE instance (mastodon-account provider — syncs
+# your REAL home timeline; users of that instance sign in there)
+MASTODON_INSTANCE="mastodon.social"
+MASTODON_CLIENT_ID="<mastodon-app-client-id>"
+MASTODON_CLIENT_SECRET="<mastodon-app-secret>"
+# X app (x provider — home timeline; requires a PAID X API tier to read)
+X_CLIENT_ID="<x-oauth2-client-id>"
+X_CLIENT_SECRET="<x-oauth2-client-secret>"
+# Twitch app (twitch provider — followed channels that are live)
+TWITCH_CLIENT_ID="<twitch-client-id>"
+TWITCH_CLIENT_SECRET="<twitch-client-secret>"
+# Tumblr app (tumblr provider — your REAL dashboard feed)
+TUMBLR_CLIENT_ID="<tumblr-consumer-key>"
+TUMBLR_CLIENT_SECRET="<tumblr-consumer-secret>"
+# Pinterest app (pinterest provider — your own pins; no home-feed API)
+PINTEREST_CLIENT_ID="<pinterest-app-id>"
+PINTEREST_CLIENT_SECRET="<pinterest-app-secret>"
+# LinkedIn app (linkedin provider — account linking only; feeds are partner-gated)
+LINKEDIN_CLIENT_ID="<linkedin-client-id>"
+LINKEDIN_CLIENT_SECRET="<linkedin-client-secret>"
+# Spotify app (spotify provider — recently played + followed-artist releases)
+SPOTIFY_CLIENT_ID="<spotify-client-id>"
+SPOTIFY_CLIENT_SECRET="<spotify-client-secret>"
+# Optional: YouTube Data API key — lights up channel NAME search for the
+# Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
+YOUTUBE_API_KEY="<youtube-data-api-key>"
+# Optional: pin the OAuth redirect origin when the app runs behind a proxy or
+# tunnel (must match the redirect URI registered with each provider app)
+CONNECTIONS_OAUTH_REDIRECT_BASE="https://your-host.example.com"
+# Optional: dedicated HMAC key the PKCE code verifier is derived from. Falls
+# back to JWT_SECRET / JWT_PRIVATE_KEY, so every deployment already has one;
+# set it only to rotate PKCE independently of the auth signing key. Any
+# in-flight connect started before a rotation just has to be retried.
+CONNECTIONS_PKCE_SECRET="<random-32-byte-secret>"
+```
+
+Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
+redirect URI in each provider app's settings (Meta and TikTok require https —
+a tunnel origin works for local dev). Official-API honesty notes: Meta removed
+the friends News Feed API in 2015, so the facebook provider syncs your own
+timeline posts; Instagram and TikTok expose your own media/videos, not the
+home/For You feed; the youtube-account provider syncs the latest uploads from
+your real subscriptions. The REAL algorithmic home feeds come from the
+providers whose APIs expose them: `reddit-account` (your front page),
+`mastodon-account` (your home timeline), and `bluesky-account` (your
+following timeline — connects with an app password, no developer app needed:
+the password is exchanged for a session and never stored).
 
 ## Branch automation: develop → main promotion
 
@@ -3650,6 +3883,71 @@ Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
 on 2026-09-18 because the installed CLI shim referenced a missing application
 binary. Other worktrees derive their own ports via `npm run web-ports`.
 
+
+### Chat continuity and iOS activity (2026-09-21)
+
+Lopu's send menu and chat settings choose browser-managed or server-managed
+continuation. Browser management requires an open page to start the next safe
+checkpoint; server management uses the existing Workflow SDK 4.8 integration
+and requires Vercel Workflow enabled for the selected Vercel project. It uses
+the normal account database and a live full-user session. Selected custom
+MongoDB connections use browser management; their credentials are never copied
+into workflow state. Session revocation stops a server chain. Recoverable
+errors back off, with five consecutive retries before requesting attention;
+manual Stop, incomplete tools, pending confirmations and unsaved page edits
+never automatically resume. Continuations retain the current conversation
+without displaying synthetic user prompts.
+
+The iOS app displays one aggregate chat Live Activity with counts and generic
+status. A Live Activity does not prevent iOS suspension: server-managed work
+continues independently. Existing private APNs setup uses `APNS_KEY_ID`,
+`APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, and optional `APNS_IOS_BUNDLE_ID`; its topic
+is `<bundle-id>.push-type.liveactivity`. Keep values in the existing private
+deployment configuration. Native clients negotiate `api.lopu-live-activity`
+1.0.0; protected tokens are bound to a live session, origin and data source.
+See [iOS setup and device checklist](iOS/README.md). No additional signing
+credentials are introduced by this feature.
+
+The continuity worktree validation server uses
+`http://localhost:19940` (Vite), 19941 (HMR), and 19942 (Nitro), with the local
+PM2 ecosystem override `remix/tmp/continuity-ecosystem.config.cjs`. Its unique
+`tt-wt-continuity-19940` identity avoids the existing worktree basename
+collision. No Funnel URL was verified: the installed Tailscale wrapper points
+to a missing app executable on the validation machine. Production/deployment
+URLs remain recorded in the project's deployment documentation.
+
+
+### Functional component and webpage demos
+
+The demo catalog uses native inputs and owner-scoped Actions. Newsletter/contact
+forms, site requests, and component records save private Things. They do not
+send email, charge cards, book services, or control devices. To add an external
+effect, create an integration Action in your account, configure its credentials
+through the normal connection settings, and bind the copied component to that
+Action. Never put credentials in component arguments or template JSON.
+
+`site-forms` and `catalog-records` are installed through
+`POST /api/v1/webpages/suites/install`; clients require
+`api.webpages-suites-install >= 1.1.0` from the selected origin's manifest.
+Copying a site demo installs missing form dependencies first without replacing customized Actions. Installed pages bind their owner’s concrete component ids. Existing installations
+can be refreshed with the suite's Install button; saved records remain intact.
+A fork needs the ordinary database/session setup described above. No external
+service key is needed for private demo records. Admins refresh system demos via
+`POST /api/v1/admin/webpages/seed-demos` after deploying the updated catalog.
+
+The declarative `$ui` binding changes bounded scalar state only in its current
+component instance (`set`, `toggle`, `increment`, `cycle`, `reset`), copies text,
+or opens Thingtime search. It cannot call arbitrary JavaScript or replace the
+runtime's viewer, query, source result, or account authority. `$ui` fields remain
+controlled so Reset and adjacent buttons also update visible inputs. Ordinary
+Action fields retain native editing and validation; Enter submits their group.
+
+Local regression fixture: `/tests/functional-demos.html` on a Vite development
+server. Verify two-instance isolation, parent renders, typed values, checkboxes,
+range/counter synchronization, reset, native disclosures, and mobile overflow.
+Native `tt-dialog` controls use browser-managed modal focus and Escape dismissal;
+`tt-countdown` accepts a bounded seconds value and provides Start/Pause/Reset.
+They run only on interactive surfaces and never execute authored JavaScript.
 ## Remote integration runtime
 
 Curated integration examples use `remix/app/library/catalog.ts` and the fixed
@@ -3686,3 +3984,92 @@ credentialed requests. The endpoint is bounded to 20 requests/minute/account,
 24 KiB request bodies, 16 KiB inputs, 256 KiB upstream responses and a 12-second
 upstream timeout. Run `corepack pnpm --dir remix run test:library` for boundaries,
 credential redaction, reusable Thing validation and capability coverage.
+
+### The integration library
+
+Browse `/library` for 540 executable recipes across 51 libraries/services: 380
+transformation actions, 59 visual components and 101 API Things. There are 468
+credential-free examples and 72 examples with provider-specific credential entry.
+Search, category/provider/type/access filters and pagination keep the catalogue
+small on screen; selecting a card shows editable inputs, live output, source and
+links to official docs. Browsing performs no integration-provider requests.
+
+Save a private copy to create sample data, an input-preparation Action Thing and
+a runnable Component Thing. Add `IntegrationExample` to builder markup with a
+curated `exampleId` and optional `inputJson`; it never accepts code or keys in
+markup. Preparation actions return inputs; remote execution occurs when Run is
+pressed in the component. Keys are entered separately for each open demo.
+
+API capability `api.library-request` 1.2.0 adds the curated credentialed provider
+registry. Each provider's account link explains its key and access requirements.
+Credentialed server examples use read-only GETs and fixed Google Places POST searches; Stripe is test-mode only. Real
+account authorization/quota behavior requires the visitor's own valid key.
+
+For browser acceptance, open `/scripts/library-browser-check.html` on the Vite
+dev server and press **Run all public examples**. The harness executes only
+credential-free catalogue defaults, four at a time, through the actual isolated
+runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
+is not copied into production static assets. Provider outages can change results.
+
+
+## Remote device files and brightness
+
+Open **Things → Browse files**, or expand **Files** in a paired device's drawer.
+The shared Things grid/list, type/name filters and action menu work in a full
+page, narrow dock and expanded pop-up. Copy or Cut, select **Your Thingtime** or
+another paired device and destination folder, then Paste. Keyboard shortcuts
+work while the file browser is focused; text inputs keep normal text editing.
+
+Update the Mac's Thingtime Node as well as the web server. An updated heartbeat
+refreshes the existing device's capabilities; re-pairing is unnecessary. The
+native brightness adapter supports DisplayServices and falls back to a matched
+IOKit display, reporting unavailable when macOS exposes no usable control.
+
+Remote files stay inside the paired Mac's home folder and obey its existing
+permission mode and locked-session policy. Files are bounded to 32 MiB each;
+a recursive browser transfer supports 500 entries, 32 levels and 128 MiB total.
+Symlinks, special files and overwrite are refused. Moves across locations copy
+and verify first, then remove originals; remote removals use recoverable Trash.
+Thingtime uploads require existing private-upload access and storage allowance,
+and use the normal protected attachment pipeline. Empty remote files can be
+read/copied on devices; Thingtime's upload pipeline requires non-empty content.
+No new secrets or environment variables are required. Forks need their existing
+MongoDB, S3 attachment setup and pairing configuration, plus the API capability
+versions documented in [the remote file contract](docs/remote-files.md).
+
+Local acceptance for `codex/remote-device-files` uses `http://localhost:22420`
+(HMR 22421, Nitro 22422), with a unique PM2 entry
+`tt-wt-remote-device-files-22420` using the canonical `pm2AppConfig` and
+`autorestart: false`. These overrides avoid another Codex checkout with the same
+`thingtime` directory basename. Tailscale/Funnel was unavailable on 2026-09-21:
+the configured launcher points to the missing Tailscale app; no public mapping
+was changed or verified.
+
+### Integration builder library
+
+The integration catalogue also has real builder pages: `/builder?page=webpage-integrations&mode=view` links to a page per provider, and each example has its own page and reusable component. The pages derive from `remix/app/library/builderPages.ts`, so adding a catalogue example updates the hierarchy without hand-maintained copies. Opening a page does not run its third-party requests. Saving edits creates an owner-private page; keys and live results stay in the open demo and are never saved.
+
+On a new deployment, configure your normal database and an admin account (see the admin setup above), then sign in as that admin and select **Prepare builder pages** on `/library`. The button negotiates `api.admin-webpages-seed-demos` 1.2.0 and calls `POST /api/v1/admin/webpages/seed-demos?catalog=integrations` with `{}`. This idempotently seeds only the integration components and pages, leaving other demo suites untouched. Re-run after catalogue updates; investigate any nonzero `skipped` count before linking to the pages. No third-party credentials are needed for setup. Viewers supply their own credentials when running keyed examples.
+
+### Map and platform examples
+
+Mapbox includes five GL JS components plus forward/reverse geocoding and driving/walking directions. Google Maps includes maps, advanced markers, info windows, polylines and radius circles. Google Places includes text/nearby search, place details and autocomplete with first-result selection in the JavaScript SDK, plus three Places API (New) REST examples. YouTube, Spotify, Microsoft Graph, GitLab, Cloudflare and Contentful add focused platform reads. Their new components and builder pages are included by **Prepare builder pages**.
+
+Use two distinct credential types:
+
+- Browser demos accept a Mapbox **public** `pk…` token or a Google Maps browser API key. Restrict the key to your actual website origin (include your preview host or localhost when testing) and the necessary APIs. Enable Maps JavaScript API, Places API (New) when applicable, and billing. Google advanced markers use `DEMO_MAP_ID`; use your own map ID in an application. Mapbox GL JS loads a pinned official CDN release; Google uses its supported quarterly channel. Browser keys go directly to the selected provider inside an opaque-origin frame. The SDK document has its own CSP; Google SDK compatibility does not loosen the app shell or ordinary package sandbox policy.
+- REST examples use dedicated server keys or short-lived OAuth **access tokens**, entered in the example's password field. Website-referrer restrictions do not apply to server requests. Use provider/API restrictions and least-privilege scopes: Spotify catalog access; Microsoft Graph `User.Read`, `Files.Read` or `Calendars.ReadBasic`; GitLab `read_api`; Cloudflare Zone/DNS Read; Contentful delivery (not management) access. Use the example's account/docs links for acquisition and provider-specific setup. No OAuth client secret, automatic token exchange, or refresh token is needed or accepted by these examples.
+
+No keys are bundled or stored with copied Things. **Clear**, reset, account changes and leaving the demo discard credentials; Clear/reset also remove running SDK frames. Provider keys, billing, quotas, development-mode access and third-party availability determine whether a live request succeeds. The tests use provider contract fixtures; they do not claim authenticated access to a visitor's account.
+
+The maps-library development worktree uses Vite `http://localhost:18860` (HMR 18861, Nitro 18862) through its local PM2 ecosystem entry `tt-wt-library-maps-platforms-18860`, with autorestart disabled. Tailscale/Funnel is not available on this machine because the Tailscale application is missing; production and Vercel previews remain available.
+
+### Discussion pagination on forks
+
+Private comment pagination uses the deployment’s existing `JWT_PRIVATE_KEY` or
+`JWT_SECRET` (with `THINGTIME_ADMIN_VAULT_KEY` as a fallback) to derive a separate
+encryption key for opaque cursors. Configure one of these existing secrets in
+both preview and production deployments; never use a public JWT key. No new
+secret variable is required. Production fails closed with HTTP 503 when none is
+configured. Local development without a configured secret uses an ephemeral
+key, so refreshing comments after a server restart starts a new cursor chain.

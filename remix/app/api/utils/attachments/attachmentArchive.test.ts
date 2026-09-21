@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { unzipSync } from 'fflate';
 
-import { ARCHIVE_ATTACHMENT_PROJECTION, ARCHIVE_CHILD_PROJECTION, createAttachmentArchiveService, type ArchiveAttachmentDoc } from './attachmentArchive';
+import { ARCHIVE_ATTACHMENT_PROJECTION, ARCHIVE_CHILD_PROJECTION, ARCHIVE_SHARED_ROOT_PROJECTION, createAttachmentArchiveService, type ArchiveAttachmentDoc } from './attachmentArchive';
+import { ARCHIVE_MAX_BOUND_ROWS, ARCHIVE_MAX_SCANNED_THINGS, ARCHIVE_MAX_THINGS } from './attachmentArchiveCore';
 import type { ThingDoc, Viewer } from '../things/things';
 
 const viewer: Viewer = { id: 'viewer-1' };
@@ -28,12 +29,16 @@ type Fixture = {
 	unreadable?: Set<string>;
 	hidden?: Set<string>;
 	sizes?: Record<string, number>;
+	// media ids readable only through the named composition root (`<id>@<root>`)
+	sharedVisible?: Set<string>;
 };
 
 const service = (fixture: Fixture, overrides: Record<string, unknown> = {}) => {
-	const calls: { download: Array<{ viewer: unknown; id: string }>; fetched: string[] } = { download: [], fetched: [] };
+	const calls: { download: Array<{ viewer: unknown; id: string }>; inspect: Array<{ viewer: unknown; id: string }>; fetched: string[] } = { download: [], inspect: [], fetched: [] };
 	const created = createAttachmentArchiveService({
 		findViewable: async (id) => (fixture.hidden?.has(id) ? null : fixture.things[id] || null),
+		findAttachmentRoot: async (id) => fixture.things[id] || null,
+		canViewShared: async (_viewer, doc, rootId) => fixture.sharedVisible?.has(`${doc.shareId}@${rootId}`) === true,
 		canView: async (doc) => !fixture.hidden?.has(doc.shareId),
 		listChildren: async (ownerId, folderId) => (fixture.children[folderId] || []).filter((child) => child.ownerId === ownerId),
 		listBound: async (targets) => fixture.bound.filter((doc) => targets.some((target) => target.shareId === doc.targetId)),
@@ -53,6 +58,11 @@ const service = (fixture: Fixture, overrides: Record<string, unknown> = {}) => {
 				disposition: 'attachment',
 				image: false
 			};
+		},
+		inspect: async (downloadViewer, id) => {
+			calls.inspect.push({ viewer: downloadViewer, id: String(id) });
+			if (fixture.unreadable?.has(String(id))) return { ok: false, status: 404, error: 'Attachment not found' };
+			return { ok: true, size: fixture.sizes?.[String(id)] ?? 3, contentType: 'application/octet-stream' };
 		},
 		customMongoActive: () => false,
 		fetch: (async (input: string | URL | Request) => {
@@ -116,10 +126,11 @@ test('a post archives its stored gallery in stored order, lists linked media and
 	// every stored candidate is authorized individually through the download gate
 	assert.deepEqual(calls.download.map((call) => call.id), ['att-2', 'att-1', 'att-dup', 'att-pending']);
 	assert.deepEqual(calls.download[0].viewer, { id: 'viewer-1' });
-	const summary = manifest(result);
+	const summary = manifest(result, { revealSkipped: true });
 	assert.equal(summary.fileCount, 3);
 	assert.equal(summary.linkCount, 1);
 	assert.equal(summary.skipped, 1);
+	assert.equal(manifest(result).skipped, 0, 'withheld counts are owner/admin only');
 	assert.deepEqual(summary.files[0], { id: 'att-2', path: 'second.png', name: 'second.png', size: 3 });
 	assert.equal('url' in summary.files[0], false);
 	const entries = await read(stream(result));
@@ -245,7 +256,117 @@ test('a folder that only reaches unreadable files reports that nothing is downlo
 		unreadable: new Set(['att-a'])
 	};
 	const result = await service(fixture).plan(viewer, 'folder-1');
-	assert.deepEqual(result, { ok: false, status: 404, error: 'No downloadable files are available to you here' });
+	// one message for empty AND fully-withheld roots: the difference is what a stranger must not learn
+	assert.deepEqual(result, { ok: false, status: 404, error: 'There are no files to download here' });
+});
+
+test('probes authorize without presigning, the skipped count is owner-only, and a probe plan cannot be streamed', async () => {
+	const fixture: Fixture = {
+		things: { 'post-1': thing('post-1', ['post'], { text: 'Gallery' }) },
+		children: {},
+		bound: [attachment('att-1', 'post-1', 'a.png'), attachment('att-2', 'post-1', 'b.png'), attachment('att-3', 'post-1', 'c.png')],
+		unreadable: new Set(['att-3'])
+	};
+	const { plan, manifest, stream, calls } = service(fixture);
+	const probe = await plan(viewer, 'post-1', { presign: false });
+	assert.equal(probe.ok, true);
+	if (probe.ok !== true) return;
+	assert.deepEqual(calls.download, [], 'a probe never mints signed URLs');
+	assert.deepEqual(calls.inspect.map((call) => call.id), ['att-1', 'att-2', 'att-3']);
+	assert.deepEqual(probe.entries.map((entry) => entry.url), ['', '']);
+	assert.equal(probe.ownerId, owner);
+	assert.equal(probe.skipped, 1);
+	assert.equal(manifest(probe).skipped, 0, 'strangers never learn how many files were withheld');
+	assert.equal(manifest(probe, { revealSkipped: true }).skipped, 1);
+	assert.throws(() => stream(probe), /without signed URLs/);
+	const real = await plan(viewer, 'post-1');
+	assert.equal(real.ok, true);
+	if (real.ok === true) assert.deepEqual(real.entries.map((entry) => entry.url), ['https://bucket.test/att-1', 'https://bucket.test/att-2']);
+});
+
+test('linked media follows the projection moderation rule: blocked hidden for everyone, pending only for its owner', async () => {
+	const fixture: Fixture = {
+		things: { 'post-1': thing('post-1', ['post'], { text: 'Links' }) },
+		children: {},
+		bound: [
+			attachment('link-ok', 'post-1', 'ok.png', { attachmentLinked: true, crystal: { name: 'ok.png', url: 'https://cdn.example/ok.png' } }),
+			attachment('link-blocked', 'post-1', 'blocked.png', { attachmentLinked: true, moderation: { status: 'blocked' }, crystal: { name: 'blocked.png', url: 'https://cdn.example/blocked.png' } }),
+			attachment('link-pending', 'post-1', 'pending.png', { attachmentLinked: true, moderation: { status: 'pending' }, crystal: { name: 'pending.png', url: 'https://cdn.example/pending.png' } })
+		]
+	};
+	const { plan } = service(fixture);
+	const stranger = await plan(viewer, 'post-1');
+	assert.equal(stranger.ok, true);
+	if (stranger.ok === true) {
+		assert.deepEqual(stranger.links.map((link) => link.url), ['https://cdn.example/ok.png']);
+		assert.equal(stranger.skipped, 2);
+	}
+	const asOwner = await plan({ id: owner }, 'post-1');
+	assert.equal(asOwner.ok, true);
+	if (asOwner.ok === true) {
+		assert.deepEqual(asOwner.links.map((link) => link.url), ['https://cdn.example/ok.png', 'https://cdn.example/pending.png']);
+		assert.equal(asOwner.skipped, 1);
+	}
+});
+
+test('the traversal budget counts only Things the viewer may see; scanning and bound rows have their own explicit bounds', async () => {
+	const privateChildren = Array.from({ length: ARCHIVE_MAX_THINGS + 5 }, (_, index) => thing(`private-${index}`, ['post']));
+	const visible = thing('post-ok', ['post']);
+	const fixture: Fixture = {
+		things: { 'folder-1': thing('folder-1', ['folder'], { name: 'Mixed' }) },
+		children: { 'folder-1': [...privateChildren, visible] },
+		bound: [attachment('att-ok', 'post-ok', 'ok.png')],
+		hidden: new Set(privateChildren.map((child) => child.shareId))
+	};
+	// > ARCHIVE_MAX_THINGS private siblings do not trip 413 for the one visible post
+	const result = await service(fixture).plan(viewer, 'folder-1');
+	assert.equal(result.ok, true);
+	if (result.ok === true) assert.deepEqual(result.entries.map((entry) => entry.name), ['ok.png']);
+
+	const scanned = await service({ ...fixture, children: { 'folder-1': Array.from({ length: ARCHIVE_MAX_SCANNED_THINGS + 1 }, (_, index) => thing(`p-${index}`, ['post'])) }, hidden: undefined }).plan(viewer, 'folder-1');
+	assert.equal(scanned.ok, false);
+	assert.equal((scanned as { status: number }).status, 413);
+
+	const rows = Array.from({ length: ARCHIVE_MAX_BOUND_ROWS + 1 }, (_, index) => attachment(`row-${index}`, 'post-1', `${index}.png`, { attachmentLinked: true, crystal: { name: `${index}.png`, url: `https://cdn.example/${index}.png` } }));
+	const overCap = await service({ things: { 'post-1': thing('post-1', ['post']) }, children: {}, bound: rows }).plan(viewer, 'post-1');
+	assert.deepEqual(overCap, { ok: false, status: 413, error: 'These files are too large to download as one ZIP — download the folders inside separately' });
+});
+
+test('a media root readable only through a page composition resolves with sharedRoot exactly as the content endpoint does', async () => {
+	const media = thing('media-1', ['attachment'], { name: 'hero.png' });
+	const fixture: Fixture = {
+		things: { 'media-1': media },
+		children: {},
+		bound: [attachment('media-1', 'private-post', 'hero.png')],
+		hidden: new Set(['media-1']),
+		sharedVisible: new Set(['media-1@page-1'])
+	};
+	const { plan, calls } = service(fixture);
+	assert.equal((await plan(null, 'media-1')).ok, false, 'not readable on its own');
+	assert.equal((await plan(null, 'media-1', { sharedRoot: 'other-page' })).ok, false, 'the root grants nothing for another page');
+	const shared = await plan(null, 'media-1', { sharedRoot: 'page-1' });
+	assert.equal(shared.ok, true);
+	if (shared.ok === true) assert.deepEqual(shared.entries.map((entry) => entry.path), ['hero.png']);
+	assert.deepEqual(calls.download.at(-1)?.viewer, { id: '', sharedRoot: 'page-1' });
+	assert.ok(Object.keys(ARCHIVE_SHARED_ROOT_PROJECTION).includes('thingtime'));
+});
+
+test('planning past the request deadline fails with 504 instead of running into the platform limit', async () => {
+	let clock = 1_000;
+	const fixture: Fixture = {
+		things: { 'folder-1': thing('folder-1', ['folder'], { name: 'Slow' }) },
+		children: { 'folder-1': [thing('post-a', ['post']), thing('post-b', ['post'])] },
+		bound: [attachment('att-a', 'post-a', 'a.png'), attachment('att-b', 'post-b', 'b.png')]
+	};
+	const slow = service(fixture, {
+		canView: async () => {
+			clock += 3_000;
+			return true;
+		},
+		now: () => clock
+	});
+	const result = await slow.plan(viewer, 'folder-1', { deadlineAt: 4_000 });
+	assert.deepEqual(result, { ok: false, status: 504, error: 'Preparing this download took too long — try a smaller folder' });
 });
 
 // A projection naming both `crystal` and `crystal.<field>` makes Mongo reject

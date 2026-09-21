@@ -1,3 +1,5 @@
+import { SITE_FORM_REFS } from './siteFormsSuite.ts';
+
 // The builder DEMO LIBRARY — a deterministic catalog of example webpages
 // (sections, full pages, and component-block compositions) generated from
 // small family × layout × tone tables, so a few hundred demos live as ONE
@@ -532,7 +534,7 @@ const ROW_ITEM_CSS = { flex: '0 0 auto' } as const;
 
 // pill-shaped call to action: a text block dressed by css (blocks never carry
 // markup; the builder keeps it editable like any other text). Every demo
-// button LINKS somewhere — solid pills to /register, ghost pills to /docs —
+// Primary controls save requests; secondary links open matching catalog pages —
 // and shrink-wraps to its label: `align` keeps a standalone pill from
 // stretching to the column (100%-wide is the renderer's unaligned default),
 // ROW_ITEM_CSS keeps it from being flexed to a share of a row, and nowrap
@@ -543,13 +545,15 @@ const button = (
 	label: string,
 	variant: 'solid' | 'ghost' = 'solid',
 	options: { align?: 'start' | 'center' | 'end' | 'stretch'; href?: string } = {}
-): DemoBlock => ({
+): DemoBlock => variant === 'solid' && !options.href ? {
+	id: ctx.id(name), type: 'component', component: 'demo-site-forms-request', args: { brand: ctx.copy.brand, intent: label }, align: options.align || 'start', maxWidth: 400
+} : ({
 	id: ctx.id(name),
 	type: 'text',
 	text: label,
 	style: 'body',
 	tag: 'span',
-	href: options.href || (variant === 'solid' ? '/register' : '/docs'),
+	href: options.href || demoNavigationHref(label),
 	align: options.align || 'start',
 	css:
 		variant === 'solid'
@@ -557,10 +561,27 @@ const button = (
 			: { ...ROW_ITEM_CSS, display: 'inline-block', padding: '12px 22px', 'border-radius': '999px', border: `1px solid ${ctx.tone.border}`, color: ctx.tone.ink, 'font-weight': '600', 'font-size': '15px', 'white-space': 'nowrap', 'text-align': 'center' }
 });
 
+// Navigation uses existing catalog destinations, never invented site routes.
+export const demoNavigationHref = (label: string): string => {
+	const name = label.toLowerCase();
+	if (/docs|api|guide|support|help/.test(name)) return '/docs';
+	const family = /pricing|plans|membership/.test(name) ? 'pricing'
+		: /contact|book|talk|message/.test(name) ? 'contact'
+		: /calendar|schedule|event|visit|classes/.test(name) ? 'schedule'
+		: /team|about|careers/.test(name) ? 'team'
+		: /journal|blog|news|changelog|read/.test(name) ? 'blog-list'
+		: /menu|food|dining/.test(name) ? 'menu'
+		: /watch|video|demo|tour/.test(name) ? 'video'
+		: /faq|question/.test(name) ? 'faq'
+		: /work|portfolio|gallery|case stud/.test(name) ? 'gallery'
+		: /process|how it works|steps/.test(name) ? 'steps' : 'features';
+	return `/builder/demos?family=${family}&kind=section`;
+};
+
 // a nav/footer link label: its own width in the row, and a real link
 const navLink = (ctx: Ctx, name: string, label: string, extra: Record<string, string> = {}): DemoBlock => ({
 	...body(ctx, name, label, 14, { color: ctx.tone.text, 'font-weight': '500', 'white-space': 'nowrap', ...ROW_ITEM_CSS, ...extra }),
-	href: `/${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+	href: demoNavigationHref(label)
 });
 
 const container = (
@@ -762,7 +783,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 			container(ctx, 'wrap', 'column', [
 				heading(ctx, 'title', `Ready to try ${ctx.copy.brand}?`, 34, { color: ctx.tone.accentInk, 'text-align': 'center' }),
 				body(ctx, 'blurb', ctx.copy.blurb, 16, { color: ctx.tone.accentInk, opacity: '0.85', 'text-align': 'center' }),
-				{ id: ctx.id('button'), type: 'text', text: ctx.copy.ctaPrimary, style: 'body', tag: 'span', href: '/register', align: 'center', css: { ...ROW_ITEM_CSS, display: 'inline-block', padding: '12px 24px', 'border-radius': '999px', background: ctx.tone.accentInk, color: ctx.tone.accent, 'font-weight': '700', 'white-space': 'nowrap', 'text-align': 'center' } }
+				button(ctx, 'button', ctx.copy.ctaPrimary, 'solid', { align: 'center' })
 			], { gap: 4, align: 'center', css: { background: ctx.tone.accent, 'border-radius': '24px', padding: '48px 32px' } })
 		],
 		split: (ctx) => [
@@ -971,16 +992,16 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 		inline: (ctx) => [
 			container(ctx, 'wrap', 'column', [
 				heading(ctx, 'title', 'Get the monthly letter', 28),
-				body(ctx, 'blurb', 'One email a month: what shipped, what we learned, what is next. No tracking.', 15),
-				html(ctx, 'form', `<div style="display:flex;gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:200px;padding:12px 14px;border:1px solid ${ctx.tone.border};border-radius:12px;color:${ctx.tone.muted};background:${ctx.tone.surface}">you@example.com</span><span style="padding:12px 20px;border-radius:12px;background:${ctx.tone.accent};color:${ctx.tone.accentInk};font-weight:700">Subscribe</span></div>`)
+				body(ctx, 'blurb', 'Try a newsletter signup: enter an email and save a private signup record.', 15),
+				{ id: ctx.id('form'), type: 'component', component: SITE_FORM_REFS[0], args: { brand: ctx.copy.brand } }
 			], { gap: 3, maxWidth: 560, css: { padding: '32px 0' } })
 		],
 		card: (ctx) => [
 			card(ctx, 'wrap', [
 				eyebrow(ctx, 'eyebrow', 'Newsletter'),
 				heading(ctx, 'title', `${ctx.copy.brand}, monthly`, 26),
-				body(ctx, 'blurb', 'Short, useful, and easy to leave.', 15),
-				html(ctx, 'form', `<div style="display:flex;gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:180px;padding:11px 14px;border:1px solid ${ctx.tone.border};border-radius:999px;color:${ctx.tone.muted}">Email address</span><span style="padding:11px 18px;border-radius:999px;background:${ctx.tone.accent};color:${ctx.tone.accentInk};font-weight:700">Join</span></div>`)
+				body(ctx, 'blurb', 'A working signup form with records you can inspect and keep.', 15),
+				{ id: ctx.id('form'), type: 'component', component: SITE_FORM_REFS[0], args: { brand: ctx.copy.brand } }
 			], { padding: '28px', 'max-width': '480px' })
 		]
 	},
@@ -1017,20 +1038,20 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 		card: (ctx) => [
 			card(ctx, 'wrap', [
 				heading(ctx, 'title', 'Say hello', 28),
-				body(ctx, 'blurb', `We read everything. Expect a reply from a human at ${ctx.copy.brand} within a day.`, 15),
-				html(ctx, 'form', `<div style="display:grid;gap:10px"><span style="padding:12px 14px;border:1px solid ${ctx.tone.border};border-radius:12px;color:${ctx.tone.muted}">Your name</span><span style="padding:12px 14px;border:1px solid ${ctx.tone.border};border-radius:12px;color:${ctx.tone.muted}">Email</span><span style="padding:12px 14px;border:1px solid ${ctx.tone.border};border-radius:12px;color:${ctx.tone.muted};min-height:90px">How can we help?</span></div>`),
-				button(ctx, 'send', 'Send message')
+				body(ctx, 'blurb', `Save a private message for ${ctx.copy.brand}. Connect delivery when you make this site your own.`, 15),
+				{ id: ctx.id('form'), type: 'component', component: SITE_FORM_REFS[1], args: { brand: ctx.copy.brand } }
+
 			], { padding: '28px', 'max-width': '520px' })
 		],
 		split: (ctx) => [
 			container(ctx, 'wrap', 'grid', [
 				container(ctx, 'info', 'column', [
 					eyebrow(ctx, 'eyebrow', 'Contact'),
-					heading(ctx, 'title', 'Come and find us', 32),
-					body(ctx, 'address', '12 Harbour Lane, Sydney · Mon–Fri 9–5', 15),
-					body(ctx, 'email', `hello@${ctx.copy.brand.toLowerCase().replace(/[^a-z]/g, '')}.example`, 15, { color: ctx.tone.ink, 'font-weight': '600' })
+					heading(ctx, 'title', 'Start a conversation', 32),
+					body(ctx, 'address', 'Write a message and keep it in your private Things.', 15),
+					body(ctx, 'email', 'Connect a delivery Action when you make this site your own.', 15)
 				], { gap: 3 }),
-				artwork(ctx, 'map', 260)
+				{ id: ctx.id('form'), type: 'component', component: SITE_FORM_REFS[1], args: { brand: ctx.copy.brand } }
 			], { columns: 2, gap: 8, css: { padding: '40px 0', 'align-items': 'center' } })
 		]
 	},
@@ -1181,14 +1202,10 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 		]
 	},
 	video: {
-		frame: (ctx) => [
-			container(ctx, 'wrap', 'column', [
-				container(ctx, 'frame', 'column', [
-					container(ctx, 'play', 'column', [body(ctx, 'icon', '▶', 22, { color: ctx.tone.ink, 'text-align': 'center', 'line-height': '64px' })], { gap: 0, css: { width: '64px', height: '64px', 'border-radius': '999px', background: ctx.tone.surface, margin: 'auto', 'box-shadow': '0 8px 24px rgba(0,0,0,0.15)' } })
-				], { gap: 0, css: { background: ctx.tone.gradient, 'border-radius': '20px', 'min-height': '360px', 'justify-content': 'center' } }),
-				body(ctx, 'caption', `Watch: ${ctx.copy.posts[0].title} (3:12)`, 13, { color: ctx.tone.muted, 'text-align': 'center' })
-			], { gap: 3, align: 'center', maxWidth: 860, css: { padding: '32px 0' } })
-		]
+		frame: (ctx) => [container(ctx, 'wrap', 'column', [
+			heading(ctx, 'title', 'Video player', 28),
+			{ id: ctx.id('player'), type: 'component', component: 'demo-site-forms-media' }
+		], { gap: 3, align: 'center', maxWidth: 860, css: { padding: '32px 0' } })]
 	},
 	profile: {
 		'bio-links': (ctx) => [
@@ -1197,7 +1214,7 @@ const SECTIONS: Record<string, Record<string, SectionBuilder>> = {
 				heading(ctx, 'name', ctx.copy.team[0].name, 26, { 'text-align': 'center' }),
 				body(ctx, 'bio', `${ctx.copy.team[0].role} at ${ctx.copy.brand}. ${ctx.copy.tagline}`, 15, { 'text-align': 'center' }),
 				container(ctx, 'links', 'column', ctx.copy.links.slice(0, 5).map((link, index) =>
-					body(ctx, `link-${index}`, link, 15, { color: ctx.tone.ink, 'font-weight': '600', 'text-align': 'center', background: ctx.tone.surface, border: `1px solid ${ctx.tone.border}`, 'border-radius': '14px', padding: '14px' })
+					navLink(ctx, `link-${index}`, link, { color: ctx.tone.ink, 'font-weight': '600', 'text-align': 'center', background: ctx.tone.surface, border: `1px solid ${ctx.tone.border}`, 'border-radius': '14px', padding: '14px' })
 				), { gap: 3 })
 			], { gap: 4, align: 'center', maxWidth: 420, css: { padding: '40px 0' } })
 		],
@@ -1327,7 +1344,7 @@ export const WEBPAGE_DEMO_FAMILIES: WebpageDemoFamily[] = [
 	{ key: 'header', title: 'Header', emoji: '🧭', kind: 'section', description: 'Navigation rows — simple, centered, with a cta.' },
 	{ key: 'newsletter', title: 'Newsletter', emoji: '✉️', kind: 'section', description: 'Inline and card signup forms.' },
 	{ key: 'blog-list', title: 'Blog list', emoji: '📰', kind: 'section', description: 'Post cards and date-led lists.' },
-	{ key: 'contact', title: 'Contact', emoji: '📮', kind: 'section', description: 'Forms and split info + map panels.' },
+	{ key: 'contact', title: 'Contact', emoji: '📮', kind: 'section', description: 'Forms that save private contact messages.' },
 	{ key: 'timeline', title: 'Timeline', emoji: '🕰', kind: 'section', description: 'Changelogs and roadmaps.' },
 	{ key: 'comparison', title: 'Comparison', emoji: '⚖️', kind: 'section', description: 'A plan × feature table as an html block.' },
 	{ key: 'banner', title: 'Banner', emoji: '📣', kind: 'section', description: 'Announcement bars, pills, and gradient cards.' },
@@ -1335,7 +1352,7 @@ export const WEBPAGE_DEMO_FAMILIES: WebpageDemoFamily[] = [
 	{ key: 'media-text', title: 'Media + text', emoji: '🖼️', kind: 'section', description: 'Artwork beside or above copy.' },
 	{ key: 'cards', title: 'Cards', emoji: '🃏', kind: 'section', description: 'Product tiles and info cards.' },
 	{ key: 'checklist', title: 'Checklist', emoji: '✅', kind: 'section', description: 'Benefit lists with ticks and chips.' },
-	{ key: 'video', title: 'Video', emoji: '🎬', kind: 'section', description: 'A framed player placeholder with caption.' },
+	{ key: 'video', title: 'Video', emoji: '🎬', kind: 'section', description: 'A native video player with an editable media URL.' },
 	{ key: 'profile', title: 'Profile', emoji: '🪪', kind: 'section', description: 'Link-in-bio stacks and profile cards.' },
 	{ key: 'schedule', title: 'Schedule', emoji: '🗓', kind: 'section', description: 'Time-slot agendas.' },
 	{ key: 'menu', title: 'Menu', emoji: '🍽', kind: 'section', description: 'Dish lists with prices.' },
@@ -1385,8 +1402,8 @@ export const COMPONENT_DEMO_REFS = [
 	'thingtime-button-outline',
 	'thingtime-card-basic',
 	'thingtime-badge-solid',
-	'thingtime-input-text',
-	'thingtime-avatar-status'
+	'thingtime-avatar-status',
+	...SITE_FORM_REFS
 ];
 
 // thingtime-avatar-status draws `initials`, not a full name — one- or
@@ -1423,13 +1440,11 @@ const COMPONENT_PAGES: Array<{ key: string; title: string; description: string; 
 	{
 		key: 'form',
 		title: 'Form components',
-		description: 'Inputs and a submit button as component blocks inside a card.',
+		description: 'A native signup form that saves a private Thing through an Action.',
 		build: (ctx) => [
 			card(ctx, 'wrap', [
-				heading(ctx, 'title', 'Sign up', 26),
-				{ id: ctx.id('name'), type: 'component', component: COMPONENT_DEMO_REFS[4], args: { label: 'Name', placeholder: 'Ada Lovelace' } },
-				{ id: ctx.id('email'), type: 'component', component: COMPONENT_DEMO_REFS[4], args: { label: 'Email', placeholder: 'you@example.com' } },
-				{ id: ctx.id('submit'), type: 'component', component: COMPONENT_DEMO_REFS[0], args: { label: 'Create account' } }
+				heading(ctx, 'title', 'Newsletter signup', 26),
+				{ id: ctx.id('form'), type: 'component', component: SITE_FORM_REFS[0], args: { brand: ctx.copy.brand } }
 			], { 'max-width': '480px' })
 		]
 	},
@@ -1439,7 +1454,7 @@ const COMPONENT_PAGES: Array<{ key: string; title: string; description: string; 
 		description: 'Native text and containers around library badges and avatars.',
 		build: (ctx) => [
 			container(ctx, 'head', 'row', [
-				{ id: ctx.id('avatar'), type: 'component', component: COMPONENT_DEMO_REFS[5], args: { initials: monogram(ctx.copy.team[0].name) } },
+				{ id: ctx.id('avatar'), type: 'component', component: COMPONENT_DEMO_REFS[4], args: { initials: monogram(ctx.copy.team[0].name) } },
 				container(ctx, 'names', 'column', [
 					{ id: ctx.id('name'), type: 'text', text: ctx.copy.team[0].name, style: 'heading', tag: 'h3', css: typo(ctx.tone, 18, 700) },
 					{ id: ctx.id('badge'), type: 'component', component: COMPONENT_DEMO_REFS[3], args: { label: ctx.copy.team[0].role } }
@@ -1542,12 +1557,15 @@ export const getWebpageDemo = (slug: string): WebpageDemo | null => getWebpageDe
 export const countDemoBlocks = (blocks: DemoBlock[]): number =>
 	blocks.reduce((sum, block) => sum + 1 + (block.children ? countDemoBlocks(block.children) : 0), 0);
 
+const demoUsesSiteForms = (blocks: DemoBlock[]): boolean => blocks.some((block) => (block.type === 'component' && SITE_FORM_REFS.includes(block.component || '')) || !!(block.children && demoUsesSiteForms(block.children)));
+
 // The crystal a demo seeds/saves as — the same shape the builder writes.
 export const webpageDemoCrystal = (demo: WebpageDemo): Record<string, unknown> => ({
 	name: demo.name,
 	description: demo.description,
 	pageKey: webpageDemoPageKey(demo.slug),
-	version: 1,
+	version: 2,
+	...(demoUsesSiteForms(demo.blocks) ? { suiteKey: 'site-forms' } : {}),
 	previewBg: demo.previewBg,
 	blocks: demo.blocks
 });

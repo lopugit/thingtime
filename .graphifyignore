@@ -6,6 +6,8 @@
 /remix/.vercel/**
 /remix/dist/
 /remix/dist/**
+/remix/.functional-preview/
+/remix/.functional-preview/**
 /remix/server/assets/
 /remix/server/assets/**
 /MCP/dist-desktop/

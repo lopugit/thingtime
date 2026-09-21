@@ -205,7 +205,7 @@ export const expiredAttachmentDraftFilter = (
 	attachmentExpiresAt: { $lte: expiredAtOrBefore },
 	$or: [
 		{ targetId: { $exists: false }, attachmentState: 'pending' },
-		{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $ne: 'recording' } }, { attachmentPurpose: 'recording', attachmentImportDraft: true }] },
+		{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $nin: ['recording', 'file'] } }, { attachmentPurpose: { $in: ['recording', 'file'] }, attachmentImportDraft: true }] },
 		{
 			targetId: { $exists: false },
 			attachmentState: 'finalizing',
@@ -220,7 +220,7 @@ export const expiredAttachmentDraftFilter = (
 
 export const attachmentStore: AttachmentStore = {
 	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft }) {
-		if (recordingImportDraft && (purpose !== 'recording' || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
+		if (recordingImportDraft && (!['recording', 'file'].includes(purpose) || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
 		const now = new Date();
 		const unstamped = {
 			shareId: id,
@@ -790,7 +790,7 @@ export const attachmentStore: AttachmentStore = {
 	}
 };
 
-type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording'>;
+type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording' | 'file'>;
 
 const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
 	post: 'post',
@@ -923,7 +923,7 @@ export const commitRecordingImport = async (ownerId: string, id: string, expecte
     const sizeBytes = thingStorageSizeBytes(next);
     await applyUserStorageDelta(ownerId, sizeBytes - canonicalStoredBytes(before), session);
     const write = await things.updateOne({
-      _id: before._id, ownerId, attachmentState: 'ready', attachmentPurpose: 'recording', attachmentImportDraft: true,
+      _id: before._id, ownerId, attachmentState: 'ready', attachmentPurpose: before.attachmentPurpose, attachmentImportDraft: true,
       updatedAt: before.updatedAt, sizeBytes: before.sizeBytes
     } as any, {
       $set: { crystal: next.crystal, acl: [ACL_OWNER], updatedAt: next.updatedAt, sizeBytes },

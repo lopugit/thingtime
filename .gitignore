@@ -37,6 +37,7 @@ api/index.js
 api/index.js.map
 remix/.vercel/
 remix/dist/
+remix/.functional-preview/
 remix/server/assets/*
 !remix/server/assets/.gitignore
 electron/dist/
@@ -112,3 +113,7 @@ macos/ThingtimeWidgets/build/
 # Native Widgets distribution artifacts
 macos/ThingtimeWidgets/release/
 macos/ThingtimeWidgets/release-upload/
+
+# Claude Code per-checkout tooling state (worktree-derived dev ports, local permissions)
+.claude/launch.json
+.claude/settings.local.json

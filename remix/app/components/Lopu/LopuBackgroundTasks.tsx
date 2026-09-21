@@ -3,7 +3,7 @@ import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
 import { PageShell, PageHeader } from '~/components/Layout/PageShell';
-import type { AiBackgroundTask } from '~/api/utils/lopu/backgroundTaskCore';
+import type { LopuDisplayTask } from './lopuTaskPresentation';
 import { getAiTaskState, getServerAiTaskState, readAiTaskOutput, refreshAiTasks, stopAiTask, subscribeAiTasks } from './aiTasks.client';
 import { useLopuChat } from './useLopuChat';
 import { useLopu } from './useLopu';
@@ -29,7 +29,7 @@ const resultText = (output: string, contentType: string) => {
 	}
 	return text || 'No reply text has been saved yet.';
 };
-const TaskRow = ({ task, title }: { task: AiBackgroundTask; title?: string }) => {
+const TaskRow = ({ task, title }: { task: LopuDisplayTask; title?: string }) => {
 	const lopu = useLopu();
 	const [opened, setOpened] = React.useState(false),
 		[result, setResult] = React.useState(''),
@@ -38,7 +38,7 @@ const TaskRow = ({ task, title }: { task: AiBackgroundTask; title?: string }) =>
 		setOpened(!opened);
 		if (opened) return;
 		try {
-			const saved = await readAiTaskOutput(task);
+			const saved = await readAiTaskOutput(task.resultTask);
 			setResult(
 				saved
 					? resultText(saved.output, saved.task.contentType)

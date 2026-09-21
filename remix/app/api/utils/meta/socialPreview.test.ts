@@ -34,6 +34,11 @@ test('uncustomized pages use the press-kit PNG and safe shared page titles', asy
 	const custom = await resolveSocialMeta(new Request('https://thingtime.example/feed'));
 	assert.match(custom.tags.find((tag) => tag.key === 'og:image')!.content, /\/social-card\?/);
 	assert.equal(pageTitle('/branding', '[LC]'), '[LC] Thingtime - Brand resources');
+	// the connections routes label from the SHARED table, so the server-rendered
+	// social meta and the client-set document.title agree (root.tsx used to carry
+	// its own copy of this one case)
+	assert.equal(pageTitle('/connections'), 'Thingtime - Connections');
+	assert.equal(pageTitle('/connections/feed'), 'Thingtime - Connections');
 	assert.equal(pageTitle('/profile-secret'), DEFAULT_PAGE_TITLE);
 	assert.equal(pageTitle('/', '[LC]'), `[LC] ${DEFAULT_PAGE_TITLE}`);
 });
@@ -212,4 +217,23 @@ test('every canonical post family and thread shape gets a distinct social varian
 	assert.equal(reply.kind, 'reply');
 	assert.equal(reply.variant, 'reply');
 	assert.ok(reply.badges.includes('To Jade'));
+});
+
+test('an anonymously readable unlisted photo post has contextual metadata but stays noindex', async () => {
+  const { publicPostPreview } = await import('./socialPreview');
+  const { socialMetaFromPreview } = await import('./socialMeta');
+  const result = { ok: true, thing: { updatedAt: '2026-09-21' }, post: {
+    acl: ['tt:hidden'], author: { displayName: 'Photographer' }, text: 'Classic cars at the weekend meet',
+    thingtime: ['post'], attachments: [{ id: 'car-photo', mediaKind: 'image' }]
+  }};
+  const preview = await publicPostPreview('/post/car-meet', result);
+  assert.ok(preview);
+  assert.match(preview.title, /Classic cars/);
+  assert.equal(preview.images[0].attachmentId, 'car-photo');
+  const tags = new Map(socialMetaFromPreview('https://thingtime.example', preview).tags.map(tag => [tag.key, tag.content]));
+  assert.match(tags.get('og:description')!, /Classic cars/);
+  assert.match(tags.get('og:image')!, /social-card/);
+  assert.equal(tags.get('robots'), 'noindex, follow');
+  assert.equal(await publicPostPreview('/post/private', { ...result, ok: false }), null);
+  assert.equal(await publicPostPreview('/post/private', { ...result, post: { ...result.post, acl: ['tt:user'] } }), null);
 });

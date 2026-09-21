@@ -26,6 +26,8 @@ export type UpdownControlProps = {
 	size?: 'md' | 'sm';
 	// optional accent for the "up" state (a subspace's branding colour)
 	accent?: string | null;
+	// Bounded discussion pages deliberately omit unhydrated interaction totals.
+	hideUnknownScore?: boolean;
 };
 
 const formatScore = (score: number): string => {
@@ -38,6 +40,7 @@ const formatScore = (score: number): string => {
 export const UpdownControl = (props: UpdownControlProps) => {
 	const { onVote, enabled = true, size = 'md', accent } = props;
 	const votes = props.votes || EMPTY_VOTES;
+	const scoreKnown = !props.hideUnknownScore || !!props.votes;
 	const upColor = accent || UP;
 	const active = votes.viewerVote;
 	const iconSize = size === 'sm' ? 15 : 20;
@@ -87,10 +90,10 @@ export const UpdownControl = (props: UpdownControlProps) => {
 			background="var(--tt-card, #ffffff)"
 			flexShrink={0}
 			data-testid="updown-control"
-			title={`${votes.up} up · ${votes.down} down`}
+			title={scoreKnown ? `${votes.up} up · ${votes.down} down` : undefined}
 		>
 			{arrow('up')}
-			<Text
+			{scoreKnown && <Text
 				as="span"
 				minWidth={size === 'sm' ? '14px' : '18px'}
 				textAlign="center"
@@ -102,7 +105,7 @@ export const UpdownControl = (props: UpdownControlProps) => {
 				data-updown-score={votes.score}
 			>
 				{formatScore(votes.score)}
-			</Text>
+			</Text>}
 			{arrow('down')}
 		</Flex>
 	);

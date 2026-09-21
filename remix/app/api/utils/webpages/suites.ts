@@ -1,7 +1,9 @@
+import { bindSuiteComponentRefs } from '~/schemas/suiteComponentBindings';
+import type { DemoBlock } from '~/schemas/webpageDemos';
 import { getThingsCollection } from '../mongodb/collections';
 import { createThing, fail, isFail, updateThing, type Fail, type Viewer } from '../things/things';
 import { ACL_OWNER } from '~/schemas/registry';
-import { materializeSuite, suiteEntryPageKey, type BehaviourSuite } from '~/schemas/behaviourSuites';
+import { materializeSuite, suiteEntryPageKey, suiteSlug, type BehaviourSuite } from '~/schemas/behaviourSuites';
 // Import the app-suite REGISTRY, not just the lookup: registration is a
 // module side effect, and this route can be the first server module to run
 // after a dev rebuild — without this import `pokeworld` would 404 here until
@@ -61,7 +63,7 @@ const ownDocsByKey = async (viewerId: string, kind: string, field: string, keys:
 
 const SAMPLE_STAMP = 'suiteSample';
 
-export const installSuiteForViewer = async (viewer: Viewer, key: unknown): Promise<Fail | InstallSuiteResult> => {
+export const installSuiteForViewer = async (viewer: Viewer, key: unknown, options: { onlyMissing?: boolean } = {}): Promise<Fail | InstallSuiteResult> => {
 	if (!viewer?.id) return fail(401, 'Sign in to install a suite');
 	const suiteKey = typeof key === 'string' ? key.trim() : '';
 	const suite: BehaviourSuite | null = suiteKey ? ALL_SUITES.find((entry) => entry.key === suiteKey) || null : null;
@@ -73,6 +75,7 @@ export const installSuiteForViewer = async (viewer: Viewer, key: unknown): Promi
 
 	const upsert = async (kind: string, existing: OwnDoc | undefined, crystal: Record<string, unknown>, label: string): Promise<string> => {
 		if (existing) {
+			if (options.onlyMissing) return existing.shareId;
 			// same content → nothing to write; otherwise refresh in place
 			if (JSON.stringify(existing.crystal) === JSON.stringify(crystal)) return existing.shareId;
 			const result = await updateThing(viewer, existing.shareId, { crystal });
@@ -131,7 +134,8 @@ export const installSuiteForViewer = async (viewer: Viewer, key: unknown): Promi
 		const pageByKey = await ownDocsByKey(viewer.id, 'webpage', 'pageKey', bundle.pages.map((page) => page.pageKey));
 		const pageIds: Record<string, string> = {};
 		for (const page of bundle.pages) {
-			const crystal = { ...page.crystal, forkOf: page.shareId };
+			const bindings = Object.fromEntries(Object.entries(componentIds).map(([key, id]) => [suiteSlug(suite.key, key), id]));
+			const crystal = { ...page.crystal, blocks: bindSuiteComponentRefs(page.crystal.blocks as DemoBlock[], bindings), forkOf: page.shareId };
 			pageIds[page.key] = await upsert('webpage', pageByKey.get(page.pageKey), crystal, `page ${page.slug}`);
 		}
 

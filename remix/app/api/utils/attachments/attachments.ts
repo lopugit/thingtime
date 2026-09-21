@@ -64,7 +64,7 @@ export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
 export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
 export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
-export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import', 'subspace-icon', 'subspace-banner'] as const;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import', 'file', 'file-import', 'subspace-icon', 'subspace-banner'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
 export const CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -139,6 +139,8 @@ const attachmentUploadIntent = (
 	if (value === undefined || value === 'post') return { requestPurpose: 'post', purpose: 'post' };
 	if (value === 'comment') return { requestPurpose: value, purpose: 'comment' };
 	if (value === 'message') return { requestPurpose: value, purpose: 'message' };
+	if (value === 'file') return { requestPurpose: value, purpose: 'file' };
+	if (value === 'file-import') return { requestPurpose: value, purpose: 'file', recordingImportDraft: true };
 	if (value === 'recording') return { requestPurpose: value, purpose: 'recording' };
 	if (value === 'recording-import') return { requestPurpose: value, purpose: 'recording', recordingImportDraft: true };
 	if (value === 'profile-avatar') return { requestPurpose: value, purpose: 'profile', profileSlot: 'avatar' };
@@ -837,7 +839,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
-			if (intent.purpose === 'recording' && reserved.attachmentState === 'ready') {
+			if (['recording', 'file'].includes(intent.purpose) && reserved.attachmentState === 'ready') {
 				if (intent.recordingImportDraft && (reserved.attachmentImportDraft !== true ||
 					!(reserved.attachmentExpiresAt instanceof Date) || !Number.isFinite(reserved.attachmentExpiresAt.getTime()) ||
 					reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
@@ -1263,7 +1265,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// Saved recordings intentionally have no expiry: they are private
 			// library content, not abandoned upload drafts. This exception is
 			// exact-owner only and must not revive an expiring/import draft.
-			const durableRecording = doc.attachmentPurpose === 'recording' &&
+			const durableRecording = ['recording', 'file'].includes(doc.attachmentPurpose || '') &&
 				doc.attachmentImportDraft !== true && !doc.attachmentExpiresAt &&
 				!doc.attachmentLinked && !doc.attachmentProfileSlot &&
 				doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment' &&
@@ -1351,6 +1353,19 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			};
 		} catch (error) {
 			return knownFailure(error) || unavailable('download', error);
+		}
+	};
+
+	// The download gates without a signed URL: size and served type only. The
+	// archive planner uses it for manifests and HEAD probes so those never
+	// presign hundreds of objects nobody is about to fetch.
+	const inspectDownload = async (viewer: AttachmentViewer, idInput: unknown): Promise<AttachmentResult<{ size: number; contentType: string }>> => {
+		try {
+			const readable = await readableStoredAttachment(viewer, idInput);
+			if (readable.ok === false) return readable;
+			return { ok: true, size: readable.doc.objectSizeBytes, contentType: 'application/octet-stream' };
+		} catch (error) {
+			return knownFailure(error) || unavailable('inspect', error);
 		}
 	};
 
@@ -1495,6 +1510,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		cancel,
 		remove,
 		download,
+		inspectDownload,
 		describeTransfer,
 		copy,
 		inspectForPost,
@@ -1516,6 +1532,7 @@ export const completeAttachmentUpload = service.complete;
 export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
+export const inspectAttachmentDownload = service.inspectDownload;
 export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;

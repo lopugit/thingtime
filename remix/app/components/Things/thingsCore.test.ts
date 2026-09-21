@@ -80,3 +80,19 @@ test('schemaRenderOf reads a schema thing render template and nothing else', () 
   assert.equal(schemaRenderOf(null), null);
   assert.equal(schemaRenderOf(undefined), null);
 });
+
+test('explicit legacy Lopu folder markers use canonical browse links and sort before data', async () => {
+  const { isFolder, sortThings, thingIcon, thingDisplayName, thingRenameCrystal } = await import('./thingsCore');
+  const folder = { ...makeThing('legacy-folder', 'data'), crystal: { kind: 'folder', name: 'Original folder', value: { kept: true } } };
+  assert.equal(isFolder(folder), true);
+  assert.equal(thingIcon(folder), '📁');
+  assert.equal(thingLink(folder), '/things?folder=legacy-folder');
+  assert.equal(thingOpenHref(folder, 'things'), '/things?folder=legacy-folder');
+  assert.equal(sortThings([makeThing('data', 'data'), folder], 'newest')[0].id, folder.id);
+  const patch = thingRenameCrystal(folder, 'Renamed folder');
+  assert.deepEqual(patch, { title: 'Renamed folder', name: 'Renamed folder' });
+  assert.equal(thingDisplayName({ ...folder, crystal: { ...folder.crystal, ...patch } }), 'Renamed folder');
+  assert.deepEqual(folder.crystal.value, { kept: true });
+  for (const crystal of [{ name: 'folder' }, { type: 'Folder' }, { folder: true }]) assert.equal(isFolder({ ...folder, crystal }), false);
+  assert.equal(isFolder({ ...folder, thingtime: ['post', 'data'] }), false);
+});
