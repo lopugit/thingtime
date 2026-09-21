@@ -49,3 +49,9 @@ The local acceptance URL is http://localhost:19450/library (HMR 19451, Nitro
 19452). Tailscale Funnel is unavailable because the installed wrapper points to
 a missing Tailscale application. Branch preview and production are verified
 through Vercel and the PR checks before release.
+
+A final sweep on the release candidate completed with 466/468 immediately
+successful executions; both CSV cases passed their focused rerun without code
+changes, so transient external execution failures remain possible. The deployed
+Vercel chart rendered correctly. Its nested iframe was changed to `display:block`
+to remove the inline baseline gap and unnecessary outer scrollbar.
