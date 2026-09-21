@@ -95,7 +95,7 @@ console.log(`\n▶ verify-demo-apps against ${base}`);
 	} else console.log(`  · seed skipped (status ${seeded.status}) — set TT_VERIFY_ADMIN_USER/PASS to seed`);
 	const demos = await api('GET', '/api/v1/webpages/demos');
 	const suites = demos.data?.suites || [];
-	for (const key of ['dusted', 'thingmon', 'snapquest', 'branchwood']) check(`demos lists the ${key} app`, suites.some((suite) => suite.key === key && suite.app), suites.map((suite) => suite.key));
+	for (const key of ['dusted', 'thingmon', 'snapquest', 'branchwood', 'garden']) check(`demos lists the ${key} app`, suites.some((suite) => suite.key === key && suite.app), suites.map((suite) => suite.key));
 }
 
 const install = async (key) => {
@@ -357,6 +357,45 @@ if (!only || only.has('branchwood')) {
 	const again = await run('app-branchwood-begin');
 	check('begin again resets in place and keeps the endings', ok(again) && /kept/.test(again.result?.message || '') && (await run('app-branchwood-scene')).result?.endingsFound === 1, again);
 	await resolvePages(['branchwood', 'branchwood-journal']);
+}
+
+// ── 5. Pixel Garden ─────────────────────────────────────────────────────────
+if (!only || only.has('garden')) {
+	console.log('\n■ Pixel Garden');
+	await install('garden');
+	const cold = await run('app-garden-garden');
+	check('garden before start: hasGarden false, catalogue + weather still answer', ok(cold) && cold.result?.hasGarden === false && cold.result?.catalogue?.length === 6 && typeof cold.result?.weather === 'string', cold.result);
+	const plantEarly = await run('app-garden-plant', { bed: 1, seed: 'radish' });
+	check('plant before start is refused', !ok(plantEarly) && /Open the garden/.test(plantEarly.error || ''), plantEarly);
+	const start = await run('app-garden-start');
+	check('start opens the garden', ok(start) && /Six beds/.test(start.result?.message || ''), start);
+	const fresh = await run('app-garden-garden');
+	check('garden after start: 6 empty beds, 20 coins, clock formatted', ok(fresh) && fresh.result?.hasGarden === true && fresh.result?.beds?.length === 6 && fresh.result.beds.every((bed) => bed.planted === false) && fresh.result?.coins === 20 && /\d/.test(fresh.result?.clock || ''), fresh.result);
+	const plant = await run('app-garden-plant', { bed: 1, seed: 'radish' });
+	check('plant a radish in bed 1', ok(plant) && /Planted a Radish in bed 1/.test(plant.result?.message || ''), plant);
+	const taken = await run('app-garden-plant', { bed: 1, seed: 'radish' });
+	check('planting a taken bed is refused', !ok(taken) && /taken/.test(taken.error || ''), taken);
+	const poor = await run('app-garden-plant', { bed: 2, seed: 'bonsai' });
+	check('planting what you cannot afford is refused', !ok(poor) && /costs 60 coins/.test(poor.error || ''), poor);
+	const state = await run('app-garden-garden');
+	const bed1 = state.result?.beds?.[0];
+	check('bed 1 view: planted radish, seedling, 0–100% grown, not thirsty, 19 coins', bed1?.planted === true && bed1?.seedName === 'Radish' && bed1?.stageName === 'seedling' && bed1?.percent >= 0 && bed1?.percent < 100 && bed1?.thirsty === false && state.result?.coins === 19, { bed1, coins: state.result?.coins });
+	const notThirsty = await run('app-garden-water', { bed: 1 });
+	check('watering a freshly watered bed is refused', !ok(notThirsty) && /not thirsty/.test(notThirsty.error || ''), notThirsty);
+	const notReady = await run('app-garden-harvest', { bed: 1 });
+	check('harvesting before it is ready is refused with the percent', !ok(notReady) && /Not ready/.test(notReady.error || ''), notReady);
+	const empty = await run('app-garden-harvest', { bed: 3 });
+	check('harvesting an empty bed is refused', !ok(empty) && /Nothing is planted/.test(empty.error || ''), empty);
+	const pumpkin = await run('app-garden-plant', { bed: 2, seed: 'pumpkin' });
+	check('plant a pumpkin in bed 2 with the remaining coins', ok(pumpkin) && (await run('app-garden-garden')).result?.coins === 1, pumpkin);
+	const clear = await run('app-garden-clear', { bed: 2 });
+	check('dig up bed 2', ok(clear) && (await run('app-garden-garden')).result?.beds?.[1]?.planted === false, clear);
+	const compost = await run('app-garden-compost');
+	check('compost resets beds and coins', ok(compost) && (await run('app-garden-garden')).result?.beds?.every((bed) => bed.planted === false) && (await run('app-garden-garden')).result?.coins === 20, compost);
+	await resolvePages(['garden', 'garden-shed']);
+	const resolved = await api('GET', '/api/v1/webpages/resolve?id=garden');
+	const bedsBlock = JSON.stringify(resolved.data?.page?.crystal?.blocks || []);
+	check('the garden page binds its source with refresh: interval', /"refresh":"interval"/.test(bedsBlock) && /"intervalMs":15000/.test(bedsBlock), bedsBlock.slice(0, 300));
 }
 
 console.log(`\n${passed} passed · ${failed} failed`);
