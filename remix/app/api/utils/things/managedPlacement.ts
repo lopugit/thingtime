@@ -1,3 +1,4 @@
+import { folderThingMatch } from '../../../schemas/folderThing';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { prepareManagedPlacement, type PlacementRecord } from './managedPlacementCore';
@@ -40,7 +41,7 @@ export const moveManagedContent = async (
     const source = await things.findOne({ shareId: id, ownerId } as any, { session }) as unknown as PlacementRecord | null;
     if (!source) throw new Error('Managed content not found');
     const folder = folderId === null ? null : await things.findOne(
-      { shareId: folderId, ownerId, thingtime: ['folder'] } as any, { session }
+      { shareId: folderId, ownerId, ...folderThingMatch() } as any, { session }
     ) as unknown as PlacementRecord | null;
     if (folderId !== null && !folder) throw new Error('Folder not found');
     const now = deps.now();
@@ -53,7 +54,7 @@ export const moveManagedContent = async (
       // A real timestamp advance makes this transaction a folder writer too:
       // either deletion observes our placement or our retry sees no folder.
       const locked = await things.updateOne(
-        { shareId: folder.shareId, ownerId, thingtime: ['folder'], updatedAt: folder.updatedAt } as any,
+        { shareId: folder.shareId, ownerId, ...folderThingMatch(), updatedAt: folder.updatedAt } as any,
         { $set: { updatedAt: new Date(Math.max(now.getTime(), folder.updatedAt.getTime() + 1)) } }, { session }
       );
       if (locked.matchedCount !== 1) throw new Error('Folder changed before the move');

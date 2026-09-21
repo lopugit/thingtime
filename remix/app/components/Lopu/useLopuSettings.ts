@@ -22,6 +22,7 @@ export type LopuDock = 'free' | 'right' | 'left' | 'top' | 'bottom';
 export type LopuSpeed = 'normal' | 'fast';
 
 export interface LopuSettings {
+ management: 'client' | 'server';
 	// show the floating 🦄 bubble on every page
 	launcher: boolean;
 	// where the chat window sits: free-floating or flush against an edge
@@ -67,6 +68,7 @@ export const LOPU_SETTINGS_NAMESPACE = 'lopu';
 export const LOPU_SETTINGS_PATH = 'settings.lopu';
 
 export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
+ management: 'server',
 	launcher: true,
 	dock: 'free',
 	dockMode: 'overlay',
@@ -118,6 +120,7 @@ export const normalizeLopuSettings = (raw: unknown): LopuSettings => {
 	const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
 
 	return {
+		management: source.management === 'client' ? 'client' : 'server',
 		launcher: boolOr(source.launcher, LOPU_SETTINGS_DEFAULTS.launcher),
 		dock: normalizeLopuDock(source.dock),
 	dockMode: source.dockMode === 'split' ? 'split' : 'overlay',
@@ -490,6 +493,7 @@ export const useLopuSettings = () => {
 		open,
 		setOpen,
 		toggleOpen,
+		setManagement: (value: 'client' | 'server') => setLopuSetting('management', value),
 		setLauncher,
 		setDock,
 		setMinimised: (value: boolean) => setThingtime?.('settings.lopu.minimised', value, { ignoreUndoRedo: true, namespace: 'lopu', tabLocal: true }),

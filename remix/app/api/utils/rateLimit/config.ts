@@ -30,6 +30,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // "download all" ZIP builds (GET /api/v1/attachments/archive) — each call
   // enumerates a Thing's files and streams them; heavier than one read
   'attachments.archive': { limit: 30, windowMs: 60_000, enabled: true },
+  // manifest=1 and HEAD probes on the same endpoint: enumerate + authorize
+  // without presigning or streaming. Their own window so folder browsing and
+  // download-manager probes never spend the ZIP budget above.
+  'attachments.archiveManifest': { limit: 120, windowMs: 60_000, enabled: true },
   // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
   'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
@@ -99,6 +103,18 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // anonymous browse shape as schemas.browse; it only ever returns public theme
   // projections, but each call is two indexed reads and up to 60 token docs
   'themes.gallery': { limit: 120, windowMs: 60_000, enabled: true },
+  // third-party connections (/api/v1/connections) — reads of stored feed
+  // pages and connection lists, bounded like the other authenticated reads
+  'connections.read': { limit: 120, windowMs: 60_000, enabled: true },
+  // link/unlink/filter writes and OAuth begin — each mints or mutates account
+  // linkage, write-shaped like things.write
+  'connections.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // calls that leave our infrastructure for a provider API (YouTube channel
+  // search/resolve, forced feed sync). These spend a SHARED, quota-limited
+  // third-party budget — a YouTube Data API search costs 100 of ~10,000 daily
+  // units — so one signed-in account must not be able to exhaust the feature
+  // for everyone. Deliberately much tighter than the local reads above.
+  'connections.provider': { limit: 20, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },
@@ -291,6 +307,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
 	// User Secure Vault writes are rare and credential-sensitive; voice replies
 	// can spend a user-supplied provider quota, so both fail closed at routes.
+  'library.request': { limit: 20, windowMs: 60_000, enabled: true },
 	'lopu.vault': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.voiceReply': { limit: 30, windowMs: 60_000, enabled: true },
 	// Paired device mesh. Pairing creates credentials and therefore fails

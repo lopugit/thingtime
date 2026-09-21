@@ -1,3 +1,4 @@
+import { isFolderThing } from '../../schemas/folderThing';
 // One audience vocabulary for every Thing surface. Posts, Builder pages,
 // components, folders and generic data Things all persist the same ACL
 // grammar; this module keeps their quick choices and hidden-link URLs from
@@ -56,15 +57,15 @@ export const audienceOfAcl = (acl: readonly string[] | undefined): ThingAudience
 
 export type ResolvedAudience = { sourceId: string; acl: string[]; linkKey?: string };
 
-type LinkableThing = { audience?: ResolvedAudience; id: string; thingtime: readonly string[]; acl?: readonly string[]; linkKey?: string | null };
+type LinkableThing = { audience?: ResolvedAudience; id: string; thingtime: readonly string[]; crystal?: Record<string, unknown>; acl?: readonly string[]; linkKey?: string | null };
 
 const universalThingLink = (id: string): string => `/thing/${encodeURIComponent(id)}`;
 
-export const thingPath = (thing: Pick<LinkableThing, 'id' | 'thingtime'>): string => {
+export const thingPath = (thing: Pick<LinkableThing, 'id' | 'thingtime' | 'crystal'>): string => {
 	const id = encodeURIComponent(thing.id);
 	if (thing.thingtime.includes('attachment')) return `/media/${id}`;
 	if (thing.thingtime.includes('comment')) return `/post/${id}`;
-	if (thing.thingtime.includes('folder')) return `/things?folder=${id}`;
+	if (isFolderThing(thing)) return `/things?folder=${id}`;
 	if (thing.thingtime.includes('post')) return `/post/${id}`;
 	if (thing.thingtime.includes('action')) return `/actions/${id}`;
 	if (thing.thingtime.includes('webpage')) return `/p/${id}`;

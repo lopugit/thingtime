@@ -52,6 +52,18 @@ test('expired recording import drafts enter cleanup without sweeping durable rec
   assert.deepEqual(filter.attachmentExpiresAt, { $lte: now });
   assert.deepEqual((filter.$or as any[])[1], {
     targetId: { $exists: false }, attachmentState: 'ready',
-    $or: [{ attachmentPurpose: { $ne: 'recording' } }, { attachmentPurpose: 'recording', attachmentImportDraft: true }]
+    $or: [{ attachmentPurpose: { $nin: ['recording', 'file'] } }, { attachmentPurpose: { $in: ['recording', 'file'] }, attachmentImportDraft: true }]
   });
+});
+
+test('file imports retain immutable file purpose, private ACL and byte accounting', () => {
+  const before = { ...fixture(), attachmentPurpose: 'file' as const };
+  const next = prepareRecordingImport(before, 'owner', 4, {}, now);
+  assert.equal(next.attachmentPurpose, 'file');
+  assert.equal(next.attachmentExpiresAt, undefined);
+  assert.equal(next.attachmentImportDraft, undefined);
+  assert.equal(next.objectSizeBytes, 4);
+  assert.deepEqual(next.acl, ['tt:user']);
+  assert.equal(isDurableRecordingUpload(next), true);
+  assert.equal(isDurableRecordingUpload(before), false);
 });

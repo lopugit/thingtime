@@ -24,6 +24,9 @@
 // Every materialised crystal clears its kind's write gate unchanged; the unit
 // test asserts that for both modes across the whole catalog.
 
+import { suiteControlForms } from './suiteControlForms';
+import { catalogRecordsSuite } from './catalogRecordsSuite';
+import { siteFormsSuite } from './siteFormsSuite.ts';
 import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from './webpageDemos.ts';
 
 export const SUITE_SLUG_PREFIX = 'demo-';
@@ -270,6 +273,8 @@ const suitePage = (
 
 // ---------------------------------------------------------------------------
 export const BEHAVIOUR_SUITES: BehaviourSuite[] = [
+	siteFormsSuite,
+	catalogRecordsSuite,
 	{
 		key: 'guestbook',
 		title: 'Guestbook',
@@ -277,7 +282,7 @@ export const BEHAVIOUR_SUITES: BehaviourSuite[] = [
 		description: 'Sign a guestbook, then read the signatures back.',
 		story: [
 			'The simplest program: one schema, one create action, one search action. Signing mints a private guestbook-entry data thing stamped with $now; the reader lists the newest twelve.',
-			'Change the name, message, or mood in the builder inspector — the control passes its args as the action inputs.'
+			'Enter your name, message, and mood in the form. Save a signature, then read the latest entries below.'
 		],
 		tone: 'paper',
 		schemas: [
@@ -1341,9 +1346,9 @@ export const materializeSuite = (suite: BehaviourSuite, mode: SuiteMode): Materi
 				library: 'thingtime',
 				category: 'demo suites',
 				componentKey: suiteSlug(suite.key, component.key),
-				version: 1,
+				version: isAppSuite(suite) ? 1 : 2,
 				args: component.args,
-				render: component.render(refs)
+				render: isAppSuite(suite) ? component.render(refs) : suiteControlForms(component.render(refs), suite.actions, refs)
 			}
 		})),
 		actions: suite.actions.map((action) => ({

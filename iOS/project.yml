@@ -97,6 +97,7 @@ targets:
       - path: Shared
         excludes:
           - LopuVoiceActivityAttributes.swift
+          - LopuChatActivityAttributes.swift
       - path: Thingtime/Resources/Assets.xcassets
         buildPhase: resources
     info:

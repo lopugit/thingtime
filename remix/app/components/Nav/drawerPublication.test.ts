@@ -38,8 +38,8 @@ test('the marketing section itself follows its children for visitors', () => {
 	assert.ok(!ids(filterDrawerTopItems(drawerMenuItems, true, false)).includes('marketing'));
 	assert.ok(ids(filterDrawerTopItems(drawerMenuItems, false, true, nothing)).includes('marketing'), 'admins keep the section');
 	assert.ok(ids(filterDrawerTopItems(drawerMenuItems, false, false, only('category:landing'))).includes('marketing'), 'one published child is enough');
-	// nothing else is ever dropped by the publication filter
-	assert.equal(filterDrawerTopItems(drawerMenuItems, false, false, nothing).length, drawerMenuItems.length - 1);
+	// Publication filtering preserves all sections the viewer is authorized to see.
+	assert.equal(filterDrawerTopItems(drawerMenuItems, false, false, nothing).length, filterDrawerItemsByAuth(drawerMenuItems, false, false, () => true).length - 1);
 	// the auth-only rules still apply unchanged
 	const messages = drawerMenuItems.find((item) => item.id === 'messages')!;
 	assert.deepEqual(filterDrawerItemsByAuth(messages.children, false, false, nothing), []);
@@ -73,4 +73,11 @@ test('a section is listed by its children, not by its own key', () => {
 	assert.ok(!ids(filterDrawerItemsByAuth(drawerMenuItems, false, false, live)).includes('marketing'));
 	// and they agree once the hub itself is published
 	assert.ok(ids(filterDrawerItemsByAuth(drawerMenuItems, false, false, only('hub'))).includes('marketing'));
+});
+
+test('Admin is a top-level admin-only section immediately below Dev', () => {
+	const ids = (admin: boolean) => filterDrawerTopItems(drawerMenuItems, true, admin, nothing).map(item => item.id);
+	assert.ok(!ids(false).includes('admin'));
+	assert.equal(ids(true).indexOf('admin'), ids(true).indexOf('dev') + 1);
+	assert.ok(!drawerMenuItems.find(item => item.id === 'dev')!.children.some(item => item.id === 'dev-admin'));
 });

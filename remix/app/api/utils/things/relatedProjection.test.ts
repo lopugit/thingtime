@@ -144,3 +144,18 @@ test('canonical link grants cannot bypass token scopes, moderation, missing pare
   assert.equal(await canViewInherited(target, guest, lookup), false);
   assert.equal(canView({ ...root, thingtime: ['post-discovery'] }, withThingLink(null, root.shareId)), false);
 });
+
+test('a non-post Thing discussion and every reply inherit live visibility without a duplicate root', async () => {
+  const { root, docs, lookup } = inheritanceFixture(['tt:user']);
+  root.thingtime = ['data'];
+  for (const doc of docs) assert.equal(await canViewInherited(doc, withThingLink(null, doc.shareId), lookup), false);
+  root.acl = ['tt:all'];
+  for (const doc of docs) assert.equal(await canViewInherited(doc, null, lookup), true);
+  root.acl = ['tt:group/team'];
+  for (const doc of docs) {
+    assert.equal(await canViewInherited(doc, { id: 'member', groupIds: new Set(['team']) }, lookup), true);
+    assert.equal(await canViewInherited(doc, { id: 'outsider' }, lookup), false);
+  }
+  root.acl = ['tt:user'];
+  for (const doc of docs) assert.equal(await canViewInherited(doc, { id: 'member', groupIds: new Set(['team']) }, lookup), false);
+});

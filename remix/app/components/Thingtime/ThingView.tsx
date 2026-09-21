@@ -222,6 +222,7 @@ const CornerToggle = (props: { rendered: boolean; rendererTitle: string; onToggl
 };
 
 export type ThingViewProps = {
+  initialMode?: 'data' | 'interactive';
 	thing: unknown;
 	// what the native tree shows as the root label (display only — the store
 	// address is a unique per-instance key, so feed cards never collide)
@@ -251,7 +252,7 @@ export const ThingView = (props: ThingViewProps) => {
 
 	// default to the rendered form when one is available ("render mode by
 	// default"); the corner icon flips to the native Thingtime view and back
-	const [showRendered, setShowRendered] = React.useState(true);
+	const [showRendered, setShowRendered] = React.useState(props.initialMode !== 'data');
 	const rendered = canRender && showRendered;
 
 	// unique, stable store address per ThingView instance so sibling feed cards

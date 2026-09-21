@@ -11,7 +11,9 @@ const chat: any = {
 };
 let writes = 0;
 let active = true;
-mock.module('../mongodb/collections', { namedExports: { getThingsCollection: async () => ({}), withHomeMongoTransaction: async () => {} } });
+let checkpoint: any = null;
+let cancelledCheckpoint = false;
+mock.module('../mongodb/collections', { namedExports: { getThingsCollection: async () => ({findOne:async()=>checkpoint}), getHomeThingsCollection:async()=>({findOne:async()=>cancelledCheckpoint?{}:null}), withHomeMongoTransaction: async () => {} } });
 mock.module('../messenger/messenger', {
 	namedExports: {
 		resolveChatAccess: async (viewer: string) =>
@@ -74,4 +76,17 @@ test('invalid values, foreign accounts and inactive memberships never write', as
 	active = false;
 	assert.equal((await updateLopuChat('owner', chat.shareId, { archived: true })).ok, false);
 	assert.equal(writes, before);
+});
+
+test('persisted retry limit is enforced by the continuation reader, with explicit Continue allowed', async () => {
+ active = true; chat.crystal.lopu.archived = false;
+ const {readLopuContinuation} = await import('../messenger/lopuChats.ts');
+ checkpoint = {crystal:{lopu:{role:'assistant',requestId:'saved',stopReason:'error',continuationSafe:true,recoveryFailures:4}}};
+ assert.equal((await readLopuContinuation('owner',chat.shareId,'saved',true)).ok,true);
+ checkpoint.crystal.lopu.recoveryFailures=5;
+ assert.equal((await readLopuContinuation('owner',chat.shareId,'saved',true)).ok,false);
+ assert.equal((await readLopuContinuation('owner',chat.shareId,'saved',false)).ok,true);
+ checkpoint.crystal.lopu.recoveryFailures=0; cancelledCheckpoint=true;
+ assert.equal((await readLopuContinuation('owner',chat.shareId,'saved',true)).ok,false,'Stop still overrides the retry budget');
+ cancelledCheckpoint=false;
 });

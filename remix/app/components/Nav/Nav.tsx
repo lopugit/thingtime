@@ -1,10 +1,9 @@
 import React from 'react';
 import { Box, Center, Flex } from '@chakra-ui/react';
-import { ArrowLeft, ArrowRight, Command, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
-import { toggleQuickSwitcher } from '../QuickSwitcher/QuickSwitcher';
 import { Icon } from '../Icon/Icon';
 import { NotificationsBell } from './NotificationsBell';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from './Drawer/useDrawer';
@@ -55,7 +54,7 @@ const NavAccountLink = (props: { claimedUser: ReturnType<typeof useCurrentUser> 
 			{claimedUser ? (
 				<Link to="/profile">
 					<Flex flexDir="row" gap={2} alignItems="center">
-						<Box fontSize="xs" fontWeight="600">
+						<Box fontSize="xs" fontWeight="600" maxWidth={{ base: '5ch', md: '24ch' }} overflow="hidden" textOverflow="ellipsis" title={getUserDisplayName(claimedUser)}>
 							{getUserDisplayName(claimedUser)}
 						</Box>
 						<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
@@ -144,19 +143,7 @@ export const Nav = (props) => {
 		return false;
 	}, [pathname]);
 
-	const editorToggleable = React.useMemo(() => {
-		if (pathname.slice(0, 7) === '/things') {
-			return true;
-		} else if (pathname.slice(0, 5) === '/edit') {
-			return true;
-		}
-
-		if (thingtime.get('thingtimeUrlPageVisible')) {
-			return true;
-		}
-
-		return false;
-	}, [pathname, thingtime]);
+	const editorToggleable = /^\/(things|edit|editor)\/.+/.test(pathname);
 
 	const toggleEdit = React.useCallback(
 		(e) => {
@@ -312,29 +299,14 @@ export const Nav = (props) => {
 							</Center>
 						) : null}
 					</Center>
-					{/* Reserve desktop space for search so it cannot cover the account or bell,
-					including when a pinned drawer narrows the available header. */}
-					<Box
-						className="nav-search-section"
-						position={['absolute', 'relative']}
-						left={[0, 'auto']}
-						right={[0, 'auto']}
-						top={[0, 'auto']}
-						flex={1}
-						minWidth={0}
-						height="48px"
-						marginX={[0, 2]}
-						sx={{ 'html.thingtime-electron-desktop &': { display: 'contents' } }}
-					>
-						<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
-					</Box>
+					<CommanderV2 key={user?.id || "anonymous"} global id="nav" />
 					{/* relative + above the commander host (zIndex 9999): the centered
 				search pill is absolutely positioned, and long usernames (and now
 				the bell) can extend under it — these controls must stay tappable */}
 				<Center
 					className="nav-right-section"
 					flexShrink={0}
-					columnGap={[3, 8]}
+					columnGap={[2, 8]}
 					height="100%"
 					marginLeft="auto"
 					position="relative"
@@ -343,29 +315,9 @@ export const Nav = (props) => {
 						{/* 🦄 Lopu opener — toggles the floating chat window (hidden on
 						/lopu*, where the page is the chat); the same ring as the launcher */}
 						<LopuNavButton />
-						{/* ⌘K quick switcher trigger — the touch/mobile way in (desktop
-						has the chord); sits by the search pill, styled like the other
-						nav icon buttons */}
-						<Center
-							className="nav-quick-switcher-button"
-							as="button"
-							type="button"
-							cursor="pointer"
-							opacity={0.55}
-							aria-label="Quick switcher (⌘K)"
-							title="Quick switcher (⌘K)"
-							_hover={{ opacity: 1 }}
-							sx={{
-								WebkitTapHighlightColor: 'transparent',
-								touchAction: 'manipulation'
-							}}
-							onClick={(event: React.MouseEvent) => {
-								event.preventDefault();
-								event.stopPropagation();
-								toggleQuickSwitcher();
-							}}
-						>
-							<Command size={14} strokeWidth={1.9} />
+						<Center as="button" type="button" display={{ base: 'flex', md: 'none' }} width="36px" height="36px"
+							aria-label="Open Commander search" title="Search" onClick={onElectronSearchClick}>
+							<Search size={18} />
 						</Center>
 						{inEditMode && (
 							<Center

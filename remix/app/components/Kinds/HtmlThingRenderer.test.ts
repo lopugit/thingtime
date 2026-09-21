@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { ALLOWED_PROPS } from './HtmlThingRenderer.tsx';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { createMemoryRouter, RouterProvider } from 'react-router';
+import { NativeControlsEnabled } from '../Builder/NativeComponentControls';
+import { WebpageRuntimeProvider, useWebpageRuntime } from '../Builder/webpageRuntime';
+import { ALLOWED_PROPS, HtmlThingRenderer, InteractiveWorkspace } from './HtmlThingRenderer.tsx';
 
 // The prop allowlist IS the trust boundary for component things: a component
 // crystal is untrusted data, and every name in this set is something its
@@ -31,4 +36,35 @@ test('event handlers and script sinks stay out of the allowlist', () => {
 	for (const prop of ['onClick', 'onclick', 'onError', 'dangerouslySetInnerHTML', 'srcDoc', 'srcdoc', 'formAction', 'xlinkHref']) {
 		assert.equal(ALLOWED_PROPS.has(prop), false, `${prop} must never render from untrusted markup`);
 	}
+});
+
+
+test('inert HTML previews do not mount service workspace data or controls', () => {
+  const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: { tag: 'tt-service-workspace', props: { rootId: 'private-workspace' } } }));
+  assert.match(markup, /interactive page/);
+  assert.doesNotMatch(markup, /Opening workspace|Create workspace|private-workspace/);
+  let mounts = 0;
+  const WorkspaceProbe = () => { mounts++; return React.createElement('button', null, 'Save workspace'); };
+  renderToStaticMarkup(React.createElement(NativeControlsEnabled.Provider, { value: false }, React.createElement(InteractiveWorkspace, null, React.createElement(WorkspaceProbe))));
+  assert.equal(mounts, 0, 'an inert surface never reaches the workspace component or its loaders');
+});
+
+test('interactive shared pages still mount workspace controls for enrolled nonowner staff', () => {
+  let viewer: string | null = null;
+  let shared = false;
+  const StaffWorkspace = () => {
+    const runtime = useWebpageRuntime();
+    viewer = runtime.viewer.id;
+    shared = !!runtime.sharedRun;
+    return React.createElement('button', null, 'Save authorized workspace');
+  };
+  const element = React.createElement(WebpageRuntimeProvider, { pageId: 'owners-page', pageKey: null, suiteKey: null, source: 'system', shared: true, children:
+    React.createElement(NativeControlsEnabled.Provider, { value: true }, React.createElement(InteractiveWorkspace, null, React.createElement(StaffWorkspace))) });
+  const router = createMemoryRouter([{ id: 'root', path: '/', element }], { hydrationData: { loaderData: { root: { user: { id: 'staff-member' } } } } });
+  try {
+    const markup = renderToStaticMarkup(React.createElement(RouterProvider, { router }));
+    assert.match(markup, /Save authorized workspace/);
+    assert.equal(viewer, 'staff-member');
+    assert.equal(shared, true, 'shared runtime is not mistaken for an inert preview');
+  } finally { router.dispose(); }
 });

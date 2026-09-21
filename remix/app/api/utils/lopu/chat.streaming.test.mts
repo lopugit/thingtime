@@ -31,6 +31,10 @@ const anthropicPlans: AnthropicPlan[] = [];
 const anthropicRequests: CapturedRequest[] = [];
 const openAiPlans: OpenAiPlan[] = [];
 const openAiRequests: CapturedRequest[] = [];
+// Responses uses its actual SDK SSE parser against this same HTTP fixture.
+type ResponsesPlan = { events?: Array<Record<string, unknown>>; status?: number };
+const responsesPlans: ResponsesPlan[] = [];
+const responsesRequests: CapturedRequest[] = [];
 let waterfall: string[] = [];
 let waterfallReads = 0;
 
@@ -124,6 +128,15 @@ const server = createServer(async (request, response) => {
       return;
     }
     sendAnthropic(response, plan);
+    return;
+  }
+  if (pathname.endsWith('/responses')) {
+    responsesRequests.push({ body, headers: request.headers });
+    const plan = responsesPlans.shift();
+    if (!plan || plan.status) {
+      response.writeHead(plan?.status || 400, { 'content-type': 'application/json' })
+        .end(JSON.stringify({ error: { message: 'Provider refused the request', type: 'invalid_request_error' } }));
+    } else sse(response, plan.events || [], true);
     return;
   }
   if (pathname.endsWith('/chat/completions')) {
@@ -240,9 +253,11 @@ beforeEach(() => {
   anthropicRequests.length = 0;
   openAiPlans.length = 0;
   openAiRequests.length = 0;
+  responsesPlans.length = 0;
+  responsesRequests.length = 0;
   toolCalls = [];
   waterfallReads = 0;
-  waterfall = ['claude-opus-5:high', 'gpt-5.6-sol:high', 'default'];
+  waterfall = ['claude-opus-5:high', 'gpt-5.5:high', 'default'];
   process.env.CLAUDE_CODE_OAUTH_TOKEN = 'anthropic-test-key';
   process.env.ANTHROPIC_BASE_URL = origin;
   process.env.OPENAI_API_KEY = 'openai-test-key';
@@ -363,7 +378,7 @@ test('OpenAI native tools: per-index argument accumulation, tool messages, and t
     { contentChunks: ['Patched!'], finish: 'stop' }
   );
 
-  const { events, outcome } = await collect(turn('change the title', 'gpt-5.6-sol:xhigh:fast'));
+  const { events, outcome } = await collect(turn('change the title', 'gpt-5.5:xhigh:fast'));
 
   assert.deepEqual(types(events), ['meta', 'delta', 'tool_use_start', 'tool_input_delta', 'tool_input_delta', 'tool_input_delta', 'tool_use', 'patch', 'tool_result', 'delta']);
   assert.equal(meta(events).provider, 'openai');
@@ -376,7 +391,7 @@ test('OpenAI native tools: per-index argument accumulation, tool messages, and t
 
   assert.equal(openAiRequests.length, 2);
   const first = openAiRequests[0].body;
-  assert.equal(first.model, 'gpt-5.6-sol');
+  assert.equal(first.model, 'gpt-5.5');
   assert.equal(first.max_completion_tokens, 16000);
   assert.equal(first.max_tokens, undefined);
   assert.equal(first.reasoning_effort, 'xhigh');
@@ -408,7 +423,7 @@ test('OpenAI text mode: fenced tt-tool blocks become tool calls, text outside st
     { contentChunks: ['All done 🦄'], finish: 'stop' }
   );
 
-  const { events, outcome } = await collect(turn('make me a page', 'gpt-5.6-sol'));
+  const { events, outcome } = await collect(turn('make me a page', 'gpt-5.5'));
 
   assert.equal(meta(events).provider, 'openai');
   assert.equal(text(events), 'Sure!  Now on the page.All done 🦄');
@@ -487,7 +502,7 @@ test('a plain completion that is a bare tool-call object still runs the tool (te
     { plain: { content: '{"message":"All done 🦄"}' } }
   );
 
-  const { events, outcome } = await collect(turn('make me a page', 'gpt-5.6-sol'));
+  const { events, outcome } = await collect(turn('make me a page', 'gpt-5.5'));
 
   assert.equal(meta(events).provider, 'openai');
   assert.equal(events.find((event) => event.type === 'tool_use')?.name, 'create_page');
@@ -625,7 +640,7 @@ test('no provider configured → the honest unconfigured line, never a blank rep
 
 test('every provider failing before output ends in the daydreaming fallback', async () => {
   // the explicit Claude choice is bare (one attempt); the OpenAI fallback is
-  // the waterfall's decorated gpt-5.6-sol:high, so it gets its bare retry and
+  // the waterfall's decorated gpt-5.5:high, so it gets its bare retry and
   // then the plain (non-streaming) completion rung before it is given up on
   anthropicPlans.push({ status: 400 }, { status: 400 });
   openAiPlans.push({ status: 400 }, { status: 400 }, { status: 400 });
@@ -657,7 +672,7 @@ test('an OpenAI-compatible endpoint that refuses streaming is served by the plai
 
   // a decorated choice (effort high) walks the whole ladder: decorated stream
   // → bare stream → plain completion
-  const { events, outcome } = await collect(turn('make me a page', 'gpt-5.6-sol:high'));
+  const { events, outcome } = await collect(turn('make me a page', 'gpt-5.5:high'));
 
   assert.equal(meta(events).provider, 'openai');
   assert.equal(text(events), 'Sure!  Now on the page.All done 🦄');
@@ -848,7 +863,7 @@ test('Both provider transports receive actual image/PDF content and retain it af
     assert.equal(content.find((part:any) => part.type === 'document').source.data, 'cGRm');
   }
   openAiPlans.push({contentChunks:['Seen']});
-  await collect(turn('Inspect', 'gpt-5.6-sol:high', {media}));
+  await collect(turn('Inspect', 'gpt-5.5:high', {media}));
   const content = openAiRequests[0].body.messages.at(-1).content;
   assert.equal(content[1].image_url.url, 'data:image/png;base64,cGl4ZWxz');
   assert.equal(content[2].file.file_data, 'data:application/pdf;base64,cGRm');
@@ -894,7 +909,271 @@ test('Claude receives a note only after the active tool completes, without repla
 test('OpenAI includes a note arriving during a text reply in a following hop of the same turn', async () => {
  openAiPlans.push({ contentChunks: ['Finishing the current work.'], finish: 'stop' }, { contentChunks: ['I have the note.'], finish: 'stop' });
  let reads = 0;
- const { outcome } = await collect(turn('work', 'gpt-5.6-sol', { readNotes: async () => reads++ === 0 ? ['An extra detail'] : [] }));
+ const { outcome } = await collect(turn('work', 'gpt-5.5', { readNotes: async () => reads++ === 0 ? ['An extra detail'] : [] }));
  assert.equal(openAiRequests.length, 2); assert.equal(outcome.stopReason, 'end_turn');
  assert.deepEqual(openAiRequests[1].body.messages.at(-1), { role: 'user', content: 'An extra detail' });
+});
+
+const responseFunction = (id = 'call_sol', name = 'get_thing', args = '{"id":"one"}') => ({
+  type: 'function_call', id: `item_${id}`, call_id: id, name, arguments: args, status: 'completed'
+});
+const responseMessage = (value: string) => ({
+  type: 'message', id: 'message_sol', role: 'assistant', status: 'completed',
+  content: [{ type: 'output_text', text: value, annotations: [] }]
+});
+const responseTerminal = (output: any[], status = 'completed', reason?: string) => ({
+  type: `response.${status}`,
+  response: { id: 'response_sol', status, output,
+    usage: { input_tokens: 10, output_tokens: 8, input_tokens_details: { cached_tokens: 3 } },
+    ...(reason ? { incomplete_details: { reason } } : {}) }
+});
+const responseCallEvents = (call = responseFunction(), index = 1) => [
+  { type: 'response.output_item.added', output_index: index, item: { ...call, arguments: '', status: 'in_progress' } },
+  { type: 'response.function_call_arguments.delta', output_index: index, item_id: call.id, delta: call.arguments.slice(0, 6) },
+  { type: 'response.function_call_arguments.delta', output_index: index, item_id: call.id, delta: call.arguments.slice(6) },
+  { type: 'response.function_call_arguments.done', output_index: index, item_id: call.id, arguments: call.arguments },
+  { type: 'response.output_item.done', output_index: index, item: call }
+];
+const responseTextEvents = (value: string) => [
+  { type: 'response.output_text.delta', output_index: 0, item_id: 'message_sol', content_index: 0, delta: value },
+  responseTerminal([responseMessage(value)])
+];
+
+test('GPT-5.6 Sol Responses preserves High/Fast, tool IDs, encrypted reasoning, media, notes and cache usage across hops', async () => {
+  const firstCall = responseFunction('provider_call_one', 'get_thing');
+  const secondCall = responseFunction('provider_call_two', 'search_things', '{"query":"page"}');
+  const reasoning = { type: 'reasoning', id: 'reasoning_one', summary: [], encrypted_content: 'opaque-reasoning-never-for-the-client' };
+  responsesPlans.push({ events: [
+    { type: 'response.output_item.added', output_index: 0, item: reasoning },
+    { type: 'response.output_text.delta', output_index: 1, item_id: 'message_sol', content_index: 0, delta: 'Checking. ' },
+    ...responseCallEvents(firstCall, 2), ...responseCallEvents(secondCall, 3),
+    responseTerminal([reasoning, responseMessage('Checking. '), firstCall, secondCall])
+  ] }, { events: responseTextEvents('Done.') });
+  let noteReads = 0;
+  const media = [{ name: 'photo.png', contentType: 'image/png', data: 'cGl4ZWxz' }, { name: 'file.pdf', contentType: 'application/pdf', data: 'cGRm' }];
+  const { events, outcome } = await collect(turn('Inspect', 'gpt-5.6-sol:high:fast', {
+    media, readNotes: async () => noteReads++ === 0 ? ['Also check the title.'] : []
+  }));
+  assert.equal(meta(events).model, 'gpt-5.6-sol');
+  assert.equal(meta(events).effort, 'high');
+  assert.equal(text(events), 'Checking. Done.');
+  assert.equal(outcome.stopReason, 'end_turn');
+  assert.deepEqual(toolCalls.map(call => [call.id, call.name, call.input]), [
+    ['provider_call_one', 'get_thing', { id: 'one' }], ['provider_call_two', 'search_things', { query: 'page' }]
+  ]);
+  assert.deepEqual(outcome.usage, { inputTokens: 14, outputTokens: 16, cacheReadTokens: 6 });
+  assert.equal(openAiRequests.length, 0);
+  assert.equal(anthropicRequests.length, 0);
+  assert.equal(responsesRequests.length, 2);
+  for (const { body } of responsesRequests) {
+    assert.equal(body.model, 'gpt-5.6-sol');
+    assert.deepEqual(body.reasoning, { effort: 'high' });
+    assert.equal(body.service_tier, 'priority');
+    assert.equal(body.store, false);
+    assert.deepEqual(body.include, ['reasoning.encrypted_content']);
+    assert.equal(body.stream, true);
+    assert.equal(body.max_output_tokens, 16000);
+    assert.equal(body.max_completion_tokens, undefined);
+    assert.equal(body.reasoning_effort, undefined);
+    assert.equal(body.tool_choice, 'auto');
+    assert.match(body.instructions, /You are Lopu/);
+    assert.ok(body.tools.every((tool: any) => tool.type === 'function' && tool.strict === false && !tool.function));
+    assert.ok(body.tools.find((tool: any) => tool.name === 'get_thing').parameters);
+    const content = body.input.find((item: any) => Array.isArray(item.content) && item.content.some((part: any) => part.type === 'input_image')).content;
+    assert.equal(content[1].image_url, 'data:image/png;base64,cGl4ZWxz');
+    assert.equal(content[2].file_data, 'data:application/pdf;base64,cGRm');
+  }
+  const replay = responsesRequests[1].body.input;
+  assert.deepEqual(replay.find((item: any) => item.type === 'reasoning'), reasoning);
+  assert.deepEqual(replay.filter((item: any) => item.type === 'function_call'), [firstCall, secondCall]);
+  const results = replay.filter((item: any) => item.type === 'function_call_output');
+  assert.deepEqual(results.map((item: any) => item.call_id), ['provider_call_one', 'provider_call_two']);
+  assert.ok(results.every((item: any) => JSON.parse(item.output).ok));
+  assert.deepEqual(replay.at(-1), { role: 'user', content: 'Also check the title.' });
+  assert.doesNotMatch(JSON.stringify({ events, outcome }), /opaque-reasoning|reasoning_one|cGl4ZWxz|cGRm/);
+});
+
+test('GPT-5.6 Sol Responses continues a note received after a plain reply', async () => {
+  responsesPlans.push({ events: responseTextEvents('First.') }, { events: responseTextEvents('Noted.') });
+  let reads = 0;
+  const { outcome } = await collect(turn('work', 'gpt-5.6-sol:high', { readNotes: async () => reads++ === 0 ? ['One more detail.'] : [] }));
+  assert.equal(outcome.text, 'First.Noted.');
+  assert.deepEqual(responsesRequests[1].body.input.at(-1), { role: 'user', content: 'One more detail.' });
+  assert.deepEqual(responsesRequests[1].body.input.at(-2), responseMessage('First.'));
+});
+
+test('GPT-5.6 Sol HTTP refusal keeps requested reasoning, never retries a weaker request, and uses neutral guidance', async () => {
+  responsesPlans.push({ status: 400 });
+  const { events, outcome } = await collect(turn('hi', 'gpt-5.6-sol:high'));
+  assert.equal(outcome.stopReason, 'fallback');
+  assert.match(text(events), /provider could not process the request/);
+  assert.match(text(events), /model selection has been kept/);
+  assert.doesNotMatch(text(events), /credential|usage|Admin/);
+  assert.deepEqual(responsesRequests[0].body.reasoning, { effort: 'high' });
+  assert.equal(responsesRequests.length, 1);
+  assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+});
+
+for (const failure of ['failed', 'error', 'dropped', 'malformed-arguments', 'unfinished-call']) {
+  test(`GPT-5.6 Sol ${failure} stream preserves text without executing/replaying a tool`, async () => {
+    const call = responseFunction();
+    const terminal = failure === 'failed' ? [{ type: 'response.failed', response: { status: 'failed' } }]
+      : failure === 'error' ? [{ type: 'error', code: 'server_error', message: 'Provider failed', param: null }]
+      : failure === 'malformed-arguments' ? [responseTerminal([{ ...call, arguments: '{"id":' }])]
+      : failure === 'unfinished-call' ? [responseTerminal([{ ...call, status: 'incomplete' }])]
+      : [];
+    responsesPlans.push({ events: [
+      { type: 'response.output_text.delta', delta: 'Kept.' }, ...responseCallEvents(call), ...terminal
+    ] });
+    const { events, outcome } = await collect(turn('work', 'gpt-5.6-sol:high'));
+    assert.equal(outcome.stopReason, 'error');
+    assert.equal(outcome.text, 'Kept.');
+    assert.equal(events.at(-1).type, 'error');
+    assert.equal(toolCalls.length, 0);
+    assert.equal(responsesRequests.length, 1);
+    assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+  });
+}
+
+test('GPT-5.6 Sol token exhaustion checkpoints without executing truncated tools', async () => {
+  const call = responseFunction();
+  responsesPlans.push({ events: [...responseCallEvents(call), responseTerminal([call], 'incomplete', 'max_output_tokens')] });
+  const { outcome } = await collect(turn('work', 'gpt-5.6-sol:high'));
+  assert.equal(outcome.stopReason, 'max_tokens');
+  assert.deepEqual(outcome.usage, { inputTokens: 7, outputTokens: 8, cacheReadTokens: 3 });
+  assert.equal(toolCalls.length, 0);
+  assert.equal(responsesRequests.length, 1);
+});
+
+test('GPT-5.6 Sol cancellation after output prevents buffered calls from executing', async () => {
+  const call = responseFunction();
+  responsesPlans.push({ events: [{ type: 'response.output_text.delta', delta: 'Starting.' }, ...responseCallEvents(call), responseTerminal([call])] });
+  const controller = new AbortController();
+  const generator = turn('work', 'gpt-5.6-sol:high', { signal: controller.signal });
+  assert.equal((await generator.next()).value.type, 'meta');
+  assert.equal((await generator.next()).value.type, 'delta');
+  controller.abort();
+  const { outcome } = await collect(generator);
+  assert.equal(outcome.stopReason, 'aborted');
+  assert.equal(toolCalls.length, 0);
+  assert.equal(responsesRequests.length, 1);
+});
+
+test('GPT-5.6 Sol hosting checkpoint retains the completed receipt and makes no extra provider request', async () => {
+  process.env.VERCEL = '1';
+  const call = responseFunction('saved_once', 'create_page', '{"name":"Once"}');
+  responsesPlans.push({ events: [...responseCallEvents(call), responseTerminal([call])] });
+  let clock = 0;
+  const { outcome } = await collect(turn('build', 'gpt-5.6-sol:high', { deps: { runTool: fakeRunTool, now: () => clock += 65_000 } }));
+  assert.equal(outcome.stopReason, 'checkpoint');
+  assert.equal(outcome.toolCalls[0].ok, true);
+  assert.equal(toolCalls.length, 1);
+  assert.equal(responsesRequests.length, 1);
+});
+
+test('GPT-5.6 Sol text-tool endpoint keeps its Chat Completions contract', async () => {
+  process.env.LOPU_OPENAI_TOOLS = 'text';
+  openAiPlans.push({ contentChunks: ['Compatible text transport.'] });
+  const { outcome } = await collect(turn('hello', 'gpt-5.6-sol:high'));
+  assert.equal(outcome.text, 'Compatible text transport.');
+  assert.equal(responsesRequests.length, 0);
+  assert.equal(openAiRequests.length, 1);
+  assert.equal(openAiRequests[0].body.reasoning_effort, 'high');
+});
+
+test('GPT-5.6 Sol rejects a whole multi-call batch when a later argument is malformed or IDs repeat', async () => {
+  for (const duplicate of [false, true]) {
+    const first = responseFunction('first', 'create_page', '{"name":"Must not save"}');
+    const second = responseFunction(duplicate ? 'first' : 'second', 'create_page', duplicate ? '{}' : '{private-secret-invalid');
+    responsesPlans.push({ events: [...responseCallEvents(first), ...responseCallEvents(second, 2), responseTerminal([first, second])] });
+    const { outcome } = await collect(turn('work', 'gpt-5.6-sol:high'));
+    assert.equal(outcome.stopReason, 'error');
+    assert.equal(toolCalls.length, 0);
+    assert.doesNotMatch(outcome.error || '', /private-secret/);
+  }
+  assert.equal(responsesRequests.length, 2);
+});
+
+test('GPT-5.6 Sol abort between validated call and tool batch keeps it unexecuted', async () => {
+  const call = responseFunction();
+  responsesPlans.push({ events: [...responseCallEvents(call), responseTerminal([call])] });
+  const controller = new AbortController();
+  const generator = turn('work', 'gpt-5.6-sol:high', { signal: controller.signal });
+  for (;;) {
+    const next = await generator.next();
+    assert.equal(next.done, false);
+    if (next.value.type === 'tool_use') break;
+  }
+  controller.abort();
+  const { outcome } = await collect(generator);
+  assert.equal(outcome.stopReason, 'aborted');
+  assert.equal(toolCalls.length, 0);
+});
+
+test('GPT-5.6 Sol failure on the next hop retains executed tool receipts without replay', async () => {
+  const call = responseFunction('saved_once', 'create_page', '{"name":"Once"}');
+  responsesPlans.push({ events: [...responseCallEvents(call), responseTerminal([call])] }, { status: 400 });
+  const { outcome, events } = await collect(turn('build', 'gpt-5.6-sol:high'));
+  assert.equal(outcome.stopReason, 'error');
+  assert.equal(outcome.toolCalls[0].ok, true);
+  assert.equal(toolCalls.length, 1);
+  assert.equal(responsesRequests.length, 2);
+  assert.equal(events.filter(event => event.type === 'tool_result' && event.ok).length, 1);
+  assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+});
+
+test('GPT-5.6 Sol native vault Responses uses only its own credential, origin and requested effort', async () => {
+  rewriteToFake();
+  process.env.OPENAI_ORG_ID = 'org-server-secret';
+  process.env.OPENAI_PROJECT_ID = 'proj-server-secret';
+  responsesPlans.push({ events: responseTextEvents('Your provider.') });
+  const { outcome, events } = await collect(turn('hello', 'claude-opus-5:high', {
+    vaultProvider: vaultRecord({ provider: 'openai', model: 'gpt-5.6-sol', effort: 'high' })
+  }));
+  assert.equal(outcome.provider, 'vault');
+  assert.equal(outcome.text, 'Your provider.');
+  assert.equal(meta(events).effort, 'high');
+  assert.equal(responsesRequests.length, 1);
+  assert.equal(responsesRequests[0].headers.authorization, 'Bearer vault-token-xyz');
+  assert.equal(responsesRequests[0].headers['openai-organization'], undefined);
+  assert.equal(responsesRequests[0].headers['openai-project'], undefined);
+  assert.deepEqual(responsesRequests[0].body.reasoning, { effort: 'high' });
+  assert.equal(openAiRequests.length + anthropicRequests.length, 0);
+});
+
+for (const change of ['name', 'call-id', 'item-id', 'duplicate-item-id', 'changed-start']) {
+  test(`GPT-5.6 Sol rejects ${change} identity changes before tool execution`, async () => {
+    const advertised = responseFunction('visible_read', 'get_thing', '{"id":"one"}');
+    const changed = change === 'name' ? { ...advertised, name: 'create_page', arguments: '{"name":"Unexpected write"}' }
+      : change === 'call-id' ? { ...advertised, call_id: 'different_call' }
+      : change === 'item-id' ? { ...advertised, id: 'different_item' }
+      : { ...advertised, call_id: 'different_call', name: 'create_page', arguments: '{}' };
+    responsesPlans.push({ events: [
+      ...responseCallEvents(advertised),
+      ...(change === 'changed-start' ? [{ type: 'response.output_item.added', output_index: 1, item: changed }] : []),
+      responseTerminal(change === 'duplicate-item-id' ? [advertised, changed] : [changed])
+    ] });
+    const { outcome, events } = await collect(turn('read only', 'gpt-5.6-sol:high'));
+    assert.equal(outcome.stopReason, 'error');
+    assert.equal(events.find(event => event.type === 'tool_use_start').name, 'get_thing');
+    assert.equal(events.filter(event => event.type === 'tool_use').length, 0);
+    assert.equal(toolCalls.length, 0);
+    assert.equal(responsesRequests.length, 1);
+  });
+}
+
+test('GPT-5.6 Sol rejects a later-hop call ID replay while preserving its first receipt', async () => {
+  const first = responseFunction('saved_once', 'create_page', '{"name":"Once"}');
+  const replay = { ...first, id: 'another_provider_item' };
+  responsesPlans.push(
+    { events: [...responseCallEvents(first), responseTerminal([first])] },
+    { events: [...responseCallEvents(replay), responseTerminal([replay])] }
+  );
+  const { outcome, events } = await collect(turn('build once', 'gpt-5.6-sol:high'));
+  assert.equal(outcome.stopReason, 'error');
+  assert.equal(toolCalls.length, 1);
+  assert.equal(outcome.toolCalls.length, 1);
+  assert.equal(outcome.toolCalls[0].ok, true);
+  assert.equal(events.filter(event => event.type === 'tool_result' && event.ok).length, 1);
+  assert.equal(responsesRequests.length, 2);
 });

@@ -90,7 +90,7 @@ export const buildSocialMetaTags = (origin: string, path: string, page: Partial<
 // generic card is still useful for sharing settings/invite/missing URLs, but
 // it must not advertise a private screen or a failed lookup as public content.
 export const socialPageIsIndexable = (path: string, preview: SocialPreview): boolean =>
-	Boolean(preview.publicContent) || isIndexableStaticPath(path);
+	(preview.indexable !== false && Boolean(preview.publicContent)) || isIndexableStaticPath(path);
 
 export const socialMetaFromPreview = (origin: string, preview: SocialPreview): SocialMeta => {
 	const path = normaliseSocialPreviewPath(preview.path);

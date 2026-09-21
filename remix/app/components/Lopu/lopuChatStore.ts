@@ -1,3 +1,4 @@
+import { continuationContext, continuationRequestId, LOPU_MAX_RECOVERY_FAILURES, type LopuManagement } from '~/api/utils/lopu/continuationCore';
 import { bindLopuQueue, pauseLopuQueue } from './lopuQueueStore';
 import { LOPU_CONTINUE_PROMPT, shouldAutoContinueLopuReply } from './lopuRecovery';
 import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
@@ -81,7 +82,7 @@ export type LopuChatDefaults = { model: string | null; effort: string | null; sp
 
 // the viewer's per-chat choice: a catalog model (+ effort / speed) OR one of
 // their own Secure Vault providers (providerId, which wins over the model)
-export type LopuChatSettings = LopuChatDefaults & { providerId: string | null };
+export type LopuChatSettings = LopuChatDefaults & { providerId: string | null; management?: LopuManagement };
 
 // providers.<p>: key presence + the server's probe verdict (never a value)
 export type LopuProvidersInfo = Partial<Record<'anthropic' | 'openai', { configured: boolean; verified?: boolean | null; checkedAt?: string | null; reason?: string | null }>>;
@@ -102,7 +103,7 @@ export type LopuChatSummary = ChatSummary & {
 
 export type LopuNotice = { id: number; title: string; description?: string; status: 'success' | 'error' | 'info' };
 
-export type LopuChatWriteArgs = { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null };
+export type LopuChatWriteArgs = { management?: LopuManagement; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null };
 
 export type LopuApiClient = {
 	models: (options?: { signal?: AbortSignal }) => Promise<any>;
@@ -131,6 +132,7 @@ export type LopuStoreState = {
 	turnOrder: string[];
 	streamingId: string | null;
 	sending: boolean;
+ recoveryChatIds: string[];
 	models: AiModelPublic[];
 	modelsLoaded: boolean;
 	modelsLoading: boolean;
@@ -180,6 +182,7 @@ const createInitialState = (): LopuStoreState => ({
 	turnOrder: [],
 	streamingId: null,
 	sending: false,
+ recoveryChatIds: [],
 	models: [],
 	modelsLoaded: false,
 	modelsLoading: false,
@@ -338,24 +341,26 @@ export const reconcileLopuSettings = (
 			model: requested?.model ?? defaults?.model ?? null,
 			effort: requested?.effort ?? defaults?.effort ?? null,
 			speed: requested?.speed ?? defaults?.speed ?? null,
-			providerId
+			providerId, ...(requested?.management ? { management: requested.management } : {})
 		};
 	}
 	const wanted = requested?.model ? models.find((model) => model.id === requested.model) : null;
 	const fallback = defaults?.model ? models.find((model) => model.id === defaults.model) : null;
 	const model = isAvailable(wanted) ? wanted : isAvailable(fallback) ? fallback : models.find(isAvailable) || null;
-	if (!model) return { model: null, effort: null, speed: null, providerId };
+	// Execution management is independent of provider access (including new
+ // invite-gated accounts whose catalog has no available model).
+ if (!model) return { model: null, effort: null, speed: null, providerId, ...(requested?.management ? { management: requested.management } : {}) };
 	const efforts = Array.isArray(model.efforts) ? model.efforts : [];
 	const speeds = Array.isArray(model.speeds) ? model.speeds : [];
 	const effortCandidates = [requested?.effort, defaults?.effort, 'high'];
 	const effort = effortCandidates.find((candidate): candidate is string => !!candidate && efforts.includes(candidate)) ?? efforts[efforts.length - 1] ?? null;
 	const speedWanted = requested?.speed ?? defaults?.speed ?? 'normal';
 	const speed = speeds.includes(speedWanted) ? speedWanted : speeds.includes('normal') ? 'normal' : speeds[0] ?? null;
-	return { model: model.id, effort, speed, providerId };
+	return { model: model.id, effort, speed, providerId, ...(requested?.management ? { management: requested.management } : {}) };
 };
 
 export const sameLopuSettings = (a: LopuChatSettings, b: LopuChatSettings): boolean =>
-	a.model === b.model && a.effort === b.effort && a.speed === b.speed && a.providerId === b.providerId;
+	a.model === b.model && a.effort === b.effort && a.speed === b.speed && a.providerId === b.providerId && a.management === b.management;
 
 const persistSettings = (userId: string | null, settings: LopuChatSettings) => {
 	if (userId) writeLocalCache(lopuSettingsCacheKey(userId), settings);
@@ -393,6 +398,7 @@ export const setLopuSettings = (patch: Partial<LopuChatSettings>) => {
 	const providerChanged = settings.providerId !== state.settings.providerId;
 	persistSettings(state.userId, settings);
 	setState({ settings });
+	if (patch.management && state.activeChatId && client) void client.chats.update({ chatId: state.activeChatId, management: patch.management }).catch(() => {});
 	if (providerChanged && 'providerId' in patch && state.activeChatId) persistChatProvider(state.activeChatId, settings.providerId);
 };
 
@@ -564,6 +570,7 @@ const settingsFromChat = (chat: LopuChatSummary | undefined): Partial<LopuChatSe
 	if (typeof record.model === 'string') out.model = record.model;
 	if (typeof record.effort === 'string') out.effort = record.effort;
 	if (typeof record.speed === 'string') out.speed = record.speed;
+ if (record.management === 'server' || record.management === 'client') out.management = record.management;
 	// a chat that carries the key (even null) states its provider choice
 	if ('providerId' in record) out.providerId = typeof record.providerId === 'string' && record.providerId ? record.providerId : null;
 	return Object.keys(out).length ? out : null;
@@ -956,6 +963,7 @@ const appendMessages = (chatId: string, rows: ChatMessage[]) => {
 };
 
 export type SendLopuOptions = {
+ continuation?: { previousRequestId: string; automatic?: boolean };
  chatId?: string;
  requestId?: string;
 	// Fired once the server has persisted the user message, before reply completion.
@@ -988,17 +996,27 @@ export type SendLopuResult =
  */
 export const sendLopuMessage = async (text: string, options: SendLopuOptions = {}): Promise<SendLopuResult> => {
  const generation = accountGeneration;
- let continuation: LopuContinuation | undefined;
+ let recoveryFailures = 0;
+ let continuation: LopuContinuation | undefined = options.continuation && (options.chatId || state.activeChatId) ? { chatId: options.chatId || state.activeChatId!, ...options.continuation } : undefined;
  for (;;) {
   const result = await sendLopuMessagePart(text, options, continuation);
   if (!result.next || generation !== accountGeneration) return result;
+  if (state.turns[result.next.continuation.previousRequestId]?.stopReason === 'error') {
+   recoveryFailures = Math.max(recoveryFailures + 1, state.turns[result.next.continuation.previousRequestId]?.recoveryFailures ?? 0);
+   if (recoveryFailures >= LOPU_MAX_RECOVERY_FAILURES) return result;
+   const recoveringChatId = result.next.continuation.chatId;
+   setState(current => ({ recoveryChatIds: [...new Set([...current.recoveryChatIds, recoveringChatId])] }));
+   await new Promise(resolve => setTimeout(resolve, Math.min(30_000, 2000 * 2 ** (recoveryFailures - 1))));
+   if (generation === accountGeneration) setState(current => ({ recoveryChatIds: current.recoveryChatIds.filter(id => id !== recoveringChatId) }));
+   if (stoppedRequests.has(result.next.continuation.previousRequestId) || generation !== accountGeneration) return result;
+  } else recoveryFailures = 0;
   text = LOPU_CONTINUE_PROMPT;
   options = result.next.options;
   continuation = result.next.continuation;
  }
 };
 
-type LopuContinuation = { chatId: string; previousRequestId: string };
+type LopuContinuation = { chatId: string; previousRequestId: string; automatic?: boolean };
 type LopuPartResult = SendLopuResult & { next?: { options: SendLopuOptions; continuation: LopuContinuation } };
 const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, continuation?: LopuContinuation): Promise<LopuPartResult> => {
  const chatId = continuation?.chatId ?? options.chatId ?? state.activeChatId;
@@ -1009,7 +1027,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 		notice('Sign in to chat with Lopu 🦄', { status: 'info' });
 		return { ok: false, error: 'Sign in to chat with Lopu', text };
 	}
-	if (Object.values(state.turns).some(turn => turn.chatId === chatId && isLopuTurnActive(turn)) || getAiTasks().some(task => task.chatId === chatId && task.status === 'running' && task.requestId !== continuation?.previousRequestId)) {
+	if (Object.values(state.turns).some(turn => turn.chatId === chatId && isLopuTurnActive(turn)) || getAiTasks().some(task => task.chatId === chatId && (task.status === 'running' || task.workflowStatus === 'running') && task.requestId !== continuation?.previousRequestId)) {
 		notice('Lopu is still replying — stop it first or wait a moment ✨', { status: 'info' });
 		return { ok: false, error: 'Lopu is still replying', text };
 	}
@@ -1018,7 +1036,10 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	const generation = accountGeneration;
 	const startingPath = typeof window === 'undefined' ? null : window.location.pathname;
 	const foreground = () => state.activeChatId === (turn.chatId || chatId) && (startingPath === null || window.location.pathname === startingPath);
-	const requestId = continuation ? uuid() : options.requestId ?? uuid();
+	const requestId = continuation ? await continuationRequestId(chatId!, continuation.previousRequestId) : options.requestId ?? uuid();
+ // Computing a continuation id is asynchronous; an account/source change
+ // or Stop during that gap must not dispatch through a newly bound client.
+ if (state.userId !== userId || generation !== accountGeneration || !client || (continuation && stoppedRequests.has(continuation.previousRequestId))) return {ok:false,error:'This continuation was cancelled before sending.',text:trimmed};
 	const settings = mergeSettingsPatch(options.settings || {});
 	if (!continuation && !options.chatId && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);
@@ -1029,6 +1050,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	const attachmentIds = new Set(options.attachmentIds ?? []);
 	let turn = initialLopuTurn({ requestId, chatId, userText: trimmed,
 		userAttachments: (options.attachments ?? []).filter(attachment => attachmentIds.has(attachment.id)) });
+ turn = { ...turn, ...(continuation ? { continuation: true } : {}) };
 	const abort = new AbortController();
 	controllers.set(requestId, abort);
 	rememberTurn(turn);
@@ -1096,7 +1118,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 				break;
 			}
 			case 'error': {
-				notice(event.message || 'Lopu hit a snag', { status: 'error', description: event.retryable ? 'You can try again.' : undefined });
+				if (!event.retryable) notice(event.message || 'Lopu hit a snag', { status: 'error', description: event.retryable ? 'You can try again.' : undefined });
 				break;
 			}
 			case 'done': {
@@ -1119,6 +1141,8 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	const activeChat = chatId ? state.chats.find((chat) => chat.id === chatId) : null;
 	const statesProvider = !!settings.providerId || !!activeChat?.lopu || !!(options.settings && 'providerId' in options.settings);
 	const body: LopuReplyBody = {
+  management: settings.management || 'client',
+  ...(continuation ? { continueFromRequestId: continuation.previousRequestId, automaticContinuation: continuation.automatic === true } : {}),
 		...(chatId ? { chatId } : {}),
 		text: trimmed,
 		requestId,
@@ -1190,18 +1214,13 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	// the server managed to persist (the turn bubble absorbs those rows)
 	if (!chatId) void loadLopuChats();
 	if (!turn.messages.length) void loadLopuMessages(finalChatId);
-	const stopped = stoppedRequests.delete(requestId);
- if (cleanEnd && !stopped && !abort.signal.aborted && shouldAutoContinueLopuReply(turn)) {
+	const stopped = stoppedRequests.has(requestId);
+ if (settings.management !== 'server' && cleanEnd && !stopped && !abort.signal.aborted && shouldAutoContinueLopuReply(turn)) {
   // Fresh request IDs let the server persist/account each part independently.
   // Never resend attachments, acceptance callbacks, spent confirmation grants,
   // or an old builder snapshot over changes made by the preceding part.
-  notice('Lopu is continuing from its saved progress ✨', { status: 'info' });
-  const page = options.context?.page;
-  const context = options.context ? {
-   route: options.context.route, viewport: options.context.viewport,
-   ...(page ? { page: { id: page.id, source: page.source, pageKey: page.pageKey, siteRoute: page.siteRoute } } : {})
-  } : undefined;
-  return { ok: true, requestId, chatId: finalChatId, next: { options: { settings, context, applyPatches }, continuation: { chatId: finalChatId, previousRequestId: requestId } } };
+  const context = continuationContext(options.context);
+  return { ok: true, requestId, chatId: finalChatId, next: { options: { settings, context, applyPatches }, continuation: { chatId: finalChatId, previousRequestId: requestId, automatic: true } } };
  }
  if (turn.status !== 'done' || stopped || abort.signal.aborted) pauseLopuQueue(true);
 	return { ok: true, requestId, chatId: finalChatId };
@@ -1212,6 +1231,10 @@ export const abortLopuTurn = (): void => {
  pauseLopuQueue(true);
  const turn = Object.values(state.turns).find(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn));
  if (turn) stoppedRequests.add(turn.requestId);
+ const pending = [...state.turnOrder].reverse().map(id => state.turns[id]).find(item => item.chatId === state.activeChatId && shouldAutoContinueLopuReply(item));
+ if (!turn && pending) { setState(current => ({ recoveryChatIds: current.recoveryChatIds.filter(id => id !== pending.chatId) })); stoppedRequests.add(pending.requestId); void stopAiTaskRequest(pending.requestId).catch(() => notice('Could not stop the recovery.', { status: 'error' })); }
+ const runningTask = getAiTasks().find(task => task.chatId === state.activeChatId && (task.status === 'running' || task.workflowStatus === 'running'));
+ if (!turn && runningTask) { stoppedRequests.add(runningTask.requestId); void stopAiTaskRequest(runningTask.requestId).catch(() => notice('Could not stop the task.', { status: 'error' })); }
  if (turn) void stopAiTaskRequest(turn.requestId).then(() => controllers.get(turn.requestId)?.abort()).catch(() => notice('Could not stop the task. Open Background tasks to try again.', { status: 'error' }));
 };
 
@@ -1309,11 +1332,11 @@ export const recoverLopuBackgroundTasks = async () => {
  try {
   await refreshAiTasks();
   for (const task of getAiTasks()) {
-   if (task.path !== '/api/v1/lopu/chats/reply' || controllers.has(task.requestId)) continue;
-   if (task.status !== 'running' && task.chatId !== state.activeChatId && !state.turns[task.requestId]) continue;
+   if (task.path !== '/api/v1/lopu/chats/reply' || controllers.has(task.requestId) || (task.chatId && state.recoveryChatIds.includes(task.chatId))) continue;
+   if (task.status === 'completed' && task.chatId !== state.activeChatId && !state.turns[task.requestId]) continue;
    const versionKey = `${generation}:${task.id}`;
    if (recoveredTaskVersions.get(versionKey) === task.updatedAt) continue;
-   if (task.status !== 'running' && state.turns[task.requestId]?.status === 'done') continue;
+   if (task.status === 'completed' && state.turns[task.requestId]?.status === 'done') continue;
    const result = await readAiTaskOutput(task);
    if (state.userId !== owner || accountGeneration !== generation) return;
    if (!result) continue;
@@ -1327,7 +1350,18 @@ export const recoverLopuBackgroundTasks = async () => {
    if (state.userId !== owner || accountGeneration !== generation) return;
    rememberTurn(turn);
    recoveredTaskVersions.set(versionKey, task.updatedAt);
+   const latest = getAiTasks().find(candidate => candidate.chatId === turn.chatId && candidate.path === task.path);
+   const workflowRunning = getAiTasks().some(candidate => candidate.chatId === turn.chatId && candidate.workflowStatus === 'running');
+   if (latest?.id === task.id && task.management !== 'server' && !workflowRunning && task.status === 'needs-attention' && !stoppedRequests.has(task.requestId) && turn.chatId && shouldAutoContinueLopuReply(turn)) {
+    void resumeLopuChat(turn.chatId, turn.requestId, true);
+   }
    if (recoveredTaskVersions.size > 150) recoveredTaskVersions.delete(recoveredTaskVersions.keys().next().value!);
   }
  } finally { recoveringTasks = false; }
+};
+
+/** Explicit continuation is protocol metadata, never inferred from typed text. */
+export const resumeLopuChat = (chatId: string, previousRequestId: string, automatic = false) => {
+ const savedSettings = settingsFromChat(state.chats.find(chat => chat.id === chatId));
+ return sendLopuMessage(LOPU_CONTINUE_PROMPT, { chatId, ...(savedSettings ? { settings: savedSettings } : {}), continuation: { previousRequestId, automatic }, applyPatches: true });
 };

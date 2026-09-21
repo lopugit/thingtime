@@ -86,7 +86,7 @@ describe('normalizeLopuSettings', () => {
 			open: true
 		});
 		assert.deepEqual(settings, {
-			dockMode: 'overlay', attachCurrentPage: true, minimised: false,
+			management: 'server', dockMode: 'overlay', attachCurrentPage: true, minimised: false,
 			launcher: false,
 			dock: 'right',
 			applyPatches: false,

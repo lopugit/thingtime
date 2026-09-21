@@ -10,7 +10,7 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
-import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
+import { designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -234,6 +234,22 @@ const forwardHostProxy = (target: string) => ({
   }
 });
 
+const librarySandboxPlugin = (): Plugin => ({
+  name: 'library-isolated-preview',
+  configureServer(server) {
+    server.middlewares.use((req,res,next) => {
+      const path = req.url?.split('?')[0];
+      if (path !== '/library/sandbox.html' && path !== '/library/sdk.html' && path !== '/library/runner.js') return next();
+      const file = fileURLToPath(new URL(path.endsWith('.html') ? `./public${path}` : './dist/library/runner.js', import.meta.url));
+      if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:library');return; }
+      res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
+      res.setHeader('Content-Security-Policy',path === '/library/sdk.html' ? librarySdkCsp : librarySandboxCsp);
+      res.setHeader('Cache-Control','no-store');
+      createReadStream(file).pipe(res);
+    });
+  }
+});
+
 export default defineConfig({
   build: {
     outDir: 'dist',
@@ -329,5 +345,5 @@ export default defineConfig({
       }
     }
   },
-  plugins: [previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
+  plugins: [librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });

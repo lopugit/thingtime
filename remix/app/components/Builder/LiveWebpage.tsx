@@ -77,7 +77,7 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 	const page = draft.resolved?.page || null;
 	const isOwner = !!user?.id && page?.author?.id === user.id;
 	const editorMode =
-		(isOwner || (!!builderPageId && !!user?.id)) && !runMode
+		!!builderPageId && (isOwner || !!user?.id) && !runMode
 			? isSeamlessMode(requestedMode)
 				? requestedMode
 				: requestedMode === 'container'

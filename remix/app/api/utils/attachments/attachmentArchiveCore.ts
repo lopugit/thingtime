@@ -12,10 +12,19 @@ export const ATTACHMENT_ARCHIVE_REQUIREMENTS = { 'api.attachment-archive': '1.0.
 // inside the platform's function duration.
 export const ARCHIVE_MAX_FILES = 500;
 export const ARCHIVE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
-// Folder traversal budgets: Things visited (all kinds) and nesting depth.
+// Folder traversal budgets: Things the viewer may see (all kinds), Things
+// scanned to find them (private children cost a lookup but never a slot, so a
+// hidden sibling count is never learnable from a 413), and nesting depth.
 export const ARCHIVE_MAX_THINGS = 1000;
+export const ARCHIVE_MAX_SCANNED_THINGS = ARCHIVE_MAX_THINGS * 10;
 export const ARCHIVE_MAX_FOLDER_DEPTH = 64;
-// Wall clock for one streamed archive (Vercel functions run 300 s here).
+// Bound attachment rows read per folder level (posts × attachments); more than
+// this is an explicit 413, never a silently shorter archive.
+export const ARCHIVE_MAX_BOUND_ROWS = ARCHIVE_MAX_FILES * 4;
+// Per-file authorization/signing runs this many at a time while planning.
+export const ARCHIVE_SIGN_CONCURRENCY = 8;
+// Wall clock for one request — planning AND streaming (Vercel functions run
+// 300 s here). The route anchors it at request start.
 export const ARCHIVE_WALL_CLOCK_MS = 280_000;
 // Linked (external URL) media has no stored bytes; the archive lists it instead.
 export const ARCHIVE_LINKS_FILE = 'links.txt';
@@ -38,9 +47,13 @@ export const shortArchiveId = (id: unknown): string => {
 	return compact.slice(0, 8) || 'thing';
 };
 
+const SEGMENT_MAX_CHARS = 100;
+const EXTENSION = /\.[A-Za-z0-9]{1,16}$/;
+
 // One ZIP path segment. Separators, traversal dots, control/format characters
 // and Windows-reserved punctuation never reach an extracting filesystem; a
-// segment that empties out falls back to a stable id-derived name.
+// segment that empties out falls back to a stable id-derived name. Long names
+// lose stem characters, never their extension (uploads allow 255 characters).
 export const safeArchiveSegment = (value: unknown, fallback: string): string => {
 	const raw = typeof value === 'string' ? value : '';
 	const cleaned = raw
@@ -50,7 +63,17 @@ export const safeArchiveSegment = (value: unknown, fallback: string): string => 
 		.replace(/\s+/g, ' ')
 		.trim()
 		.replace(/^[. ]+|[. ]+$/g, '');
-	const bounded = Array.from(cleaned).slice(0, 100).join('').replace(/[. ]+$/g, '');
+	const characters = Array.from(cleaned);
+	let bounded = cleaned;
+	if (characters.length > SEGMENT_MAX_CHARS) {
+		const extension = EXTENSION.exec(cleaned)?.[0] || '';
+		const stem = Array.from(cleaned.slice(0, cleaned.length - extension.length))
+			.slice(0, SEGMENT_MAX_CHARS - Array.from(extension).length)
+			.join('')
+			.replace(/[. ]+$/g, '');
+		bounded = `${stem}${extension}`;
+	}
+	bounded = bounded.replace(/[. ]+$/g, '');
 	return bounded && bounded !== '.' && bounded !== '..' ? bounded : fallback;
 };
 
@@ -75,6 +98,11 @@ export const archiveFileName = (name: string): string => `${safeArchiveSegment(n
 
 // Filesystems that extract archives are usually case-insensitive, so
 // uniqueness is judged case-insensitively: "Photo.jpg" then "Photo (2).jpg".
+// Folding through upper case first follows the filesystems' simple case
+// mapping more closely than toLowerCase alone (dotless ı and long ſ collide
+// with i and s on NTFS/APFS).
+const caseFoldKey = (value: string): string => value.toUpperCase().toLowerCase();
+
 export class ArchivePathAllocator {
 	private readonly used = new Set<string>();
 
@@ -86,7 +114,7 @@ export class ArchivePathAllocator {
 		const prefix = directory ? `${directory}/` : '';
 		for (let attempt = 1; ; attempt += 1) {
 			const candidate = `${prefix}${attempt === 1 ? safe : `${stem} (${attempt})${extension}`}`;
-			const key = candidate.toLowerCase();
+			const key = caseFoldKey(candidate);
 			if (!this.used.has(key)) {
 				this.used.add(key);
 				return candidate;

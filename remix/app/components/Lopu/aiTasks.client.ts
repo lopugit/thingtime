@@ -3,6 +3,8 @@ import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapa
 import { observeAiTask, type AiTaskFrame, type AiTaskRequest } from './aiTaskTransport';
 let ownerId: string | null = null;
 let ownerGeneration = 0;
+let contextKey = 'unresolved';
+export const getAiTaskContextKey = () => contextKey;
 let taskState: 'idle' | 'ready' | 'unavailable' = 'idle';
 export const getAiTaskState = () => taskState;
 export const getServerAiTaskState = () => 'idle' as const;
@@ -44,6 +46,7 @@ export const bindAiTaskOwner = (next: string | null) => {
 	if (next === ownerId) return;
 	ownerId = next;
 	ownerGeneration++;
+ contextKey = 'unresolved';
 	taskState = 'idle';
 	tasks = [];
 	queueMicrotask(() => listeners.forEach((fn) => fn()));
@@ -55,11 +58,12 @@ export const refreshAiTasks = (): Promise<void> => {
 	const owner = ownerId,
 		generation = ownerGeneration;
 	const work = async () => {
-		await requireThingtimeCapability('api.lopu-background-tasks', '1.1.0');
+		await requireThingtimeCapability('api.lopu-background-tasks', '1.3.0');
 		const response = await fetch(AI_TASK_PATH, { credentials: 'include', cache: 'no-store', headers: { [AI_TASK_OWNER_HEADER]: owner } });
 		if (!response.ok) throw new Error('Task status is temporarily unavailable.');
 		const result = await response.json();
 		if (ownerId === owner && generation === ownerGeneration && result.ownerId === owner && Array.isArray(result.tasks)) {
+			contextKey = typeof result.contextKey === 'string' ? result.contextKey : 'legacy';
 			taskState = 'ready';
 			publish(result.tasks);
 		}
@@ -131,9 +135,9 @@ export const aiTaskFetch = async (url: string, init: RequestInit = {}): Promise<
 	const owner = ownerId,
 		generation = ownerGeneration;
 	if (!operation || !owner || (init.method || 'GET') !== operation.method || (init.body && typeof init.body !== 'string')) return fetch(url, init);
-	await requireThingtimeCapability('api.lopu-background-tasks', '1.1.0');
+	await requireThingtimeCapability('api.lopu-background-tasks', '1.3.0');
 	const versions: Record<string, string> = {
-		'api.lopu-chats-reply': '1.11.0',
+		'api.lopu-chats-reply': '1.14.0',
 		'api.lopu-voice-reply': '1.4.0',
 		'api.lopu-musing': '1.1.0',
 		'api.ai-complete': '1.2.0'

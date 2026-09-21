@@ -1,5 +1,119 @@
 # TESTING.md — per-area manual test checklists
 
+## Remote brightness and files
+
+- [ ] A running macOS app with an empty or whitespace-only name must use its
+  bundle identifier in the heartbeat. Blank identifiers are skipped before the
+  64-app limit; the full state update must still reach the server.
+
+- [ ] On a paired Apple Silicon Mac, change main-display and per-display
+  brightness, verify the real panel and next telemetry value, then restore it.
+  A display without a usable setter stays unavailable. Existing pairings gain
+  updated capabilities on a higher-revision heartbeat without being re-paired.
+- [ ] Adjust the brightness and volume sliders with arrow, Home/End and
+  PageUp/PageDown keys. Each change must send one remote command and reach the
+  observed device state; the thumb must not move without applying the change.
+- [ ] Open `/things?files=thingtime` and a device's Files drawer section at
+  desktop and 390px widths. Exercise grid/list, name/type filters, sort, hidden
+  files, long names, selection, context menus, folder navigation, and the
+  expanded pop-up. Scroll the full page, drawer list and pop-up to their ends;
+  menus and approval/cancel controls remain visible and inside the viewport.
+- [ ] Copy and cut synthetic files and a nested folder between Thingtime and
+  an unlocked paired Mac, and between two folders on the same device. Verify
+  byte hashes, destination listing and source retention/removal. Refuse existing
+  names, self-descendants, links, oversized files and changed source versions.
+  Cancel or fail a destination write: original files must remain. A successful
+  remote source removal goes to Trash; an uncertain move must not be retried
+  blindly. No test should read unrelated home-directory files.
+- [ ] Verify deny and ask-every-time device settings, locked sessions, old node
+  capabilities, an unapproved upload account, expired results and another
+  account's command IDs. Command history/events never contain chunk bytes.
+  Repeat directory listing after temporary-upload cleanup: scanning on a
+  duplicated descriptor must not consume the subsequent listing's cursor.
+- [ ] Run native `swift test`, `test:devices`, `test:things`, `test:attachments`,
+  `test:api-capabilities`, a complete web build, and Electron tests. The
+  opt-in `TT_BRIGHTNESS_HARDWARE_TEST=1 swift test --filter DisplayBrightnessTests`
+  briefly changes and restores the actual display; do not count a skipped
+  hardware test or synthetic UI relay as real remote-transfer acceptance.
+
+- Connections/index rollout: keep external-source authorization and private-subspace membership fences after merging shared readers. Stub DNS alongside fetch in outbound redirect tests so machine-local `.test` resolution cannot bypass credential-stripping assertions.
+
+## Integration catalogue
+
+- [ ] As an admin, Prepare builder pages twice: the first call creates the
+  integration hierarchy and the second reports unchanged, with zero skipped.
+  Anonymous/non-admin calls must fail. Verify capability 1.2.0 before seeding.
+- [ ] Follow index → service → individual example → service → index. Confirm
+  all 60 Lodash examples fit on one service page and every example resolves
+  a real component. Run a chart, a transformation and an API example.
+- [ ] At desktop, 390px and 320px, scroll index and service pages to the bottom,
+  open the inspector, edit an example input override, save a private copy,
+  reopen it and check the default system page remains unchanged. Public templates
+  must default to Private when copied; an owned page retains its audience.
+  Editing the inputJson block argument must refresh the visible demo inputs. Keys and
+  results must never appear in saved page/component documents.
+
+- [ ] Assert 500 unique recipes, pinned CDN URLs and schema-valid private saved
+  Things with `test:library`. Run the real browser harness, inspect every failure,
+  correct obsolete provider endpoints/defaults and rerun corrected examples.
+- [ ] At desktop and 390px widths, search for no results, reset filters, select a
+  provider/type/access filter, paginate and scroll the full page to its footer.
+  Open Try it, Source and Reuse; check wrapping and horizontal overflow.
+- [ ] Save one example, open all three private Things, run the component, and
+  verify that its Action Thing prepares the same input payload. Retry a partial
+  save using the same copy identifier; account switches start a fresh copy.
+
+## Remote integration runtime
+
+- [ ] Run a pinned visual module and a pure transformation in Chrome. Confirm
+  opaque frames and successful worker loading; a module worker bootstrap must
+  not silently fail in an opaque-origin frame. Cancel, rerun, invalid JSON and
+  input/response limits must resolve visibly without leaving Run disabled.
+- [ ] On desktop and mobile, expand key entry and switch views; scroll the whole
+  page, check output wrapping, show/hide/clear, and verify that account changes
+  discard credentials. Saved Things contain only defaults and registry IDs.
+- [ ] Verify no remote package loads while browsing, arbitrary IDs/URLs cannot
+  execute, redirects and live Stripe keys are rejected, anonymous API calls fail,
+  and `/library/sandbox.html` receives its sandbox CSP on the built deployment.
+  Run `test:library`, `test:api-capabilities`, `test:vercel-config` and a full build.
+
+## Service workspace and Vault environments
+
+- [ ] Dashboard, planner, job cards and visit histories show the property street
+  address, linked customers and assigned crew. Check multiple linked customers,
+  unassigned visits, moved jobs and narrow screens. Customer/B2B views must not
+  disclose another customer's name, hidden staff names or raw record IDs.
+
+- [ ] Verify Maps under production CSP: the SDK loads and renders/clicks markers
+  with a restricted key, without inline-script or eval exceptions. Check the
+  Google SDK/service hosts remain explicit and no wildcard script host is added.
+- [ ] Change an existing visit's job; its nested record folder moves with it and
+  another time/resource log can still be added without a folder conflict.
+
+- [ ] At desktop and mobile widths, scroll the workspace and every opened record
+  dialog to both ends. Menus and dialogs stay above the Thingtime header and
+  builder toolbar, with reachable controls and no horizontal page overflow.
+- [ ] Open a property and create a job, then schedule a visit from that job.
+  Date/time inputs persist after reload, including native picker/autofill paths.
+  Job, property and visit links retain context and display names instead of IDs.
+- [ ] Use record context menus to edit, duplicate, delete and restore. Cancel is
+  non-mutating. The common Trash includes time logs, usage and visits as well as
+  directory records. Check before/after media, per-file metadata, comments,
+  profile thumbnail/banner choices and reload persistence.
+- [ ] Drag visits between days and reorder within a day; verify day/week navigation,
+  keyboard ordering and date controls. Log a timed sub-job and equipment usage
+  with employee, battery percentage, vehicle, fuel and travel times.
+- [ ] Verify Customer/B2B isolation, staff write limits, owner membership protection,
+  stale-edit conflicts, explicit private ACLs, moderation and immediate revocation
+  on workspace, bound page, comments and attachment requests.
+- [ ] In Vault, create a secret in a selected environment. Move an existing secret
+  and provider to another environment and Ungrouped without re-entering a value.
+  Cancel preserves the previous environment; no response reveals encrypted data.
+- [ ] With restricted Google keys, test autocomplete, selecting a result, map marker
+  navigation and manual address entry. Switching Vault environment must select
+  the matching keys; missing/ambiguous entries show an actionable state.
+
+
 ## Real browser portable transfer acceptance
 
 - [ ] On desktop and mobile, copy a Thing and use Cmd/Ctrl+V on the Things
@@ -1561,6 +1675,20 @@ email whose link points at the attacker.
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
       `npm run worktree-setup`: every direct Remix dependency is linked and
       `npm --prefix remix run ensure-deps -- --check` passes.
+- [ ] Fresh-worktree bootstrap (`remix/scripts/worktree-bootstrap.cjs`): create
+      a linked worktree (`git worktree add ../tt-check -b tmp/check`), confirm
+      the tracked `post-checkout` hook wrote `worktree-bootstrap.log` in the Git
+      directory and that `remix/node_modules/.pnpm`, missing env files copied
+      from the main checkout (the `.env*` entries of `.worktreeinclude`), and
+      `.claude/launch.json` (entries `thingtime-web-<derived port>` attaching to
+      the PM2 stack and `thingtime-web-<derived port>-foreground`) exist;
+      `git config --worktree --get core.hooksPath` prints `.githooks`.
+      `npm run worktree-bootstrap` a second time changes nothing. Start
+      `npm run worktree-setup` while the background bootstrap is still
+      installing: the second run prints "Another dependency install is
+      running; waiting" and both finish with a complete `node_modules`
+      (`remix/node_modules/.thingtime-install.lock` is gone afterwards). Remove
+      the worktree afterwards.
 - [ ] With the pnpm virtual store present but top-level `eslint` and `vite`
       links removed, run `npm run worktree-setup`: both links are restored
       without copying dependency files from another checkout.
@@ -1787,6 +1915,20 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
+      with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
+      `remix/.env` and the dev stack restarted, run
+      `node remix/scripts/seed-fixture.mjs create --files 3 --name demo`, enable
+      uploads (admin login flags or `ADMIN_USERNAMES` + `resume`), then confirm
+      `remix/.local-attachments/objects/<id>/<version>.bin|.json` exist, the
+      post page renders the images (WebP `width=` previews return 200), the
+      content endpoint 302s to a signed `/api/v1/attachments/local-object` URL
+      that streams the bytes (Range → 206), the download-all archive unzips
+      cleanly, and `cleanup` deletes the post/folder and every object file.
+      An unsigned or expired `local-object` URL answers 403; with the variable
+      unset every request answers 404; the module throws when `VERCEL` is set.
+      `npm --prefix remix run test:attachments` covers the multipart, copy,
+      signature and traversal cases without a server.
 - [ ] Download all (PR: download-all attachments): a post with two or more
       stored attachments shows a `Download all · N files · size` pill under its
       gallery/file rows (single-file posts and linked-only galleries show none).
@@ -3161,6 +3303,11 @@ email whose link points at the attacker.
 - [ ] Run `npm run test:graphify-cas`. Confirm Graphify-only edits leave the
       source fingerprint unchanged, source edits change it, and computing a
       fingerprint leaves the real staged index byte-for-byte unchanged.
+- [ ] Snapshot immutability: after `scripts/graphify update .`,
+      `stat -f %Lp graphify-out/snapshots/v1/*/*/GRAPH_REPORT.md` prints `444`;
+      running the upstream `graphify update` (or an old hook) through the root
+      alias fails with EACCES instead of dirtying the committed snapshot, and
+      `git status` stays clean.
 - [ ] Finalize the same portable output twice and confirm it deduplicates to
       one artifact path. Finalize two valid variants for one source fingerprint
       and confirm both remain immutable while the deterministic selector picks
@@ -5889,7 +6036,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       its own sub-directory named after the post, recordings sit at the folder
       level, and children another viewer cannot see are excluded (share the
       folder as hidden, open its `/api/v1/attachments/archive?id=<folder>` URL
-      logged out: only public/unlisted children's files appear). The item ⋯ /
+      logged out: only public children's files appear — an unlisted child opens
+      by its own exact id and is never enumerated through a folder). The
+      manifest's `skipped` count is non-zero only for the folder's owner or an
+      administrator; a stranger's manifest says `0` even when files were
+      withheld, and an empty folder and a fully-withheld folder answer the same
+      404 message. Browsing back into an unchanged folder fires no second
+      manifest probe (Network tab); adding or deleting a post in it does. The item ⋯ /
       right-click menu on folders, posts, pages and media shows a **Files**
       section (`Download all files`, `Share download link`); multi-selections
       hide it. Downloading a folder with nothing downloadable toasts the server
@@ -6209,6 +6362,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Components (/components, `remix/app/components/ComponentsLibrary/`, `/api/v1/components/browse`, `/api/v1/admin/components/seed`)
 
+- [ ] Admin catalog import: regular users never see the publisher. On desktop
+      and 375px mobile, open the importer, select valid/invalid/duplicate JSON,
+      and review the count before publishing. Invalid files cannot publish;
+      progress reflects server counts; stop/account switch prevents later
+      batches and stale updates; retrying converges without duplicate Things.
+      Large UTF-8 definitions stay below the HTTP body limit, and a skipped or
+      failed batch stops with an honest partial-progress message.
 - [ ] `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`
       passes end to end (browse + filters + docs twin, admin seed gate,
       user save-version via the unified things path, react/save decoration).
@@ -6722,6 +6882,67 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
 
+## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
+
+Automated first: `pnpm --dir remix run verify:connections` (94 real-API
+checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
+
+- [ ] `/connections` renders the provider catalog signed-out with a quiet
+      sign-in card; signed in, connecting the Demo provider adds it under
+      "Your connections" with Feed + Unlink working, and reconnecting the
+      same handle reports "Already connected".
+- [ ] Connecting the same external identity from a SECOND Thingtime account
+      converges on the same external account (many-to-many): both accounts
+      read the same posts through their own links, and each earns its own
+      acl grant even when the other account's sync fired first (the shared
+      per-account cooldown must never strand the second user's grants).
+- [ ] `/connections/feed` merges all connections newest-first with per-
+      connection tabs; external posts render through the native PostCard
+      with the third-party author (never "Anonymous"), comments and
+      reactions work natively, and `/post/<ext-post-…>` permalinks resolve
+      with aggregated counts.
+- [ ] A "warn" AI feed filter veils matched posts behind the ⚠️ card with a
+      working "Show anyway" button (reason + source line shown); a "hide"
+      filter drops them with the "N posts hidden" summary; pausing a filter
+      stops matching; verdicts stay stable across reads (cached) and editing
+      the prompt re-classifies.
+- [ ] SSO connect: unconfigured providers show "Needs setup" (disabled);
+      configured ones show "Sign in with <name>" and redirect to the
+      provider's own login; the callback lands on /connections with the
+      "Account linked" toast (or the oauthError toast on decline/forged
+      state); the fields-based POST /api/v1/connections always refuses SSO
+      providers with a pointer at oauth/begin; no token material ever appears
+      in any API response or client store.
+- [ ] Virtual YouTube list: searching a channel ID/URL/@handle returns a
+      Subscribe row keylessly (name search only with YOUTUBE_API_KEY, and the
+      hint line says so); first Subscribe auto-creates the "My YouTube
+      channels" connection; the connection row shows "N channels"; Unsubscribe
+      removes just that channel; the merged uploads feed interleaves channels
+      newest-first; two users' lists stay independent while a shared video
+      stays ONE post (one external-post-source row per sourcing account) with
+      unified comments.
+- [ ] Feed deepening: scrolling past the synced end (or "Fetch older from
+      your apps") pulls older provider pages without resetting scroll
+      position, and repeated deepens stop at the per-account depth cap.
+- [ ] Personal-provider posts stay invisible (404) to non-linked users;
+      `ext-` shareIds are refused on generic create/update; the connections
+      kinds never appear in the generic /things browser; unlink removes only
+      the caller's link and the shared account retires with its last link.
+- [ ] Relational source membership (regression — the post doc must never grow
+      per linker): with two Thingtime accounts linked to ONE external
+      identity, a synced post's `acl` is exactly the constant `tt:extsourced`
+      (personal) or `tt:all` (public) — never `tt:extacct/<accountId>`, which
+      would both grow without bound on a viral post and disclose the other
+      members' external-account ids through `PublicPost.acl`. The post carries
+      no `sourceIds` array; membership is one `external-post-source` row per
+      (post, account). Unlinking revokes that viewer instantly while every
+      other linked member still sees the post, and a feed page never shows the
+      same post twice even when two of the viewer's own accounts source it.
+- [ ] Migration `relational-external-post-sources` (admin → /docs/schemas):
+      dry run reports the pending legacy posts, the live run creates the
+      membership rows + rewrites the acl + unsets `sourceIds`, a legacy
+      `tt:extacct/` post stays visible to its linked member both BEFORE and
+      AFTER the run, and a second run is a no-op.
 
 ## Commander emoji paste recovery
 
@@ -7702,7 +7923,6 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
 - [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
 
-
 - [ ] Account invitations default to Never expire; select each dated expiry. Reload and show/copy a pending invite, including clipboard-denied fallback. Legacy replacement warns before invalidating the old link; cancelled/claimed/expired rows have no link control. Check desktop and 390px page/popup top to bottom with dropdown open. Never-expiring gifts survive expiry sweeps; dated gifts refund once; another owner cannot reveal/replace a link.
 ### Lopu uploads, provider media and mobile keyboard (2026-09-16)
 
@@ -7758,7 +7978,6 @@ storage only; do not describe it as a production upload or provider acceptance.
 - [ ] Drag all four edges and four corners. Opposite edges stay anchored; frame bounds stay within the viewport. Dock to top/left/bottom/right, select overlay/split, and resize each divider. Split reduces the actual page rectangle; overlay preserves it. Scroll the page fully in each mode; fixed navigation remains in the page area and DevKit/Edit controls stay behind overlay Lopu.
 - [ ] Shrink split page width to 320px: compact navigation controls do not collide, page content has no horizontal overflow, and the drawer/quick switcher remain accessible. On mobile, check the full sheet, minimise/restore, page picker and conversation controls in a short viewport.
 - [ ] Both capability manifests advertise api.lopu-chats-reply 1.12.0. Page-bearing clients refuse 1.11 origins, while continuation without pages keeps its 1.11 requirement. Invalid page arrays/URLs fail before writes. Real route tests must prove sanitized references reach the provider and persisted message, and opt-out omits implicit page context.
-
 
 ### Lopu message queue and Send now (2026-09-18)
 
@@ -7876,3 +8095,184 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
       minutes; Shed shows the catalogue; Compost resets.
 - [ ] Mobile (390px): the arena stacks, move buttons wrap, dex grid is 3-up,
       no horizontal overflow on any app page.
+
+## Continuity, Builder, navigation and Things regression checks (2026-09-21)
+
+- [ ] On a deployed preview with an authorized account, send a harmless native-tool
+      GPT-5.6 Sol reply at High effort in local and Vercel management. Confirm the
+      selected effort survives a read-only tool hop, its receipt is saved once and
+      the reply reaches a terminal state. Reload the server-managed chat while it
+      runs. Both manifests must advertise reply 1.14.1; a provider rejection must
+      retain accurate settings and an honest error without exposing credentials.
+      Mocked provider tests alone do not prove this live acceptance.
+- [ ] Reject a provider tool batch before execution when streamed and completed
+      tool identities disagree, item/call IDs repeat, or any argument JSON is
+      incomplete. A failed later hop must preserve earlier receipts without
+      replaying their effects.
+- [ ] Fail admission before scheduler dispatch, then wait for its lease or Stop:
+      a new send becomes possible and a delayed worker cannot execute. Abandon a
+      claimed child: saved receipts survive and uncertainty requires attention; the
+      conversation claim remains held until worker completion is acknowledged.
+      Hold a worker across Stop plus redelivery: no new worker starts, late
+      receipts persist, and acknowledged completion releases the claim once.
+      Delay a competing finalizer past acknowledgment: terminal status cannot
+      regress. Redeliver an already-finished child: no stale reservation remains.
+- [ ] Reach the local safe-error retry limit, then poll and reload. Automatic
+      recovery stays paused across both; explicit manual Continue can retry. Switch
+      accounts while the continuation identity hashes: no stale recovery sends.
+- [ ] Viewing an interactive webpage attached to a feed/post/Thing never makes
+      it Lopu's active editable page. A real builder target remains active,
+      explicit edits to the attachment are refused, and local controls respond.
+
+- [ ] Open a service-workspace component in the catalog preview and as a
+      non-owner in its inert live pane: only the static hint appears, without a
+      workspace loader or setup controls. Interactive shared pages still allow
+      authorized staff. Multiple attached workspace records reuse one lookup
+      while each source ACL is checked; later reads recheck revoked membership.
+
+- [ ] Choose each Lopu management mode from the send menu and settings; confirm
+      the choice survives reopening that chat. Close/reload at a safe checkpoint
+      or recoverable error: work resumes once without a synthetic prompt bubble.
+      Stop during execution and between parts; polling/reload must never restart
+      it. Pending confirmations, uncertain tool completion, unsaved page edits,
+      session revocation and account/data-source changes must fail closed.
+- [ ] On a physical iPhone, run two server chats and lock the device: exactly one
+      Live Activity changes from two active chats to one, then finishes. Verify
+      real APNs while suspended, user dismissal, disabled Live Activities,
+      signout/account/source switches and a simultaneous voice session. Simulator
+      lifecycle tests do not prove real lock-screen or APNs delivery.
+- [ ] Desktop and mobile: a single search icon opens Commander with page/recent
+      shortcuts, remote Things/people and `>` commands. Test keyboard navigation,
+      Escape, close/reopen, account switch and nested editor shortcuts. Admin is
+      directly below Dev for administrators and absent for other accounts.
+- [ ] Builder dashboard page/component cogs and floating editor cog expose
+      privacy, share, rename, private duplicate, clipboard and import/export.
+      Exercise dialogs and unsaved-change guards at desktop/mobile widths.
+      Public/page view routes and ordinary app pages have no floating Edit page
+      control; Builder has no Go to page button. Scroll through the footer.
+- [ ] Fresh notification preferences disable action-run push and email. Explicit
+      saved choices survive. Muted runs remain in notification history.
+- [ ] Anonymous crawler HTML for an unlisted post/page carries its specific
+      title/excerpt and card while retaining noindex; private/missing targets
+      remain generic. Download the actual PNG and check stored photo tiles.
+- [ ] Things: plain click opens; modifiers/checkboxes select. Explicit legacy
+      data folders browse and move with the normal owner/cycle fences. Every
+      root/nested tree and Miller column ends with New folder +. Open the page
+      cog and error log. Rename preserves original payload/permissions.
+- [ ] Thing data starts collapsed. Rendered null, false, zero and empty strings
+      remain distinct. Shared comments retain existing replies and ACLs and use
+      the same reactions/rich composer as posts. Attach multiple existing Things
+      through Commander search/folders with independent Data/Interactive modes;
+      recheck reader permission after revocation and after account switches.
+- [ ] Run focused continuity, native, Things, notification, navigation, webpage,
+      social-preview and capability suites; build and verify Vercel output and
+      both live capability manifests. Record baseline typecheck errors separately.
+- [ ] Graphify can refresh a read-only snapshot through a writable private copy
+      without mutating the snapshot; run `node --test scripts/graphify-cas.test.mjs`.
+
+## Funding and support (`/support`, landing funding section)
+
+- [ ] Signed out, open `/support` directly and reload; contribution, paid setup
+      enquiry and sponsorship enquiry paths remain visible without signing in.
+- [ ] At desktop and 375px widths, scroll the homepage and `/support` from top
+      to bottom. Cards, sticky navigation, form controls and footer links stay
+      reachable without horizontal overflow, clipping or overlap.
+- [ ] Homepage support links and the shared footer reach `/support`. Contribution
+      links reach the real Thingtime GoFundMe campaign. No Indiegogo prelaunch
+      link, hard-coded raised total/backer count/deadline, merch entitlement or
+      lifetime AI promise appears in the active funding section or FAQ.
+- [ ] Switch between setup and sponsorship enquiries, enter a brief including
+      punctuation/newlines, and inspect the generated email recipient, subject
+      and body. The visitor can edit the message; preparing it never sends it.
+- [ ] Copy the enquiry on desktop and mobile. If clipboard access is unavailable,
+      the visible draft and contact address remain available to copy manually.
+- [ ] Open the homepage funding FAQ with keyboard and pointer. Donation terms remain separate
+      from paid services and Lopu credits; no payment-success claim is shown
+      merely from clicking an outbound link or returning to the page.
+
+## Sign-in hint clearance
+
+- [ ] On signed-out desktop, 390px and 320px mobile pages, show both the preview
+  sign-in hint and account suggestion card. Keep default Lopu/DevKit launchers
+  visible; Not now and account controls must remain unobscured and clickable.
+  Scroll long hints on a short viewport; the card must stay within the viewport.
+
+## Functional catalog controls (2026-09-21)
+
+- [ ] At `/tests/functional-demos.html`, use the first component's text field,
+      checkbox, Toggle, Increase and range. Its visible summary changes; the
+      second component does not. A parent render preserves the edit. Reset
+      restores all visible fields and the summary. Open More and scroll to the
+      bottom at desktop and 390px without overlap or horizontal overflow.
+- [ ] In guestbook, RSVP and calculator demos, change the native form fields.
+      Required, email and number constraints block invalid submits. Confirm
+      shows the actual values; cancel writes nothing. A successful first run
+      installs its suite and shows the result without navigating away.
+- [ ] Contact/newsletter demos and site CTAs create private saved Things with
+      inspectable links. They claim no external delivery. Use template installs
+      its required suite before copying; the copied page remains functional
+      after reload. Automatic dependency installation preserves customized parts. Explicit reinstall refreshes controls without duplicating suite parts or overwriting saved data.
+      Run `TT_FUNCTIONAL_TEST_URL=http://127.0.0.1:<port> node --import tsx --test
+      app/api/utils/webpages/functionalDemos.integration.test.ts` from `remix/`
+      for real API proof (local server only; exact fixture Things are cleaned up).
+- [ ] Local controls work signed out on curated demo live panes. Server Actions
+      still require sign-in and remain owner-scoped. Browse thumbnails and
+      stranger-authored controls remain inert. Switching account, component or
+      defaults does not reveal the preceding component's local values/result.
+- [ ] Video demos use a native player; changing its URL changes the actual src.
+      Play/pause, seeking, volume and fullscreen work for a compatible URL.
+      Source URLs and markup continue through the existing safety allowlists.
+- Native catalog controls: a dialog opens only after a click, traps focus, closes
+  with Escape/Close and restores focus; a nested local Action remains within its
+  component. A countdown starts, pauses, resets, catches up after delayed ticks
+  and announces completion without affecting another instance. Repeat at phone
+  width; drawers are flush to the left/top/bottom and keep the close control usable.
+
+- Service workspace production regressions: save an uploaded image, reload the
+  record, and verify the gallery plus thumbnail/banner actions. After saving,
+  the upload tray must clear and the next Before/After batch must be independent.
+  A revoked member and unrelated account must not read comment media metadata;
+  blocked and wrong-owner attachments stay absent. A Google Places configuration
+  rejection must show specific safe setup guidance; gateway HTML must show a
+  retry message rather than a JSON parser exception. Run test:service-workspaces
+  and the isolated test-service-workspace-local.ts smoke.
+- Integration builder mobile header: with a long display name at 320px/390px,
+  account text truncates without covering Commander or neighboring controls;
+  the full name remains available to assistive technology and on hover.
+  The compact mobile search button opens a focused input below the header;
+  results remain below that input and Escape closes it. Desktop search remains inline.
+
+- Index-capacity upgrade: a home database carrying the pre-release Connections
+  lookup can run the integration seed with legacy read layouts still enabled.
+  Bootstrap retires that obsolete non-unique index before creating missing
+  current indexes; unique constraints and saved Things remain intact.
+
+
+## Map SDK and larger-platform library (2026-09-21)
+
+- Browse all 540 examples: Mapbox, Google Maps and Google Places belong to the key-required filter and each has a grouped builder page. No provider requests or SDK scripts load merely by browsing. The public-only browser harness must omit SDK/keyed examples.
+- Open SDK demos at desktop, 390px and 320px. Inspect inputs, key Show/Hide/Clear, setup links, source and reuse tabs; scroll through the full page. Empty keys disable Run. Mapbox secret tokens and malformed inputs fail before loading. Invalid provider keys produce actionable errors, never fake maps/results.
+- With a restricted browser key you own, run a Mapbox marker/popup and Google advanced marker. For Places, enable Places API (New), run text/nearby search and autocomplete, and verify actual markers, addresses, attribution and result JSON. Only the first autocomplete prediction is resolved using its session token. Check browser console for CSP violations; provider errors must not expose credentials in Thingtime logs or result output.
+- Clear/reset/cancel, changing account and unmounting dispose SDK frames. A saved Thing contains only the catalogue ID and ordinary inputs; credentials/results never persist. A second demo's input/key state remains independent.
+- REST Places text/nearby searches send a catalogue-selected POST with bounded fixed fields and masks; arbitrary caller URL/method/body/header choices cannot change that transport. GET providers retain their existing behavior and key redaction. Verify anonymous 401, unknown example 400, and origin capability 1.2.0.
+- Re-run the integration-only admin seed. Existing authored copies remain unchanged; the index lists 51 services and all 540 examples resolve to schema-valid component and individual page Things.
+
+- Upcoming visits: completing a future-dated visit removes it from the dashboard upcoming list while keeping it in the planner and property visit history. Cancelled and archived visits also remain absent from upcoming visits.
+
+### Shared discussion acceptance and service galleries
+
+- Post a plain or rich comment/reply on a workspace Thing, including a nested
+  reply. Refresh the media gallery only after server acceptance; rejected writes
+  must not trigger refresh. A failed gallery refresh must leave the accepted
+  comment visible without retrying or duplicating its write.
+
+- Franchise list controls: seed more than 20 authorized records; check 5/10/15/20 sizes, next/previous/page selection, filter reset, clear filters and empty matches across directories, Trash, linked records, history, media and comments. Infinite mode appends batches and stops at the last record; changing mode or filters resets the window. Search must find older cursor-backed comments/media, including attachment-free intermediate pages, and stop on failed/non-advancing cursors. Planner filters and per-day paging preserve cross-page moves in the complete day order. Check controls and opened record menus at desktop and 390px without horizontal overflow.
+
+- Shared Thing discussion paging: with more than twenty authorized comments,
+  search for text on an older cursor page and verify rich comment controls remain
+  available. Check 5/10/15/20 sizes, next/previous, author filters, empty
+  matches and infinite mode at desktop and 390px. Inaccessible comments must not
+  appear in the batched post projection; rejected or non-advancing cursor pages
+  must stop automatic loading, with an explicit retry for recoverable failures.
+
+- Device command confidentiality: generic Thing exact-id and discussion reads must reject owned device-command rows, including live and expired filesystem results and upload chunks. Only the dedicated device command result endpoint may return its authorized, unexpired result.

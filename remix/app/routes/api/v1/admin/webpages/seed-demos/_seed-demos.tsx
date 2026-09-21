@@ -3,7 +3,7 @@ import { json } from '~/api/http';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { countSeededWebpages, seedDemoSuites, seedDemoWebpages } from '~/api/utils/webpages/seed';
+import { countSeededWebpages, seedDemoSuites, seedDemoWebpages, seedIntegrationWebpages } from '~/api/utils/webpages/seed';
 
 // POST /api/v1/admin/webpages/seed-demos — upsert the builder DEMO LIBRARY:
 // every webpage demo (shareId webpage-demo-<slug>) AND every behaviour suite
@@ -33,6 +33,13 @@ export const action = async ({ request }: { request: Request }) =>
 		const limit = await enforceRateLimit(request, 'webpages.seed', `user:${gate.user.id}`, { failClosed: true });
 		if (!limit.allowed) {
 			return json({ ok: false, error: 'Seeding is rate-limited — pause between runs 🌱' }, rateLimitedResponseInit(limit));
+		}
+
+		const catalog = new URL(request.url).searchParams.get('catalog');
+		if (catalog && catalog !== 'integrations') return json({ ok: false, error: 'Unknown demo catalog' }, { status: 400 });
+		if (catalog === 'integrations') {
+			const result = await seedIntegrationWebpages();
+			return json(result);
 		}
 
 		const pages = await seedDemoWebpages();
