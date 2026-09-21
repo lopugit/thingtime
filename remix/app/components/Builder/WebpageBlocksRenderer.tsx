@@ -7,8 +7,8 @@ import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
-import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
-import { type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
+import { defaultsFromArgs, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
+import { type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { LiveTemplate, useThingSource } from './liveComponent';
 import { htmlToNode } from './htmlToNode';
 import { EditorHistory } from '../Editor/editorHistory';
@@ -790,12 +790,14 @@ const ComponentBlockView = ({
 	component,
 	interactive,
 	chrome,
+	confirm,
 	onUnowned
 }: {
 	block: WebpageBlock;
 	component: ComponentThingLike | null;
 	interactive: boolean;
 	chrome?: BuilderChrome | null;
+	confirm?: TtActionConfirmHandler;
 	onUnowned?: TtActionUnownedHandler;
 }) => {
 	const crystal = component?.crystal;
@@ -814,8 +816,8 @@ const ComponentBlockView = ({
 	const resolved = React.useMemo(() => {
 		if (!crystal?.render) return null;
 		const authored = componentTextOverrides(crystal.render, block.args, chrome?.seamlessMode === 'edit');
-		return resolveTemplate(authored.render, { ...argValues, ...source.scope });
-	}, [crystal?.render, argValues, source.scope, block.args, chrome?.seamlessMode]);
+		return authored.render;
+	}, [crystal?.render, block.args, chrome?.seamlessMode]);
 
 	// Inline text editing INSIDE components: double-click a piece of rendered
 	// text and, when it matches a string/text arg's current value verbatim, a
@@ -878,10 +880,10 @@ const ComponentBlockView = ({
 	return (
 		<LiveTemplate
 			render={resolved}
-			scope={{}}
-			resolved
+			scope={{ ...argValues, ...source.scope }}
 			interactive={interactive && (!chrome || chrome.seamlessMode === 'view')}
 			onUnowned={onUnowned}
+			confirm={confirm}
 			onDoubleClickCapture={handleDoubleClick}
 		>
 			{argEdit ? (
@@ -943,6 +945,7 @@ export type WebpageBlocksRendererProps = {
 	// what to do when a delegated click names an action the viewer does not
 	// own (demo surfaces install the suite, then re-run); see useTtActionClicks
 	onTtActionUnowned?: TtActionUnownedHandler;
+	confirm?: TtActionConfirmHandler;
 	// how native blocks render (site pages pass the app screen; builders pass
 	// a placeholder; /p/ pages omit → native blocks render nothing)
 	renderNative?: (key: string, block: WebpageBlock) => React.ReactNode;
@@ -1108,6 +1111,7 @@ const BlockView = (
 				interactive={!!interactive}
 				chrome={chrome}
 				onUnowned={props.onTtActionUnowned}
+				confirm={props.confirm}
 			/>
 		);
 	} else if (block.type === 'native') {

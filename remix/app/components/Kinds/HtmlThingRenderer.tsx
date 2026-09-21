@@ -1,3 +1,4 @@
+import { ComponentDialog, ComponentCountdown } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
 import React from 'react';
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
@@ -54,6 +55,10 @@ export const ALLOWED_PROPS = new Set([
 	'role',
 	'aria-label',
 	'aria-hidden',
+	'aria-pressed',
+	'aria-expanded',
+	'aria-selected',
+	'open',
 	// NOT `pattern`. Every other constraint-validation prop above is a cheap
 	// numeric/boolean compare, but `pattern` is a REGEX the browser compiles
 	// and runs from untrusted markup, on the main thread, with no timeout.
@@ -172,6 +177,9 @@ const FIELD_TAGS = new Set(['input', 'textarea', 'select']);
 const fieldProps = (tag: string, props: Record<string, unknown>): Record<string, unknown> => {
 	if (!FIELD_TAGS.has(tag)) return props;
 	const out: Record<string, unknown> = { ...props };
+	// Local bindings are controlled by LiveTemplate's bounded instance state.
+	// Keep the DOM in sync after another control changes a value or resets it.
+	if (out['data-tt-action'] === '$ui') return { ...out, onChange: () => {} };
 	if ('value' in out) {
 		out.defaultValue = out.value;
 		delete out.value;
@@ -205,6 +213,8 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const tag = String(node.tag || 'div').toLowerCase();
+	if (tag === 'tt-countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
+	if (tag === 'tt-dialog') return <ComponentDialog key={key} title={node.props?.title} name={node.props?.name} type={node.props?.type}>{renderChildren(node.children, depth + 1, state)}</ComponentDialog>;
 	if (tag === 'tt-upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} value={node.props?.value} attachmentId={node.props?.attachmentId} />;
 	if (!ALLOWED_TAGS.has(tag)) {
 		// unknown tag: render children in a plain span so content still shows
