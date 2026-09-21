@@ -1,3 +1,4 @@
+import { sdkSandbox } from '~/library/sdkSandbox';
 import { libraryBuilderHref, libraryExamplePageId, libraryServicePageId } from '~/library/builderLinks';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import React from 'react';
@@ -52,27 +53,33 @@ function Detail({ example }: { example: LibraryExample }) {
 			savingRef.current = false;
 		}
 	};
-	const source = example.module
+	const source = example.sdk
+		? sdkSandbox(example, example.input, 'source-example', example.sdk.type === 'mapbox' ? 'pk.YOUR_PUBLIC_TOKEN' : 'AIzaYOUR_BROWSER_API_KEY')
+		: example.module
 		? `import * as m from ${JSON.stringify(example.module)};\n\nconst input = ${JSON.stringify(
 				example.input,
 				null,
 				2
 		  )};\nconst root = document.getElementById('preview');\n\nasync function run() {\n  ${example.code}\n}\nconsole.log(await run());`
-		: `// GET request to ${example.provider}\n// ${
-				example.request?.auth ? 'Send the API key through your own server; never publish it.' : 'No account needed.'
-		  }\n${JSON.stringify({ url: example.request!.url, params: example.request!.params || {}, input: example.input }, null, 2)}`;
+		: `// ${example.request?.method || 'GET'} request to ${example.provider}\n// ${
+				example.request?.auth || example.sdk ? 'Send the API key through your own server; never publish it.' : 'No account needed.'
+		  }\n${JSON.stringify(
+				{ url: example.request!.url, params: example.request!.params || {}, body: example.request!.body, input: example.input },
+				null,
+				2
+		  )}`;
 	return (
 		<>
 			<Flex gap={3} flexWrap="wrap">
-				<Link to="/library">← All 500 examples</Link>
+				<Link to="/library">← All {LIBRARY_EXAMPLES.length} examples</Link>
 				<Link to={libraryBuilderHref(libraryServicePageId(example.provider))}>All {example.provider} in Builder</Link>
 				<Link to={libraryBuilderHref(libraryExamplePageId(example.id))}>Open example in Builder →</Link>
 			</Flex>
 			<PageHeader eyebrow={`${example.provider} / ${example.category}`} title={example.title} variant="ink" subtitle={example.description} />
 			<Flex gap={2} flexWrap="wrap">
 				<Badge>{kinds[example.kind]}</Badge>
-				<Badge>{example.request?.auth ? 'API key required' : 'No key needed'}</Badge>
-				<Badge>{example.module ? 'Remote module' : 'Live API'}</Badge>
+				<Badge>{example.request?.auth || example.sdk ? 'API key required' : 'No key needed'}</Badge>
+				<Badge>{example.sdk ? 'Browser SDK' : example.module ? 'Remote module' : 'Live API'}</Badge>
 			</Flex>
 			<Flex gap={2} role="tablist" aria-label="Example views">
 				{[
@@ -91,7 +98,11 @@ function Detail({ example }: { example: LibraryExample }) {
 				</Box>
 				{tab === 'source' && (
 					<>
-						<Text mb={3}>Version-pinned imports and editable sample inputs. Visual examples expect a preview element.</Text>
+						<Text mb={3}>
+							{example.sdk
+								? 'Standalone HTML with a placeholder browser key. Replace it with your own restricted key before running.'
+								: 'Version-pinned imports and editable sample inputs. Visual examples expect a preview element.'}
+						</Text>
 						<Box
 							as="pre"
 							p={4}
@@ -174,13 +185,24 @@ export default function LibraryPage() {
 		setSeeding(true);
 		try {
 			await requireThingtimeCapability('api.admin-webpages-seed-demos', '1.2.0');
-			const response = await fetch('/api/v1/admin/webpages/seed-demos?catalog=integrations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+			const response = await fetch('/api/v1/admin/webpages/seed-demos?catalog=integrations', {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: '{}'
+			});
 			const data = await response.json();
 			if (!response.ok || !data.ok || data.skipped) throw new Error(data.error || 'Some pages could not be prepared. Check the seed report.');
-			lopu({ title: 'Builder library ready', description: `${data.created} new · ${data.refreshed} refreshed · ${data.unchanged} unchanged Things`, status: 'success' });
+			lopu({
+				title: 'Builder library ready',
+				description: `${data.created} new · ${data.refreshed} refreshed · ${data.unchanged} unchanged Things`,
+				status: 'success'
+			});
 		} catch (error) {
 			lopu({ title: 'Could not prepare builder pages', description: error instanceof Error ? error.message : 'Please try again.', status: 'error' });
-		} finally { setSeeding(false); }
+		} finally {
+			setSeeding(false);
+		}
 	};
 	const q = params.get('q') || '';
 	const category = params.get('category') || '';
@@ -200,7 +222,7 @@ export default function LibraryPage() {
 					(!category || example.category === category) &&
 					(!provider || example.provider === provider) &&
 					(!kind || example.kind === kind) &&
-					(!access || (access === 'key') === !!example.request?.auth) &&
+					(!access || (access === 'key') === !!(example.request?.auth || example.sdk)) &&
 					(!q || `${example.title} ${example.provider} ${example.category} ${example.description}`.toLowerCase().includes(q.toLowerCase()))
 			),
 		[q, category, kind, provider, access]
@@ -217,8 +239,14 @@ export default function LibraryPage() {
 	return (
 		<PageShell width={1180}>
 			<Flex gap={3} flexWrap="wrap">
-				<Button as={Link} to={libraryBuilderHref()} size="sm" variant="outline">Open builder index →</Button>
-				{user?.isAdmin && <Button size="sm" variant="ghost" onClick={seedBuilder} isLoading={seeding}>Prepare builder pages</Button>}
+				<Button as={Link} to={libraryBuilderHref()} size="sm" variant="outline">
+					Open builder index →
+				</Button>
+				{user?.isAdmin && (
+					<Button size="sm" variant="ghost" onClick={seedBuilder} isLoading={seeding}>
+						Prepare builder pages
+					</Button>
+				)}
 			</Flex>
 			{id ? (
 				example ? (
@@ -235,7 +263,7 @@ export default function LibraryPage() {
 						eyebrow="Things · Actions · Components"
 						title="The integration library"
 						variant="ink"
-						subtitle="500 small starting points for something bigger. Explore popular libraries and live APIs, change the inputs, and make them yours."
+						subtitle={`${LIBRARY_EXAMPLES.length} small starting points for something bigger. Explore popular libraries and live APIs, change the inputs, and make them yours.`}
 					/>
 					<Flex gap={6} py={2} flexWrap="wrap">
 						{[
@@ -315,7 +343,7 @@ export default function LibraryPage() {
 										{item.provider}
 									</Text>
 									<Text fontSize="xs" color="var(--tt-muted, #73737d)">
-										{item.request?.auth ? 'Key required' : 'No key'}
+										{item.request?.auth || item.sdk ? 'Key required' : 'No key'}
 									</Text>
 								</Flex>
 								<Text as="h2" fontSize="lg" fontWeight={650} mb={2}>

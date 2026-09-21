@@ -72,3 +72,14 @@ and events exclude file data. Native and browser clients each negotiate a small
 requirement map. `filesystemCommandRoute.test.mts` tests the real service with
 a test collection; both manifest suites assert the additive contracts.
 See [remote-files.md](../remote-files.md) for semantic versions and limits.
+
+## Integration library runtime
+
+`app/library/platformApis.ts` adds fixed read-only provider operations to
+`api.library-request` 1.2.0, including Google Places POST search templates.
+`app/library/request.ts` is the request builder and client requirement source;
+`app/api/utils/library/request.ts` bounds and redacts upstream transport.
+Browser Mapbox and Google SDKs use `app/library/sdkSandbox.ts` and the separately
+restricted `/library/sdk.html` document. Browser keys never enter saved Things.
+Run `npm --prefix remix run test:library`, included in `test:unit`, for catalog,
+builder hierarchy, credential boundaries, and SDK recipe contract coverage.
