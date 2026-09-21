@@ -1,3 +1,4 @@
+import { ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS } from '~/api/utils/attachments/attachmentArchiveCore';
 import { isHeicImage } from './heicImage';
 import type {
 	AttachmentComposerSnapshot,
@@ -323,8 +324,9 @@ export const attachmentContentUrl = (id: string, download = false): string => {
 // "Download all" archives: one ZIP of a post's, folder's or media Thing's
 // stored files. The plain URL IS the share link — opening it in a browser,
 // wget or curl downloads the archive under the Thing's own audience rules.
-export const ATTACHMENT_ARCHIVE_PATH = '/api/v1/attachments/archive';
-export const ATTACHMENT_ARCHIVE_REQUIREMENTS = { 'api.attachment-archive': '1.0.0' } as const;
+// The path and the client requirement live with the (dependency-free) server
+// core so the two sides can never disagree about either.
+export { ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS };
 
 export const attachmentArchiveUrl = (id: string, options: { key?: string; sharedRoot?: string; manifest?: boolean } = {}): string => {
 	const params = new URLSearchParams({ id });

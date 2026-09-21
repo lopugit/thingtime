@@ -8,11 +8,19 @@ import { ATTACHMENT_ARCHIVE_REQUIREMENTS, attachmentArchiveShareUrl, attachmentA
 
 // One hook behind every "Download all" / "Share download link" control. The
 // download asks the server for the manifest first (a small JSON read through
-// the same authorization) so an empty, unauthorized or oversized archive
-// becomes a Lopu toast instead of a navigated-into JSON error; only then does
-// the browser save the ZIP. The share link is the canonical endpoint URL.
+// the same authorization, on its own rate window) so an empty, unauthorized or
+// oversized archive becomes a Lopu toast instead of a navigated-into JSON
+// error; only then does the browser save the ZIP. The share link is the
+// canonical endpoint URL.
+//
+// Mount it only where a control can actually show (see PostAttachments): it
+// carries the full API client, which every card, comment and message row
+// should not pay for.
 
 export type ArchiveAccess = { key?: string; sharedRoot?: string };
+
+const CAPABILITY = 'api.attachment-archive';
+const ensureCapability = () => requireThingtimeCapability(CAPABILITY, ATTACHMENT_ARCHIVE_REQUIREMENTS[CAPABILITY]);
 
 export const useAttachmentArchive = (access: ArchiveAccess = {}) => {
 	const api = useApi();
@@ -22,11 +30,31 @@ export const useAttachmentArchive = (access: ArchiveAccess = {}) => {
 	const sharedRoot = access.sharedRoot || context.sharedRoot;
 	const busy = React.useRef(new Set<string>());
 
+	// Warm the capability check while the controls render. Safari drops a tap's
+	// transient user activation across a network round-trip, so the share/copy
+	// call below must never be the first thing to fetch the capability manifest.
+	React.useEffect(() => {
+		void ensureCapability().catch(() => {});
+	}, []);
+
+	const unsupported = React.useCallback(
+		(what: string) => lopu({ title: `This server can’t build ${what} yet`, description: 'Refresh after the update and try again.', status: 'error' }),
+		[lopu]
+	);
+
 	const download = React.useCallback(
 		async (id: string, noun: ArchiveNoun = 'post') => {
 			if (!id || busy.current.has(id)) return;
 			busy.current.add(id);
 			try {
+				// A stale tab against an older origin gets the same plain answer the
+				// share action gives, not the checker's internal message.
+				try {
+					await ensureCapability();
+				} catch {
+					unsupported('ZIP downloads');
+					return;
+				}
 				const manifest = await api.v1.attachments.archive.manifest({ id, key, sharedRoot });
 				if (!manifest?.ok) throw manifest;
 				triggerBrowserDownload(attachmentArchiveUrl(id, { key, sharedRoot }));
@@ -43,7 +71,7 @@ export const useAttachmentArchive = (access: ArchiveAccess = {}) => {
 				busy.current.delete(id);
 			}
 		},
-		[api, key, sharedRoot, lopu]
+		[api, key, sharedRoot, lopu, unsupported]
 	);
 
 	const shareLink = React.useCallback(
@@ -51,9 +79,9 @@ export const useAttachmentArchive = (access: ArchiveAccess = {}) => {
 			if (!id) return;
 			const url = attachmentArchiveShareUrl(id, window.location.origin, sharedRoot);
 			try {
-				await requireThingtimeCapability('api.attachment-archive', ATTACHMENT_ARCHIVE_REQUIREMENTS['api.attachment-archive']);
+				await ensureCapability();
 			} catch {
-				lopu({ title: 'This server can’t build download links yet', description: 'Refresh after the update and try again.', status: 'error' });
+				unsupported('download links');
 				return;
 			}
 			try {
@@ -65,10 +93,12 @@ export const useAttachmentArchive = (access: ArchiveAccess = {}) => {
 				lopu({ title: 'Download link copied 🔗', description: archiveShareDescription(noun), status: 'success', duration: 8000 });
 			} catch (error) {
 				if ((error as { name?: string } | null)?.name === 'AbortError') return;
+				// NotAllowedError (no user activation left) and unsupported clipboards
+				// both land here: the link itself is the fallback.
 				lopu({ title: `Copy this download link: ${url}`, description: archiveShareDescription(noun), status: 'info', duration: 12000 });
 			}
 		},
-		[sharedRoot, lopu]
+		[sharedRoot, lopu, unsupported]
 	);
 
 	return { download, shareLink };

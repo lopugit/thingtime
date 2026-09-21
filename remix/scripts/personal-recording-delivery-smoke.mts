@@ -52,8 +52,11 @@ export const runDeliverySmoke = async (options: ReturnType<typeof deliverySmokeO
 		phase = 'synthetic S3 upload';
 		const checksum = createHash('sha256').update(audio).digest('base64');
 		const signed = await request('/api/v1/attachments/uploads/parts', { uploadId, parts: [{ partNumber: 1, checksumSha256: checksum }] });
-		const part = signed.parts[0], url = new URL(part.url);
-		assert.equal(url.protocol, 'https:'); assert.ok(url.hostname.endsWith('.amazonaws.com'));
+		// Real buckets presign absolute https URLs; the local stand-in mints
+		// first-party ones (root-relative by default), which resolve against the origin.
+		const part = signed.parts[0], url = new URL(part.url, options.origin);
+		if (url.pathname === '/api/v1/attachments/local-object') assert.equal(url.origin, new URL(options.origin).origin);
+		else { assert.equal(url.protocol, 'https:'); assert.ok(url.hostname.endsWith('.amazonaws.com')); }
 		assert.equal(part.headers['x-amz-checksum-sha256'], checksum);
 		const put = await fetch(url, { method: 'PUT', body: audio, headers: { 'x-amz-checksum-sha256': checksum }, redirect: 'error', signal: AbortSignal.timeout(30000) });
 		assert.ok(put.ok); await put.body?.cancel();

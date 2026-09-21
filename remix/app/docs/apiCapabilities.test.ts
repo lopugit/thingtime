@@ -522,9 +522,9 @@ test('uncapped post attachments and profile grants negotiate their own feature c
 });
 
 test('download-all archives are advertised by both manifests and routed as an executable endpoint', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.attachment-archive'], '1.0.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-archive'], '1.0.1');
 	const discovery = thingtimeCapabilityManifest('https://archive.test');
-	assert.equal(discovery.features['api.attachment-archive'].version, '1.0.0');
+	assert.equal(discovery.features['api.attachment-archive'].version, '1.0.1');
 	assert.ok(discovery.operations.some((operation) => operation.feature === 'api.attachment-archive' && operation.path === '/api/v1/attachments/archive' && operation.methods.includes('GET')));
 	assert.ok(routeModules['v1/attachments/archive']);
 	assert.match(createApiCapabilitiesManifest(Object.keys(routeModules)).features[apiRouteCapabilityId('v1/attachments/archive')] || '', /^\d+\.\d+\.\d+$/);
@@ -532,6 +532,13 @@ test('download-all archives are advertised by both manifests and routed as an ex
 	for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
 });
 
+test('the local development object-storage route is advertised and registered like every executable endpoint', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-local-object'], '1.0.1');
+	const discovery = thingtimeCapabilityManifest('https://local.test');
+	assert.equal(discovery.features['api.attachment-local-object'].version, '1.0.1');
+	assert.ok(discovery.operations.some((operation) => operation.feature === 'api.attachment-local-object' && operation.path === '/api/v1/attachments/local-object' && operation.methods.includes('PUT')));
+	assert.ok(routeModules['v1/attachments/local-object']);
+});
 
 test('native aggregate chat activities have origin-scoped capability coverage', () => {
   assert.ok(routeModules['v1/lopu/live-activity']);

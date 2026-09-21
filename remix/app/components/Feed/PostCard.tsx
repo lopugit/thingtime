@@ -64,7 +64,7 @@ import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, w
 import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
 import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~/utils/mentions';
 import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
-import { CIRCLE_META, COMMENT_SORTS, COMMENT_SORT_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, isCommentSort, isPendingComment, mergeCommentPage, sortCommentPage, timeAgo, windowCommentPage } from './feedTypes';
+import { CIRCLE_META, COMMENT_SORTS, COMMENT_SORT_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, authorLinkTarget, isCommentSort, isPendingComment, mergeCommentPage, sortCommentPage, timeAgo, windowCommentPage } from './feedTypes';
 import type { CommentSort, EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicAuthorFlair, PublicPost, UpdownDirection } from './feedTypes';
 import type { PollRenderPollContext } from '~/components/Kinds';
 
@@ -320,9 +320,20 @@ export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; 
     </Center>
   );
 
-  if (!author?.username) return circle;
+  // third-party authors (synced external posts) link to their real profile on
+  // the source platform — /profile/<handle> would be a dead native route, or
+  // someone else's. Unlinked when the provider gave us no url (authorLinkTarget).
+  const link = authorLinkTarget(author);
+  if (!link) return circle;
+  if (link.external) {
+    return (
+      <a href={link.href} target="_blank" rel="noreferrer noopener">
+        {circle}
+      </a>
+    );
+  }
 
-  return <Link to={`/profile/${author.username}`}>{circle}</Link>;
+  return <Link to={link.href}>{circle}</Link>;
 };
 
 const formatPrice = (price: number, currency: string) => {
@@ -524,7 +535,7 @@ const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) =
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'id' | 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey' | 'linkedThings'>;
+type PostBodyShape = Pick<PublicPost, 'id' | 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey' | 'thingtime' | 'linkedThings'>;
 
 const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'richText'>; compact?: boolean }) => {
   const richText = getEditorJsDoc(post.richText);
@@ -563,7 +574,7 @@ const PostBody = ({
     {post.type === 'thingtime' && post.thing && <PostLinkedThings value={post.thing} linkedThings={post.linkedThings} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
-    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} postId={post.id} />
+    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
     <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
 );
@@ -2154,11 +2165,25 @@ function PostCardImpl(props: PostCardProps) {
           <Box minWidth={0} flex="1">
             <Flex alignItems="baseline" columnGap={1.5} flexWrap="wrap" whiteSpace="normal">
               {post.author?.username ? (
-                <Link to={`/profile/${post.author.username}`}>
-                  <Text as="span" fontSize="sm" fontWeight={700} color={INK} _hover={{ textDecoration: 'underline' }}>
-                    {authorName(post.author)}
-                  </Text>
-                </Link>
+                // named, and linked only where a link is honest — a third-party
+                // author the provider gave no url for stays plain text rather
+                // than borrowing a native /profile route (authorLinkTarget)
+                (() => {
+                  const link = authorLinkTarget(post.author);
+                  const name = (
+                    <Text as="span" fontSize="sm" fontWeight={700} color={INK} _hover={link ? { textDecoration: 'underline' } : undefined}>
+                      {authorName(post.author)}
+                    </Text>
+                  );
+                  if (!link) return name;
+                  return link.external ? (
+                    <a href={link.href} target="_blank" rel="noreferrer noopener">
+                      {name}
+                    </a>
+                  ) : (
+                    <Link to={link.href}>{name}</Link>
+                  );
+                })()
               ) : (
                 <Text as="span" fontSize="sm" fontWeight={700} color={MUTED}>
                   Anonymous 👻
@@ -2360,7 +2385,7 @@ function PostCardImpl(props: PostCardProps) {
             share copies a public original's tags, so a second chip row here
             would just duplicate it) */}
             <PostTextBody post={post} />
-            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} postId={post.id} />
+            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (

@@ -5990,16 +5990,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-archive',
-		contractVersion: '1.0.0',
-		featureVersion: '1.0.0',
+		contractVersion: '1.0.1',
+		// 1.0.1: manifest/HEAD probes rate-limit separately and never presign; one
+		// wall clock covers planning and streaming (504 when planning overruns);
+		// `skipped` is reported only to the root's owner or an administrator and
+		// 404 carries one message for missing, unauthorized and empty roots.
+		featureVersion: '1.0.1',
 		group: 'attachments',
 		title: 'Download all files as a ZIP',
 		endpoint: '/api/v1/attachments/archive',
 		summary: 'Streams one ZIP of every stored file the caller may already read on a post, comment, page, folder or single media Thing; the URL doubles as a share link that downloads directly in browsers, wget and curl.',
 		detail:
 			'The root Thing resolves through the canonical Thing reader: public and unlisted (hidden) Things open by exact id, private and custom audiences need a current eligible session. Posts and comments archive their own bound gallery in stored order; pages archive their bound post-purpose media; a media Thing archives itself; folders are walked recursively (owner-scoped children, nested folders as sub-directories, each post gallery in its own sub-directory) with every child re-judged on its own inherited ACL — the folder audience never leaks into its contents. ' +
-			'Each file is then authorized and signed through the same gates as the content endpoint (purpose/target ACL, moderation, ready state, exact object version, home-storage guards). Files that fail a gate are skipped and counted; blocked media stays hidden for everyone but administrators reviewing evidence. Linked (external URL) media has no stored bytes and is listed in a links.txt member instead. ' +
-			'Bounds: 500 files, 2 GiB, 1000 traversed Things, 64 folder levels and a 280-second stream budget; larger sets return 413 so callers can archive sub-folders separately. Signed object URLs are fetched server-side and piped into a stored (uncompressed) ZIP — no object key, version or signed URL is ever exposed. Responses are private and never cached. Missing, unauthorized and empty roots return 404 uniformly.',
+			'Each file is then authorized and, for a real download, signed through the same gates as the content endpoint (purpose/target ACL, moderation, ready state, exact object version, home-storage guards). Files that fail a gate are skipped; the skipped count is reported only to the root’s owner or an administrator, because it would otherwise reveal moderation or audience state of files a stranger cannot see. Blocked media stays hidden for everyone but administrators reviewing evidence, linked media included. Linked (external URL) media has no stored bytes and is listed in a links.txt member instead. ' +
+			'Bounds: 500 files, 2 GiB, 1000 visible Things (private siblings never count toward it), 2000 bound attachment rows per folder level, 64 folder levels and one 280-second wall clock covering planning and streaming; larger sets return 413 so callers can archive sub-folders separately, and planning that overruns the clock returns 504. Signed object URLs are fetched server-side and piped into a stored (uncompressed) ZIP — no object key, version or signed URL is ever exposed. Responses are private and never cached. Missing, unauthorized and empty roots return 404 with one message.',
 		auth: {
 			mode: 'optional',
 			description:
@@ -6007,11 +6011,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['GET'],
 		steps: [
-			'GET with id (a post, comment, page, folder or media Thing id). Optional sharedRoot authorizes page-composition media exactly as the content endpoint does; optional key accepts a legacy hidden-link secret.',
-			'Save the response body as a .zip; the Content-Disposition filename is derived from the folder name, media filename, page title or the post’s opening words. HEAD returns the headers without building the archive.',
-			'Add manifest=1 to receive JSON instead: { ok, id, kind, name, fileName, fileCount, totalBytes, skipped, linkCount, files: [{ id, path, name, size }] }. Use it to label buttons and to detect folders without downloadable files before offering a download.',
+			'GET with id (a post, comment, page, folder or media Thing id). Optional sharedRoot authorizes page-composition media exactly as the content endpoint does — including a media root that is only readable through that page; optional key accepts a legacy hidden-link secret.',
+			'Save the response body as a .zip; the Content-Disposition filename is derived from the folder name, media filename, page title or the post’s opening words. HEAD returns the headers without presigning or streaming anything.',
+			'Add manifest=1 to receive JSON instead: { ok, id, kind, name, fileName, fileCount, totalBytes, skipped, linkCount, files: [{ id, path, name, size }] }. Use it to label buttons and to detect folders without downloadable files before offering a download. Probes (manifest=1, HEAD) are limited at 120/min per identity, ZIP downloads at 30/min.',
 			'Share the plain URL (no key) as the “download link”: anyone who can view the Thing gets the ZIP, and access is revoked the moment the Thing’s audience changes.',
-			'Treat 404 uniformly for missing, unauthorized and empty roots; 413 means the set exceeds one archive’s bounds.'
+			'Treat 404 uniformly for missing, unauthorized and empty roots; 413 means the set exceeds one archive’s bounds; 504 means planning alone overran the wall clock.'
 		],
 		requestExamples: [
 			{
@@ -6044,7 +6048,47 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				body: { ok: true, id: 'folder-id', kind: 'folder', name: 'Recipes', fileName: 'Recipes.zip', fileCount: 2, totalBytes: 4096, skipped: 0, linkCount: 0, files: [{ id: 'att-1', path: 'Dinner/photo.jpg', name: 'photo.jpg', size: 2048 }] }
 			},
 			{ status: 404, description: 'Missing, unauthorized or nothing to download.', body: { ok: false, error: 'Thing not found' } },
-			{ status: 413, description: 'Too many files or bytes for one archive.', body: { ok: false, error: 'These files are too large to download as one ZIP — download the folders inside separately' } }
+			{ status: 413, description: 'Too many files or bytes for one archive.', body: { ok: false, error: 'These files are too large to download as one ZIP — download the folders inside separately' } },
+			{ status: 504, description: 'Planning overran the request wall clock.', body: { ok: false, error: 'Preparing this download took too long — try a smaller folder' } }
+		]
+	}),
+	endpoint({
+		id: 'attachment-local-object',
+		contractVersion: '1.0.1',
+		// 1.0.1: optional THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN mints absolute
+		// URLs for native and script clients; exact versions carry ETag /
+		// Last-Modified and answer If-None-Match with 304; a PUT whose body ends
+		// early is a 400; foreign version ids read as absent objects.
+		featureVersion: '1.0.1',
+		group: 'attachments',
+		title: 'Local development object storage',
+		endpoint: '/api/v1/attachments/local-object',
+		summary: 'Filesystem stand-in for the private S3 bucket: serves the server-signed part-upload and download URLs when THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR is set on a developer machine; 404 everywhere else.',
+		detail:
+			'Never active in deployments: the module refuses to start when Vercel environment variables are present (a non-retryable storage configuration failure), and without the directory variable every request answers 404. URLs are minted only by the attachment service (upload part signing and downloads) and carry a ten-minute HMAC signature over every parameter; they are root-relative by default and absolute when THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN names the dev server origin (native uploaders and scripts need the absolute form, exactly like a presigned S3 URL). PUT stores one multipart part after verifying the signed length and SHA-256 checksum — a body that ends early is a 400, never an unhandled error; GET/HEAD stream one exact object version with Range support, the signed Content-Type/Content-Disposition, an ETag and Last-Modified (If-None-Match answers 304). Object keys, upload ids and version ids are validated against fixed grammars so no request can reach outside the storage directory; a version id the stand-in never minted reads as an absent object. Quota, moderation, ACL and copy behaviour are unchanged — they only ever see the AttachmentS3 interface.',
+		auth: {
+			mode: 'none',
+			description: 'Authorization is the short-lived signature minted by the attachment service after its own audience checks. Callers never construct these URLs.'
+		},
+		methods: ['GET', 'PUT'],
+		steps: [
+			'Set THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR (for example remix/.local-attachments) in remix/.env and restart the dev stack. Uploads, previews, downloads, archives and moderation fetches then run against local files.',
+			'Upload through the normal /api/v1/attachments/uploads flow; the signed part URLs point at this route and the browser PUTs to the same origin, so no CORS setup is needed.',
+			'Downloads follow the content endpoint redirect to a signed GET here; Range requests return 206 for video scrubbing.',
+			'Delete the storage directory to reset local media. Never set the variable in a Vercel environment.'
+		],
+		requestExamples: [
+			{
+				name: 'Serve a signed object',
+				description: 'The content endpoint redirects here with a server-minted signature.',
+				method: 'GET',
+				query: { op: 'get', key: 'objects/att_example', version: 'v0abc-0123456789abcdef', disposition: 'aW5saW5l', type: 'aW1hZ2UvcG5n', exp: 1790000000, sig: '<hmac>' }
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Object bytes with the signed headers.', headers: { 'Content-Type': 'image/png', 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, no-store, max-age=0' } },
+			{ status: 403, description: 'Expired or mismatched signature.', body: { ok: false, error: 'Signature does not match' } },
+			{ status: 404, description: 'Stand-in not configured, or unknown object.', body: { ok: false, error: 'Local attachment storage is not configured' } }
 		]
 	}),
 	endpoint({
@@ -13618,6 +13662,440 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 404,
         description: 'Unknown migration id.',
         body: { ok: false, error: 'Unknown migration' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-providers',
+    group: 'connections',
+    title: 'Connection providers',
+    endpoint: '/api/v1/connections/providers',
+    summary: 'Lists the third-party feed providers Thingtime can connect to.',
+    detail:
+      'The provider catalog behind "connect a 3rd party app": Reddit, YouTube, Mastodon, Bluesky, RSS, Hacker News, ' +
+      'Lemmy, GitHub, and a demo personal-algorithm provider. Each entry declares its connect fields, whether its ' +
+      'content is public or personal, and whether it is configured on this deployment (OAuth providers appear ' +
+      'unconfigured until their credentials are set).',
+    auth: {
+      mode: 'none',
+      description: 'Public — the catalog holds no user data.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET to read the provider catalog.',
+      'Render a connect form from each provider `fields` list.',
+      'POST the filled fields to /api/v1/connections to link an account.'
+    ],
+    requestExamples: [
+      {
+        name: 'List providers',
+        description: 'Read the catalog.',
+        method: 'GET'
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Provider catalog returned.',
+        body: {
+          ok: true,
+          providers: [
+            {
+              id: 'reddit',
+              name: 'Reddit',
+              icon: '👽',
+              auth: 'none',
+              contentVisibility: 'public',
+              configured: true,
+              fields: [{ key: 'subreddits', label: 'Subreddits', required: true }]
+            }
+          ]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections',
+    group: 'connections',
+    title: 'Connections',
+    endpoint: '/api/v1/connections',
+    summary: 'Lists or creates links between this Thingtime account and third-party app accounts.',
+    detail:
+      'A connection links the current Thingtime account to one external identity (a subreddit set, a YouTube ' +
+      'channel, a Mastodon account, …). External accounts are shared many-to-many: the same third-party identity ' +
+      'can be linked from several Thingtime accounts, converging on one account record. Once linked, the feed is ' +
+      'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list the current account connections.',
+      'POST provider plus its connect fields (from /api/v1/connections/providers) to link an account.',
+      'Reconnecting the same identity is idempotent — alreadyLinked reports it.',
+      'Unlink via POST /api/v1/connections/unlink with the connection id.'
+    ],
+    requestExamples: [
+      {
+        name: 'List connections',
+        description: 'Read the linked third-party accounts.',
+        method: 'GET'
+      },
+      {
+        name: 'Connect Reddit',
+        description: 'Follow two subreddits as one connection.',
+        method: 'POST',
+        body: { provider: 'reddit', fields: { subreddits: 'worldnews+technology', sort: 'hot' } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Connection created.',
+        body: {
+          ok: true,
+          alreadyLinked: false,
+          connection: {
+            id: 'ext-link-…',
+            provider: 'reddit',
+            providerName: 'Reddit',
+            contentVisibility: 'public',
+            account: { id: 'ext-account-…', handle: 'r/worldnews+technology', displayName: 'r/worldnews+technology' }
+          }
+        }
+      },
+      {
+        status: 401,
+        description: 'No authenticated user.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-unlink',
+    group: 'connections',
+    title: 'Unlink connection',
+    endpoint: '/api/v1/connections/unlink',
+    summary: 'Removes one of the caller’s third-party connections.',
+    detail:
+      'Deletes the caller’s link to the external account. The shared external account record retires with its last ' +
+      'link; already-synced external posts (and any Thingtime comments and reactions on them) remain.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the connection id (from GET /api/v1/connections).',
+      'Handle 404 for ids the caller does not hold.'
+    ],
+    requestExamples: [
+      {
+        name: 'Unlink',
+        description: 'Remove one connection.',
+        method: 'POST',
+        body: { id: 'ext-link-…' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Connection removed.',
+        body: { ok: true, removed: true }
+      },
+      {
+        status: 404,
+        description: 'Not one of the caller’s connections.',
+        body: { ok: false, error: 'Connection not found' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-feed',
+    group: 'connections',
+    title: 'Connections feed',
+    endpoint: '/api/v1/connections/feed',
+    summary: 'Syncs and reads the caller’s connected third-party feeds as Thingtime posts.',
+    detail:
+      'Pulls fresh items from each linked provider (per-account cooldown, one minute), upserts them idempotently as ' +
+      'external-post things, and returns them newest-first in the standard post shape — so Thingtime comments and ' +
+      'reactions attach natively via /api/v1/things/comment and /api/v1/things/react, and /post/<id> permalinks ' +
+      'resolve. Personal-algorithm providers grant each linked user individually; public providers publish tt:all ' +
+      'posts. The caller’s enabled AI feed filters annotate each post via feedFilterMatches.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET to sync and read all connections merged; connection=<id> narrows to one.',
+      'Page with cursor from nextCursor; limit caps the page (max 50).',
+      'sync=force bypasses the per-account sync cooldown.',
+      'Render feedFilterMatches: action warn veils the post behind a Show button, hide drops it.',
+      'Comment and react through the standard things endpoints using each post id.'
+    ],
+    requestExamples: [
+      {
+        name: 'Merged feed',
+        description: 'Sync and read every connection.',
+        method: 'GET'
+      },
+      {
+        name: 'One connection',
+        description: 'Read a single connection’s feed.',
+        method: 'GET',
+        query: { connection: 'ext-link-…', limit: 20 }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Feed page returned.',
+        body: {
+          ok: true,
+          posts: [
+            {
+              id: 'ext-post-…',
+              text: 'Community garden doubles its harvest',
+              author: { id: 'ext:reddit:u/gardener', username: 'u/gardener' },
+              extended: { external: { provider: 'reddit', url: 'https://www.reddit.com/…' } },
+              feedFilterMatches: []
+            }
+          ],
+          nextCursor: null,
+          connections: [],
+          synced: [{ connectionId: 'ext-link-…', provider: 'reddit', fetched: 25, skipped: false, error: null }],
+          filters: []
+        }
+      },
+      {
+        status: 401,
+        description: 'No authenticated user.',
+        body: { ok: false, error: 'Unauthorized' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-oauth-begin',
+    group: 'connections',
+    title: 'Begin SSO connect',
+    endpoint: '/api/v1/connections/oauth/begin',
+    summary: 'Starts an SSO account link with an OAuth provider (Facebook, Instagram, TikTok, YouTube account).',
+    detail:
+      'Returns the provider’s authorize URL for the requested SSO provider. Send the browser there; the provider’s ' +
+      'own sign-in page collects credentials (Thingtime never sees a third-party password) and returns to the ' +
+      'callback endpoint, which saves the token response into the linked external account’s sealed secure storage. ' +
+      'The state parameter is a short-lived signed JWT bound to the beginning session. Providers report ' +
+      'configured:false in the catalog until their app credentials are set in the environment.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the provider id (an oauth2 provider from /api/v1/connections/providers).',
+      'Navigate the browser to the returned authorizeUrl.',
+      'The provider redirects to /api/v1/connections/oauth/callback, which finishes the link and lands on /connections.',
+      'Handle 400 for unconfigured providers (the error names the env credentials to set).'
+    ],
+    requestExamples: [
+      {
+        name: 'Begin Facebook link',
+        description: 'Ask for the Facebook authorize URL.',
+        method: 'POST',
+        body: { provider: 'facebook' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Authorize URL minted.',
+        body: { ok: true, provider: 'facebook', authorizeUrl: 'https://www.facebook.com/v23.0/dialog/oauth?...' }
+      },
+      {
+        status: 400,
+        description: 'Provider not configured on this deployment.',
+        body: { ok: false, error: 'Facebook is not configured on this deployment yet (set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET)' }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-oauth-callback',
+    group: 'connections',
+    title: 'SSO connect callback',
+    endpoint: '/api/v1/connections/oauth/callback',
+    summary: 'Completes an SSO account link after the provider’s sign-in.',
+    detail:
+      'The OAuth redirect target. Verifies the signed state belongs to the current session, exchanges the code ' +
+      'server-side, resolves the external identity, seals the token response into the external account’s secure ' +
+      'storage, links the account, and redirects the browser back to /connections (connected=<provider> on ' +
+      'success, oauthError=<code> on failure — one of declined, state, session, provider, exchange, rateLimited ' +
+      'or failed). The failure reason is a code and never prose: this is a GET landing, so anything it carried ' +
+      'would be text a stranger could choose and /connections renders in a Lopu toast. No token material ever ' +
+      'reaches the client.',
+    auth: {
+      mode: 'session',
+      description: 'The browser session that began the link (redirects to /login when signed out).'
+    },
+    methods: ['GET'],
+    steps: [
+      'Register this exact URL as the OAuth redirect URI in the provider’s app settings.',
+      'The provider calls it with code and state after sign-in.',
+      'The browser lands on /connections with connected or oauthError set.'
+    ],
+    requestExamples: [
+      {
+        name: 'Provider redirect',
+        description: 'What the provider’s redirect looks like.',
+        method: 'GET',
+        query: { code: '<provider code>', state: '<signed state>' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 302,
+        description: 'Redirects to /connections?connected=facebook on success.',
+        body: {}
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-youtube-search',
+    group: 'connections',
+    title: 'YouTube channel search',
+    endpoint: '/api/v1/connections/youtube/search',
+    summary: 'Resolves or searches YouTube channels for the virtual subscription list.',
+    detail:
+      'Accepts a channel id (UC…), a /channel/ URL, an @handle, or free text. Ids resolve keylessly via the public ' +
+      'uploads feed; @handles and name search use the YouTube Data API when YOUTUBE_API_KEY (or GOOGLE_API_KEY) is ' +
+      'configured — searchConfigured reports which mode is active.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with q set to an id, URL, @handle, or channel name.',
+      'Offer the returned channels as Subscribe candidates.',
+      'POST a chosen channel to /api/v1/connections/youtube/channels.'
+    ],
+    requestExamples: [
+      {
+        name: 'Search by name',
+        description: 'Find channels matching a name (needs the API key).',
+        method: 'GET',
+        query: { q: 'veritasium' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Channel candidates returned.',
+        body: {
+          ok: true,
+          via: 'api',
+          searchConfigured: true,
+          channels: [{ id: 'UCHnyfMqiRRG1u-2MsSQLbXA', title: 'Veritasium', thumbnail: 'https://yt3.ggpht.com/…' }]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-youtube-channels',
+    group: 'connections',
+    title: 'YouTube channel list',
+    endpoint: '/api/v1/connections/youtube/channels',
+    summary: 'Manages the caller’s Thingtime-managed virtual YouTube subscription list.',
+    detail:
+      'Adds and removes channels on the per-user virtual YouTube connection (one merged uploads feed across the ' +
+      'whole list). add accepts a channel reference from /youtube/search or free text to resolve; remove takes a ' +
+      'channel id. The first add auto-creates the connection. Lists hold up to 100 channels.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST add with a channel reference (or search text) to subscribe.',
+      'POST remove with a channel id to unsubscribe.',
+      'Read the current list from GET /api/v1/connections (the youtube connection carries channels).'
+    ],
+    requestExamples: [
+      {
+        name: 'Subscribe',
+        description: 'Add a channel from a search result.',
+        method: 'POST',
+        body: { add: { id: 'UCHnyfMqiRRG1u-2MsSQLbXA', title: 'Veritasium' } }
+      },
+      {
+        name: 'Unsubscribe',
+        description: 'Remove a channel by id.',
+        method: 'POST',
+        body: { remove: 'UCHnyfMqiRRG1u-2MsSQLbXA' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'List updated.',
+        body: {
+          ok: true,
+          channels: [{ id: 'UCHnyfMqiRRG1u-2MsSQLbXA', title: 'Veritasium', thumbnail: null }],
+          connection: { id: 'ext-link-…', provider: 'youtube', account: { handle: '1 channel' } }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'connections-filters',
+    group: 'connections',
+    title: 'Feed filters',
+    endpoint: '/api/v1/connections/filters',
+    summary: 'Lists or manages the caller’s AI feed filters for connected feeds.',
+    detail:
+      'A feed filter is a natural-language rule ("warn for sad news") applied server-side to connected third-party ' +
+      'feeds. Matched posts carry the filter in feedFilterMatches: action warn veils the post behind a Show button, ' +
+      'hide drops it from the feed view. Classification uses the configured AI provider when available (verdicts ' +
+      'cached per filter revision and post) and a deterministic keyword heuristic otherwise.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list filters.',
+      'POST name, prompt, and action (warn | hide) to create one.',
+      'Include id to update; pass enabled false to pause without deleting.',
+      'POST id plus remove true to delete.'
+    ],
+    requestExamples: [
+      {
+        name: 'Create a filter',
+        description: 'Warn for sad news with a Show button.',
+        method: 'POST',
+        body: { name: 'Sad news', prompt: 'warn for sad news', action: 'warn' }
+      },
+      {
+        name: 'Delete a filter',
+        description: 'Remove a filter by id.',
+        method: 'POST',
+        body: { id: 'ext-filter-…', remove: true }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Filter saved.',
+        body: {
+          ok: true,
+          filter: { id: 'ext-filter-…', name: 'Sad news', prompt: 'warn for sad news', action: 'warn', enabled: true }
+        }
+      },
+      {
+        status: 401,
+        description: 'No authenticated user.',
+        body: { ok: false, error: 'Unauthorized' }
       }
     ]
   }),

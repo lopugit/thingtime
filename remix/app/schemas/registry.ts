@@ -179,6 +179,18 @@ export const ACL_CUSTOM = 'tt:custom';
 export const ACL_USER_PREFIX = 'tt:user/';
 export const ACL_APP_PREFIX = 'tt:app/';
 export const ACL_GROUP_PREFIX = 'tt:group/';
+// audience = "holders of a connections link to an external account that
+// SOURCES this post" — one CONSTANT entry, resolved live against relational
+// external-post-source membership docs (see aclEntryMatches). Constant by
+// design: the per-source ancestor below grew the acl array by one entry per
+// sourcing account, which for personal-timeline providers (one account per
+// user) meant one entry per user — unbounded on a viral post, and disclosed
+// to every reader through PublicPost.acl.
+export const ACL_EXT_SOURCED = 'tt:extsourced';
+// LEGACY per-source audience: `tt:extacct/<accountId>`. Still evaluated so
+// pre-migration rows keep resolving; the relational-external-post-sources
+// migration rewrites them to ACL_EXT_SOURCED. No writer mints these any more.
+export const ACL_EXTACCT_PREFIX = 'tt:extacct/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 // raised from 16 for custom audiences (a hand-picked user list + groups);
@@ -275,6 +287,16 @@ export type AclViewer = {
   username?: string | null;
   friendIds?: ReadonlySet<string>;
   groupIds?: ReadonlySet<string>;
+  // external-account shareIds the viewer holds connections links to — loaded
+  // lazily (things.ts withExtAccountIds) only when a doc carries a LEGACY
+  // tt:extacct/ entry, exactly like friendIds serves tt:userFriends
+  extAccountIds?: ReadonlySet<string>;
+  // shareIds of external posts the viewer SOURCES (they hold a link to an
+  // account with an external-post-source membership doc for that post) —
+  // serves the constant tt:extsourced audience. Loaded lazily/primed per
+  // request by things.ts ensureExtSourced. Absent set = nothing loaded =
+  // deny, exactly like friendIds.
+  extSourcedPostIds?: ReadonlySet<string>;
 } | null;
 
 // Custom-audience capabilities: write ⊃ comment ⊃ read. A grant entry may
@@ -314,7 +336,7 @@ const aclSpecificity = (id: string): number => {
   return 1; // circles + groups
 };
 
-const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolean => {
+const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string, docId?: string | null): boolean => {
   const { base } = splitCapability(id);
   if (base === ACL_ALL) return true;
   if (!viewer?.id) return false;
@@ -332,6 +354,17 @@ const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolea
   // friend of the owner (friendship is mutual, so the viewer's own friend set
   // answers for any owner). Owner always counts as their own friend.
   if (base === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
+  // external-source audience (connections): the viewer sees the post while
+  // they hold a link to ANY external account that sources it. Membership is
+  // relational (external-post-source docs) and evaluated live, so unlinking
+  // revokes instantly, new links grant instantly, nothing materializes per
+  // member, and the entry itself names no account (it is a constant, so it
+  // discloses nothing through PublicPost.acl).
+  if (base === ACL_EXT_SOURCED) return !!docId && viewer.extSourcedPostIds?.has(docId) === true;
+  // LEGACY per-source audience — pre-migration rows only (see ACL_EXTACCT_PREFIX)
+  if (base.startsWith(ACL_EXTACCT_PREFIX)) {
+    return viewer.extAccountIds?.has(base.slice(ACL_EXTACCT_PREFIX.length)) === true;
+  }
   // family circle: no family graph yet — owner only
   if (base === ACL_FAMILY) return viewer.id === ownerId;
   return false;
@@ -370,14 +403,17 @@ export const aclCapabilityFor = (acl: string[], viewer: AclViewer, ownerId: stri
 
 // Most-specific matching entry wins; exclusions win ties. Callers short-circuit
 // the owner before asking (owners always see their own things).
-export const aclAllows = (acl: string[], viewer: AclViewer, ownerId: string): boolean => {
+// docId (the doc's own shareId) is needed only by the constant tt:extsourced
+// audience, whose membership is per-(post, viewer) rather than per-entry;
+// callers without it simply never match that entry, which fails closed.
+export const aclAllows = (acl: string[], viewer: AclViewer, ownerId: string, docId?: string | null): boolean => {
   let best = -1;
   let allow = false;
   for (const raw of acl) {
     const negated = raw.startsWith('-');
     const id = negated ? raw.slice(1) : raw;
     if (id === ACL_INHERIT) continue;
-    if (!aclEntryMatches(id, viewer, ownerId)) continue;
+    if (!aclEntryMatches(id, viewer, ownerId, docId)) continue;
     const specificity = aclSpecificity(id);
     if (specificity > best) {
       best = specificity;
@@ -2287,16 +2323,16 @@ const errorLogSchema: ThingtimeSchema = {
   fields: [
     { name: 'source', type: 'string', required: true, max: 128, description: 'Authored operation label.' },
     { name: 'message', type: 'string', required: true, max: 2048, description: 'Redacted error summary.' },
-    { name: 'provider', type: 'string', description: 'External provider when applicable.' },
-    { name: 'status', type: 'number', description: 'Upstream or HTTP status.' },
-    { name: 'code', type: 'string', description: 'Provider error code.' },
-    { name: 'requestId', type: 'string', description: 'Server-generated correlation id.' },
-    { name: 'route', type: 'string', description: 'Registered API route, without query strings.' },
-    { name: 'method', type: 'string', description: 'HTTP request method.' },
-    { name: 'providerType', type: 'string', description: 'Provider error classification.' },
-    { name: 'providerRequestId', type: 'string', description: 'Upstream request correlation id.' },
-    { name: 'retryAfter', type: 'string', description: 'Upstream retry delay.' },
-    { name: 'attempt', type: 'number', description: 'Bounded provider attempt number.' }
+    { name: 'provider', type: 'string', required: false, description: 'External provider when applicable.' },
+    { name: 'status', type: 'number', required: false, description: 'Upstream or HTTP status.' },
+    { name: 'code', type: 'string', required: false, description: 'Provider error code.' },
+    { name: 'requestId', type: 'string', required: false, description: 'Server-generated correlation id.' },
+    { name: 'route', type: 'string', required: false, description: 'Registered API route, without query strings.' },
+    { name: 'method', type: 'string', required: false, description: 'HTTP request method.' },
+    { name: 'providerType', type: 'string', required: false, description: 'Provider error classification.' },
+    { name: 'providerRequestId', type: 'string', required: false, description: 'Upstream request correlation id.' },
+    { name: 'retryAfter', type: 'string', required: false, description: 'Upstream retry delay.' },
+    { name: 'attempt', type: 'number', required: false, description: 'Bounded provider attempt number.' }
   ], example: { source: 'moderation', message: 'Rate limit reached', provider: 'openai', status: 429 }
 };
 
@@ -2385,16 +2421,16 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail: 'The root stores fixed configuration and latest-run metadata. Ordered sources and targets are relational ci-feature-stack-entry Things published by revision, so edits never expose a partially replaced list.',
     createdVia: '/api/v1/admin/ci/stacks',
     fields: [
-      { name: 'title', type: 'string', required: true, max: 80 },
-      { name: 'repository', type: 'string', required: true, max: 300 },
-      { name: 'autoDecideBranches', type: 'boolean', required: true },
-      { name: 'revision', type: 'string', required: true, max: 80 },
-      { name: 'status', type: 'string', required: true, max: 120 },
-      { name: 'archived', type: 'boolean', required: true },
-      { name: 'createdBy', type: 'string', required: true, max: 180 },
-      { name: 'updatedBy', type: 'string', required: true, max: 180 },
-      { name: 'lastDispatchId', type: 'string', required: false, max: 180 },
-      { name: 'lastRunAt', type: 'date', required: false }
+      { name: 'title', type: 'string', required: true, max: 80, description: 'Human name of the saved Feature Stack.' },
+      { name: 'repository', type: 'string', required: true, max: 300, description: 'GitHub owner/name the stack builds against.' },
+      { name: 'autoDecideBranches', type: 'boolean', required: true, description: 'Whether Lopu chooses branch names for each stacked feature.' },
+      { name: 'revision', type: 'string', required: true, max: 80, description: 'Immutable revision id of the saved stack definition.' },
+      { name: 'status', type: 'string', required: true, max: 120, description: 'Lifecycle status such as saved, dispatched or completed.' },
+      { name: 'archived', type: 'boolean', required: true, description: 'Hidden from the active stack list when true.' },
+      { name: 'createdBy', type: 'string', required: true, max: 180, description: 'Admin username that saved the stack.' },
+      { name: 'updatedBy', type: 'string', required: true, max: 180, description: 'Admin username of the latest edit.' },
+      { name: 'lastDispatchId', type: 'string', required: false, max: 180, description: 'Id of the most recent controller dispatch, when any.' },
+      { name: 'lastRunAt', type: 'date', required: false, description: 'When the stack was last dispatched to the controller.' }
     ],
     example: { title: 'Search + Actions', repository: 'lopugit/thingtime', autoDecideBranches: true, revision: 'revision-id', status: 'saved', archived: false, createdBy: 'admin', updatedBy: 'admin' }
   },
@@ -2405,12 +2441,12 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail: 'Each child belongs to one root and revision. entryType chooses either prNumber or branch; position preserves administrator order without embedding an unbounded list on the root.',
     createdVia: '/api/v1/admin/ci/stacks',
     fields: [
-      { name: 'repository', type: 'string', required: true, max: 300 },
-      { name: 'revision', type: 'string', required: true, max: 80 },
-      { name: 'entryType', type: 'enum', required: true, values: ['source', 'target'] },
-      { name: 'position', type: 'number', required: true, min: 0 },
-      { name: 'prNumber', type: 'number', required: false, min: 1 },
-      { name: 'branch', type: 'string', required: false, max: 180 }
+      { name: 'repository', type: 'string', required: true, max: 300, description: 'GitHub owner/name the entry belongs to.' },
+      { name: 'revision', type: 'string', required: true, max: 80, description: 'Revision of the parent Feature Stack this entry is part of.' },
+      { name: 'entryType', type: 'enum', required: true, values: ['source', 'target'], description: 'Whether the entry is a source pull request or a target branch.' },
+      { name: 'position', type: 'number', required: true, min: 0, description: 'Zero-based administrator ordering within the stack.' },
+      { name: 'prNumber', type: 'number', required: false, min: 1, description: 'Pull request number for source entries.' },
+      { name: 'branch', type: 'string', required: false, max: 180, description: 'Branch name for target entries.' }
     ],
     example: { repository: 'lopugit/thingtime', revision: 'revision-id', entryType: 'source', position: 0, prNumber: 427 }
   },
@@ -4092,6 +4128,30 @@ const passkeyAppLinkThingSchema: ThingtimeSchema = {
 // minted only by the server on someone ELSE's action. Their dedicated
 // endpoints (/api/v1/users/follow, /api/v1/users/friend, notifications utils)
 // do direct inserts.
+// Third-party connections (api/utils/connections/): external-account carries
+// provider identity (and, later, OAuth tokens in its secure blob) — forging
+// one through generic CRUD would be credential forgery; external-account-link
+// is an authorization record (a forged link would grant another user's
+// personal feed); external-post/external-post-source/feed-filter-verdict are
+// server-synced state written only by the sync/classify utils —
+// external-post-source is BOTH the feed's membership index and the live
+// authorization truth behind tt:extsourced, so a forged one would grant a
+// stranger's personal timeline; feed-filter is an operational
+// preference managed by /api/v1/connections/filters. Their deterministic
+// shareIds live under the reserved `ext-` prefix below.
+export const EXTERNAL_CONNECTION_THINGTIME = [
+  'external-account',
+  'external-account-link',
+  'external-post',
+  'external-post-source',
+  'feed-filter',
+  'feed-filter-verdict'
+] as const;
+// Deterministic sync/link/verdict destinations (`ext-account-…`, `ext-link-…`,
+// `ext-post-…`, `ext-filter-…`, `ext-verdict-…`) must never be squatted by
+// client-supplied shareIds (enforced in things.ts sanitizeShareId).
+export const EXTERNAL_RESERVED_ID_PREFIX = 'ext-';
+
 export const DEVICE_THINGTIME = [
 	'device',
 	'device-state',
@@ -4140,6 +4200,7 @@ export const PROTECTED_THINGTIME = [
   ERROR_LOG_THINGTIME,
 	'moderationFlag',
   ...CI_CONTROL_THINGTIME,
+  ...EXTERNAL_CONNECTION_THINGTIME,
   'follow',
   'friend',
   'notification',

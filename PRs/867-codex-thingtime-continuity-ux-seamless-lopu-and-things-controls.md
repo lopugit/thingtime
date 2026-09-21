@@ -95,11 +95,10 @@ source snapshots, fixing refreshes that failed with permission denied.
 - Physical lock-screen/Dynamic Island updates and APNs while suspended require a
   signed device build and the existing private APNs configuration. No TestFlight
   upload is included.
-- Full TypeScript verification reports 115 diagnostics versus 116 in a clean
-  extraction of base `f5e3b0cd38` using the same compiler and dependencies. Matching
-  file, error code, message, column and source line found zero introduced errors;
-  the removed error is Nitro's duplicate serverAssets property. The checked-in
-  ratchet value of 108 is already stale on the base and was not changed.
+- Full TypeScript verification reports 89 diagnostics, matching clean base
+  `2cb1eff7a` with the same compiler and dependencies. Matching file, error code,
+  message, column and source line found zero introduced errors. The checked-in
+  typecheck ratchet is also 89 and passes.
 - Local QA uses http://localhost:19940, HMR 19941, Nitro 19942 and the isolated
   `tt-wt-continuity-19940` PM2 entry. No Funnel URL is available: the installed
   Tailscale launcher references a missing application executable.
@@ -166,3 +165,18 @@ source separately. Chrome at 1440×1000 and 390×844 confirmed the static hint i
 both inert catalog panes, usable mobile settings, and aligned page bottoms.
 All 18 QA fixtures are retained privately, with owner access and anonymous
 access denial verified. No permanent fixture deletion was performed.
+
+The later develop promotion was integrated through `2cb1eff7a`. Merge resolution
+keeps external posts, inherited audience rules, archive improvements, local
+attachment storage and new navigation alongside the continuity/Things work. The
+external-source regression confirms one membership lookup for multiple linked
+comments, private/protected-source isolation and access revocation after unlink.
+The new feature maps now describe the added routes, services, controls and tests.
+
+Final promotion-integrated validation: the complete canonical unit suite passed
+3,552 tests with zero failures and six explicit skips across 84 reported groups.
+The production/Workflow build and Vercel output verification passed. Changed-source
+lint passed with zero errors; full TypeScript matches the 89-diagnostic clean-main
+baseline exactly. The 63-pass native simulator result remains applicable because
+the native implementation did not change during these web integrations. Exact
+head CI, preview and production verification are recorded on the PR.
