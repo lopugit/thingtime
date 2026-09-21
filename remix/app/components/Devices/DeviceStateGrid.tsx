@@ -1,9 +1,10 @@
-import React, { memo, useRef } from 'react';
+import React, { memo, useEffect, useRef } from 'react';
 
 import { Box, Button, Flex, Grid, MenuItem, Progress, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
 import { AppWindow, LockKeyhole, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
 
 import { reconcileDesiredState } from './deviceCore';
+import { isMeterCommitKey, shouldSubmitMeterPercent, type MeterSubmission } from './meterCommit';
 import type { DeviceActionKind, DeviceActionPolicy, DeviceCommand, DeviceDesiredState, DeviceSnapshot } from './deviceTypes';
 import { DeviceStatusPill } from './DeviceCard';
 
@@ -173,7 +174,17 @@ const Meter = ({
 	controlFor?: DeviceControlResolver;
 	onAction?: DeviceActionHandler;
 }) => {
-	const lastSubmission = useRef<{ key: string; percent: number } | null>(null);
+	const lastSubmission = useRef<MeterSubmission | null>(null);
+	const restoreThumbFocus = useRef(false);
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	// Committing re-keys the Slider below, so React remounts it and the focused
+	// thumb is destroyed. Without this the first key press works and every later
+	// one is dropped on the floor, because focus has fallen back to the body.
+	useEffect(() => {
+		if (!restoreThumbFocus.current) return;
+		restoreThumbFocus.current = false;
+		containerRef.current?.querySelector<HTMLElement>('[role="slider"]')?.focus();
+	});
 	if (value === null)
 		return (
 			<Text color="var(--tt-muted, #71717a)" fontSize="10px">
@@ -195,10 +206,11 @@ const Meter = ({
 		);
 	}
 	const actionable = control.policy.allowed && Boolean(control.idempotencyKey) && Boolean(onAction) && !control.busy;
-	const commit = (nextPercent: number) => {
-		if (!actionable || !onAction || !Number.isFinite(nextPercent) || nextPercent < 0 || nextPercent > 100) return;
-		if (lastSubmission.current?.key === control.idempotencyKey && lastSubmission.current.percent === nextPercent) return;
-		lastSubmission.current = { key: control.idempotencyKey, percent: nextPercent };
+	const commit = (nextPercent: number): boolean => {
+		if (!actionable || !onAction) return false;
+		const next: MeterSubmission = { key: control.idempotencyKey, percent: nextPercent };
+		if (!shouldSubmitMeterPercent(lastSubmission.current, next)) return false;
+		lastSubmission.current = next;
 		onAction({
 			deviceId,
 			action,
@@ -207,9 +219,10 @@ const Meter = ({
 			targetId: field,
 			desired: { [field]: nextPercent / 100 }
 		});
+		return true;
 	};
 	return (
-		<Box>
+		<Box ref={containerRef}>
 			<Slider
 				aria-label={`Set ${field}`}
 				defaultValue={valuePercent}
@@ -219,11 +232,11 @@ const Meter = ({
 				max={100}
 				onChangeEnd={commit}
 				onKeyUp={(event) => {
-					if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) return;
+					if (!isMeterCommitKey(event.key)) return;
 					// Chakra's pointer-end callback does not reliably run for keyboard
 					// input in the current React runtime. Commit the rendered thumb value.
 					const percent = event.target instanceof HTMLElement ? event.target.getAttribute('aria-valuenow') : null;
-					if (percent !== null) commit(Number(percent));
+					if (percent !== null && commit(Number(percent))) restoreThumbFocus.current = true;
 				}}
 				step={1}
 			>

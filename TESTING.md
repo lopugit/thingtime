@@ -13,6 +13,8 @@
 - [ ] Adjust the brightness and volume sliders with arrow, Home/End and
   PageUp/PageDown keys. Each change must send one remote command and reach the
   observed device state; the thumb must not move without applying the change.
+  Press an arrow key several times in a row without clicking or tabbing back:
+  every press must keep focus on the thumb and send its own command.
 - [ ] Open `/things?files=thingtime` and a device's Files drawer section at
   desktop and 390px widths. Exercise grid/list, name/type filters, sort, hidden
   files, long names, selection, context menus, folder navigation, and the
