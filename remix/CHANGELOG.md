@@ -49,6 +49,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Commit keyboard adjustments on the remote
+  brightness and volume sliders. Arrow and range-navigation keys now send the
+  displayed value, with duplicate pointer/keyboard completion suppressed.
+
 - 2026-09-22 — **Codex (AI)**: Keep remote device telemetry flowing when a
   macOS application has a blank display name. The native heartbeat now uses
   its bundle identifier as the name and skips blank identifiers before paging,
