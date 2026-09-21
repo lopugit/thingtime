@@ -12,11 +12,13 @@ export function ServiceMedia({
 	record,
 	canEdit,
 	report,
+	onSaved,
 	selectImage
 }: {
 	record: ServiceRecord;
 	canEdit: boolean;
 	report: (error: unknown) => void;
+	onSaved: () => Promise<unknown>;
 	selectImage: (key: 'thumbnailId' | 'bannerId', id: string) => Promise<void>;
 }) {
 	const api = useApi();
@@ -89,6 +91,9 @@ export function ServiceMedia({
 			setTitle('');
 			setDescription('');
 			if (stage === 'Before' && split) setStage('After');
+			// Comments advance the parent version. Refresh before subsequent
+			// thumbnail/banner edits use its optimistic concurrency stamp.
+			await onSaved();
 			await load();
 		} catch (error) {
 			setError((error as Error).message);

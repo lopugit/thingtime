@@ -538,6 +538,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 								record={selected}
 								canEdit={canEdit && !selected.values.archived}
 								report={report}
+								onSaved={refresh}
 								selectImage={async (key, id) => {
 									await mutate(
 										{
@@ -556,6 +557,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 							<ThingComments
 								key={`comments:${selected.id}`}
 								thingId={selected.id}
+								onCommentAdded={() => refresh().catch(report)}
 								description={`Notes, questions and updates for this ${SINGULAR[selected.kind]}.`}
 							/>
 						)}

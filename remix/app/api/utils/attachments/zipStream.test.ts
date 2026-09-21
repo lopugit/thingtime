@@ -95,6 +95,36 @@ test('the deadline stops a slow archive', async () => {
 	await assert.rejects(collect(stream), (error: unknown) => error instanceof ZipStreamError && /timed out/.test(error.message));
 });
 
+test('the deadline fires while an upstream read is stalled and aborts the upstream signal', async () => {
+	let upstreamAborted = false;
+	const stalled = new ReadableStream<Uint8Array>({
+		start(controller) {
+			controller.enqueue(bytesOf('a'));
+			// never closes, never delivers the second byte
+		}
+	});
+	const stream = createZipStream(
+		[
+			{
+				path: 'stalled.bin',
+				size: 2,
+				open: async (signal) => {
+					signal.addEventListener('abort', () => {
+						upstreamAborted = true;
+					});
+					return stalled;
+				}
+			}
+		],
+		[],
+		{ deadlineAt: Date.now() + 40 }
+	);
+	const started = Date.now();
+	await assert.rejects(collect(stream), (error: unknown) => error instanceof ZipStreamError && /timed out/.test(error.message));
+	assert.ok(Date.now() - started < 5_000, 'the timer, not the platform, ended the read');
+	assert.equal(upstreamAborted, true);
+});
+
 test('cancelling the consumer releases the upstream reader', async () => {
 	let cancelled = false;
 	const endless = new ReadableStream<Uint8Array>({

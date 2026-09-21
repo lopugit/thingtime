@@ -15,6 +15,7 @@ import {
 	normalizePublicAttachment
 } from './attachmentUiCore';
 import { useAttachmentArchive } from './useAttachmentArchive';
+import type { ArchiveNoun } from './attachmentArchiveActions';
 import { MediaLightbox } from './MediaLightbox';
 import { AudioAttachmentPlayer } from './AudioAttachmentPlayer';
 import type { PublicAttachment } from './attachmentTypes';
@@ -208,23 +209,31 @@ const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachme
 );
 };
 
-const PostAttachmentsGallery = ({
-	attachments,
-	mediaLayout,
-	compact,
-	ariaLabel = 'Attachments',
-	postId
-}: {
+type PostAttachmentsProps = {
 	attachments?: PublicAttachment[];
 	mediaLayout?: PostMediaLayout | null;
 	compact?: boolean;
 	ariaLabel?: string;
 	// the owning post/comment: enables "Download all" (one ZIP of every stored file)
 	postId?: string;
+	// what the owning Thing is called in toasts and tooltips
+	archiveNoun?: Extract<ArchiveNoun, 'post' | 'comment'>;
+};
+
+const PostAttachmentsGallery = ({
+	attachments,
+	mediaLayout,
+	compact,
+	ariaLabel = 'Attachments',
+	postId,
+	archiveNoun = 'post',
+	onDownloadAll
+}: PostAttachmentsProps & {
+	// supplied only by galleries that can offer an archive (see PostAttachments)
+	onDownloadAll?: (noun: ArchiveNoun) => void;
 }) => {
 	// Per-render reveal consent; navigating away re-shields.
 	const mediaUrl = useSharedMediaUrl();
-	const archive = useAttachmentArchive();
 	const [revealedIds, setRevealedIds] = React.useState<ReadonlySet<string>>(new Set());
 	const reveal = React.useCallback((id: string) => {
 		setRevealedIds((current) => {
@@ -247,7 +256,7 @@ const PostAttachmentsGallery = ({
 	// a lone file already has its own download control. Linked media has no bytes.
 	const stored = downloadableAttachments(normalized);
 	const storedBytes = stored.reduce((sum, attachment) => sum + (Number.isFinite(attachment.size) ? attachment.size : 0), 0);
-	const downloadAll = postId && stored.length > 1 ? () => void archive.download(postId, 'post') : undefined;
+	const downloadAll = postId && stored.length > 1 && onDownloadAll ? () => onDownloadAll(archiveNoun) : undefined;
 
 	const layout: PostMediaLayout = mediaLayout && visualMedia.length > 1 ? mediaLayout : { mode: 'masonry' };
 
@@ -427,7 +436,7 @@ const PostAttachmentsGallery = ({
 						borderColor="var(--tt-border, #ececef)"
 						background="var(--tt-surface, #fafafb)"
 						_hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
-						title="Every stored file in this post as one ZIP"
+						title={`Every stored file in this ${archiveNoun} as one ZIP`}
 						onClick={(event) => {
 							event.preventDefault();
 							event.stopPropagation();
@@ -444,13 +453,25 @@ const PostAttachmentsGallery = ({
 				index={lightbox.index}
 				isOpen={lightbox.open}
 				onClose={() => setLightbox((state) => ({ ...state, open: false }))}
-				onDownloadAll={postId && stored.length > 1 ? () => void archive.download(postId, 'gallery') : undefined}
+				onDownloadAll={downloadAll && onDownloadAll ? () => onDownloadAll('gallery') : undefined}
 			/>
 		</Flex>
 	);
 };
 
+// Only a gallery that can offer "Download all" (a post/comment with two or more
+// stored files) mounts the archive hook and the API client behind it; every
+// other card, comment row, chat and message row renders the plain gallery.
+const PostAttachmentsWithArchive = (props: PostAttachmentsProps & { postId: string }) => {
+	const archive = useAttachmentArchive();
+	const onDownloadAll = React.useCallback((noun: ArchiveNoun) => void archive.download(props.postId, noun), [archive, props.postId]);
+	return <PostAttachmentsGallery {...props} onDownloadAll={onDownloadAll} />;
+};
+
+const PostAttachmentsBody = (props: PostAttachmentsProps) =>
+	props.postId && downloadableAttachments(props.attachments).length > 1 ? <PostAttachmentsWithArchive {...props} postId={props.postId} /> : <PostAttachmentsGallery {...props} />;
+
 // Owners can share hidden post media with the same parent key; visitors inherit
 // the already-presented page context. Never send that key to an external URL.
-export const PostAttachments = (props: React.ComponentProps<typeof PostAttachmentsGallery> & { linkKey?: string }) =>
-	props.linkKey ? <SharedMediaProvider linkKey={props.linkKey}><PostAttachmentsGallery {...props} /></SharedMediaProvider> : <PostAttachmentsGallery {...props} />;
+export const PostAttachments = (props: PostAttachmentsProps & { linkKey?: string }) =>
+	props.linkKey ? <SharedMediaProvider linkKey={props.linkKey}><PostAttachmentsBody {...props} /></SharedMediaProvider> : <PostAttachmentsBody {...props} />;

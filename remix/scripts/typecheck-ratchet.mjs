@@ -21,6 +21,15 @@ const tscBin = join(remixDir, 'node_modules', '.bin', process.platform === 'win3
 
 const escapeWorkflowCommand = (value) => value.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
 
+// Diagnostics no baseline may absorb: a duplicate object-literal property
+// (TS1117) or duplicate identifier (TS2300/TS2451) compiles to "the last one
+// wins" and silently drops configuration — the way a second `serverAssets`
+// key in nitro.config.ts once dropped the shell mount. These fail the run even
+// while the count sits under the baseline.
+export const NEVER_TOLERATED_CODES = ['TS1117', 'TS2300', 'TS2451'];
+
+export const neverToleratedErrors = (errors) => errors.filter((line) => NEVER_TOLERATED_CODES.some((code) => line.includes(`error ${code}:`)));
+
 export const reportTypecheckRatchet = ({
   errors,
   baseline,
@@ -28,6 +37,17 @@ export const reportTypecheckRatchet = ({
   reporter = console,
 }) => {
   const count = errors.length;
+
+  const fatal = neverToleratedErrors(errors);
+  if (fatal.length) {
+    const summary = `Typecheck ratchet FAILED: ${fatal.length} duplicate-property/identifier diagnostic${fatal.length === 1 ? '' : 's'} (${NEVER_TOLERATED_CODES.join(', ')}) are never tolerated — the last duplicate silently wins.`;
+    reporter.warn(summary);
+    if (githubActions) {
+      reporter.log(`::error title=Typecheck ratchet duplicate declarations::${escapeWorkflowCommand(summary)}`);
+    }
+    for (const line of fatal.slice(0, 40)) reporter.warn(`  ${line}`);
+    return 1;
+  }
 
   if (count > baseline) {
     const summary = `Typecheck ratchet WARNING: ${count} tsc errors vs baseline ${baseline} (+${count - baseline}). This check is non-blocking.`;

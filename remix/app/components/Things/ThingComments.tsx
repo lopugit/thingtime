@@ -10,12 +10,12 @@ type CommentThing = { id: string; author?: { username?: string } | null; crystal
 
 // The parent is only an identifier. Discussion state is neither read from nor
 // written into its crystal, cache or embedded interaction fields.
-export function ThingComments({ thingId, linkKey = '', description }: { thingId: string; linkKey?: string; description?: string }) {
+export function ThingComments({ thingId, linkKey = '', description, onCommentAdded }: { thingId: string; linkKey?: string; description?: string; onCommentAdded?: () => void | Promise<unknown> }) {
 	const user = useCurrentUser();
-	return <Discussion key={`${user?.id || 'anonymous'}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} description={description} />;
+	return <Discussion key={`${user?.id || 'anonymous'}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} description={description} onCommentAdded={onCommentAdded} />;
 }
 
-function Discussion({ thingId, linkKey, description }: { thingId: string; linkKey: string; description?: string }) {
+function Discussion({ thingId, linkKey, description, onCommentAdded }: { thingId: string; linkKey: string; description?: string; onCommentAdded?: () => void | Promise<unknown> }) {
 	const api = useApi();
 	const user = useCurrentUser();
 	const apiRef = React.useRef(api);
@@ -68,6 +68,7 @@ function Discussion({ thingId, linkKey, description }: { thingId: string; linkKe
 			fresh.current.set(item.id, item);
 			setComments(previous => [item, ...previous.filter(comment => comment.id !== item.id)]);
 			setDraft(''); request.current = null;
+			void Promise.resolve().then(() => onCommentAdded?.()).catch(() => {});
 		} catch (failure) { if (live.current) setError(failure instanceof Error ? failure.message : 'Could not post comment.'); }
 		finally { posting.current = false; if (live.current) setSending(false); }
 	};
