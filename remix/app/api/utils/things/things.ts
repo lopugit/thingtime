@@ -1,6 +1,7 @@
 import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
 import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
 import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { serviceWorkspaceCanRead, workspaceRootFor } from '../serviceWorkspaces/access';
 import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -2937,6 +2938,7 @@ const customEngageBlocks = async (viewer: Viewer, doc: ThingDoc): Promise<boolea
     ? await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing)
     : doc;
   if (!terminal) return true; // broken chain fails closed
+  if (workspaceRootFor(terminal) && await serviceWorkspaceCanRead(terminal, viewer)) return false;
   if (!aclOf(terminal).includes(ACL_CUSTOM)) return false;
   const enriched = await withFriendIds(viewer);
   return customEngageBlocksAcl(enriched, aclOf(terminal), String(terminal.ownerId));
@@ -2992,6 +2994,7 @@ export const canViewInherited = async (
     if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
     const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
     if (canView(terminal, linkedViewer)) return true;
+    if (!patVisibilityBlocksAcl(viewer, aclOf(terminal)) && await serviceWorkspaceCanRead(terminal, viewer)) return true;
     if (isCustomMongoEndpointActive()) return false;
     return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
   }

@@ -778,6 +778,8 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false, 
     // reach this namespace, which is why relationship invariants live here
     // instead of on user-writable crystal paths.
     col.createIndex({ uniqueKeys: 1 }, { unique: true, sparse: true }),
+    // Service workspace record batches and live membership checks share one bounded owner index.
+    col.createIndex({ ownerId: 1, 'crystal.workspaceId': 1, 'crystal.recordType': 1, 'crystal.values.userId': 1 }, { name: 'service_workspace_records', partialFilterExpression: { 'crystal.workspaceId': { $exists: true } } }),
     // login + people-search lookups on user things (thingtime is the only
     // multikey field here, so the compound is legal)
     col.createIndex({ thingtime: 1, 'crystal.username': 1 }),
