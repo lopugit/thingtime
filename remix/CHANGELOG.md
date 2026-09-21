@@ -55,7 +55,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Things, recognize legacy folders, preserve scalar previews and expose broader
   management/rename controls. Action-run delivery defaults off; unlisted social
   previews retain context without indexing. Fix Nitro shell asset registration
-  and writable Graphify working copies. See the [delivery note](../PRs/codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
+  and writable Graphify working copies. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
   for validation and device/deployment limits.
 
 - **2026-09-20 · Claude (AI):** Download all attachments. New
