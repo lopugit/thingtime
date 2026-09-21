@@ -49,6 +49,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action.
+
 - 2026-09-21 — **Codex (AI)**: Added an admin catalog importer on `/components`
   with whole-file schema validation, capability negotiation, bounded paced
   batches, cancellation and real publication counts. Functional demo runtime

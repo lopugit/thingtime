@@ -2,6 +2,19 @@
 
 ## Integration catalogue
 
+- [ ] As an admin, Prepare builder pages twice: the first call creates the
+  integration hierarchy and the second reports unchanged, with zero skipped.
+  Anonymous/non-admin calls must fail. Verify capability 1.2.0 before seeding.
+- [ ] Follow index → service → individual example → service → index. Confirm
+  all 60 Lodash examples fit on one service page and every example resolves
+  a real component. Run a chart, a transformation and an API example.
+- [ ] At desktop, 390px and 320px, scroll index and service pages to the bottom,
+  open the inspector, edit an example input override, save a private copy,
+  reopen it and check the default system page remains unchanged. Public templates
+  must default to Private when copied; an owned page retains its audience.
+  Editing the inputJson block argument must refresh the visible demo inputs. Keys and
+  results must never appear in saved page/component documents.
+
 - [ ] Assert 500 unique recipes, pinned CDN URLs and schema-valid private saved
   Things with `test:library`. Run the real browser harness, inspect every failure,
   correct obsolete provider endpoints/defaults and rerun corrected examples.

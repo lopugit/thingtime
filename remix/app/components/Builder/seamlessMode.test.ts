@@ -1,3 +1,4 @@
+import { initialPageAudience } from './seamlessMode';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { isSeamlessMode, matchingTextArg, usesPageRuntime, pageRuntimeSearch } from './seamlessMode';
@@ -75,4 +76,12 @@ test('builder route controls do not leak into page inputs, unrelated query field
 	assert.equal(pageRuntimeSearch('/p/id', '?mode=view&customer=42'), 'customer=42');
 	assert.equal(pageRuntimeSearch('/t/id', '?page=2&mode=run'), 'page=2');
 	assert.equal(pageRuntimeSearch('/components/card', '?mode=edit&page=2'), 'mode=edit&page=2');
+});
+
+test('copying public or shared templates starts private while owned pages keep their audience', () => {
+	assert.deepEqual(initialPageAudience('system', ['tt:all']), ['tt:user']);
+	assert.deepEqual(initialPageAudience('system', ['tt:friends']), ['tt:user']);
+	assert.deepEqual(initialPageAudience(null), ['tt:user']);
+	assert.deepEqual(initialPageAudience('user', ['tt:all']), ['tt:all']);
+	assert.deepEqual(initialPageAudience('user', ['tt:user']), ['tt:user']);
 });
