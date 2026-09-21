@@ -129,7 +129,9 @@ export const thingmonPack: ActionPack = {
 		const amount = typeof raw.amount === 'number' ? raw.amount : raw.defeated ? expGainFor(normalizeCritter(raw.defeated, 'expGain.defeated')) : 0;
 		const grant = grantExp(member, amount);
 		const next = canEvolve(grant.critter);
-		return { member: critterView(grant.critter), gained: Math.max(0, Math.round(amount)), leveledUp: grant.leveledUp, from: grant.from, to: grant.to, canEvolve: !!next, evolvesTo: next?.name ?? null };
+		// what was actually banked, not what was asked for — experience stops at
+		// the level cap, and the app narrates this number back to the player
+		return { member: critterView(grant.critter), gained: grant.critter.exp - member.exp, leveledUp: grant.leveledUp, from: grant.from, to: grant.to, canEvolve: !!next, evolvesTo: next?.name ?? null };
 	},
 	'thingmon.evolve': ([member]) => {
 		const result = evolve(normalizeCritter(member, 'evolve'));

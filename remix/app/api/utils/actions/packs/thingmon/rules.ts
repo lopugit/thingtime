@@ -122,8 +122,19 @@ export const movesFor = (types: ThingmonType[], level: number): Move[] => {
 export const MAX_LEVEL = 50;
 export const DEFAULT_IV = 8;
 export const clampLevel = (level: number): number => Math.max(1, Math.min(MAX_LEVEL, Math.round(Number(level) || 1)));
-export const calcStats = (species: Species, level: number, iv = DEFAULT_IV): { hp: number; atk: number; def: number; spd: number } => {
+// `typeof NaN === 'number'`, so a non-finite iv slips past a bare typeof test
+// and turns every stat — and then hp, damage and the fainted check — into NaN:
+// a battle that can neither be won nor lost. Every iv enters through here.
+export const clampIv = (iv: unknown): number => (typeof iv === 'number' && Number.isFinite(iv) ? Math.max(0, Math.min(15, Math.round(iv))) : DEFAULT_IV);
+// `Number(x) || fallback` already swallows NaN but keeps ±Infinity, and `??`
+// only catches null/undefined — a stored NaN/Infinity needs both checks
+const finite = (value: unknown, fallback: number): number => {
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : fallback;
+};
+export const calcStats = (species: Species, level: number, ivIn: number = DEFAULT_IV): { hp: number; atk: number; def: number; spd: number } => {
 	const L = clampLevel(level);
+	const iv = clampIv(ivIn);
 	const stat = (base: number) => Math.floor(((2 * base + iv) * L) / 100) + 5;
 	return { hp: Math.floor(((2 * species.baseStats.hp + iv) * L) / 100) + L + 10, atk: stat(species.baseStats.atk), def: stat(species.baseStats.def), spd: stat(species.baseStats.spd) };
 };
@@ -153,7 +164,7 @@ export type Critter = {
 export const newCritter = (spec: { speciesId: unknown; level?: unknown; nickname?: unknown; iv?: unknown }, rng: Rng): Critter => {
 	const species = getSpecies(spec.speciesId);
 	const level = clampLevel(Number(spec.level) || 5);
-	const iv = typeof spec.iv === 'number' && Number.isFinite(spec.iv) ? Math.max(0, Math.min(15, Math.round(spec.iv))) : Math.floor(rng() * 16);
+	const iv = typeof spec.iv === 'number' && Number.isFinite(spec.iv) ? clampIv(spec.iv) : Math.floor(rng() * 16);
 	const stats = calcStats(species, level, iv);
 	const nickname = typeof spec.nickname === 'string' && spec.nickname.trim() ? spec.nickname.trim().slice(0, 16) : null;
 	return {
@@ -183,10 +194,10 @@ export const normalizeCritter = (value: unknown, label: string): Critter => {
 	const raw = value as Record<string, unknown>;
 	const species = getSpecies(raw.speciesId);
 	const level = clampLevel(Number(raw.level) || 1);
-	const iv = typeof raw.iv === 'number' ? Math.max(0, Math.min(15, Math.round(raw.iv))) : DEFAULT_IV;
+	const iv = clampIv(raw.iv);
 	const stats = calcStats(species, level, iv);
 	const maxHp = stats.hp;
-	const hp = Math.max(0, Math.min(maxHp, Math.round(Number(raw.hp ?? maxHp))));
+	const hp = Math.max(0, Math.min(maxHp, Math.round(finite(raw.hp ?? maxHp, maxHp))));
 	const status = (['ok', 'burned', 'chilled', 'shocked'] as StatusCondition[]).includes(raw.status as StatusCondition) ? (raw.status as StatusCondition) : 'ok';
 	const knownMoves = Array.isArray(raw.moves) ? raw.moves.map((entry) => (entry && typeof entry === 'object' ? (entry as { id?: unknown }).id : entry)).filter((id): id is string => typeof id === 'string' && MOVE_BY_ID.has(id)) : [];
 	const moves = (knownMoves.length ? knownMoves.map((id) => MOVE_BY_ID.get(id)!) : movesFor(species.types, level)).slice(0, 4);
@@ -197,7 +208,7 @@ export const normalizeCritter = (value: unknown, label: string): Critter => {
 		types: [...species.types],
 		rarity: species.rarity,
 		level,
-		exp: Math.max(expForLevel(level), Math.round(Number(raw.exp) || 0)),
+		exp: Math.max(expForLevel(level), Math.min(expForLevel(MAX_LEVEL), Math.round(finite(raw.exp, 0)))),
 		iv,
 		hp,
 		maxHp,
@@ -377,7 +388,7 @@ export const expGainFor = (defeated: Pick<Critter, 'speciesId' | 'level'>): numb
 export const shardsFor = (defeated: Pick<Critter, 'level' | 'rarity'>): number => 4 + defeated.level * 2 + (defeated.rarity === 'rare' ? 20 : defeated.rarity === 'legendary' ? 100 : 0);
 
 export const grantExp = (critter: Critter, amount: number): { critter: Critter; from: number; to: number; leveledUp: boolean } => {
-	const exp = Math.min(expForLevel(MAX_LEVEL), critter.exp + Math.max(0, Math.round(amount)));
+	const exp = Math.min(expForLevel(MAX_LEVEL), critter.exp + Math.max(0, Math.round(finite(amount, 0))));
 	const to = levelForExp(exp);
 	const from = critter.level;
 	if (to <= from) return { critter: { ...critter, exp }, from, to: from, leveledUp: false };

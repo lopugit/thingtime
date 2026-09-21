@@ -110,6 +110,45 @@ describe('battle', () => {
 		assert.deepEqual(normalized.moves.map((entry) => entry.id), ['ember-flick']);
 		assert.throws(() => normalizeCritter({ speciesId: 999 }, 'test'), /No Thingmon species/);
 	});
+	it('a non-finite iv, hp or exp cannot produce a NaN creature or an endless battle', () => {
+		for (const hostile of [NaN, Infinity, -Infinity]) {
+			const normalized = normalizeCritter({ speciesId: 1, level: 10, iv: hostile, hp: hostile, exp: hostile }, 'test');
+			for (const key of ['iv', 'level', 'hp', 'maxHp', 'atk', 'def', 'spd', 'exp'] as const) assert.ok(Number.isFinite(normalized[key]), `${key} is ${normalized[key]} for iv/hp/exp ${hostile}`);
+			assert.ok(normalized.hp > 0 && normalized.hp <= normalized.maxHp);
+			assert.ok(normalized.iv >= 0 && normalized.iv <= 15);
+			assert.ok(normalized.exp <= expForLevel(50));
+		}
+		// with NaN stats every hp comparison is false, so the battle loop could
+		// never reach 'won' or 'fainted' — it ran forever against a level-5 foe
+		let state = { player: normalizeCritter({ speciesId: 1, level: 10, iv: NaN }, 'test'), wild: normalizeCritter({ speciesId: 7, level: 5 }, 'test') };
+		let outcome = 'continue';
+		for (let i = 0; i < 40 && outcome === 'continue'; i++) {
+			const turn = resolveTurn(state.player, state.wild, 0, seeded(10 + i));
+			state = { player: turn.player, wild: turn.wild };
+			outcome = turn.outcome;
+		}
+		assert.notEqual(outcome, 'continue');
+	});
+	it('stats clamp a hostile iv the same way every other entry point does', () => {
+		const context = ctx();
+		assert.deepEqual(pack['thingmon.stats']([{ speciesId: 1, level: 10, iv: NaN }], context), calcStats(getSpecies(1), 10, 8));
+		assert.deepEqual(pack['thingmon.stats']([{ speciesId: 1, level: 10, iv: 1e9 }], context), calcStats(getSpecies(1), 10, 15));
+		assert.deepEqual(pack['thingmon.stats']([{ speciesId: 1, level: 10, iv: -50 }], context), calcStats(getSpecies(1), 10, 0));
+	});
+	it('experience reports what was banked, not what was asked for', () => {
+		const context = ctx();
+		const capped = newCritter({ speciesId: 3, level: 50 }, seeded(1));
+		const atCap = pack['thingmon.expGain']([{ member: capped, amount: 1e9 }], context) as { gained: number; leveledUp: boolean };
+		assert.equal(atCap.gained, 0);
+		assert.equal(atCap.leveledUp, false);
+		const young = newCritter({ speciesId: 3, level: 5 }, seeded(1));
+		const grew = pack['thingmon.expGain']([{ member: young, amount: 500 }], context) as { gained: number; member: { exp: number } };
+		assert.equal(grew.gained, 500);
+		assert.equal(grew.member.exp, young.exp + 500);
+		const nonsense = pack['thingmon.expGain']([{ member: young, amount: NaN }], context) as { gained: number; member: { exp: number } };
+		assert.equal(nonsense.gained, 0);
+		assert.ok(Number.isFinite(nonsense.member.exp));
+	});
 	it('catch odds rise as HP falls and with a better crystal; a full-HP legendary is nearly uncatchable', () => {
 		const wounded: Critter = { ...wild, hp: 1 };
 		const shard = itemById('shard-crystal');
