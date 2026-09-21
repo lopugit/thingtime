@@ -49,7 +49,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action. [PR #875 notes](../PRs/875-codex-library-builder-pages-integration-builder-pages.md).
+- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action. Long account names now truncate in the mobile header, with a compact search trigger. [PR #875 notes](../PRs/875-codex-library-builder-pages-integration-builder-pages.md).
 - 2026-09-21 — **Codex (AI)**: Allow the franchise Google Maps SDK and map-service
   hosts in production/dev CSP while retaining the inline-script and eval bans;
   use raster map rendering and verify the explicit host policy.

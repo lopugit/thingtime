@@ -1,5 +1,6 @@
 import React from 'react';
-import { Center, Flex, Input, Spinner, Text } from '@chakra-ui/react';
+import { Center, Flex, IconButton, Input, Spinner, Text } from '@chakra-ui/react';
+import { Search } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 import Fuse from 'fuse.js';
 
@@ -56,6 +57,7 @@ export const CommanderV2 = (props) => {
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 
 	const global = props?.global;
+	const compactMobile = global && commanderId === 'nav';
 
 	const commanderSettings = thingtime?.settings?.commander?.[commanderId] || {};
 
@@ -71,12 +73,11 @@ export const CommanderV2 = (props) => {
 
 	const [showContext, setShowContextState] = React.useState(false);
 
-	// mobile chrome allowance: 52px for the fixed drawer trigger on the left
-	// plus 148px reserved for the right-side nav icons (the notifications bell
-	// joined the username + logo there — 108px started clipping under the pill)
+	// The mobile nav uses a compact search trigger; its open input sits below
+	// the header, where it can use the viewport without covering account controls.
 	const mobileVW = React.useMemo(() => {
-		return 'calc(100vw - 200px)';
-	}, []);
+		return compactMobile ? 'calc(100% - 16px)' : 'calc(100vw - 200px)';
+	}, [compactMobile]);
 
 	const rainbowRepeats = 2;
 
@@ -692,10 +693,25 @@ export const CommanderV2 = (props) => {
 					}
 				}}
 			>
+				{compactMobile && (
+					<IconButton
+						aria-label="Open Commander search"
+						icon={<Search size={16} />}
+						display={['flex', 'none']}
+						minWidth="28px"
+						width="28px"
+						height="36px"
+						marginTop="6px"
+						variant="ghost"
+						pointerEvents="all"
+						onClick={toggleCommander}
+						aria-expanded={!!commanderActive}
+					/>
+				)}
 				<Flex
 					position="absolute"
 					zIndex={9999}
-					top="100%"
+					top={compactMobile ? ['calc(100% + 52px)', '100%'] : '100%'}
 					right={0}
 					left={0}
 					alignItems={['flex-start', 'center']}
@@ -914,7 +930,15 @@ export const CommanderV2 = (props) => {
 						)}
 					</Flex>
 				</Flex>
-				<Center position="relative" width={['100%', '400px']} maxWidth={[mobileVW, '100%']} height="100%">
+				<Center
+					position={compactMobile ? ['absolute', 'relative'] : 'relative'}
+					top={compactMobile ? ['52px', 'auto'] : 'auto'}
+					left={compactMobile ? ['8px', 'auto'] : 'auto'}
+					display={compactMobile ? [commanderActive ? 'flex' : 'none', 'flex'] : 'flex'}
+					width={['100%', '400px']}
+					maxWidth={[mobileVW, '100%']}
+					height="100%"
+				>
 					{/* TODO: Fix duplicate code because of rainbow mode disabling hack */}
 					{props?.rainbow && (
 						<Rainbow

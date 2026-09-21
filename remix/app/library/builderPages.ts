@@ -89,12 +89,13 @@ export function integrationBuilderSeeds(): IntegrationSeed[] {
 	]);
 	const services = LIBRARY_PROVIDERS.map((provider) => {
 		const examples = LIBRARY_EXAMPLES.filter((example) => example.provider === provider);
-		return page(libraryServicePageId(provider), `${provider} examples`, `All ${examples.length} ${provider} examples on one editable page.`, [
+		const noun = examples.length === 1 ? 'example' : 'examples';
+		return page(libraryServicePageId(provider), `${provider} examples`, `${examples.length} ${provider} ${noun} on one editable page.`, [
 			link('index', '← All libraries & services', libraryBuilderHref()),
 			heading(`${provider} examples`),
 			body(
 				'intro',
-				`${examples.length} runnable examples. Each example loads its dependency or calls its provider only when you press Run. Keys stay in the open demo and are never saved with this page.`
+				`${examples.length} runnable ${noun}. Each example loads its dependency or calls its provider only when you press Run. Keys stay in the open demo and are never saved with this page.`
 			),
 			...examples.map((example) => component(example.id))
 		]);

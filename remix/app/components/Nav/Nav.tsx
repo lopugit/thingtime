@@ -55,7 +55,7 @@ const NavAccountLink = (props: { claimedUser: ReturnType<typeof useCurrentUser> 
 			{claimedUser ? (
 				<Link to="/profile">
 					<Flex flexDir="row" gap={2} alignItems="center">
-						<Box fontSize="xs" fontWeight="600">
+						<Box fontSize="xs" fontWeight="600" maxWidth={{ base: '5ch', md: '24ch' }} overflow="hidden" textOverflow="ellipsis" title={getUserDisplayName(claimedUser)}>
 							{getUserDisplayName(claimedUser)}
 						</Box>
 						<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
@@ -334,7 +334,7 @@ export const Nav = (props) => {
 				<Center
 					className="nav-right-section"
 					flexShrink={0}
-					columnGap={[3, 8]}
+					columnGap={[2, 8]}
 					height="100%"
 					marginLeft="auto"
 					position="relative"

@@ -7951,3 +7951,9 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   component. A countdown starts, pauses, resets, catches up after delayed ticks
   and announces completion without affecting another instance. Repeat at phone
   width; drawers are flush to the left/top/bottom and keep the close control usable.
+
+- Integration builder mobile header: with a long display name at 320px/390px,
+  account text truncates without covering Commander or neighboring controls;
+  the full name remains available to assistive technology and on hover.
+  The compact mobile search button opens a focused input below the header;
+  results remain below that input and Escape closes it. Desktop search remains inline.
