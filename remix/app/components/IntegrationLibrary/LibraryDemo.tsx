@@ -1,3 +1,4 @@
+import { libraryBuilderHref, libraryExamplePageId } from '~/library/builderLinks';
 import React from 'react';
 import { Box, Button, Flex, FormControl, FormLabel, Input, Text, Textarea } from '@chakra-ui/react';
 import { Link } from 'react-router';
@@ -260,10 +261,11 @@ export default function EmbeddedLibraryExample({ exampleId, inputJson }: { examp
 				{example.provider} · {example.title}
 			</Text>
 			<LibraryDemo
-				key={example.id}
+				key={`${example.id}:${typeof inputJson === 'string' ? inputJson : ''}`}
 				example={example}
 				initialInput={typeof inputJson === 'string' && inputJson.length <= 16384 ? inputJson : undefined}
 			/>
+			<Button as={Link} to={libraryBuilderHref(libraryExamplePageId(example.id))} variant="link" size="sm" mt={4} whiteSpace="normal" textAlign="left">Open this example in Builder →</Button>
 		</Box>
 	);
 }

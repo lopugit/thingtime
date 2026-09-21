@@ -3974,3 +3974,9 @@ dev server and press **Run all public examples**. The harness executes only
 credential-free catalogue defaults, four at a time, through the actual isolated
 runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
 is not copied into production static assets. Provider outages can change results.
+
+### Integration builder library
+
+The integration catalogue also has real builder pages: `/builder?page=webpage-integrations&mode=view` links to a page per provider, and each example has its own page and reusable component. The pages derive from `remix/app/library/builderPages.ts`, so adding a catalogue example updates the hierarchy without hand-maintained copies. Opening a page does not run its third-party requests. Saving edits creates an owner-private page; keys and live results stay in the open demo and are never saved.
+
+On a new deployment, configure your normal database and an admin account (see the admin setup above), then sign in as that admin and select **Prepare builder pages** on `/library`. The button negotiates `api.admin-webpages-seed-demos` 1.2.0 and calls `POST /api/v1/admin/webpages/seed-demos?catalog=integrations` with `{}`. This idempotently seeds only the integration components and pages, leaving other demo suites untouched. Re-run after catalogue updates; investigate any nonzero `skipped` count before linking to the pages. No third-party credentials are needed for setup. Viewers supply their own credentials when running keyed examples.

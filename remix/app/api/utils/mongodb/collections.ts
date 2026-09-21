@@ -550,6 +550,11 @@ export const RETIRED_THINGS_INDEXES = [
 	'things_emoji_key_lookup',
 	'sourceIds_1_createdAt_-1_shareId_1',
 	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
+	// A pre-release Connections lookup was removed from the shared plan but
+	// remained on databases that ran that build. Its readers now use the
+	// existing thingtime/createdAt index; this was never a unique constraint.
+	// Retire it before bootstrap so the full legacy-compatible plan still fits.
+	'thingtime_1_targetId_1_crystal.accountId_1',
 	// Device event pagination now supplies the deterministic control-scope key,
 	// so the retention index serves the same cursor in either scan direction.
 	'things_device_event_cursor',
