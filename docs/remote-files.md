@@ -15,7 +15,7 @@ The browser negotiates these origin-scoped features before dependent work:
 | --- | --- |
 | `api.devices` | 1.0.0 |
 | `api.devices-approvals` | 1.0.0 |
-| `api.attachment-delete` | 1.1.0 |
+| `api.attachment-delete` | 1.0.0 |
 | `api.devices-commands` | 1.9.0 |
 | `api.devices-node-commands` | 1.9.0 |
 | `api.devices-node-state` | 1.9.0 |

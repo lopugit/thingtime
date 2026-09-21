@@ -537,7 +537,7 @@ test('filesystem clients negotiate all additive file contracts on both origin ma
   const route = createApiCapabilitiesManifest().features;
   const wellKnown = thingtimeCapabilityManifest('https://files.test').features;
   for (const [feature, required] of Object.entries(FILESYSTEM_REQUIREMENTS)) {
-    assert.equal(capabilitySatisfies(route[feature], required), true);
+    assert.equal(capabilitySatisfies(route[feature], required), true, `${feature}: ${route[feature]} needs ${required}`);
     assert.equal(capabilitySatisfies(wellKnown[feature].version, required), true);
     assert.equal(capabilitySatisfies('0.9.0', required), false);
     assert.equal(capabilitySatisfies('2.0.0', required), false);

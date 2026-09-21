@@ -242,7 +242,7 @@ test('managed attachment, moderation, user, and emoji fields are closed server-o
 	// 'recording' is the owner-private standalone purpose: it never binds to a
 	// target, so it stays out of BindableAttachmentPurpose and is denied by
 	// canViewHomeAttachmentTarget's non-post fallthrough.
-	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'subspace-icon', 'subspace-banner']);
+	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner']);
 	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 
