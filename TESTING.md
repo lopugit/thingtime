@@ -8121,3 +8121,5 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   current indexes; unique constraints and saved Things remain intact.
 
 - Upcoming visits: completing a future-dated visit removes it from the dashboard upcoming list while keeping it in the planner and property visit history. Cancelled and archived visits also remain absent from upcoming visits.
+
+- Franchise list controls: seed more than 20 authorized records; check 5/10/15/20 sizes, next/previous/page selection, filter reset, clear filters and empty matches across directories, Trash, linked records, history, media and comments. Infinite mode appends batches and stops at the last record; changing mode or filters resets the window. Search must find older cursor-backed comments/media, including attachment-free intermediate pages, and stop on failed/non-advancing cursors. Planner filters and per-day paging preserve cross-page moves in the complete day order. Check controls and opened record menus at desktop and 390px without horizontal overflow.

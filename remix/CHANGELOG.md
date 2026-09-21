@@ -56,6 +56,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   failed transfers and keep file bytes out of device history/events. Verified
   real brightness round-trip, repeated native/web tests, a full web build and
   desktop/mobile browser states. [QA and rollout](../PRs/878-codex-remote-device-files-fix-brightness-and-shared-file-browser.md).
+- 2026-09-21 — **Codex (AI)**: Added shared franchise list controls with search, relevant filters, result counts, 5/10/15/20 page sizes and infinite scrolling across records, histories, comments, media and planner days. Removed the eight-visit dashboard cutoff; paged planner moves retain the full day order. Details: [PR #879](../PRs/879-codex-franchise-list-controls-paginate-and-filter-franchise-lists.md).
+
 - 2026-09-21 — **Codex (AI):** Require native app changes, including Thingtime
   Mac, Thingtime Recovery and Commander, to be rebuilt, verified, reinstalled
   and launched on the development machine before handoff, with installed-build
