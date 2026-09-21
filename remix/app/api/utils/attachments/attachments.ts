@@ -1356,6 +1356,19 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
+	// The download gates without a signed URL: size and served type only. The
+	// archive planner uses it for manifests and HEAD probes so those never
+	// presign hundreds of objects nobody is about to fetch.
+	const inspectDownload = async (viewer: AttachmentViewer, idInput: unknown): Promise<AttachmentResult<{ size: number; contentType: string }>> => {
+		try {
+			const readable = await readableStoredAttachment(viewer, idInput);
+			if (readable.ok === false) return readable;
+			return { ok: true, size: readable.doc.objectSizeBytes, contentType: 'application/octet-stream' };
+		} catch (error) {
+			return knownFailure(error) || unavailable('inspect', error);
+		}
+	};
+
 	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal, purpose: 'post' | 'comment' = 'post') => copyStoredAttachment({
 		canCopy: dependencies.canCopyFiles,
 		read: (viewer, id) => readableStoredAttachment(viewer, id, true), start, complete, remove,
@@ -1497,6 +1510,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		cancel,
 		remove,
 		download,
+		inspectDownload,
 		describeTransfer,
 		copy,
 		inspectForPost,
@@ -1518,6 +1532,7 @@ export const completeAttachmentUpload = service.complete;
 export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
+export const inspectAttachmentDownload = service.inspectDownload;
 export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;

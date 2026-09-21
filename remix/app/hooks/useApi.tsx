@@ -892,7 +892,7 @@ export function useApi() {
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
           await requireThingtimeCapability('api.things-export', '1.15.0');
-          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.10.0');
+          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
@@ -1128,6 +1128,59 @@ export function useApi() {
       grants: useCallback(async () => getJson('/api/v1/oauth/grants'), []),
       revokeGrant: useCallback(
         async (args) => asyncFetcher.submit({ clientId: args?.clientId }, { action: '/api/v1/oauth/grants/revoke' }),
+        [asyncFetcher]
+      )
+    },
+    // third-party app connections (Reddit, YouTube, Mastodon, …) — link
+    // external accounts, browse their feeds, manage AI feed filters
+    connections: {
+      providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
+      list: useCallback(async () => getJson('/api/v1/connections'), []),
+      connect: useCallback(
+        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
+        [asyncFetcher]
+      ),
+      unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
+      // SSO account linking: begin returns the provider's authorize URL — send
+      // the browser there; the callback lands back on /connections
+      oauthBegin: useCallback(
+        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        [asyncFetcher]
+      ),
+      // the Thingtime-managed virtual YouTube subscription list
+      youtubeSearch: useCallback(async (args) => getJson(`/api/v1/connections/youtube/search${toQuery({ q: args?.q })}`), []),
+      youtubeChannels: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { ...(args && 'add' in args ? { add: args.add } : {}), ...(args?.remove ? { remove: args.remove } : {}) },
+            { action: '/api/v1/connections/youtube/channels' }
+          ),
+        [asyncFetcher]
+      ),
+      feed: useCallback(
+        async (args) =>
+          getJson(
+            `/api/v1/connections/feed${toQuery({
+              connection: args?.connection,
+              cursor: args?.cursor,
+              limit: args?.limit,
+              sync: args?.sync,
+              deepen: args?.deepen
+            })}`
+          ),
+        []
+      ),
+      filters: useCallback(async () => getJson('/api/v1/connections/filters'), []),
+      saveFilter: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
+            { action: '/api/v1/connections/filters' }
+          ),
+        [asyncFetcher]
+      ),
+      removeFilter: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }),
         [asyncFetcher]
       )
     },

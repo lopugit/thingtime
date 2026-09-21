@@ -10,7 +10,7 @@ export const loader = async ({ request }: { request: Request }) => {
 	const params = new URL(request.url).searchParams;
 	if (params.has('commandId')) {
 		const result = await readDeviceCommand(user.id, params.get('deviceId') || '', params.get('commandId') || '');
-		return json(result, { status: result.ok ? 200 : result.status, headers: { 'Cache-Control': 'private, no-store' } });
+		return json(result, { status: result.ok === true ? 200 : result.status, headers: { 'Cache-Control': 'private, no-store' } });
 	}
 	const result = await listDeviceCommands(user.id, params.get('deviceId'), params.get('status'));
 	if (result.ok === false) return json(result, { status: result.status });

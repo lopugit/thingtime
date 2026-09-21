@@ -125,12 +125,13 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadA
 							_hover={{ color: 'white', background: 'rgba(255,255,255,0.12)' }}
 							borderRadius="999px"
 						/>
-						{count > 1 && onDownloadAll ? (
+						{onDownloadAll ? (
 							<IconButton
-								// the gallery may also hold audio/files outside this visual set, so the
-								// label promises the post's files rather than quoting this count
-								aria-label="Download every file in this post as a ZIP"
-								title="Download all files (ZIP)"
+								// offered whenever the gallery has an archive (two or more stored
+								// files), not only when two of them are visual: audio and documents
+								// count too. Same words for the label and the tooltip.
+								aria-label="Download all files as a ZIP"
+								title="Download all files as a ZIP"
 								icon={<FolderDown size={16} />}
 								size="sm"
 								variant="ghost"

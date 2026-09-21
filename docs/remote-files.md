@@ -18,8 +18,8 @@ The browser negotiates these origin-scoped features before dependent work:
 | `api.devices-node-state` | 1.9.0 |
 | `api.attachment-uploads` | 1.5.0 |
 | `api.attachment-upload-complete` | 1.4.0 |
-| `api.attachment-content` | 1.10.0 |
-| `api.things` | 1.23.0 |
+| `api.attachment-content` | 1.11.0 |
+| `api.things` | 1.24.0 |
 | `api.things-bulk` | 1.5.0 |
 
 Portable Things export/import negotiate 1.15.0 and 1.11.0 respectively.

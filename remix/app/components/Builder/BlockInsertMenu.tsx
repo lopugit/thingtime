@@ -43,6 +43,7 @@ const QUICK_BLOCKS: Array<{ key: string; icon: string; label: string; make: (exi
 	{ key: 'row', icon: '➡️', label: 'Row', make: (existing) => defaultContainerBlock(existing, 'row') },
 	{ key: 'grid', icon: '🔲', label: 'Grid', make: (existing) => defaultContainerBlock(existing, 'grid') },
 	{ key: 'media', icon: '🖼', label: 'Media', make: (existing) => defaultMediaBlock(existing) },
+	{ key: 'service', icon: '🌿', label: 'Service workspace', make: existing => ({ id: newBlockId('service', existing), type: 'html', html: `<tt-service-workspace rootId="${crypto.randomUUID()}" name="Service workspace"></tt-service-workspace>` }) },
 	{ key: 'html', icon: '🧬', label: 'HTML', make: (existing) => defaultHtmlBlock(existing) }
 ];
 

@@ -166,29 +166,7 @@ const ThingsLibraryPage = () => {
 	const deviceParam = searchParams.get('device') || null;
   const currentKey = folderKeyOf(folderId);
 
-  // "Download all files" for the folder being browsed: one small manifest read
-  // per folder visit says whether a ZIP would hold anything (folders with no
-  // stored files show no button). Keyed per folder so a stale answer for an
-  // earlier folder never labels the current one.
   const archive = useAttachmentArchive();
-  const [folderArchives, setFolderArchives] = useState<Record<string, { fileCount: number; totalBytes: number } | null>>({});
-  useEffect(() => {
-    if (!user?.id || !folderId) return;
-    let cancelled = false;
-    apiRef.current.v1.attachments.archive
-      .manifest({ id: folderId })
-      .then((manifest: any) => {
-        if (cancelled) return;
-        setFolderArchives((prev) => ({ ...prev, [folderId]: manifest?.ok && manifest.fileCount > 0 ? { fileCount: manifest.fileCount, totalBytes: manifest.totalBytes || 0 } : null }));
-      })
-      .catch(() => {
-        if (!cancelled) setFolderArchives((prev) => ({ ...prev, [folderId]: null }));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, folderId]);
-  const folderArchive = folderId ? folderArchives[folderId] : null;
 
 	const devicesEnabled = Boolean(user && user.accountKind === 'user' && !user.temporary);
 	const deviceStore = useDeviceStore({
@@ -246,6 +224,33 @@ const ThingsLibraryPage = () => {
   const [cursors, setCursors] = useState<Record<string, string | null>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
   const [folderMeta, setFolderMeta] = useState<NonNullable<ThingsCache['folderMeta']>>(cached?.folderMeta || {});
+
+  // "Download all files" for the folder being browsed: one small manifest read
+  // says whether a ZIP would hold anything (folders with no stored files show
+  // no button). The answer is cached per folder AND per listed contents, so
+  // walking back into an unchanged folder costs nothing, while adding, moving
+  // or deleting a Thing in it re-probes — a stale pill never survives a change.
+  // The probe waits for the folder's own listing so a never-loaded folder is
+  // not probed twice, and it draws on the manifest rate window, never the
+  // download one.
+  const [folderArchives, setFolderArchives] = useState<Record<string, { signature: string; archive: { fileCount: number; totalBytes: number } | null }>>({});
+  const folderSignature = folderId && folderPages[currentKey] ? folderPages[currentKey].map((item) => item.id).join('\n') : null;
+  useEffect(() => {
+    if (!user?.id || !folderId || folderSignature === null) return;
+    if (folderArchives[folderId]?.signature === folderSignature) return;
+    let cancelled = false;
+    const remember = (value: { fileCount: number; totalBytes: number } | null) => {
+      if (!cancelled) setFolderArchives((prev) => ({ ...prev, [folderId]: { signature: folderSignature, archive: value } }));
+    };
+    apiRef.current.v1.attachments.archive
+      .manifest({ id: folderId })
+      .then((manifest: any) => remember(manifest?.ok && manifest.fileCount > 0 ? { fileCount: manifest.fileCount, totalBytes: manifest.totalBytes || 0 } : null))
+      .catch(() => remember(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, folderId, folderSignature]); // eslint-disable-line react-hooks/exhaustive-deps
+  const folderArchive = folderId ? folderArchives[folderId]?.archive ?? null : null;
 
   const [searchResults, setSearchResults] = useState<ThingsThing[] | null>(null);
   const [searching, setSearching] = useState(false);

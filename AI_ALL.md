@@ -29,6 +29,18 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## Feature maps — read the map for the domain you touch
+
+`docs/feature-map/` holds one short map per domain (attachments and media,
+sharing and audiences, things and folders, posts and feed, API endpoints and
+capabilities, UI shell and menus, auth and accounts, local development). Each
+lists the routes, service modules, the authorization helper every read/write
+must call, the UI entry points, the registration steps and the tests to run.
+Before broad `graphify`/`rg` exploration, read the map for the domain you are
+changing; when you add a route, service, menu action or test script, update the
+map in the same PR. Maps link to `FUNDAMENTALS.md`, `TESTING.md`, the API docs
+registry and design notes instead of duplicating them.
+
 ## Recurring development lessons — 2026-09-11
 
 These rules come from the [two-month PR review](docs/ai-guidance-review-2026-09-11.md)
@@ -381,11 +393,15 @@ product direction or architecture tradeoffs matter. Default to
 single-source-of-truth, determinism, test-equals-live cohesion, and merge
 commits.
 
-## Commander macOS distribution signing
-
-- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
-- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
-- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
+Evidence and sequencing sit upstream of that backlog, one stage per tree:
+`NOTES/` holds dated, sourced observations and open questions that nothing has
+committed to yet; `PLAN/` turns a note into gated milestones, metrics, and stop
+conditions; `TODO/` is the actionable work; `DECISIONS.md` records the durable
+fork once the owner decides. Write a note before a plan and a plan before a new
+`TODO/claude-todo/NN-*.md`, and update the index that fronts each tree
+(`NOTES/README.md`, `PLAN/README.md`, `TODO/TODO.md` plus
+`TODO/claude-todo/README.md`) in the same change — those indexes are the entry
+points, not the individual files.
 
 ## Local development and worktrees
 
@@ -430,6 +446,18 @@ commits.
   PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
   npm --prefix remix run dev`. Keep any tooling config that hardcodes worktree
   ports (for example `.claude/launch.json`) untracked.
+- Fresh worktrees: run `npm run worktree-bootstrap` (or let the tracked
+  `post-checkout` hook do it on first checkout). It relinks remix dependencies,
+  copies missing ignored env files from the main checkout, writes the
+  derived-port `.claude/launch.json`, and sets this worktree's `core.hooksPath`
+  to the relative `.githooks` so stale hooks from another checkout never run
+  here. Keep `core.hooksPath` relative; an absolute path shared across
+  worktrees runs one checkout's hook files everywhere.
+- Local attachment bytes: set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` in
+  `remix/.env` (see README "Local attachment storage") so uploads, previews,
+  downloads and archives work without the private bucket. Seed realistic data
+  with `node remix/scripts/seed-fixture.mjs create` (real API only) and remove it
+  with `cleanup`; never insert attachment records into Mongo by hand.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
   setup into new managed worktrees. Keep tracked files and every
   `node_modules/` directory out of `.worktreeinclude`: copied pnpm symlink
@@ -450,6 +478,12 @@ commits.
   no hook: local checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`,
   and Vercel reads `VERCEL_GIT_COMMIT_REF` at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
+
+## Commander macOS distribution signing
+
+- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
+- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
+- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
 
 ## Browser and UI validation
 
