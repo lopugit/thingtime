@@ -49,6 +49,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Include the pinned Claude runtime in Vercel
+  Workflow execution packaging and check the worker bundle independently of the
+  main server. Align each Claude-consuming function’s CPU architecture with
+  its packaged executable. Reply capability 1.14.2 records the correction for a
+  production failure before provider invocation. The follow-up PR records
+  deployed acceptance and final release evidence; see the
+  [follow-up note](../PRs/lopu-workflow-claude-runtime.md).
+
 - 2026-09-22 — **Codex (AI)**: Route native-tool GPT-5.6 Sol chat replies through
   Responses while retaining the selected reasoning effort and speed. The reply
   contract advances to 1.14.1 after authenticated preview QA exposed a rejected
