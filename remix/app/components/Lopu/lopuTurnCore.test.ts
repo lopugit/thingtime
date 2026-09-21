@@ -622,3 +622,92 @@ test('explicit continuation metadata hides synthetic user rows both live and aft
  const typed = buildUserMessage(initialLopuTurn({ requestId: 'typed', chatId: 'chat', userText: prompt }), 'owner');
  assert.equal(buildLopuTimeline([typed], [], 'owner').length, 1);
 });
+
+
+test('unplaced recovered turns keep assistant progress without inventing an empty user message', () => {
+  for (const stopReason of ['aborted', 'error', 'end_turn']) {
+    const recovered = fold([META, { type: 'done', stopReason }], initialLopuTurn({ requestId: 'recovered', chatId: 'chat-1', userText: '' }));
+    const items = buildLopuTimeline([], [recovered], 'owner');
+    assert.deepEqual(items.map(item => item.kind), ['turn']);
+    assert.equal(items[0].kind === 'turn' && items[0].turn.stopReason, stopReason);
+  }
+});
+
+test('recovered turns retain their real persisted user message when available', () => {
+  const user = { ...buildUserMessage(initialLopuTurn({ requestId: 'request', userText: 'A real question' }), 'owner', 'chat-1'), id: 'msg-user' };
+  const recovered = fold([META, { type: 'done', stopReason: 'aborted' }], initialLopuTurn({ requestId: 'request', chatId: 'chat-1', userText: '' }));
+  const items = buildLopuTimeline([user], [recovered], 'owner');
+  assert.deepEqual(items.map(item => item.kind), ['message', 'turn']);
+  assert.equal(items[0].kind === 'message' && items[0].message.text, 'A real question');
+});
+
+test('an attachment-only user turn remains visible before its persisted row loads', () => {
+  const attachment = { id: 'only-file', name: 'note.txt', size: 12, contentType: 'text/plain', mediaKind: 'file' as const };
+  const turn = initialLopuTurn({ requestId: 'attachment-turn', userText: '', userAttachments: [attachment] });
+  const items = buildLopuTimeline([], [turn], 'owner');
+  assert.deepEqual(items.map(item => item.kind), ['message', 'turn']);
+  assert.equal(items[0].kind === 'message' && items[0].message.attachments[0].id, 'only-file');
+});
+
+test('empty stopped recovery yields to the same saved assistant without hiding its terminal text', () => {
+  for (const hasMeta of [true, false]) {
+    for (const hasAssistantId of [true, false]) {
+      for (const hasSavedMessages of [true, false]) {
+        const base = initialLopuTurn({ requestId: 'req-1', chatId: 'chat-1', userText: '' });
+        const user = { ...buildUserMessage(base, 'owner'), id: 'msg-user', text: 'Stop test' };
+        const assistant = {
+          ...user, id: 'saved-stop', text: 'Lopu’s reply was stopped before it started.',
+          externalSource: { provider: 'lopu', role: 'assistant' } as any,
+          lopu: { role: 'assistant', requestId: 'req-1', stopReason: 'aborted' }
+        } as any;
+        const recovered = fold([
+          ...(hasMeta ? [META] : []),
+          { type: 'done', assistantMessageId: hasAssistantId ? 'saved-stop' : undefined,
+            messages: hasSavedMessages ? [assistant] : [], stopReason: 'aborted' }
+        ], base);
+        const items = buildLopuTimeline([user, assistant], [recovered], 'owner');
+        assert.deepEqual(items.map(item => item.kind === 'message' ? item.message.id : 'duplicate-turn'), ['msg-user', 'saved-stop']);
+        assert.equal(items[1].kind === 'message' && items[1].message.text, assistant.text);
+        assert.equal(items[1].kind === 'message' && lopuMessageMeta(items[1].message)?.stopReason, 'aborted');
+      }
+    }
+  }
+});
+
+test('recovered turns only yield to a visible saved assistant with their exact identity', () => {
+  const recovered = fold([{ type: 'done', assistantMessageId: 'saved-stop', stopReason: 'aborted' }],
+    initialLopuTurn({ requestId: 'req-1', chatId: 'chat-1', userText: '' }));
+  const saved = {
+    ...buildUserMessage(recovered, 'owner'), id: 'saved-stop', text: 'Stopped',
+    externalSource: { provider: 'lopu', role: 'assistant' } as any,
+    lopu: { role: 'assistant', requestId: 'req-1', stopReason: 'aborted' }
+  };
+  for (const message of [
+    { ...saved, lopu: { ...saved.lopu, requestId: 'another-request' } },
+    { ...saved, lopu: { ...saved.lopu, requestId: null } },
+    { ...saved, lopu: { ...saved.lopu, stopReason: null } },
+    { ...saved, lopu: { ...saved.lopu, stopReason: 'end_turn' } },
+    { ...saved, text: '' },
+    { ...saved, deleted: true },
+    { ...saved, systemType: 'hidden' },
+    { ...saved, externalSource: null },
+    { ...saved, systemMeta: { lopuOptimistic: true } }
+  ]) {
+    assert.ok(buildLopuTimeline([message], [recovered], 'owner').some(item => item.kind === 'turn'));
+  }
+  const active = initialLopuTurn({ requestId: 'req-1', chatId: 'chat-1', userText: '' });
+  for (const turn of [
+    { ...active, assistantMessageId: 'saved-stop' },
+    { ...recovered, userText: 'A genuine user turn' },
+    { ...recovered, userAttachments: [{ id: 'file', name: 'note.txt', size: 12, contentType: 'text/plain', mediaKind: 'file' as const }] },
+    { ...recovered, text: 'Partial output' },
+    { ...recovered, segments: [{ kind: 'text' as const, text: 'Partial output' }] },
+    { ...recovered, messages: [saved, { ...saved, id: 'not-loaded' }] },
+    reduceLopuTurn(recovered, { type: 'tool_use', id: 'read', name: 'get_thing', input: { id: 'missing' } })
+  ]) {
+    assert.ok(buildLopuTimeline([saved], [turn], 'owner').some(item => item.kind === 'turn'));
+  }
+  const second = { ...saved, id: 'second-saved-segment' };
+  assert.equal(buildLopuTimeline([saved, second], [{ ...recovered, messages: [saved, second] }], 'owner')
+    .filter(item => item.kind === 'turn').length, 0, 'all persisted segments remain visible before recovery yields');
+});

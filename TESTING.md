@@ -8053,6 +8053,12 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
 
 ## Continuity, Builder, navigation and Things regression checks (2026-09-21)
 
+- [ ] Stop a background reply before it produces text, then poll and reload.
+      Recovery must retain the terminal assistant state and manual Retry control
+      without adding an empty user bubble, duplicating an already-saved terminal
+      reply, or dispatching another reply. Verify
+      both local and Vercel management, a missing/unloaded user-message identity,
+      and an attachment-only genuine user turn that must remain visible.
 - [ ] Build the Vercel output and verify the Claude runtime in both the Nitro
       server function and each Workflow step function that can invoke it. Resolve
       the pinned runtime from an isolated function working directory without
