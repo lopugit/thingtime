@@ -77,6 +77,8 @@ export type SocialPreview = {
 	revision?: string;
 	/** Set only after an anonymous content read succeeds, never by a static fallback. */
 	publicContent?: boolean;
+	/** Unlisted links can unfurl without being advertised for indexing. */
+	indexable?: boolean;
 };
 
 export const SOCIAL_PREVIEW_WIDTH = 1200;
@@ -447,13 +449,14 @@ const webpagePreview = async (path: string, id: string): Promise<SocialPreview> 
 	if (!result.ok || !result.page) return fallback;
 	const page: any = result.page;
 	const crystal = page.crystal || {};
-	const name = cleanSocialText(crystal.name) || 'A page';
+	const name = cleanSocialText(crystal.title) || cleanSocialText(crystal.name) || 'A page';
 	const pageText = webpageCopy(crystal.blocks).join(' ');
 	const description = cleanSocialText(crystal.description) || pageText || 'A published page made with Thingtime.';
 	const author = cleanSocialText(page.author?.displayName) || cleanSocialText(page.author?.username);
 	const blockCount = webpageBlockCount(crystal.blocks);
 	return {
 		publicContent: true,
+		indexable: page.acl?.includes('tt:all') === true,
 		kind: 'webpage',
 		variant: 'webpage',
 		path,
@@ -593,19 +596,20 @@ export const socialPreviewFromPublicPost = (path: string, post: any, context: { 
 // comment or a media attachment it also walks the parent chain (uncapped depth,
 // one round trip per level). Returns null when the target is not a
 // world-readable post, which every caller renders as the generic card.
-const publicPostPreview = async (path: string, result: any): Promise<SocialPreview | null> => {
+export const publicPostPreview = async (path: string, result: any): Promise<SocialPreview | null> => {
 	const post: any = result.post;
-	if (!post) return null;
-	// belt-and-braces on top of the anonymous viewer walk: rich meta is for
-	// world-readable posts only. tt:all is directly world-readable; tt:inherit
-	// (every comment) counts too because the anonymous getThing success above
-	// already proved the inherited audience includes anonymous.
-	const { ACL_ALL, ACL_INHERIT } = await import('../../../schemas/registry');
-	if (!Array.isArray(post.acl) || !(post.acl.includes(ACL_ALL) || post.acl.includes(ACL_INHERIT))) return null;
-	return socialPreviewFromPublicPost(path, post, {
-		parent: result.parent,
-		revision: cleanSocialText(result.thing?.updatedAt) || cleanSocialText(result.thing?.createdAt)
-	});
+	if (!result.ok || !post) return null;
+	// The canonical anonymous read already checked the exact permalink. Unlisted
+	// posts are accessible to its holder too; private posts never reach here.
+	const { ACL_ALL, ACL_INHERIT, ACL_HIDDEN } = await import('../../../schemas/registry');
+	if (!Array.isArray(post.acl) || !post.acl.some((acl: string) => [ACL_ALL, ACL_INHERIT, ACL_HIDDEN].includes(acl))) return null;
+	return {
+		...socialPreviewFromPublicPost(path, post, {
+			parent: result.parent,
+			revision: cleanSocialText(result.thing?.updatedAt) || cleanSocialText(result.thing?.createdAt)
+		}),
+		indexable: post.acl.includes(ACL_ALL) || (post.acl.includes(ACL_INHERIT) && result.parent?.acl?.includes(ACL_ALL))
+	};
 };
 
 const postPreview = async (path: string, id: string): Promise<SocialPreview> => {
@@ -657,6 +661,7 @@ const mediaPreview = async (path: string, id: string): Promise<SocialPreview> =>
 	const variant = socialMediaVariant(mediaKind);
 	return {
 		publicContent: true,
+		indexable: thing.acl?.includes('tt:all') === true,
 		kind: 'media',
 		variant,
 		path,
@@ -698,6 +703,7 @@ const thingPreview = async (path: string, id: string): Promise<SocialPreview> =>
 	const description = cleanSocialText(crystal.description) || cleanSocialText(crystal.text) || `A ${kind.toLowerCase()} on ${SITE_NAME}.`;
 	return {
 		publicContent: true,
+		indexable: thing.acl?.includes('tt:all') === true,
 		kind: 'thing',
 		variant: 'thing',
 		path,
@@ -724,6 +730,8 @@ export const resolveSocialPreview = async (origin: string, pathInput: string): P
 		if (mediaMatch) return await mediaPreview(path, decodeURIComponent(mediaMatch[1]));
 		const webpageMatch = path.match(/^\/p\/([^/]+)\/?$/);
 		if (webpageMatch) return await webpagePreview(path, decodeURIComponent(webpageMatch[1]));
+		const deployedMatch = path.match(/^\/t\/([^/]+)\/?$/);
+		if (deployedMatch) return await webpagePreview(path, decodeURIComponent(deployedMatch[1]));
 		const thingMatch = path.match(/^\/thing\/([^/]+)\/?$/);
 		if (thingMatch) return await thingPreview(path, decodeURIComponent(thingMatch[1]));
 	} catch {

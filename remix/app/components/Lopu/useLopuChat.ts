@@ -1,3 +1,5 @@
+import { syncNativeLopuChatActivity } from '~/utils/lopuChatActivity';
+import { getAiTasks, getAiTaskContextKey, getServerAiTasks, subscribeAiTasks } from './aiTasks.client';
 import { addLopuQueueMessage, drainLopuQueue, getLopuQueue, subscribeLopuQueue } from './lopuQueueStore';
 import { sendAiTaskNote, getAiTasks as queueTasks, refreshAiTasks as refreshQueueTasks } from './aiTasks.client';
 // useLopuChat (design note §3.1) — the ONE React hook every Lopu surface uses
@@ -21,6 +23,7 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { getWebpageDraftsVersion, subscribeWebpageDrafts } from './lopuBuildBridge';
 import {
+	resumeLopuChat,
 	abortLopuTurn,
 	archiveLopuChat,
 	recoverLopuBackgroundTasks,
@@ -138,6 +141,7 @@ export type UseLopuChat = {
 	streaming: LopuTurnState | null;
 	sending: boolean;
 	send: (text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; attachments?: ChatMessage['attachments']; thingIds?: string[]; onAccepted?: () => void }) => Promise<SendLopuResult>;
+	resume: (requestId: string) => Promise<SendLopuResult>;
 	abort: () => void;
 	selectChat: (chatId: string | null) => void;
 	createChat: (args?: { title?: string }) => ReturnType<typeof createLopuChat>;
@@ -182,7 +186,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messenger = useMessengerApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const { settings: prefs, setModelChoice, setEnterSends, setApplyPatches, setConfirmDeletes } = useLopuSettings();
+	const { settings: prefs, setModelChoice, setEnterSends, setApplyPatches, setConfirmDeletes, setManagement } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
 	const activeLabel = useActiveDraftLabel();
@@ -207,6 +211,17 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 
 	const snapshot = React.useSyncExternalStore(subscribeLopuStore, getLopuStoreSnapshot, getLopuStoreServerSnapshot);
 	const activeChatId = snapshot.activeChatId;
+ const tasks = React.useSyncExternalStore(subscribeAiTasks, getAiTasks, getServerAiTasks);
+ React.useEffect(() => {
+  const sync = () => {
+   const active = new Map<string, { chatId: string; status: 'running' | 'retrying'; management: 'server' | 'client' }>();
+   for (const task of getAiTasks()) if (task.chatId && !active.has(task.chatId) && (task.status === 'running' || task.workflowStatus === 'running')) active.set(task.chatId, { chatId: task.chatId, status: task.status === 'running' ? 'running' : 'retrying', management: task.management || 'client' });
+   for (const chatId of snapshot.recoveryChatIds) if (!active.has(chatId)) active.set(chatId, { chatId, status: 'retrying', management: 'client' });
+   syncNativeLopuChatActivity({ ownerId: userId, contextKey: getAiTaskContextKey(), chats: [...active.values()] });
+  };
+  sync(); window.addEventListener('thingtime:native-bridge-ready', sync); document.addEventListener('visibilitychange', sync);
+  return () => { window.removeEventListener('thingtime:native-bridge-ready', sync); document.removeEventListener('visibilitychange', sync); };
+ }, [tasks, userId, snapshot.recoveryChatIds]);
 
 	// the viewer's account / access rules ride along with every surface; a
 	// pinned vault provider makes the turn BYO (the gate lets it through when
@@ -232,12 +247,12 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	// the viewer's preference (settings.lopu.*) feeds the store; a chat's own
 	// settings can still override it while that chat is selected
 	React.useEffect(() => {
-		const patch: Partial<LopuChatSettings> = {};
+		const patch: Partial<LopuChatSettings> = { management: prefs.management };
 		if (prefs.model) patch.model = prefs.model;
 		if (prefs.effort) patch.effort = prefs.effort;
 		if (prefs.speed) patch.speed = prefs.speed;
 		if (Object.keys(patch).length) setLopuSettings(patch);
-	}, [prefs.model, prefs.effort, prefs.speed]);
+	}, [prefs.model, prefs.effort, prefs.speed, prefs.management]);
 
 	// notices → the Lopu toast (the first mounted hook drains them)
 	const noticeCount = snapshot.notices.length;
@@ -295,7 +310,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
     await refreshQueueTasks();
     for (const target of new Set(queue.items.map(item => item.chatId))) {
      if (cancelled) return;
-     if (queueTasks().some(task => task.chatId === target && task.status === 'running')) continue;
+     if (queueTasks().some(task => task.chatId === target && (task.status === 'running' || task.workflowStatus === 'running'))) continue;
      const live = getLopuStoreSnapshot();
      if (Object.values(live.turns).some(turn => turn.chatId === target && turn.status === 'streaming')) continue;
      await drainLopuQueue(target, sendLopuMessage);
@@ -314,13 +329,14 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const setSettings = React.useCallback(
 		(patch: Partial<LopuChatSettings>) => {
 			setLopuSettings(patch);
+   if (patch.management) setManagement(patch.management);
 			// the catalog choice is also the viewer's preference (settings.lopu.*);
 			// a provider-only change is per chat and leaves the preference alone
 			if (!('model' in patch || 'effort' in patch || 'speed' in patch)) return;
 			const next = getLopuStoreSnapshot().settings;
 			setModelChoice({ model: next.model, effort: next.effort, speed: next.speed === 'fast' || next.speed === 'normal' ? next.speed : null });
 		},
-		[setModelChoice]
+		[setModelChoice, setManagement]
 	);
 
 	const setPreferences = React.useCallback(
@@ -352,8 +368,9 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		turns,
 		timeline,
 		streaming,
-		sending: !!streaming,
+		sending: !!streaming || (!!activeChatId && snapshot.recoveryChatIds.includes(activeChatId)) || tasks.some(task => task.chatId === activeChatId && (task.status === 'running' || task.workflowStatus === 'running')),
 		send, enqueue, sendNote, queue,
+		resume: requestId => activeChatId ? resumeLopuChat(activeChatId, requestId) : Promise.resolve({ ok: false, error: 'Select a conversation first.', text: '' }),
 		abort: abortLopuTurn,
 		selectChat,
 		createChat: createLopuChat,

@@ -1,14 +1,13 @@
 import { taskNeedsAttention } from '~/api/utils/lopu/backgroundTaskCore';
 export const canContinueLopuReply = (status: unknown, stopReason: unknown) =>
 	status === 'error' || status === 'aborted' || stopReason === 'aborted' || taskNeedsAttention(stopReason);
-export const LOPU_CONTINUE_PROMPT =
-	'Continue the interrupted reply from its saved progress. Check the conversation’s tool receipts and the current state first. Do not repeat completed actions or recreate things that already exist. Finish the remaining work; ask for a fresh confirmation wherever one is required.';
-
+export { LOPU_CONTINUE_PROMPT } from '~/api/utils/lopu/continuationCore';
 // Continue only a persisted, cleanly observed budget boundary. A lost stream or
-// provider error may leave a write in flight, so those require manual recovery.
+// unacknowledged provider error may leave a write in flight and needs review.
 export const shouldAutoContinueLopuReply = (turn: {
  status: string; stopReason: string | null; assistantMessageId: string | null;
+ continuationSafe?: boolean;
  tools: Array<{ status: string; result?: unknown; confirm?: { resolved?: string | null } | null }>;
-}) => turn.status === 'done' && !!turn.assistantMessageId &&
- ['checkpoint', 'tool_limit', 'hop_limit', 'time_limit', 'max_tokens'].includes(turn.stopReason || '') &&
- !turn.tools.some(tool => tool.status === 'confirm' || (tool.status === 'error' && !tool.result) || (tool.confirm && !tool.confirm.resolved));
+}) => turn.status === 'done' && turn.continuationSafe !== false && (turn.stopReason !== 'error' || turn.continuationSafe === true) && !!turn.assistantMessageId &&
+ ['checkpoint', 'tool_limit', 'hop_limit', 'time_limit', 'max_tokens', 'error'].includes(turn.stopReason || '') &&
+ !turn.tools.some(tool => tool.status === 'streaming' || tool.status === 'running' || tool.status === 'confirm' || (tool.status === 'error' && !tool.result) || (tool.confirm && !tool.confirm.resolved));

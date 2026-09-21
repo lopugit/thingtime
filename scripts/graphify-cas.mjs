@@ -3,6 +3,7 @@
 import { createHash, randomUUID } from "node:crypto"
 import {
   cpSync,
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -491,15 +492,27 @@ export function pruneSnapshots(
   }
 }
 
-function copyPortableFiles(from, to) {
+export function copyPortableFiles(from, to) {
   mkdirSync(to, { recursive: true })
   for (const name of PORTABLE_FILES) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) {
+      const destination = path.join(to, name)
+      cpSync(source, destination)
+      // Snapshots may be read-only. Only their private working copies need
+      // owner write access so upstream Graphify can refresh reports in place.
+      chmodSync(destination, statSync(destination).mode | 0o200)
+    }
   }
   for (const name of [".graphify_analysis.json", ".graphify_labels.json"]) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) {
+      const destination = path.join(to, name)
+      cpSync(source, destination)
+      // Snapshots may be read-only. Only their private working copies need
+      // owner write access so upstream Graphify can refresh reports in place.
+      chmodSync(destination, statSync(destination).mode | 0o200)
+    }
   }
 }
 

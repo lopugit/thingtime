@@ -213,3 +213,22 @@ test('every canonical post family and thread shape gets a distinct social varian
 	assert.equal(reply.variant, 'reply');
 	assert.ok(reply.badges.includes('To Jade'));
 });
+
+test('an anonymously readable unlisted photo post has contextual metadata but stays noindex', async () => {
+  const { publicPostPreview } = await import('./socialPreview');
+  const { socialMetaFromPreview } = await import('./socialMeta');
+  const result = { ok: true, thing: { updatedAt: '2026-09-21' }, post: {
+    acl: ['tt:hidden'], author: { displayName: 'Photographer' }, text: 'Classic cars at the weekend meet',
+    thingtime: ['post'], attachments: [{ id: 'car-photo', mediaKind: 'image' }]
+  }};
+  const preview = await publicPostPreview('/post/car-meet', result);
+  assert.ok(preview);
+  assert.match(preview.title, /Classic cars/);
+  assert.equal(preview.images[0].attachmentId, 'car-photo');
+  const tags = new Map(socialMetaFromPreview('https://thingtime.example', preview).tags.map(tag => [tag.key, tag.content]));
+  assert.match(tags.get('og:description')!, /Classic cars/);
+  assert.match(tags.get('og:image')!, /social-card/);
+  assert.equal(tags.get('robots'), 'noindex, follow');
+  assert.equal(await publicPostPreview('/post/private', { ...result, ok: false }), null);
+  assert.equal(await publicPostPreview('/post/private', { ...result, post: { ...result.post, acl: ['tt:user'] } }), null);
+});

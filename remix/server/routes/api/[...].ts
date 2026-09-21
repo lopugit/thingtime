@@ -191,6 +191,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/lopu/chats': () => import('../../../app/routes/api/v1/lopu/chats/_chats'),
   'v1/lopu/chats/update': () => import('../../../app/routes/api/v1/lopu/chats/update/_update'),
   'v1/lopu/chats/delete': () => import('../../../app/routes/api/v1/lopu/chats/delete/_delete'),
+  'v1/lopu/live-activity': () => import('../../../app/routes/api/v1/lopu/live-activity/_live-activity'),
   'v1/lopu/chats/reply': () => import('../../../app/routes/api/v1/lopu/chats/reply/_reply'),
 	'v1/lopu/vault': () => import('../../../app/routes/api/v1/lopu/vault/_vault'),
 	'v1/lopu/voice/reply': () => import('../../../app/routes/api/v1/lopu/voice/reply/_reply'),

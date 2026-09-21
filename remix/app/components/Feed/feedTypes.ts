@@ -1,3 +1,5 @@
+import type { PostThingReference } from './postThingReferences';
+import type { ThingsThing } from '../Things/thingsCore';
 // Client-side shapes for the feed / algorithms / profile APIs. These mirror the
 // public projections in remix/app/api/utils/things + algorithms + auth/users —
 // the API utils are the source of truth; keep this file in sync with them.
@@ -49,6 +51,7 @@ export type MarketplaceListing = {
 // things, so the payload carries the post vocabulary plus reactions and a
 // reply count. Legacy-era comments arrive with the text-only defaults.
 export type PostComment = {
+  linkedThings?: PublicPost['linkedThings'];
   id: string;
   thingtime: string[];
   author: FeedAuthor | null;
@@ -80,6 +83,7 @@ export type PostComment = {
 };
 
 export type PublicPost = {
+  linkedThings?: Array<PostThingReference & { thing: ThingsThing | null }>;
   audience?: ResolvedAudience;
   id: string;
   type: PostType;

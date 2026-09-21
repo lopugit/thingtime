@@ -49,6 +49,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-21 · Codex (AI):** Seamless Lopu continuation with browser/server
+  management, one aggregate iOS chat Live Activity, Builder settings and unified
+  Commander navigation. Things now share post discussions, attach existing
+  Things, recognize legacy folders, preserve scalar previews and expose broader
+  management/rename controls. Action-run delivery defaults off; unlisted social
+  previews retain context without indexing. Fix Nitro shell asset registration
+  and writable Graphify working copies. See the [delivery note](../PRs/codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
+  for validation and device/deployment limits.
+
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
   one stored (uncompressed) ZIP of every file the caller may already read —

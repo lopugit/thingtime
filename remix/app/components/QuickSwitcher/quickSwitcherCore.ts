@@ -34,6 +34,8 @@ export const QUICK_PAGES: (QuickRow & { keywords: string })[] = [
   { key: 'page:/messages', kind: 'page', label: 'Messages', href: '/messages', glyph: '💬', keywords: 'messenger chats dm inbox' },
   { key: 'page:/lopu', kind: 'page', label: 'Lopu', href: '/lopu', glyph: '🦄', keywords: 'ai assistant chat ask build unicorn' },
   { key: 'page:/things', kind: 'page', label: 'Things', href: '/things', glyph: '🗂️', keywords: 'drive files folders library' },
+  { key: 'page:/builder', kind: 'page', label: 'Builder', href: '/builder', glyph: '🧱', keywords: 'pages websites edit build' },
+  { key: 'page:/components', kind: 'page', label: 'Components', href: '/components', glyph: '🧩', keywords: 'reusable blocks widgets library' },
   { key: 'page:/search', kind: 'page', label: 'Search', href: '/search', glyph: '🔎', keywords: 'find query lookup' },
   { key: 'page:/themes', kind: 'page', label: 'Themes', href: '/themes', glyph: '🎨', keywords: 'appearance colors styling' },
   { key: 'page:/schemas', kind: 'page', label: 'Schemas', href: '/schemas', glyph: '🧬', keywords: 'shapes fields crystal types' },

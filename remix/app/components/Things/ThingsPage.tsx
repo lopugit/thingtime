@@ -1,9 +1,10 @@
+import { isManagedLibraryThing } from './thingsCore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { transferIntent } from '~/utils/thingTransfer/intent';
 import { readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
 
-import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
-import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
+import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Text } from '@chakra-ui/react';
+import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -50,6 +51,7 @@ import {
   schemaRenderOf,
   sortThings,
   thingDisplayName,
+  thingRenameCrystal,
   thingShareLink,
   thingOpenHref,
   thingsCacheKey
@@ -270,15 +272,17 @@ export const ThingsPage = () => {
   const [menuThing, setMenuThing] = useState<ThingsThing | null>(null);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+  const openNewFolder = useCallback((parent: string | null) => { setNewFolderParent(parent); setNewFolderOpen(true); }, []);
   useEffect(() => {
     const action = searchParams.get('widget');
     if (!user || (action !== 'search' && action !== 'newFolder')) return;
-    if (action === 'newFolder') setNewFolderOpen(true);
+    if (action === 'newFolder') openNewFolder(folderId);
     else requestAnimationFrame(() => document.getElementById('thingtime-things-search')?.focus());
     const next = new URLSearchParams(searchParams);
     next.delete('widget');
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, user]);
+  }, [searchParams, setSearchParams, user, folderId, openNewFolder]);
 
   const [renameThing, setRenameThing] = useState<ThingsThing | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -708,8 +712,7 @@ export const ThingsPage = () => {
           return;
         }
       }
-      setSelection(new Set([thing.id]));
-      anchorRef.current = thing.id;
+      openThing(thing);
     },
     [displayItems, isMobile, openThing, toggleSelect]
   );
@@ -970,7 +973,7 @@ export const ThingsPage = () => {
       setFolderPages((prev) => {
         const next: typeof prev = {};
         for (const [key, things] of Object.entries(prev)) {
-					next[key] = things.map((entry) => (entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, name } } : entry));
+					next[key] = things.map((entry) => (entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, ...thingRenameCrystal(entry, name) } } : entry));
         }
         return next;
       });
@@ -978,11 +981,19 @@ export const ThingsPage = () => {
         setFolderMeta((prev) => ({ ...prev, [thing.id]: { ...(prev[thing.id] || { folderId: thing.folderId }), name } }));
       }
       try {
-        await apiRef.current.v1.things.update({ id: thing.id, crystal: { name } });
+        const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+        await requireThingtimeCapability('api.things', '1.23.0');
+        const response = isManagedLibraryThing(thing)
+          ? await apiRef.current.v1.things.renameLibrary({ id: thing.id, displayTitle: name, expectedUpdatedAt: thing.updatedAt })
+          : thing.thingtime.includes('attachment')
+          ? await apiRef.current.v1.attachments.annotate({ id: thing.id, title: name })
+          : await apiRef.current.v1.things.update({ id: thing.id, crystal: thingRenameCrystal(thing, name) });
+        if (response?.ok === false) throw new Error(response.error || 'Rename failed');
+        setSearchResults(previous => previous?.map(entry => entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, ...thingRenameCrystal(entry, name) } } : entry) || null);
         lopuRef.current({ title: 'Renamed ✏️', status: 'success', duration: 4000 });
         return true;
       } catch (err: any) {
-        lopuRef.current({ title: 'Rename failed 😔', description: err?.error || undefined, status: 'error' });
+        lopuRef.current({ title: 'Rename failed 😔', description: err?.error || err?.message || undefined, status: 'error' });
         refreshAfterMutation(sourceKeysOf([thing.id]));
         return false;
       }
@@ -996,11 +1007,11 @@ export const ThingsPage = () => {
         const resp = await apiRef.current.v1.things.create({
           thingtime: ['folder'],
           crystal: { name, ...(icon ? { icon } : {}) },
-          folderId
+          folderId: newFolderParent
         });
         const thing: ThingsThing | undefined = resp?.thing;
         if (thing) {
-          setFolderPages((prev) => ({ ...prev, [currentKey]: dedupeById([thing, ...(prev[currentKey] || [])]) }));
+          setFolderPages((prev) => ({ ...prev, [folderKeyOf(newFolderParent)]: dedupeById([thing, ...(prev[folderKeyOf(newFolderParent)] || [])]) }));
           rememberFolderMeta([thing]);
         }
         lopuRef.current({ title: `Folder “${name}” created 📁`, status: 'success', duration: 5000 });
@@ -1010,7 +1021,7 @@ export const ThingsPage = () => {
         return false;
       }
     },
-    [currentKey, folderId, rememberFolderMeta]
+    [newFolderParent, rememberFolderMeta]
   );
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
@@ -1284,7 +1295,7 @@ export const ThingsPage = () => {
           setImportBundle(null); setImportDestination(folderId); setImportOpen(true);
           break;
         case 'new-folder':
-          setNewFolderOpen(true);
+          openNewFolder(folderId);
           break;
         case 'paste':
           pasteClipboard();
@@ -1306,7 +1317,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [folderId, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
+    [folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
@@ -1485,14 +1496,32 @@ export const ThingsPage = () => {
             Things
           </Text>
           <Box flex={1} />
-          {user?.isAdmin && <Button as={RouterLink} to="/things?logs=1" size="sm" variant="outline">Error logs</Button>}
+          <Menu placement="bottom-end" closeOnSelect={false}>
+            <MenuButton as={Button} size="sm" variant="ghost" aria-label="Things settings" minW="36px" px={2}><Settings size={18} /></MenuButton>
+            <Portal><MenuList zIndex={10250} maxH="70vh" overflowY="auto" maxW="calc(100vw - 32px)">
+              <MenuOptionGroup title="Layout" type="radio" value={view} onChange={value => setView(value as ThingsView)}>
+                <MenuItemOption value="grid">Grid</MenuItemOption><MenuItemOption value="list">List</MenuItemOption><MenuItemOption value="columns">Folder columns</MenuItemOption>
+              </MenuOptionGroup>
+              <MenuOptionGroup title="Display" type="radio" value={displayMode} onChange={value => setDisplayMode(value as ThingsDisplayMode)}>
+                <MenuItemOption value="name">Names</MenuItemOption><MenuItemOption value="preview">Rendered previews</MenuItemOption>
+              </MenuOptionGroup>
+              <MenuOptionGroup title="Sort" type="radio" value={sort} onChange={value => setSort(value as ThingsSort)}>{THINGS_SORT_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
+              <MenuOptionGroup title="Group" type="radio" value={groupBy} onChange={value => setGroupBy(value as ThingsGroupBy)}>{THINGS_GROUP_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
+              <MenuDivider />
+              <MenuItem onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import Things…</MenuItem>
+              <MenuItem onClick={() => void fetchFolder(folderId)}>Refresh this folder</MenuItem>
+              <MenuItem onClick={selectAll}>{allSelected ? 'Clear selection' : 'Select all'}</MenuItem>
+              {devicesEnabled && <MenuItem onClick={() => setNodePanelDismissed(!nodePanelDismissed)}>{nodePanelDismissed ? 'Show' : 'Hide'} device setup</MenuItem>}
+              <MenuDivider /><MenuItem as={RouterLink} to="/things?logs=1">Error logs</MenuItem>
+            </MenuList></Portal>
+          </Menu>
           <Menu placement="bottom-end">
             <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
               New
             </MenuButton>
             <Portal>
               <MenuList fontSize="13px" zIndex={10250}>
-                <MenuItem onClick={() => setNewFolderOpen(true)}>📁 New folder</MenuItem>
+                <MenuItem onClick={() => openNewFolder(folderId)}>📁 New folder</MenuItem>
                 <MenuItem as={RouterLink} to="/feed">
                   📝 New post
                 </MenuItem>
@@ -1706,7 +1735,7 @@ export const ThingsPage = () => {
           {/* folder tree sidebar (desktop, browse mode) */}
           {!isMobile && !searchMode && view !== 'columns' && (
             <Box flexShrink={0} paddingTop={1} width="220px">
-							<FolderTree currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} />
+							<FolderTree currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} onNewFolder={openNewFolder} />
             </Box>
           )}
 
@@ -1806,6 +1835,7 @@ export const ThingsPage = () => {
               ))}
 						{canPaintContent && view === 'columns' && !searchMode && (
               <ThingsColumnsView
+                onNewFolder={openNewFolder}
 								{...devicePresentation}
                 activeFolderAt={(depth) => columnsPath[depth + 1] ?? null}
                 displayMode={displayMode}

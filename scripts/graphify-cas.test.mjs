@@ -2,6 +2,8 @@ import assert from "node:assert/strict"
 import { execFileSync, spawn, spawnSync } from "node:child_process"
 import {
   existsSync,
+  chmodSync,
+  statSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -17,6 +19,7 @@ import test from "node:test"
 
 import {
   activateSnapshot,
+  copyPortableFiles,
   computeSourceFingerprint,
   finalizeSnapshot,
   hydrateSemanticCache,
@@ -783,6 +786,24 @@ test("a routed query holds its snapshot lock until the subprocess finishes", { t
     assert.equal(existsSync(lock), false)
   } finally {
     await stopLockWorkers(workers)
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+
+test("read-only snapshot copies are writable without changing the snapshot", () => {
+  const root = fixture()
+  try {
+    const source = writeOutput(root, "readonly", 1)
+    const report = path.join(source, "GRAPH_REPORT.md")
+    chmodSync(report, 0o444)
+    const working = path.join(root, "graphify-out", ".work", "next")
+    copyPortableFiles(source, working)
+    assert.equal(statSync(report).mode & 0o200, 0)
+    assert.equal(statSync(path.join(working, "GRAPH_REPORT.md")).mode & 0o200, 0o200)
+    writeFileSync(path.join(working, "GRAPH_REPORT.md"), "# refreshed\n")
+    assert.equal(readFileSync(report, "utf8"), "# readonly\n")
+  } finally {
     rmSync(root, { recursive: true, force: true })
   }
 })

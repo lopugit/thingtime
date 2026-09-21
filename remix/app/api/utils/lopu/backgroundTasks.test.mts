@@ -6,7 +6,9 @@ let chatAccessible = true;
 let user: any = { id: 'owner', accountKind: 'user', temporary: false };
 const match = (row: any, filter: any) =>
 	Object.entries(filter).every(([key, value]: any) => {
+		if (key === '$or') return value.some((part: any) => match(row, part));
 		const actual = key.split('.').reduce((r: any, part: string) => r?.[part], row);
+		if (value && typeof value === 'object' && '$ne' in value) return actual !== value.$ne;
 		if (value && typeof value === 'object' && '$lt' in value) return actual < value.$lt;
 		return Array.isArray(actual) ? actual.includes(value) : actual === value;
 	});
@@ -282,4 +284,20 @@ test('notes are persisted without cancelling an active task and recheck scope/me
  assert.equal((await stopBackgroundTask(note())).status, 404);
  assert.equal((await stopBackgroundTask(note('https://example.test', 'x'.repeat(8001)))).status, 400);
  } finally { release(); await Promise.all(pending); }
+});
+
+test('durable child claims execution before its handler begins and Stop cancels the root', async () => {
+ rows.push({shareId:'root',ownerId:'owner',thingtime:['lopu-background-task'],taskScope:'scope',crystal:{status:'needs-attention',workflowStatus:'running'}});
+ let calls=0;
+ const response=await startBackgroundTask(request('child',{chatId:'chat',requestId:'child',text:'Continue',management:'server'}), async () => {
+  calls++; assert.equal(rows.find(row=>row.crystal.requestId==='child').workerStarted,true);
+  return new Response('{"type":"done","stopReason":"checkpoint"}\n',{headers:{'Content-Type':'application/x-ndjson'}});
+ }, {user,scope:'scope',rootTaskId:'root',wait:true});
+ assert.equal(response.status,202); assert.equal(calls,1);
+ const child=rows.find(row=>row.crystal.requestId==='child');
+ // Stop's authenticated request scope must match the stored scope.
+ const {backgroundTaskScopeFor}=await import('./backgroundTaskScope');
+ const stopRequest=new Request('https://example.test/api/v1/lopu/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stop',id:child.shareId})});
+ const scope=await backgroundTaskScopeFor(stopRequest); rows[0].taskScope=scope; child.taskScope=scope;
+ assert.equal((await stopBackgroundTask(stopRequest)).status,200); assert.equal(rows[0].cancelRequested,true); assert.equal(child.cancelRequested,true);
 });

@@ -124,7 +124,7 @@ type MigrationDiagnostic = {
 
 type ThingViewData =
 	| { kind: 'diagnostic'; diagnostic: MigrationDiagnostic }
-	| { kind: 'thing'; thing: Record<string, any>; post: PublicPost | null; parent: PublicPost | null };
+	| { kind: 'thing'; thing: Record<string, any>; post: PublicPost | null; discussion?: PublicPost | null; parent: PublicPost | null };
 
 type ThingLoadState = {
 	key: string;
@@ -303,13 +303,14 @@ function GenericThingPage() {
 	// inspecting a Thing's exact shape. They are independent so either one (or
 	// both) can stay visible without another route or mode switch.
 	const [showPreview, setShowPreview] = React.useState(true);
-	const [showData, setShowData] = React.useState(true);
+	const [showData, setShowData] = React.useState(false);
 
 	// Hide prior-account data synchronously during the render that observes an
 	// identity change; the effect below then aborts the old request and refetches.
 	const visibleState: ThingLoadState = loadState.key === requestKey ? loadState : seedState(requestKey);
 
 	React.useLayoutEffect(() => {
+		setShowData(false);
 		window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
 	}, [requestKey]);
 
@@ -337,6 +338,7 @@ function GenericThingPage() {
 					kind: 'thing' as const,
 					thing: thingFromResponse(response),
 					post: response?.post ? mergeReactionOverlay(startedAt, response.post as PublicPost) : null,
+					discussion: response?.discussion ? mergeReactionOverlay(startedAt, response.discussion as PublicPost) : null,
 					parent: response?.parent ? mergeReactionOverlay(startedAt, response.parent as PublicPost) : null
 			  }));
 
@@ -817,7 +819,7 @@ function GenericThingPage() {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<SharedMediaProvider linkKey={thing?.audience?.linkKey || thing?.linkKey || linkKey} sharedRoot={thing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" sx={sections.preview ? { '& > :not([data-live])': { width: 'calc(100% - 32px)', maxWidth: '920px', marginInline: 'auto' } } : undefined} maxW={sections.preview ? undefined : "920px"} px={sections.preview ? 0 : { base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
+			<SharedMediaProvider linkKey={thing?.audience?.linkKey || thing?.linkKey || linkKey} sharedRoot={thing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" sx={sections.preview ? { '& > :not([data-preview-fullwidth="true"])': { width: 'calc(100% - 32px)', maxWidth: '920px', marginInline: 'auto' } } : undefined} maxW={sections.preview ? undefined : "920px"} px={sections.preview ? 0 : { base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box minW={0}>
 						<Text color={MUTED} fontFamily="mono" fontSize="10px" fontWeight="700" letterSpacing="0.12em" textTransform="uppercase">
@@ -980,8 +982,8 @@ function GenericThingPage() {
 								source={isThingOwner ? 'user' : 'system'}
 								onInstall={seeded && suiteKey ? onInstall : undefined}
 							>
-								<Box width="100%" minW={0} data-live={interactive ? 'true' : 'false'}>
-									<Flex align="center" justify="space-between" gap={3} mb={3} wrap="wrap">
+								<Box width="100%" minW={0} data-live={interactive ? 'true' : 'false'} data-preview-fullwidth={isWebpage ? 'true' : undefined}>
+									<Flex align="center" justify="space-between" gap={3} mb={3} wrap="wrap" width={isWebpage ? 'calc(100% - 32px)' : undefined} maxW={isWebpage ? '920px' : undefined} mx={isWebpage ? 'auto' : undefined}>
 										<Heading as="h2" fontSize="md">
 											{interactive && (isComponent || isWebpage) ? 'Live preview' : 'Rendered preview'}
 										</Heading>
@@ -1027,7 +1029,7 @@ function GenericThingPage() {
 						) : null}
 
 						{thing && isThingOwner && ['scheduled-task', 'reminder'].includes(thing.crystal?.type) ? <ScheduledTaskPanel key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} /> : null}
-						{thing && (!post || !sections.preview) ? <ThingComments thingId={thing.id} linkKey={linkKey} /> : null}
+						{thing && (!post || !sections.preview) ? <ThingComments thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
 
 						{diagnostic?.revealables.length ? (
 							<SensitiveThingReveal

@@ -1,3 +1,5 @@
+import { PostThingPicker } from './PostThingPicker';
+import { composePostThing, postThingDraft, postThingReferences, type PostThingReference } from './postThingReferences';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Input, Modal, ModalContent, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { PictureInPicture2, Plus, X } from 'lucide-react';
@@ -189,6 +191,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		isEdit && (editPost!.type === 'image' || (editPost!.images?.length ?? 0) > 0 || (editPost!.attachments?.length ?? 0) > 0)
   );
   const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
+  const [pickedThings, setPickedThings] = React.useState<PostThingReference[]>(() => postThingReferences(editPost?.thing));
   const [thingOn, setThingOn] = React.useState(isEdit && editPost!.type === 'thingtime');
   // Poll is the one EXCLUSIVE badge: a poll post's thing IS the poll, so it
   // owns the thing slot the other groups build into. Compose-only — an
@@ -344,7 +347,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
   // edit mode: the thing to seed the draft branch with, captured at mount so
   // the seed effect's deps stay constant
-  const editSeedRef = React.useRef(editPost?.thing || null);
+  const editSeedRef = React.useRef(postThingDraft(editPost?.thing));
 
 	// edit mode: the post's existing attachments, reorderable in place. Saving
 	// sends the full desired id list (this ordered set plus any new uploads)
@@ -510,7 +513,7 @@ export const PostComposer = (props: PostComposerProps) => {
       : type === 'image'
 			? hasReadyVisualAttachment
         : type === 'thingtime'
-			? draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing) && (!marketOn || listingValid)
+			? (pickedThings.length > 0 || (draftReady && Object.keys(draftThing).length > 0 && thingHasContent(draftThing))) && (!marketOn || listingValid)
 			: type === 'poll'
 				? text.trim().length > 0 && parsedPollOptions.length >= MIN_POLL_OPTIONS
 				: listingValid;
@@ -547,6 +550,7 @@ export const PostComposer = (props: PostComposerProps) => {
     setPhotosOn(false);
     setMarketOn(false);
     setThingOn(false);
+    setPickedThings([]);
     setPollOn(false);
     setPollOptions(['', '']);
     setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks('') });
@@ -610,7 +614,7 @@ export const PostComposer = (props: PostComposerProps) => {
 		// text stays empty for polls
 		const canonicalThing =
 			type === 'thingtime'
-				? draftThing
+				? composePostThing(draftReady && thingHasContent(draftThing) ? draftThing : null, pickedThings)
 				: type === 'poll'
 					? { kind: 'poll', question: submittedText, options: parsedPollOptions }
 					: null;
@@ -967,7 +971,7 @@ export const PostComposer = (props: PostComposerProps) => {
 						variant={thingOn ? 'solid' : 'ghost'}
 						borderRadius={RADIUS_SM}
 						aria-pressed={thingOn}
-						title="Build a structured thing into this post"
+						title="Attach existing Things or create a new structured Thing"
 						onClick={() => {
 							setPollOn(false);
 							setThingOn((on) => !on);
@@ -1056,7 +1060,8 @@ export const PostComposer = (props: PostComposerProps) => {
       (photos and listing field groups toggle on via the type badges above) */}
       {thingOn && (
         <Flex flexDirection="column" rowGap={2}>
-          <Eyebrow>Thing 📦</Eyebrow>
+          <Eyebrow>Things 📦</Eyebrow>
+          <PostThingPicker value={pickedThings} onChange={setPickedThings} />
 
           {/* tappable preview — the real editing happens in the bottom-sheet
           modal (nested comment composers can't host a full editor inline, and
@@ -1082,7 +1087,7 @@ export const PostComposer = (props: PostComposerProps) => {
               <ThingView thing={draftThing as Record<string, any>} compact />
             ) : (
               <Text fontSize="md" color={MUTED}>
-                Imagine.. 🌀
+                Create a new Thing (optional)
               </Text>
             )}
             <Text fontSize="10px" color={MUTED} paddingTop={2}>

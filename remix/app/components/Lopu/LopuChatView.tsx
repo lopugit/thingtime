@@ -4,7 +4,7 @@ import { useLopuCurrentPage } from './useLopuPages';
 import { useLopuContextProvider } from './useLopuChat';
 import { lopuPageReferences, type LopuPageReference } from '~/utils/lopuPageContext';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
-import { canContinueLopuReply, LOPU_CONTINUE_PROMPT } from './lopuRecovery';
+import { canContinueLopuReply } from './lopuRecovery';
 import React from 'react';
 import { Button, Box, Flex, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router';
@@ -277,7 +277,9 @@ const TurnBubble = ({
 	confirmBusy,
 	account,
 	admin,
-	onRetry
+	onRetry,
+ onContinue,
+ showContinue
 }: {
 	turn: LopuTurnState;
 	first: boolean;
@@ -293,6 +295,8 @@ const TurnBubble = ({
 	account: LopuAccount | null;
 	admin: boolean;
 	onRetry: (text: string) => void;
+ onContinue: () => void;
+ showContinue: boolean;
 }) => {
 	const streaming = turn.status === 'streaming';
 	const componentsByRef = React.useMemo(() => componentsFromTurn(turn), [turn]);
@@ -340,8 +344,8 @@ const TurnBubble = ({
 					Stopped
 				</Text>
 			) : null}
-			{turn.error ? <ErrorLine message={turn.error.message} /> : null}
-            {canContinueLopuReply(turn.status, turn.stopReason) ? <Button size="sm" variant="outline" mt={3} isDisabled={confirmBusy} onClick={() => onRetry(LOPU_CONTINUE_PROMPT)}>Retry / Continue</Button> : null}
+			{turn.error && !confirmBusy ? <ErrorLine message={turn.error.message} /> : null}
+            {showContinue && canContinueLopuReply(turn.status, turn.stopReason) ? <Button size="sm" variant="outline" mt={3} isDisabled={confirmBusy} onClick={onContinue}>Retry / Continue</Button> : null}
 		</LopuAssistantRow>
 	);
 };
@@ -356,7 +360,8 @@ const MessageBubble = React.memo(function MessageBubble({
 	compact,
 	modelLabels,
     onContinue,
-    busy
+    busy,
+ showContinue
 }: {
 	message: ChatMessage;
 	role: 'user' | 'assistant';
@@ -367,6 +372,7 @@ const MessageBubble = React.memo(function MessageBubble({
 	modelLabels: Record<string, string>;
     onContinue: () => void;
     busy: boolean;
+ showContinue: boolean;
 }) {
 	const meta = React.useMemo(() => lopuMessageMeta(message), [message]);
 	if (message.deleted) return null;
@@ -396,7 +402,7 @@ const MessageBubble = React.memo(function MessageBubble({
 				</Box>
 			) : null}
 			<LopuMarkdown text={message.text} compact={compact} />
-            {canContinueLopuReply(null, meta?.stopReason) ? <Button size="sm" variant="outline" mt={3} isDisabled={busy} onClick={onContinue}>Retry / Continue</Button> : null}
+            {showContinue && canContinueLopuReply(null, meta?.stopReason) ? <Button size="sm" variant="outline" mt={3} isDisabled={busy} onClick={onContinue}>Retry / Continue</Button> : null}
 		</LopuAssistantRow>
 	);
 });
@@ -580,7 +586,7 @@ export const LopuChatView = ({
  const noteChatRef = React.useRef(chat.chatId); noteChatRef.current = chat.chatId;
  React.useEffect(() => { setComposerError(null); setNoteSending(false); noteRetry.current = null; submittingRef.current = false; setSubmitting(false); }, [chat.viewer.id, chat.chatId]);
 	const submit = React.useCallback(
-		async (text: string, mode: 'send' | 'queue' = 'send') => {
+		async (text: string, mode: 'send' | 'queue' | 'server' | 'client' = 'send') => {
 			if (uploads.blocking || submittingRef.current) return;
    submittingRef.current = true; setSubmitting(true); setComposerError(null);
 			const ownerId = chat.viewer.id;
@@ -608,7 +614,7 @@ export const LopuChatView = ({
    try {
     const media = { attachmentIds: uploads.attachmentIds, attachments: uploads.attachments, thingIds: selectedThings.map(thing => thing.id), onAccepted };
     if (mode === 'queue') { chat.enqueue(text, media); onAccepted(); result = { ok: true, requestId: '', chatId: chat.chatId }; }
-    else result = await chat.send(text, undefined, media);
+    else result = await chat.send(text, mode === 'server' || mode === 'client' ? { management: mode } : undefined, media);
    } catch (error) { result = { ok: false, error: error instanceof Error ? error.message : 'Could not queue the message', text }; setComposerError(result.error); }
 			if (ownerRef.current !== ownerId || noteChatRef.current !== targetChatId) return result;
    if (!accepted) { submittingRef.current = false; setSubmitting(false); }
@@ -710,6 +716,7 @@ export const LopuChatView = ({
 					{row.item.kind === 'turn' ? (
 						<TurnBubble
 							turn={row.item.turn}
+ showContinue={!chat.sending && index === rows.length - 1}
 							first={row.first}
 							last={row.last}
 							compact={compact}
@@ -720,10 +727,11 @@ export const LopuChatView = ({
 							confirmBusy={confirmBusy}
 							account={chat.account.account}
 							admin={viewerIsAdmin}
-							onRetry={(text) => text === LOPU_CONTINUE_PROMPT ? chat.send(text) : send(text)}
+							onRetry={(text) => send(text)}
+ onContinue={() => { if (row.item.kind === 'turn') void chat.resume(row.item.turn.requestId); }}
 						/>
 					) : (
-						<MessageBubble message={row.item.message} role={row.role} first={row.first} last={row.last} compact={compact} modelLabels={chat.modelLabels} busy={chat.sending} onContinue={() => void chat.send(LOPU_CONTINUE_PROMPT)} />
+						<MessageBubble showContinue={!chat.sending && index === rows.length - 1} message={row.item.message} role={row.role} first={row.first} last={row.last} compact={compact} modelLabels={chat.modelLabels} busy={chat.sending} onContinue={() => { const requestId = row.item.kind === 'message' ? lopuMessageMeta(row.item.message)?.requestId : null; if (requestId) void chat.resume(requestId); }} />
 					)}
 				</Box>
 			</React.Fragment>
@@ -826,6 +834,7 @@ export const LopuChatView = ({
      <LopuMessageQueue items={chat.queue.items.filter(item => item.chatId === chat.chatId)} paused={chat.queue.paused} error={chat.queue.error} lockedIds={chat.queue.batch?.ids}/>
      {composerError ? <Text role="status" fontSize="sm" mb={2}>{composerError}</Text> : null}
 					<LopuComposer
+       onSendManaged={(text, management) => void submit(text, management)}
 						attachments={<><LopuPageAttachments owner={chat.viewer.id} current={currentPage} selected={selectedPages} onChange={setSelectedPages} disabled={submitting} /><LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} expanded={attachmentsExpanded} onExpandedChange={setAttachmentsExpanded} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={submitting} /></>}
 						onAttachFiles={files => { if (uploadsRef.current?.addFiles(files)) setAttachmentsExpanded(true); }}
 						value={draft}

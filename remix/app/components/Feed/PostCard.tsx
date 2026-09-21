@@ -1,3 +1,4 @@
+import { PostLinkedThings } from './PostLinkedThings';
 import { SharedMediaProvider, useSharedThingPath, useSharedAccess } from '~/components/Sharing/SharedMedia';
 import { audienceDescription, audienceOfAcl, sharePathForThing, aclForAudience } from '~/components/Sharing/audienceCore';
 import React from 'react';
@@ -216,6 +217,7 @@ export type PostCardProps = {
   onEngagement?: (event: EngagementEvent) => void;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
+  discussionOnly?: boolean;
 	// the /media/:id page projects a protected attachment Thing as this card:
 	// interactions stay live, but the owner menu drops edit/privacy/delete
 	// (title/description edit via annotate; lifecycle belongs to the parent post)
@@ -522,7 +524,7 @@ const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) =
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'id' | 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey'>;
+type PostBodyShape = Pick<PublicPost, 'id' | 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey' | 'linkedThings'>;
 
 const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'richText'>; compact?: boolean }) => {
   const richText = getEditorJsDoc(post.richText);
@@ -558,7 +560,7 @@ const PostBody = ({
     repeat the first photo). The thing mounts as the NATIVE Thingtime tree
     (sandboxed — see ThingView), rendered through its kind renderer when one
     resolves, with a corner icon flipping between the two views. */}
-    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} poll={poll} />}
+    {post.type === 'thingtime' && post.thing && <PostLinkedThings value={post.thing} linkedThings={post.linkedThings} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
     <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} postId={post.id} />
@@ -1397,7 +1399,7 @@ export const PostCard = React.memo(function PostCard(props: PostCardProps) {
 });
 
 function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing, gallery } = props;
+  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing, gallery, discussionOnly } = props;
 	const sharedPath = useSharedThingPath();
   const sharedAccess = useSharedAccess();
 	const permalinkPath = sharedPath(sharePathForThing(post));
@@ -1888,7 +1890,7 @@ function PostCardImpl(props: PostCardProps) {
   // meanwhile) is dropped; a refusal toasts and REVERTS the pick, so the menu
   // never claims an order the server page never delivered. Offered on
   // subspace posts only (media cards defer to their post).
-  const commentSortAvailable = !!post.subspace && !mediaThing;
+  const commentSortAvailable = (!!post.subspace || discussionOnly) && !mediaThing;
   const changeCommentSort = async (value: string | string[]) => {
     const next = Array.isArray(value) ? value[0] : value;
     if (!isCommentSort(next) || next === commentSort) return;
@@ -1899,8 +1901,8 @@ function PostCardImpl(props: PostCardProps) {
     const startedAt = Date.now();
     try {
       const resp = await api.v1.things.get({ id: post.id, commentSort: next, ...sharedAccess });
-      if (seq !== commentSortSeqRef.current || !resp?.post) return;
-      const fresh = resp.post as PublicPost;
+      if (seq !== commentSortSeqRef.current || !(resp?.post || resp?.discussion)) return;
+      const fresh = (resp.post || resp.discussion) as PublicPost;
       onChanged?.(post.id, (prev) => {
         const merged = mergeCommentPage(fresh.comments, prev.comments, freshComments.ref.current, startedAt);
         return { ...prev, comments: merged.comments, commentCount: fresh.commentCount + merged.unseen, commentCounts: fresh.commentCounts };
@@ -2144,6 +2146,8 @@ function PostCardImpl(props: PostCardProps) {
       padding={[4, 5]}
     >
       <Flex flexDirection="column" rowGap={3}>
+        {discussionOnly && <Text as="h2" fontWeight={700}>Comments</Text>}
+        {!discussionOnly && <>
         {/* header */}
         <Flex alignItems="center" columnGap={3}>
           <AuthorAvatar author={post.author} />
@@ -2180,6 +2184,7 @@ function PostCardImpl(props: PostCardProps) {
             archive={archiveTarget}
             onOpen={() => { if (isOwner || canModerate) void loadFlairs(); }}
             handlers={{
+                  rename: title => onChanged?.(post.id, prev => ({ ...prev, title })),
               edit: handleEditStart, delete: handleDelete, privacy: handleVisibilityChange,
               report: () => guestReport ? lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 }) : setReportOpen(true),
               remove: () => setRemoveOpen(true), moderate: handleModerate, flair: handleOwnFlair,
@@ -2376,6 +2381,7 @@ function PostCardImpl(props: PostCardProps) {
           <PostBody post={post} attachments={post.attachments} poll={pollContext} />
         )}
 
+        </>}
         {/* action row — icons + counts only (X-style, no labels); the merged
         react control sits right beside the comments icon (comment rows keep
         their IG-style right-aligned react columns) */}
@@ -2431,7 +2437,7 @@ function PostCardImpl(props: PostCardProps) {
           )}
 
           {/* repost: instant repost OR quote (caption + circle) */}
-			{!mediaThing && (user ? (
+			{!mediaThing && !discussionOnly && (user ? (
             <Box position="relative" display="flex">
               <Menu placement="top" autoSelect={false}>
 									<MenuButton as={ActionIcon} icon={<Repeat2 size={18} strokeWidth={2.2} />} count={post.shareCount} label="Repost" />

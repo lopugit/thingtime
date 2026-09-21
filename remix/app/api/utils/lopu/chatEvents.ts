@@ -89,7 +89,7 @@ export type LopuConfirmRequest = { key: string; token: string; expiresAt: string
 
 export type LopuChatEvent =
   | {
-      type: 'meta';
+      type: 'meta'; continuation?: boolean;
       chatId: string;
       userMessageId: string;
       requestId: string;
@@ -118,7 +118,7 @@ export type LopuChatEvent =
   | ({ type: 'confirm'; id: string; name: string } & LopuConfirmRequest)
   | { type: 'error'; message: string; retryable: boolean }
   | {
-      type: 'done';
+      type: 'done'; continuationSafe?: boolean;
       assistantMessageId: string;
       messages: PublicChatMessage[];
       usage?: LopuChatUsage;

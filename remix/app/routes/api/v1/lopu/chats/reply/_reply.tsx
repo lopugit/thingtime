@@ -1,3 +1,4 @@
+import { LOPU_CONTINUE_PROMPT, continuationRequestId, LOPU_RECOVERABLE_STOPS } from '~/api/utils/lopu/continuationCore';
 import { lopuPageReference, lopuPageReferences, LOPU_MAX_PAGE_REFERENCES } from '~/utils/lopuPageContext';
 import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
@@ -14,7 +15,7 @@ import type { LopuApprovedAction } from '~/api/utils/lopu/chatTools';
 import { parseLopuConfirmations, verifyLopuConfirmation, type LopuConfirmationInput } from '~/api/utils/lopu/confirmations';
 import { getUserVaultProvider, userVaultConfigured } from '~/api/utils/lopu/userVault';
 import { safeVaultId } from '~/api/utils/lopu/userVaultCore';
-import { createLopuNoteReader, createLopuChat, deleteLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
+import { readLopuContinuation, createLopuNoteReader, createLopuChat, deleteLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
 import type { PublicChatMessage } from '~/api/utils/messenger/messenger';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import type { AiWorkflowModelChoice } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
@@ -52,6 +53,9 @@ const HISTORY_TURNS = 40;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 type ReplyBody = {
+  management?: 'client' | 'server';
+  continueFromRequestId?: string;
+  automaticContinuation?: boolean;
   attachmentIds: string[];
   thingIds: string[];
   chatId: string | null;
@@ -131,7 +135,11 @@ const parseBody = (body: unknown): Validation => {
   let attachmentIds: string[], thingIds: string[];
   try { attachmentIds = lopuReferenceIds(body.attachmentIds); thingIds = lopuReferenceIds(body.thingIds); }
   catch (error) { return { ok: false, error: (error as Error).message }; }
-  const text = typeof body.text === 'string' ? body.text.trim() : '';
+  if (body.management !== undefined && body.management !== 'client' && body.management !== 'server') return { ok: false, error: 'management must be client or server.' };
+  const continuation = typeof body.continueFromRequestId === 'string' ? body.continueFromRequestId : undefined;
+  if (body.continueFromRequestId !== undefined && !continuation) return { ok: false, error: 'Invalid continuation request.' };
+  if (continuation !== undefined && (typeof continuation !== 'string' || !REQUEST_ID_PATTERN.test(continuation))) return { ok: false, error: 'Invalid continuation request.' };
+  const text = continuation ? LOPU_CONTINUE_PROMPT : typeof body.text === 'string' ? body.text.trim() : '';
   if (!text) return { ok: false, error: 'Say something first' };
   if (Array.from(text).length > MAX_TEXT_CHARS) return { ok: false, error: `Messages to Lopu cap at ${MAX_TEXT_CHARS} characters` };
   const requestId = typeof body.requestId === 'string' ? body.requestId.trim() : '';
@@ -158,11 +166,14 @@ const parseBody = (body: unknown): Validation => {
   if (context.ok === false) return context;
   const confirmations = parseLopuConfirmations(body.confirmations);
   if (confirmations.ok === false) return confirmations;
+  if (continuation && (attachmentIds.length || thingIds.length || confirmations.confirmations.length || context.context?.page?.blocks)) return { ok: false, error: 'Continuations use saved progress without attachments, confirmations or draft snapshots.' };
   if (confirmations.confirmations.length && !chatId) return { ok: false, error: 'Confirmations belong to an existing conversation — send its chatId' };
   return {
     ok: true,
     value: {
       attachmentIds, thingIds,
+      ...(body.management ? { management: body.management as 'client' | 'server' } : {}),
+      ...(continuation ? { continueFromRequestId: continuation, automaticContinuation: body.automaticContinuation === true } : {}),
       chatId,
       text,
       requestId,
@@ -224,6 +235,13 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   if (parsed.ok === false) return json({ ok: false, error: parsed.error }, { status: 400 });
   const input = parsed.value;
   const viewer = { id: user.id, username: user.username };
+  if (input.continueFromRequestId) {
+    if (!input.chatId) return json({ ok: false, error: 'A continuation requires its conversation.' }, { status: 400 });
+    const continuation = await readLopuContinuation(user.id, input.chatId, input.continueFromRequestId, input.automaticContinuation === true);
+    if (continuation.ok === false) return json({ ok: false, error: continuation.error }, { status: continuation.status });
+    const expectedRequestId = await continuationRequestId(input.chatId, input.continueFromRequestId);
+    if (input.requestId !== expectedRequestId) return json({ ok: false, error: 'Use the continuation request id for this saved checkpoint.' }, { status: 400 });
+  }
 
   // Reject inaccessible references before creating a conversation or reserving
   // a billed turn. Store stable links alongside the user's original prompt.
@@ -333,6 +351,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     if (!chatId) {
       const created = await createLopuChat(user.id, {
         title: titleFromMessage(input.text),
+        ...(input.management ? { management: input.management } : {}),
         ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {}),
         ...(providerExplicit && vaultProvider ? { providerId: vaultProvider.id } : {})
       });
@@ -344,7 +363,8 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
       // the turn itself already carries the resolved choice); an explicit
       // providerId (or null) does too, and a stored connection that no longer
       // resolves is cleared so the picker stops showing it
-      const patch: { model?: string; effort?: string | null; speed?: string; providerId?: string | null } = {};
+      const patch: { management?: 'client' | 'server'; model?: string; effort?: string | null; speed?: string; providerId?: string | null } = {};
+      if (input.management) patch.management = input.management;
       if (overrides && choice) Object.assign(patch, { model: choice.model, effort: choice.effort, speed: choice.speed });
       if (providerExplicit) patch.providerId = vaultProvider?.id ?? null;
       else if (clearStoredProvider) patch.providerId = null;
@@ -362,7 +382,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     };
     let userTurn: Awaited<ReturnType<typeof persistLopuUserTurn>>;
     try {
-      userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: linkedText, attachmentIds: input.attachmentIds, unread: execution.scheduled });
+      userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: linkedText, attachmentIds: input.attachmentIds, unread: execution.scheduled, continuation: !!input.continueFromRequestId });
     } catch (error) {
       await discardCreated();
       throw error;
@@ -388,7 +408,13 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     const stream = new ReadableStream({
       async start(controller) {
         let closed = false;
+        const pendingTools = new Set<string>();
+        let awaitingConfirmation = false;
         const send = (event: LopuChatEvent) => {
+          if (event.type === 'meta' && input.continueFromRequestId) event = { ...event, continuation: true };
+          if (event.type === 'tool_use' || event.type === 'tool_use_start') pendingTools.add(event.id);
+          if (event.type === 'tool_result') { pendingTools.delete(event.id); awaitingConfirmation ||= event.needsConfirmation === true; }
+          if (event.type === 'confirm') awaitingConfirmation = true;
           if (closed) return;
           try {
             controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
@@ -439,8 +465,9 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           if (leaseHeartbeat) clearInterval(leaseHeartbeat);
           // persist whatever streamed, even after an error or a disconnect
           const finished = outcome?.stopReason === 'checkpoint' || outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
-          const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);
           const stopReason = outcome?.stopReason || 'error';
+          const continuationSafe = !!outcome && !abort.signal.aborted && !pendingTools.size && !awaitingConfirmation && !(input.context?.page && !input.context.page.id) && LOPU_RECOVERABLE_STOPS.includes(stopReason);
+          const text = (finished || continuationSafe) && outcome?.text.trim() ? outcome.text : continuationSafe ? 'Progress saved.' : interruptedNote(outcome);
 
           // --- accounting (verified-access design note §2) ----------------------
           // price what the provider reported and record the turn; thingtime
@@ -491,6 +518,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
                 priced,
                 balanceMicros,
                 toolCalls: outcome?.toolCalls ?? [],
+                continuationSafe,
                 stopReason
               }
             });
@@ -503,7 +531,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           } catch (error: any) {
             console.error('[lopu] assistant turn persist threw:', error?.message || error);
           }
-          send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), billing, costMicros, priced, balanceMicros, stopReason });
+          send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), billing, costMicros, priced, balanceMicros, stopReason, continuationSafe });
           try {
             controller.close();
           } catch {

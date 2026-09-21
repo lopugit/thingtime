@@ -7830,3 +7830,46 @@ Local validation: http://localhost:18420/scripts/inherited-audience-preview.html
 in `thingtime-media-gallery-profile` (Vite 18420 / HMR 18421 / Nitro 18422).
 Tailscale/Funnel is unavailable because its installed launcher points to a
 missing `/Applications/Tailscale.app`; no public mapping was changed.
+
+
+## Continuity, Builder, navigation and Things regression checks (2026-09-21)
+
+- [ ] Choose each Lopu management mode from the send menu and settings; confirm
+      the choice survives reopening that chat. Close/reload at a safe checkpoint
+      or recoverable error: work resumes once without a synthetic prompt bubble.
+      Stop during execution and between parts; polling/reload must never restart
+      it. Pending confirmations, uncertain tool completion, unsaved page edits,
+      session revocation and account/data-source changes must fail closed.
+- [ ] On a physical iPhone, run two server chats and lock the device: exactly one
+      Live Activity changes from two active chats to one, then finishes. Verify
+      real APNs while suspended, user dismissal, disabled Live Activities,
+      signout/account/source switches and a simultaneous voice session. Simulator
+      lifecycle tests do not prove real lock-screen or APNs delivery.
+- [ ] Desktop and mobile: a single search icon opens Commander with page/recent
+      shortcuts, remote Things/people and `>` commands. Test keyboard navigation,
+      Escape, close/reopen, account switch and nested editor shortcuts. Admin is
+      directly below Dev for administrators and absent for other accounts.
+- [ ] Builder dashboard page/component cogs and floating editor cog expose
+      privacy, share, rename, private duplicate, clipboard and import/export.
+      Exercise dialogs and unsaved-change guards at desktop/mobile widths.
+      Public/page view routes and ordinary app pages have no floating Edit page
+      control; Builder has no Go to page button. Scroll through the footer.
+- [ ] Fresh notification preferences disable action-run push and email. Explicit
+      saved choices survive. Muted runs remain in notification history.
+- [ ] Anonymous crawler HTML for an unlisted post/page carries its specific
+      title/excerpt and card while retaining noindex; private/missing targets
+      remain generic. Download the actual PNG and check stored photo tiles.
+- [ ] Things: plain click opens; modifiers/checkboxes select. Explicit legacy
+      data folders browse and move with the normal owner/cycle fences. Every
+      root/nested tree and Miller column ends with New folder +. Open the page
+      cog and error log. Rename preserves original payload/permissions.
+- [ ] Thing data starts collapsed. Rendered null, false, zero and empty strings
+      remain distinct. Shared comments retain existing replies and ACLs and use
+      the same reactions/rich composer as posts. Attach multiple existing Things
+      through Commander search/folders with independent Data/Interactive modes;
+      recheck reader permission after revocation and after account switches.
+- [ ] Run focused continuity, native, Things, notification, navigation, webpage,
+      social-preview and capability suites; build and verify Vercel output and
+      both live capability manifests. Record baseline typecheck errors separately.
+- [ ] Graphify can refresh a read-only snapshot through a writable private copy
+      without mutating the snapshot; run `node --test scripts/graphify-cas.test.mjs`.

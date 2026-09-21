@@ -15,6 +15,9 @@ export const AI_TASK_OPERATIONS: Record<string, { method: string; label: string;
 export type AiTaskStatus = 'running' | 'completed' | 'needs-attention' | 'stopped';
 export type AiBackgroundTask = {
 	id: string;
+ management?: 'client' | 'server';
+ rootTaskId?: string | null;
+ workflowStatus?: AiTaskStatus | null;
 	requestId: string;
 	label: string;
 	path: string;

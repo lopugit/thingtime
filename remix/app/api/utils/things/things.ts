@@ -1,3 +1,5 @@
+import { isFolderThing, folderThingMatch } from '../../../schemas/folderThing';
+import { postThingReferences, type PostThingReference } from '../../../components/Feed/postThingReferences';
 import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
 import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
 import { ownerLibraryMatch } from './ownerLibraryQuery';
@@ -308,6 +310,7 @@ export type FeedAuthor = {
 // things), so the payload carries the post vocabulary: body fields, reactions,
 // and a reply count. Legacy-era comments surface with the text-only defaults.
 export type PublicComment = {
+  linkedThings?: Array<PostThingReference & { thing: PublicThing | null }>;
   id: string;
   thingtime: string[];
   author: FeedAuthor | null;
@@ -339,6 +342,7 @@ export type PublicComment = {
 };
 
 export type PublicPost = {
+  linkedThings?: Array<PostThingReference & { thing: PublicThing | null }>;
   audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
@@ -947,8 +951,12 @@ export const postThingMatch = async () => await legacyThingReadsRequired() ? { $
 // posts have no thingtime array, so a 'post' filter must also match kind:'post'.
 // Shared by listThings and things/search so the two never disagree on which
 // legacy posts exist (the single source the era semantics live behind).
-export const thingtimeInClause = async (thingtime: string[]) =>
-  thingtime.includes('post') && await legacyThingReadsRequired() ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] } : { thingtime: { $in: thingtime } };
+export const thingtimeInClause = async (thingtime: string[]) => {
+  const alternatives: Record<string, unknown>[] = [{ thingtime: { $in: thingtime } }];
+  if (thingtime.includes('post') && await legacyThingReadsRequired()) alternatives.push({ kind: 'post' });
+  if (thingtime.includes('folder')) alternatives.push(folderThingMatch());
+  return alternatives.length > 1 ? { $or: alternatives } : alternatives[0];
+};
 
 export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
@@ -1096,7 +1104,7 @@ const resolveFolderAssignment = async (
   const folder = (await things.findOne({
     shareId: rawFolderId.trim(),
     ownerId,
-    thingtime: 'folder'
+    ...folderThingMatch()
   } as any)) as any as ThingDoc | null;
   if (!folder) return fail(404, 'Folder not found');
   return { ok: true, folderId: folder.shareId };
@@ -1115,7 +1123,7 @@ const folderAncestryContains = async (ownerId: string, folderId: string, needleI
     if (visited.has(current)) return true; // existing cycle — fail closed
     visited.add(current);
     const doc = (await things.findOne(
-      { shareId: current, ownerId, thingtime: 'folder' } as any,
+      { shareId: current, ownerId, ...folderThingMatch() } as any,
       { projection: { folderId: 1 } } as any
     )) as any as ThingDoc | null;
     if (!doc) return false; // chain ends at root (or a since-deleted parent)
@@ -2348,6 +2356,19 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     // anonymous viewers skip the read entirely and get no viewerSaved field
     viewer?.id ? savedTargetIds(viewer, allDocs.map((doc) => doc.shareId)) : Promise.resolve(new Set<string>())
   ]);
+  const linkedIds = [...new Set([...allDocs, ...Array.from(related.commentsByTarget.values()).flatMap(entries => entries.flatMap(entry => entry.doc ? [entry.doc] : []))].flatMap(doc => postThingReferences(crystalOf(doc).thing).map(item => item.id)))];
+  const linkedLookup = batchedThingLookup();
+  const linkedDocs = await Promise.all(linkedIds.map(async id => {
+    const linked = await linkedLookup(id);
+    // Managed/account/chat payloads are never post embeds. References grant no
+    // new permission; each source is checked against its current audience.
+    if (!linked || isProtectedThingtime(thingtimeOf(linked)) || thingtimeOf(linked).some(kind => MESSENGER_THINGTIME.includes(kind as any))) return null;
+    return await canViewInherited(linked, withThingLink(viewer, id), linkedLookup) ? linked : null;
+  }));
+  const linkedPublic = await toPublicThings(linkedDocs.filter((doc): doc is ThingDoc => !!doc), viewer);
+  const linkedById = new Map(linkedPublic.map(thing => [thing.id, thing]));
+
+
 	const attachmentTargetIds = [
 		...allDocs.map((doc) => doc.shareId),
 		...Array.from(related.commentsByTarget.values()).flatMap((entries) => entries.flatMap((entry) => (entry.doc ? [entry.doc.shareId] : [])))
@@ -2457,6 +2478,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
         commentCrystal.thing && typeof commentCrystal.thing === 'object' && !Array.isArray(commentCrystal.thing)
           ? (commentCrystal.thing as Record<string, any>)
           : null,
+      ...(postThingReferences(commentCrystal.thing).length ? { linkedThings: postThingReferences(commentCrystal.thing).map(reference => ({ ...reference, thing: linkedById.get(reference.id) || null })) } : {}),
       tags: comment.doc?.tags || [],
       reactionCounts: reactionCountsOf(commentReactions),
       viewerReactions: viewerReactionsOf(commentReactions, viewerId),
@@ -2542,6 +2564,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 			mediaLayout: mediaLayoutOf(crystal),
       listing: redacted ? null : (crystal.listing as MarketplaceListing) || null,
       thing: !redacted && crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
+      ...(postThingReferences(crystal.thing).length ? { linkedThings: postThingReferences(crystal.thing).map(reference => ({ ...reference, thing: redacted ? null : linkedById.get(reference.id) || null })) } : {}),
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
@@ -3389,7 +3412,7 @@ export const getThing = async (
   shareId: unknown,
   app: AppLens = null,
   options: PostProjectionOptions = {}
-): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
+): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; discussion: (PublicPost & { sourceThingId: string }) | null; parent: PublicPost | null; root: PublicPost | null }> => {
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
@@ -3409,7 +3432,7 @@ export const getThing = async (
   // GET /api/v1/things?target=… inside their namespace instead.
   if (app) {
     await appShapeProjections(app, [doc], [thing]);
-    return { ok: true, thing, post: null, parent: null, root: null };
+    return { ok: true, thing, post: null, discussion: null, parent: null, root: null };
   }
 
   const isComment = thingtimeOf(doc).includes('comment');
@@ -3418,7 +3441,11 @@ export const getThing = async (
 	// aggregates (those resolvers are target-generic), and the parent walk
 	// links the page back to the post the media is bound to.
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
-	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, { ...options, resolveAudience: true }))[0] : null;
+	const projected = (await toPublicPosts([doc], viewer, { ...options, resolveAudience: true }))[0];
+	const post = isPostThing(doc) || isComment || isMediaAttachment ? projected : null;
+  // One stable discussion view per original Thing; no duplicate stored post,
+  // no writes on read, and all existing comments retain their target/ACL.
+  const discussion = post ? null : { ...projected, sourceThingId: doc.shareId };
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -3455,7 +3482,7 @@ export const getThing = async (
       root = last ? byId.get(last.shareId) || null : null;
     }
   }
-  return { ok: true, thing, post, parent, root };
+  return { ok: true, thing, post, discussion, parent, root };
 };
 
 export type ListThingsQuery = {
@@ -3571,7 +3598,7 @@ export const listThings = async (
   for (const thing of projected) if (thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive') {
     // Library entries are private root summaries, never history or stored
     // authority. Only the dedicated snapshot route returns archived people.
-    thing.crystal = { name: typeof thing.crystal.name === 'string' ? thing.crystal.name : 'Chat archive' };
+    thing.crystal = { name: typeof thing.crystal.name === 'string' ? thing.crystal.name : 'Chat archive', ...(typeof thing.crystal.title === 'string' ? { title: thing.crystal.title } : {}) };
     thing.acl = ['tt:user']; thing.visibility = 'private'; thing.extended = null; thing.tags = [];
     delete thing.linkKey; delete thing.tokenAcl;
   }
@@ -4164,6 +4191,8 @@ export const addComment = async (
     createdAt: new Date(doc.createdAt).toISOString()
   };
 
+  if (!app && postThingReferences(crystal.thing).length) comment.linkedThings = (await toPublicPosts([doc], viewer))[0].linkedThings;
+
   if (app) {
     // self-author shaped by the acting grant; count fenced to the namespace
     await appShapeProjections(app, [doc], [comment]);
@@ -4725,7 +4754,7 @@ export const deleteThing = async (
 				// deleting a folder never deletes what's inside it — contents (and
 				// subfolders) re-parent to the deleted folder's own parent, so the
 				// worst a folder delete can do to your things is flatten them one level
-				if (thingtimeOf(rootResult.doc).includes('folder')) {
+				if (isFolderThing(rootResult.doc)) {
 					await things.updateMany(
 						{ ownerId: viewer.id, folderId: rootResult.doc.shareId } as any,
 						{ $set: { folderId: rootResult.doc.folderId || null, updatedAt: new Date() } } as any
@@ -4984,7 +5013,7 @@ export const updateThing = async (
     if (isFail(assignment)) return assignment;
     if (
       assignment.folderId &&
-      thingtime.includes('folder') &&
+      isFolderThing(doc) &&
       (await folderAncestryContains(viewer.id, assignment.folderId, doc.shareId))
     ) {
       return fail(400, 'A folder cannot be moved into itself or its own subfolders');
@@ -5297,7 +5326,7 @@ const collectFolderTree = async (
     for (const child of children) {
       if (docs.length >= MAX_FOLDER_TREE_THINGS) return { docs, truncated: true };
       docs.push(child);
-      if (thingtimeOf(child).includes('folder') && !visitedFolders.has(child.shareId)) {
+      if (isFolderThing(child) && !visitedFolders.has(child.shareId)) {
         visitedFolders.add(child.shareId);
         nextFrontier.push(child.shareId);
       }
@@ -5414,7 +5443,7 @@ export const bulkThings = async (
       continue;
     }
     const thingtime = thingtimeOf(doc);
-    const isFolderDoc = thingtime.includes('folder');
+    const isFolderDoc = isFolderThing(doc);
 
     if (op === 'share') {
       const result = await updateThing(viewer, id, sharePatch);
@@ -5490,7 +5519,7 @@ export const bulkThings = async (
         skipped += 1;
       } else {
         copied += 1;
-        if (childKinds.includes('folder')) idMap.set(child.shareId, childCopy.doc.shareId);
+        if (isFolderThing(child)) idMap.set(child.shareId, childCopy.doc.shareId);
       }
     }
     results.push({ id, ok: true, newId: rootCopy.doc.shareId, copied, skipped });

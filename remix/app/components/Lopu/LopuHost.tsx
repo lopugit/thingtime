@@ -349,7 +349,7 @@ const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean; providerI
 // so the same controls land in both surfaces without duplicating the logic.
 export const LopuSettingsRows = (props: { renderRow: (label: string, control: React.ReactNode, hint?: string) => React.ReactNode }) => {
 	const { renderRow } = props;
-	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed, setSpokenReplies, setTranscribe, setDirectVoice, setDockMode, setAttachCurrentPage } =
+	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed, setSpokenReplies, setTranscribe, setDirectVoice, setDockMode, setAttachCurrentPage, setManagement } =
 		useLopuSettings();
 	const { catalog, hasCatalog } = useLopuModelCatalog(true);
 	const choice = resolveLopuModelChoice(catalog, settings);
@@ -375,6 +375,7 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 				'Float anywhere, or pin the chat to a viewport edge (double-click its header to toggle)'
 			)}
 			{renderRow('Dock behavior', <Select size="sm" aria-label="Dock behavior" value={settings.dockMode} onChange={event => setDockMode(event.target.value as 'overlay' | 'split')}><option value="overlay">Overlay</option><option value="split">Split</option></Select>, 'Split resizes the page beside Lopu; overlay draws over it')}
+			{renderRow('Vercel chat management', <Switch isChecked={settings.management === 'server'} onChange={event => setManagement(event.target.checked ? 'server' : 'client')} aria-label="Vercel chat management" />, 'Continue saved work on the server when this page closes. Turn off to manage continuation locally in an open page.')}
 			{renderRow('Attach current page', <Switch isChecked={settings.attachCurrentPage} onChange={event => setAttachCurrentPage(event.target.checked)} aria-label="Automatically attach the current page" />, 'Include the current page URL and open builder draft with each message')}
 			{renderRow(
 				'Apply builder changes live',

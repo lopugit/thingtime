@@ -1,3 +1,4 @@
+import { isFolderThing } from '../../schemas/folderThing';
 // Shared vocabulary for the /things page — types, display helpers, and the
 // localCache shape. Pure module (no React) so views/dialogs/tests can all
 // import it without dragging component code along.
@@ -82,7 +83,7 @@ export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-
 
 export const folderKeyOf = (folderId: string | null) => folderId || 'root';
 
-export const isFolder = (thing: Pick<ThingsThing, 'thingtime'>): boolean => thing.thingtime.includes('folder');
+export const isFolder = (thing: Pick<ThingsThing, 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): boolean => isFolderThing(thing);
 
 // Kinds the server refuses to copy (mirrors UNCOPYABLE in
 // api/utils/things/things.ts): attached children live under their target — a
@@ -118,7 +119,7 @@ const firstLine = (value: string, max = 80): string => {
 // about what the thing is instead of rendering an empty row.
 export const thingDisplayName = (thing: Pick<ThingsThing, 'thingtime' | 'crystal'>): string => {
   const crystal = thing.crystal || {};
-  for (const key of ['name', 'title']) {
+  for (const key of ['title', 'name']) {
     if (typeof crystal[key] === 'string' && crystal[key].trim()) return firstLine(crystal[key]);
   }
   if (typeof crystal.text === 'string' && crystal.text.trim()) return firstLine(crystal.text);
@@ -157,7 +158,7 @@ export const formatWhen = (iso: string): string => {
 // (folders open in place on /things); components, data and whatever kind
 // comes next land on the universal /thing/:id page. The /things?preview=
 // deep link stays the explicit quick-look, never the permalink.
-export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'>): string => {
+export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): string => {
   return thingPath(thing);
 };
 
@@ -172,7 +173,7 @@ export type ThingsReferrer = 'things' | 'actions' | 'feed';
 // hint the universal /thing/:id page reads for its back link. Only that page
 // consumes the hint, so dedicated pages (post/action/webpage/schema) and the
 // shareable permalink itself never carry it.
-export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'>, from: ThingsReferrer): string => {
+export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, from: ThingsReferrer): string => {
   const href = thingLink(thing);
   return href.startsWith('/thing/') ? `${href}${href.includes('?') ? '&' : '?'}from=${from}` : href;
 };
@@ -325,3 +326,10 @@ export const interpolateRenderTree = (
   };
   return walk(tree) as Record<string, unknown>;
 };
+
+// A title is shared metadata; keep an existing schema name in sync too.
+export const thingRenameCrystal = (thing: Pick<ThingsThing, 'crystal'>, title: string): Record<string, string> =>
+  ({ title, ...(typeof thing.crystal?.name === 'string' ? { name: title } : {}) });
+
+export const isManagedLibraryThing = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
+  thing.thingtime.length === 1 && ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(thing.thingtime[0]);

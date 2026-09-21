@@ -34,6 +34,7 @@ import {
 import { parseCommentSort } from '~/api/utils/things/updownCore';
 import { sharedThingRead } from './sharedThingRead';
 import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
+import { renameLibraryThing } from '~/api/utils/things/renameLibraryThing';
 import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
@@ -157,7 +158,7 @@ export const loader = async ({ request }: { request: Request }) => {
     // (post/parent/root are first-party projections — null under the app lens);
     // the response echoes the comment order it shipped (null = default)
     return json(
-      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root, commentSort: commentSort.sort },
+      { ok: true, thing: result.thing, post: result.post, discussion: result.discussion, parent: result.parent, root: result.root, commentSort: commentSort.sort },
       { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } }
     );
   }
@@ -361,6 +362,12 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'PATCH') {
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'displayTitle')) {
+      if (Object.keys(body).some(key => !['id', 'displayTitle', 'expectedUpdatedAt'].includes(key))) return json({ ok: false, error: 'Rename accepts only id, displayTitle and expectedUpdatedAt' }, { status: 400, headers: cors });
+      const result = await renameLibraryThing({ actorKind: actor.kind, accountKind: user.accountKind, ownerId: user.id,
+        sameOrigin: isSameOriginAttachmentRequest(request), id: body.id, title: body.displayTitle, expectedUpdatedAt: body.expectedUpdatedAt });
+      return json(result, { status: result.ok === false ? result.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+    }
     // Sync attachments before the document update so the projection the
     // client gets back already lists them in the new order — and so
     // updateThing's boundAttachmentPresence sees freshly added media when it

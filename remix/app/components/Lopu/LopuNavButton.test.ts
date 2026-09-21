@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { LOPU_NAV_BUTTON_LABEL } from './LopuNavButton';
 
 // 🦄 The navbar opener's wiring: mounted in Nav's right section right before
-// the ⌘K quick switcher (desktop + mobile), toggles the floating window
+// the mobile Commander search control, toggles the floating window
 // through the shared settings hook, hides itself on /lopu*, and carries the
 // shared streaming badge. Source-level checks (the lopuDrawerEntry.test.ts
 // style) so the contract holds without rendering the app shell in node.
@@ -15,21 +15,21 @@ import { LOPU_NAV_BUTTON_LABEL } from './LopuNavButton';
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (relative: string) => readFileSync(path.join(appDir, relative), 'utf8');
 
-test('Nav mounts the Lopu opener in the right section immediately before the ⌘K quick switcher', () => {
+test('Nav preserves the Lopu opener beside the unified mobile Commander control', () => {
 	const source = read('components/Nav/Nav.tsx');
 	assert.match(source, /import \{ LopuNavButton \} from '\.\.\/Lopu\/LopuNavButton';/);
 
 	const rightSectionAt = source.indexOf('className="nav-right-section"');
 	const buttonAt = source.indexOf('<LopuNavButton />');
-	const quickSwitcherAt = source.indexOf('className="nav-quick-switcher-button"');
+	const quickSwitcherAt = source.indexOf('aria-label="Open Commander search"', buttonAt);
 	assert.notEqual(rightSectionAt, -1);
 	assert.notEqual(buttonAt, -1);
 	assert.notEqual(quickSwitcherAt, -1);
 	assert.ok(buttonAt > rightSectionAt, 'the opener lives inside the right section');
-	assert.ok(buttonAt < quickSwitcherAt, 'the opener sits immediately before the ⌘K button');
+	assert.ok(buttonAt < quickSwitcherAt, 'the mobile search control follows the Lopu opener');
 	// nothing but a comment between the two: no other control slips in between
 	const between = source.slice(buttonAt + '<LopuNavButton />'.length, quickSwitcherAt);
-	assert.doesNotMatch(between, /<(Center|Box|Flex|Link|Icon)\b[^>]*>[\s\S]*?<\/(Center|Box|Flex|Link|Icon)>/, 'no other control between the opener and ⌘K');
+	assert.doesNotMatch(between, /<(Center|Box|Flex|Link|Icon)\b[^>]*>[\s\S]*?<\/(Center|Box|Flex|Link|Icon)>/, 'no other control between Lopu and mobile search');
 	// not wrapped in a mobile/desktop display gate: visible on both
 	const line = source.slice(source.lastIndexOf('\n', buttonAt), source.indexOf('\n', buttonAt));
 	assert.doesNotMatch(line, /isMobile/);
