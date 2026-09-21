@@ -10,6 +10,9 @@
   brightness, verify the real panel and next telemetry value, then restore it.
   A display without a usable setter stays unavailable. Existing pairings gain
   updated capabilities on a higher-revision heartbeat without being re-paired.
+- [ ] Adjust the brightness and volume sliders with arrow, Home/End and
+  PageUp/PageDown keys. Each change must send one remote command and reach the
+  observed device state; the thumb must not move without applying the change.
 - [ ] Open `/things?files=thingtime` and a device's Files drawer section at
   desktop and 390px widths. Exercise grid/list, name/type filters, sort, hidden
   files, long names, selection, context menus, folder navigation, and the
