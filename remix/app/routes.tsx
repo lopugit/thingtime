@@ -173,6 +173,8 @@ export const router = createBrowserRouter([
       { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
       // the demo library — a few hundred example sections/pages to preview and
       // copy into your own pages (catalog in schemas/webpageDemos)
+      { path: 'library', lazy: lazyRoute(() => import('./routes/library')) },
+      { path: 'library/:id', lazy: lazyRoute(() => import('./routes/library')) },
       { path: 'builder/demos', lazy: lazyRoute(() => import('./routes/builder-demos')) },
       // one demo / suite / app on its own page: preview + the LIVE version
       { path: 'builder/demos/:slug', lazy: lazyRoute(() => import('./routes/builder-demo-detail')) },

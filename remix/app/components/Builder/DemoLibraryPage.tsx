@@ -1,3 +1,4 @@
+import { siteDemoComponents, siteDemoActionNames, installSiteDemoAction, installSiteDemoDependencies } from './siteDemoRuntime';
 import React from 'react';
 import { Box, Button, Flex, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
@@ -9,7 +10,7 @@ import { materializeSuite, summarizeBehaviourSuite, type BehaviourSuite, type Ma
 // the REGISTRY module (not just the lookups): importing it registers the app
 // suites, so the gallery lists Pokeworld and StarsAlign on a cold load
 import { ALL_SUITES } from '~/schemas/appSuites/index';
-import { installSuite as installSuiteThings, installSuiteOnServer, suiteKeyFromActionKey } from './installSuite';
+import { installSuiteOnServer, suiteKeyFromActionKey } from './installSuite';
 import {
 	WEBPAGE_DEMO_FAMILIES,
 	countDemoBlocks,
@@ -327,27 +328,6 @@ export default function DemoLibraryPage() {
 	const [busyKey, setBusyKey] = React.useState<string | null>(null);
 	const [seeding, setSeeding] = React.useState(false);
 
-	// The post-install hand-off waits so the "installed ✨" toast is readable
-	// before the gallery navigates. That timer OUTLIVES this page if the viewer
-	// leaves inside the delay, and it would then pull them off whatever they
-	// opened next. Held in a ref so unmount cancels the pending hand-off.
-	const handoffRef = React.useRef<number | null>(null);
-	const scheduleHandoff = React.useCallback((run: () => void, delayMs: number) => {
-		if (handoffRef.current !== null) window.clearTimeout(handoffRef.current);
-		handoffRef.current = window.setTimeout(() => {
-			handoffRef.current = null;
-			run();
-		}, delayMs);
-	}, []);
-	React.useEffect(
-		() => () => {
-			if (handoffRef.current !== null) {
-				window.clearTimeout(handoffRef.current);
-				handoffRef.current = null;
-			}
-		},
-		[]
-	);
 
 	const setParam = (key: string, value: string) => {
 		const next = new URLSearchParams(searchParams);
@@ -409,9 +389,10 @@ export default function DemoLibraryPage() {
 		if (!requireUser('use a template')) return;
 		setBusyKey(demo.slug);
 		try {
+			const blocks = await installSiteDemoDependencies(demo.blocks);
 			const resp: any = await apiRef.current.v1.things.create({
 				thingtime: ['webpage'],
-				crystal: templateCrystalOf(demo, { seeded: seededState.seeded.has(demo.slug) }),
+				crystal: { ...templateCrystalOf(demo, { seeded: seededState.seeded.has(demo.slug) }), blocks },
 				acl: ['tt:user']
 			});
 			if (!resp?.ok) throw resp;
@@ -420,7 +401,7 @@ export default function DemoLibraryPage() {
 			setPreview(null);
 			navigate(`/builder?page=${encodeURIComponent(id)}`);
 		} catch (err: any) {
-			lopu({ title: err?.error || 'Couldn’t copy the template — try again 🌈', status: 'error' });
+			lopu({ title: err?.error || err?.message || 'Couldn’t copy the template — try again 🌈', status: 'error' });
 		} finally {
 			setBusyKey(null);
 		}
@@ -434,31 +415,10 @@ export default function DemoLibraryPage() {
 		if (!requireUser('install a suite')) return false;
 		setBusyKey(`suite:${suite.key}`);
 		try {
-			if (suite.app) {
-				// an APP: one idempotent server install (every page keeps its key),
-				// then the entry page — the same URL now serves the viewer's copy
-				const installed = await installSuiteOnServer(suite.key);
-				lopu({
-					title: `${suite.emoji} ${suite.title} installed ✨`,
-					description: `${installed.created} things created · ${installed.updated} refreshed — opening your copy at /p/${installed.entryPageKey}.`,
-					status: 'success',
-					duration: 8000
-				});
-				setPreview(null);
-				navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`);
-				return true;
-			}
-			const installed = await installSuiteThings((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: seededState.suites.has(suite.key) });
-			const bundle = materializeSuite(suite, 'own');
-			const pageId = installed.pageId;
-			lopu({
-				title: `${suite.emoji} ${suite.title} installed ✨`,
-				description: `${bundle.schemas.length} schemas · ${bundle.components.length} controls · ${bundle.actions.length} actions · ${bundle.data.length} data things · 1 page — tap a control to run your program.`,
-				status: 'success',
-				duration: 8000
-			});
+			const installed = await installSuiteOnServer(suite.key);
+			lopu({ title: `${suite.emoji} ${suite.title} installed ✨`, description: `${installed.created} things created · ${installed.updated} refreshed.`, status: 'success' });
 			setPreview(null);
-			navigate(`/p/${encodeURIComponent(pageId)}`);
+			navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`);
 			return true;
 		} catch (err: any) {
 			lopu({ title: err?.error || 'Couldn’t install the suite — try again 🌈', description: err?.error ? undefined : 'Some parts may have been created; check /things.', status: 'error' });
@@ -470,30 +430,17 @@ export default function DemoLibraryPage() {
 
 	// a control clicked in a suite preview: a signed-in viewer with no copy of
 	// the program gets the suite installed on the spot, the same click re-runs,
-	// and their own page opens — the modal's controls are never inert for them
+	// and keeps the result in the modal where they clicked
 	const onPreviewUnowned = React.useCallback(
 		async (action: string): Promise<boolean> => {
 			const key = suiteKeyFromActionKey(action, ALL_SUITES) || (preview?.kind === 'suite' ? preview.suite.key : null);
 			const suite = key ? ALL_SUITES.find((entry) => entry.key === key) : null;
 			if (!suite || !user?.id) return false;
-			if (suite.app) {
-				const installed = await installSuiteOnServer(suite.key);
-				lopu({ title: `${suite.emoji} ${suite.title} installed ✨`, description: `Opening your copy at /p/${installed.entryPageKey}.`, status: 'success', duration: 6000 });
-				scheduleHandoff(() => navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`), 800);
-				return true;
-			}
-			lopu({ title: `Installing the ${suite.emoji} ${suite.title} suite…`, description: 'Your own schemas, controls, actions, and sample data.', status: 'info', duration: 4000 });
-			const installed = await installSuiteThings((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: seededState.suites.has(suite.key) });
-			lopu({
-				title: `${suite.emoji} ${suite.title} installed ✨`,
-				description: 'Running your click now — your own copy of the page is one tap away.',
-				status: 'success',
-				duration: 8000,
-				link: { label: 'Open my page', href: `/p/${encodeURIComponent(installed.pageId)}` }
-			});
+			const installed = await installSuiteOnServer(suite.key, { onlyMissing: true });
+			lopu({ title: `${suite.emoji} ${suite.title} installed ✨`, description: 'Running your click now.', status: 'success', link: { label: 'Open my page', href: `/p/${encodeURIComponent(installed.entryPageKey)}` } });
 			return true;
 		},
-		[lopu, navigate, preview, scheduleHandoff, seededState.suites, user?.id]
+		[lopu, preview, user?.id]
 	);
 
 	// the `$install` pseudo-action a suite page may render (the runtime's
@@ -522,7 +469,7 @@ export default function DemoLibraryPage() {
 	const previewBlocks = preview ? (preview.kind === 'demo' ? preview.demo.blocks : (preview.materialized.page.crystal.blocks as DemoBlockList)) : [];
 	const previewBg = preview ? (preview.kind === 'demo' ? preview.demo.previewBg : String(preview.materialized.page.crystal.previewBg || '')) : '';
 	const previewComponents = React.useMemo(
-		() => (preview?.kind === 'suite' ? suiteComponentsByRef(preview.materialized) : libraryComponents),
+		() => (preview?.kind === 'suite' ? suiteComponentsByRef(preview.materialized) : { ...libraryComponents, ...siteDemoComponents }),
 		[preview, libraryComponents]
 	);
 	const previewSeeded = preview ? (preview.kind === 'demo' ? seededState.seeded.has(preview.demo.slug) : seededState.suites.has(preview.suite.key)) : false;
@@ -532,27 +479,26 @@ export default function DemoLibraryPage() {
 	// the runtime identity of the modal's render: the seeded copy's when it
 	// exists on this deployment, else a catalog: id (see demoDetail.ts)
 	const previewRuntime = runtimeIdentityFor({ pageKey: previewPageKey, shareId: previewSeededId }, previewSeeded);
-	const previewActionNames = React.useMemo(() => (preview?.kind === 'suite' ? suiteActionNames(preview.materialized) : {}), [preview]);
+	const previewActionNames = React.useMemo(() => (preview?.kind === 'suite' ? suiteActionNames(preview.materialized) : siteDemoActionNames), [preview]);
 	// the catalog-side run confirmation: the first press of each control
 	// names what will run before anything executes (ActionRunConfirm)
 	const { confirm: previewConfirm, dialog: previewConfirmDialog } = useActionRunConfirm({
 		resolveActionName: (action) => previewActionNames[action] || null
 	});
-	// `confirm` is not a WebpageBlocksRenderer prop yet — it is threaded here
-	// so the gate arms the moment the renderer forwards it to ComponentBlockView
-	// (useTtActionClicks already accepts it); until then the dialog stays idle
+	// Every component control receives the catalog confirmation gate.
 	const previewRendererProps: WebpageBlocksRendererProps & { confirm: typeof previewConfirm } = {
 		blocks: previewBlocks as WebpageBlock[],
 		componentsByRef: previewComponents,
 		// platform-curated → live for any signed-in viewer (see the header note)
-		interactive: !!user?.id,
-		onTtActionUnowned: preview?.kind === 'suite' ? onPreviewUnowned : undefined,
+		interactive: true,
+		onTtActionUnowned: preview?.kind === 'suite' ? onPreviewUnowned : installSiteDemoAction,
 		confirm: previewConfirm
 	};
 	const notSeeded = seededState.total + ALL_SUITES.length - seededState.seededCount - seededState.suites.size;
 
 	return (
 		<PageShell width={1280}>
+      <Button as={Link} to="/library" alignSelf="flex-start" size="sm" variant="outline">🔌 500 integrations · libraries & APIs</Button>
 			<PageHeader
 				eyebrow="Thingtime · builder"
 				title="Demo library 🧱✨"

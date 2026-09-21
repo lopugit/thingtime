@@ -1221,6 +1221,15 @@ for the catalog size — tranche 2 grew it to 70 archetypes / 350 families /
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
 
+Admins can also publish a catalog from `/components` → **Import component
+catalog**. Choose a JSON array of component definitions (or an object with a
+`components` array), review the validated count, then select **Publish catalog**.
+This uses the signed-in session, so no password file is needed. Files are capped
+at 32 MiB / 5,000 definitions. Batches respect the API's count, body-size and
+rate limits; stopping or retrying preserves completed work without duplicating
+components. The selected origin must advertise `api.admin-components-seed`
+1.0.0 and `api.webpages-suites-install` 1.1.0 or compatible versions.
+
 ```sh
 # 1. Start the dev stack and register a throwaway user, then restart with
 #    that user on the admin allowlist:
@@ -3815,3 +3824,98 @@ Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
 `14872`; docs `http://localhost:14870/docs/builder`. Tailscale/Funnel was unavailable
 on 2026-09-18 because the installed CLI shim referenced a missing application
 binary. Other worktrees derive their own ports via `npm run web-ports`.
+
+
+### Functional component and webpage demos
+
+The demo catalog uses native inputs and owner-scoped Actions. Newsletter/contact
+forms, site requests, and component records save private Things. They do not
+send email, charge cards, book services, or control devices. To add an external
+effect, create an integration Action in your account, configure its credentials
+through the normal connection settings, and bind the copied component to that
+Action. Never put credentials in component arguments or template JSON.
+
+`site-forms` and `catalog-records` are installed through
+`POST /api/v1/webpages/suites/install`; clients require
+`api.webpages-suites-install >= 1.1.0` from the selected origin's manifest.
+Copying a site demo installs missing form dependencies first without replacing customized Actions. Installed pages bind their owner’s concrete component ids. Existing installations
+can be refreshed with the suite's Install button; saved records remain intact.
+A fork needs the ordinary database/session setup described above. No external
+service key is needed for private demo records. Admins refresh system demos via
+`POST /api/v1/admin/webpages/seed-demos` after deploying the updated catalog.
+
+The declarative `$ui` binding changes bounded scalar state only in its current
+component instance (`set`, `toggle`, `increment`, `cycle`, `reset`), copies text,
+or opens Thingtime search. It cannot call arbitrary JavaScript or replace the
+runtime's viewer, query, source result, or account authority. `$ui` fields remain
+controlled so Reset and adjacent buttons also update visible inputs. Ordinary
+Action fields retain native editing and validation; Enter submits their group.
+
+Local regression fixture: `/tests/functional-demos.html` on a Vite development
+server. Verify two-instance isolation, parent renders, typed values, checkboxes,
+range/counter synchronization, reset, native disclosures, and mobile overflow.
+Native `tt-dialog` controls use browser-managed modal focus and Escape dismissal;
+`tt-countdown` accepts a bounded seconds value and provides Start/Pause/Reset.
+They run only on interactive surfaces and never execute authored JavaScript.
+## Remote integration runtime
+
+Curated integration examples use `remix/app/library/catalog.ts` and the fixed
+provider request registry in `apis.ts`. The runtime is delivered before the
+catalogue; an empty registry intentionally offers no executable examples.
+Only registry IDs and JSON inputs can enter the `IntegrationExample` component.
+Arbitrary persisted JavaScript, package URLs, and credentials are not accepted.
+
+`corepack pnpm --dir remix run build:client` builds the application, the isolated
+`/library/runner.js`, and the embed bundle. The normal dev command builds and
+watches the isolated runner too. Custom deployments must serve
+`/library/sandbox.html` with `librarySandboxCsp` from `remix/scripts/csp.mjs`;
+the Vercel build and Vite middleware apply it automatically. Do not apply the
+sandbox policy to the main application shell.
+
+Remote packages load from pinned esm.sh URLs only on Run. Pure transformations
+run in terminable workers; visual packages run in an opaque-origin sandbox.
+The frames cannot access Thingtime cookies or storage. Keyless APIs must allow
+browser CORS; provider outages and rate limits remain visible errors.
+
+Credentialed examples require the fork's normal account/session and MongoDB
+rate-limit setup. No shared provider secret or new deployment environment
+variable is required: each visitor enters their own key in the open component.
+Keys remain in component memory, travel over HTTPS to the authenticated
+`POST /api/v1/library/request`, and are forwarded only to a registered provider
+using a read-only GET with redirects disabled. Keys and live results are never
+saved in copied Things. Account changes and unmounting discard key state; the
+Clear button removes it immediately. Use provider-scoped keys; Stripe examples
+accept test-mode keys only. Fork operators must preserve request-body privacy
+in their own reverse proxies and observability tools.
+
+Clients negotiate `api.library-request` 1.0.0 against the selected origin before
+credentialed requests. The endpoint is bounded to 20 requests/minute/account,
+24 KiB request bodies, 16 KiB inputs, 256 KiB upstream responses and a 12-second
+upstream timeout. Run `corepack pnpm --dir remix run test:library` for boundaries,
+credential redaction, reusable Thing validation and capability coverage.
+
+### The 500-example integration library
+
+Browse `/library` for 500 executable recipes across 42 libraries/services: 380
+transformation actions, 45 visual components and 75 API Things. There are 468
+credential-free examples and 32 examples with provider-specific API-key entry.
+Search, category/provider/type/access filters and pagination keep the catalogue
+small on screen; selecting a card shows editable inputs, live output, source and
+links to official docs. Browsing performs no integration-provider requests.
+
+Save a private copy to create sample data, an input-preparation Action Thing and
+a runnable Component Thing. Add `IntegrationExample` to builder markup with a
+curated `exampleId` and optional `inputJson`; it never accepts code or keys in
+markup. Preparation actions return inputs; remote execution occurs when Run is
+pressed in the component. Keys are entered separately for each open demo.
+
+API capability `api.library-request` 1.1.0 adds the curated credentialed provider
+registry. Each provider's account link explains its key and access requirements.
+Credentialed examples use only read-only GETs; Stripe is test-mode only. Real
+account authorization/quota behavior requires the visitor's own valid key.
+
+For browser acceptance, open `/scripts/library-browser-check.html` on the Vite
+dev server and press **Run all public examples**. The harness executes only
+credential-free catalogue defaults, four at a time, through the actual isolated
+runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
+is not copied into production static assets. Provider outages can change results.

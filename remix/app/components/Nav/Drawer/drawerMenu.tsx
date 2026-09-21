@@ -152,6 +152,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'legal-pages', label: 'Legal policies & terms', icon: '⚖️', to: '/legal' },
 			{ id: 'builder-pages', label: 'My pages', icon: '📄', to: '/builder' },
+			{ id: 'builder-library', label: 'Integration library', icon: '🔌', to: '/library' },
 			{ id: 'builder-components', label: 'Components', icon: '🧩', to: '/components' },
 			{ id: 'builder-actions', label: 'Actions', icon: '⚡', to: '/actions' },
 			{ id: 'builder-design-system', label: 'Design system', icon: '🎨', to: '/docs/design-system' }
