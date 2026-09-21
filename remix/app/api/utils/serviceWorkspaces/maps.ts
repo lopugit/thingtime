@@ -1,3 +1,4 @@
+import { GooglePlacesError, requestGooglePlaces } from './googlePlaces';
 import { getThing, updateThing } from '../things/things';
 import type { PublicUser } from '../auth/users';
 import { listUserVault, revealUserVaultValue } from '../lopu/userVault';
@@ -26,37 +27,10 @@ export async function workspaceMapKeys(access: WorkspaceAccess, includePlaces = 
 }
 async function googlePlaces(key: string, path: string, fields: string, body?: unknown) {
 	try {
-		const response = await fetch(`https://places.googleapis.com/v1/${path}`, {
-			method: body ? 'POST' : 'GET',
-			redirect: 'error',
-			signal: AbortSignal.timeout(8000),
-			headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': fields },
-			...(body ? { body: JSON.stringify(body) } : {})
-		});
-		if (!response.ok) {
-			await response.body?.cancel();
-			throw new Error('Provider rejected request');
-		}
-		const reader = response.body?.getReader();
-		if (!reader) throw new Error('Empty provider response');
-		const chunks: Uint8Array[] = [];
-		let size = 0;
-		while (true) {
-			const next = await reader.read();
-			if (next.done) break;
-			size += next.value.length;
-			if (size > 128 * 1024) {
-				await reader.cancel();
-				throw new Error('Response too large');
-			}
-			chunks.push(next.value);
-		}
-		return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-	} catch {
-		throw new WorkspaceError(
-			502,
-			'Google Places could not complete this request. Check Places API (New), billing, quota and API key restrictions in your Google project.'
-		);
+		return await requestGooglePlaces(key, path, fields, body);
+	} catch (error) {
+		if (error instanceof GooglePlacesError) throw new WorkspaceError(error.status, error.message);
+		throw error;
 	}
 }
 export async function searchWorkspaceAddresses(user: PublicUser, input: any) {
@@ -108,7 +82,7 @@ export async function configureWorkspaceMaps(user: PublicUser, input: any) {
 	const updated = await updateThing(
 		user.id,
 		access.rootId,
-		{ extended: { ...(root.thing.extended as Record<string, unknown> || {}), serviceWorkspace: config } },
+		{ extended: { ...((root.thing.extended as Record<string, unknown>) || {}), serviceWorkspace: config } },
 		{ expectedUpdatedAt: root.thing.updatedAt }
 	);
 	if (!updated.ok) throw new WorkspaceError(409, 'Workspace changed. Refresh before configuring Maps.');

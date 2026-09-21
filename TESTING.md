@@ -8072,6 +8072,14 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   and announces completion without affecting another instance. Repeat at phone
   width; drawers are flush to the left/top/bottom and keep the close control usable.
 
+- Service workspace production regressions: save an uploaded image, reload the
+  record, and verify the gallery plus thumbnail/banner actions. After saving,
+  the upload tray must clear and the next Before/After batch must be independent.
+  A revoked member and unrelated account must not read comment media metadata;
+  blocked and wrong-owner attachments stay absent. A Google Places configuration
+  rejection must show specific safe setup guidance; gateway HTML must show a
+  retry message rather than a JSON parser exception. Run test:service-workspaces
+  and the isolated test-service-workspace-local.ts smoke.
 - Integration builder mobile header: with a long display name at 320px/390px,
   account text truncates without covering Commander or neighboring controls;
   the full name remains available to assistive technology and on hover.
@@ -8092,3 +8100,5 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
 - Clear/reset/cancel, changing account and unmounting dispose SDK frames. A saved Thing contains only the catalogue ID and ordinary inputs; credentials/results never persist. A second demo's input/key state remains independent.
 - REST Places text/nearby searches send a catalogue-selected POST with bounded fixed fields and masks; arbitrary caller URL/method/body/header choices cannot change that transport. GET providers retain their existing behavior and key redaction. Verify anonymous 401, unknown example 400, and origin capability 1.2.0.
 - Re-run the integration-only admin seed. Existing authored copies remain unchanged; the index lists 51 services and all 540 examples resolve to schema-valid component and individual page Things.
+
+- Upcoming visits: completing a future-dated visit removes it from the dashboard upcoming list while keeping it in the planner and property visit history. Cancelled and archived visits also remain absent from upcoming visits.
