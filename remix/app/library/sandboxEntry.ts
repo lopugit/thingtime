@@ -16,7 +16,7 @@ addEventListener('message', async (event) => {
 			const child = document.createElement('iframe');
 			child.title = 'Isolated remote example';
 			child.sandbox.add('allow-scripts');
-			child.style.cssText = 'display:block;width:100%;height:340px;border:0';
+			child.style.cssText = 'display:block;width:100%;height:100vh;border:0';
 			addEventListener('message', (message) => {
 				if (
 					message.source === child.contentWindow &&
