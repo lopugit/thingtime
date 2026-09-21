@@ -42,12 +42,27 @@ See [the contract](../docs/remote-files.md) for compatibility and exact limits.
    requirement used by the installed embedded helper. Installation and protected
    runtime operations must be verified against the final compatible web rollout.
 
-The local QA account has no paired devices and no private upload entitlement.
+The initial browser QA account has no paired devices and no private upload entitlement.
 Its upload rejection is an authorization test, not proof of a real S3 transfer.
 The synthetic relay proves browser interactions; actual filesystem byte/hash
 and failure behavior is covered by temporary-directory native tests, and command
 leasing/reporting/result isolation is covered through the real server service
 with a test collection. Live paired-device and production checks are separate.
+
+7. After integrating main, 278 Things, 272 attachment, 75 capability and 76
+   device tests passed; the full web build passed and the typecheck ratchet
+   returned to its 89-error baseline. The merged mobile header and file page
+   were inspected again in Chrome.
+8. Real local HTTP/native/storage round-trip: an isolated fixture account
+   paired a test node via the signed pairing proof, leased bounded reads,
+   executed the release-built Swift `RemoteFilesystem` in a disposable folder,
+   uploaded the returned bytes as a durable `file` attachment into local object
+   storage, placed it in a Thingtime folder, downloaded it through the owner
+   content gate, and wrote it back via leased native chunks. SHA-256 matched at
+   every boundary. Native move, recoverable Trash, original retention, history
+   redaction and anonymous content denial passed. Test file cleanup completed.
+   This tests the real HTTP services and native filesystem; it does not claim
+   a production S3 or installed-helper transfer.
 
 ## Rollout
 
