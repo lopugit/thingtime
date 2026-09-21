@@ -38,6 +38,8 @@ import { ServicePlanner } from './ServicePlanner';
 import { ServiceMap } from './ServiceMaps';
 import { ServiceMedia } from './ServiceMedia';
 import { serviceWorkspaceStyles } from './serviceWorkspaceStyles';
+import { serviceWorkspaceContexts, serviceContextText } from '~/schemas/serviceWorkspaceContext';
+import { ServiceJobContext } from './ServiceJobContext';
 
 type Section = 'overview' | 'planner' | 'map' | 'setup' | 'trash' | ServiceKind;
 const NAV = [
@@ -128,6 +130,8 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 	}, [refresh]);
 	const canEdit = !!data && isServiceStaff(data.role);
 	const records = data?.records || [];
+	const contexts = React.useMemo(() => serviceWorkspaceContexts(data?.records || [], data?.team), [data?.records, data?.team]);
+	const context = (record: ServiceRecord) => <ServiceJobContext context={contexts.get(record.id)} job={record.kind === 'job'} />;
 	const active = records.filter((r) => !r.values.archived);
 	const selected = records.find((r) => r.id === selectedId);
 	const recordById = (id: string) => records.find((r) => r.id === id);
@@ -175,7 +179,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 		const v = record.values;
 		if (record.kind === 'customer') return [v.contact, v.email || v.phone].filter(Boolean).join(' · ');
 		if (record.kind === 'address') return v.address;
-		if (record.kind === 'job') return recordById(v.addressId)?.values.title || '';
+		if (record.kind === 'job') return v.estimatedMinutes ? `${v.estimatedMinutes} min estimated` : 'Job template';
 		if (record.kind === 'visit') return [v.date, v.time, v.status].filter(Boolean).join(' · ');
 		if (record.kind === 'equipment') return [v.category, v.serialNumber].filter(Boolean).join(' · ');
 		if (record.kind === 'member') return v.role;
@@ -218,6 +222,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 							<span>
 								<strong>{serviceTitle(record)}</strong>
 								<small>{subtitle(record)}</small>
+								{context(record)}
 								{record.values.archived && <span className="sw-badge">Deleted</span>}
 							</span>
 						</button>
@@ -289,7 +294,9 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 		items.filter(
 			(r) =>
 				(trash || section === 'trash' ? !!r.values.archived : !r.values.archived) &&
-				`${serviceTitle(r)} ${subtitle(r)} ${r.values.description || ''}`.toLowerCase().includes(query.toLowerCase())
+				`${serviceTitle(r)} ${subtitle(r)} ${serviceContextText(contexts.get(r.id))} ${r.values.description || ''}`
+					.toLowerCase()
+					.includes(query.toLowerCase())
 		);
 	const pageTitle = selected ? serviceTitle(selected) : NAV.find((n) => n.id === section)?.label || SERVICE_LABELS[section as ServiceKind];
 	const relationButtons = selected
@@ -392,6 +399,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 							</p>
 						)}
 						<section className="sw-panel sw-detail-summary">
+							{context(selected)}
 							<div className="sw-detail-fields">
 								{SERVICE_FIELDS[selected.kind]
 									.filter(
@@ -609,6 +617,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 						report={report}
 						timeZone={data.timeZone}
 						menu={menu}
+						context={context}
 					/>
 				) : section === 'setup' ? (
 					<section className="sw-panel sw-setup">

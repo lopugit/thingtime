@@ -11,7 +11,8 @@ export function ServicePlanner({
 	refresh,
 	report,
 	timeZone,
-	menu
+	menu,
+	context
 }: {
 	rootId: string;
 	records: ServiceRecord[];
@@ -22,6 +23,7 @@ export function ServicePlanner({
 	report: (error: unknown) => void;
 	timeZone: string;
 	menu: (record: ServiceRecord) => React.ReactNode;
+	context: (record: ServiceRecord) => React.ReactNode;
 }) {
 	const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 	const [date, setDate] = React.useState(today);
@@ -147,7 +149,8 @@ export function ServicePlanner({
 									<button className="sw-card-open" onClick={() => open(visit.id)}>
 										<span className="sw-badge">{visit.values.status || 'Scheduled'}</span>
 										<strong>{serviceTitle(visit)}</strong>
-										<span>{visit.values.time || 'Time to be set'}</span>
+										<span className="sw-visit-time">{visit.values.time || 'Time to be set'}</span>
+										{context(visit)}
 									</button>
 									{menu(visit)}
 									{canEdit && (

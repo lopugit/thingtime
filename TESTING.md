@@ -28,6 +28,11 @@
 
 ## Service workspace and Vault environments
 
+- [ ] Dashboard, planner, job cards and visit histories show the property street
+  address, linked customers and assigned crew. Check multiple linked customers,
+  unassigned visits, moved jobs and narrow screens. Customer/B2B views must not
+  disclose another customer's name, hidden staff names or raw record IDs.
+
 - [ ] Verify Maps under production CSP: the SDK loads and renders/clicks markers
   with a restricted key, without inline-script or eval exceptions. Check the
   Google SDK/service hosts remain explicit and no wildcard script host is added.

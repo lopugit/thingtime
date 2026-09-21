@@ -327,6 +327,38 @@ export const serviceWorkspaceStyles = `
 	overflow: hidden;
 	color: #6e7447;
 }
+.sw-job-context {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	margin-top: 8px;
+	min-width: 0;
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 1.5;
+	color: var(--sw-muted);
+}
+.sw-context-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	min-width: 0;
+}
+.sw-context-row svg {
+	flex: 0 0 14px;
+	margin-top: 2px;
+}
+.sw-context-row > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.sw-detail-summary > .sw-job-context {
+	margin: 0 0 20px;
+	font-size: 14px;
+}
+.sw-card-open .sw-job-context {
+	font-size: 11px;
+}
 .sw-avatar-address,
 .sw-avatar-equipment {
 	border-radius: 10px;
@@ -567,7 +599,7 @@ export const serviceWorkspaceStyles = `
 	overflow-wrap: anywhere;
 	font-size: 12px;
 }
-.sw-card-open > span:last-child {
+.sw-card-open > .sw-visit-time {
 	font-weight: 400;
 	color: var(--sw-muted);
 }
