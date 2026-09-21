@@ -55,7 +55,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Thingtime files and bounded remote copy/cut/paste. Preserve originals on
   failed transfers and keep file bytes out of device history/events. Verified
   real brightness round-trip, repeated native/web tests, a full web build and
-  desktop/mobile browser states. [Contract](../docs/remote-files.md).
+  desktop/mobile browser states. [QA and rollout](../PRs/878-codex-remote-device-files-fix-brightness-and-shared-file-browser.md).
 
 - 2026-09-21 — **Codex (AI)**: Added an admin catalog importer on `/components`
   with whole-file schema validation, capability negotiation, bounded paced
