@@ -49,6 +49,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21 — **Codex (AI)**: Keep mobile sign-in hints above the floating
+  assistant and DevKit buttons, with bounded scrolling for short viewports.
+  Verified while testing the remote integration catalogue preview.
+
 - 2026-09-21 — **Codex (AI)**: Enable 500 remote integration examples across 42
   libraries/services with searchable `/library` pages, editable demos, source,
   provider account/key entry and private reusable Things. The catalogue extends
