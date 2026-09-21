@@ -95,7 +95,7 @@ console.log(`\n▶ verify-demo-apps against ${base}`);
 	} else console.log(`  · seed skipped (status ${seeded.status}) — set TT_VERIFY_ADMIN_USER/PASS to seed`);
 	const demos = await api('GET', '/api/v1/webpages/demos');
 	const suites = demos.data?.suites || [];
-	for (const key of ['dusted', 'thingmon']) check(`demos lists the ${key} app`, suites.some((suite) => suite.key === key && suite.app), suites.map((suite) => suite.key));
+	for (const key of ['dusted', 'thingmon', 'snapquest', 'branchwood']) check(`demos lists the ${key} app`, suites.some((suite) => suite.key === key && suite.app), suites.map((suite) => suite.key));
 }
 
 const install = async (key) => {
@@ -281,6 +281,82 @@ if (!only || only.has('thingmon')) {
 	check('reset deletes keeper, creatures and battles through each → discard', ok(reset) && reset.result?.removed >= 3, reset);
 	const gone = await run('app-thingmon-state');
 	check('state after reset: no keeper again', ok(gone) && gone.result?.hasKeeper === false, gone.result);
+}
+
+// ── 3. Snapquest ────────────────────────────────────────────────────────────
+if (!only || only.has('snapquest')) {
+	console.log('\n■ Snapquest');
+	await install('snapquest');
+	const board = await run('app-snapquest-board', { category: '' });
+	check('board: 24 challenges from system content, none done, a featured pick', ok(board) && board.result?.items?.length === 24 && board.result?.stats?.done === 0 && board.result?.stats?.total === 24 && typeof board.result?.featured?.key === 'string', { count: board.result?.items?.length, stats: board.result?.stats, featured: board.result?.featured?.key });
+	check('board: category totals sum to 24', board.result?.stats?.categories?.reduce((sum, entry) => sum + entry.total, 0) === 24, board.result?.stats?.categories);
+	const nature = await run('app-snapquest-board', { category: 'nature' });
+	check('board?category=nature narrows the list', ok(nature) && nature.result?.items?.length >= 3 && nature.result.items.every((item) => item.category === 'nature') && nature.result?.category === 'nature', nature.result?.items?.map((item) => item.key));
+	const noPhoto = await run('app-snapquest-capture', { challengeKey: 'red-door', note: 'no photo', photo: '', photoAttachmentId: '' });
+	check('capture without a photo is refused', !ok(noPhoto) && /Attach a photo/.test(noPhoto.error || ''), noPhoto);
+	const bogus = await run('app-snapquest-capture', { challengeKey: 'nope', note: '', photo: '/x.png', photoAttachmentId: 'att-1' });
+	check('capture of an unknown challenge is refused', !ok(bogus) && /No such challenge/.test(bogus.error || ''), bogus);
+	const claim = await run('app-snapquest-capture', { challengeKey: 'red-door', note: 'A very red door.', photo: '/demos/thingmon/01-cindrel.png', photoAttachmentId: 'att-demo-1' });
+	check('capture creates the claim and narrates the points', ok(claim) && claim.result?.points === 10 && /\+10 points/.test(claim.result?.message || ''), claim);
+	const twice = await run('app-snapquest-capture', { challengeKey: 'red-door', note: '', photo: '/x.png', photoAttachmentId: 'att-2' });
+	check('a second claim of the same challenge is refused', !ok(twice) && /already claimed/.test(twice.error || ''), twice);
+	const boardAfter = await run('app-snapquest-board', { category: 'todo' });
+	check('board?category=todo hides the claimed challenge; stats moved', ok(boardAfter) && boardAfter.result?.items?.length === 23 && boardAfter.result?.stats?.done === 1 && boardAfter.result?.stats?.points === 10 && boardAfter.result?.stats?.categories?.find((entry) => entry.key === 'urban')?.done === 1, boardAfter.result?.stats);
+	const all = await run('app-snapquest-board', { category: 'all' });
+	check('the claimed card carries done + photo', all.result?.items?.find((item) => item.key === 'red-door')?.done === true && all.result?.items?.find((item) => item.key === 'red-door')?.photo === '/demos/thingmon/01-cindrel.png', all.result?.items?.find((item) => item.key === 'red-door'));
+	const detail = await run('app-snapquest-challenge', { key: 'red-door' });
+	check('challenge: found, claimed, capture with capturedOn', ok(detail) && detail.result?.found === true && detail.result?.claimed === true && /^\d{4}-\d{2}-\d{2}$/.test(detail.result?.capture?.capturedOn || ''), detail.result);
+	const missing = await run('app-snapquest-challenge', { key: '' });
+	check('challenge with no key: found false', ok(missing) && missing.result?.found === false, missing.result);
+	const gallery = await run('app-snapquest-gallery');
+	check('gallery lists the capture with points', ok(gallery) && gallery.result?.count === 1 && gallery.result?.points === 10 && gallery.result?.items?.[0]?.title === 'A red door', gallery.result);
+	const unclaim = await run('app-snapquest-uncapture', { id: gallery.result?.items?.[0]?.id });
+	check('uncapture deletes the capture', ok(unclaim), unclaim);
+	const galleryAfter = await run('app-snapquest-gallery');
+	check('gallery empty after un-claim', ok(galleryAfter) && galleryAfter.result?.count === 0, galleryAfter.result);
+	await resolvePages(['snapquest', 'snapquest-challenge', 'snapquest-gallery']);
+}
+
+// ── 4. Branchwood ───────────────────────────────────────────────────────────
+if (!only || only.has('branchwood')) {
+	console.log('\n■ Branchwood');
+	await install('branchwood');
+	const cold = await run('app-branchwood-scene');
+	check('scene before begin: the opening scene, hasRun false', ok(cold) && cold.result?.hasRun === false && cold.result?.scene?.key === 'start' && cold.result?.choices?.length === 2, cold.result);
+	const early = await run('app-branchwood-choose', { choice: 0 });
+	check('choose before begin is refused', !ok(early) && /Begin/.test(early.error || ''), early);
+	const begin = await run('app-branchwood-begin');
+	check('begin creates the playthrough', ok(begin) && /bus/.test(begin.result?.message || ''), begin);
+	const s1 = await run('app-branchwood-scene');
+	check('scene after begin: start, step 0, nothing carried', ok(s1) && s1.result?.hasRun === true && s1.result?.scene?.key === 'start' && s1.result?.steps === 0 && s1.result?.flagsLine === 'nothing yet', s1.result);
+	const bad = await run('app-branchwood-choose', { choice: 3 });
+	check('an out-of-range choice is refused', !ok(bad) && /not one of the choices/.test(bad.error || ''), bad);
+	// go straight to the lighthouse and try the locked door without the key
+	const toCliff = await run('app-branchwood-choose', { choice: 1 });
+	check('choose 1 → cliff path', ok(toCliff) && toCliff.result?.scene === 'cliffpath', toCliff);
+	const toDoor = await run('app-branchwood-choose', { choice: 0 });
+	check('choose 0 → the door', ok(toDoor) && toDoor.result?.scene === 'door', toDoor);
+	const door = await run('app-branchwood-scene');
+	check('the locked choice is reported unavailable with its hint', door.result?.choices?.[0]?.available === false && door.result?.choices?.[0]?.hint === 'needs the key', door.result?.choices);
+	const locked = await run('app-branchwood-choose', { choice: 0 });
+	check('taking a locked choice is refused with the hint', !ok(locked) && /needs the key/.test(locked.error || ''), locked);
+	// knock → go back to the Gull for the key → take it (sets key) → lantern → cliff → door → unlock → light lantern → lamp room → lamp on → keeper ending
+	const route = [1, 1, 0, 0, 0, 0, 0, 0, 0, 0];
+	let lastStep = null;
+	for (const choice of route) {
+		lastStep = await run('app-branchwood-choose', { choice });
+		if (!ok(lastStep)) break;
+	}
+	check(`the route to the keeper ending resolves (${lastStep?.result?.scene})`, ok(lastStep) && lastStep.result?.scene === 'ending-keeper' && lastStep.result?.ended === true, lastStep);
+	const ended = await run('app-branchwood-scene');
+	check('scene at the end: ended, flags carried, one ending found', ended.result?.ended === true && /key/.test(ended.result?.flagsLine || '') && /lantern/.test(ended.result?.flagsLine || '') && ended.result?.endingsFound === 1, ended.result);
+	const after = await run('app-branchwood-choose', { choice: 0 });
+	check('choosing after the end is refused', !ok(after) && /ended/.test(after.error || ''), after);
+	const journal = await run('app-branchwood-journal');
+	check('journal maps the path to titles and lists the endings', ok(journal) && journal.result?.path?.length >= 10 && journal.result.path[0].title === 'The last bus to Branchwood' && journal.result.path.at(-1).mood === 'ending' && journal.result?.endings?.find((entry) => entry.key === 'keeper')?.found === true && journal.result?.endingsFound === 1, journal.result);
+	const again = await run('app-branchwood-begin');
+	check('begin again resets in place and keeps the endings', ok(again) && /kept/.test(again.result?.message || '') && (await run('app-branchwood-scene')).result?.endingsFound === 1, again);
+	await resolvePages(['branchwood', 'branchwood-journal']);
 }
 
 console.log(`\n${passed} passed · ${failed} failed`);
