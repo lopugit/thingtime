@@ -33,6 +33,12 @@ installation refreshes definitions. Installed pages use the owner's component id
   playback. A nonempty-string conditional initially hid the video; its explicit
   empty-URL condition is now covered by a regression.
 
+Native dialogs and countdowns were added during catalog acceptance: dialogs keep
+Action delegation inside the component DOM and use native focus/Escape handling;
+countdowns use elapsed time with bounded duration and interval cleanup. Chrome
+verified desktop/mobile dialog opening, nested local Actions, Escape focus return
+and countdown completion. Two clock-boundary tests passed.
+
 ## Local acceptance environment
 
 Worktree PM2 name: `tt-wt-functional-demos-19970`, autorestart disabled.

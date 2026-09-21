@@ -3658,6 +3658,9 @@ Action fields retain native editing and validation; Enter submits their group.
 Local regression fixture: `/tests/functional-demos.html` on a Vite development
 server. Verify two-instance isolation, parent renders, typed values, checkboxes,
 range/counter synchronization, reset, native disclosures, and mobile overflow.
+Native `tt-dialog` controls use browser-managed modal focus and Escape dismissal;
+`tt-countdown` accepts a bounded seconds value and provides Start/Pause/Reset.
+They run only on interactive surfaces and never execute authored JavaScript.
 ## Remote integration runtime
 
 Curated integration examples use `remix/app/library/catalog.ts` and the fixed

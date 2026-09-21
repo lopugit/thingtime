@@ -7871,3 +7871,8 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
 - [ ] Video demos use a native player; changing its URL changes the actual src.
       Play/pause, seeking, volume and fullscreen work for a compatible URL.
       Source URLs and markup continue through the existing safety allowlists.
+- Native catalog controls: a dialog opens only after a click, traps focus, closes
+  with Escape/Close and restores focus; a nested local Action remains within its
+  component. A countdown starts, pauses, resets, catches up after delayed ticks
+  and announces completion without affecting another instance. Repeat at phone
+  width; drawers are flush to the left/top/bottom and keep the close control usable.

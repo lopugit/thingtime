@@ -1,3 +1,4 @@
+import { NativeControlsEnabled } from './NativeComponentControls';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
 import { useNavigate } from 'react-router';
@@ -253,7 +254,7 @@ export const LiveTemplate = ({
 	const resolved = React.useMemo(() => (render ? alreadyResolved ? render : resolveTemplate(render, liveScope) : null), [render, scopeKey, alreadyResolved]); // eslint-disable-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
 	if (!resolved) return null;
 	return (
-		<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
+		<NativeControlsEnabled.Provider key={identity} value={interactive}><ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
 			<Box
 				onClickCapture={interactive ? (event) => {
 					if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
@@ -285,6 +286,6 @@ export const LiveTemplate = ({
 				{interactive && active.outcome ? <ActionResult outcome={active.outcome} /> : null}
 				{children}
 			</Box>
-		</ComponentUploadEnabled.Provider>
+		</ComponentUploadEnabled.Provider></NativeControlsEnabled.Provider>
 	);
 };
