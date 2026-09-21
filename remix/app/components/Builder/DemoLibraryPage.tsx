@@ -498,6 +498,7 @@ export default function DemoLibraryPage() {
 
 	return (
 		<PageShell width={1280}>
+      <Button as={Link} to="/library" alignSelf="flex-start" size="sm" variant="outline">🔌 500 integrations · libraries & APIs</Button>
 			<PageHeader
 				eyebrow="Thingtime · builder"
 				title="Demo library 🧱✨"

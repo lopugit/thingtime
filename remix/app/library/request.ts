@@ -1,5 +1,5 @@
 import type { LibraryExample } from './types';
-export const LIBRARY_REQUEST_REQUIREMENT = ['api.library-request', '1.0.0'] as const;
+export const LIBRARY_REQUEST_REQUIREMENT = ['api.library-request', '1.1.0'] as const;
 export const MAX_INPUT_BYTES = 16 * 1024;
 export const MAX_RESPONSE_BYTES = 256 * 1024;
 export function parseExampleInput(text: string): Record<string, unknown> {
