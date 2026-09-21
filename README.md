@@ -2,6 +2,53 @@
 
 https://thingtime.com
 
+### Builder service workspaces
+
+Insert **Service workspace** from the builder block menu. Its native
+`<tt-service-workspace rootId="your-stable-workspace-id" name="My service business">`
+component creates real Thingtime folders and relational records for customers,
+properties, job templates, scheduled visits, sub-jobs, time logs, equipment,
+resource usage and memberships. The owner is an Admin. Add existing Thingtime
+usernames in Team; Customer/B2B memberships must select their customer account.
+Use Setup to connect the owned builder page to the same live access policy.
+Members sign in with their normal Thingtime account. Removing membership revokes
+workspace, page, comments and attachment access on subsequent requests.
+
+Records open directly; their context menus offer Edit, Duplicate and recoverable
+Delete. Trash includes all record types. Each job and visit has separate comments,
+media titles/descriptions, attachments and optional Before/After groups. Time logs
+use the workspace IANA time zone and reject ambiguous or nonexistent DST times.
+The day/week planner supports dragging, ordering buttons and date controls.
+The bounded workspace API pages 250 records at a time, up to 5,000 records.
+
+Fork-safe maps and Vault setup:
+
+1. Configure a stable `THINGTIME_USER_VAULT_KEY=<base64url-encoded-32-byte-key>`
+   on the server. Never publish its value or rotate it without migrating entries.
+2. In the workspace owner's **Settings → Secure Vault**, save
+   `GOOGLE_MAPS_JAVASCRIPT_API_KEY=<browser-restricted-key>` and
+   `GOOGLE_PLACES_API_KEY=<server-places-key>`. New entries have an Environment
+   selector; existing entries have **Change environment**. Moves preserve the
+   encrypted value and can return an entry to Ungrouped.
+3. Enable Google Maps JavaScript API and Places API (New) with billing in the
+   matching Google project. Restrict the JavaScript key to the intended website
+   referrers and API. That key is intentionally visible to workspace browsers.
+   Keep the Places key server-only, restrict it to Places API, and use supported
+   server restrictions. No Mapbox token is needed for this Google implementation.
+4. Choose the matching Vault environment in workspace Setup. Automatic selection
+   works when there is exactly one entry of each required name; duplicate matches
+   require an explicit environment. Reload after switching a loaded Maps SDK key.
+   Place searches send only the entered query to Google; map coordinates are
+   fetched on demand, not persisted as a provider-content cache.
+
+Local regression fixture: run `TT_SERVICE_TEST_LOCAL=1 node --env-file=.env
+--import tsx scripts/test-service-workspace-local.ts` from `remix/` against the
+isolated Mongo replica at `127.0.0.1:18943` (`jimsLocal`). The opt-in test rejects
+other database URLs. Use `npm run web-pms` in the `thingtime-jims-franchise`
+worktree: local web `http://localhost:18940`, HMR 18941, Nitro 18942.
+Tailscale/Funnel was unavailable during validation: the installed CLI launcher
+points to the missing `/Applications/Tailscale.app` executable.
+
 ### Seamless page editor
 
 `/builder?page=<id>` and `/p/<id>` share `LiveWebpage` and its lazy

@@ -1,5 +1,6 @@
 import { ComponentUpload } from '../Builder/ComponentUpload';
 import React from 'react';
+const ServiceWorkspace = React.lazy(() => import('../Builder/ServiceWorkspace/ServiceWorkspace'));
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { HTML_ALLOWED_TAGS as ALLOWED_TAGS, HTML_VOID_TAGS as VOID_TAGS, HTML_MAX_NODES as MAX_NODES, HTML_MAX_DEPTH as MAX_DEPTH } from './htmlRenderPolicy';
@@ -205,6 +206,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const tag = String(node.tag || 'div').toLowerCase();
+	if (tag === 'tt-service-workspace') return <React.Suspense key={key} fallback={<div aria-busy="true">Opening workspace…</div>}><ServiceWorkspace rootId={node.props?.rootId ?? node.props?.rootid} name={typeof node.props?.name === 'string' ? node.props.name : undefined} /></React.Suspense>;
 	if (tag === 'tt-upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} value={node.props?.value} attachmentId={node.props?.attachmentId} />;
 	if (!ALLOWED_TAGS.has(tag)) {
 		// unknown tag: render children in a plain span so content still shows

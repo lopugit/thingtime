@@ -14,6 +14,32 @@
   and `/library/sandbox.html` receives its sandbox CSP on the built deployment.
   Run `test:library`, `test:api-capabilities`, `test:vercel-config` and a full build.
 
+## Service workspace and Vault environments
+
+- [ ] At desktop and mobile widths, scroll the workspace and every opened record
+  dialog to both ends. Menus and dialogs stay above the Thingtime header and
+  builder toolbar, with reachable controls and no horizontal page overflow.
+- [ ] Open a property and create a job, then schedule a visit from that job.
+  Date/time inputs persist after reload, including native picker/autofill paths.
+  Job, property and visit links retain context and display names instead of IDs.
+- [ ] Use record context menus to edit, duplicate, delete and restore. Cancel is
+  non-mutating. The common Trash includes time logs, usage and visits as well as
+  directory records. Check before/after media, per-file metadata, comments,
+  profile thumbnail/banner choices and reload persistence.
+- [ ] Drag visits between days and reorder within a day; verify day/week navigation,
+  keyboard ordering and date controls. Log a timed sub-job and equipment usage
+  with employee, battery percentage, vehicle, fuel and travel times.
+- [ ] Verify Customer/B2B isolation, staff write limits, owner membership protection,
+  stale-edit conflicts, explicit private ACLs, moderation and immediate revocation
+  on workspace, bound page, comments and attachment requests.
+- [ ] In Vault, create a secret in a selected environment. Move an existing secret
+  and provider to another environment and Ungrouped without re-entering a value.
+  Cancel preserves the previous environment; no response reveals encrypted data.
+- [ ] With restricted Google keys, test autocomplete, selecting a result, map marker
+  navigation and manual address entry. Switching Vault environment must select
+  the matching keys; missing/ambiguous entries show an actionable state.
+
+
 ## Real browser portable transfer acceptance
 
 - [ ] On desktop and mobile, copy a Thing and use Cmd/Ctrl+V on the Things
