@@ -21,7 +21,8 @@ export const action = async ({ request }: { request: Request }) => {
 		return json({ ok: false, error: 'Installs are rate-limited — give it a minute 🌱' }, rateLimitedResponseInit(limit));
 	}
 	const body = await readJsonBody(request, MAX_BODY_BYTES);
-	const result = await installSuiteForViewer(viewerOf(user), body?.key);
+	if (body?.onlyMissing !== undefined && typeof body.onlyMissing !== 'boolean') return json({ ok: false, error: 'onlyMissing must be a boolean' }, { status: 400 });
+	const result = await installSuiteForViewer(viewerOf(user), body?.key, { onlyMissing: body?.onlyMissing === true });
 	if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
 	return json(result);
 };

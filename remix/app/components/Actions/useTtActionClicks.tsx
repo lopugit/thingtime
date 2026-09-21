@@ -1,4 +1,6 @@
 import React from 'react';
+import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
+import { LOCAL_UI_ACTION } from './localUiAction';
 import { useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
@@ -88,7 +90,7 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler }) => {
+export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -99,6 +101,10 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	onUnownedRef.current = options?.onUnowned;
 	const confirmRef = React.useRef(options?.confirm);
 	confirmRef.current = options?.confirm;
+	const localRef = React.useRef(options?.onLocal);
+	localRef.current = options?.onLocal;
+	const resultRef = React.useRef(options?.onResult);
+	resultRef.current = options?.onResult;
 	const busyRef = React.useRef(false);
 	const mountedRef = React.useRef(true);
 	React.useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
@@ -125,6 +131,13 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			if (busyRef.current || control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
 			const action = control.getAttribute('data-tt-action') || '';
 			if (!action) return;
+			if (action === LOCAL_UI_ACTION) {
+				try {
+					const input = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
+					if (input && typeof input === 'object' && !Array.isArray(input)) localRef.current?.(input);
+				} catch {}
+				return;
+			}
 			if (action === REFRESH_ACTION) {
 				runtimeRef.current.refresh();
 				return;
@@ -168,6 +181,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			const identity = identityRef.current;
 			const runRuntime = runtimeRef.current;
 			const runApi = apiRef.current;
+			const reportResult = resultRef.current;
+			const onUnowned = onUnownedRef.current;
 			control.setAttribute('aria-busy', 'true');
 			(async () => {
 				try {
@@ -186,13 +201,23 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 							if (!mountedRef.current || identity !== identityRef.current) throw new Error('Account changed');
 							return runRuntime.sharedRun ? runRuntime.sharedRun(action, inputs) : runApi.v1.actions.run({ action, inputs, source: 'component' });
 						},
-						onUnowned: (key, fields) => mountedRef.current && identity === identityRef.current ? onUnownedRef.current?.(key, fields) ?? false : false
+						onUnowned: async (key, fields) => {
+							if (!mountedRef.current || identity !== identityRef.current) return false;
+							if (key === CATALOG_RECORD_ACTION) {
+								const { installSuiteOnServer } = await import('../Builder/installSuite');
+								await installSuiteOnServer('catalog-records', { onlyMissing: true });
+								return true;
+							}
+							return onUnowned?.(key, fields) ?? false;
+						}
 					});
 					if (!mountedRef.current || identity !== identityRef.current) return;
 					const response = outcome.response;
 					if (outcome.error !== undefined) {
 						lopuRef.current({ title: 'That didn’t work 😔', description: outcome.error || undefined, status: 'error' });
-						runtimeRef.current.report({ action, ok: false, result: null, error: outcome.error || 'failed' });
+						const report = { action, ok: false, result: null, error: outcome.error || 'failed' };
+						runRuntime.report(report);
+						reportResult?.(report);
 					} else if (response?.status === 'ok') {
 						const toast = toastFromResult(response.result, {
 							title: '⚡ Action ran ✓',
@@ -205,13 +230,22 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 								...(!runtimeRef.current.sharedRun ? { link: { label: 'Inspect the run', href: `/actions/${encodeURIComponent(response.actionId || action)}` } } : {})
 							});
 						}
-						runtimeRef.current.report({ action, ok: true, result: response.result ?? null, error: null });
+						const report = { action, ok: true, result: response.result ?? null, error: null };
+						runRuntime.report(report);
+						reportResult?.(report);
 					} else {
 						lopuRef.current({ title: 'The action finished with an error 🧯', description: response?.error || undefined, status: 'error' });
-						runtimeRef.current.report({ action, ok: false, result: null, error: response?.error || 'error' });
+						const report = { action, ok: false, result: null, error: response?.error || 'error' };
+						runRuntime.report(report);
+						reportResult?.(report);
 					}
 				} catch {
-					if (mountedRef.current && identity === identityRef.current) lopuRef.current({ title: 'Could not run this action', status: 'error' });
+					if (mountedRef.current && identity === identityRef.current) {
+						lopuRef.current({ title: 'Could not run this action', status: 'error' });
+						const report = { action, ok: false, result: null, error: 'Could not run this action' };
+						runRuntime.report(report);
+						reportResult?.(report);
+					}
 				} finally {
 					control.removeAttribute('aria-busy');
 					busyRef.current = false;
