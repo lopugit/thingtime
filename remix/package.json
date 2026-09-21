@@ -5,7 +5,9 @@
   "packageManager": "pnpm@10.12.1",
   "scripts": {
     "build": "node scripts/ensure-dependencies.js && npm run ensure-bcrypt && ./scripts/pre-dev.sh && npm run build:client && npm run sync:nitro-template && NITRO_PRESET=vercel npm run build:server && node scripts/package-claude-oauth.mjs && npm run patch:vercel-output && npm run verify:vercel-output",
-    "build:client": "node scripts/ensure-dependencies.js && vite build && npm run build:embed",
+    "build:client": "node scripts/ensure-dependencies.js && vite build && npm run build:library && npm run build:embed",
+    "build:library": "vite build --config vite.library.config.ts",
+    "test:library": "node --import tsx --test app/library/*.test.ts app/api/utils/library/*.test.ts",
     "build:embed": "vite build --config vite.embed.config.ts && npm run verify:embed",
     "build:server": "node scripts/ensure-dependencies.js && nitro build",
     "ensure-bcrypt": "node scripts/ensure-bcrypt-binding.js",

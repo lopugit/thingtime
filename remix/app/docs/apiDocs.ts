@@ -12907,6 +12907,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'library-request', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'library',
+    title: 'Run a credentialed library read', endpoint: '/api/v1/library/request',
+    summary: 'Runs one curated, read-only third-party API example with a transient caller-supplied key.',
+    detail: 'The catalogue selects the HTTPS origin, GET path, permitted inputs and authentication scheme. No arbitrary URLs, redirects, headers, mutation methods or stored secrets are accepted. Full accounts only; fail-closed 20/minute rate limit, 24 KB body, 16 KB inputs, 12 second upstream deadline and 256 KB response limit. Stripe accepts test-mode keys only. Responses are no-store; supplied keys are redacted from successful results and all errors are generic. Public keyless examples fetch directly in the browser. Clients negotiate api.library-request >=1.0.0 on this origin.',
+    auth: { mode: 'session-or-bearer', description: 'A full signed-in account is required; temporary accounts are rejected.' },
+    methods: ['POST'],
+    steps: ['Choose a credentialed example ID from the library.', 'POST exampleId, input and apiKey as JSON.', 'Read result; keys and results are not persisted.'],
+    requestExamples: [{ name: 'List available models', description: 'Use your own key; placeholder only.', method: 'POST', body: { exampleId: 'openai-available-models', input: {}, apiKey: '<your-api-key>' } }],
+    responseExamples: [{ status: 200, description: 'Bounded provider JSON', body: { ok: true, result: { data: [] } } }, { status: 400, description: 'Invalid input or provider failure', body: { ok: false, error: 'API request failed.' } }, { status: 401, description: 'Sign in required', body: { ok: false, error: 'Sign in with a full account to use an API key.' } }, { status: 429, description: 'Rate limited', body: { ok: false, error: 'Please wait before running another API example.' } }]
+  }),
+  endpoint({
     id: 'webpages-demos',
     // brand-new capability: everything this PR adds to the response is its 1.0.0 shape
     contractVersion: '1.0.0',
