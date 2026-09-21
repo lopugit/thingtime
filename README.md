@@ -3676,6 +3676,38 @@ Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
 on 2026-09-18 because the installed CLI shim referenced a missing application
 binary. Other worktrees derive their own ports via `npm run web-ports`.
 
+
+### Functional component and webpage demos
+
+The demo catalog uses native inputs and owner-scoped Actions. Newsletter/contact
+forms, site requests, and component records save private Things. They do not
+send email, charge cards, book services, or control devices. To add an external
+effect, create an integration Action in your account, configure its credentials
+through the normal connection settings, and bind the copied component to that
+Action. Never put credentials in component arguments or template JSON.
+
+`site-forms` and `catalog-records` are installed through
+`POST /api/v1/webpages/suites/install`; clients require
+`api.webpages-suites-install >= 1.1.0` from the selected origin's manifest.
+Copying a site demo installs missing form dependencies first without replacing customized Actions. Installed pages bind their owner’s concrete component ids. Existing installations
+can be refreshed with the suite's Install button; saved records remain intact.
+A fork needs the ordinary database/session setup described above. No external
+service key is needed for private demo records. Admins refresh system demos via
+`POST /api/v1/admin/webpages/seed-demos` after deploying the updated catalog.
+
+The declarative `$ui` binding changes bounded scalar state only in its current
+component instance (`set`, `toggle`, `increment`, `cycle`, `reset`), copies text,
+or opens Thingtime search. It cannot call arbitrary JavaScript or replace the
+runtime's viewer, query, source result, or account authority. `$ui` fields remain
+controlled so Reset and adjacent buttons also update visible inputs. Ordinary
+Action fields retain native editing and validation; Enter submits their group.
+
+Local regression fixture: `/tests/functional-demos.html` on a Vite development
+server. Verify two-instance isolation, parent renders, typed values, checkboxes,
+range/counter synchronization, reset, native disclosures, and mobile overflow.
+Native `tt-dialog` controls use browser-managed modal focus and Escape dismissal;
+`tt-countdown` accepts a bounded seconds value and provides Start/Pause/Reset.
+They run only on interactive surfaces and never execute authored JavaScript.
 ## Remote integration runtime
 
 Curated integration examples use `remix/app/library/catalog.ts` and the fixed

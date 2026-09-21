@@ -379,3 +379,14 @@ test('inherited audience clients negotiate the additive read and ancestor modera
     for (const actual of [undefined, previous, '2.0.0']) assert.equal(capabilitySatisfies(actual, minimum), false);
   }
 });
+
+
+test('functional demo capabilities advertise compatible catalog and install contracts', () => {
+  const manifest = thingtimeCapabilityManifest('https://thingtime.com');
+  for (const feature of ['api.webpages-demos', 'api.webpages-suites-install', 'api.admin-webpages-seed-demos']) {
+    assert.equal(manifest.features[feature]?.version, '1.1.0');
+    assert.ok(capabilitySatisfies(manifest.features[feature].version, '1.1.0'));
+  }
+  assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);
+  assert.equal(capabilitySatisfies('2.0.0', '1.1.0'), false);
+});
