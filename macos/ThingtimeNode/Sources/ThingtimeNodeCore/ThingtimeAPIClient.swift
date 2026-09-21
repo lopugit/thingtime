@@ -354,10 +354,12 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 soundEffectsMuted: telemetry.soundEffectsOutputMuted,
                 brightness: brightness,
                 openApps: Array(telemetry.runningApplications.compactMap { application in
-                    guard let identifier = application.bundleIdentifier, !identifier.isEmpty else { return nil }
+                    guard let identifier = application.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !identifier.isEmpty else { return nil }
+                    let name = application.name?.trimmingCharacters(in: .whitespacesAndNewlines)
                     return .init(
-                        id: String(identifier.prefix(255)),
-                        name: String((application.name ?? identifier).prefix(120)),
+                        id: String(identifier.prefix(160)),
+                        name: String((name.flatMap { $0.isEmpty ? nil : $0 } ?? identifier).prefix(120)),
                         frontmost: application.isActive,
                         hidden: application.isHidden
                     )

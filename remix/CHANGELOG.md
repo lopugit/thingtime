@@ -49,6 +49,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Keep remote device telemetry flowing when a
+  macOS application has a blank display name. The native heartbeat now uses
+  its bundle identifier as the name and skips blank identifiers before paging,
+  preventing HTTP 400 responses that hide brightness and file capabilities.
+
 - **2026-09-21 · Codex (AI):** Seamless Lopu continuation with browser/server
   management, one aggregate iOS chat Live Activity, Builder settings and unified
   Commander navigation. Things now share post discussions, attach existing

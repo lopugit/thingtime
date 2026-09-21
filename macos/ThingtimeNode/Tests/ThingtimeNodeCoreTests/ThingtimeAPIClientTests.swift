@@ -170,6 +170,10 @@ final class ThingtimeAPIClientTests: XCTestCase {
             XCTAssertTrue(capabilities.contains("system.brightness.write"))
             let state = try XCTUnwrap(body["state"] as? [String: Any])
             XCTAssertEqual((state["openApps"] as? [[String: Any]])?.count, 64)
+            let apps = try XCTUnwrap(state["openApps"] as? [[String: Any]])
+            XCTAssertEqual(apps[0]["name"] as? String, "com.example.app0")
+            XCTAssertEqual(apps[1]["name"] as? String, "com.example.app1")
+            XCTAssertEqual(apps[2]["name"] as? String, "com.example.app2")
             XCTAssertEqual(try XCTUnwrap(state["brightness"] as? Double), 0.42, accuracy: 0.001)
 			XCTAssertEqual(state["muted"] as? Bool, true)
 			XCTAssertEqual(try XCTUnwrap(state["inputVolume"] as? Double), 0.35, accuracy: 0.001)
@@ -214,7 +218,7 @@ final class ThingtimeAPIClientTests: XCTestCase {
         let applicationsWithoutStableIDs = (0 ..< 20).map { index in
             RunningApplicationTelemetry(
                 processIdentifier: Int32(index),
-                bundleIdentifier: nil,
+                bundleIdentifier: index.isMultiple(of: 2) ? nil : " \n\t ",
                 name: "Unidentified \(index)",
                 isActive: false,
                 isHidden: false
@@ -224,7 +228,7 @@ final class ThingtimeAPIClientTests: XCTestCase {
             RunningApplicationTelemetry(
                 processIdentifier: Int32(index + applicationsWithoutStableIDs.count),
                 bundleIdentifier: "com.example.app\(index)",
-                name: "App \(index)",
+                name: index == 0 ? "" : index == 1 ? " \n\t " : index == 2 ? nil : "App \(index)",
                 isActive: index == 0,
                 isHidden: false
             )
