@@ -49,6 +49,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21 — **Codex (AI)**: Production franchise follow-up: restore saved
+  comment attachments in workspace galleries, clear committed upload batches,
+  and show safe Google Places setup or gateway error guidance. Contracts:
+  api.things 1.24.0 and api.builder-workspaces 1.0.1.
+
+
 - 2026-09-21 — **Codex (AI)**: Allow the franchise Google Maps SDK and map-service
   hosts in production/dev CSP while retaining the inline-script and eval bans;
   use raster map rendering and verify the explicit host policy.

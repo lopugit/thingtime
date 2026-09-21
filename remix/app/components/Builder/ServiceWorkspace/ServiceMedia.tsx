@@ -33,6 +33,7 @@ export function ServiceMedia({
 	const [split, setSplit] = React.useState(false);
 	const [snapshot, setSnapshot] = React.useState<AttachmentComposerSnapshot | null>(null);
 	const [saving, setSaving] = React.useState(false);
+	const [composerVersion, setComposerVersion] = React.useState(0);
 	const [error, setError] = React.useState('');
 	const composer = React.useRef<AttachmentComposerHandle>(null);
 	const requestId = React.useRef(crypto.randomUUID());
@@ -41,7 +42,7 @@ export function ServiceMedia({
 	const load = React.useCallback(
 		async (after?: string) => {
 			try {
-				await Promise.all([requireThingtimeCapability('api.things', '1.23.0'), requireThingtimeCapability('api.attachment-content', '1.10.0')]);
+				await Promise.all([requireThingtimeCapability('api.things', '1.24.0'), requireThingtimeCapability('api.attachment-content', '1.10.0')]);
 				const result = await apiRef.current.v1.things.list({ target: record.id, thingtime: 'comment', cursor: after, limit: 50 });
 				if (!result.ok) throw new Error(result.error || 'Could not load media');
 				if (live.current) {
@@ -82,6 +83,8 @@ export function ServiceMedia({
 			});
 			if (!result.ok) throw new Error(result.error || 'Could not save media');
 			composer.current?.markCommitted(snapshot.attachmentIds);
+			setSnapshot(null);
+			setComposerVersion((version) => version + 1);
 			requestId.current = crypto.randomUUID();
 			setTitle('');
 			setDescription('');
@@ -187,6 +190,7 @@ export function ServiceMedia({
 						</label>
 						<div className="sw-wide">
 							<AttachmentComposer
+								key={composerVersion}
 								ref={composer}
 								ownerId={user.id}
 								purpose="comment"
