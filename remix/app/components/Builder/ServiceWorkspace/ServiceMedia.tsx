@@ -1,4 +1,5 @@
 import React from 'react';
+import { CollectionList } from '~/components/Collections/CollectionList';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import { PostAttachments } from '~/components/Attachments/PostAttachments';
@@ -29,6 +30,9 @@ export function ServiceMedia({
 	reportRef.current = report;
 	const [entries, setEntries] = React.useState<MediaEntry[]>([]);
 	const [cursor, setCursor] = React.useState<string | null>(null);
+	const [loading, setLoading] = React.useState(false);
+	const loadingRef = React.useRef(false);
+	const generation = React.useRef(0);
 	const [title, setTitle] = React.useState('');
 	const [description, setDescription] = React.useState('');
 	const [stage, setStage] = React.useState('Gallery');
@@ -43,20 +47,31 @@ export function ServiceMedia({
 	const busy = React.useRef(false);
 	const load = React.useCallback(
 		async (after?: string) => {
+			if (after && loadingRef.current) return;
+			const epoch = ++generation.current;
+			loadingRef.current = true;
+			setLoading(true);
+			setError('');
 			try {
 				await Promise.all([requireThingtimeCapability('api.things', '1.24.0'), requireThingtimeCapability('api.attachment-content', '1.10.0')]);
 				const result = await apiRef.current.v1.things.list({ target: record.id, thingtime: 'comment', cursor: after, limit: 50 });
 				if (!result.ok) throw new Error(result.error || 'Could not load media');
-				if (live.current) {
+				if (live.current && epoch === generation.current) {
 					setEntries((previous) => [
 						...new Map<string, MediaEntry>([...(after ? previous : []), ...result.things].map((entry: MediaEntry) => [entry.id, entry])).values()
 					]);
+					if (after && result.nextCursor === after) throw new Error('Media pagination did not advance. Refresh to retry.');
 					setCursor(result.nextCursor || null);
 				}
 			} catch (error) {
-				if (live.current) {
+				if (live.current && epoch === generation.current) {
 					setError((error as Error).message);
 					reportRef.current(error);
+				}
+			} finally {
+				if (epoch === generation.current) {
+					loadingRef.current = false;
+					if (live.current) setLoading(false);
 				}
 			}
 		},
@@ -67,6 +82,7 @@ export function ServiceMedia({
 		void load();
 		return () => {
 			live.current = false;
+			++generation.current;
 		};
 	}, [load]);
 	async function save(event: React.FormEvent) {
@@ -105,31 +121,45 @@ export function ServiceMedia({
 	}
 	const media = entries.filter((entry) => entry.attachments?.length);
 	const gallery = (filter?: string) => (
-		<div className="sw-media-list">
-			{media
-				.filter((entry) => !filter || String(entry.crystal.text).startsWith(`[${filter}]`))
-				.map((entry) => (
-					<article key={entry.id} className="sw-media-entry">
-						<p className="sw-media-caption">{entry.crystal.text}</p>
-						<PostAttachments attachments={entry.attachments} postId={entry.id} />
-						{canEdit && ['customer', 'address', 'equipment'].includes(record.kind) && (
-							<div className="sw-image-picks">
-								{entry.attachments
-									?.filter((a) => a.mediaKind === 'image')
-									.map((a) => (
-										<div key={a.id}>
-											<span>{a.title || a.name || 'Image'}</span>
-											<button onClick={() => void selectImage('thumbnailId', a.id).catch(() => {})}>
-												Use as {record.kind === 'customer' ? 'profile' : 'thumbnail'}
-											</button>
-											{record.kind === 'address' && <button onClick={() => void selectImage('bannerId', a.id).catch(() => {})}>Use as banner</button>}
-										</div>
-									))}
-							</div>
-						)}
-					</article>
-				))}
-		</div>
+		<CollectionList
+			key={filter || 'gallery'}
+			label={filter ? `${filter} media` : 'Media'}
+			items={media.filter((entry) => !filter || String(entry.crystal.text).startsWith(`[${filter}]`))}
+			searchText={(entry) => `${entry.crystal.text || ''} ${(entry.attachments || []).map((a) => `${a.name || ''} ${a.title || ''}`).join(' ')}`}
+			hasMore={!!cursor}
+			loadMore={() => load(cursor || undefined)}
+			loading={loading}
+			error={error}
+			empty="No matching media."
+		>
+			{(visible) => (
+				<div className="sw-media-list">
+					{visible.map((entry) => (
+						<article key={entry.id} className="sw-media-entry">
+							<p className="sw-media-caption">{entry.crystal.text}</p>
+							<PostAttachments attachments={entry.attachments} postId={entry.id} />
+							{canEdit && ['customer', 'address', 'equipment'].includes(record.kind) && (
+								<div className="sw-image-picks">
+									{entry.attachments
+										?.filter((a) => a.mediaKind === 'image')
+										.map((a) => (
+											<div key={a.id}>
+												<span>{a.title || a.name || 'Image'}</span>
+												<button onClick={() => void selectImage('thumbnailId', a.id).catch(() => {})}>
+													Use as {record.kind === 'customer' ? 'profile' : 'thumbnail'}
+												</button>
+												{record.kind === 'address' && (
+													<button onClick={() => void selectImage('bannerId', a.id).catch(() => {})}>Use as banner</button>
+												)}
+											</div>
+										))}
+								</div>
+							)}
+						</article>
+					))}
+				</div>
+			)}
+		</CollectionList>
 	);
 	return (
 		<section className="sw-panel">
@@ -164,7 +194,6 @@ export function ServiceMedia({
 				gallery()
 			)}
 			{!media.length && <p className="sw-muted">Add photos, videos, documents, or audio for this {record.kind === 'visit' ? 'visit' : 'record'}.</p>}
-			{cursor && <button onClick={() => void load(cursor)}>Load older media</button>}
 			{canEdit && user && (
 				<details className="sw-upload-details">
 					<summary>Add media</summary>

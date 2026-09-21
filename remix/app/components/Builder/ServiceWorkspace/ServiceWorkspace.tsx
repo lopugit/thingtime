@@ -11,7 +11,6 @@ import {
 	ShieldCheck,
 	Settings2,
 	Trash2,
-	Search,
 	Leaf,
 	ArrowLeft,
 	Plus,
@@ -40,6 +39,9 @@ import { ServiceMedia } from './ServiceMedia';
 import { serviceWorkspaceStyles } from './serviceWorkspaceStyles';
 import { serviceWorkspaceContexts, serviceContextText } from '~/schemas/serviceWorkspaceContext';
 import { ServiceJobContext } from './ServiceJobContext';
+import { CollectionList } from '~/components/Collections/CollectionList';
+import { collectionStyles } from '~/components/Collections/collectionStyles';
+import { serviceListFilters } from './serviceListFilters';
 
 type Section = 'overview' | 'planner' | 'map' | 'setup' | 'trash' | ServiceKind;
 const NAV = [
@@ -60,7 +62,7 @@ export default function ServiceWorkspace({ rootId: suppliedRoot, name = 'Service
 	// Mount by account as well as workspace: switching accounts cannot retain private state.
 	return (
 		<>
-			<style>{serviceWorkspaceStyles}</style>
+			<style>{serviceWorkspaceStyles + collectionStyles}</style>
 			<Workspace
 				key={`${user?.id || 'anonymous'}:${String(suppliedRoot)}`}
 				rootId={typeof suppliedRoot === 'string' ? suppliedRoot : ''}
@@ -199,42 +201,54 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 				.join(' ↔ ');
 		return v.description || '';
 	};
-	const list = (items: ServiceRecord[], empty = 'Nothing here yet.', compact = false) =>
-		items.length ? (
-			<div className={compact ? 'sw-record-list' : 'sw-record-grid'}>
-				{items.map((record) => (
-					<article className="sw-record" key={record.id}>
-						<button className="sw-record-main" onClick={() => open(record.id)}>
-							{['customer', 'address', 'equipment'].includes(record.kind) && (
-								<span className={'sw-avatar sw-avatar-' + record.kind}>
-									{record.values.thumbnailId ? (
-										<img src={attachmentUrl(record.values.thumbnailId)} alt="" loading="lazy" />
-									) : (
-										serviceTitle(record)
-											.split(' ')
-											.map((x) => x[0])
-											.join('')
-											.slice(0, 2)
-											.toUpperCase()
-									)}
+	const searchText = (record: ServiceRecord) =>
+		`${serviceTitle(record)} ${subtitle(record)} ${serviceContextText(contexts.get(record.id))} ${Object.values(record.values)
+			.filter((value) => typeof value === 'string')
+			.join(' ')}`;
+	const list = (items: ServiceRecord[], empty = 'Nothing here yet.', compact = false, label = 'Records', controlled = false) => (
+		<CollectionList
+			key={`${selectedId || section}:${label}:${trash}`}
+			label={label}
+			items={items}
+			searchText={searchText}
+			filters={serviceListFilters(items, data?.team)}
+			empty={empty}
+			query={controlled ? query : undefined}
+			onQueryChange={controlled ? setQuery : undefined}
+		>
+			{(visibleItems) => (
+				<div className={compact ? 'sw-record-list' : 'sw-record-grid'}>
+					{visibleItems.map((record) => (
+						<article className="sw-record" key={record.id}>
+							<button className="sw-record-main" onClick={() => open(record.id)}>
+								{['customer', 'address', 'equipment'].includes(record.kind) && (
+									<span className={'sw-avatar sw-avatar-' + record.kind}>
+										{record.values.thumbnailId ? (
+											<img src={attachmentUrl(record.values.thumbnailId)} alt="" loading="lazy" />
+										) : (
+											serviceTitle(record)
+												.split(' ')
+												.map((x) => x[0])
+												.join('')
+												.slice(0, 2)
+												.toUpperCase()
+										)}
+									</span>
+								)}
+								<span>
+									<strong>{serviceTitle(record)}</strong>
+									<small>{subtitle(record)}</small>
+									{context(record)}
+									{record.values.archived && <span className="sw-badge">Deleted</span>}
 								</span>
-							)}
-							<span>
-								<strong>{serviceTitle(record)}</strong>
-								<small>{subtitle(record)}</small>
-								{context(record)}
-								{record.values.archived && <span className="sw-badge">Deleted</span>}
-							</span>
-						</button>
-						{menu(record)}
-					</article>
-				))}
-			</div>
-		) : (
-			<div className="sw-empty">
-				<p>{empty}</p>
-			</div>
-		);
+							</button>
+							{menu(record)}
+						</article>
+					))}
+				</div>
+			)}
+		</CollectionList>
+	);
 	const sectionList = (title: string, items: ServiceRecord[], add?: () => void, addLabel = 'Add') => (
 		<section className="sw-panel">
 			<div className="sw-section-heading">
@@ -249,7 +263,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 					</button>
 				)}
 			</div>
-			{list(items, `No ${title.toLowerCase()} yet.`, true)}
+			{list(items, `No ${title.toLowerCase()} yet.`, true, title)}
 		</section>
 	);
 	async function initialize() {
@@ -290,14 +304,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 		);
 	const today = new Intl.DateTimeFormat('en-CA', { timeZone: data.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 	const visits = active.filter((r) => r.kind === 'visit');
-	const filter = (items: ServiceRecord[]) =>
-		items.filter(
-			(r) =>
-				(trash || section === 'trash' ? !!r.values.archived : !r.values.archived) &&
-				`${serviceTitle(r)} ${subtitle(r)} ${serviceContextText(contexts.get(r.id))} ${r.values.description || ''}`
-					.toLowerCase()
-					.includes(query.toLowerCase())
-		);
+	const filter = (items: ServiceRecord[]) => items.filter((r) => (trash || section === 'trash' ? !!r.values.archived : !r.values.archived));
 	const pageTitle = selected ? serviceTitle(selected) : NAV.find((n) => n.id === section)?.label || SERVICE_LABELS[section as ServiceKind];
 	const relationButtons = selected
 		? SERVICE_FIELDS[selected.kind]
@@ -557,6 +564,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 							<ThingComments
 								key={`comments:${selected.id}`}
 								thingId={selected.id}
+								collectionControls
 								onCommentAdded={() => refresh().catch(report)}
 								description={`Notes, questions and updates for this ${SINGULAR[selected.kind]}.`}
 							/>
@@ -604,8 +612,12 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 							'Upcoming visits',
 							visits
 								.filter((r) => r.values.date > today && r.values.status !== 'Cancelled' && r.values.status !== 'Completed')
-								.sort((a, b) => a.values.date.localeCompare(b.values.date))
-								.slice(0, 8)
+								.sort(
+									(a, b) =>
+										`${a.values.date} ${a.values.time || ''}`.localeCompare(`${b.values.date} ${b.values.time || ''}`) ||
+										(a.values.order || 0) - (b.values.order || 0) ||
+										a.id.localeCompare(b.id)
+								)
 						)}
 					</>
 				) : section === 'planner' ? (
@@ -620,6 +632,8 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 						timeZone={data.timeZone}
 						menu={menu}
 						context={context}
+						searchText={searchText}
+						team={data.team}
 					/>
 				) : section === 'setup' ? (
 					<section className="sw-panel sw-setup">
@@ -683,16 +697,6 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 				) : (
 					<>
 						<div className="sw-list-controls">
-							<label className="sw-search">
-								<Search size={17} />
-								<input
-									type="search"
-									value={query}
-									onChange={(e) => setQuery(e.target.value)}
-									placeholder={`Search ${pageTitle?.toLowerCase()}…`}
-									aria-label={`Search ${pageTitle}`}
-								/>
-							</label>
 							{canEdit && section !== 'map' && section !== 'trash' && (
 								<button aria-pressed={trash} onClick={() => setTrash(!trash)}>
 									{trash ? 'Show active' : 'Trash'}
@@ -704,11 +708,13 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 								<ServiceMap
 									rootId={rootId}
 									apiKey={data.mapsBrowserKey}
-									addresses={filter(records.filter((r) => r.kind === 'address'))}
+									addresses={filter(records.filter((r) => r.kind === 'address')).filter((record) =>
+										searchText(record).toLowerCase().includes(query.toLowerCase())
+									)}
 									open={open}
 									report={report}
 								/>
-								{list(filter(records.filter((r) => r.kind === 'address')), 'Add your first property to get started.')}
+								{list(filter(records.filter((r) => r.kind === 'address')), 'Add your first property to get started.', false, 'Map properties', true)}
 							</>
 						) : (
 							list(
@@ -717,7 +723,10 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 									? 'Trash is empty.'
 									: query
 									? 'No records match your search.'
-									: `Add your first ${SINGULAR[section as ServiceKind] || 'record'} to get started.`
+									: `Add your first ${SINGULAR[section as ServiceKind] || 'record'} to get started.`,
+								false,
+								pageTitle || 'Records',
+								true
 							)
 						)}
 					</>
