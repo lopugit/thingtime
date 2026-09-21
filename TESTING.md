@@ -1,5 +1,17 @@
 # TESTING.md — per-area manual test checklists
 
+## Integration catalogue
+
+- [ ] Assert 500 unique recipes, pinned CDN URLs and schema-valid private saved
+  Things with `test:library`. Run the real browser harness, inspect every failure,
+  correct obsolete provider endpoints/defaults and rerun corrected examples.
+- [ ] At desktop and 390px widths, search for no results, reset filters, select a
+  provider/type/access filter, paginate and scroll the full page to its footer.
+  Open Try it, Source and Reuse; check wrapping and horizontal overflow.
+- [ ] Save one example, open all three private Things, run the component, and
+  verify that its Action Thing prepares the same input payload. Retry a partial
+  save using the same copy identifier; account switches start a fresh copy.
+
 ## Remote integration runtime
 
 - [ ] Run a pinned visual module and a pure transformation in Chrome. Confirm

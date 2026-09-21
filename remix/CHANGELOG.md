@@ -49,6 +49,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21 — **Codex (AI)**: Enable 500 remote integration examples across 42
+  libraries/services with searchable `/library` pages, editable demos, source,
+  provider account/key entry and private reusable Things. The catalogue extends
+  the previously delivered isolated runtime with capability 1.1.0.
+
 - 2026-09-21 — **Codex (AI)**: Add the curated remote integration runtime, opaque
   preview documents, cancellable workers, credential-safe read-only provider
   requests, capability negotiation and reusable Component Thing rendering.
