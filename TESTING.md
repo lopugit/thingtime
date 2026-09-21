@@ -1,5 +1,34 @@
 # TESTING.md — per-area manual test checklists
 
+## Remote brightness and files
+
+- [ ] On a paired Apple Silicon Mac, change main-display and per-display
+  brightness, verify the real panel and next telemetry value, then restore it.
+  A display without a usable setter stays unavailable. Existing pairings gain
+  updated capabilities on a higher-revision heartbeat without being re-paired.
+- [ ] Open `/things?files=thingtime` and a device's Files drawer section at
+  desktop and 390px widths. Exercise grid/list, name/type filters, sort, hidden
+  files, long names, selection, context menus, folder navigation, and the
+  expanded pop-up. Scroll the full page, drawer list and pop-up to their ends;
+  menus and approval/cancel controls remain visible and inside the viewport.
+- [ ] Copy and cut synthetic files and a nested folder between Thingtime and
+  an unlocked paired Mac, and between two folders on the same device. Verify
+  byte hashes, destination listing and source retention/removal. Refuse existing
+  names, self-descendants, links, oversized files and changed source versions.
+  Cancel or fail a destination write: original files must remain. A successful
+  remote source removal goes to Trash; an uncertain move must not be retried
+  blindly. No test should read unrelated home-directory files.
+- [ ] Verify deny and ask-every-time device settings, locked sessions, old node
+  capabilities, an unapproved upload account, expired results and another
+  account's command IDs. Command history/events never contain chunk bytes.
+  Repeat directory listing after temporary-upload cleanup: scanning on a
+  duplicated descriptor must not consume the subsequent listing's cursor.
+- [ ] Run native `swift test`, `test:devices`, `test:things`, `test:attachments`,
+  `test:api-capabilities`, a complete web build, and Electron tests. The
+  opt-in `TT_BRIGHTNESS_HARDWARE_TEST=1 swift test --filter DisplayBrightnessTests`
+  briefly changes and restores the actual display; do not count a skipped
+  hardware test or synthetic UI relay as real remote-transfer acceptance.
+
 - Connections/index rollout: keep external-source authorization and private-subspace membership fences after merging shared readers. Stub DNS alongside fetch in outbound redirect tests so machine-local `.test` resolution cannot bypass credential-stripping assertions.
 
 ## Integration catalogue
@@ -8155,6 +8184,16 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   Bootstrap retires that obsolete non-unique index before creating missing
   current indexes; unique constraints and saved Things remain intact.
 
+
+## Map SDK and larger-platform library (2026-09-21)
+
+- Browse all 540 examples: Mapbox, Google Maps and Google Places belong to the key-required filter and each has a grouped builder page. No provider requests or SDK scripts load merely by browsing. The public-only browser harness must omit SDK/keyed examples.
+- Open SDK demos at desktop, 390px and 320px. Inspect inputs, key Show/Hide/Clear, setup links, source and reuse tabs; scroll through the full page. Empty keys disable Run. Mapbox secret tokens and malformed inputs fail before loading. Invalid provider keys produce actionable errors, never fake maps/results.
+- With a restricted browser key you own, run a Mapbox marker/popup and Google advanced marker. For Places, enable Places API (New), run text/nearby search and autocomplete, and verify actual markers, addresses, attribution and result JSON. Only the first autocomplete prediction is resolved using its session token. Check browser console for CSP violations; provider errors must not expose credentials in Thingtime logs or result output.
+- Clear/reset/cancel, changing account and unmounting dispose SDK frames. A saved Thing contains only the catalogue ID and ordinary inputs; credentials/results never persist. A second demo's input/key state remains independent.
+- REST Places text/nearby searches send a catalogue-selected POST with bounded fixed fields and masks; arbitrary caller URL/method/body/header choices cannot change that transport. GET providers retain their existing behavior and key redaction. Verify anonymous 401, unknown example 400, and origin capability 1.2.0.
+- Re-run the integration-only admin seed. Existing authored copies remain unchanged; the index lists 51 services and all 540 examples resolve to schema-valid component and individual page Things.
+
 - Upcoming visits: completing a future-dated visit removes it from the dashboard upcoming list while keeping it in the planner and property visit history. Cancelled and archived visits also remain absent from upcoming visits.
 
 ### Shared discussion acceptance and service galleries
@@ -8172,3 +8211,5 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   matches and infinite mode at desktop and 390px. Inaccessible comments must not
   appear in the batched post projection; rejected or non-advancing cursor pages
   must stop automatic loading, with an explicit retry for recoverable failures.
+
+- Device command confidentiality: generic Thing exact-id and discussion reads must reject owned device-command rows, including live and expired filesystem results and upload chunks. Only the dedicated device command result endpoint may return its authorized, unexpired result.

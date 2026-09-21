@@ -71,3 +71,21 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
   transfers".
 - Realistic local data: `node remix/scripts/seed-fixture.mjs create` makes a
   folder holding a post with stored files.
+
+## Remote and stored files
+
+`FilesystemThingsBrowser.tsx` adapts ephemeral remote inode entries into the
+same `ThingsGridView`/`ThingsListView` used by `/things`. The full-page entry is
+`/things?files=thingtime` (or a device id); `DeviceDetailsDrawer` mounts the same
+component with `compact` and an expanded pop-up. Folder/path query parameters
+survive reload. `filesystemClient.ts` negotiates capabilities and polls exact
+owner-scoped commands; `filesystemTransfer.ts` preflights recursive copies and
+checks source versions before cross-location move cleanup. See
+[the remote file contract](../remote-files.md) for bounds and failure semantics.
+
+Stored files remain protected attachment Things with purpose `file`; imports
+use `file-import` drafts and `recordingTransfer.ts` preserves the purpose.
+`test:things` covers orchestration, client retry identities and portable file
+contracts; `test:devices` covers leases, private result expiry and byte redaction.
+Native `RemoteFilesystemTests` exercise actual temporary-directory bytes and
+no-follow operations. The manual checklist is “Remote brightness and files”.

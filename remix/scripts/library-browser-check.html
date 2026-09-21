@@ -2,7 +2,7 @@
 import {LIBRARY_EXAMPLES} from '/app/library/catalog.ts';
 const status=document.querySelector('#status'),failures=document.querySelector('#failures');
 const requested=new URLSearchParams(location.search).get('ids')?.split(',');
-const examples=LIBRARY_EXAMPLES.filter(x=>!x.request?.auth&&(!requested||requested.includes(x.id)));
+const examples=LIBRARY_EXAMPLES.filter(x=>!x.request?.auth&&!x.sdk&&(!requested||requested.includes(x.id)));
 document.querySelector('#run').onclick=async()=>{
  document.querySelector('#run').disabled=true;let completed=0,passed=0;const failed=[];
  async function one(example){await new Promise(resolve=>{

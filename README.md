@@ -3985,11 +3985,11 @@ credentialed requests. The endpoint is bounded to 20 requests/minute/account,
 upstream timeout. Run `corepack pnpm --dir remix run test:library` for boundaries,
 credential redaction, reusable Thing validation and capability coverage.
 
-### The 500-example integration library
+### The integration library
 
-Browse `/library` for 500 executable recipes across 42 libraries/services: 380
-transformation actions, 45 visual components and 75 API Things. There are 468
-credential-free examples and 32 examples with provider-specific API-key entry.
+Browse `/library` for 540 executable recipes across 51 libraries/services: 380
+transformation actions, 59 visual components and 101 API Things. There are 468
+credential-free examples and 72 examples with provider-specific credential entry.
 Search, category/provider/type/access filters and pagination keep the catalogue
 small on screen; selecting a card shows editable inputs, live output, source and
 links to official docs. Browsing performs no integration-provider requests.
@@ -4000,9 +4000,9 @@ curated `exampleId` and optional `inputJson`; it never accepts code or keys in
 markup. Preparation actions return inputs; remote execution occurs when Run is
 pressed in the component. Keys are entered separately for each open demo.
 
-API capability `api.library-request` 1.1.0 adds the curated credentialed provider
+API capability `api.library-request` 1.2.0 adds the curated credentialed provider
 registry. Each provider's account link explains its key and access requirements.
-Credentialed examples use only read-only GETs; Stripe is test-mode only. Real
+Credentialed server examples use read-only GETs and fixed Google Places POST searches; Stripe is test-mode only. Real
 account authorization/quota behavior requires the visitor's own valid key.
 
 For browser acceptance, open `/scripts/library-browser-check.html` on the Vite
@@ -4011,8 +4011,65 @@ credential-free catalogue defaults, four at a time, through the actual isolated
 runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
 is not copied into production static assets. Provider outages can change results.
 
+
+## Remote device files and brightness
+
+Open **Things → Browse files**, or expand **Files** in a paired device's drawer.
+The shared Things grid/list, type/name filters and action menu work in a full
+page, narrow dock and expanded pop-up. Copy or Cut, select **Your Thingtime** or
+another paired device and destination folder, then Paste. Keyboard shortcuts
+work while the file browser is focused; text inputs keep normal text editing.
+
+Update the Mac's Thingtime Node as well as the web server. An updated heartbeat
+refreshes the existing device's capabilities; re-pairing is unnecessary. The
+native brightness adapter supports DisplayServices and falls back to a matched
+IOKit display, reporting unavailable when macOS exposes no usable control.
+
+Remote files stay inside the paired Mac's home folder and obey its existing
+permission mode and locked-session policy. Files are bounded to 32 MiB each;
+a recursive browser transfer supports 500 entries, 32 levels and 128 MiB total.
+Symlinks, special files and overwrite are refused. Moves across locations copy
+and verify first, then remove originals; remote removals use recoverable Trash.
+Thingtime uploads require existing private-upload access and storage allowance,
+and use the normal protected attachment pipeline. Empty remote files can be
+read/copied on devices; Thingtime's upload pipeline requires non-empty content.
+No new secrets or environment variables are required. Forks need their existing
+MongoDB, S3 attachment setup and pairing configuration, plus the API capability
+versions documented in [the remote file contract](docs/remote-files.md).
+
+Local acceptance for `codex/remote-device-files` uses `http://localhost:22420`
+(HMR 22421, Nitro 22422), with a unique PM2 entry
+`tt-wt-remote-device-files-22420` using the canonical `pm2AppConfig` and
+`autorestart: false`. These overrides avoid another Codex checkout with the same
+`thingtime` directory basename. Tailscale/Funnel was unavailable on 2026-09-21:
+the configured launcher points to the missing Tailscale app; no public mapping
+was changed or verified.
+
 ### Integration builder library
 
 The integration catalogue also has real builder pages: `/builder?page=webpage-integrations&mode=view` links to a page per provider, and each example has its own page and reusable component. The pages derive from `remix/app/library/builderPages.ts`, so adding a catalogue example updates the hierarchy without hand-maintained copies. Opening a page does not run its third-party requests. Saving edits creates an owner-private page; keys and live results stay in the open demo and are never saved.
 
 On a new deployment, configure your normal database and an admin account (see the admin setup above), then sign in as that admin and select **Prepare builder pages** on `/library`. The button negotiates `api.admin-webpages-seed-demos` 1.2.0 and calls `POST /api/v1/admin/webpages/seed-demos?catalog=integrations` with `{}`. This idempotently seeds only the integration components and pages, leaving other demo suites untouched. Re-run after catalogue updates; investigate any nonzero `skipped` count before linking to the pages. No third-party credentials are needed for setup. Viewers supply their own credentials when running keyed examples.
+
+### Map and platform examples
+
+Mapbox includes five GL JS components plus forward/reverse geocoding and driving/walking directions. Google Maps includes maps, advanced markers, info windows, polylines and radius circles. Google Places includes text/nearby search, place details and autocomplete with first-result selection in the JavaScript SDK, plus three Places API (New) REST examples. YouTube, Spotify, Microsoft Graph, GitLab, Cloudflare and Contentful add focused platform reads. Their new components and builder pages are included by **Prepare builder pages**.
+
+Use two distinct credential types:
+
+- Browser demos accept a Mapbox **public** `pk…` token or a Google Maps browser API key. Restrict the key to your actual website origin (include your preview host or localhost when testing) and the necessary APIs. Enable Maps JavaScript API, Places API (New) when applicable, and billing. Google advanced markers use `DEMO_MAP_ID`; use your own map ID in an application. Mapbox GL JS loads a pinned official CDN release; Google uses its supported quarterly channel. Browser keys go directly to the selected provider inside an opaque-origin frame. The SDK document has its own CSP; Google SDK compatibility does not loosen the app shell or ordinary package sandbox policy.
+- REST examples use dedicated server keys or short-lived OAuth **access tokens**, entered in the example's password field. Website-referrer restrictions do not apply to server requests. Use provider/API restrictions and least-privilege scopes: Spotify catalog access; Microsoft Graph `User.Read`, `Files.Read` or `Calendars.ReadBasic`; GitLab `read_api`; Cloudflare Zone/DNS Read; Contentful delivery (not management) access. Use the example's account/docs links for acquisition and provider-specific setup. No OAuth client secret, automatic token exchange, or refresh token is needed or accepted by these examples.
+
+No keys are bundled or stored with copied Things. **Clear**, reset, account changes and leaving the demo discard credentials; Clear/reset also remove running SDK frames. Provider keys, billing, quotas, development-mode access and third-party availability determine whether a live request succeeds. The tests use provider contract fixtures; they do not claim authenticated access to a visitor's account.
+
+The maps-library development worktree uses Vite `http://localhost:18860` (HMR 18861, Nitro 18862) through its local PM2 ecosystem entry `tt-wt-library-maps-platforms-18860`, with autorestart disabled. Tailscale/Funnel is not available on this machine because the Tailscale application is missing; production and Vercel previews remain available.
+
+### Discussion pagination on forks
+
+Private comment pagination uses the deployment’s existing `JWT_PRIVATE_KEY` or
+`JWT_SECRET` (with `THINGTIME_ADMIN_VAULT_KEY` as a fallback) to derive a separate
+encryption key for opaque cursors. Configure one of these existing secrets in
+both preview and production deployments; never use a public JWT key. No new
+secret variable is required. Production fails closed with HTTP 503 when none is
+configured. Local development without a configured secret uses an ephemeral
+key, so refreshing comments after a server restart starts a new cursor chain.

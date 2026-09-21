@@ -63,6 +63,7 @@ import {
 	APP_STORAGE_RESERVED_ID_PREFIX,
 	CASCADE_CHILD_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
+  DEVICE_CONTROL_THINGTIME,
 	EXTERNAL_RESERVED_ID_PREFIX,
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
@@ -2983,7 +2984,12 @@ export const resolvePublicAudiences = async (
   return new Map(entries);
 };
 
+// Device delivery payloads have dedicated permission, redaction and result-TTL
+// gates. Generic Things access must never become an alternate raw-byte read.
+const isDeviceControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => (DEVICE_CONTROL_THINGTIME as readonly string[]).includes(kind));
+
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
+  if (isDeviceControlThing(doc)) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
@@ -3082,6 +3088,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
+  if (isDeviceControlThing(doc)) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
 	// vanish for non-owners too
@@ -3096,7 +3103,7 @@ export const canViewInherited = async (
   let ancestorDenied = false;
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), async id => {
     const ancestor = await findByShareId(id);
-    if (ancestor && (attachmentIsBlocked(ancestor as any) ||
+    if (ancestor && (isDeviceControlThing(ancestor) || attachmentIsBlocked(ancestor as any) ||
       (attachmentModerationStatus(ancestor as any) === 'pending' &&
        thingtimeOf(ancestor).some(kind => TEXT_MODERATED_THINGTIMES.has(kind)) && ancestor.ownerId !== viewer?.id))) ancestorDenied = true;
     return ancestor;
@@ -3735,7 +3742,7 @@ export async function getThing(
   if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
-  if (!doc) return fail(404, 'Thing not found');
+  if (!doc || isDeviceControlThing(doc)) return fail(404, 'Thing not found');
   if (options.commentProjection && doc.appId) return fail(404, 'Thing not found');
   if (!app) {
     const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
@@ -3764,7 +3771,7 @@ export async function getThing(
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
   const isPost = isPostLikeThing(doc) || isComment || isMediaAttachment;
   if (options.commentProjection || !isPost) {
-    // Generic discussion is new in Things 1.26: keep its default read bounded
+    // Generic discussion is new in Things 1.27: keep its default read bounded
     // too, so an outer Thing detail fetch cannot transmit hidden descendants.
     if (isCustomMongoEndpointActive() || doc.appId) return { ok: true, thing, post: null, discussion: null, parent: null, root: null };
     const projected = (await toPublicDiscussionPage([doc], viewer, [thing]))[0];
@@ -3909,6 +3916,7 @@ export const listThings = async (
     if (fence) match = withMatch(match, fence);
   }
 
+  match = withMatch(match, { thingtime: { $nin: [...DEVICE_CONTROL_THINGTIME] } });
   if (query.commentProjection) match = withMatch(match, { appId: { $in: [null] }, thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] } });
   const parsed = query.commentProjection ? discussionCursor : parseChronoCursor(query.cursor);
   const pageMatch = parsed ? withMatch(match, chronoCursorClause(parsed)) : match;

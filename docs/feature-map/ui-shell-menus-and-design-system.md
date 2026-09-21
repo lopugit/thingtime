@@ -64,3 +64,12 @@ workspace loaders, while interactive shared pages retain authorized staff access
   models), `test:feed` (card contracts). Menu/layout behaviour is verified in a
   live browser at desktop and 375 px widths (`TESTING.md` "Shared page shell",
   "Things page", attachment/media sections).
+
+## Compact file browser
+
+`FilesystemThingsBrowser` reuses Things views, `ThingActionMenuButton` and
+`ThingContextMenu` for file/folder actions. The optional `compact`, `itemHref`,
+`itemMenuFor` and `menuZIndex` view handlers support narrow drawers and the
+expanded transfer dialog without changing the ordinary library defaults.
+Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
+only intercepts events inside the browser and leaves editable inputs alone.

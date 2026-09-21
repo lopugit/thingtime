@@ -5,9 +5,9 @@ import { LIBRARY_EXAMPLES } from './catalog';
 import { exampleThings } from './reuse';
 import { validateThingtimeCrystal } from '../schemas/registry';
 
-test('500 unique real examples with version-pinned modules or explicit provider requests', () => {
-	assert.equal(LIBRARY_EXAMPLES.length, 500);
-	assert.equal(new Set(LIBRARY_EXAMPLES.map((x) => x.id)).size, 500);
+test('540 unique real examples with version-pinned modules or explicit provider requests', () => {
+	assert.equal(LIBRARY_EXAMPLES.length, 540);
+	assert.equal(new Set(LIBRARY_EXAMPLES.map((x) => x.id)).size, 540);
 	assert.ok(new Set(LIBRARY_EXAMPLES.map((x) => x.provider)).size >= 40);
 	for (const example of LIBRARY_EXAMPLES) {
 		assert.ok(example.code || example.request, example.id);

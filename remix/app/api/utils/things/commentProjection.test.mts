@@ -260,3 +260,36 @@ test('the legacy list contract retains raw cursors and generic attachment projec
   assert.equal(result.nextCursor, `${+date}_a_legacy`); assert.equal('comments' in result, false);
   assert.deepEqual(result.things[0].attachments, []); assert.equal(aggregates.length, 0);
 });
+
+
+test('generic reads cannot bypass device command byte redaction or result expiry, including owner PATs and inherited rows', async () => {
+  const owner = { ...viewer, id: 'author' };
+  const pat = { ...owner, pat: { tokenId: 'things-read-only', onlyCreatedThings: false, visibility: null } };
+  rows.push(doc('device', { thingtime: ['device'], acl: ['tt:user'] }));
+  for (const kind of ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval']) {
+    for (const expiresAt of [new Date(Date.now() - 60_000), new Date(Date.now() + 600_000)]) {
+      const id = `${kind}-${+expiresAt}`;
+      rows.push(doc(id, { thingtime: [kind], targetId: 'device', acl: ['tt:inherit'], crystal: {
+        kind: 'filesystem', input: { op: 'write', data: 'private-upload-bytes' }, result: { data: 'private-download-bytes' }, resultExpiresAt: expiresAt } }));
+      for (const actor of [owner, pat]) for (const commentProjection of [false, true]) {
+        assert.deepEqual(await getThing(actor, id, null, { commentProjection }), { ok: false, status: 404, error: 'Thing not found' });
+      }
+      rows.push(comment(`child-${id}`, { targetId: id }));
+      assert.equal((await getThing(owner, `child-${id}`, null, { commentProjection: true })).ok, false, 'an inherited child cannot reopen a control-plane ancestor');
+    }
+  }
+  for (const actor of [owner, pat]) {
+    const list = await listThings(actor, { targetId: 'device' }); assert.equal(list.ok, true); if (list.ok) assert.deepEqual(list.things, []);
+  }
+  assert.equal(aggregates.length, 0, 'no body/media hydration occurs for control records');
+});
+
+test('the control-row fence preserves personal library theme, algorithm and ready file discussions', async () => {
+  const owner = { ...viewer, id: 'author' };
+  for (const kind of ['theme', 'feed-algorithm', 'attachment']) {
+    const id = `library-${kind}`;
+    rows.push(doc(id, { thingtime: [kind], acl: ['tt:user'], attachmentPurpose: 'file', attachmentState: 'ready', crystal: { name: 'My library item' } }));
+    const result = await getThing(owner, id, null, { commentProjection: true }); assert.equal(result.ok, true, kind);
+    if (result.ok) { assert.equal(result.thing.crystal.name, 'My library item'); assert.equal((result.post || result.discussion)?.repliesLoaded, false); }
+  }
+});

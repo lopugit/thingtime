@@ -40,10 +40,10 @@ export const prepareManagedPlacement = (
     throw new Error('Only complete archive roots can be filed');
   }
   if (source.thingtime[0] === 'attachment' &&
-    (source.attachmentPurpose !== 'recording' || source.attachmentState !== 'ready' ||
+    (!['recording', 'file'].includes(String(source.attachmentPurpose)) || source.attachmentState !== 'ready' ||
       source.attachmentImportDraft === true || source.attachmentExpiresAt != null ||
       source.attachmentLinked === true || source.attachmentProfileSlot != null)) {
-    throw new Error('Only durable standalone recordings can be filed');
+    throw new Error('Only durable standalone files and recordings can be filed');
   }
   if (folder && (folder.ownerId !== ownerId || folder.shareId === source.shareId ||
     folder.thingtime.length !== 1 || !isFolderThing(folder) ||

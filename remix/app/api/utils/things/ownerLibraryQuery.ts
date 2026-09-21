@@ -13,6 +13,6 @@ export const ownerLibraryMatch = (ownerId: string, excludedKinds: readonly strin
     ...(includeArchives ? [{ thingtime: ['chat-archive'], archiveVersion: 1, archiveDeleting: { $in: [null, false] },
       targetId: null, appId: null, sandbox: null, sandboxSpace: null,
       $expr: { $eq: ['$archiveRootId', '$shareId'] } }] : []),
-    { thingtime: [ATTACHMENT_THINGTIME], attachmentPurpose: 'recording', attachmentState: 'ready', attachmentImportDraft: { $ne: true }, targetId: { $exists: false } }
+    { thingtime: [ATTACHMENT_THINGTIME], attachmentPurpose: { $in: ['recording', 'file'] }, attachmentState: 'ready', attachmentImportDraft: { $ne: true }, targetId: { $exists: false } }
   ]
 });

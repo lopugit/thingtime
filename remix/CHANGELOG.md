@@ -54,12 +54,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Commander navigation. Things now share post discussions, attach existing
   Things, recognize legacy folders, preserve scalar previews and expose broader
   management/rename controls. Shared discussions preserve paginated search and
-  filters with authorized rich comment batches (Things 1.26.0). Action-run delivery defaults off; unlisted social
+  filters with authorized rich comment batches (Things 1.27.0). Generic Thing
+  reads also protect device-command inputs and expiring file results. Action-run delivery defaults off; unlisted social
   previews retain context without indexing. Fix Nitro shell asset registration
   and writable Graphify working copies. Pre-merge review also hardens abandoned
   server task cancellation, workflow admission recovery and persisted local
   retry limits. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
   for validation and device/deployment limits.
+
+- 2026-09-21 — **Codex (AI)**: Restore native display brightness on Apple
+  Silicon Macs and refresh paired capabilities on heartbeat. Add a shared
+  Things file browser in full-page, docked and pop-up layouts, with protected
+  Thingtime files and bounded remote copy/cut/paste. Preserve originals on
+  failed transfers and keep file bytes out of device history/events. Verified
+  real brightness round-trip, repeated native/web tests, a full web build and
+  desktop/mobile browser states. [QA and rollout](../PRs/878-codex-remote-device-files-fix-brightness-and-shared-file-browser.md).
+
+- 2026-09-21 — **Codex (AI)**: Add 40 Mapbox, Google Maps/Places and larger-platform examples (540 total), isolated browser SDK loading with transient key controls, bounded Places POST searches and generated builder pages. `api.library-request` advances to 1.2.0; setup and verification guidance cover separate browser/server keys. [PR #880 details](../PRs/880-codex-library-maps-platforms-maps-and-major-platform-examples.md).
 
 - 2026-09-21 — **Codex (AI)**: Added shared franchise list controls with search, relevant filters, result counts, 5/10/15/20 page sizes and infinite scrolling across records, histories, comments, media and planner days. Removed the eight-visit dashboard cutoff; paged planner moves retain the full day order. Details: [PR #879](../PRs/879-codex-franchise-list-controls-paginate-and-filter-franchise-lists.md).
 

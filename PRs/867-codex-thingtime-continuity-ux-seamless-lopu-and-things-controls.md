@@ -199,10 +199,14 @@ combined-source checks and deployed acceptance are recorded on the PR.
 Main integration through `4094a9a15` preserves PR #879's shared list controls,
 including paginated and filtered Thing discussions. Authorized older comment
 pages retain rich post rows, reactions, nested replies and attached Things through
-an optional batched projection; the Things capability advances to 1.26.0.
+an optional batched projection; the Things capability advances to 1.27.0.
 Acceptance checks cover searching beyond the initial twenty comments, bounded
 cursor loading, denied rows, page-size changes and empty filters. The shared
 acceptance callback still refreshes service galleries only after a committed
 comment. Final combined-source and deployment evidence is recorded on the PR.
 
 Discussion pagination QA: private twenty-five-comment fixture returned twenty plus five unique rows, found an older-page search match, and loaded its nested reply only on expansion. Chrome desktop and 390px checks passed all fixed page sizes, Author filters, empty search, infinite completion and page-bottom layout. The bounded projection omits unloaded replies and unknown totals, preserves bounded legacy comments, and encrypts target/viewer/token-scoped cursor positions so denied hidden IDs never appear in pagination tokens. Canonical Things tests passed 293 cases. Final integrated build and security evidence is recorded on the PR.
+
+The final integration also retains main PRs #880 (library maps/platforms and its isolated SDK CSP) and #878 (remote device file browser). All discussion QA read grants were revoked and read denial was rechecked. Graphify covers the new production paths; its installed detector does not index `.mts` test modules, which are exercised by the canonical test suite.
+
+Integration security review also checks the remote-file byte boundary: generic Thing readers must not expose device-command input or results in place of the dedicated, expiring device result endpoint. A focused regression accompanies this boundary fix.

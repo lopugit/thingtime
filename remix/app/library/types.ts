@@ -11,8 +11,14 @@ export type LibraryExample = {
 	module?: string;
 	code?: string;
 	visual?: boolean;
+	setup?: string;
+	sdk?: { type: 'mapbox' | 'google-maps'; accountUrl: string };
+	credentialLabel?: string;
 	request?: {
 		url: string;
+		// Only catalogue-authored read operations may use POST (Places search).
+		method?: 'GET' | 'POST';
+		body?: Record<string, unknown>;
 		auth?: { type: 'bearer' | 'header' | 'query' | 'basic'; name?: string; prefix?: string };
 		headers?: Record<string, string>;
 		params?: Record<string, string>;

@@ -671,7 +671,8 @@ export function useApi() {
 						},
 						options?: { signal?: AbortSignal }
 					) => {
-						await requireThingtimeCapability('api.attachment-uploads', '1.4.1');
+						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
+						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
 						if (args.purpose === 'recording-import') {
 							await requireThingtimeCapability('api.attachment-upload-complete', '1.3.0');
 						}
@@ -896,14 +897,14 @@ export function useApi() {
     things: {
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
-          await requireThingtimeCapability('api.things-export', '1.14.0');
-          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.6.4');
+          await requireThingtimeCapability('api.things-export', '1.15.0');
+          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.10.0');
+        await requireThingtimeCapability('api.things-import', '1.11.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -952,7 +953,7 @@ export function useApi() {
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => {
-          await requireThingtimeCapability('api.things', '1.26.0');
+          await requireThingtimeCapability('api.things', '1.27.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
         },
@@ -960,7 +961,7 @@ export function useApi() {
 			),
       list: useCallback(
         async (args, options?: { signal?: AbortSignal }) => {
-          await requireThingtimeCapability('api.things', args?.commentProjection ? '1.26.0' : args?.target ? '1.22.0' : '1.14.0');
+          await requireThingtimeCapability('api.things', args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : '1.14.0');
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -983,7 +984,7 @@ export function useApi() {
       }, []),
       update: useCallback(
         async (args) => {
-          if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.26.0');
+          if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
@@ -1010,7 +1011,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       renameLibrary: useCallback(async (args: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
-        await requireThingtimeCapability('api.things', '1.26.0');
+        await requireThingtimeCapability('api.things', '1.27.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
       }, [asyncFetcher]),
       // multi-select move/copy/delete/share — see /docs/api things-bulk
@@ -1051,7 +1052,7 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.26.0');
+          if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
