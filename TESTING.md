@@ -6231,6 +6231,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Components (/components, `remix/app/components/ComponentsLibrary/`, `/api/v1/components/browse`, `/api/v1/admin/components/seed`)
 
+- [ ] Admin catalog import: regular users never see the publisher. On desktop
+      and 375px mobile, open the importer, select valid/invalid/duplicate JSON,
+      and review the count before publishing. Invalid files cannot publish;
+      progress reflects server counts; stop/account switch prevents later
+      batches and stale updates; retrying converges without duplicate Things.
+      Large UTF-8 definitions stay below the HTTP body limit, and a skipped or
+      failed batch stops with an honest partial-progress message.
 - [ ] `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`
       passes end to end (browse + filters + docs twin, admin seed gate,
       user save-version via the unified things path, react/save decoration).

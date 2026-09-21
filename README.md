@@ -1186,6 +1186,15 @@ for the catalog size — tranche 2 grew it to 70 archetypes / 350 families /
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
 
+Admins can also publish a catalog from `/components` → **Import component
+catalog**. Choose a JSON array of component definitions (or an object with a
+`components` array), review the validated count, then select **Publish catalog**.
+This uses the signed-in session, so no password file is needed. Files are capped
+at 32 MiB / 5,000 definitions. Batches respect the API's count, body-size and
+rate limits; stopping or retrying preserves completed work without duplicating
+components. The selected origin must advertise `api.admin-components-seed`
+1.0.0 and `api.webpages-suites-install` 1.1.0 or compatible versions.
+
 ```sh
 # 1. Start the dev stack and register a throwaway user, then restart with
 #    that user on the admin allowlist:
