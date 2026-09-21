@@ -49,11 +49,132 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Route native-tool GPT-5.6 Sol chat replies through
+  Responses while retaining the selected reasoning effort and speed. The reply
+  contract advances to 1.14.1 after authenticated preview QA exposed a rejected
+  Chat Completions combination. Live repaired-path acceptance remains pending;
+  details are in the [PR 867 note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md).
+
+- 2026-09-22 — **Codex (AI)**: Commit keyboard adjustments on the remote
+  brightness and volume sliders. Arrow and range-navigation keys now send the
+  displayed value, with duplicate pointer/keyboard completion suppressed.
+
+- 2026-09-22 — **Codex (AI)**: Keep remote device telemetry flowing when a
+  macOS application has a blank display name. The native heartbeat now uses
+  its bundle identifier as the name and skips blank identifiers before paging,
+  preventing HTTP 400 responses that hide brightness and file capabilities.
+
+- **2026-09-21 · Codex (AI):** Seamless Lopu continuation with browser/server
+  management, one aggregate iOS chat Live Activity, Builder settings and unified
+  Commander navigation. Things now share post discussions, attach existing
+  Things, recognize legacy folders, preserve scalar previews and expose broader
+  management/rename controls. Shared discussions preserve paginated search and
+  filters with authorized rich comment batches (Things 1.27.0). Generic Thing
+  reads also protect device-command inputs and expiring file results. Action-run delivery defaults off; unlisted social
+  previews retain context without indexing. Fix Nitro shell asset registration
+  and writable Graphify working copies. Pre-merge review also hardens abandoned
+  server task cancellation, workflow admission recovery and persisted local
+  retry limits. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
+  for validation and device/deployment limits.
+
+- 2026-09-21 — **Codex (AI)**: Restore native display brightness on Apple
+  Silicon Macs and refresh paired capabilities on heartbeat. Add a shared
+  Things file browser in full-page, docked and pop-up layouts, with protected
+  Thingtime files and bounded remote copy/cut/paste. Preserve originals on
+  failed transfers and keep file bytes out of device history/events. Verified
+  real brightness round-trip, repeated native/web tests, a full web build and
+  desktop/mobile browser states. [QA and rollout](../PRs/878-codex-remote-device-files-fix-brightness-and-shared-file-browser.md).
+
+- 2026-09-21 — **Codex (AI)**: Add 40 Mapbox, Google Maps/Places and larger-platform examples (540 total), isolated browser SDK loading with transient key controls, bounded Places POST searches and generated builder pages. `api.library-request` advances to 1.2.0; setup and verification guidance cover separate browser/server keys. [PR #880 details](../PRs/880-codex-library-maps-platforms-maps-and-major-platform-examples.md).
+
+- 2026-09-21 — **Codex (AI)**: Added shared franchise list controls with search, relevant filters, result counts, 5/10/15/20 page sizes and infinite scrolling across records, histories, comments, media and planner days. Removed the eight-visit dashboard cutoff; paged planner moves retain the full day order. Details: [PR #879](../PRs/879-codex-franchise-list-controls-paginate-and-filter-franchise-lists.md).
+
+- 2026-09-21 — **Codex (AI):** Require native app changes, including Thingtime
+  Mac, Thingtime Recovery and Commander, to be rebuilt, verified, reinstalled
+  and launched on the development machine before handoff, with installed-build
+  and smoke-check evidence in the completion report.
+
+- 2026-09-21 — **Codex (AI)**: Production franchise follow-up: restore saved
+  comment attachments in workspace galleries, clear committed upload batches,
+  and show safe Google Places setup or gateway error guidance. Contracts:
+  api.things 1.24.0 and api.builder-workspaces 1.0.1.
+  [PR #876 details](../PRs/876-codex-franchise-production-polish-media-galleries-and-places-errors.md).
+
+- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action. Long account names now truncate in the mobile header, with a compact search trigger. Retired a stale Connections lookup that could block seeding at the MongoDB index limit. [PR #875 notes](../PRs/875-codex-library-builder-pages-integration-builder-pages.md).
+- **2026-09-20 · Claude (AI):** Developer-experience follow-ups. Filesystem
+  stand-in for the private S3 bucket (`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR`,
+  `localAttachmentStorage.ts`, dev-only `GET|PUT /api/v1/attachments/local-object`
+  with HMAC-signed URLs, refused on Vercel) so uploads, previews, downloads,
+  archives and moderation fetches run locally; `remix/scripts/seed-fixture.mjs`
+  (`create`/`resume`/`cleanup`/`list`) seeds a user, folder and post with N
+  stored files through the real API; `docs/feature-map/` per-domain maps linked
+  from `AI_ALL.md`; `nitro.config.ts` duplicate `serverAssets` merged (the
+  `shell` mount was silently dropped), `registry.ts` schema fields completed and
+  the typecheck baseline ratcheted down; Graphify snapshot files are now
+  read-only on activation so stale hooks cannot mutate committed snapshots;
+  `npm run worktree-bootstrap` + `post-checkout` auto-bootstrap for linked
+  worktrees (deps, env copy, derived-port `.claude/launch.json`, relative
+  `core.hooksPath`). Validation: `test:attachments`, `test:api-capabilities`,
+  `test:graphify-cas`, seed → archive → cleanup against the local stand-in.
+  Details: [PR #863 note](../PRs/863-claude-dx-local-storage-fixtures-feature-maps--developer-experience-follow-ups.md).
+
+- **2026-09-21 · Claude (AI):** Once-over review fixes for download-all
+  archives and the local attachment stand-in. Archive: the 280 s deadline is a
+  timer that aborts stalled upstream reads and now covers planning too (504 on
+  overrun); `manifest=1`/HEAD probes authorize without presigning on their own
+  `attachments.archiveManifest` window; bound rows past the cap return 413
+  instead of a shorter ZIP; the traversal budget counts only visible Things;
+  blocked linked media is withheld from `links.txt`; the `skipped` count is
+  owner/admin-only and 404s carry one message; `sharedRoot` resolves a
+  composition-only media root; long names keep their extension; client toasts,
+  folder-pill caching and hook placement tightened (`api.attachment-archive`
+  1.0.1). Stand-in: signing-secret retry, `PrivateS3ConfigError` on Vercel,
+  foreign version ids as absent objects, honoured abort signals, one pipeline
+  per completion, 400 for cancelled part PUTs, optional
+  `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, ETag/304
+  (`api.attachment-local-object` 1.0.1). Scripts: install lock in
+  `ensure-dependencies.js`, `.worktreeinclude`-driven env copy and an attach
+  entry in `.claude/launch.json`, seed-fixture cleanup/validation/realpath
+  fixes, ratchet hard-fail on duplicate declarations. Details:
+  [PR #865 note](../PRs/865-claude-dx-once-over-fixes--archive-and-local-storage-review-fixes.md).
+
+- 2026-09-21 — **Codex (AI)**: Allow the franchise Google Maps SDK and map-service
+  hosts in production/dev CSP while retaining the inline-script and eval bans;
+  use raster map rendering and verify the explicit host policy.
+
+- 2026-09-21 — **Codex (AI)**: Added an admin catalog importer on `/components`
+  with whole-file schema validation, capability negotiation, bounded paced
+  batches, cancellation and real publication counts. Functional demo runtime
+  PR #870 is production-live; all 322 built-in demos and 18 suites are seeded.
+
+- 2026-09-21 — **Codex (AI)**: Keep mobile sign-in hints above the floating
+  assistant and DevKit buttons, with bounded scrolling for short viewports.
+  Verified while testing the remote integration catalogue preview.
+
+- 2026-09-21 — **Codex (AI)**: Enable 500 remote integration examples across 42
+  libraries/services with searchable `/library` pages, editable demos, source,
+  provider account/key entry and private reusable Things. The catalogue extends
+  the previously delivered isolated runtime with capability 1.1.0. [Acceptance notes](../PRs/869-codex-third-party-catalogue-500-remote-integration-examples.md).
+
+- 2026-09-21: Make demo forms run real Actions, preserve confirmation through
+  composed pages, show results inline, and support bounded local component
+  controls. Site forms and requests save private Things; template copying
+  installs their dependencies. Added responsive browser regression coverage.
+  [Validation notes](../PRs/870-codex-functional-thingtime-demos-functional-demo-controls.md).
 - 2026-09-21 — **Codex (AI)**: Add the curated remote integration runtime, opaque
   preview documents, cancellable workers, credential-safe read-only provider
   requests, capability negotiation and reusable Component Thing rendering.
   Build and dev workflows generate the isolated runner. The catalogue ships
   separately after this backing infrastructure. [Validation notes](../PRs/866-codex-third-party-runtime-isolated-remote-integration-runtime.md).
+
+- **2026-09-21 · Codex (AI):** Add a native builder service workspace for franchise
+  operations: folder-backed customer/property/job/visit/equipment records, live
+  role and customer access, direct record context menus, day/week planning,
+  time and resource logs, per-record comments/media and Google Maps via the
+  owner's Vault. Add environment selection for new Vault secrets and metadata-only
+  environment moves for existing secrets/providers. Document fork setup and
+  local role, scheduling, media and responsive regression checks.
+  [Validation notes](../PRs/871-codex-jims-franchise-builder-franchise-workspaces-and-vault-environments.md).
 
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
@@ -192,6 +313,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-14 — Dropping files onto a post composer opens Photos and queues the files through the existing uploader without deselecting other modes, including Poll. Collapsed prompts and rich comments use the same flow. — Codex (AI)
 
 - 2026-09-14 — Allow `thingtime` as a subspace slug and let owners rename URLs in Mod tools → Settings, preserving posts and memberships with atomic uniqueness checks and capability negotiation. **Codex (AI)**
+
+- Add a public support page with the existing GoFundMe contribution link and
+  editable paid-setup/sponsorship email enquiries. Replace unsupported landing
+  totals, reward promises and the unavailable Indiegogo link; add a funding
+  launch plan and fork-safe support setup notes. — Codex (AI), 2026-09-14
 
 - Recover committed text/link posts when the server omits an empty media layout;
   bound stalled publish/readback requests and preserve the same retry UUID. Use
@@ -829,6 +955,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Fix APNs rejection of notification tests and long reminder IDs by hashing the collapse header to Apple’s 64-byte limit; expose the safe BadCollapseId diagnostic. — Codex (AI), 2026-09-10
 
 - 2026-09-10: Recover older iPhone Lopu recordings into private Things with durable import receipts; fix notification bell toggling and refresh, reconnect native push from Settings, report APNs outcomes, and keep single/bulk push delivery alive through Vercel responses. Details: [PR 726](../PRs/726-ios-push-recording-import.md).
+
+- Update the connections preview with released shared-index readers, writers and migrations while retaining relational external-post sources and private-subspace fences. Make stubbed outbound redirect tests independent of machine DNS. — Codex (AI), 2026-09-09
 
 - Refresh the custom-audience promotion preview with released main's shared-index readers. Resolve equivalent ACL merge blocks and duplicate viewer fields, composer state, and modal rendering; retain main's unified audience controls and drawer layering. Database migration activation remains separate. — Codex (AI), 2026-09-09
 
@@ -2701,6 +2829,35 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the Electron bundle uses adaptive light/dark Icon Composer artwork. — Codex
   (AI), 2026-08-21
 
+- **Third-party connections: a viral external post could grow without bound,
+  and leaked who else was reading it** (PR #295). A synced `external-post`
+  carried its source membership as an embedded root `sourceIds` array plus, for
+  personal-timeline providers, one `tt:extacct/<accountId>` ACL entry per
+  sourcing account. Because personal providers give each user their own
+  external account, "per source" meant *per user*: a post that surfaced in
+  10k home timelines accumulated 10k array elements and 10k ACL entries on one
+  document — monotonic growth toward Mongo's 16 MB cap on exactly the hottest
+  documents, a whole-document rewrite on every sync, and a privacy leak, since
+  `toPublicPosts` projects `acl` verbatim, so every reader received the
+  external-account ids of everyone else who sourced the post. Membership is now
+  relational per FUNDAMENTALS §3: one `external-post-source` thing per (post,
+  sourcing account), a canonical root-`targetId` child of the post,
+  `uniqueKeys`-deduped, with the post's publish time denormalized onto the row
+  so the connections feed pages membership directly on the existing
+  `(thingtime, parentId, createdAt, shareId)` index (the sourcing account is
+  the row's root `parentId` — the Things index budget is at its ceiling, so
+  connections adds no index of its own). The post's own
+  ACL is now a CONSTANT — `tt:all` for public providers, `tt:extsourced` for
+  personal ones — resolved live against the reader's links, so it names no
+  account, discloses nothing, and never grows. Unlinking still revokes
+  instantly (links, not materialized grants, are the authorization truth), and
+  retiring an account's last link now drains its membership rows instead of
+  leaving dead index entries. Legacy rows keep resolving through the
+  compatibility path; the admin `relational-external-post-sources` migration
+  converts them (drilled end-to-end: 20/20, including that a legacy post stays
+  visible to its member both before and after, and that a re-run is a no-op).
+  `verify:connections` is now 94/94. — Claude (AI), 2026-08-21
+
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex
@@ -3011,150 +3168,37 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
   (PR #308 note has details).
 
-- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
-  with the drawer and media-capture fixes, verified the signed IPA metadata and
-  privacy descriptions, and published build 14 for internal TestFlight testing.
-  — Codex (AI), 2026-08-18
-
-### Performance
-
-- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
-  audit of the codebase with every finding adversarially verified against the
-  real source (74 raw → 63 confirmed, 11 refuted); see
-  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
-  for the complete record. Landed this round: route-level code splitting plus
-  removal of the never-rendered FontAwesome solid set, taking the entry chunk
-  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
-  session, user and subscription concurrently, turning three sequential Mongo
-  round trips into one on every authenticated request; `useRecentReactions`
-  shares a single fetch across all consumers (8 → 1 identical requests per page,
-  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
-  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
-  resolution; and the notifications bell no longer polls hidden tabs.
+- **Connections: real SSO account linking + virtual YouTube subscriptions.**
+  OAuth begin/callback endpoints (state = short-lived signed JWT bound to the
+  starting session; token responses sealed in the external-account secure
+  BinData blob, refreshed near expiry) with config-gated SSO providers:
+  Facebook (`FACEBOOK_APP_ID/SECRET`), Instagram (`INSTAGRAM_APP_ID/SECRET`),
+  TikTok (`TIKTOK_CLIENT_KEY/SECRET`), and YouTube account via Google
+  (`GOOGLE_CLIENT_ID/SECRET` — syncs your real subscriptions). Plus the
+  Thingtime-managed **virtual YouTube subscription list** (ytsubber-style):
+  per-user multi-channel list with add/remove + channel name search
+  (`YOUTUBE_API_KEY`/`GOOGLE_API_KEY`; ids/URLs/@handles keyless via RSS),
+  merged uploads feed. External posts now carry a root `sourceIds` array (one
+  video through many sources stays ONE post with unified comments) and the
+  feed deepens on scroll (`deepen=1`, per-account depth cap). Redirect origin
+  pin: `CONNECTIONS_OAUTH_REDIRECT_BASE`. `verify:connections` now 64 checks.
   — Claude (AI), 2026-08-18
-- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
-  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
-  a conditional GET per repeat visit, restoring the zero-network disk-cache
-  path); the comment permalink's ancestor ACL checks share one batched lookup
-  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
-  pages use the same batched walk; a partial index backs the unread-notification
-  badge so the count no longer fetches every notification a user ever received;
-  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
-  the messenger access gate resolves chat and membership together; and the
-  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
-  Host header). — Claude (AI), 2026-08-18
-- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
-  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
-  and the reply aggregate projects before `$group`, removing a 100MB
-  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
-  index gives the dual-era post match a sortable v1 branch, so the feed stops
-  fetching every visible post and sorting in memory; a sparse `shareOfId` index
-  turns the live share-count aggregation from a full collection scan into an
-  indexed lookup on every feed page, post read and reaction toggle; chat member
-  existence checks batch into two queries; and the feed's post row is memoized
-  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
-- **PR #299 independent review**: every push was re-reviewed by a second
-  session (verification record in the PR note's "Review record" section);
-  no invalid changes found. One hardening landed from review:
-  `insertChatMembers` rethrows bulk write-concern failures instead of
-  swallowing them with the benign duplicate-key races, matching the old
-  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
-  confirmed against the production cluster's MongoDB 8.0.1.
-  — Claude (AI), 2026-08-18
-- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
-  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
-  layout across feed, profile, and permalink reloads instead of silently
-  falling back to masonry. A focused projection-contract regression test covers
-  every direct-comment and eagerly shipped reply-level use of that field.
-  — Codex (AI), 2026-08-24
 
-### Added
-
-- **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
-  Three layers, all powered by the browser's own sessions — never a central
-  session store. (1) _Federated hint resolution_: `/api/v1/auth/account-hints`
-  now reports foreign-database origins as `unresolved`, and the client fans
-  out to each origin's new `/account-hints/resolve` (CORS restricted to the
-  Thingtime family, credentialed, read-only) so every environment vouches
-  only for its own sessions. (2) _Cross-origin session handoff_: a signed-in
-  surface mints a 2-minute, aud-bound, single-use code
-  (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
-  cookie family (immutable `*.vercel.app` previews) redeems at its own
-  `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
-  the session (theft signal), different-environment redemption fails closed;
-  the `/authorize?self=1` popup ("Continue to <host>?") and a
-  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) _FedCM
-  identity provider_: `/.well-known/web-identity` + config/accounts/
-  client-metadata/assertion endpoints let Chromium render its native
-  "Continue as…" sheet on any domain from the switcher roster
-  (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
-  assertion mints handoff codes for Thingtime-self or baseline app tokens for
-  registered clients). E2E: `remix/scripts/verify-federated-login.mjs` — 31
-  checks against two stacks on separate mongods, including the full
-  FedCM→assertion→session loop. — Claude (AI), 2026-08-19
-
-- **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
-  password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
-  → `/register`), usernameless discoverable login (`/login-options` → `/login`,
-  bypasses email-OTP by design, sessions carry `meta.method: "passkey"`), and a
-  Settings → Security manager (nicknames, descriptions, provider names derived
-  from authenticator AAGUIDs, created/last-used dates, linked apps, revoke +
-  delete, both password-confirmed). rpID is `thingtime.com` for every
-  `*.thingtime.com` deployment so one passkey works on production, dev, and
-  previews; conditional-UI autofill (`autocomplete="username webauthn"` +
-  `mediation: conditional`) surfaces the native iCloud Keychain / 1Password
-  popups on the login form. Credentials are protected `passkey` things (secure
-  blob + uniqueKeys, HOME collection — a `tt_mongo` override can never capture
-  or plant credentials); usage records are `passkey-app-link` child things.
-  Auto-login: every sign-in writes a `{rosterId, origin}` pointer into the
-  `Domain=.thingtime.com` `tt_hints` cookie; `GET /api/v1/auth/account-hints`
-  resolves pointers live (same roster/session chokepoints as the switcher) so
-  signed-out visitors get a "Continue as…" popup listing accounts with live
-  sessions on other deployments — picking one still requires that account's
-  password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
-  software WebAuthn authenticator (P-256 + CBOR) driving the real API (44
-  checks). — Claude (AI), 2026-08-19
-
-- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
-  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
-  card choosing the provider per surface — media uploads (default / tiered /
-  free openai-only / claude / off) and post/comment text (default / free
-  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
-  the env default. New text pipeline: post/comment/share `crystal.text` is
-  screened by the free omni endpoint on create and on edit; block-worthy
-  categories quarantine the thing (hidden from feeds/threads/search via
-  `canView` + thread loading), other flags queue an advisory `moderationFlag`
-  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
-  and its stamps are final for the pipeline. A new hourly cron
-  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute 29) retries text moderation lost to mid-flight process deaths or provider
-  outages and drains off-era backlog for free, plus the standard attachment
-  sweep; the admin sweep button runs both batches and the tab shows the text
-  backlog count. Post creation adds a hybrid sync gate: the free omni screen
-  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
-  insert so flagged posts are born stamped (blocked content never renders,
-  even briefly), while timeouts/outages produce owner-private pending posts
-  for the async pipeline — moderation can never break posting; a per-instance circuit breaker
-  (3 failures → open, 60s cooldown) skips the omni call during confirmed
-  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
-  obtainable while the surface is on, posts are born PENDING — owner-private
-  until the async queue / hourly cron screens and releases them (creation
-  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
-  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
-  combined free request: prose + listing text + tags + legacy external image
-  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
-
-- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
-  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
-  `omni-moderation-latest` endpoint screens every image first; clean images
-  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
-  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
-  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
-  `OPENAI_API_KEY` reused for the screen, optional
-  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
-  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
-  standalone `openai`, and the unset default picks the tiered pipeline when
-  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
-  (PR #308 note has details).
+- **Third-party app connections** (`/connections`, `/connections/feed`, API
+  family `/api/v1/connections/*`): link external accounts (Reddit, YouTube,
+  Mastodon, Bluesky, Lemmy, Hacker News, GitHub, generic RSS/Atom, and a
+  deterministic demo personal-algorithm provider) to a Thingtime account —
+  one external account is linkable from MULTIPLE Thingtime accounts
+  (deterministic shared `external-account` things). Feeds sync idempotently
+  into `external-post` things (reserved `ext-` shareId namespace, CI-style
+  not-older upserts, per-account cooldown), so native Thingtime comments and
+  reactions attach by `targetId` and `/post/:id` permalinks resolve with the
+  third-party author. AI feed filters ("warn for sad news" → veil + Show
+  button, or hide) classify feeds server-side via the shared Lopu provider
+  waterfall (`generateAiCompletion` in `musing.ts`) with cached per-revision
+  verdicts and a deterministic keyword fallback when no AI key is set.
+  E2E: `pnpm --dir remix run verify:connections` (45 checks; +2 live with
+  `TT_VERIFY_LIVE=1`). — Claude (AI), 2026-08-17
 
 ### Security
 

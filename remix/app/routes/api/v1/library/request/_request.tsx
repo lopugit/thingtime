@@ -2,7 +2,10 @@ import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { API_EXAMPLES } from '~/library/apis';
+import { PLATFORM_API_EXAMPLES } from '~/library/platformApis';
 import { runLibraryRequest } from '~/api/utils/library/request';
+
+const credentialedExamples = [...API_EXAMPLES, ...PLATFORM_API_EXAMPLES];
 const headers = { 'Cache-Control': 'no-store' };
 export async function action({ request }: { request: Request }) {
 	if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers });
@@ -22,7 +25,7 @@ export async function action({ request }: { request: Request }) {
 	}
 	try {
 		const body = await readJsonBody(request, 24 * 1024);
-		const example = API_EXAMPLES.find((item) => item.id === body?.exampleId);
+		const example = credentialedExamples.find((item) => item.id === body?.exampleId);
 		if (!example?.request?.auth || typeof body.apiKey !== 'string')
 			return json({ ok: false, error: 'Choose a supported credentialed example.' }, { status: 400, headers });
 		const result = await runLibraryRequest(example, body.input, body.apiKey);

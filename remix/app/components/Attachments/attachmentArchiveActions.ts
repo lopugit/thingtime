@@ -27,6 +27,9 @@ export const buildArchiveMenuSection = ({ fileCount, noun, bulk = false }: { fil
 	if (bulk || fileCount === 0) return null;
 	const counted = fileCount && fileCount > 0 ? ` (${fileCount} file${fileCount === 1 ? '' : 's'})` : '';
 	const scope = noun === 'media' ? 'this file' : `this ${noun}`;
+	// One known file is still a ZIP (so the share link exists), but "all files
+	// (1 file)" would promise a gallery the inline pill deliberately hides.
+	const single = noun !== 'media' && fileCount === 1;
 	return {
 		id: 'files',
 		label: 'Files',
@@ -34,10 +37,10 @@ export const buildArchiveMenuSection = ({ fileCount, noun, bulk = false }: { fil
 			{
 				id: ARCHIVE_DOWNLOAD_COMMAND,
 				command: ARCHIVE_DOWNLOAD_COMMAND,
-				label: noun === 'media' ? 'Download as ZIP' : `Download all files${counted}`,
+				label: noun === 'media' ? 'Download as ZIP' : single ? 'Download the file as a ZIP' : `Download all files${counted}`,
 				icon: '🗜️',
 				lucide: 'folder-down',
-				hint: noun === 'media' ? 'The stored file inside one ZIP' : `Every stored file in ${scope} as one ZIP`
+				hint: noun === 'media' ? 'The stored file inside one ZIP' : single ? `The one stored file in ${scope} as a ZIP` : `Every stored file in ${scope} as one ZIP`
 			},
 			{
 				id: ARCHIVE_SHARE_COMMAND,

@@ -510,12 +510,18 @@ export function useApi() {
         // providerId = one of the viewer's Secure Vault providers (v1.ai.models()
         // → vaultProviders[].id); null clears it back to the catalog model
         create: useCallback(
-          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null }) =>
-            asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' }),
+          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; management?: 'client' | 'server' }) => {
+            if (args?.management) await requireThingtimeCapability('api.lopu-chats', '1.5.0');
+            return asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' });
+          },
           [asyncFetcher]
         ),
         update: useCallback(
-          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; archived?: boolean }) => {
+          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; management?: 'client' | 'server'; archived?: boolean }) => {
+            if (args.management) {
+              await requireThingtimeCapability('api.lopu-chats', '1.5.0');
+              await requireThingtimeCapability('api.lopu-chats-update', '1.4.0');
+            }
             if (args.archived !== undefined) {
               await requireThingtimeCapability('api.lopu-chats', '1.4.0');
               await requireThingtimeCapability('api.lopu-chats-update', '1.3.0');
@@ -665,7 +671,8 @@ export function useApi() {
 						},
 						options?: { signal?: AbortSignal }
 					) => {
-						await requireThingtimeCapability('api.attachment-uploads', '1.4.1');
+						await requireThingtimeCapability('api.attachment-uploads', args.purpose === 'file' || args.purpose === 'file-import' ? '1.5.0' : '1.4.1');
+						if (args.purpose === 'file' || args.purpose === 'file-import') await requireThingtimeCapability('api.attachment-upload-complete', '1.4.0');
 						if (args.purpose === 'recording-import') {
 							await requireThingtimeCapability('api.attachment-upload-complete', '1.3.0');
 						}
@@ -890,20 +897,20 @@ export function useApi() {
     things: {
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
-          await requireThingtimeCapability('api.things-export', '1.14.0');
-          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.6.4');
+          await requireThingtimeCapability('api.things-export', '1.15.0');
+          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.10.0');
+        await requireThingtimeCapability('api.things-import', '1.11.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
       // subspaces (the "🪐 My subspaces" chip); default all
       feed: useCallback(async (args) => {
-        if (isDefaultAlgorithm(args?.algorithm)) await requireThingtimeCapability('api.things-feed', '1.7.0');
+        await requireThingtimeCapability('api.things-feed', '1.8.0');
         return getJson(`/api/v1/things/feed${toQuery(args)}`);
       }, []),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
@@ -935,7 +942,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => {
-        await requireThingtimeCapability('api.things-user', '1.6.0');
+        await requireThingtimeCapability('api.things-user', '1.7.0');
         await requireThingtimeCapability('api.attachment-content', '1.8.0');
         return getJson(`/api/v1/things/user${toQuery(args)}`);
       }, []),
@@ -946,18 +953,19 @@ export function useApi() {
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => {
-          await requireThingtimeCapability('api.things', '1.22.0');
+          await requireThingtimeCapability('api.things', '1.27.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
-          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
+          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
         },
 				[]
 			),
       list: useCallback(
-        async (args) => {
-          await requireThingtimeCapability('api.things', args?.target ? '1.22.0' : '1.14.0');
+        async (args, options?: { signal?: AbortSignal }) => {
+          await requireThingtimeCapability('api.things', args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : '1.14.0');
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
+              commentProjection: args?.commentProjection ? true : undefined,
               key: args?.key,
               thingtime: args?.thingtime,
               folder: args?.folder,
@@ -965,7 +973,7 @@ export function useApi() {
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
               appId: args?.appId
-            })}`
+            })}`, options
           );
         },
         []
@@ -976,6 +984,7 @@ export function useApi() {
       }, []),
       update: useCallback(
         async (args) => {
+          if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
@@ -1001,6 +1010,10 @@ export function useApi() {
         },
         [asyncFetcher]
       ),
+      renameLibrary: useCallback(async (args: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
+        await requireThingtimeCapability('api.things', '1.27.0');
+        return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
+      }, [asyncFetcher]),
       // multi-select move/copy/delete/share — see /docs/api things-bulk
       bulk: useCallback(
         async (args) => {
@@ -1039,6 +1052,7 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
+          if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
@@ -1087,7 +1101,7 @@ export function useApi() {
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
-          await requireThingtimeCapability('api.things-comment', '1.6.0');
+          await requireThingtimeCapability('api.things-comment', '1.8.0');
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
@@ -1127,6 +1141,59 @@ export function useApi() {
       grants: useCallback(async () => getJson('/api/v1/oauth/grants'), []),
       revokeGrant: useCallback(
         async (args) => asyncFetcher.submit({ clientId: args?.clientId }, { action: '/api/v1/oauth/grants/revoke' }),
+        [asyncFetcher]
+      )
+    },
+    // third-party app connections (Reddit, YouTube, Mastodon, …) — link
+    // external accounts, browse their feeds, manage AI feed filters
+    connections: {
+      providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
+      list: useCallback(async () => getJson('/api/v1/connections'), []),
+      connect: useCallback(
+        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
+        [asyncFetcher]
+      ),
+      unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
+      // SSO account linking: begin returns the provider's authorize URL — send
+      // the browser there; the callback lands back on /connections
+      oauthBegin: useCallback(
+        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        [asyncFetcher]
+      ),
+      // the Thingtime-managed virtual YouTube subscription list
+      youtubeSearch: useCallback(async (args) => getJson(`/api/v1/connections/youtube/search${toQuery({ q: args?.q })}`), []),
+      youtubeChannels: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { ...(args && 'add' in args ? { add: args.add } : {}), ...(args?.remove ? { remove: args.remove } : {}) },
+            { action: '/api/v1/connections/youtube/channels' }
+          ),
+        [asyncFetcher]
+      ),
+      feed: useCallback(
+        async (args) =>
+          getJson(
+            `/api/v1/connections/feed${toQuery({
+              connection: args?.connection,
+              cursor: args?.cursor,
+              limit: args?.limit,
+              sync: args?.sync,
+              deepen: args?.deepen
+            })}`
+          ),
+        []
+      ),
+      filters: useCallback(async () => getJson('/api/v1/connections/filters'), []),
+      saveFilter: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
+            { action: '/api/v1/connections/filters' }
+          ),
+        [asyncFetcher]
+      ),
+      removeFilter: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }),
         [asyncFetcher]
       )
     },

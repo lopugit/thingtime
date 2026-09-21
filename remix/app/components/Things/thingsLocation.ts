@@ -24,7 +24,7 @@ export const writeThingsLocation = (params: URLSearchParams, state: ThingsLocati
   return next;
 };
 
-export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'>, search = '') => {
+export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, search = '') => {
   if (!isFolder(thing)) return thingOpenHref(thing, 'things');
   const next = new URLSearchParams(search);
   next.set('folder', thing.id);

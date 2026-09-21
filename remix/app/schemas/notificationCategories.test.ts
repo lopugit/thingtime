@@ -48,7 +48,7 @@ test('merged recording and subspace families retain their independent preference
   assert.equal(notificationCategoryOf('subspace-report'), 'engagement');
 });
 
-test('action-run is the system family: bell on by default, email opt-in', () => {
+test('action-run is the system family: all delivery channels opt-in', () => {
   assert.equal(NOTIFICATION_TYPE_CATEGORY['action-run'], 'system');
   assert.deepEqual(notificationTypesInCategory('system'), ['action-run', 'recording-reminder', 'lopu-reminder', 'lopu-message', 'login-success', 'system-message']);
   assert.equal(normalizeNotificationPrefs(null).push['lopu-message'], true);
@@ -57,7 +57,9 @@ test('action-run is the system family: bell on by default, email opt-in', () => 
   assert.equal(normalizeNotificationPrefs(null).email['recording-reminder'], false);
   assert.ok(EMAIL_DEFAULT_OFF_TYPES.includes('action-run'));
   const prefs = normalizeNotificationPrefs(null);
-  assert.equal(prefs.push['action-run'], true);
+  assert.equal(prefs.push['action-run'], false);
+  assert.equal(normalizeNotificationPrefs({ 'action-run': true }).push['action-run'], true);
+  assert.equal(normalizeNotificationPrefs({ push: { 'action-run': true } }).push['action-run'], true);
   assert.equal(prefs.email['action-run'], false);
   assert.equal(normalizeNotificationPrefs({ email: { 'action-run': true } }).email['action-run'], true);
 });

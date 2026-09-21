@@ -1,3 +1,4 @@
+import { integrationBuilderSeeds } from '~/library/builderPages';
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { toBin } from '../auth/users';
 import { WEBPAGE_RESERVED_ID_PREFIX } from '../things/things';
@@ -332,6 +333,9 @@ export const seedDemoWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 			webpageDefinition(`${WEBPAGE_DEMO_SLUG_PREFIX}${demo.slug}`, ['webpage', 'demo', demo.family, demo.kind], webpageDemoCrystal(demo))
 		)
 	);
+
+// A separate, explicitly selected seed never refreshes unrelated demo suites.
+export const seedIntegrationWebpages = () => upsertSystemThings(integrationBuilderSeeds());
 
 // Behaviour suites: every part of every suite as a public system thing.
 // Schemas first in the list so a partial run still leaves the shapes the

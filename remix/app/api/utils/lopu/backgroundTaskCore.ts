@@ -5,6 +5,9 @@ export const AI_TASK_OWNER_HEADER = 'X-Thingtime-Task-Owner';
 export const AI_TASK_KIND = 'lopu-background-task';
 // Expiring worker lease, renewed while alive; not a task runtime limit.
 export const AI_TASK_LEASE_MS = 30_000;
+// Allow the durable scheduler to dispatch a new root, then fail closed if no
+// worker ever claims it. This is separate from a running worker heartbeat.
+export const AI_TASK_ADMISSION_LEASE_MS = 5 * 60_000;
 export const AI_TASK_MAX_BYTES = 2 * 1024 * 1024;
 export const AI_TASK_OPERATIONS: Record<string, { method: string; label: string; feature: string }> = {
 	'/api/v1/lopu/chats/reply': { method: 'POST', label: 'Lopu chat', feature: 'api.lopu-chats-reply' },
@@ -15,6 +18,9 @@ export const AI_TASK_OPERATIONS: Record<string, { method: string; label: string;
 export type AiTaskStatus = 'running' | 'completed' | 'needs-attention' | 'stopped';
 export type AiBackgroundTask = {
 	id: string;
+ management?: 'client' | 'server';
+ rootTaskId?: string | null;
+ workflowStatus?: AiTaskStatus | null;
 	requestId: string;
 	label: string;
 	path: string;

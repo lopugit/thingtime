@@ -31,6 +31,9 @@ export type LopuReplyContext = {
 export type LopuReplyConfirmation = { key: string; token: string };
 
 export type LopuReplyBody = {
+ management?: 'client' | 'server';
+ continueFromRequestId?: string;
+ automaticContinuation?: boolean;
 	attachmentIds?: string[];
 	thingIds?: string[];
 	chatId?: string;
@@ -80,7 +83,7 @@ export class LopuStreamError extends Error {
 export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal }): Promise<Response> => {
 	{ // Continuation requires the checkpoint-capable origin contract.
 		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-		await requireThingtimeCapability('api.lopu-chats-reply', body.context?.pages?.length ? '1.12.0' : '1.11.0');
+		await requireThingtimeCapability('api.lopu-chats-reply', '1.14.0');
 	}
 	const started = performance.now();
 	let response: Response;

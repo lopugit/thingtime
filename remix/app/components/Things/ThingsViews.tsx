@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Box, Checkbox, Flex, Grid, Text } from '@chakra-ui/react';
+import { Box, Button, Checkbox, Flex, Grid, Text } from '@chakra-ui/react';
 import type { TextProps } from '@chakra-ui/react';
 import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router';
@@ -132,6 +132,10 @@ export type ThingsItemAction =
   | 'delete';
 
 export type ThingsItemHandlers = {
+  compact?: boolean;
+  menuZIndex?: number;
+  itemHref?: (thing: ThingsThing) => string;
+  itemMenuFor?: (thing: ThingsThing) => import('../Thingtime/ContextMenu/contextMenuModel').ThingContextMenuModel;
   locationSearch?: string;
   clipboardCount?: number;
   ownerId?: string;
@@ -238,7 +242,7 @@ const TitleLink = ({
       else handlers.onItemOpen(thing);
     }}
     onDoubleClick={(event: React.MouseEvent) => event.stopPropagation()}
-    to={thingBrowseHref(thing, handlers.locationSearch)}
+    to={handlers.itemHref?.(thing) || (thing.inode ? `/things?files=${encodeURIComponent(thing.inode.deviceId)}&path=${encodeURIComponent(thing.inode.type === 'folder' ? thing.inode.path : thing.inode.path.split('/').slice(0, -1).join('/'))}` : thingBrowseHref(thing, handlers.locationSearch))}
     {...textProps}
   >
     {thingDisplayName(thing)}
@@ -246,8 +250,8 @@ const TitleLink = ({
 );
 
 const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
-  <ThingActionMenuButton identity={`${handlers.ownerId}:${thing.id}`}
-    model={buildThingsItemMenu({ thing, ownerId: handlers.ownerId, locationSearch: handlers.locationSearch,
+  <ThingActionMenuButton zIndex={handlers.menuZIndex} identity={`${handlers.ownerId}:${thing.id}`}
+    model={handlers.itemMenuFor?.(thing) || buildThingsItemMenu({ thing, ownerId: handlers.ownerId, locationSearch: handlers.locationSearch,
       actCount: handlers.selected.has(thing.id) ? Math.max(1, handlers.selected.size) : 1,
       clipboardCount: handlers.clipboardCount || 0 })}
     onAction={({ action }) => handlers.onItemAction(thing, (action.command === 'copy-link' ? 'copyLink' : action.command) as ThingsItemAction)} />
@@ -295,7 +299,7 @@ export const ThingsGridView = ({
   displayMode: ThingsDisplayMode;
   schemaRenderFor?: SchemaRenderLookup;
 } & ThingsDevicePresentation) => (
-	<Grid gap={3} templateColumns={`repeat(auto-fill, minmax(${displayMode === 'preview' ? '230px' : '150px'}, 1fr))`}>
+	<Grid gap={3} templateColumns={`repeat(auto-fill, minmax(min(100%, ${displayMode === 'preview' ? '230px' : handlers.compact ? '110px' : '150px'}), 1fr))`}>
 		{devices.map((state) =>
 			state.summary ? (
 				<DeviceCard
@@ -436,16 +440,16 @@ export const ThingsListView = ({
         size="sm"
       />
       <Text flex="1">Name</Text>
-      <Text display={['none', 'block']} width="70px">
+      <Text display={handlers.compact ? 'none' : ['none', 'block']} width="70px">
         Kind
       </Text>
-      <Text display={['none', 'block']} width="90px">
+      <Text display={handlers.compact ? 'none' : ['none', 'block']} width="90px">
         Audience
       </Text>
-      <Text display={['none', null, 'block']} flex="0.7">
+      <Text display={handlers.compact ? 'none' : ['none', null, 'block']} flex="0.7">
         Tags
       </Text>
-      <Text textAlign="right" width="72px">
+      <Text display={handlers.compact ? 'none' : undefined} textAlign="right" width="72px">
         Updated
       </Text>
       <Box width="24px" />
@@ -481,10 +485,10 @@ export const ThingsListView = ({
             <TitleLink fontSize="13px" fontWeight={500} handlers={handlers} noOfLines={1} thing={thing} wordBreak="break-all" />
             {isFolder(thing) && <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />}
           </Flex>
-          <Box display={['none', 'block']} width="70px">
+          <Box display={handlers.compact ? 'none' : ['none', 'block']} width="70px">
             <KindChip thing={thing} />
           </Box>
-          <Box display={['none', 'block']} width="90px">
+          <Box display={handlers.compact ? 'none' : ['none', 'block']} width="90px">
             <VisibilityChip thing={thing} />
           </Box>
           <Flex display={['none', null, 'flex']} flex="0.7" gap={1} minWidth={0} overflow="hidden">
@@ -503,7 +507,7 @@ export const ThingsListView = ({
               </Text>
             ))}
           </Flex>
-          <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px" textAlign="right" whiteSpace="nowrap" width="72px">
+          <Text display={handlers.compact ? 'none' : undefined} color="var(--tt-faint, #b6b6c0)" fontSize="11px" textAlign="right" whiteSpace="nowrap" width="72px">
             {formatWhen(thing.updatedAt)}
           </Text>
           <ItemMenu handlers={handlers} thing={thing} />
@@ -531,6 +535,7 @@ export const ThingsColumnsView = ({
   itemsFor,
   activeFolderAt,
   onOpenFolderAt,
+  onNewFolder,
   handlers,
   displayMode,
 	schemaRenderFor,
@@ -545,6 +550,7 @@ export const ThingsColumnsView = ({
   activeFolderAt: (depth: number) => string | null;
   onOpenFolderAt: (depth: number, folderId: string) => void;
   handlers: ThingsItemHandlers;
+  onNewFolder?: (parentId: string | null) => void;
   displayMode: ThingsDisplayMode;
   schemaRenderFor?: SchemaRenderLookup;
 } & ThingsDevicePresentation) => (
@@ -594,7 +600,7 @@ export const ThingsColumnsView = ({
                 data-thing-id={thing.id}
                 direction="column"
                 onClick={(event) => {
-                  if (folder) {
+                  if (folder && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
                     onOpenFolderAt(depth, thing.id);
                   } else {
                     handlers.onItemClick(thing, event);
@@ -640,6 +646,7 @@ export const ThingsColumnsView = ({
               Loading…
             </Text>
           )}
+          {onNewFolder && <Button size="sm" variant="ghost" flexShrink={0} justifyContent="flex-start" mx={2} mt={1} onClick={() => onNewFolder(folderId)}>New folder +</Button>}
         </Flex>
       );
     })}

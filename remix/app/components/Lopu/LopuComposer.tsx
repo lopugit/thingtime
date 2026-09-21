@@ -1,10 +1,10 @@
 import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
 import React from 'react';
-import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Text, Textarea } from '@chakra-ui/react';
 import { ArrowUp, ChevronDown, Settings2, Square } from 'lucide-react';
 
-import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
+import { DRAWER_POPUP_Z, useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { LopuModelPicker, LopuToggle } from './LopuModelPicker';
 import type { AiModelPublic, LopuChatDefaults, LopuChatSettings, LopuVaultInfo, LopuVaultProvider } from './lopuChatStore';
 import { LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuPopoverSx, lopuReducedMotionSx } from './lopuTheme';
@@ -28,6 +28,7 @@ export type LopuComposerProps = {
 	value: string;
 	onChange: (next: string) => void;
 	onSend: (text: string) => void;
+ onSendManaged?: (text: string, management: 'client' | 'server') => void;
 	onStop: () => void;
 	onQueue?: (text: string) => void;
 	onSendNow?: (text: string) => void;
@@ -183,6 +184,7 @@ export const LopuComposer = ({
 	onStop,
 	onQueue,
 	onSendNow,
+ onSendManaged,
 	noteDisabled,
 	queuePending = false,
 	streaming,
@@ -358,7 +360,7 @@ export const LopuComposer = ({
 					) : null}
 					<Flex align="center" gap={1.5} flexShrink={0} ml="auto">
 						{showSettings ? (
-							<Popover placement="top-end" isLazy strategy="fixed" gutter={8}>
+							<Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12 } }, { name: "flip", options: { padding: 12 } }]}>
 								<PopoverTrigger>
 									<Box as="span" display="inline-flex">
 										<IconButton label="Chat settings" size={iconSize}>
@@ -366,7 +368,7 @@ export const LopuComposer = ({
 										</IconButton>
 									</Box>
 								</PopoverTrigger>
-								<PopoverContent
+								<Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z}
 									width="300px"
 									maxW="calc(100vw - 24px)"
 									sx={lopuPopoverSx}
@@ -415,19 +417,20 @@ export const LopuComposer = ({
 												/>
 											</>
 										) : null}
+          <SettingsRow label="Vercel chat management" hint="Server continues saved work after this page closes" control={<LopuToggle checked={settings.management === 'server'} onChange={value => onSettingsChange({ management: value ? 'server' : 'client' })} label="Vercel chat management" />} />
 										{settingsContent ? (
 											<Box borderTop={preferences ? LOPU_UI.border : undefined} pt={preferences ? 2 : 0} mt={preferences ? 1 : 0}>
 												{settingsContent}
 											</Box>
 										) : null}
 									</PopoverBody>
-								</PopoverContent>
+								</PopoverContent></Portal>
 							</Popover>
 						) : null}
 						{streaming ? (
 							<Flex align="flex-end" gap={1}>
 								{value.trim() && onSendNow ? (
-									<Popover placement="top-end" isLazy strategy="fixed" gutter={8}>
+									<Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12 } }, { name: "flip", options: { padding: 12 } }]}>
 										<PopoverTrigger>
 											<Box
 												as="button"
@@ -445,7 +448,7 @@ export const LopuComposer = ({
 												<ChevronDown size={14} />
 											</Box>
 										</PopoverTrigger>
-										<PopoverContent width="220px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}>
+										<Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z} width="220px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}>
 											<PopoverBody p={2}>
 												<Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={submit}>
 													Send after reply
@@ -466,7 +469,7 @@ export const LopuComposer = ({
 														: 'Send now adds a note at Lopu’s next safe step without stopping the reply.'}
 												</Text>
 											</PopoverBody>
-										</PopoverContent>
+										</PopoverContent></Portal>
 									</Popover>
 								) : null}
 								<Box
@@ -491,13 +494,17 @@ export const LopuComposer = ({
 								</Box>
 							</Flex>
 						) : (
-							<ActionButton
-								kind="send"
-								size={controlSize}
-								disabled={!canSend}
-								onClick={submit}
-								label={isMobile || !enterSends ? 'Send' : 'Send (Enter)'}
-							/>
+<Flex align="center" gap={1}>
+        {onSendManaged ? <Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12 } }, { name: "flip", options: { padding: 12 } }]}>
+          <PopoverTrigger><Box as="button" type="button" aria-label="More send options" width={isMobile ? '40px' : '28px'} height={`${controlSize}px`} display="grid" placeItems="center" borderRadius="full"><ChevronDown size={14} /></Box></PopoverTrigger>
+          <Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z} width="260px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}><PopoverBody p={2}>
+           <Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={() => onSendManaged(value.trim(), 'server')}>Send with Vercel management</Button>
+           <Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={() => onSendManaged(value.trim(), 'client')}>Send with local management</Button>
+           <Text fontSize="xs" color={LOPU_UI.muted} px={3} py={2}>Local management needs an open page to continue. Both modes use your selected AI provider.</Text>
+          </PopoverBody></PopoverContent></Portal>
+        </Popover> : null}
+        <ActionButton kind="send" size={controlSize} disabled={!canSend} onClick={submit} label={isMobile || !enterSends ? 'Send' : 'Send (Enter)'} />
+       </Flex>
 						)}
 					</Flex>
 				</Flex>

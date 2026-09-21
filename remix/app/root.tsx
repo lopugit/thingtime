@@ -22,7 +22,6 @@ import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
 import { LopuPositionSync } from './components/Lopu/useLopuPosition';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
-import { QuickSwitcher } from './components/QuickSwitcher/QuickSwitcher';
 import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
 import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals';
 import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
@@ -162,7 +161,6 @@ export default function App() {
         {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
         {mounted && !isAuthorizePopup ? <LopuHost /> : null}
         {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
-        {mounted && !isAuthorizePopup ? <QuickSwitcher /> : null}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
         {mounted && !isAuthorizePopup ? <WatchPendingApprovals /> : null}

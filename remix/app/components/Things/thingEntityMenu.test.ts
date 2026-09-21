@@ -19,7 +19,7 @@ test('menu geometry keeps tall menus and scrollbar edges reachable without offse
 });
 
 test('entity schemas inherit canonical verbs while extending their own sections', () => {
-  const menu = buildThingEntityMenu({ open: true, inspect: true, 'copy-link': true, edit: true, share: true, delete: true, 'send-to-lopu': true },
+  const menu = buildThingEntityMenu({ open: true, inspect: true, 'copy-link': true, rename: true, edit: true, share: true, delete: true, 'send-to-lopu': true },
     [{ id: 'extension', actions: [{ id: 'flair', command: 'flair', label: 'Flair', icon: '🏷️' }] }]);
   const actions = menu.sections.flatMap(section => section.actions);
   for (const base of Object.values(THING_ACTIONS)) assert.deepEqual(actions.find(action => action.id === base.id), base);

@@ -1,3 +1,4 @@
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { materializeSuite, type BehaviourSuite } from '~/schemas/behaviourSuites';
 
 // Install a behaviour suite into the viewer's own things = the suite's
@@ -59,16 +60,18 @@ export type ServerInstalledSuite = {
 	created: number;
 	updated: number;
 	pageIds: Record<string, string>;
+	componentIds: Record<string, string>;
 	entryPageId: string;
 	entryPageKey: string;
 };
 
-export const installSuiteOnServer = async (key: string): Promise<ServerInstalledSuite> => {
+export const installSuiteOnServer = async (key: string, options: { onlyMissing?: boolean } = {}): Promise<ServerInstalledSuite> => {
+	await requireThingtimeCapability('api.webpages-suites-install', '1.1.0');
 	const response = await fetch('/api/v1/webpages/suites/install', {
 		method: 'POST',
 		credentials: 'include',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ key })
+		body: JSON.stringify({ key, ...(options.onlyMissing ? { onlyMissing: true } : {}) })
 	});
 	const data = await response.json().catch(() => null);
 	if (!response.ok || !data?.ok) throw data || { error: `Install failed (${response.status})` };

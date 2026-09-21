@@ -1,8 +1,10 @@
+import { libraryBuilderHref } from '~/library/builderLinks';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import LiveWebpage from './LiveWebpage';
+import { BuilderThingMenu } from './BuilderThingMenu';
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -25,6 +27,11 @@ import { countBlocks, type WebpageBlock } from './webpageBlocks';
 type PageRow = { id: string; crystal: Record<string, any>; updatedAt?: string };
 
 const PagesList = () => {
+	const user = useCurrentUser();
+	return <AccountPagesList key={user?.id || "anonymous"} />;
+};
+
+const AccountPagesList = () => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -32,26 +39,33 @@ const PagesList = () => {
 	const user = useCurrentUser();
 	const navigate = useNavigate();
 	const [pages, setPages] = React.useState<PageRow[] | null>(null);
+	const [components, setComponents] = React.useState<PageRow[]>([]);
 	const [creating, setCreating] = React.useState(false);
+	const [loadError, setLoadError] = React.useState<string | null>(null);
+	const [revision, refresh] = React.useReducer(value => value + 1, 0);
 
 	React.useEffect(() => {
 		if (!user?.id) {
-			setPages([]);
+			setPages([]); setComponents([]);
 			return;
 		}
 		let cancelled = false;
 		(async () => {
 			try {
-				const resp: any = await apiRef.current.v1.things.list({ thingtime: 'webpage', limit: 50 });
-				if (!cancelled) setPages(resp?.ok ? resp.things || [] : []);
+				const [resp, parts]: any[] = await Promise.all([apiRef.current.v1.things.list({ thingtime: 'webpage', limit: 50 }), apiRef.current.v1.things.list({ thingtime: 'component', limit: 50 })]);
+				if (!cancelled) {
+					if (resp?.ok) setPages(resp.things || []);
+					if (parts?.ok) setComponents(parts.things || []);
+					setLoadError(!resp?.ok || !parts?.ok ? 'Could not refresh all your Builder content.' : null);
+				}
 			} catch {
-				if (!cancelled) setPages([]);
+				if (!cancelled) setLoadError('Could not refresh your Builder content.');
 			}
 		})();
 		return () => {
 			cancelled = true;
 		};
-	}, [user?.id]);
+	}, [user?.id, revision]);
 
 	const createPage = async () => {
 		setCreating(true);
@@ -77,9 +91,10 @@ const PagesList = () => {
 			<PageHeader
 				eyebrow="Thingtime · block by block"
 				title="Builder 🧱"
-				subtitle="Build webpages from Thingtime components and actions — and personalise every Thingtime page with the ✏️ edit mode."
+				subtitle="Build webpages from Thingtime components and actions — manage their settings, privacy and content in one place."
 				after={
-					<Flex columnGap={2} alignItems="center">
+					<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
+						<Button as={Link} to={libraryBuilderHref()} size="sm" variant="outline">Integration library</Button>
 						<Button as={Link} to="/docs/builder" size="sm" variant="outline">Builder docs</Button>
 						<Button as={Link} to="/builder/demos" size="sm" variant="outline" data-testid="builder-demo-library">
 							Demo library 🧱
@@ -92,6 +107,9 @@ const PagesList = () => {
 					</Flex>
 				}
 			/>
+			{loadError && user?.id ? <Flex role="alert" alignItems="center" gap={3} flexWrap="wrap" padding={3} marginBottom={3}>
+				<Text>{loadError}</Text><Button size="sm" onClick={refresh}>Retry</Button>
+			</Flex> : null}
 			{!user?.id ? (
 				<Flex {...CARD_STYLES} padding={6} flexDirection="column" rowGap={2}>
 					<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
@@ -109,7 +127,7 @@ const PagesList = () => {
 								No pages yet 🌱
 							</Text>
 							<Text color="var(--tt-text, #5a5a66)" fontSize="sm">
-								Hit “New page ✨” to start one, or open any Thingtime page and press the ✏️ pill to make it yours.
+								Hit “New page ✨” to start one, then use its settings menu to share, duplicate, import or export it.
 							</Text>
 						</Flex>
 					) : null}
@@ -126,6 +144,7 @@ const PagesList = () => {
 							Edit
 						</Button>
 					</Flex>
+					<Text fontWeight={700}>Pages</Text>
 					{pages.map((page) => (
 						<Flex key={page.id} {...CARD_STYLES} padding={4} alignItems="center" justifyContent="space-between" columnGap={3}>
 							<Box minWidth={0}>
@@ -139,6 +158,7 @@ const PagesList = () => {
 								</Text>
 							</Box>
 							<Flex columnGap={2} flexShrink={0}>
+								<BuilderThingMenu id={page.id} onChanged={refresh} />
 								{!page.crystal?.siteRoute ? (
 									<Button as={Link} to={`/p/${page.id}`} size="xs" variant="outline">
 										View
@@ -154,6 +174,12 @@ const PagesList = () => {
 							</Flex>
 						</Flex>
 					))}
+                    {components.length ? <Text fontWeight={700} marginTop={4}>Components</Text> : null}
+                    {components.map(component => <Flex key={component.id} {...CARD_STYLES} padding={4} alignItems="center" gap={3}>
+                        <Text fontWeight={700} flex={1} minWidth={0} noOfLines={2}>{component.crystal?.name || 'Untitled component'}</Text>
+                        <BuilderThingMenu id={component.id} kind="component" onChanged={refresh} />
+                        <Button as={Link} to={`/thing/${encodeURIComponent(component.id)}`} size="xs">Open</Button>
+                    </Flex>)}
 				</Flex>
 			)}
 		</PageShell>

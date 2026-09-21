@@ -1,3 +1,5 @@
+import type { PostThingReference } from './postThingReferences';
+import type { ThingsThing } from '../Things/thingsCore';
 // Client-side shapes for the feed / algorithms / profile APIs. These mirror the
 // public projections in remix/app/api/utils/things + algorithms + auth/users —
 // the API utils are the source of truth; keep this file in sync with them.
@@ -22,12 +24,36 @@ export type PublicProfile = {
 
 // Lean author embed on posts/comments — identity only (the API never sends
 // bio/bannerUrl inside feed payloads).
+// `external` marks a third-party author of a synced external post (connections
+// feeds); `externalUrl` is where they live on the source platform, when the
+// provider gave us one. Route with authorLinkTarget below, never on the url.
 export type FeedAuthor = {
   id: string;
   username: string;
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  external?: boolean;
+  externalUrl?: string | null;
+};
+
+// Where an author's name/avatar should link, or null for "render it as plain
+// text". Third-party authors of synced external posts are NOT Thingtime users:
+// their handle is provider-supplied, and a provider is any RSS feed or
+// fediverse instance a user named — so `/profile/<handle>` either dead-ends or,
+// when the handle happens to match a real account, presents an unrelated
+// Thingtime user as the author of third-party content. They link to the source
+// platform when the provider gave us a url, and nowhere when it did not.
+// One `href` for both cases rather than a discriminated union: the caller
+// still has to branch on `external` to pick <a> over react-router's <Link>,
+// and a single field means that branch needs no type narrowing to survive
+// this project's non-strict tsconfig.
+export type AuthorLinkTarget = { external: boolean; href: string };
+
+export const authorLinkTarget = (author: FeedAuthor | null): AuthorLinkTarget | null => {
+  if (!author?.username) return null;
+  if (author.external) return author.externalUrl ? { external: true, href: author.externalUrl } : null;
+  return { external: false, href: `/profile/${author.username}` };
 };
 
 export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
@@ -49,6 +75,7 @@ export type MarketplaceListing = {
 // things, so the payload carries the post vocabulary plus reactions and a
 // reply count. Legacy-era comments arrive with the text-only defaults.
 export type PostComment = {
+  linkedThings?: PublicPost['linkedThings'];
   id: string;
   thingtime: string[];
   author: FeedAuthor | null;
@@ -57,13 +84,14 @@ export type PostComment = {
   richText?: EditorJsDoc | null;
   images: string[];
 	attachments: PublicAttachment[];
+  attachmentsTruncated?: boolean;
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
 	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   thing: Record<string, any> | null;
   tags: string[];
-  reactionCounts: Record<string, number>;
-  viewerReactions: string[];
+  reactionCounts?: Record<string, number>;
+  viewerReactions?: string[];
   // up/down votes — the separate focused reaction kind (POST /api/v1/things/updown).
   // Optional while older deployments roll out; treat absence as no votes.
   votes?: PublicUpdownVotes;
@@ -71,7 +99,9 @@ export type PostComment = {
   // subspaces / when they wear none). Optional during rollout.
   authorFlair?: PublicAuthorFlair | null;
   // direct replies — the comment's own /post/:id page shows the thread
-  commentCount: number;
+  commentCount?: number;
+  // Cursor projections omit unknown totals and hydrate replies on demand.
+  repliesLoaded?: false;
   // nested replies (threads ship two levels deep, ≤ 5 per level, oldest →
   // newest; deeper levels arrive empty and load on demand)
   comments?: PostComment[];
@@ -80,6 +110,7 @@ export type PostComment = {
 };
 
 export type PublicPost = {
+  linkedThings?: Array<PostThingReference & { thing: ThingsThing | null }>;
   audience?: ResolvedAudience;
   id: string;
   type: PostType;
@@ -97,15 +128,16 @@ export type PublicPost = {
   // Stable metadata only. Content always resolves through the authenticated
   // attachment endpoint; feed payloads never carry S3 keys or signed URLs.
   attachments: PublicAttachment[];
+  attachmentsTruncated?: boolean;
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
 	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   // thingtime posts: the free-form structured thing (crystal.thing)
   thing: Record<string, any> | null;
   tags: string[];
-  reactionCounts: Record<string, number>;
+  reactionCounts?: Record<string, number>;
   // every reaction token the viewer has toggled on this post (multi-react)
-  viewerReactions: string[];
+  viewerReactions?: string[];
   // up/down votes — the separate focused reaction kind beside the emoji
   // reactions (POST /api/v1/things/updown). Optional during rollout.
   votes?: PublicUpdownVotes;
@@ -119,7 +151,8 @@ export type PublicPost = {
   // name — a template or custom text). Optional during rollout.
   authorFlair?: PublicAuthorFlair | null;
   subspaceMod?: PublicSubspaceMod | null;
-  commentCount: number;
+  commentCount?: number;
+  repliesLoaded?: false;
   // Viewer-relative count layers. Optional while older deployments roll out;
   // commentCount remains the backward-compatible total.
   commentCounts?: { direct: number; replies: number; total: number; loaded: number };
@@ -139,6 +172,11 @@ export type PublicPost = {
   // logged-in viewers only: has the viewer saved this post to their library?
   // (absent for anonymous projections — the bookmark button hides with it)
   viewerSaved?: boolean;
+  // free-form extended JSON; connections posts carry `extended.external`
+  // (provider, url, original author, stats) — see api/utils/connections
+  extended?: Record<string, any> | null;
+  // connections feed only: the viewer's AI feed-filter matches for this post
+  feedFilterMatches?: FeedFilterMatch[];
   createdAt: string;
 };
 
@@ -147,6 +185,16 @@ export type PublicPost = {
 // viewer's own option (null = hasn't voted). Mirrors PublicPollVotes in
 // api/utils/things/pollCore.ts.
 export type PublicPollVotes = { counts: number[]; totalVotes: number; viewerVote: number | null };
+
+// A matched AI feed filter on a connections-feed post: 'warn' veils the post
+// behind a Show button, 'hide' drops it from the rendered feed.
+export type FeedFilterMatch = {
+  filterId: string;
+  name: string;
+  action: 'warn' | 'hide';
+  reason: string;
+  source: 'claude' | 'openai' | 'heuristic';
+};
 
 // Up/down vote tally carried on posts and comments (mirrors PublicUpdownVotes
 // in api/utils/things/updownCore.ts): raw counts, net score, the viewer's

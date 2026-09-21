@@ -29,11 +29,6 @@ import {
   primaryKindOf
 } from './thingsCore';
 
-const canRename = (thing: ThingsThing) => {
-  const kind = primaryKindOf(thing);
-  return kind === 'folder' || kind === 'data' || kind === 'schema';
-};
-
 // "Copy 4 things" when acting on a multi-selection, plain verb otherwise
 const countLabel = (verb: string, count: number) => (count > 1 ? `${verb} ${count} things` : verb);
 
@@ -57,7 +52,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
   const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
   return buildThingEntityMenu({
     open: { href: thingBrowseHref(thing, locationSearch) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
-    edit: canRename(thing) && actCount === 1,
+    rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),
     share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
     delete: !archive && { hint: bulkHint, kbd: '⌫' },
     'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)

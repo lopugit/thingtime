@@ -193,3 +193,35 @@ Validate with `xcodegen generate` then `DEST='platform=iOS Simulator,id=<id>'
 separate denial messages, origin-scoped feature negotiation and readable local
 audio/text. Physical-device recognition and lock-screen acceptance remain
 required; a simulator build does not prove them.
+
+### Aggregate Lopu chat Live Activity
+
+Lopu chat work started in the iOS shell appears in one shared chat Live Activity,
+including when multiple chats run. It displays counts and generic progress only;
+chat titles, messages, account IDs and tool output are never put on the lock screen.
+The existing microphone/voice activity remains independent.
+
+Live Activities **do not prevent iOS from suspending the app**. Server-managed
+chats run independently of the phone. Locally managed chats still need Thingtime
+open. The native bridge advertises `lopuChatActivityVersion: 1.0.0`, consumes full
+`lopu-chat-activity-sync` snapshots, and negotiates `api.lopu-live-activity: 1.0.0`
+before registering ActivityKit update tokens. It ends the activity when no chats
+remain and clears it at account/destination changes. An old status expires to
+“Open Thingtime for the latest status” after two minutes without an update.
+
+Server checkpoints send ActivityKit updates and completion using the existing APNs
+credentials (`APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, optional
+`APNS_IOS_BUNDLE_ID`) and topic `<bundle-id>.push-type.liveactivity`. Configure these
+through the deployment's existing private notification setup; never commit key
+material. ActivityKit tokens are distinct from notification device tokens, stored
+in protected binary records, and bound to a live session, origin and data source.
+APNs remains best effort and requires the app's signed push entitlement and
+Live Activities enabled in iOS Settings. Foreground snapshots reconcile delivery
+misses. Server activity delivery does not depend on ordinary notification settings.
+
+Physical-device acceptance: start two server-managed chats and lock the phone;
+verify one chat activity with count 2, updates when one completes, and dismissal
+when both finish. Repeat across account/destination changes, manual stop, an
+automatic retry, a disabled Live Activities setting, and a user-dismissed activity.
+Verify a concurrent voice session retains its existing behavior. Simulator build
+and unit tests do not prove APNs delivery or physical lock-screen behavior.

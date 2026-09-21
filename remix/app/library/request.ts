@@ -1,5 +1,5 @@
 import type { LibraryExample } from './types';
-export const LIBRARY_REQUEST_REQUIREMENT = ['api.library-request', '1.0.0'] as const;
+export const LIBRARY_REQUEST_REQUIREMENT = ['api.library-request', '1.2.0'] as const;
 export const MAX_INPUT_BYTES = 16 * 1024;
 export const MAX_RESPONSE_BYTES = 256 * 1024;
 export function parseExampleInput(text: string): Record<string, unknown> {
@@ -35,7 +35,26 @@ export function buildExampleRequest(example: LibraryExample, input: Record<strin
 		else if (request.auth.type === 'query') url.searchParams.set(request.auth.name!, apiKey.trim());
 		else throw new Error('Unsupported authentication.');
 	}
-	return { url, headers };
+	// Body templates are owned by the catalogue. Callers cannot choose fields,
+	// methods or URLs; a whole-field placeholder preserves JSON number types.
+	const template = (value: unknown): unknown => {
+		if (typeof value === 'string') {
+			const match = /^\{([A-Za-z][A-Za-z0-9_]*)\}$/.exec(value);
+			if (match) {
+				substitute(value);
+				return input[match[1]];
+			}
+			return substitute(value);
+		}
+		if (Array.isArray(value)) return value.map(template);
+		if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, template(child)]));
+		return value;
+	};
+	const method = request.method || 'GET';
+	if (method !== 'GET' && method !== 'POST') throw new Error('Unsupported method.');
+	const body = request.body ? JSON.stringify(template(request.body)) : undefined;
+	if (body) headers['Content-Type'] = 'application/json';
+	return { url, headers, method, body };
 }
 export async function readBoundedJson(response: Response) {
 	if (!response.ok || !response.body) throw new Error(`Provider returned HTTP ${response.status}. Check access, input and quota.`);
