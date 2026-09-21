@@ -56,6 +56,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   failed transfers and keep file bytes out of device history/events. Verified
   real brightness round-trip, repeated native/web tests, a full web build and
   desktop/mobile browser states. [QA and rollout](../PRs/878-codex-remote-device-files-fix-brightness-and-shared-file-browser.md).
+- 2026-09-21 — **Codex (AI):** Require native app changes, including Thingtime
+  Mac, Thingtime Recovery and Commander, to be rebuilt, verified, reinstalled
+  and launched on the development machine before handoff, with installed-build
+  and smoke-check evidence in the completion report.
+
 - 2026-09-21 — **Codex (AI)**: Production franchise follow-up: restore saved
   comment attachments in workspace galleries, clear committed upload batches,
   and show safe Google Places setup or gateway error guidance. Contracts:
