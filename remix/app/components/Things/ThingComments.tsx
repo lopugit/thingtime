@@ -10,12 +10,12 @@ type CommentThing = { id: string; author?: { username?: string } | null; crystal
 
 // The parent is only an identifier. Discussion state is neither read from nor
 // written into its crystal, cache or embedded interaction fields.
-export function ThingComments({ thingId, linkKey = '' }: { thingId: string; linkKey?: string }) {
+export function ThingComments({ thingId, linkKey = '', description }: { thingId: string; linkKey?: string; description?: string }) {
 	const user = useCurrentUser();
-	return <Discussion key={`${user?.id || 'anonymous'}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} />;
+	return <Discussion key={`${user?.id || 'anonymous'}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} description={description} />;
 }
 
-function Discussion({ thingId, linkKey }: { thingId: string; linkKey: string }) {
+function Discussion({ thingId, linkKey, description }: { thingId: string; linkKey: string; description?: string }) {
 	const api = useApi();
 	const user = useCurrentUser();
 	const apiRef = React.useRef(api);
@@ -73,7 +73,7 @@ function Discussion({ thingId, linkKey }: { thingId: string; linkKey: string }) 
 	};
 	return <Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0} data-testid="thing-comments">
 		<Flex justify="space-between" align="center" gap={2} wrap="wrap"><Heading as="h2" size="sm">Comments</Heading><Button size="sm" variant="ghost" isDisabled={loading || sending} onClick={() => void load()}>Refresh comments</Button></Flex>
-		<Text color="var(--tt-muted)" fontSize="sm" mt={2}>A separate discussion linked to this Thing. Comments follow its visibility and do not change its data.</Text>
+		<Text color="var(--tt-muted)" fontSize="sm" mt={2}>{description || 'A separate discussion linked to this Thing. Comments follow its visibility and do not change its data.'}</Text>
 		<Stack spacing={4} mt={4}>
 			{comments.map(comment => <Box key={comment.id} borderTop="1px solid var(--tt-border)" pt={3} minW={0}>
 				<Flex gap={2} wrap="wrap" fontSize="xs" color="var(--tt-muted)"><Text>{comment.author?.username ? `@${comment.author.username}` : 'Account unavailable'}</Text><Text as="time" dateTime={comment.createdAt}>{new Date(comment.createdAt).toLocaleString()}</Text><Link to={`/thing/${encodeURIComponent(comment.id)}${linkKey ? `?key=${encodeURIComponent(linkKey)}` : ''}`}>Open comment / replies</Link></Flex>

@@ -49,7 +49,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action.
+- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action. [PR #875 notes](../PRs/875-codex-library-builder-pages-integration-builder-pages.md).
+- 2026-09-21 — **Codex (AI)**: Allow the franchise Google Maps SDK and map-service
+  hosts in production/dev CSP while retaining the inline-script and eval bans;
+  use raster map rendering and verify the explicit host policy.
 
 - 2026-09-21 — **Codex (AI)**: Added an admin catalog importer on `/components`
   with whole-file schema validation, capability negotiation, bounded paced
@@ -75,6 +78,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   requests, capability negotiation and reusable Component Thing rendering.
   Build and dev workflows generate the isolated runner. The catalogue ships
   separately after this backing infrastructure. [Validation notes](../PRs/866-codex-third-party-runtime-isolated-remote-integration-runtime.md).
+
+- **2026-09-21 · Codex (AI):** Add a native builder service workspace for franchise
+  operations: folder-backed customer/property/job/visit/equipment records, live
+  role and customer access, direct record context menus, day/week planning,
+  time and resource logs, per-record comments/media and Google Maps via the
+  owner's Vault. Add environment selection for new Vault secrets and metadata-only
+  environment moves for existing secrets/providers. Document fork setup and
+  local role, scheduling, media and responsive regression checks.
+  [Validation notes](../PRs/871-codex-jims-franchise-builder-franchise-workspaces-and-vault-environments.md).
 
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
