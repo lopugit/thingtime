@@ -157,7 +157,13 @@ export function ServiceMap({
 			.then(async (maps) => {
 				const [{ Map }, { AdvancedMarkerElement }] = await Promise.all([maps.importLibrary('maps'), maps.importLibrary('marker')]);
 				if (!live || !host.current) return;
-				const map = new Map(host.current, { center: { lat: -37.81, lng: 144.96 }, zoom: 11, mapId: 'DEMO_MAP_ID', mapTypeControl: true });
+				const map = new Map(host.current, {
+					center: { lat: -37.81, lng: 144.96 },
+					zoom: 11,
+					mapId: 'DEMO_MAP_ID',
+					renderingType: maps.RenderingType.RASTER,
+					mapTypeControl: true
+				});
 				const bounds = new maps.LatLngBounds();
 				let count = 0;
 				const list = addressRecords.current.filter((r) => r.values.placeId).slice(0, 50);

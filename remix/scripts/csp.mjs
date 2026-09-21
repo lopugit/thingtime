@@ -38,6 +38,9 @@ const directives = ({ dev = false } = {}) => ({
 		"'self'",
 		'https://cdn.jsdelivr.net',
 		'https://va.vercel-scripts.com',
+		// Native property maps: fixed Google SDK hosts; no inline/eval exception.
+		'https://maps.googleapis.com',
+		'https://maps.gstatic.com',
 		// Dev only: @vitejs/plugin-react injects an inline react-refresh preamble.
 		...(dev ? ["'unsafe-inline'"] : [])
 	],
@@ -61,6 +64,10 @@ const directives = ({ dev = false } = {}) => ({
 		// Keep production scoped to the one supported realtime host; never
 		// allow arbitrary wss: origins or user-supplied provider URLs here.
 		'wss://api.x.ai',
+		'https://maps.googleapis.com',
+		'https://mapsresources-pa.googleapis.com',
+		'https://maps.gstatic.com',
+		'https://csi.gstatic.com',
 		// Dev only: Vite HMR websocket (separate port) + analytics debug beacons.
 		...(dev ? ['ws:', 'wss:', 'https://va.vercel-scripts.com'] : [])
 	],

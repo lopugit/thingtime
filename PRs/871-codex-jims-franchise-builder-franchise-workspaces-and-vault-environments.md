@@ -16,7 +16,9 @@ workspace access. Every fresh request rechecks current memberships. Edits and
 planner moves use expectedUpdatedAt to reject stale writes.
 
 Google Places calls go to fixed Google endpoints with bounded requests/responses.
-Only the designated JavaScript key is returned to authorized browsers. The Places
+Only the designated JavaScript key is returned to authorized browsers. CSP
+allows fixed Google Maps SDK/service hosts and retains the application bans on
+executable inline scripts and eval. The Places
 key stays server-side. Vault environment moves edit metadata without decrypting or
 replacing ciphertext. README contains fork-safe setup with placeholders only.
 

@@ -49,6 +49,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21 — **Codex (AI)**: Allow the franchise Google Maps SDK and map-service
+  hosts in production/dev CSP while retaining the inline-script and eval bans;
+  use raster map rendering and verify the explicit host policy.
+
+
 - 2026-09-21 — **Codex (AI)**: Keep mobile sign-in hints above the floating
   assistant and DevKit buttons, with bounded scrolling for short viewports.
   Verified while testing the remote integration catalogue preview.

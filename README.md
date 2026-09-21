@@ -3770,3 +3770,11 @@ dev server and press **Run all public examples**. The harness executes only
 credential-free catalogue defaults, four at a time, through the actual isolated
 runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
 is not copied into production static assets. Provider outages can change results.
+
+The native service-workspace property map uses the Google Maps SDK with the
+specific Google script and service hosts listed in remix/scripts/csp.mjs. The
+application still blocks executable inline scripts and eval. Keep these hosts
+in the production and development policies when deploying a fork, and review
+[Google's Maps domains](https://developers.google.com/maps/domains) if the SDK
+changes its endpoints. Run test:vercel-config and verify:vercel-output to catch
+policy regressions; browser acceptance with restricted keys remains required.

@@ -28,6 +28,12 @@
 
 ## Service workspace and Vault environments
 
+- [ ] Verify Maps under production CSP: the SDK loads and renders/clicks markers
+  with a restricted key, without inline-script or eval exceptions. Check the
+  Google SDK/service hosts remain explicit and no wildcard script host is added.
+- [ ] Change an existing visit's job; its nested record folder moves with it and
+  another time/resource log can still be added without a folder conflict.
+
 - [ ] At desktop and mobile widths, scroll the workspace and every opened record
   dialog to both ends. Menus and dialogs stay above the Thingtime header and
   builder toolbar, with reachable controls and no horizontal page overflow.
