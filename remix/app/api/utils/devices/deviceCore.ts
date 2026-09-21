@@ -1,6 +1,8 @@
+import { normalizeFilesystemInput, type FilesystemInput } from './deviceFilesystemCore';
 import { createHash } from 'node:crypto';
 
 export const DEVICE_COMMAND_KINDS = [
+	'filesystem',
 	'connector.start',
 	'connector.stop',
 	'session.list',
@@ -661,6 +663,7 @@ type ConnectorInput = { connectorId: string };
 type CursorPageInput = { cursor?: string; limit?: number };
 
 export type DeviceCommandInputByKind = {
+	'filesystem': FilesystemInput;
 	'connector.start': ConnectorInput;
 	'connector.stop': ConnectorInput;
 	'session.list': ConnectorInput & CursorPageInput & { projectId?: string; search?: string };
@@ -766,6 +769,7 @@ export const deviceConnectorSupportsCommand = (
 };
 
 const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
+	'filesystem': 'filesystem.v1',
 	'app.focus': 'apps.launch',
 	'app.launch': 'apps.launch',
 	'app.quit': 'apps.quit',
@@ -945,6 +949,10 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 	const ok = (input: unknown) => ({ ok: true as const, input: input as DeviceCommandInputByKind[K] });
 
 	switch (kind) {
+		case 'filesystem': {
+			const input = normalizeFilesystemInput(raw);
+			return input ? ok(input) : deviceFail(400, 'Invalid bounded filesystem operation');
+		}
 		case 'connector.start':
 		case 'connector.stop': {
 			const connectorId = connector();
@@ -1230,8 +1238,8 @@ export const decideDeviceRevision = (
 	return existingHash === incomingHash ? 'same' : 'conflict';
 };
 
-export const deviceSnapshotHash = (state: DeviceStateSnapshot, connectors: DeviceConnectorSnapshot[]): string =>
-	devicePayloadHash({ state, connectors });
+export const deviceSnapshotHash = (state: DeviceStateSnapshot, connectors: DeviceConnectorSnapshot[], capabilities?: string[]): string =>
+	devicePayloadHash({ state, connectors, ...(capabilities === undefined ? {} : { capabilities }) });
 
 export type DeviceLeaseDecision = 'active' | 'expired' | 'invalid';
 export const decideDeviceLease = (storedLeaseHash: unknown, presentedLeaseHash: string, leaseExpiresAt: unknown, now: Date): DeviceLeaseDecision => {

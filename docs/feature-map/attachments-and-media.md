@@ -88,3 +88,13 @@ until an admin enables them (`POST /api/v1/admin/users/public-uploads`).
   pending media is visible only to its owner.
 - Mongo projections must not name both `crystal` and a `crystal.<field>`
   (path collision → 500).
+
+## Standalone file Things
+
+Purpose `file` uses the existing private upload, quota, moderation and exact-owner
+content gates. Completion makes it durable in the owner library; `file-import`
+remains an expiring draft until the protected transfer writer commits it.
+`useAttachmentUploads` supplies the filesystem browser's upload path, preserving
+original bytes; portable exports/imports retain the immutable file purpose.
+`test:attachments` covers file lifecycle and access alongside recordings.
+The minimum origin contracts are listed in [remote-files.md](../remote-files.md).

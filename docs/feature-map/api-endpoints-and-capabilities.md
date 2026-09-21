@@ -62,6 +62,17 @@ the source of truth for the route table and both capability manifests.
 - A duplicate object key in `nitro.config.ts` silently drops the earlier one
   (last wins); the ratchet catches it as TS1117.
 
+## Remote filesystem commands
+
+The existing devices command routes carry the bounded `filesystem` operation;
+no arbitrary filesystem HTTP path is added. `deviceFilesystemCore.ts` validates
+closed request/result shapes, `deviceCommands.ts` leases and fences reports,
+and only an exact owner/device/command read returns short-lived bytes. History
+and events exclude file data. Native and browser clients each negotiate a small
+requirement map. `filesystemCommandRoute.test.mts` tests the real service with
+a test collection; both manifest suites assert the additive contracts.
+See [remote-files.md](../remote-files.md) for semantic versions and limits.
+
 ## Integration library runtime
 
 `app/library/platformApis.ts` adds fixed read-only provider operations to

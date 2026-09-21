@@ -24,3 +24,6 @@ sitemap-out/
 .local-attachments/
 # seed-fixture state files (ids + generated fixture passwords)
 .fixtures/
+
+# Local browser fixtures and isolated QA process configuration
+.qa/
