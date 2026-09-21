@@ -62,6 +62,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   owner's Vault. Add environment selection for new Vault secrets and metadata-only
   environment moves for existing secrets/providers. Document fork setup and
   local role, scheduling, media and responsive regression checks.
+  [Validation notes](../PRs/871-codex-jims-franchise-builder-franchise-workspaces-and-vault-environments.md).
 
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams

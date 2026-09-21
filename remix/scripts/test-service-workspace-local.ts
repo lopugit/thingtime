@@ -123,6 +123,15 @@ async function main() {
 		moveWorkspaceVisit(users.employee, { rootId, id: visit.id, date: '2026-09-23', order: 1024, expectedUpdatedAt: beforeMove.updatedAt }),
 		/changed/
 	);
+	const alternateJob = await save('job', { title: 'Seasonal tidy', addressId: address.id });
+	const beforeReparent = (await snapshot()).records.find((r: any) => r.id === visit.id)!;
+	await save('visit', { ...beforeReparent.values, jobId: alternateJob.id }, users.employee, {
+		id: visit.id,
+		expectedUpdatedAt: beforeReparent.updatedAt
+	});
+	const afterReparent = (await snapshot()).records.find((r: any) => r.id === visit.id)!;
+	assert.notEqual(afterReparent.folderId, beforeReparent.folderId, 'moving a visit updates its folder');
+	await save('time', { title: 'Additional tidy', visitId: visit.id, minutes: 5 }, users.employee);
 	const pageId = randomUUID();
 	const page = await createThing(users.owner.id, {
 		shareId: pageId,

@@ -91,6 +91,9 @@ export function ServiceRecordEditor({
 									...v,
 									[field.key]: value,
 									...(field.key === 'address' ? { placeId: '' } : {}),
+									...(field.key === 'jobId' && draft.kind === 'visit' && !v.title
+										? { title: data.records.find((record) => record.id === value)?.values.title || '' }
+										: {}),
 									...(field.key === 'visitId' ? { subjobId: '' } : {})
 								}));
 							const common = {

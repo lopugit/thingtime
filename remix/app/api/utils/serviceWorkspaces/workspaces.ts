@@ -233,8 +233,15 @@ export async function saveWorkspaceRecord(user: PublicUser, input: any) {
 		});
 	}
 	const crystal = { workspaceId: access.rootId, recordType: kind, values, ...(parentKey ? { parentId: parentKey } : {}) };
-	if (existing) check(await updateThing(access.ownerId, recordId, { crystal }, { replaceCrystal: true, expectedUpdatedAt: input.expectedUpdatedAt }));
-	else
+	if (existing) {
+		check(await updateThing(access.ownerId, recordId, { crystal, folderId }, { replaceCrystal: true, expectedUpdatedAt: input.expectedUpdatedAt }));
+		if (existing.folderId !== folderId && kind === 'visit') {
+			const childrenId = stableId(access.rootId, `record-folder:${recordId}`);
+			const children = await getThing({ id: access.ownerId }, childrenId);
+			if (children.ok && children.thing.thingtime.includes('folder'))
+				check(await updateThing(access.ownerId, childrenId, { folderId }, { expectedUpdatedAt: children.thing.updatedAt }));
+		}
+	} else
 		check(
 			await createThing(access.ownerId, {
 				shareId: recordId,
