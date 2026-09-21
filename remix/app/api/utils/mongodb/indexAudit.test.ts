@@ -18,7 +18,7 @@ test('unused emoji lookup retires without removing its protected uniqueness or l
   assert.ok(RETIRED_THINGS_INDEXES.includes('things_emoji_key_lookup'));
   assert.equal((RETIRED_THINGS_INDEXES as readonly string[]).includes('things_emoji_key_unique'), false);
   assert.equal(entries.find(({ name }) => name === 'uniqueKeys_1')?.options.unique, true);
-  assert.equal(summarizeThingIndexPlan(entries).total, 50); // shared ephemeral TTL replaces the prior diagnostic TTL; geographic queries add one 2dsphere index
+  assert.equal(summarizeThingIndexPlan(entries).total, 51); // Includes the service-workspace membership/record lookup.
   assert.deepEqual(entries.find(({ name }) => name === 'things_geo')?.keys, { geo: '2dsphere' });
   assert.deepEqual(entries.find(({ name }) => name === 'lopu_recording_due')?.keys, { thingtime: 1, nextRunAt: 1, shareId: 1 });
 });

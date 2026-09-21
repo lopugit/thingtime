@@ -78,6 +78,11 @@ for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
 	}
 }
 
+for (const host of ['https://maps.googleapis.com', 'https://maps.gstatic.com'])
+	if (!appScriptSources.includes(host)) throw new Error('Missing Maps SDK host: ' + host);
+for (const host of ['https://maps.googleapis.com', 'https://mapsresources-pa.googleapis.com'])
+	if (!getDirectiveSources(prodCsp, 'connect-src').includes(host)) throw new Error('Missing Maps service host: ' + host);
+
 // Every executable script must be external and same-origin. The policy has no
 // inline hash/nonce allowance, so an inline bootstrap would be present in the
 // HTML but silently blocked by the browser.
