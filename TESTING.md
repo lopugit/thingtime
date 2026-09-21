@@ -1,5 +1,13 @@
 # TESTING.md — per-area manual test checklists
 
+## Sign-in hint clearance
+
+- [ ] On signed-out desktop, 390px and 320px mobile pages, show both the preview
+  sign-in hint and account suggestion card. Keep default Lopu/DevKit launchers
+  visible; Not now and account controls must remain unobscured and clickable.
+  Scroll long hints on a short viewport; the card must stay within the viewport.
+
+
 ## Remote integration runtime
 
 - [ ] Run a pinned visual module and a pure transformation in Chrome. Confirm
