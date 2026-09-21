@@ -35,6 +35,9 @@ Fork-safe maps and Vault setup:
    referrers and API. That key is intentionally visible to workspace browsers.
    Keep the Places key server-only, restrict it to Places API, and use supported
    server restrictions. No Mapbox token is needed for this Google implementation.
+   Website-referrer restrictions do not work on the server Places key. Setup
+   failures are reported with safe guidance for the rejected restriction or
+   disabled service; provider messages and project identifiers are never echoed.
 4. Choose the matching Vault environment in workspace Setup. Automatic selection
    works when there is exactly one entry of each required name; duplicate matches
    require an explicit environment. Reload after switching a loaded Maps SDK key.
