@@ -37,6 +37,7 @@ api/index.js
 api/index.js.map
 remix/.vercel/
 remix/dist/
+remix/.functional-preview/
 remix/server/assets/*
 !remix/server/assets/.gitignore
 electron/dist/

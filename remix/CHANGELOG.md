@@ -53,6 +53,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   hosts in production/dev CSP while retaining the inline-script and eval bans;
   use raster map rendering and verify the explicit host policy.
 
+- 2026-09-21 — **Codex (AI)**: Added an admin catalog importer on `/components`
+  with whole-file schema validation, capability negotiation, bounded paced
+  batches, cancellation and real publication counts. Functional demo runtime
+  PR #870 is production-live; all 322 built-in demos and 18 suites are seeded.
 
 - 2026-09-21 — **Codex (AI)**: Keep mobile sign-in hints above the floating
   assistant and DevKit buttons, with bounded scrolling for short viewports.

@@ -36,6 +36,7 @@ import { getThingtimeSchema } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField } from '~/schemas/tools';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
+import { CatalogImporter } from './CatalogImporter';
 
 import {
   COMPONENT_LIBRARY_LABELS,
@@ -1102,6 +1103,8 @@ export const ComponentsBrowsePage = () => {
             💎 Schemas
           </Button>
         </Flex>
+
+        {user?.isAdmin && <CatalogImporter key={user.id} onPublished={() => { familyCacheRef.current.clear(); void runBrowse(); }} />}
 
         {/* same rainbow-ringed input as /search and /schemas */}
         <form onSubmit={submit}>

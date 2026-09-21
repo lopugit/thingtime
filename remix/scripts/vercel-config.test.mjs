@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { prodCsp, devCsp } from './csp.mjs';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const vercelConfig = JSON.parse(readFileSync(resolve(repositoryRoot, 'vercel.json'), 'utf8'));
@@ -40,7 +41,6 @@ test('recording processing, attachment cleanup, moderation sweep, peer sync, and
 	]);
 });
 
-import { prodCsp, devCsp } from './csp.mjs';
 const cspSources = (csp, name) =>
 	csp
 		.split(';')
