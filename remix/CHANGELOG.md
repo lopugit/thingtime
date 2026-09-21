@@ -58,6 +58,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and writable Graphify working copies. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
   for validation and device/deployment limits.
 
+- 2026-09-21 — **Codex (AI)**: Add the curated remote integration runtime, opaque
+  preview documents, cancellable workers, credential-safe read-only provider
+  requests, capability negotiation and reusable Component Thing rendering.
+  Build and dev workflows generate the isolated runner. The catalogue ships
+  separately after this backing infrastructure. [Validation notes](../PRs/866-codex-third-party-runtime-isolated-remote-integration-runtime.md).
+
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
   one stored (uncompressed) ZIP of every file the caller may already read —
