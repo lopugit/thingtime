@@ -84,7 +84,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `ensure-dependencies.js`, `.worktreeinclude`-driven env copy and an attach
   entry in `.claude/launch.json`, seed-fixture cleanup/validation/realpath
   fixes, ratchet hard-fail on duplicate declarations. Details:
-  [PR note](../PRs/claude-dx-once-over-fixes--archive-and-local-storage-review-fixes.md).
+  [PR #865 note](../PRs/865-claude-dx-once-over-fixes--archive-and-local-storage-review-fixes.md).
 
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
