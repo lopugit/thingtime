@@ -46,6 +46,15 @@ action to `buildThingsItemMenu`, handle it in both `onItemAction` and
 `onItemMenuAction` in `ThingsPage.tsx`, and keep bulk selections in mind
 (`actCount > 1`).
 
+## Folder and metadata editing
+
+Explicit legacy data folders use the same browsing, owner and cycle fences as
+native folders. `thingsCore.ts` preserves scalar null, false, zero and empty
+strings. `renameLibraryThing.ts` permits only display-title metadata changes for
+protected library kinds; it preserves payload, ACL, owner, namespace and stale
+write checks. Its regression is included in `test:things`. New folder actions
+appear at every tree depth and column; the page cog owns view/error-log options.
+
 ## Registration
 
 Same three places as every endpoint (route file, import map, `apiDocs.ts`

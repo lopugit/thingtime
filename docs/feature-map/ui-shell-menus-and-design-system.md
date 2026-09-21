@@ -39,6 +39,15 @@ components; reuse them instead of adding parallel versions.
 5. Verify mouse, keyboard (arrow/Enter/Escape), touch, desktop and 375 px, and
    that menus stay clickable (no drag start) and reachable under the nav.
 
+## Shared navigation and Builder controls
+
+The compact Commander trigger opens shortcuts, recents, remote search and
+commands in one surface. Builder page/component menus share `BuilderThingMenu`;
+ordinary public page views do not expose floating editor controls. Admin remains
+immediately below Dev and restricted to administrators. `NativeControlsEnabled`
+also gates service-workspace rendering: inert catalog/preview panes cannot mount
+workspace loaders, while interactive shared pages retain authorized staff access.
+
 ## House rules
 
 - Optimistic rendering: never flash a spinner when prior or cached state

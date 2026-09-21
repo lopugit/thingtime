@@ -181,6 +181,9 @@ export type PublicLopuToolCall = { name: string; ok: boolean; summary: string; t
 export type PublicLopuMessageMeta = {
 	role: 'user' | 'assistant';
 	requestId: string | null;
+	continuation?: boolean;
+	continuationSafe?: boolean;
+	recoveryFailures?: number;
 	segmentIndex: number;
 	segmentCount: number;
 	// assistant rows only
@@ -215,7 +218,10 @@ export const publicLopuMessageMeta = (value: unknown): PublicLopuMessageMeta | n
 	const segmentIndex = nonNegativeInt(raw.segmentIndex) ?? 0;
 	const segmentCount = Math.max(1, nonNegativeInt(raw.segmentCount) ?? 1);
 	const meta: PublicLopuMessageMeta = { role, requestId: text(raw.requestId, 128) || null, segmentIndex, segmentCount };
+	if (raw.continuation === true) meta.continuation = true;
+	if (typeof raw.continuationSafe === 'boolean') meta.continuationSafe = raw.continuationSafe;
 	if (role !== 'assistant') return meta;
+	if (nonNegativeInt(raw.recoveryFailures) !== undefined) meta.recoveryFailures = Number(raw.recoveryFailures);
 	meta.model = text(raw.model, 128) || null;
 	meta.effort = text(raw.effort, 32) || null;
 	meta.speed = text(raw.speed, 32) || null;

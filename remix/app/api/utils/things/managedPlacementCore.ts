@@ -1,3 +1,4 @@
+import { isFolderThing } from '../../../schemas/folderThing';
 /** Owner-side organization only. This is not an input to generic Thing CRUD:
  * the dedicated writer must re-read both records and apply this patch with
  * a source-version fence in the same transaction. No content/ACL is copied. */
@@ -7,6 +8,7 @@ export type PlacementRecord = {
   thingtime: string[];
   updatedAt: Date;
   folderId?: string | null;
+  crystal?: Record<string, unknown>;
   appId?: unknown;
   sandbox?: unknown;
   sandboxSpace?: unknown;
@@ -44,7 +46,7 @@ export const prepareManagedPlacement = (
     throw new Error('Only durable standalone files and recordings can be filed');
   }
   if (folder && (folder.ownerId !== ownerId || folder.shareId === source.shareId ||
-    folder.thingtime.length !== 1 || folder.thingtime[0] !== 'folder' ||
+    folder.thingtime.length !== 1 || !isFolderThing(folder) ||
     !(folder.updatedAt instanceof Date) || !Number.isFinite(folder.updatedAt.getTime()) ||
     folder.appId != null || folder.sandbox != null || folder.sandboxSpace != null)) {
     throw new Error('Choose a folder in your own Thingtime library');

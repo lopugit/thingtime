@@ -1,3 +1,6 @@
+import { PostLinkedThings } from './PostLinkedThings';
+import { CollectionList } from '~/components/Collections/CollectionList';
+import { createDiscussionCommentPager, mergeDiscussionComments, discussionCommentSearchText } from './discussionCommentPages';
 import { SharedMediaProvider, useSharedThingPath, useSharedAccess } from '~/components/Sharing/SharedMedia';
 import { audienceDescription, audienceOfAcl, sharePathForThing, aclForAudience } from '~/components/Sharing/audienceCore';
 import React from 'react';
@@ -71,13 +74,14 @@ import type { PollRenderPollContext } from '~/components/Kinds';
 // reflects it). Used for optimistic paint + revert against the FRESHEST post, so
 // a concurrent reaction on a different token is never clobbered.
 const applyReactionToggle = <T extends Pick<PublicPost, 'reactionCounts' | 'viewerReactions'>>(prev: T, token: string, adding: boolean): T => {
-  const has = prev.viewerReactions.includes(token);
+  const previousReactions = prev.viewerReactions || [];
+  const has = previousReactions.includes(token);
   if (adding === has) return prev;
   const reactionCounts = { ...prev.reactionCounts };
   reactionCounts[token] = (reactionCounts[token] || 0) + (adding ? 1 : -1);
   if (reactionCounts[token] <= 0) delete reactionCounts[token];
-	const viewerReactions = adding ? [...prev.viewerReactions, token] : prev.viewerReactions.filter((entry) => entry !== token);
-  return { ...prev, reactionCounts, viewerReactions };
+	const viewerReactions = adding ? [...previousReactions, token] : previousReactions.filter((entry) => entry !== token);
+  return { ...prev, reactionCounts: prev.reactionCounts === undefined ? undefined : reactionCounts, viewerReactions };
 };
 
 // Reconcile ONLY the toggled token against the server's authoritative view,
@@ -85,18 +89,19 @@ const applyReactionToggle = <T extends Pick<PublicPost, 'reactionCounts' | 'view
 const reconcileReactionToken = <T extends Pick<PublicPost, 'reactionCounts' | 'viewerReactions'>>(
   prev: T,
   token: string,
-  serverCounts: Record<string, number>,
-  serverViewer: string[]
+  serverCounts: Record<string, number> | undefined,
+  serverViewer: string[] | undefined
 ): T => {
+  if (!serverCounts) return { ...prev, reactionCounts: undefined, viewerReactions: serverViewer || [] };
   const reactionCounts = { ...prev.reactionCounts };
   const count = serverCounts[token] || 0;
   if (count > 0) reactionCounts[token] = count;
   else delete reactionCounts[token];
-  const serverHas = serverViewer.includes(token);
-  const prevHas = prev.viewerReactions.includes(token);
-  let viewerReactions = prev.viewerReactions;
-  if (serverHas && !prevHas) viewerReactions = [...prev.viewerReactions, token];
-  else if (!serverHas && prevHas) viewerReactions = prev.viewerReactions.filter((entry) => entry !== token);
+  const serverHas = (serverViewer || []).includes(token);
+  const prevHas = (prev.viewerReactions || []).includes(token);
+  let viewerReactions = prev.viewerReactions || [];
+  if (serverHas && !prevHas) viewerReactions = [...viewerReactions, token];
+  else if (!serverHas && prevHas) viewerReactions = viewerReactions.filter((entry) => entry !== token);
   return { ...prev, reactionCounts, viewerReactions };
 };
 
@@ -214,8 +219,22 @@ export type PostCardProps = {
   onChanged?: (id: string, next: PostChange) => void;
   // card-level signals: expand/react/comment/share
   onEngagement?: (event: EngagementEvent) => void;
+  // Accepted comments/replies may refresh related media without changing the
+  // optimistic engagement signal or turning a refresh failure into a retry.
+  onCommentAdded?: () => void | Promise<unknown>;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
+  discussionOnly?: boolean;
+  // Only a standalone Thing discussion supplies cursor-backed collection state.
+  // Regular feed cards retain their existing sort and reveal behavior.
+  commentCollection?: {
+    controls: boolean;
+    hasMore: boolean;
+    loadMore: () => Promise<unknown>;
+    loading: boolean;
+    error: string;
+    resetKey: string;
+  };
 	// the /media/:id page projects a protected attachment Thing as this card:
 	// interactions stay live, but the owner menu drops edit/privacy/delete
 	// (title/description edit via annotate; lifecycle belongs to the parent post)
@@ -223,6 +242,10 @@ export type PostCardProps = {
 	// media pages: the parent post's gallery this media belongs to, so the menu
 	// can offer "Download all" for the whole set instead of the single file
 	gallery?: { id: string; fileCount: number } | null;
+};
+
+const notifyCommentAdded = (callback?: () => void | Promise<unknown>) => {
+  void Promise.resolve().then(() => callback?.()).catch(() => {});
 };
 
 const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
@@ -533,7 +556,7 @@ const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) =
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'id' | 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey' | 'thingtime'>;
+type PostBodyShape = Pick<PublicPost, 'id' | 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey' | 'thingtime' | 'linkedThings' | 'attachmentsTruncated'>;
 
 const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'richText'>; compact?: boolean }) => {
   const richText = getEditorJsDoc(post.richText);
@@ -569,10 +592,11 @@ const PostBody = ({
     repeat the first photo). The thing mounts as the NATIVE Thingtime tree
     (sandboxed — see ThingView), rendered through its kind renderer when one
     resolves, with a corner icon flipping between the two views. */}
-    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} poll={poll} />}
+    {post.type === 'thingtime' && post.thing && <PostLinkedThings value={post.thing} linkedThings={post.linkedThings} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
     <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
+    {post.attachmentsTruncated && <Link to={`/thing/${encodeURIComponent(post.id)}`} style={{ fontSize: '0.8rem' }}>View all attachments on the original Thing</Link>}
     <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
 );
@@ -814,6 +838,7 @@ const CommentRow = (props: {
   comment: PostComment;
   onChanged: (id: string, change: CommentChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
+  onCommentAdded?: () => void | Promise<unknown>;
   // 1 = a post's direct comment; grows down the thread. Only depth-1 rows
   // auto-open their preloaded replies (the default two-level view) — deeper
   // rows reveal ONE more depth per tap, and rows AT the visual cap refocus
@@ -821,10 +846,12 @@ const CommentRow = (props: {
   depth?: number;
   // the focused root of a drilled-in thread panel opens its replies on mount
   defaultOpen?: boolean;
+  cursorReplies?: boolean;
 }) => {
-  const { comment, onChanged, onEngagement, depth = 1, defaultOpen } = props;
+  const { comment, onChanged, onEngagement, onCommentAdded, depth = 1, defaultOpen, cursorReplies = false } = props;
 
   const api = useApi();
+  const sharedAccess = useSharedAccess();
   const user = useCurrentUser();
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
@@ -863,9 +890,9 @@ const CommentRow = (props: {
     // epoch 0 so a remount can't resurrect pre-tap reaction state
     // under a sort the thread's sorted read is preferred, but a default-order
     // copy still seeds (the rows re-order client-side) rather than a skeleton
-    () => getCachedThread(comment.id, commentSort) ?? (commentSort ? getCachedThread(comment.id) : null) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
+    () => cursorReplies ? null : getCachedThread(comment.id, commentSort) ?? (commentSort ? getCachedThread(comment.id) : null) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
   );
-  const [repliesOpen, setRepliesOpen] = React.useState((depth === 1 && !!comment.comments?.length) || !!defaultOpen);
+  const [repliesOpen, setRepliesOpen] = React.useState((!cursorReplies && depth === 1 && !!comment.comments?.length) || !!defaultOpen);
   // the reply INPUT is separate from thread visibility: threads stay open,
   // but only one empty input exists at a time (ReplyFocusContext)
   const [replyInputOpen, setReplyInputOpen] = React.useState(false);
@@ -952,7 +979,7 @@ const CommentRow = (props: {
       let reconciled = false;
       if (shouldReconcileReactionFailure(err)) {
         try {
-          const fresh = await fetchReactionTruth(api, comment.id);
+          const fresh = cursorReplies ? null : await fetchReactionTruth(api, comment.id);
           if (fresh) {
             reconcileLocalToken(fresh.reactionCounts, fresh.viewerReactions);
             reconciled = true;
@@ -983,8 +1010,39 @@ const CommentRow = (props: {
   repliesStateRef.current = replies;
   const fetchingRef = React.useRef(false);
 
+  const cursorThread = React.useRef<{ pager: ReturnType<typeof createDiscussionCommentPager>; controller: AbortController } | null>(null);
+  const [repliesHaveMore, setRepliesHaveMore] = React.useState(true);
+  const [replyLoadError, setReplyLoadError] = React.useState('');
+  React.useEffect(() => {
+    if (!cursorReplies) return;
+    const request = cursorThread.current || { pager: createDiscussionCommentPager(), controller: new AbortController() };
+    cursorThread.current = request;
+    return () => { request.controller.abort(); request.pager.dispose(); cursorThread.current = null; };
+  }, [cursorReplies, comment.id]);
+  const loadReplyPage = React.useCallback(async () => {
+    const request = cursorThread.current ||= { pager: createDiscussionCommentPager(), controller: new AbortController() };
+    if (fetchingRef.current || pending || !request.pager.hasMore) return;
+    fetchingRef.current = true;
+    const started = Date.now();
+    setRepliesLoading(true); setReplyLoadError('');
+    try {
+      const page = await request.pager.load(cursor => api.v1.things.list({ target: comment.id, thingtime: 'comment', commentProjection: true, cursor, limit: 20, ...sharedAccess }, { signal: request.controller.signal }));
+      if (request.controller.signal.aborted || !page) return;
+      setReplies(previous => mergeReactionOverlays(started, mergeDiscussionComments(previous || [], page.comments)));
+    } catch (failure: any) {
+      if (request.controller.signal.aborted) return;
+      if ([401, 403, 404].includes(Number(failure?.status))) { setReplies([]); request.pager.dispose(); }
+      setReplyLoadError(failure instanceof Error ? failure.message : 'Could not load replies.');
+    } finally {
+      if (!request.controller.signal.aborted) {
+        fetchingRef.current = false; setRepliesLoading(false); setRepliesHaveMore(request.pager.hasMore);
+      }
+    }
+  }, [api, comment.id, pending, sharedAccess]);
+
   const fetchThread = React.useCallback(
     (options?: { force?: boolean }) => {
+      if (cursorReplies) { if (options?.force) void loadReplyPage(); return; }
       if (fetchingRef.current || pending) return;
       const loaded = repliesStateRef.current?.length ?? 0;
       if (!options?.force && (comment.commentCount === 0 || loaded >= comment.commentCount)) return;
@@ -1013,7 +1071,7 @@ const CommentRow = (props: {
           setRepliesLoading(false);
         });
     },
-    [api, comment.id, comment.commentCount, pending, commentSort]
+    [api, comment.id, comment.commentCount, pending, commentSort, cursorReplies, loadReplyPage]
   );
 
   // prefetch-ahead: fill this row's missing depth as soon as it renders —
@@ -1077,7 +1135,7 @@ const CommentRow = (props: {
   // background refetch reconciles any live comments added in the meantime
   const showMoreReplies = () => {
     setVisibleReplies((count) => count + 5);
-    fetchThread({ force: true });
+    if (!cursorReplies || (repliesStateRef.current?.length || 0) <= visibleReplies) fetchThread({ force: true });
   };
 
   // optimistic: the reply renders the moment you hit send; the server copy
@@ -1090,7 +1148,7 @@ const CommentRow = (props: {
     clearReplyDraft();
     freshReplies.note(pendingReply.id);
     setReplies((prev) => [...(prev || []), pendingReply]);
-    onChanged(comment.id, (current) => ({ ...current, commentCount: current.commentCount + 1 }));
+    onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: current.commentCount + 1 }) }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
 
     try {
@@ -1099,17 +1157,18 @@ const CommentRow = (props: {
       setReplies((prev) => {
         const mapped = (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply));
         const deduped = mapped.filter((reply, index) => mapped.findIndex((entry) => entry.id === reply.id) === index);
-        setCachedThread(
+        if (!cursorReplies) setCachedThread(
           comment.id,
           deduped.filter((reply) => !isPendingComment(reply)),
           { sort: commentSort }
         );
         return deduped;
       });
+      notifyCommentAdded(onCommentAdded);
     } catch (err: any) {
       freshReplies.drop(pendingReply.id);
       setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
-      onChanged(comment.id, (current) => ({ ...current, commentCount: Math.max(0, current.commentCount - 1) }));
+      onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: Math.max(0, current.commentCount - 1) }) }));
       setReplyText(text); // give the draft back
       lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
     }
@@ -1121,7 +1180,7 @@ const CommentRow = (props: {
     freshReplies.note(reply.id);
     setReplies((prev) => {
       const next = [...(prev || []), reply];
-      setCachedThread(
+      if (!cursorReplies) setCachedThread(
         comment.id,
         next.filter((entry) => !isPendingComment(entry)),
         { sort: commentSort }
@@ -1129,9 +1188,10 @@ const CommentRow = (props: {
       return next;
     });
     setRepliesOpen(true);
-    onChanged(comment.id, (current) => ({ ...current, commentCount: current.commentCount + 1 }));
+    onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: current.commentCount + 1 }) }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
     setRichReplyOpen(false);
+    notifyCommentAdded(onCommentAdded);
   };
 
   const handleReplyChanged = (id: string, change: CommentChange) => {
@@ -1142,7 +1202,7 @@ const CommentRow = (props: {
   // it (oldest → newest, revealed upwards), a sort re-ordered client-side
   // (exact — a thread page is at most 20 wide) and windowed top-down with the
   // viewer's own fresh replies kept on screen
-  const orderedReplies = commentSort ? sortCommentPage(replies || [], commentSort) : replies || [];
+  const orderedReplies = cursorReplies ? sortCommentPage(replies || [], 'old') : commentSort ? sortCommentPage(replies || [], commentSort) : replies || [];
   const shownReplies = windowCommentPage(orderedReplies, commentSort, visibleReplies, freshReplies.ids);
 
   // parent comments carry the bigger avatar; replies step down (IG-style)
@@ -1167,7 +1227,7 @@ const CommentRow = (props: {
     if (pending || commentUpdownInFlightRef.current) return;
     commentUpdownInFlightRef.current = true;
     const before = comment.votes;
-    onChanged(comment.id, (current) => applyUpdownVote(current, direction));
+    if (!cursorReplies || comment.votes) onChanged(comment.id, (current) => applyUpdownVote(current, direction));
     try {
       const resp = await api.v1.things.updown({ id: comment.id, direction });
       onChanged(comment.id, (current) => ({ ...current, votes: resp.votes }));
@@ -1178,7 +1238,7 @@ const CommentRow = (props: {
       commentUpdownInFlightRef.current = false;
     }
   };
-  const commentUpdown = <UpdownControl size="sm" votes={comment.votes} onVote={handleCommentUpdown} enabled={!!user && !pending} />;
+  const commentUpdown = <UpdownControl size="sm" votes={comment.votes} hideUnknownScore={cursorReplies} onVote={handleCommentUpdown} enabled={!!user && !pending} />;
 
   const reactControl = (
     <Box ref={reactAnchorRef} position="relative" display="flex" flexShrink={0}>
@@ -1299,7 +1359,7 @@ const CommentRow = (props: {
             </Flex>
             {/* thread reveal lives BELOW the comment (FB/IG-style), left
             edge flush with the reply icon */}
-            {!pending && comment.commentCount > 0 && (
+            {!pending && (cursorReplies || comment.commentCount > 0) && (
               <Flex alignItems="center" paddingX={1} paddingTop={0.5}>
                 <Box
                   as="button"
@@ -1312,7 +1372,7 @@ const CommentRow = (props: {
                   aria-expanded={repliesOpen}
                   onClick={toggleThread}
                 >
-                  {repliesOpen ? 'Hide replies' : `View ${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'}`}
+                  {repliesOpen ? 'Hide replies' : cursorReplies ? 'View replies' : `View ${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'}`}
                 </Box>
               </Flex>
             )}
@@ -1325,11 +1385,11 @@ const CommentRow = (props: {
             {repliesLoading && replies === null && <ReplySkeleton />}
             {repliesOpen &&
               shownReplies.map((reply) => (
-                <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} depth={depth + 1} />
+                <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} cursorReplies={cursorReplies} depth={depth + 1} />
               ))}
             {repliesOpen &&
               !(repliesLoading && replies === null) &&
-              (shownReplies.length < orderedReplies.length || comment.commentCount > orderedReplies.length) && (
+              (shownReplies.length < orderedReplies.length || (cursorReplies ? repliesHaveMore : comment.commentCount > orderedReplies.length)) && (
               <Box
                 as="button"
                 type="button"
@@ -1343,6 +1403,8 @@ const CommentRow = (props: {
                 {commentSort ? 'Show more replies 💬' : 'Show previous replies 💬'}
               </Box>
             )}
+            {cursorReplies && replyLoadError && <Text role="alert" fontSize="xs" color="red.500">{replyLoadError}</Text>}
+            {cursorReplies && repliesOpen && !repliesLoading && !repliesHaveMore && !replies?.length && !replyLoadError && <Text fontSize="xs" color={MUTED}>No replies yet.</Text>}
             {replyInputOpen &&
               (user ? (
                 <Flex flexDirection="column" rowGap={2}>
@@ -1408,7 +1470,7 @@ export const PostCard = React.memo(function PostCard(props: PostCardProps) {
 });
 
 function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing, gallery } = props;
+  const { post, onChanged, onEngagement, onCommentAdded, defaultCommentsOpen, mediaThing, gallery, discussionOnly, commentCollection } = props;
 	const sharedPath = useSharedThingPath();
   const sharedAccess = useSharedAccess();
 	const permalinkPath = sharedPath(sharePathForThing(post));
@@ -1461,7 +1523,7 @@ function PostCardImpl(props: PostCardProps) {
   // every shipped level-2 comment with replies) into the thread cache
   const prefetchedPostRef = React.useRef(false);
   React.useEffect(() => {
-    if (prefetchedPostRef.current) return;
+    if (prefetchedPostRef.current || commentCollection) return;
     prefetchedPostRef.current = true;
     warmAvatars(post.comments);
     for (const comment of post.comments) {
@@ -1533,7 +1595,7 @@ function PostCardImpl(props: PostCardProps) {
     if (updownInFlightRef.current) return;
     updownInFlightRef.current = true;
     const before = post.votes;
-    onChanged?.(post.id, (current) => applyUpdownVote(current, direction));
+    if (!commentCollection || post.votes) onChanged?.(post.id, (current) => applyUpdownVote(current, direction));
     onEngagement?.({ thingId: post.id, signal: 'react' });
     try {
       const resp = await api.v1.things.updown({ id: post.id, direction });
@@ -1813,7 +1875,7 @@ function PostCardImpl(props: PostCardProps) {
       let reconciled = false;
       if (shouldReconcileReactionFailure(err)) {
         try {
-          const fresh = await fetchReactionTruth(api, post.id);
+          const fresh = commentCollection ? null : await fetchReactionTruth(api, post.id);
           if (fresh) {
             reconcileLocalToken(fresh.reactionCounts, fresh.viewerReactions);
             reconciled = true;
@@ -1899,7 +1961,7 @@ function PostCardImpl(props: PostCardProps) {
   // meanwhile) is dropped; a refusal toasts and REVERTS the pick, so the menu
   // never claims an order the server page never delivered. Offered on
   // subspace posts only (media cards defer to their post).
-  const commentSortAvailable = !!post.subspace && !mediaThing;
+  const commentSortAvailable = (!!post.subspace || discussionOnly) && !mediaThing && !commentCollection;
   const changeCommentSort = async (value: string | string[]) => {
     const next = Array.isArray(value) ? value[0] : value;
     if (!isCommentSort(next) || next === commentSort) return;
@@ -1910,8 +1972,8 @@ function PostCardImpl(props: PostCardProps) {
     const startedAt = Date.now();
     try {
       const resp = await api.v1.things.get({ id: post.id, commentSort: next, ...sharedAccess });
-      if (seq !== commentSortSeqRef.current || !resp?.post) return;
-      const fresh = resp.post as PublicPost;
+      if (seq !== commentSortSeqRef.current || !(resp?.post || resp?.discussion)) return;
+      const fresh = (resp.post || resp.discussion) as PublicPost;
       onChanged?.(post.id, (prev) => {
         const merged = mergeCommentPage(fresh.comments, prev.comments, freshComments.ref.current, startedAt);
         return { ...prev, comments: merged.comments, commentCount: fresh.commentCount + merged.unseen, commentCounts: fresh.commentCounts };
@@ -1922,7 +1984,7 @@ function PostCardImpl(props: PostCardProps) {
       lopu({ title: err?.error || 'Could not re-sort the comments 😞', status: 'error' });
     }
   };
-  const orderedComments = commentSort ? sortCommentPage(post.comments, commentSort) : post.comments;
+  const orderedComments = commentCollection ? sortCommentPage(post.comments, commentCollection.controls ? 'new' : 'old') : commentSort ? sortCommentPage(post.comments, commentSort) : post.comments;
   // under a sort the viewer's own fresh comments stay on screen even when the
   // order puts them below the window (a new comment scores 0 and is the
   // newest — Top and Old would otherwise hide the comment they just posted)
@@ -1975,7 +2037,7 @@ function PostCardImpl(props: PostCardProps) {
     onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, pendingComment],
-      commentCount: prev.commentCount + 1
+      ...(prev.commentCount === undefined ? {} : { commentCount: prev.commentCount + 1 })
     }));
     onEngagement?.({ thingId: post.id, signal: 'comment' });
 
@@ -1987,12 +2049,13 @@ function PostCardImpl(props: PostCardProps) {
         comments: prev.comments.map((comment) => (comment.id === pendingComment.id ? resp.comment : comment)),
         commentCount: resp.commentCount
       }));
+      notifyCommentAdded(onCommentAdded);
     } catch (err: any) {
       freshComments.drop(pendingComment.id);
       onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.filter((comment) => comment.id !== pendingComment.id),
-        commentCount: Math.max(0, prev.commentCount - 1)
+        ...(prev.commentCount === undefined ? {} : { commentCount: Math.max(0, prev.commentCount - 1) })
       }));
       setCommentText(text); // give the draft back
       lopu({ title: err?.error || 'Comment did not send 😞', status: 'error' });
@@ -2006,10 +2069,11 @@ function PostCardImpl(props: PostCardProps) {
     onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, comment],
-      commentCount: prev.commentCount + 1
+      ...(prev.commentCount === undefined ? {} : { commentCount: prev.commentCount + 1 })
     }));
     onEngagement?.({ thingId: post.id, signal: 'comment' });
     setRichCommentOpen(false);
+    notifyCommentAdded(onCommentAdded);
   };
 
   // a comment changed (reaction toggled) — swap it inside the freshest post
@@ -2145,6 +2209,18 @@ function PostCardImpl(props: PostCardProps) {
     </Flex>
   );
 
+  const renderComments = (comments: PostComment[]) => (
+    <CommentSortContext.Provider value={commentSort}>
+      <SubspaceReportContext.Provider value={subspaceReportContext}>
+        <Flex flexDirection="column" rowGap={3}>
+          {comments.map(comment => (
+            <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} cursorReplies={!!commentCollection} />
+          ))}
+        </Flex>
+      </SubspaceReportContext.Provider>
+    </CommentSortContext.Provider>
+  );
+
   return (
     <ReplyFocusContext.Provider value={replyFocus}>
     <Box
@@ -2155,6 +2231,8 @@ function PostCardImpl(props: PostCardProps) {
       padding={[4, 5]}
     >
       <Flex flexDirection="column" rowGap={3}>
+        {discussionOnly && <Text as="h2" fontWeight={700}>Comments</Text>}
+        {!discussionOnly && <>
         {/* header */}
         <Flex alignItems="center" columnGap={3}>
           <AuthorAvatar author={post.author} />
@@ -2205,6 +2283,7 @@ function PostCardImpl(props: PostCardProps) {
             archive={archiveTarget}
             onOpen={() => { if (isOwner || canModerate) void loadFlairs(); }}
             handlers={{
+                  rename: title => onChanged?.(post.id, prev => ({ ...prev, title })),
               edit: handleEditStart, delete: handleDelete, privacy: handleVisibilityChange,
               report: () => guestReport ? lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 }) : setReportOpen(true),
               remove: () => setRemoveOpen(true), moderate: handleModerate, flair: handleOwnFlair,
@@ -2401,6 +2480,7 @@ function PostCardImpl(props: PostCardProps) {
           <PostBody post={post} attachments={post.attachments} poll={pollContext} />
         )}
 
+        </>}
         {/* action row — icons + counts only (X-style, no labels); the merged
         react control sits right beside the comments icon (comment rows keep
         their IG-style right-aligned react columns) */}
@@ -2416,7 +2496,7 @@ function PostCardImpl(props: PostCardProps) {
             aria-expanded={commentsOpen}
             onClick={toggleComments}
           />
-          {showVotes && <UpdownControl votes={post.votes} onVote={handleUpdown} enabled={!!user} accent={post.subspace?.accent} />}
+          {showVotes && <UpdownControl votes={post.votes} hideUnknownScore={!!commentCollection} onVote={handleUpdown} enabled={!!user} accent={post.subspace?.accent} />}
 
           {user ? (
             <Box ref={reactAnchorRef} position="relative" display="flex">
@@ -2456,7 +2536,7 @@ function PostCardImpl(props: PostCardProps) {
           )}
 
           {/* repost: instant repost OR quote (caption + circle) */}
-			{!mediaThing && (user ? (
+			{!mediaThing && !discussionOnly && (user ? (
             <Box position="relative" display="flex">
               <Menu placement="top" autoSelect={false}>
 									<MenuButton as={ActionIcon} icon={<Repeat2 size={18} strokeWidth={2.2} />} count={post.shareCount} label="Repost" />
@@ -2555,7 +2635,7 @@ function PostCardImpl(props: PostCardProps) {
 
           {/* public view stats (X-style, right edge): count = unique viewers;
           the tooltip carries impressions + average time on screen */}
-          <Tooltip
+          {(!commentCollection || typeof post.viewCount === 'number') && <Tooltip
             label={`${post.viewCount || 0} unique ${(post.viewCount || 0) === 1 ? 'viewer' : 'viewers'} · ${
               post.viewStats?.impressions || 0
             } impressions · avg ${formatDwell(post.viewStats?.avgDwellMs || 0)} on screen`}
@@ -2579,7 +2659,7 @@ function PostCardImpl(props: PostCardProps) {
               <Eye size={18} strokeWidth={2.2} />
               <Text as="span">{formatCompactCount(post.viewCount || 0)}</Text>
             </Flex>
-          </Tooltip>
+          </Tooltip>}
         </Flex>
 
         {/* comments — the post's conversation, or a FOCUSED thread panel:
@@ -2615,7 +2695,7 @@ function PostCardImpl(props: PostCardProps) {
               </Flex>
               <CommentSortContext.Provider value={commentSort}>
                 <SubspaceReportContext.Provider value={subspaceReportContext}>
-                  <CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} defaultOpen />
+                  <CommentRow key={focusedComment.id} comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} cursorReplies={!!commentCollection} defaultOpen />
                 </SubspaceReportContext.Provider>
               </CommentSortContext.Provider>
             </Flex>
@@ -2652,18 +2732,27 @@ function PostCardImpl(props: PostCardProps) {
                 </Menu>
               </Flex>
             )}
-            <CommentSortContext.Provider value={commentSort}>
-              <SubspaceReportContext.Provider value={subspaceReportContext}>
-                {shownComments.map((comment) => (
-                  <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
-                ))}
-              </SubspaceReportContext.Provider>
-            </CommentSortContext.Provider>
+            {commentCollection?.controls ? (
+              <CollectionList
+                label="Comments"
+                items={orderedComments}
+                searchText={discussionCommentSearchText}
+                filters={[{ key: 'author', label: 'Author', value: comment => comment.author?.username || '' }]}
+                hasMore={commentCollection.hasMore}
+                loadMore={commentCollection.loadMore}
+                loading={commentCollection.loading}
+                error={commentCollection.error}
+                resetKey={commentCollection.resetKey}
+                empty="No comments yet."
+              >
+                {renderComments}
+              </CollectionList>
+            ) : renderComments(shownComments)}
 
             {/* the reveal control sits BELOW the conversation (FB-style);
             the OLDER comments it reveals render above the visible list — under
             a sort the page reads top-down, so the reveal appends below */}
-            {shownComments.length < orderedComments.length && (
+            {!commentCollection?.controls && shownComments.length < orderedComments.length && (
               <Box
                 as="button"
                 type="button"
@@ -2677,6 +2766,12 @@ function PostCardImpl(props: PostCardProps) {
               >
                 {commentSort ? 'Show more comments 💬' : 'Show previous comments 💬'}
               </Box>
+            )}
+
+            {commentCollection && !commentCollection.controls && commentCollection.hasMore && (
+              <Button size="sm" variant="ghost" alignSelf="flex-start" isDisabled={commentCollection.loading} onClick={async () => { await commentCollection.loadMore(); setVisibleComments(count => count + 20); }}>
+                {commentCollection.loading ? 'Loading older comments…' : 'Load older comments'}
+              </Button>
             )}
 
             {user ? (

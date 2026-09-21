@@ -15,7 +15,7 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
   // the ZIP this card can offer: its own stored gallery, or (media pages) the
   // parent gallery the media belongs to — null when nothing is downloadable
   archive?: PostArchiveTarget | null;
-  handlers: { edit: () => void; delete: () => void; privacy: (value: PostVisibility) => void; report: () => void;
+  handlers: { rename?: (title: string) => void; edit: () => void; delete: () => void; privacy: (value: PostVisibility) => void; report: () => void;
     remove: () => void; moderate: (action: string, extra?: Record<string, unknown>) => void; flair: (id: string | null) => void;
     downloadArchive?: () => void; shareDownloadLink?: () => void };
 }) {
@@ -41,7 +41,7 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
     ] }] } }] });
   }
   return <PersistedThingMenu id={post.id} initialThing={post} label={mediaThing ? 'Media options' : 'Post options'} openHref={openHref}
-    onOpen={onOpen} extensions={extensions} capabilities={{ edit: isOwner && !mediaThing, delete: isOwner && !mediaThing,
+    onOpen={onOpen} onRenamed={handlers.rename} extensions={extensions} capabilities={{ edit: isOwner && !mediaThing, delete: isOwner && !mediaThing,
       share: isOwner && !mediaThing ? { submenu: { title: 'Share / permissions', sections: [privacy] } } : false }}
     onAction={({ action }) => {
       const command = action.command;

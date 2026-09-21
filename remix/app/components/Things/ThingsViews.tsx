@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Box, Checkbox, Flex, Grid, Text } from '@chakra-ui/react';
+import { Box, Button, Checkbox, Flex, Grid, Text } from '@chakra-ui/react';
 import type { TextProps } from '@chakra-ui/react';
 import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router';
@@ -535,6 +535,7 @@ export const ThingsColumnsView = ({
   itemsFor,
   activeFolderAt,
   onOpenFolderAt,
+  onNewFolder,
   handlers,
   displayMode,
 	schemaRenderFor,
@@ -549,6 +550,7 @@ export const ThingsColumnsView = ({
   activeFolderAt: (depth: number) => string | null;
   onOpenFolderAt: (depth: number, folderId: string) => void;
   handlers: ThingsItemHandlers;
+  onNewFolder?: (parentId: string | null) => void;
   displayMode: ThingsDisplayMode;
   schemaRenderFor?: SchemaRenderLookup;
 } & ThingsDevicePresentation) => (
@@ -598,7 +600,7 @@ export const ThingsColumnsView = ({
                 data-thing-id={thing.id}
                 direction="column"
                 onClick={(event) => {
-                  if (folder) {
+                  if (folder && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
                     onOpenFolderAt(depth, thing.id);
                   } else {
                     handlers.onItemClick(thing, event);
@@ -644,6 +646,7 @@ export const ThingsColumnsView = ({
               Loading…
             </Text>
           )}
+          {onNewFolder && <Button size="sm" variant="ghost" flexShrink={0} justifyContent="flex-start" mx={2} mt={1} onClick={() => onNewFolder(folderId)}>New folder +</Button>}
         </Flex>
       );
     })}

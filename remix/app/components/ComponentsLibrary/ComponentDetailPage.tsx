@@ -14,7 +14,7 @@ import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { isSafeCssText } from '~/components/Kinds/safeUrl';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
-import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
+import { BuilderThingMenu } from '~/components/Builder/BuilderThingMenu';
 import { pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -762,7 +762,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
             Components
           </Button>
           <Box flex={1} />
-          {active && <ThingTransferControls id={active.entry.id} linkKey={searchParams.get('key') || undefined} />}
+          {active && <BuilderThingMenu id={active.entry.id} linkKey={searchParams.get('key') || undefined} kind="component" onChanged={() => void loadFamily()} />}
           <Button leftIcon={<LinkIcon size={13} />} onClick={() => copyLink()} size="xs" variant="ghost">
             Copy link
           </Button>

@@ -49,6 +49,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Route native-tool GPT-5.6 Sol chat replies through
+  Responses while retaining the selected reasoning effort and speed. The reply
+  contract advances to 1.14.1 after authenticated preview QA exposed a rejected
+  Chat Completions combination. Live repaired-path acceptance remains pending;
+  details are in the [PR 867 note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md).
+
 - 2026-09-22 — **Codex (AI)**: Commit keyboard adjustments on the remote
   brightness and volume sliders. Arrow and range-navigation keys now send the
   displayed value, with duplicate pointer/keyboard completion suppressed.
@@ -57,6 +63,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   macOS application has a blank display name. The native heartbeat now uses
   its bundle identifier as the name and skips blank identifiers before paging,
   preventing HTTP 400 responses that hide brightness and file capabilities.
+
+- **2026-09-21 · Codex (AI):** Seamless Lopu continuation with browser/server
+  management, one aggregate iOS chat Live Activity, Builder settings and unified
+  Commander navigation. Things now share post discussions, attach existing
+  Things, recognize legacy folders, preserve scalar previews and expose broader
+  management/rename controls. Shared discussions preserve paginated search and
+  filters with authorized rich comment batches (Things 1.27.0). Generic Thing
+  reads also protect device-command inputs and expiring file results. Action-run delivery defaults off; unlisted social
+  previews retain context without indexing. Fix Nitro shell asset registration
+  and writable Graphify working copies. Pre-merge review also hardens abandoned
+  server task cancellation, workflow admission recovery and persisted local
+  retry limits. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
+  for validation and device/deployment limits.
 
 - 2026-09-21 — **Codex (AI)**: Restore native display brightness on Apple
   Silicon Macs and refresh paired capabilities on heartbeat. Add a shared

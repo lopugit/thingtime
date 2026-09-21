@@ -12,7 +12,7 @@ export function buildThingEntityMenu(
     ? [{ ...THING_ACTIONS[id], ...(typeof capabilities[id] === 'object' ? capabilities[id] : {}), id, command: id }]
     : [];
   return { sections: [
-    { id: 'thing', actions: [...action('open'), ...action('inspect'), ...action('copy-link'), ...action('edit'), ...action('share')] },
+    { id: 'thing', actions: [...action('open'), ...action('inspect'), ...action('copy-link'), ...action('rename'), ...action('edit'), ...action('share')] },
     { id: 'lopu', actions: action('send-to-lopu') },
     ...extensions,
     { id: 'danger', actions: action('delete') }

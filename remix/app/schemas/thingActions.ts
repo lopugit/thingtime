@@ -5,6 +5,7 @@ export const THING_ACTIONS = {
   open: { id: 'open', command: 'open', label: 'Open Thing', icon: '🔎', lucide: 'external-link' },
   inspect: { id: 'inspect', command: 'inspect', label: 'View Thing data', icon: '💎', lucide: 'braces' },
   'copy-link': { id: 'copy-link', command: 'copy-link', label: 'Copy link', icon: '🔗', lucide: 'link' },
+  rename: { id: 'rename', command: 'rename', label: 'Rename', icon: '✏️', lucide: 'text-cursor-input' },
   edit: { id: 'edit', command: 'edit', label: 'Edit', icon: '✏️', lucide: 'pen-line' },
   share: { id: 'share', command: 'share', label: 'Share / permissions', icon: '🌐', lucide: 'share-2' },
   delete: { id: 'delete', command: 'delete', label: 'Delete', icon: '🗑️', lucide: 'trash-2', danger: true },

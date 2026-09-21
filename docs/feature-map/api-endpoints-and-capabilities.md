@@ -45,6 +45,21 @@ the source of truth for the route table and both capability manifests.
 7. **Docs**: README section for any env/setup, `TESTING.md` checklist,
    `remix/CHANGELOG.md` under `[Unreleased]`, and the relevant feature map.
 
+## Lopu continuity and native activity contracts
+
+`api.lopu-chats-reply` 1.14.0 and `api.lopu-background-tasks` 1.3.0 describe safe
+continuation metadata and local/server management. `continuationWorkflow.server.ts`,
+`continuationSteps.server.ts`, `continuationFinalization.server.ts` and
+`backgroundTasks.ts` retain a conversation claim until the executor saves its
+last output and acknowledges completion. Uncertain work never replays. The
+`api.lopu-live-activity` 1.0.0 route registers one aggregate native chat activity.
+Canonical `test:lopu` includes workflow/admission and reload/account-switch
+regressions; `test:lopu-ui` covers presentation and client state.
+
+Thing discussions, linked references and metadata rename require `api.things`
+1.27.0; rich linked comments require `api.things-comment` 1.8.0. Client negotiation
+must reject main's earlier 1.23.0/1.7.0 workspace-only contracts for those features.
+
 ## Verify
 
 - `npm --prefix remix run test:api-capabilities` — every `routeModules` key

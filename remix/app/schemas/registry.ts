@@ -1,3 +1,4 @@
+import { MAX_POST_THINGS, postThingReferences } from '../components/Feed/postThingReferences.ts';
 import { isActionLookupProvider } from './actionLookups';
 // Thingtime Schemas — the single source of truth for the shapes Thingtime data
 // can take. Everything in the `things` collection is a thing: one root Thing
@@ -2752,7 +2753,7 @@ export type NormalizedNotificationPrefs = {
 // the push/in-app channel — unchanged from the original shape, so prefs saved
 // before channels existed keep working with zero migration — plus nested
 // email: { [type]: boolean } and masters: { push, email }. Absent = ON,
-// except EMAIL_DEFAULT_OFF_TYPES whose email channel is opt-in. Shared by the
+// except action-run (push opt-in) and EMAIL_DEFAULT_OFF_TYPES (email opt-in). Shared by the
 // server (write/read gating) and the settings UI (defaults) so both sides
 // agree on what absent keys mean. Also accepts an already-normalized matrix
 // (nested push object) so the wire shape round-trips: normalize(normalize(x))
@@ -2763,7 +2764,7 @@ export const normalizeNotificationPrefs = (stored: Record<string, any> | null | 
   const mastersStored = source.masters && typeof source.masters === 'object' ? source.masters : {};
   const pushStored = source.push && typeof source.push === 'object' ? source.push : source;
   const push: Record<string, boolean> = {};
-  for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
+  for (const type of NOTIFICATION_TYPES) push[type] = type === 'action-run' ? pushStored[type] === true : pushStored[type] !== false;
   const email: Record<string, boolean> = {};
   for (const type of EMAIL_NOTIFICATION_TYPES) {
 		email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type) ? emailStored[type] === true : emailStored[type] !== false;
@@ -4374,7 +4375,7 @@ const waitlistThingSchema: ThingtimeSchema = {
 export const thingtimeSchemas: ThingtimeSchema[] = [
 	{ id: 'lopu-background-task', version: 1, kind: 'crystal', collection: null, title: 'Background AI task',
     summary: 'Protected owner-private execution and reconnect state.',
-    detail: 'Home control Thing with origin/data-source scope, immutable request digest and bounded secure BinData output. Seven-day output access; lazy byte removal; retained operation marker prevents replay. Chat output additionally requires current conversation access.',
+    detail: 'Home control Thing with origin/data-source scope, immutable request digest and bounded secure BinData output. Seven-day output access; lazy byte removal; retained operation marker prevents replay. Chat output additionally requires current conversation access. Optional management and workflowStatus track a durable chain. The root workflowInput is protected BinData containing the initial request and a revocable session grant; it is never indexed or projected and is removed at terminal completion. Child parts link by protected rootTaskId. Protected activeWorkerRequestId, workerStarted, workerFinishedAt, workflowFinalStatus and workflowFinalizedAt fence admission and preserve the conversation claim until all executors acknowledge their final saved output; lease expiry alone never releases that claim.',
     createdVia: 'Background transport on the canonical AI endpoints', fields: [], example: {} },
 	...(['lopu-recording-settings', 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const).map((id): ThingtimeSchema => ({
 		id, version: 1, kind: 'crystal', collection: null, title: id,
@@ -4702,6 +4703,17 @@ const sanitizePostCrystal = (
       const sanitized = sanitizeDataValue(raw, { path: 'thing', depth: 2 });
 			if (sanitized.ok === false) return sanitized;
       thing = sanitized.value as Record<string, unknown>;
+      if (thing.kind === 'thing-collection') {
+        if (!Array.isArray(thing.items) || !thing.items.length || thing.items.length > MAX_POST_THINGS ||
+          thing.items.some(item => !item || typeof item !== 'object' || !['data', 'interactive'].includes(item.mode))) {
+          return fail(400, `Attach 1-${MAX_POST_THINGS} Things with a data or interactive mode`);
+        }
+        const items = postThingReferences(thing);
+        if (items.length !== thing.items.length) return fail(400, 'Attached Things require unique valid ids');
+        if (thing.data !== undefined && (!thing.data || typeof thing.data !== 'object' || Array.isArray(thing.data))) return fail(400, 'Inline Thing data must be an object');
+        thing = { kind: 'thing-collection', items, ...(thing.data ? { data: thing.data } : {}) };
+      }
+
     }
     if (!isShare && (!thing || !Object.keys(thing).length)) {
       return fail(400, 'Thingtime posts need a thing with at least one field 🌀');
@@ -6844,6 +6856,15 @@ export const validateThingtimeCrystal = (
 		const sanitized = sanitizer(input, ids, options);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
+  }
+  // Every generically writable Thing may have an owner-chosen display title.
+  // Typed sanitizers retain their stricter title rules; schemas without one
+  // gain the same bounded metadata without changing their content.
+  if (input.title !== undefined && !Object.prototype.hasOwnProperty.call(merged, 'title')) {
+    if (input.title !== null && typeof input.title !== 'string') return fail(400, 'Thing title must be text');
+    const title = typeof input.title === 'string' ? input.title.trim() : '';
+    if (title.length > 300) return fail(400, 'Thing title is too long (max 300)');
+    if (title) merged.title = title;
   }
   return { ok: true, thingtime: ids, crystal: merged, requiresTarget };
 };

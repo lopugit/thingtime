@@ -611,3 +611,14 @@ test('lopuPlainText drops markdown markers for conversation previews', () => {
 	assert.equal(lopuPlainText('# Title\n- one\n- *two*\n[Open](/p/x)'), 'Title one · two Open');
 	assert.equal(lopuPlainText(''), '');
 });
+
+test('explicit continuation metadata hides synthetic user rows both live and after reload', () => {
+ const prompt = 'Continue the interrupted reply from its saved progress.';
+ const turn = { ...initialLopuTurn({ requestId: 'resume', chatId: 'chat', userText: prompt }), continuation: true };
+ const savedUser = buildUserMessage(turn, 'owner');
+ assert.equal(lopuMessageMeta(savedUser)?.continuation, true);
+ assert.equal(buildLopuTimeline([], [turn], 'owner').filter(item => item.kind === 'message').length, 0);
+ assert.equal(buildLopuTimeline([savedUser], [], 'owner').length, 0);
+ const typed = buildUserMessage(initialLopuTurn({ requestId: 'typed', chatId: 'chat', userText: prompt }), 'owner');
+ assert.equal(buildLopuTimeline([typed], [], 'owner').length, 1);
+});

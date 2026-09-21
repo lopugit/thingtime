@@ -25,8 +25,9 @@ export const collectionStyles = `
 	min-width: 0;
 	max-width: 100%;
 }
-.tt-collection input,
-.tt-collection select {
+.tt-collection-controls input,
+.tt-collection-controls select,
+.tt-collection-pagination select {
 	min-height: 36px;
 	border: 1px solid var(--sw-line, var(--tt-border));
 	border-radius: 8px;
@@ -61,14 +62,18 @@ export const collectionStyles = `
 	align-items: center;
 	gap: 5px;
 }
-.tt-collection button {
+.tt-collection-controls button,
+.tt-collection-pagination button,
+.tt-collection-more > button {
 	min-height: 36px;
 	border: 1px solid var(--sw-line, var(--tt-border));
 	border-radius: 8px;
 	padding: 7px 10px;
 	font-size: 12px;
 }
-.tt-collection button:disabled {
+.tt-collection-controls button:disabled,
+.tt-collection-pagination button:disabled,
+.tt-collection-more > button:disabled {
 	opacity: 0.45;
 	cursor: default;
 }

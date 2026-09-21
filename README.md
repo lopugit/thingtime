@@ -3884,6 +3884,39 @@ on 2026-09-18 because the installed CLI shim referenced a missing application
 binary. Other worktrees derive their own ports via `npm run web-ports`.
 
 
+### Chat continuity and iOS activity (2026-09-21)
+
+Lopu's send menu and chat settings choose browser-managed or server-managed
+continuation. Browser management requires an open page to start the next safe
+checkpoint; server management uses the existing Workflow SDK 4.8 integration
+and requires Vercel Workflow enabled for the selected Vercel project. It uses
+the normal account database and a live full-user session. Selected custom
+MongoDB connections use browser management; their credentials are never copied
+into workflow state. Session revocation stops a server chain. Recoverable
+errors back off, with five consecutive retries before requesting attention;
+manual Stop, incomplete tools, pending confirmations and unsaved page edits
+never automatically resume. Continuations retain the current conversation
+without displaying synthetic user prompts.
+
+The iOS app displays one aggregate chat Live Activity with counts and generic
+status. A Live Activity does not prevent iOS suspension: server-managed work
+continues independently. Existing private APNs setup uses `APNS_KEY_ID`,
+`APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, and optional `APNS_IOS_BUNDLE_ID`; its topic
+is `<bundle-id>.push-type.liveactivity`. Keep values in the existing private
+deployment configuration. Native clients negotiate `api.lopu-live-activity`
+1.0.0; protected tokens are bound to a live session, origin and data source.
+See [iOS setup and device checklist](iOS/README.md). No additional signing
+credentials are introduced by this feature.
+
+The continuity worktree validation server uses
+`http://localhost:19940` (Vite), 19941 (HMR), and 19942 (Nitro), with the local
+PM2 ecosystem override `remix/tmp/continuity-ecosystem.config.cjs`. Its unique
+`tt-wt-continuity-19940` identity avoids the existing worktree basename
+collision. No Funnel URL was verified: the installed Tailscale wrapper points
+to a missing app executable on the validation machine. Production/deployment
+URLs remain recorded in the project's deployment documentation.
+
+
 ### Functional component and webpage demos
 
 The demo catalog uses native inputs and owner-scoped Actions. Newsletter/contact
@@ -4030,3 +4063,13 @@ Use two distinct credential types:
 No keys are bundled or stored with copied Things. **Clear**, reset, account changes and leaving the demo discard credentials; Clear/reset also remove running SDK frames. Provider keys, billing, quotas, development-mode access and third-party availability determine whether a live request succeeds. The tests use provider contract fixtures; they do not claim authenticated access to a visitor's account.
 
 The maps-library development worktree uses Vite `http://localhost:18860` (HMR 18861, Nitro 18862) through its local PM2 ecosystem entry `tt-wt-library-maps-platforms-18860`, with autorestart disabled. Tailscale/Funnel is not available on this machine because the Tailscale application is missing; production and Vercel previews remain available.
+
+### Discussion pagination on forks
+
+Private comment pagination uses the deployment’s existing `JWT_PRIVATE_KEY` or
+`JWT_SECRET` (with `THINGTIME_ADMIN_VAULT_KEY` as a fallback) to derive a separate
+encryption key for opaque cursors. Configure one of these existing secrets in
+both preview and production deployments; never use a public JWT key. No new
+secret variable is required. Production fails closed with HTTP 503 when none is
+configured. Local development without a configured secret uses an ephemeral
+key, so refreshing comments after a server restart starts a new cursor chain.

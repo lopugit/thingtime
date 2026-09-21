@@ -40,6 +40,18 @@ Moderation actions require subspace moderator roles (`canModerateSubspace`).
   (`shareId`/`requestId`) — never create a second post or upload.
 - Every user-facing notification goes through `useLopu()`.
 
+## Shared Thing discussions and references
+
+`app/components/Things/ThingComments.tsx` uses the canonical `PostCard` discussion
+on the original Thing id, including cached first paint, nested replies and rich
+comments. `PostThingPicker.tsx` selects bounded existing-Thing collections;
+`PostLinkedThings.tsx` and `PostInteractiveThing.tsx` render Data/Interactive
+choices without registering a viewed attachment as an editable builder target.
+`resolvePostLinkedThings` in `things.ts` checks every source ACL using one
+request-local viewer so workspace membership lookups can be shared safely.
+`test:things` includes `postLinkedThings.test.ts`; `test:feed` covers attachment
+registration. Reader revocation must remove linked content on the next read.
+
 ## Tests
 
 - `npm --prefix remix run test:feed` (card change contracts, hidden-link
