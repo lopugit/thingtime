@@ -48,7 +48,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
-
+- 2026-09-21 — **Claude (AI)**: Five creative builder demo app suites on the
+  📱 Apps tab — ✅ Done & Dusted (todo), 🔮 Thingmon (creature collector with
+  60 generated original pixel-art species and a new `thingmon` domain pack),
+  📸 Snapquest (photo hunt with real uploads), 📖 Branchwood (choose-your-own-
+  adventure), 🌱 Pixel Garden (time-based growth on an interval source).
+  Adds `schemas/appSuites/kit.ts`, `BehaviourSuite.content` (generic seeding
+  of app content), `scripts/generate-thingmon-sprites.mjs` and the live
+  verifier `scripts/verify-demo-apps.mjs` (151 checks). Details, gotchas
+  (rolldown + JSON initialisers, nested `$item` lambdas) and the manual
+  checklist: `PRs/864-claude-thingtime-builder-demos-2e2672--creative-demo-app-suites.md`
+  and `TESTING.md`.
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
   one stored (uncompressed) ZIP of every file the caller may already read —
