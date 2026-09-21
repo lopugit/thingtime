@@ -2,7 +2,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { authorizeCsp, designBundlesCsp, mcpLabCsp, prodCsp } from './csp.mjs';
+import { authorizeCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, prodCsp } from './csp.mjs';
 
 const configPath = '.vercel/output/config.json';
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -57,6 +57,7 @@ config.routes = [
     },
     continue: true
   },
+  { src: '^/library/sandbox\\.html$', headers: { 'Content-Security-Policy': librarySandboxCsp, 'Cache-Control': 'no-store' }, continue: true },
   // Self-contained static prototype pages use inline scripts; same policy with
   // inline scripts allowed.
   {

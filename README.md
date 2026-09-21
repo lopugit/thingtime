@@ -3628,3 +3628,40 @@ Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
 `14872`; docs `http://localhost:14870/docs/builder`. Tailscale/Funnel was unavailable
 on 2026-09-18 because the installed CLI shim referenced a missing application
 binary. Other worktrees derive their own ports via `npm run web-ports`.
+
+## Remote integration runtime
+
+Curated integration examples use `remix/app/library/catalog.ts` and the fixed
+provider request registry in `apis.ts`. The runtime is delivered before the
+catalogue; an empty registry intentionally offers no executable examples.
+Only registry IDs and JSON inputs can enter the `IntegrationExample` component.
+Arbitrary persisted JavaScript, package URLs, and credentials are not accepted.
+
+`corepack pnpm --dir remix run build:client` builds the application, the isolated
+`/library/runner.js`, and the embed bundle. The normal dev command builds and
+watches the isolated runner too. Custom deployments must serve
+`/library/sandbox.html` with `librarySandboxCsp` from `remix/scripts/csp.mjs`;
+the Vercel build and Vite middleware apply it automatically. Do not apply the
+sandbox policy to the main application shell.
+
+Remote packages load from pinned esm.sh URLs only on Run. Pure transformations
+run in terminable workers; visual packages run in an opaque-origin sandbox.
+The frames cannot access Thingtime cookies or storage. Keyless APIs must allow
+browser CORS; provider outages and rate limits remain visible errors.
+
+Credentialed examples require the fork's normal account/session and MongoDB
+rate-limit setup. No shared provider secret or new deployment environment
+variable is required: each visitor enters their own key in the open component.
+Keys remain in component memory, travel over HTTPS to the authenticated
+`POST /api/v1/library/request`, and are forwarded only to a registered provider
+using a read-only GET with redirects disabled. Keys and live results are never
+saved in copied Things. Account changes and unmounting discard key state; the
+Clear button removes it immediately. Use provider-scoped keys; Stripe examples
+accept test-mode keys only. Fork operators must preserve request-body privacy
+in their own reverse proxies and observability tools.
+
+Clients negotiate `api.library-request` 1.0.0 against the selected origin before
+credentialed requests. The endpoint is bounded to 20 requests/minute/account,
+24 KiB request bodies, 16 KiB inputs, 256 KiB upstream responses and a 12-second
+upstream timeout. Run `corepack pnpm --dir remix run test:library` for boundaries,
+credential redaction, reusable Thing validation and capability coverage.

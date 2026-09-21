@@ -291,6 +291,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
 	// User Secure Vault writes are rare and credential-sensitive; voice replies
 	// can spend a user-supplied provider quota, so both fail closed at routes.
+  'library.request': { limit: 20, windowMs: 60_000, enabled: true },
 	'lopu.vault': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.voiceReply': { limit: 30, windowMs: 60_000, enabled: true },
 	// Paired device mesh. Pairing creates credentials and therefore fails
