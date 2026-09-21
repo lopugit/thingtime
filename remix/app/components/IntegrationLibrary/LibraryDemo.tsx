@@ -1,5 +1,6 @@
 import { libraryBuilderHref, libraryExamplePageId } from '~/library/builderLinks';
 import React from 'react';
+import { validateSdkInput } from '~/library/sdkSandbox';
 import { Box, Button, Flex, FormControl, FormLabel, Input, Text, Textarea } from '@chakra-ui/react';
 import { Link } from 'react-router';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -15,7 +16,7 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 	const [result, setResult] = React.useState('');
 	const [error, setError] = React.useState('');
 	const [busy, setBusy] = React.useState(false);
-	const [frame, setFrame] = React.useState<{ id: string; input: Record<string, unknown> } | null>(null);
+	const [frame, setFrame] = React.useState<{ id: string; input: Record<string, unknown>; browserKey?: string } | null>(null);
 	const iframe = React.useRef<HTMLIFrameElement>(null);
 	const controller = React.useRef<AbortController | null>(null);
 	const active = React.useRef<string | null>(null);
@@ -28,7 +29,16 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 	React.useEffect(() => {
 		const onMessage = (event: MessageEvent) => {
 			if (event.source === iframe.current?.contentWindow && event.data?.type === 'tt-library-ready' && frame && active.current === frame.id) {
-				iframe.current?.contentWindow?.postMessage({ type: 'tt-library-start', runId: frame.id, exampleId: example.id, input: frame.input }, '*');
+				iframe.current?.contentWindow?.postMessage(
+					{
+						type: 'tt-library-start',
+						runId: frame.id,
+						exampleId: example.id,
+						input: frame.input,
+						...(example.sdk ? { browserKey: frame.browserKey } : {})
+					},
+					'*'
+				);
 				return;
 			}
 			if (
@@ -39,12 +49,19 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 			)
 				return;
 			if (event.data.ok === true) setResult(event.data.text.slice(0, 65536));
-			else setError('The remote demo failed or timed out. Check the inputs, then retry.');
+			else {
+				setFrame(null);
+				setError(
+					example.sdk
+						? 'The map SDK could not finish. Check API activation, billing, browser key restrictions and inputs, then retry.'
+						: 'The remote demo failed or timed out. Check the inputs, then retry.'
+				);
+			}
 			finish();
 		};
 		window.addEventListener('message', onMessage);
 		return () => window.removeEventListener('message', onMessage);
-	}, [finish, frame, example.id]);
+	}, [finish, frame, example.id, example.sdk]);
 	React.useEffect(
 		() => () => {
 			controller.current?.abort();
@@ -77,8 +94,9 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 		setError('');
 		try {
 			const parsed = parseExampleInput(input);
-			if (example.module || !example.request?.auth) {
-				setFrame({ id, input: parsed });
+			if (example.module || example.sdk || !example.request?.auth) {
+				if (example.sdk) validateSdkInput(example, parsed, apiKey.trim());
+				setFrame({ id, input: parsed, ...(example.sdk ? { browserKey: apiKey.trim() } : {}) });
 				timer.current = setTimeout(() => {
 					if (active.current !== id) return;
 					setFrame(null);
@@ -140,11 +158,11 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 					bg="var(--tt-surface-raised, white)"
 				/>
 			</FormControl>
-			{example.request?.auth && (
+			{(example.request?.auth || example.sdk) && (
 				<Box mt={4} p={4} border="1px solid var(--tt-border, #e5e5e9)" borderRadius="12px">
 					<FormControl>
 						<FormLabel htmlFor={`key-${example.id}`} fontSize="sm">
-							{example.provider} API key {example.provider === 'Stripe' ? '(test mode)' : ''}
+							{example.credentialLabel || `${example.provider} API key`} {example.provider === 'Stripe' ? '(test mode)' : ''}
 						</FormLabel>
 						<Flex gap={2}>
 							<Input
@@ -161,21 +179,36 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 							<Button size="sm" onClick={() => setShowKey((x) => !x)} aria-pressed={showKey}>
 								{showKey ? 'Hide' : 'Show'}
 							</Button>
-							<Button size="sm" onClick={() => setApiKey('')}>
+							<Button
+								size="sm"
+								onClick={() => {
+									cancel();
+									setApiKey('');
+									setResult('');
+									setError('');
+								}}
+							>
 								Clear
 							</Button>
 						</Flex>
 					</FormControl>
 					<Text fontSize="xs" mt={2} color="var(--tt-muted, #73737d)">
-						Used for this request through Thingtime’s server. Kept only in this open demo; never saved with the example. Provider quotas may apply.
+						{example.sdk
+							? 'This restricted browser key is sent directly to the map provider in an isolated frame. Never use a private server secret. Clear removes the map and key.'
+							: 'Used for this request through Thingtime’s server. Kept only in this open demo; never saved with the example. Provider quotas may apply.'}
 					</Text>
 					<Flex gap={3} mt={2} flexWrap="wrap">
-						<a href={example.request.accountUrl} target="_blank" rel="noreferrer">
+						<a href={example.sdk?.accountUrl || example.request?.accountUrl} target="_blank" rel="noreferrer">
 							Get a key / account ↗
 						</a>
-						{!user?.id && <Link to="/login">Sign in to run</Link>}
+						{!user?.id && !example.sdk && <Link to="/login">Sign in to run</Link>}
 					</Flex>
 				</Box>
+			)}
+			{example.setup && (
+				<Text fontSize="sm" mt={3}>
+					{example.setup}
+				</Text>
 			)}
 			<Flex gap={2} my={4} alignItems="center" flexWrap="wrap">
 				<Button
@@ -183,9 +216,9 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 					bg="var(--tt-ink, #18181b)"
 					color="var(--tt-surface, white)"
 					onClick={run}
-					isDisabled={busy || (!!example.request?.auth && (!apiKey.trim() || !user?.id))}
+					isDisabled={busy || (!!example.sdk && !apiKey.trim()) || (!!example.request?.auth && (!apiKey.trim() || !user?.id))}
 				>
-					{busy ? 'Running…' : example.module ? 'Load & run example' : 'Fetch live data'}
+					{busy ? 'Running…' : example.module || example.sdk ? 'Load & run example' : 'Fetch live data'}
 				</Button>
 				{busy && <Button onClick={cancel}>Cancel</Button>}
 				<Button
@@ -193,6 +226,7 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 					onClick={() => {
 						cancel();
 						setInput(JSON.stringify(example.input, null, 2));
+						setResult('');
 						setError('');
 						setApiKey('');
 					}}
@@ -201,9 +235,11 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 				</Button>
 			</Flex>
 			<Text fontSize="xs" color="var(--tt-muted, #73737d)" mb={3}>
-				{example.module
+				{example.sdk
+					? `Loads ${example.provider} from its official SDK host only when you run it.`
+					: example.module
 					? `Loads ${example.provider} remotely from esm.sh only when you run it.`
-					: `GET · ${new URL(example.request!.url).hostname} · read-only request`}
+					: `${example.request?.method || 'GET'} · ${new URL(example.request!.url).hostname} · read-only request`}
 			</Text>
 			{error && (
 				<Text role="alert" color="red.600" fontSize="sm" mb={3}>
@@ -216,11 +252,11 @@ export function LibraryDemo({ example, initialInput }: { example: LibraryExample
 					ref={iframe}
 					title={`${example.title} preview`}
 					sandbox="allow-scripts"
-					referrerPolicy="no-referrer"
-					src="/library/sandbox.html"
+					referrerPolicy={example.sdk ? 'origin' : 'no-referrer'}
+					src={example.sdk ? '/library/sdk.html' : '/library/sandbox.html'}
 					style={{
 						width: '100%',
-						height: example.visual ? 340 : 0,
+						height: example.sdk ? 420 : example.visual ? 340 : 0,
 						border: example.visual ? '1px solid #e5e5e9' : 'none',
 						borderRadius: 12,
 						display: example.visual ? 'block' : 'none'
@@ -265,7 +301,17 @@ export default function EmbeddedLibraryExample({ exampleId, inputJson }: { examp
 				example={example}
 				initialInput={typeof inputJson === 'string' && inputJson.length <= 16384 ? inputJson : undefined}
 			/>
-			<Button as={Link} to={libraryBuilderHref(libraryExamplePageId(example.id))} variant="link" size="sm" mt={4} whiteSpace="normal" textAlign="left">Open this example in Builder →</Button>
+			<Button
+				as={Link}
+				to={libraryBuilderHref(libraryExamplePageId(example.id))}
+				variant="link"
+				size="sm"
+				mt={4}
+				whiteSpace="normal"
+				textAlign="left"
+			>
+				Open this example in Builder →
+			</Button>
 		</Box>
 	);
 }

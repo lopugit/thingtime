@@ -3,7 +3,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { authorizeCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
+import { authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
@@ -316,8 +316,9 @@ if (mcpLabHeadersIndex < cspHeadersIndex || mcpLabHeadersIndex > spaIndex) {
 }
 for (const route of routes) {
 	const csp = route.headers?.['Content-Security-Policy'];
-	if (typeof csp === 'string' && csp.includes('unsafe-eval') && csp !== designBundlesCsp) {
-		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside design bundles (route ${route.src}).`);
+	const isolatedSdk = route.src === '^/library/sdk\\.html$' && csp === librarySdkCsp;
+	if (typeof csp === 'string' && csp.includes('unsafe-eval') && csp !== designBundlesCsp && !isolatedSdk) {
+		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside isolated design/SDK documents (route ${route.src}).`);
 	}
 }
 const mcpLabScriptSources = new Set(getDirectiveSources(mcpLabCsp, 'script-src'));
@@ -357,8 +358,12 @@ console.log(
 
 const libraryHeaders = routes.find(route => route.src === '^/library/sandbox\\.html$' && route.headers?.['Content-Security-Policy'] === librarySandboxCsp);
 if (!libraryHeaders || routes.indexOf(libraryHeaders) < cspHeadersIndex || routes.indexOf(libraryHeaders) > spaIndex || !libraryHeaders.continue) throw new Error('Isolated library CSP must override only its document before filesystem routing.');
-for (const asset of ['library/sandbox.html','library/runner.js']) {
+for (const asset of ['library/sandbox.html','library/sdk.html','library/runner.js']) {
  if (!existsSync(join('.vercel/output/static',asset))) throw new Error(`Missing isolated library asset: ${asset}`);
 }
 const librarySandboxTokens = getDirectiveSources(librarySandboxCsp,'sandbox');
 if (!librarySandboxTokens.includes('allow-scripts') || librarySandboxTokens.includes('allow-same-origin')) throw new Error('Library preview must retain its opaque origin.');
+
+const sdkHeaders = routes.find(route => route.src === '^/library/sdk\\.html$' && route.headers?.['Content-Security-Policy'] === librarySdkCsp);
+if (!sdkHeaders || routes.indexOf(sdkHeaders) < cspHeadersIndex || routes.indexOf(sdkHeaders) > spaIndex || !sdkHeaders.continue) throw new Error('SDK CSP must stay scoped to its isolated document.');
+if (getDirectiveSources(librarySdkCsp,'sandbox').join(' ') !== 'allow-scripts') throw new Error('SDK previews must retain opaque-origin containment.');
