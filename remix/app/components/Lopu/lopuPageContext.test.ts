@@ -16,8 +16,8 @@ test('opting out removes route, builder and selected block while keeping explici
  assert.deepEqual(context, {viewport:'desktop',pages:[{url:'/feed',title:'Feed'}]});
 });
 test('both API manifests advertise page context and the requirement rejects older servers', () => {
- assert.equal(createApiCapabilitiesManifest().features['api.lopu-chats-reply'],'1.14.0');
- assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version,'1.14.0');
+ assert.equal(createApiCapabilitiesManifest().features['api.lopu-chats-reply'],'1.14.1');
+ assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version,'1.14.1');
  for (const version of ['', '1.10.0', '2.0.0']) assert.equal(capabilitySatisfies(version,'1.12.0'),false);
  assert.equal(capabilitySatisfies('1.14.0','1.12.0'),true);
 });

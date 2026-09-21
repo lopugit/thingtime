@@ -49,6 +49,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Route native-tool GPT-5.6 Sol chat replies through
+  Responses while retaining the selected reasoning effort and speed. The reply
+  contract advances to 1.14.1 after authenticated preview QA exposed a rejected
+  Chat Completions combination. Live repaired-path acceptance remains pending;
+  details are in the [PR 867 note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md).
+
 - 2026-09-22 — **Codex (AI)**: Commit keyboard adjustments on the remote
   brightness and volume sliders. Arrow and range-navigation keys now send the
   displayed value, with duplicate pointer/keyboard completion suppressed.

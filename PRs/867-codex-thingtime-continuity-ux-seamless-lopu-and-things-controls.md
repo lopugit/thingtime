@@ -88,10 +88,13 @@ source snapshots, fixing refreshes that failed with permission denied.
 
 ## Remaining acceptance limits
 
-- The fresh QA account is invite-gated, so live provider execution and a real
-  deployed Vercel continuation were not exercised. Mocked workflow/admission,
-  stop/recovery and contract tests passed. Vercel Workflow must be enabled for
-  the chosen project; there is no new provider credential requirement.
+- The initial fresh QA account was invite-gated. Later authenticated preview
+  QA signed in through normal federated authentication, reached a durable Vercel
+  Workflow and the selected GPT-5.6 Sol High provider,
+  which rejected native tools plus reasoning on Chat Completions. The compatible
+  reply 1.14.1 correction uses Responses without lowering effort; successful
+  repaired-path live execution and continuation remain pending. Vercel Workflow
+  must be enabled for the chosen project; no new provider credential is required.
 - Physical lock-screen/Dynamic Island updates and APNs while suspended require a
   signed device build and the existing private APNs configuration. No TestFlight
   upload is included.
@@ -124,7 +127,9 @@ checks passed: webpage 104 (three optional integration tests skipped), library
 nine, Commander 26, navigation 17, social previews 42, notifications 62. Native
 simulator build/install/launch and 63 tests passed; one real ActivityKit request
 remains skipped on the unsigned simulator. Activity/privacy and drawer checks
-passed 19 cases. Real-device and provider-backed acceptance limits above remain.
+passed 19 cases. These historical checks did not establish real-device or
+provider-backed acceptance; current limits and subsequent live findings are
+recorded above and in the dated updates below.
 
 Read-only attachment registration prevents viewed webpages from capturing Lopu's
 build target while retaining interactive controls. Fresh Chrome proof at
@@ -212,3 +217,7 @@ The final integration also retains main PRs #880 (library maps/platforms and its
 Integration security review also checks the remote-file byte boundary: generic Thing readers must not expose device-command input or results in place of the dedicated, expiring device result endpoint. A focused regression accompanies this boundary fix.
 
 Main integration through `a410951b9` retains PR #881’s macOS heartbeat fix for unnamed applications; its focused native tests passed 8 cases. The discussion pager’s seven synthetic cursor fixtures now use clearly labelled `test-page` values, preserving punctuation, ordering and opaque forwarding coverage; all 10 focused pager tests passed. GitGuardian incident 37494924 was confirmed to concern the exact historical synthetic literal and classified as a false positive, not a secret. Final-head CI and deployment verification are recorded on the PR.
+
+Authenticated provider QA (2026-09-22): a harmless Vercel-managed reply on preview head `632b9a7cb` reached GPT-5.6 Sol High and failed with the provider’s explicit unsupported-tools/reasoning response. This is a transport compatibility failure, not evidence of invalid credentials or exhausted credits. Reply capability 1.14.1 corrects the exact native-tool model path using Responses while preserving effort, speed, tool permissions and checkpoint rules; provider conversation storage remains disabled. Existing 1.14.0 client minimums remain valid because the public request/event contract is unchanged. Repeat a live read-only tool hop and server-managed reload on the repaired preview before claiming end-to-end acceptance.
+
+Provider repair validation: the complete canonical unit suite passed 3,659 tests with zero failures and six explicit skips; production/Workflow build, Vercel output verification and both built manifests (27 contracts) passed. The TypeScript ratchet remains at 89 existing diagnostics; provider/contract source lint has zero errors. Independent review also reproduced a streamed-versus-completed tool identity mismatch; the adapter rejects inconsistent identities before dispatch and preserves earlier receipts across later-hop failures. Final focused regression counts, exact-head CI and repaired-path live acceptance are recorded on the PR.
