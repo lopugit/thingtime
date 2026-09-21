@@ -53,6 +53,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   composed pages, show results inline, and support bounded local component
   controls. Site forms and requests save private Things; template copying
   installs their dependencies. Added responsive browser regression coverage.
+  [Validation notes](../PRs/870-codex-functional-thingtime-demos-functional-demo-controls.md).
 - 2026-09-21 — **Codex (AI)**: Add the curated remote integration runtime, opaque
   preview documents, cancellable workers, credential-safe read-only provider
   requests, capability negotiation and reusable Component Thing rendering.
