@@ -21,6 +21,7 @@
 // models; the id is validated for shape here and for ownership on write.
 // `turns` counts persisted assistant replies and `lastModel` remembers the
 // provider-native id that answered last.
+import { canAutomaticallyResume } from '../lopu/continuationCore';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { MAX_CHAT_NAME_CHARS, MAX_MESSAGE_CHARS } from '~/schemas/registry';
@@ -108,6 +109,7 @@ export type LopuAssistantTurnMeta = {
 	toolCalls?: unknown;
 	stopReason?: unknown;
 	continuationSafe?: boolean;
+	recoveryFailures?: number;
 };
 export type LopuHistoryTurn = { role: 'user' | 'assistant'; text: string };
 
@@ -799,7 +801,7 @@ export const readLopuContinuation = async (viewerId: string, chatId: string, req
   const stopped = await homeThings.findOne({ ownerId: viewerId, targetId: chatId, thingtime: 'lopu-background-task', 'crystal.requestId': requestId, cancelRequested: true } as any, { projection: { _id: 1 } });
   if (stopped) return fail(409, 'This reply was stopped. Continue it manually when ready.');
  }
- if (automatic && (meta.continuationSafe !== true || !['checkpoint', 'tool_limit', 'hop_limit', 'time_limit', 'max_tokens', 'error'].includes(meta.stopReason || ''))) {
+ if (automatic && !canAutomaticallyResume(meta)) {
   return fail(409, 'This reply needs your review before it can continue.');
  }
  return { ok: true as const, meta };

@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import { mock, test, beforeEach } from 'node:test';
 const rows: any[] = [],
 	pending: Promise<unknown>[] = [];
+let beforeUpdate: ((update:any)=>Promise<void>) | null = null;
 let chatAccessible = true;
+let admissionMode: 'okay' | 'throw' | 'claimed-throw' = 'okay';
 let user: any = { id: 'owner', accountKind: 'user', temporary: false };
 const match = (row: any, filter: any) =>
 	Object.entries(filter).every(([key, value]: any) => {
 		if (key === '$or') return value.some((part: any) => match(row, part));
 		const actual = key.split('.').reduce((r: any, part: string) => r?.[part], row);
+		if (value && typeof value === 'object' && '$exists' in value) return (actual !== undefined) === value.$exists;
 		if (value && typeof value === 'object' && '$ne' in value) return actual !== value.$ne;
 		if (value && typeof value === 'object' && '$lt' in value) return actual < value.$lt;
 		return Array.isArray(actual) ? actual.includes(value) : actual === value;
@@ -35,6 +38,7 @@ const collection: any = {
 		rows.push(row);
 	},
 	updateOne: async (filter: any, update: any) => {
+  await beforeUpdate?.(update);
 		const row = rows.find((row) => match(row, filter));
 		if (row) patch(row, update);
 		return { matchedCount: row ? 1 : 0 };
@@ -55,9 +59,15 @@ mock.module('../messenger/lopuChats', {
 mock.module('../rateLimit/enforce', {
 	namedExports: { enforceRateLimit: async () => ({ allowed: true }), rateLimitedResponseInit: () => ({ status: 429 }) }
 });
-const { startBackgroundTask, readBackgroundTasks, stopBackgroundTask } = await import('./backgroundTasks');
+mock.module('./continuationAdmission.server', {namedExports: {admitLopuWorkflow: async (_request: Request, row: any) => {
+ row.workflowInput={privateGrant:true};
+ if (admissionMode === 'claimed-throw') row.workerStarted=true;
+ if (admissionMode !== 'okay') throw new Error('Admission write failed');
+ return {ok:true};
+}}});
+const { startBackgroundTask, executeBackgroundTask, readBackgroundTasks, stopBackgroundTask } = await import('./backgroundTasks');
 beforeEach(() => {
-	chatAccessible = true;
+	chatAccessible = true; admissionMode='okay'; beforeUpdate=null;
 	rows.length = 0;
 	pending.length = 0;
 	user = { id: 'owner', accountKind: 'user', temporary: false };
@@ -300,4 +310,121 @@ test('durable child claims execution before its handler begins and Stop cancels 
  const stopRequest=new Request('https://example.test/api/v1/lopu/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stop',id:child.shareId})});
  const scope=await backgroundTaskScopeFor(stopRequest); rows[0].taskScope=scope; child.taskScope=scope;
  assert.equal((await stopBackgroundTask(stopRequest)).status,200); assert.equal(rows[0].cancelRequested,true); assert.equal(child.cancelRequested,true);
+});
+
+const pendingServerRoot = async (id = 'server') => {
+ const response = await startBackgroundTask(request(id, {chatId:'chat',requestId:id,text:'hello',management:'server'}), async()=>{throw new Error('Must never execute in admission');});
+ return {response,row:rows.find(row=>row.crystal.requestId===id)};
+};
+test('admission exceptions retire unclaimed roots and release the conversation safely', async () => {
+ admissionMode='throw'; const {response,row}=await pendingServerRoot();
+ assert.equal(response.status,409); assert.equal(row.cancelRequested,true);
+ assert.equal(row.crystal.workflowStatus,'needs-attention'); assert.equal(row.uniqueKeys,undefined); assert.equal(row.workflowInput,undefined);
+ admissionMode='okay'; assert.equal((await pendingServerRoot('fresh')).response.status,202);
+});
+test('ambiguous scheduler failure retains a claimed worker lock until it stops', async () => {
+ admissionMode='claimed-throw'; const {response,row}=await pendingServerRoot();
+ assert.equal(response.status,409); assert.equal(row.cancelRequested,true); assert.equal(row.crystal.workflowStatus,'running');
+ assert.ok(row.uniqueKeys); assert.ok(row.workflowInput);
+ admissionMode='okay'; assert.equal((await pendingServerRoot('fresh')).response.status,409);
+});
+test('expired unstarted admissions clear their grant and lock without executing work', async () => {
+ const {row}=await pendingServerRoot(); row.deadlineAt=new Date(0);
+ const response=await read(row.shareId); assert.equal(response.status,200);
+ assert.equal(row.crystal.status,'needs-attention'); assert.equal(row.crystal.workflowStatus,'needs-attention'); assert.equal(row.cancelRequested,true);
+ assert.equal(row.uniqueKeys,undefined); assert.equal(row.workflowInput,undefined);
+ assert.equal((await pendingServerRoot('fresh')).response.status,202);
+});
+test('Stop before scheduler dispatch finalizes the unclaimed root immediately', async () => {
+ const {row}=await pendingServerRoot();
+ const response=await stopBackgroundTask(new Request('https://example.test/api/v1/lopu/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stop',id:row.shareId})}));
+ assert.equal(response.status,200); assert.equal(row.crystal.status,'stopped'); assert.equal(row.crystal.workflowStatus,'stopped'); assert.equal(row.cancelRequested,true);
+ assert.equal(row.uniqueKeys,undefined); assert.equal(row.workflowInput,undefined);
+ assert.equal((await pendingServerRoot('fresh')).response.status,202);
+});
+test('an expired worker lease alone never retires a claimed durable root', async () => {
+ const {row}=await pendingServerRoot(); row.workerStarted=true; row.deadlineAt=new Date(0);
+ await read(row.shareId); assert.equal(row.crystal.status,'running'); assert.equal(row.cancelRequested,undefined); assert.ok(row.uniqueKeys);
+});
+
+for (const child of [false, true]) test(`Stop/redelivery retains ${child ? 'child' : 'root'} execution claim and late receipts until acknowledgment`, async () => {
+ const {row:root} = await pendingServerRoot();
+ root.workerStarted = true;
+ if (child) {root.workerFinishedAt = new Date();root.crystal.status = 'needs-attention';}
+ const row = child ? {...root,shareId:'held-child',rootTaskId:root.shareId,crystal:{...root.crystal,requestId:'child',status:'running',workflowStatus:undefined},workerFinishedAt:undefined,uniqueKeys:undefined} : root;
+ if (child) rows.push(row);
+ root.activeWorkerRequestId = row.crystal.requestId;
+ let stream!: ReadableStreamDefaultController<Uint8Array>;
+ const encoder = new TextEncoder();
+ const execute = executeBackgroundTask(request(row.crystal.requestId), async () => new Response(new ReadableStream({start(controller){stream=controller;}}),{headers:{'Content-Type':'application/x-ndjson'}}), row, user);
+ const flush = () => new Promise(resolve => setImmediate(resolve));
+ await flush();
+ stream.enqueue(encoder.encode('{"type":"tool_result","summary":"before stop"}\n')); await flush();
+ const stop = new Request('https://example.test/api/v1/lopu/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stop',id:root.shareId})});
+ assert.equal((await stopBackgroundTask(stop)).status,200);
+ const {finalizeLopuWorkflow} = await import('./continuationFinalization.server');
+ assert.equal(await finalizeLopuWorkflow(root.shareId,'stopped'),false);
+ assert.ok(root.uniqueKeys);
+ assert.equal(row.crystal.status,'running');
+ assert.equal((await pendingServerRoot('overlap')).response.status,409,'another send cannot overlap uncertain execution');
+ stream.enqueue(encoder.encode('{"type":"tool_result","summary":"late saved receipt"}\n{"type":"done","stopReason":"aborted"}\n'));
+ stream.close(); await execute;
+ assert.ok(row.workerFinishedAt);
+ assert.match(Buffer.from(row.secure.value()).toString('utf8'),/late saved receipt/);
+ assert.equal(root.crystal.workflowStatus,'stopped');
+ assert.equal(root.uniqueKeys,undefined);
+ assert.equal(root.activeWorkerRequestId,undefined);
+ assert.equal((await pendingServerRoot('after-ack')).response.status,202);
+});
+
+test('output limit aborts but never acknowledges before the response producer closes', async () => {
+ const {row} = await pendingServerRoot(); row.workerStarted=true; row.activeWorkerRequestId=row.crystal.requestId;
+ let stream!: ReadableStreamDefaultController<Uint8Array>;
+ const run = executeBackgroundTask(request(row.crystal.requestId),async()=>new Response(new ReadableStream({start(controller){stream=controller;}}),{headers:{'Content-Type':'application/x-ndjson'}}),row,user);
+ const flush = () => new Promise(resolve => setImmediate(resolve)); await flush();
+ stream.enqueue(new Uint8Array(2 * 1024 * 1024 + 1)); await flush();
+ const {finalizeLopuWorkflow} = await import('./continuationFinalization.server');
+ assert.equal(await finalizeLopuWorkflow(row.shareId,'needs-attention'),false);
+ assert.ok(row.uniqueKeys); assert.equal(row.workerFinishedAt,undefined);
+ stream.close(); await run;
+ assert.ok(row.workerFinishedAt); assert.equal(row.uniqueKeys,undefined);
+});
+test('an errored response without a verified producer close remains fenced', async () => {
+ const {row} = await pendingServerRoot(); row.workerStarted=true; row.activeWorkerRequestId=row.crystal.requestId;
+ await executeBackgroundTask(request(row.crystal.requestId),async()=>new Response(new ReadableStream({start(controller){controller.error(new Error('uncertain producer'));}})),row,user);
+ const {finalizeLopuWorkflow} = await import('./continuationFinalization.server');
+ assert.equal(await finalizeLopuWorkflow(row.shareId,'needs-attention'),false);
+ assert.equal(row.workerFinishedAt,undefined); assert.ok(row.uniqueKeys);
+ assert.equal((await pendingServerRoot('blocked')).response.status,409);
+});
+
+test('a delayed pending finalizer cannot overwrite acknowledged completion or change its outcome', async () => {
+ const {row}=await pendingServerRoot(); row.workerStarted=true; row.activeWorkerRequestId=row.crystal.requestId;
+ let stream!:ReadableStreamDefaultController<Uint8Array>;
+ const execution=executeBackgroundTask(request(row.crystal.requestId),async()=>new Response(new ReadableStream({start(controller){stream=controller;}})),row,user);
+ await new Promise(resolve=>setImmediate(resolve));
+ let release!:()=>void; let reached!:()=>void;
+ const ready=new Promise<void>(resolve=>{reached=resolve;});
+ beforeUpdate=async(update:any)=>{if(update.$set?.['crystal.stage']==='Waiting for worker to stop'){beforeUpdate=null; reached();await new Promise<void>(resolve=>{release=resolve;});}};
+ const {finalizeLopuWorkflow}=await import('./continuationFinalization.server');
+ const pending=finalizeLopuWorkflow(row.shareId,'stopped'); await ready;
+ stream.close(); await execution;
+ assert.ok(row.workflowFinalizedAt); assert.equal(row.crystal.workflowStatus,'stopped');
+ release(); await pending;
+ await finalizeLopuWorkflow(row.shareId,'completed');
+ assert.equal(row.crystal.workflowStatus,'stopped');
+ assert.equal(row.crystal.stage,'Stopped'); assert.equal(row.uniqueKeys,undefined);
+});
+
+test('Stop in the reserved-before-child-insert gap prevents the delayed handler from running', async () => {
+ const {row:root}=await pendingServerRoot(); root.workerStarted=true; root.workerFinishedAt=new Date(); root.crystal.status='needs-attention'; root.activeWorkerRequestId='delayed-child';
+ const {finalizeLopuWorkflow}=await import('./continuationFinalization.server');
+ assert.equal(await finalizeLopuWorkflow(root.shareId,'stopped'),true);
+ assert.equal(root.uniqueKeys,undefined);
+ let calls=0;
+ const response=await startBackgroundTask(request('delayed-child',{chatId:'chat',requestId:'delayed-child',text:'Continue',management:'server'}),async()=>{calls++;return new Response('Must not execute');},{user,scope:root.taskScope,rootTaskId:root.shareId,wait:true});
+ assert.equal(response.status,202); assert.equal(calls,0);
+ const child=rows.find(row=>row.crystal.requestId==='delayed-child');
+ assert.equal(child.crystal.status,'stopped'); assert.ok(child.workerFinishedAt);
+ assert.equal(root.crystal.workflowStatus,'stopped'); assert.equal(root.uniqueKeys,undefined);
 });

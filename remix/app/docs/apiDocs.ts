@@ -647,7 +647,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         id: 'lopu-background-tasks', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'lopu', title: 'Background AI tasks',
         endpoint: '/api/v1/lopu/tasks', methods: ['GET', 'POST'],
         summary: 'Observe and stop account-owned background AI requests without replaying them.',
-        detail: 'Version 1.3 adds explicit management: server on chat requests. It starts a durable Workflow that checkpoints and resumes saved safe errors without a browser. Tasks expose management, rootTaskId and workflowStatus; GET also returns an opaque contextKey for origin/data-source fencing. Stop cancels the entire workflow, including scheduling gaps. Each step revalidates the original live session, chat membership, provider permissions and billing. Five successive recoverable failures use exponential backoff then require review; uncertain in-flight actions and confirmations are never replayed. Server management currently requires the home account database; custom database sessions must choose client management. Version 1.2 adds POST { action: "note", id, noteId, text } (up to 8000 characters, noteId 1–36 letters/digits/hyphens). It persists an idempotent membership-gated user message and returns messages plus active. It never cancels or restarts the task. Chat providers consume notes after a response/tool batch; notes arriving after the last boundary remain in history for the next reply. Negotiate this feature before opting into X-Thingtime-Background-Id on chat replies, voice replies, musings or AI completions. The header is an immutable operation ID: identical retries return the existing task with HTTP 202; different payloads return 409. X-Thingtime-Task-Owner fences account changes. Canonical handlers retain their authentication, provider, permission, quota and billing checks. A SharedWorker observes jobs while origin tabs remain; Nitro and Vercel waitUntil drain the canonical handler even after every tab closes. Version 1.1 removes the total execution deadline: a renewable worker lease detects a lost worker without stopping a healthy task. Each saved transport window retains up to 2 MiB of private output; chat checkpoints rotate windows without capping total work. GET lists up to 100 recent tasks without output; GET ?id=...&offset=0 returns a bounded 65536-character output slice, next offset and total length. The task contains responseStatus and contentType for reconstructing its response. Polling never re-executes an action. A persisted safe error may resume automatically; missing receipts or uncertain tool effects require review. POST {id,action:"stop"} requests cancellation. Alternatively requestId stops an operation before admission using an immutable cancellation marker. Task output is protected binary operational state; no provider credentials or request headers are stored. Tasks are fenced to account, browser-facing origin and selected data source. Output access expires after seven days (410); expired bytes are lazily cleared on the next task read, while the small immutable operation marker remains to prevent replay. Chat transcript access is rechecked before returning its task output.',
+        detail: 'Version 1.3 adds explicit management: server on chat requests. It starts a durable Workflow that checkpoints and resumes saved safe errors without a browser. Tasks expose management, rootTaskId and workflowStatus; GET also returns an opaque contextKey for origin/data-source fencing. Stop cancels the entire workflow, including scheduling gaps. A root reservation fences child admission against finalization; the conversation stays locked until each claimed executor saves its final output and acknowledges completion. Expired heartbeats alone never unlock uncertain work. An unacknowledged worker appears as needs-attention with stage Waiting for worker to stop; it cannot be bypassed by a fresh send, and a late completion finishes Stop automatically. Each step revalidates the original live session, chat membership, provider permissions and billing. Five successive recoverable failures use exponential backoff then require review; uncertain in-flight actions and confirmations are never replayed. Server management currently requires the home account database; custom database sessions must choose client management. Version 1.2 adds POST { action: "note", id, noteId, text } (up to 8000 characters, noteId 1–36 letters/digits/hyphens). It persists an idempotent membership-gated user message and returns messages plus active. It never cancels or restarts the task. Chat providers consume notes after a response/tool batch; notes arriving after the last boundary remain in history for the next reply. Negotiate this feature before opting into X-Thingtime-Background-Id on chat replies, voice replies, musings or AI completions. The header is an immutable operation ID: identical retries return the existing task with HTTP 202; different payloads return 409. X-Thingtime-Task-Owner fences account changes. Canonical handlers retain their authentication, provider, permission, quota and billing checks. A SharedWorker observes jobs while origin tabs remain; Nitro and Vercel waitUntil drain the canonical handler even after every tab closes. Version 1.1 removes the total execution deadline: a renewable worker lease detects a lost worker without stopping a healthy task. Each saved transport window retains up to 2 MiB of private output; chat checkpoints rotate windows without capping total work. GET lists up to 100 recent tasks without output; GET ?id=...&offset=0 returns a bounded 65536-character output slice, next offset and total length. The task contains responseStatus and contentType for reconstructing its response. Polling never re-executes an action. A persisted safe error may resume automatically; missing receipts or uncertain tool effects require review. POST {id,action:"stop"} requests cancellation. Alternatively requestId stops an operation before admission using an immutable cancellation marker. Task output is protected binary operational state; no provider credentials or request headers are stored. Tasks are fenced to account, browser-facing origin and selected data source. Output access expires after seven days (410); expired bytes are lazily cleared on the next task read, while the small immutable operation marker remains to prevent replay. Chat transcript access is rechecked before returning its task output.',
         auth: { mode: 'session-or-bearer', description: 'Full first-party account only; same-origin, private no-store. Every read and cancellation rechecks identity and task scope.' },
         steps: ['Negotiate api.lopu-background-tasks >=1.0.0 on this origin.', 'Start a supported AI request with a fresh operation ID and expected owner header.', 'Retain the accepted task ID; observe its output without resubmitting.', 'Review partial output before explicitly continuing interrupted work.'],
         requestExamples: [{ name: 'Stop task', description: 'Stop only this owned execution.', method: 'POST', body: { id: 'lopu-background-example', action: 'stop' } }],
@@ -4678,7 +4678,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     featureVersion: '1.14.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
-      'Version 1.14 adds management (client or server) and explicit continueFromRequestId with automaticContinuation. The server supplies the continuation prompt, checks the latest saved assistant boundary and uses a deterministic resume request ID. Continuations cannot resubmit attachments, confirmation grants or old draft snapshots. Persisted user metadata and meta events mark continuation=true so the transcript omits synthetic user bubbles. done and persisted assistant metadata include continuationSafe; automatic recovery requires true. Manual Stop, archived conversations, newer messages, incomplete tools and pending confirmations block automatic continuation. create_thing now accepts type folder plus optional owned folderId and stores the canonical folder kind. ' +
+      'Version 1.14 adds management (client or server) and explicit continueFromRequestId with automaticContinuation. The server supplies the continuation prompt, checks the latest saved assistant boundary and uses a deterministic resume request ID. Continuations cannot resubmit attachments, confirmation grants or old draft snapshots. Persisted user metadata and meta events mark continuation=true so the transcript omits synthetic user bubbles. done and persisted assistant metadata include continuationSafe and recoveryFailures; automatic recovery requires true and fewer than five consecutive saved errors. The server derives this streak from the preceding checkpoint, so polling, reloads and account switches cannot reset it. Successful checkpoints reset the streak; explicit manual Continue starts a fresh bounded streak. Manual Stop, archived conversations, newer messages, incomplete tools and pending confirmations block automatic continuation. create_thing now accepts type folder plus optional owned folderId and stores the canonical folder kind. ' +
       'Version 1.13 consumes persisted user notes at provider boundaries without aborting an in-flight request or tool. Notes do not grant tool approval. ' +
       'Version 1.12 adds optional context.pages (up to ten { url, title } Thingtime relative page links, URL up to 300 characters, title up to 120). The user input remains capped at 8,000 characters; the persisted turn allows 16,000 including bounded attached Thing/page references. Validated URLs exclude authentication routes, fragments and non-navigation query keys. References are included as untrusted model context and persisted with the user message; references grant no extra read or write permissions. Omitting route/page/selectedBlockId excludes current-page context. ' +
       'Version 1.11 removes task-wide tool, hop and elapsed-time limits. Completed tool batches may emit done.stopReason=checkpoint to rotate a hosting or stream-storage window; clients continue from persisted receipts with a fresh request ID, without a continuation count limit. Confirmation, Stop and uncertain in-flight writes are never automatically replayed. ' +
@@ -12926,10 +12926,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'library-request', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'library',
+    id: 'library-request', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'library',
     title: 'Run a credentialed library read', endpoint: '/api/v1/library/request',
     summary: 'Runs one curated, read-only third-party API example with a transient caller-supplied key.',
-    detail: 'The catalogue selects the HTTPS origin, GET path, permitted inputs and authentication scheme. No arbitrary URLs, redirects, headers, mutation methods or stored secrets are accepted. Full accounts only; fail-closed 20/minute rate limit, 24 KB body, 16 KB inputs, 12 second upstream deadline and 256 KB response limit. Stripe accepts test-mode keys only. Responses are no-store; supplied keys are redacted from successful results and all errors are generic. Public keyless examples fetch directly in the browser. Clients negotiate api.library-request >=1.0.0 on this origin.',
+    detail: 'The catalogue selects the HTTPS origin, GET path, permitted inputs and authentication scheme. No arbitrary URLs, redirects, headers, mutation methods or stored secrets are accepted. Full accounts only; fail-closed 20/minute rate limit, 24 KB body, 16 KB inputs, 12 second upstream deadline and 256 KB response limit. Stripe accepts test-mode keys only. Responses are no-store; supplied keys are redacted from successful results and all errors are generic. Public keyless examples fetch directly in the browser. Clients negotiate api.library-request >=1.1.0 on this origin.',
     auth: { mode: 'session-or-bearer', description: 'A full signed-in account is required; temporary accounts are rejected.' },
     methods: ['POST'],
     steps: ['Choose a credentialed example ID from the library.', 'POST exampleId, input and apiKey as JSON.', 'Read result; keys and results are not persisted.'],
@@ -12938,13 +12938,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-demos',
-    // brand-new capability: everything this PR adds to the response is its 1.0.0 shape
-    contractVersion: '1.0.0',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'webpages',
     title: 'Browse the builder demo library',
     endpoint: '/api/v1/webpages/demos',
     summary: 'Lists the deterministic catalog of builder demos (sections, full pages, component-block pages) and behaviour suites (schemas + components + actions + data + page), with a seeded flag per entry.',
     detail:
+      'Version 1.1 includes native site forms, media controls, and private request Actions. Copying a demo with suiteKey requires installing that suite first. ' +
       'The demo library is code: schemas/webpageDemos generates a few hundred example webpages from family × ' +
       'layout × tone tables, each of which clears the webpage write gate unchanged. This endpoint lists that ' +
       'catalog — id (the seeded shareId webpage-demo-<slug>), slug, name, family, kind, tone, layout, tags, ' +
@@ -13044,12 +13045,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-suites-install',
-    contractVersion: '1.0.0',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'webpages',
     title: 'Install a behaviour suite or app suite',
     endpoint: '/api/v1/webpages/suites/install',
     summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
     detail:
+      'Version 1.1 adds site-forms and catalog-records suites, native form fields, and versioned interactive controls. ' +
+      'Site forms and catalog records create private Things; external effects require a configured integration Action. ' +
+      'Optional onlyMissing: true preserves all existing parts while installing absent dependencies. Installed page component references bind to the caller’s concrete component ids. ' +
       'A suite is an installable program bundle (schemas/behaviourSuites): schema things, ttAction-bound component ' +
       'things, action things, sample data things, and one or more builder pages. App suites (Pokeworld, StarsAlign) are ' +
       'multi-page suites whose pages link to each other by pageKey. This endpoint writes the OWN-mode bundle through the ' +
@@ -13073,6 +13078,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     requestExamples: [
       { name: 'Install Pokeworld', description: 'Every page, control, and program of the game into your things.', method: 'POST', body: { key: 'pokeworld' } },
+      { name: 'Install missing site form dependencies', description: 'Preserves customized Actions and controls.', method: 'POST', body: { key: 'site-forms', onlyMissing: true } },
       { name: 'Install the guestbook demo suite', description: 'A single-page behaviour suite.', method: 'POST', body: { key: 'guestbook' } }
     ],
     responseExamples: [
@@ -13154,6 +13160,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-webpages-seed-demos',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'admin',
     title: 'Seed the builder demo library',
     endpoint: '/api/v1/admin/webpages/seed-demos',

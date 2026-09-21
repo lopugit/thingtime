@@ -19,10 +19,11 @@ export const admitLopuWorkflow = async (request: Request, row: any, input: any, 
 	if (!claims || claims.sub !== user.id) return { ok: false as const, error: 'Sign in again before starting server management.' };
 	const things = await getHomeThingsCollection();
 	const grant: WorkflowGrant = { input, url: request.url, sessionId: claims.jti };
-	await things.updateOne(
-		{ shareId: row.shareId, ownerId: user.id, thingtime: AI_TASK_KIND },
+	const stored = await things.updateOne(
+		{ shareId: row.shareId, ownerId: user.id, thingtime: AI_TASK_KIND, cancelRequested: { $ne: true }, 'crystal.workflowStatus': 'running' },
 		{ $set: { workflowInput: new Binary(Buffer.from(JSON.stringify(grant))) } }
 	);
+	if (!stored.matchedCount) return { ok: false as const, error: 'This task was stopped before it started.' };
 	try {
 		const run = await start(runLopuContinuation, [row.shareId]);
 		// Scheduling has succeeded. An observability write failure must not turn

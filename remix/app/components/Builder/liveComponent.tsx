@@ -1,5 +1,11 @@
+import { NativeControlsEnabled } from './NativeComponentControls';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
+import { useNavigate } from 'react-router';
+import { useLopu } from '~/components/Lopu/useLopu';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { LOCAL_UI_ACTION, reduceLocalUi } from '../Actions/localUiAction';
+import { ActionResult, type ControlResult } from './ActionResult';
 import { Box } from '@chakra-ui/react';
 
 import { useApi } from '~/hooks/useApi';
@@ -218,24 +224,68 @@ export const LiveTemplate = ({
 	onDoubleClickCapture?: (event: React.MouseEvent) => void;
 	children?: React.ReactNode;
 }) => {
-	const onTtAction = useTtActionClicks({ onUnowned, confirm });
 	const runtime = useWebpageRuntime();
-	const scopeKey = JSON.stringify(scope);
-	const resolved = React.useMemo(() => (render ? alreadyResolved ? render : resolveTemplate(render, scope) : null), [render, scopeKey, alreadyResolved]); // eslint-disable-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
+	const user = useCurrentUser();
+	const navigate = useNavigate();
+	const lopu = useLopu();
+	const baseScope = Object.fromEntries(Object.entries(scope).filter(([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'hasSource'].includes(key)));
+	const identity = JSON.stringify([user?.id, runtime.pageId, render, baseScope]);
+	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
+	const active = local.identity === identity ? local : { identity, values: {} };
+	const onLocal = (input: Record<string, unknown>) => {
+		if (input.op === 'copy' && typeof input.value === 'string' && input.value.length <= 5000) {
+			if (!navigator.clipboard) { lopu({ title: 'Clipboard unavailable', description: 'Copy is available on secure pages.', status: 'info' }); return; }
+			navigator.clipboard?.writeText(input.value).then(() => lopu({ title: 'Copied', status: 'success' })).catch(() => lopu({ title: 'Could not copy', description: 'Your browser did not allow clipboard access.', status: 'error' }));
+			return;
+		}
+		if (input.op === 'search' && typeof input.value === 'string') {
+			navigate(`/search?q=${encodeURIComponent(input.value.slice(0, 500))}`);
+			return;
+		}
+		setLocal((previous) => ({
+			...(previous.identity === identity ? previous : { identity, values: {} }),
+			values: reduceLocalUi(previous.identity === identity ? previous.values : {}, baseScope, input)
+		}));
+	};
+	const onTtAction = useTtActionClicks({ onUnowned, confirm, onLocal,
+		onResult: (outcome) => setLocal((previous) => ({ ...(previous.identity === identity ? previous : { identity, values: {} }), outcome })) });
+	const liveScope = { ...scope, ...active.values };
+	const scopeKey = JSON.stringify(liveScope);
+	const resolved = React.useMemo(() => (render ? alreadyResolved ? render : resolveTemplate(render, liveScope) : null), [render, scopeKey, alreadyResolved]); // eslint-disable-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
 	if (!resolved) return null;
 	return (
-		<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
+		<NativeControlsEnabled.Provider key={identity} value={interactive}><ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
 			<Box
 				onClickCapture={interactive ? (event) => {
 					if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
+				} : undefined}
+				onChangeCapture={interactive ? (event) => {
+					const field = event.target as HTMLInputElement;
+					if (field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;
+					try {
+						const input = JSON.parse(field.getAttribute('data-tt-action-inputs') || '{}');
+						onLocal({ ...input, op: 'set', value: field.type === 'checkbox' ? field.checked : field.type === 'number' || field.type === 'range' ? Number(field.value) : field.value });
+					} catch {}
+				} : undefined}
+				onKeyDownCapture={interactive ? (event) => {
+					const field = event.target as HTMLInputElement;
+					if (event.key !== 'Enter' || event.nativeEvent.isComposing || field.tagName !== 'INPUT' || ['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)) return;
+					const group = field.closest('fieldset') || event.currentTarget;
+					const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
+					if (submit) {
+						const action = submit.getAttribute('data-tt-action');
+						const inputs = submit.getAttribute('data-tt-action-inputs') || '';
+						if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) { event.preventDefault(); submit.click(); }
+					}
 				} : undefined}
 				onDoubleClickCapture={onDoubleClickCapture}
 				width="100%"
 				data-live={interactive ? 'true' : 'false'}
 			>
 				{isChakraThingNode(resolved) ? <ChakraThingRenderer node={resolved as ChakraThingNode} /> : <HtmlThingRenderer node={resolved as HtmlThingNode} />}
+				{interactive && active.outcome ? <ActionResult outcome={active.outcome} /> : null}
 				{children}
 			</Box>
-		</ComponentUploadEnabled.Provider>
+		</ComponentUploadEnabled.Provider></NativeControlsEnabled.Provider>
 	);
 };

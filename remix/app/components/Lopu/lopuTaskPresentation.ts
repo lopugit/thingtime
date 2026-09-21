@@ -17,7 +17,9 @@ export const presentLopuTasks = (tasks: AiBackgroundTask[]): LopuDisplayTask[] =
 			const root = roots.get(id) || resultTask;
 			const status = root.workflowStatus || root.status;
 			const stage =
-				root.workflowStatus === 'running'
+				root.stage === 'Stopping' || root.stage === 'Waiting for worker to stop'
+     ? root.stage
+     : root.workflowStatus === 'running'
 					? resultTask.status === 'running'
 						? resultTask.stage
 						: 'Continuing'
@@ -32,7 +34,7 @@ export const presentLopuTasks = (tasks: AiBackgroundTask[]): LopuDisplayTask[] =
 				...root,
 				status,
 				stage,
-				error: root.workflowStatus === 'running' || root.workflowStatus === 'completed' ? null : resultTask.error || root.error,
+				error: root.workflowStatus === 'running' || root.workflowStatus === 'completed' ? null : root.error || resultTask.error,
 				resultTask
 			};
 		})

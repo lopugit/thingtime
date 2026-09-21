@@ -105,4 +105,42 @@ source snapshots, fixing refreshes that failed with permission denied.
   Tailscale launcher references a missing application executable.
 
 CI, the exact branch preview and the final build result are recorded on the PR.
-This branch does not update the remote primary branch.
+The owner explicitly authorized merging this PR into `main` after pre-merge verification on 2026-09-21. Production acceptance is recorded on the PR after merge.
+
+## Pre-merge review (2026-09-21)
+
+Integrated `main` through `50dd31b7b`, retaining the new remote integration
+catalog, functional native component controls, mobile sign-in clearance and
+admin catalog importer. Preserved both sides of documentation and capability
+coverage; regenerated the graph as one consistent snapshot.
+
+A fresh continuation review identified abandoned child tasks that could remain
+running after a workflow ended, and admission failures that could leave an
+unstarted workflow claim. These paths now use explicit terminal reconciliation
+without replaying uncertain tool work. Regression results and the final head
+are recorded on the PR before the authorized merge.
+
+The combined build and Vercel output verification passed. Fresh browser-independent
+checks passed: webpage 104 (three optional integration tests skipped), library
+nine, Commander 26, navigation 17, social previews 42, notifications 62. Native
+simulator build/install/launch and 63 tests passed; one real ActivityKit request
+remains skipped on the unsigned simulator. Activity/privacy and drawer checks
+passed 19 cases. Real-device and provider-backed acceptance limits above remain.
+
+Read-only attachment registration prevents viewed webpages from capturing Lopu's
+build target while retaining interactive controls. Fresh Chrome proof at
+1440×1000 and 390×844 covered a real post with an attached page/private contextual
+component: its counter incremented, resizing preserved its value, page bottoms
+stayed aligned, Thing data began collapsed, and the non-owner menu retained only
+read-only actions. Prior private fixtures retained owner access and rejected all
+13 anonymous reads. Temporary QA objects are retained privately, not deleted. All 16 retained QA
+objects now allow owner reads and reject anonymous reads. The canonical Things
+suite includes the protected-rename regressions (275 passed); the feed suite
+includes the new attachment-target regression (56 passed).
+
+Cancellation preserves the conversation claim until the executor acknowledges
+completion and saves its last output. A timed-out heartbeat alone cannot prove
+that an external side effect stopped. Unacknowledged work therefore needs
+attention and remains fenced; it is never silently replayed or unlocked. The
+local automatic retry budget also survives polling/reload instead of resetting
+with each recovery invocation. Explicit manual Continue remains intentional.

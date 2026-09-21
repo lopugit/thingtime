@@ -18,7 +18,8 @@ function LinkedComponent({ thing }: { thing: ThingsThing }) {
 }
 function LinkedPage({ thing }: { thing: ThingsThing }) {
   const target = React.useMemo(() => ({ kind: 'id' as const, id: thing.id }), [thing.id]);
-  const page = useWebpageDraft(target);
+  // Viewing an attachment must not make it Lopu's active builder target.
+  const page = useWebpageDraft(target, { editable: false });
   return page.resolved ? <WebpageBlocksRenderer blocks={page.blocks} componentsByRef={page.componentsByRef} interactive /> : <Text fontSize="sm" color="var(--tt-muted)">{page.loading ? 'Opening page…' : 'Open this page to view its content.'}</Text>;
 }
 export function PostInteractiveThing({ thing, compact }: { thing: ThingsThing; compact?: boolean }) {

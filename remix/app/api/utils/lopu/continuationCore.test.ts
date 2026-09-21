@@ -26,3 +26,11 @@ test('only explicit persisted safe boundaries allow automatic recovery', () => {
 	}
 	for (const stopReason of ['end_turn', 'aborted', 'confirm']) assert.equal(canAutomaticallyResume({ stopReason, continuationSafe: true }), false);
 });
+
+test('saved error streak bounds recovery across independent callers', () => {
+ const checkpoint = { stopReason: 'error', continuationSafe: true, recoveryFailures: 4 };
+ assert.equal(canAutomaticallyResume(checkpoint), true);
+ assert.equal(canAutomaticallyResume({ ...checkpoint, recoveryFailures: 5 }), false);
+ assert.equal(canAutomaticallyResume({ ...checkpoint, recoveryFailures: 500 }), false);
+ assert.equal(canAutomaticallyResume({ ...checkpoint, stopReason: 'checkpoint', recoveryFailures: 0 }), true);
+});

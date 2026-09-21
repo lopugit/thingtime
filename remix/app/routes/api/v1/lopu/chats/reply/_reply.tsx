@@ -1,4 +1,4 @@
-import { LOPU_CONTINUE_PROMPT, continuationRequestId, LOPU_RECOVERABLE_STOPS } from '~/api/utils/lopu/continuationCore';
+import { LOPU_CONTINUE_PROMPT, continuationRequestId, LOPU_RECOVERABLE_STOPS, lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
 import { lopuPageReference, lopuPageReferences, LOPU_MAX_PAGE_REFERENCES } from '~/utils/lopuPageContext';
 import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
@@ -235,10 +235,12 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   if (parsed.ok === false) return json({ ok: false, error: parsed.error }, { status: 400 });
   const input = parsed.value;
   const viewer = { id: user.id, username: user.username };
+  let previousRecoveryFailures = 0;
   if (input.continueFromRequestId) {
     if (!input.chatId) return json({ ok: false, error: 'A continuation requires its conversation.' }, { status: 400 });
     const continuation = await readLopuContinuation(user.id, input.chatId, input.continueFromRequestId, input.automaticContinuation === true);
     if (continuation.ok === false) return json({ ok: false, error: continuation.error }, { status: continuation.status });
+    if (input.automaticContinuation === true) previousRecoveryFailures = lopuRecoveryFailures(continuation.meta.recoveryFailures);
     const expectedRequestId = await continuationRequestId(input.chatId, input.continueFromRequestId);
     if (input.requestId !== expectedRequestId) return json({ ok: false, error: 'Use the continuation request id for this saved checkpoint.' }, { status: 400 });
   }
@@ -466,6 +468,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           // persist whatever streamed, even after an error or a disconnect
           const finished = outcome?.stopReason === 'checkpoint' || outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
           const stopReason = outcome?.stopReason || 'error';
+          const recoveryFailures = stopReason === 'error' ? previousRecoveryFailures + 1 : 0;
           const continuationSafe = !!outcome && !abort.signal.aborted && !pendingTools.size && !awaitingConfirmation && !(input.context?.page && !input.context.page.id) && LOPU_RECOVERABLE_STOPS.includes(stopReason);
           const text = (finished || continuationSafe) && outcome?.text.trim() ? outcome.text : continuationSafe ? 'Progress saved.' : interruptedNote(outcome);
 
@@ -519,6 +522,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
                 balanceMicros,
                 toolCalls: outcome?.toolCalls ?? [],
                 continuationSafe,
+                recoveryFailures,
                 stopReason
               }
             });
@@ -531,7 +535,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           } catch (error: any) {
             console.error('[lopu] assistant turn persist threw:', error?.message || error);
           }
-          send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), billing, costMicros, priced, balanceMicros, stopReason, continuationSafe });
+          send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), billing, costMicros, priced, balanceMicros, stopReason, continuationSafe, recoveryFailures });
           try {
             controller.close();
           } catch {

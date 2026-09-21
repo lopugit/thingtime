@@ -14,6 +14,7 @@ import {
 	AI_TASK_OWNER_HEADER,
 	AI_TASK_KIND,
 	AI_TASK_LEASE_MS,
+ AI_TASK_ADMISSION_LEASE_MS,
 	AI_TASK_MAX_BYTES,
 	AI_TASK_OPERATIONS,
 	validAiTaskRequestId,
@@ -55,6 +56,12 @@ export const publicBackgroundTask = (row: any): AiBackgroundTask => ({
 });
 const stale = async (filter: any) => {
 	const things = await getHomeThingsCollection();
+ // Admission and worker claim race through this same cancellation/status fence.
+ // A delayed scheduler delivery cannot execute a root reclaimed here.
+ await things.updateMany({ ...filter, rootTaskId: { $exists: false }, 'crystal.management': 'server', 'crystal.workflowStatus': 'running', 'crystal.status': 'running', workerStarted: { $ne: true }, activeWorkerRequestId: { $exists: false }, deadlineAt: { $lt: new Date() } }, {
+  $set: { cancelRequested: true, 'crystal.status': 'needs-attention', 'crystal.workflowStatus': 'needs-attention', 'crystal.stage': 'Could not start', 'crystal.error': 'The server did not start this task. Review its saved progress before sending again.', updatedAt: new Date() },
+  $unset: { uniqueKeys: '', workflowInput: '' }
+ });
 	await things.updateMany(
 		{ ...filter, 'crystal.status': 'running', 'crystal.management': { $ne: 'server' }, deadlineAt: { $lt: new Date() } },
 		{
@@ -91,7 +98,7 @@ export const readBackgroundTasks = async (request: Request) => {
 			.toArray();
 		// A long workflow can have more than a page of child checkpoints. Keep its
   // active root visible so Stop and aggregate status never disappear.
-  const activeRoots = await things.find({ ...filter, 'crystal.workflowStatus': 'running' }, { projection: { secure: 0, workflowInput: 0 } }).sort({ createdAt: -1 }).limit(100).toArray();
+  const activeRoots = await things.find({ ...filter, $or: [{ 'crystal.workflowStatus': 'running' }, { workflowFinalStatus: { $exists: true }, workflowFinalizedAt: { $exists: false } }] }, { projection: { secure: 0, workflowInput: 0 } }).sort({ createdAt: -1 }).limit(100).toArray();
   const visible = [...new Map([...rows, ...activeRoots].map(row => [row.shareId, row])).values()].sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
   return json({ ok: true, ownerId: user.id, contextKey: scope, tasks: visible.map(publicBackgroundTask) }, { headers });
 	}
@@ -145,12 +152,19 @@ export const stopBackgroundTask = async (request: Request) => {
 	const id = typeof input.id === 'string' ? input.id : taskIdFor(user.id, scope, input.requestId);
 	const filter = { ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: scope, shareId: id };
 	const stoppedRow = await things.findOne(filter, { projection: { rootTaskId: 1, crystal: 1 } });
- if (stoppedRow?.rootTaskId) await things.updateOne({ shareId: stoppedRow.rootTaskId, ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: scope }, { $set: { cancelRequested: true } });
+ // No worker exists to observe cancellation before initial dispatch. Retire an
+ // unclaimed root atomically so Stop also releases its conversation claim.
+ const stoppedBeforeStart = await things.updateOne({ ...filter, rootTaskId: { $exists: false }, 'crystal.management': 'server', 'crystal.workflowStatus': 'running', workerStarted: { $ne: true }, activeWorkerRequestId: { $exists: false } }, {
+  $set: { cancelRequested: true, 'crystal.status': 'stopped', 'crystal.workflowStatus': 'stopped', 'crystal.stage': 'Stopped before starting', updatedAt: new Date() },
+  $unset: { uniqueKeys: '', workflowInput: '' }
+ });
+ if (stoppedBeforeStart.matchedCount) return json({ ok: true }, { headers });
+ if (stoppedRow?.rootTaskId) await things.updateOne({ shareId: stoppedRow.rootTaskId, ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: scope }, { $set: { cancelRequested: true, 'crystal.stage': 'Stopping', updatedAt: new Date() } });
  if (stoppedRow?.crystal?.status === 'needs-attention' && stoppedRow.crystal.workflowStatus !== 'running') {
   await things.updateOne(filter, { $set: { cancelRequested: true, 'crystal.status': 'stopped', 'crystal.stage': 'Stopped', updatedAt: new Date() } });
   return json({ ok: true }, { headers });
  }
-	let result = await things.updateOne({ ...filter, $or: [{ 'crystal.status': 'running' }, { 'crystal.status': 'needs-attention' }, { 'crystal.workflowStatus': 'running' }] }, { $set: { cancelRequested: true } });
+	let result = await things.updateOne({ ...filter, $or: [{ 'crystal.status': 'running' }, { 'crystal.status': 'needs-attention' }, { 'crystal.workflowStatus': 'running' }] }, { $set: { cancelRequested: true, 'crystal.stage': 'Stopping', updatedAt: new Date() } });
 	if (!result.matchedCount && validAiTaskRequestId(input.requestId) && !(await things.findOne(filter))) {
 		const limit = await enforceRateLimit(request, 'lopu.chat', `background-cancel:${user.id}`, { failClosed: true });
 		if (!limit.allowed) return json({ ok: false, error: 'Please wait before stopping another pending request.' }, rateLimitedResponseInit(limit));
@@ -185,7 +199,7 @@ export const stopBackgroundTask = async (request: Request) => {
 		} catch (error: any) {
 			if (error?.code !== 11000) throw error;
 		}
-		result = await things.updateOne({ ...filter, $or: [{ 'crystal.status': 'running' }, { 'crystal.status': 'needs-attention' }, { 'crystal.workflowStatus': 'running' }] }, { $set: { cancelRequested: true } });
+		result = await things.updateOne({ ...filter, $or: [{ 'crystal.status': 'running' }, { 'crystal.status': 'needs-attention' }, { 'crystal.workflowStatus': 'running' }] }, { $set: { cancelRequested: true, 'crystal.stage': 'Stopping', updatedAt: new Date() } });
 	}
 	return result.matchedCount ? json({ ok: true }, { headers }) : fail('Task is already finished or unavailable.', 409);
 };
@@ -240,7 +254,7 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 		secure: new Binary(Buffer.alloc(0)),
 		createdAt: now,
 		updatedAt: now,
-		deadlineAt: new Date(now.getTime() + AI_TASK_LEASE_MS),
+		deadlineAt: new Date(now.getTime() + (serverManaged && !internal ? AI_TASK_ADMISSION_LEASE_MS : AI_TASK_LEASE_MS)),
 		outputExpiresAt: new Date(now.getTime() + 7 * 86_400_000),
 		crystal: {
 			outputExpired: false,
@@ -267,11 +281,21 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 	}
 
  if (serverManaged && !internal) {
-  const { admitLopuWorkflow } = await import('./continuationAdmission.server');
-  const admitted = await admitLopuWorkflow(request, row, input, user);
+  let admitted: { ok: boolean; error?: string };
+  try {
+   const { admitLopuWorkflow } = await import('./continuationAdmission.server');
+   admitted = await admitLopuWorkflow(request, row, input, user);
+  } catch {
+   admitted = { ok: false, error: 'Server management could not confirm startup. Review this task before trying again.' };
+  }
   if (!admitted.ok) {
-   await things.updateOne(filter, { $set: { 'crystal.status': 'needs-attention', 'crystal.workflowStatus': 'needs-attention', 'crystal.error': admitted.error, cancelRequested: true, updatedAt: new Date() }, $unset: { uniqueKeys: '', workflowInput: '' } });
-   return fail(admitted.error, 409);
+   const error = admitted.error || 'Server management could not start.';
+   // A scheduler error can be an ambiguous acknowledgment. Cancel first. If
+   // its worker already claimed the root, let that worker stop and retain the
+   // conversation lock until its durable workflow finalizer runs.
+   await things.updateOne(filter, { $set: { cancelRequested: true, 'crystal.error': error, updatedAt: new Date() } });
+   await things.updateOne({ ...filter, workerStarted: { $ne: true }, activeWorkerRequestId: { $exists: false }, 'crystal.workflowStatus': 'running' }, { $set: { 'crystal.status': 'needs-attention', 'crystal.workflowStatus': 'needs-attention', 'crystal.stage': 'Could not start' }, $unset: { uniqueKeys: '', workflowInput: '' } });
+   return fail(error, 409);
   }
   return json({ ok: true, task: publicBackgroundTask(row) }, { status: 202, headers });
  }
@@ -302,11 +326,15 @@ export const executeBackgroundTask = async (request: Request, execute: (request:
 		let status = 'running',
 			stopped = false,
 			sawDone = false,
+   executionSettled = false,
+   finalSaveAcknowledged = false,
+   outputTruncated = false,
 			lastSave = 0,
 			saving = Promise.resolve();
 		const save = () => {
 			const terminal = status !== 'running';
 			const update = {
+    ...(terminal && executionSettled ? {workerFinishedAt:new Date()} : {}),
 				secure: new Binary(Buffer.from(output)),
 				targetId: chatId,
 				updatedAt: new Date(),
@@ -315,11 +343,12 @@ export const executeBackgroundTask = async (request: Request, execute: (request:
 				'crystal.responseStatus': responseStatus, 'crystal.retryAfter': retryAfter,
 				'crystal.contentType': contentType,
 				'crystal.error': taskError,
-    ...(row.crystal.workflowStatus === 'running' && chatId ? { uniqueKeys: [new Binary(Buffer.from(`lopu-background-chat:${hash(`${user.id}:${row.taskScope}:${chatId}`)}`))] } : {}),
+    ...(!row.rootTaskId && row.crystal.workflowStatus === 'running' && chatId ? { uniqueKeys: [new Binary(Buffer.from(`lopu-background-chat:${hash(`${user.id}:${row.taskScope}:${chatId}`)}`))] } : {}),
     deadlineAt: new Date(Date.now() + AI_TASK_LEASE_MS)
 			};
 			saving = saving.then(async () => {
-				await things.updateOne({ ...filter, 'crystal.status': 'running' }, { $set: update, ...(terminal && row.crystal.workflowStatus !== 'running' ? { $unset: { uniqueKeys: '' } } : {}) });
+				const saved = await things.updateOne({ ...filter, 'crystal.status': 'running' }, { $set: update, ...(terminal && !(row.crystal.management === 'server' && !row.rootTaskId) ? { $unset: { uniqueKeys: '' } } : {}) });
+    if (terminal && executionSettled && saved.matchedCount) finalSaveAcknowledged = true;
     await import('./liveActivity').then(m => m.refreshLopuLiveActivitiesForOwner(user.id, row.taskScope)).catch(() => {});
 			});
 			return saving;
@@ -345,6 +374,16 @@ export const executeBackgroundTask = async (request: Request, execute: (request:
 			}
 		}, 1500);
 		try {
+   // Admission can be delayed after its root reservation. Check persisted
+   // cancellation before invoking a handler; the heartbeat alone is too late.
+   const current = await things.findOne(filter);
+   const root = row.rootTaskId ? await things.findOne({shareId:row.rootTaskId,ownerId:user.id,taskScope:row.taskScope,thingtime:AI_TASK_KIND}) : current;
+   if (!current || current.cancelRequested || !root || root.cancelRequested) {
+    stopped = true; executionSettled = true; status = 'stopped'; stage = 'Stopped before starting';
+    responseStatus = 409; contentType = 'application/json';
+    output = JSON.stringify({ok:false,error:'This task was stopped before execution.'});
+    return;
+   }
 			let response: Response;
 			try {
 				response = await execute(detached);
@@ -357,17 +396,20 @@ export const executeBackgroundTask = async (request: Request, execute: (request:
 			await save();
 			const reader = response.body?.getReader(),
 				decoder = new TextDecoder();
+   if (!reader) executionSettled = true;
 			if (reader)
 				for (;;) {
 					const result = await reader.read();
 					const chunk = result.done ? decoder.decode() : decoder.decode(result.value, { stream: true });
 					if (Buffer.byteLength(output) + Buffer.byteLength(chunk) > AI_TASK_MAX_BYTES) {
 						abort.abort();
-						await reader.cancel();
-						throw new Error('output-limit');
+      outputTruncated = true;
+      taskError = 'Output limit reached. The worker is stopping; saved conversation receipts are kept.';
 					}
-					output += chunk;
-					if (contentType.includes('ndjson')) {
+     // Cancellation alone does not acknowledge side-effect completion. Drain
+     // to the handler close even after the stored-output limit is reached.
+     if (!outputTruncated) output += chunk;
+					if (!outputTruncated && contentType.includes('ndjson')) {
 						pendingLine += chunk;
 						const lines = pendingLine.split('\n');
 						pendingLine = lines.pop() || '';
@@ -393,7 +435,7 @@ export const executeBackgroundTask = async (request: Request, execute: (request:
 						await save();
 						lastSave = Date.now();
 					}
-					if (result.done) break;
+					if (result.done) { executionSettled = true; break; }
 				}
 			if (response.ok && contentType.includes('ndjson') && !sawDone)
 				taskError ||= 'The reply connection ended before completion. Review its saved output and continue.';
@@ -414,6 +456,15 @@ export const executeBackgroundTask = async (request: Request, execute: (request:
 			clearInterval(heartbeat);
 			abort.abort();
 			await save();
+   if (row.crystal.management === 'server' && finalSaveAcknowledged) {
+    const rootId = row.rootTaskId || row.shareId;
+    await things.updateOne({shareId:rootId,ownerId:user.id,taskScope:row.taskScope,thingtime:AI_TASK_KIND,activeWorkerRequestId:row.crystal.requestId},{$unset:{activeWorkerRequestId:''}});
+    const root = await things.findOne({shareId:rootId,ownerId:user.id,taskScope:row.taskScope,thingtime:AI_TASK_KIND});
+    if (root?.workflowFinalStatus) {
+     const {finalizeLopuWorkflow} = await import('./continuationFinalization.server');
+     await finalizeLopuWorkflow(rootId,root.workflowFinalStatus);
+    }
+   }
 		}
 	};
  await work();

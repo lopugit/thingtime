@@ -118,7 +118,7 @@ export type LopuChatEvent =
   | ({ type: 'confirm'; id: string; name: string } & LopuConfirmRequest)
   | { type: 'error'; message: string; retryable: boolean }
   | {
-      type: 'done'; continuationSafe?: boolean;
+      type: 'done'; continuationSafe?: boolean; recoveryFailures?: number;
       assistantMessageId: string;
       messages: PublicChatMessage[];
       usage?: LopuChatUsage;

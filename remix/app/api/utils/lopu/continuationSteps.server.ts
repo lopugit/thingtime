@@ -1,25 +1,7 @@
 export async function finishLopuWorkflow(rootId: string, status: 'completed' | 'needs-attention' | 'stopped') {
-	'use step';
-	const { getHomeThingsCollection } = await import('../mongodb/collections');
-	const { AI_TASK_KIND } = await import('./backgroundTaskCore');
-	const things = await getHomeThingsCollection();
-	const row = await things.findOne({ shareId: rootId, thingtime: AI_TASK_KIND });
-	if (!row) return;
-	const finalStatus = row.cancelRequested ? 'stopped' : status;
-	await things.updateOne(
-		{ shareId: rootId, thingtime: AI_TASK_KIND },
-		{
-			$set: {
-				'crystal.workflowStatus': finalStatus,
-				updatedAt: new Date(),
-				...(row.crystal.status === 'running'
-					? { 'crystal.status': finalStatus, 'crystal.stage': finalStatus === 'stopped' ? 'Stopped' : 'Needs attention' }
-					: {})
-			},
-			$unset: { uniqueKeys: '', workflowInput: '' }
-		}
-	);
-	await import('./liveActivity').then((m) => m.refreshLopuLiveActivitiesForOwner(row.ownerId, row.taskScope)).catch(() => {});
+ 'use step';
+ const { finalizeLopuWorkflow } = await import('./continuationFinalization.server');
+ return finalizeLopuWorkflow(rootId, status);
 }
 
 /** One invocation executes at most one checkpoint. Step retries only observe a
@@ -69,6 +51,15 @@ export async function runLopuPart(
 	let task: any = previousRequestId
 		? await things.findOne({ ownerId: root.ownerId, thingtime: AI_TASK_KIND, taskScope: root.taskScope, 'crystal.requestId': input.requestId })
 		: root;
+ // Reserve the root before dispatch; finalization cancels this same row.
+ // The reservation closes the gap before a child task is inserted/claimed.
+ if (!task || (task.crystal.status === 'running' && !task.workerStarted)) {
+  const reserved = await things.updateOne({shareId:rootId,ownerId:root.ownerId,taskScope:root.taskScope,thingtime:AI_TASK_KIND,
+   cancelRequested:{$ne:true},'crystal.workflowStatus':'running',
+   $or:[{activeWorkerRequestId:{$exists:false}},{activeWorkerRequestId:input.requestId}]},
+   {$set:{activeWorkerRequestId:input.requestId}});
+  if (!reserved.matchedCount) return {next:null,reason:'stopped',delay:0};
+ }
 	if (!task) {
 		const accepted = await startBackgroundTask(request, (req) => replyAsUser(req, user), {
 			user,
@@ -81,18 +72,41 @@ export async function runLopuPart(
 		task = await things.findOne({ shareId: result.task.id, thingtime: AI_TASK_KIND });
 	} else if (task.crystal.status === 'running') {
 		const claim = await things.updateOne(
-			{ shareId: task.shareId, thingtime: AI_TASK_KIND, workerStarted: { $ne: true } },
+			{
+				shareId: task.shareId,
+				ownerId: root.ownerId,
+				taskScope: root.taskScope,
+				thingtime: AI_TASK_KIND,
+				'crystal.status': 'running',
+				cancelRequested: { $ne: true },
+				workerStarted: { $ne: true },
+				...(!task.rootTaskId ? { 'crystal.workflowStatus': 'running' } : {})
+			},
 			{ $set: { workerStarted: true } }
 		);
 		if (!claim.matchedCount) {
-			if (new Date(task.deadlineAt).getTime() > Date.now()) return { next: null, reason: 'running', delay: 30_000, pending: true };
-			// No verified boundary means the worker may have died inside a side effect.
-			// Preserve its receipts and require review instead of running it twice.
-			return { next: null, reason: 'needs-attention', delay: 0 };
-		}
-		await executeBackgroundTask(request, (req) => replyAsUser(req, user), task, user, JSON.stringify(input));
-		task = await things.findOne({ shareId: task.shareId, thingtime: AI_TASK_KIND });
+   task = await things.findOne({ shareId: task.shareId, thingtime: AI_TASK_KIND });
+   if (!task?.workerFinishedAt) {
+    if (!task || task.cancelRequested || task.crystal.status !== 'running') {
+     // A cancelled, unclaimed task cannot start; claimed executors must save
+     // an acknowledgment before any matching reservation can be cleared.
+     if (task?.cancelRequested && !task.workerStarted) await things.updateOne({shareId:rootId,thingtime:AI_TASK_KIND,activeWorkerRequestId:input.requestId},{$unset:{activeWorkerRequestId:''}});
+     return { next: null, reason: 'stopped', delay: 0 };
+    }
+    if (new Date(task.deadlineAt).getTime() > Date.now()) return { next: null, reason: 'running', delay: 30_000, pending: true };
+    return { next: null, reason: 'needs-attention', delay: 0 };
+   }
+   // Another delivery finished between our stale read and this claim. Fall
+   // through to acknowledged-reservation cleanup and its saved checkpoint.
+  } else {
+   await executeBackgroundTask(request, (req) => replyAsUser(req, user), task, user, JSON.stringify(input));
+   task = await things.findOne({ shareId: task.shareId, thingtime: AI_TASK_KIND });
+  }
 	}
+ // A duplicate dispatch can reserve after another executor already finished.
+ // Its persisted acknowledgment proves this matching reservation is safe to clear.
+ if (task?.workerFinishedAt) await things.updateOne({shareId:rootId,ownerId:root.ownerId,taskScope:root.taskScope,thingtime:AI_TASK_KIND,activeWorkerRequestId:input.requestId},{$unset:{activeWorkerRequestId:''}});
+	if (task?.crystal.status === 'running' && !task.cancelRequested) return new Date(task.deadlineAt).getTime() > Date.now() ? {next:null,reason:'running',delay:30_000,pending:true} : {next:null,reason:'needs-attention',delay:0};
 	if (!task || task.cancelRequested || task.crystal.status === 'stopped') return { next: null, reason: 'stopped', delay: 0 };
 	if (task.targetId && !root.targetId) await things.updateOne({ shareId: rootId, thingtime: AI_TASK_KIND }, { $set: { targetId: task.targetId } });
 	const output = task.secure instanceof Binary ? Buffer.from(task.secure.value()).toString('utf8') : '';

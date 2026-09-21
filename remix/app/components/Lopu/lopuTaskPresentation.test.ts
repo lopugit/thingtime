@@ -31,3 +31,12 @@ test('workflow completion replaces first checkpoint attention and gaps remain ac
 	row = presentLopuTasks([child, { ...root, workflowStatus: 'stopped' }])[0];
 	assert.equal(row.status, 'stopped');
 });
+
+test('Stop and uncertain worker acknowledgment remain explicit in the grouped task status', () => {
+ let row = presentLopuTasks([child, {...root,stage:'Stopping'}])[0];
+ assert.equal(row.stage,'Stopping');
+ row = presentLopuTasks([child, {...root,workflowStatus:'needs-attention',stage:'Waiting for worker to stop',error:'Conversation stays locked until acknowledgment.'}])[0];
+ assert.equal(row.status,'needs-attention');
+ assert.equal(row.stage,'Waiting for worker to stop');
+ assert.equal(row.error,'Conversation stays locked until acknowledgment.');
+});

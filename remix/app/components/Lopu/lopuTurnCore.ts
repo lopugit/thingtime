@@ -1,3 +1,4 @@
+import { lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
 import { lopuResultLinks, normalizeLopuLinks, safeLopuHref, type LopuToolLink } from '~/utils/lopuLinks';
 // Pure, DOM-free core for the Lopu chat client (PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md
 // §2.3 event protocol, §3.1 streaming reducer): the client mirror of the
@@ -111,7 +112,7 @@ export type LopuChatEvent =
 	| { type: 'confirm'; id: string; name: string; key: string; token: string; expiresAt: string; summary: string; subject?: LopuConfirmSubject }
 	| { type: 'error'; message: string; retryable: boolean }
 	| {
-			type: 'done'; continuationSafe?: boolean;
+			type: 'done'; continuationSafe?: boolean; recoveryFailures?: number;
 			assistantMessageId?: string | null;
 			messages?: ChatMessage[];
 			usage?: LopuUsage;
@@ -200,7 +201,7 @@ export type LopuTurnState = {
 	userMessageId: string;
 	userText: string;
 	continuation?: boolean;
-	continuationSafe?: boolean;
+	continuationSafe?: boolean; recoveryFailures?: number;
 	userAttachments: ChatMessage['attachments'];
 	startedAt: number;
 	meta: LopuTurnMeta | null;
@@ -474,6 +475,7 @@ export const reduceLopuTurn = (state: LopuTurnState, event: LopuChatEvent): Lopu
 				messages: Array.isArray(event.messages) ? event.messages : [],
 				usage: normalizeLopuUsage(event.usage),
 				continuationSafe: event.continuationSafe,
+				recoveryFailures: lopuRecoveryFailures(event.recoveryFailures),
 				stopReason: typeof event.stopReason === 'string' ? event.stopReason : null,
 				costMicros: microsOrNull(event.costMicros),
 				// the done event's billing wins (a fallback mid-turn can change who pays)
@@ -959,7 +961,7 @@ export const historicalToolStatus = (call: Pick<LopuMessageToolCall, 'ok' | 'sum
 export type LopuMessageMeta = {
  requestId?: string | null;
  continuation?: boolean;
- continuationSafe?: boolean;
+ continuationSafe?: boolean; recoveryFailures?: number;
 	role: 'user' | 'assistant' | null;
 	model: string | null;
 	effort: string | null;
@@ -993,7 +995,7 @@ export const lopuMessageMeta = (message: unknown): LopuMessageMeta | null => {
 	const provider = LOPU_PROVIDERS.includes(record.provider as LopuProvider) ? (record.provider as LopuProvider) : null;
 	const usageRaw = record.usage && typeof record.usage === 'object' ? (record.usage as Record<string, unknown>) : null;
 	return {
-		requestId: stringOrNull(record.requestId), continuation: record.continuation === true, continuationSafe: record.continuationSafe === true,
+		requestId: stringOrNull(record.requestId), continuation: record.continuation === true, continuationSafe: record.continuationSafe === true, recoveryFailures: lopuRecoveryFailures(record.recoveryFailures),
 		role: record.role === 'assistant' || record.role === 'user' ? record.role : null,
 		model: stringOrNull(record.model),
 		effort: stringOrNull(record.effort),

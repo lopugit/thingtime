@@ -13,7 +13,7 @@ mock.module('./chat', { namedExports: {
  streamLopuChatTurn: async function* (input: any) { providerContext = input.context; yield {type:'meta',chatId:input.chatId,userMessageId:input.userMessageId,requestId:input.requestId}; for (const event of events) yield event; yield {type:'delta',text:'Checked'}; return {text:'Checked',stopReason,provider:'fallback',toolCalls:[],usage:null}; }
 } });
 mock.module('../messenger/lopuChats', { namedExports: {
- readLopuContinuation: async () => allowContinuation ? {ok:true,meta:{}} : {ok:false,status:409,error:'Newer work'},
+ readLopuContinuation: async () => allowContinuation ? {ok:true,meta:savedMeta ?? {}} : {ok:false,status:409,error:'Newer work'},
  createLopuNoteReader: () => async () => [],
  createLopuChat: async () => ({ok:true,chat:{id:'test-chat'}}), deleteLopuChat:ok,
  getLopuChat:async()=>({ok:true,settings:{}}), loadLopuHistory:async()=>({ok:true,history:[]}), updateLopuChat:ok,
@@ -67,4 +67,31 @@ test('route persists explicit safe errors but blocks unfinished tools, confirmat
   events=toolEvents; const response=await replyAsUser(request(context),viewer); await response.text(); assert.equal(savedMeta.continuationSafe,safe);
  }
  events=[]; stopReason='fallback';
+});
+
+test('automatic requests inherit persisted error streak while explicit Continue resets it', async () => {
+ events = []; stopReason = 'error'; savedMeta = undefined;
+ let response = await replyAsUser(request(undefined), viewer);
+ await response.text();
+ assert.equal(savedMeta.recoveryFailures, 1);
+ let previousRequestId = 'page-context-test';
+ const send = async (automaticContinuation: boolean) => {
+  const requestId = await continuationRequestId('test-chat', previousRequestId);
+  const response = await replyAsUser(new Request('https://thingtime.test/api/v1/lopu/chats/reply', {
+   method: 'POST', headers: {'Content-Type':'application/json'},
+   body: JSON.stringify({chatId:'test-chat', requestId, continueFromRequestId:previousRequestId, automaticContinuation, text:'continue'})
+  }), viewer);
+  previousRequestId = requestId;
+  assert.equal(response.status, 200);
+  return (await response.text()).trim().split('\n').map(line => JSON.parse(line)).find(event => event.type === 'done');
+ };
+ for (let count = 2; count <= 5; count++) {
+  const done = await send(true);
+  assert.equal(done.recoveryFailures, count);
+  assert.equal(savedMeta.recoveryFailures, count);
+ }
+ assert.equal((await send(false)).recoveryFailures, 1, 'manual Continue starts a fresh bounded streak');
+ stopReason = 'checkpoint';
+ assert.equal((await send(true)).recoveryFailures, 0, 'successful progress resets the error streak');
+ stopReason = 'fallback';
 });

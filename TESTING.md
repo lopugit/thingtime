@@ -1,5 +1,17 @@
 # TESTING.md — per-area manual test checklists
 
+## Integration catalogue
+
+- [ ] Assert 500 unique recipes, pinned CDN URLs and schema-valid private saved
+  Things with `test:library`. Run the real browser harness, inspect every failure,
+  correct obsolete provider endpoints/defaults and rerun corrected examples.
+- [ ] At desktop and 390px widths, search for no results, reset filters, select a
+  provider/type/access filter, paginate and scroll the full page to its footer.
+  Open Try it, Source and Reuse; check wrapping and horizontal overflow.
+- [ ] Save one example, open all three private Things, run the component, and
+  verify that its Action Thing prepares the same input payload. Retry a partial
+  save using the same copy identifier; account switches start a fresh copy.
+
 ## Remote integration runtime
 
 - [ ] Run a pinned visual module and a pure transformation in Chrome. Confirm
@@ -6223,6 +6235,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Components (/components, `remix/app/components/ComponentsLibrary/`, `/api/v1/components/browse`, `/api/v1/admin/components/seed`)
 
+- [ ] Admin catalog import: regular users never see the publisher. On desktop
+      and 375px mobile, open the importer, select valid/invalid/duplicate JSON,
+      and review the count before publishing. Invalid files cannot publish;
+      progress reflects server counts; stop/account switch prevents later
+      batches and stale updates; retrying converges without duplicate Things.
+      Large UTF-8 definitions stay below the HTTP body limit, and a skipped or
+      failed batch stops with an honest partial-progress message.
 - [ ] `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`
       passes end to end (browse + filters + docs twin, admin seed gate,
       user save-version via the unified things path, react/save decoration).
@@ -7848,6 +7867,21 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
 
 ## Continuity, Builder, navigation and Things regression checks (2026-09-21)
 
+- [ ] Fail admission before scheduler dispatch, then wait for its lease or Stop:
+      a new send becomes possible and a delayed worker cannot execute. Abandon a
+      claimed child: saved receipts survive and uncertainty requires attention; the
+      conversation claim remains held until worker completion is acknowledged.
+      Hold a worker across Stop plus redelivery: no new worker starts, late
+      receipts persist, and acknowledged completion releases the claim once.
+      Delay a competing finalizer past acknowledgment: terminal status cannot
+      regress. Redeliver an already-finished child: no stale reservation remains.
+- [ ] Reach the local safe-error retry limit, then poll and reload. Automatic
+      recovery stays paused across both; explicit manual Continue can retry. Switch
+      accounts while the continuation identity hashes: no stale recovery sends.
+- [ ] Viewing an interactive webpage attached to a feed/post/Thing never makes
+      it Lopu's active editable page. A real builder target remains active,
+      explicit edits to the attachment are refused, and local controls respond.
+
 - [ ] Choose each Lopu management mode from the send menu and settings; confirm
       the choice survives reopening that chat. Close/reload at a safe checkpoint
       or recoverable error: work resumes once without a synthetic prompt bubble.
@@ -7887,3 +7921,41 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
       both live capability manifests. Record baseline typecheck errors separately.
 - [ ] Graphify can refresh a read-only snapshot through a writable private copy
       without mutating the snapshot; run `node --test scripts/graphify-cas.test.mjs`.
+
+## Sign-in hint clearance
+
+- [ ] On signed-out desktop, 390px and 320px mobile pages, show both the preview
+  sign-in hint and account suggestion card. Keep default Lopu/DevKit launchers
+  visible; Not now and account controls must remain unobscured and clickable.
+  Scroll long hints on a short viewport; the card must stay within the viewport.
+
+## Functional catalog controls (2026-09-21)
+
+- [ ] At `/tests/functional-demos.html`, use the first component's text field,
+      checkbox, Toggle, Increase and range. Its visible summary changes; the
+      second component does not. A parent render preserves the edit. Reset
+      restores all visible fields and the summary. Open More and scroll to the
+      bottom at desktop and 390px without overlap or horizontal overflow.
+- [ ] In guestbook, RSVP and calculator demos, change the native form fields.
+      Required, email and number constraints block invalid submits. Confirm
+      shows the actual values; cancel writes nothing. A successful first run
+      installs its suite and shows the result without navigating away.
+- [ ] Contact/newsletter demos and site CTAs create private saved Things with
+      inspectable links. They claim no external delivery. Use template installs
+      its required suite before copying; the copied page remains functional
+      after reload. Automatic dependency installation preserves customized parts. Explicit reinstall refreshes controls without duplicating suite parts or overwriting saved data.
+      Run `TT_FUNCTIONAL_TEST_URL=http://127.0.0.1:<port> node --import tsx --test
+      app/api/utils/webpages/functionalDemos.integration.test.ts` from `remix/`
+      for real API proof (local server only; exact fixture Things are cleaned up).
+- [ ] Local controls work signed out on curated demo live panes. Server Actions
+      still require sign-in and remain owner-scoped. Browse thumbnails and
+      stranger-authored controls remain inert. Switching account, component or
+      defaults does not reveal the preceding component's local values/result.
+- [ ] Video demos use a native player; changing its URL changes the actual src.
+      Play/pause, seeking, volume and fullscreen work for a compatible URL.
+      Source URLs and markup continue through the existing safety allowlists.
+- Native catalog controls: a dialog opens only after a click, traps focus, closes
+  with Escape/Close and restores focus; a nested local Action remains within its
+  component. A countdown starts, pauses, resets, catches up after delayed ticks
+  and announces completion without affecting another instance. Repeat at phone
+  width; drawers are flush to the left/top/bottom and keep the close control usable.

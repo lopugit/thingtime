@@ -55,9 +55,31 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Things, recognize legacy folders, preserve scalar previews and expose broader
   management/rename controls. Action-run delivery defaults off; unlisted social
   previews retain context without indexing. Fix Nitro shell asset registration
-  and writable Graphify working copies. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
+  and writable Graphify working copies. Pre-merge review also hardens abandoned
+  server task cancellation, workflow admission recovery and persisted local
+  retry limits. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
   for validation and device/deployment limits.
 
+
+- 2026-09-21 — **Codex (AI)**: Added an admin catalog importer on `/components`
+  with whole-file schema validation, capability negotiation, bounded paced
+  batches, cancellation and real publication counts. Functional demo runtime
+  PR #870 is production-live; all 322 built-in demos and 18 suites are seeded.
+
+- 2026-09-21 — **Codex (AI)**: Keep mobile sign-in hints above the floating
+  assistant and DevKit buttons, with bounded scrolling for short viewports.
+  Verified while testing the remote integration catalogue preview.
+
+- 2026-09-21 — **Codex (AI)**: Enable 500 remote integration examples across 42
+  libraries/services with searchable `/library` pages, editable demos, source,
+  provider account/key entry and private reusable Things. The catalogue extends
+  the previously delivered isolated runtime with capability 1.1.0. [Acceptance notes](../PRs/869-codex-third-party-catalogue-500-remote-integration-examples.md).
+
+- 2026-09-21: Make demo forms run real Actions, preserve confirmation through
+  composed pages, show results inline, and support bounded local component
+  controls. Site forms and requests save private Things; template copying
+  installs their dependencies. Added responsive browser regression coverage.
+  [Validation notes](../PRs/870-codex-functional-thingtime-demos-functional-demo-controls.md).
 - 2026-09-21 — **Codex (AI)**: Add the curated remote integration runtime, opaque
   preview documents, cancellable workers, credential-safe read-only provider
   requests, capability negotiation and reusable Component Thing rendering.

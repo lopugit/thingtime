@@ -1,4 +1,4 @@
-import { continuationContext, continuationRequestId, type LopuManagement } from '~/api/utils/lopu/continuationCore';
+import { continuationContext, continuationRequestId, LOPU_MAX_RECOVERY_FAILURES, type LopuManagement } from '~/api/utils/lopu/continuationCore';
 import { bindLopuQueue, pauseLopuQueue } from './lopuQueueStore';
 import { LOPU_CONTINUE_PROMPT, shouldAutoContinueLopuReply } from './lopuRecovery';
 import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
@@ -1002,8 +1002,8 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
   const result = await sendLopuMessagePart(text, options, continuation);
   if (!result.next || generation !== accountGeneration) return result;
   if (state.turns[result.next.continuation.previousRequestId]?.stopReason === 'error') {
-   recoveryFailures++;
-   if (recoveryFailures >= 5) return result;
+   recoveryFailures = Math.max(recoveryFailures + 1, state.turns[result.next.continuation.previousRequestId]?.recoveryFailures ?? 0);
+   if (recoveryFailures >= LOPU_MAX_RECOVERY_FAILURES) return result;
    const recoveringChatId = result.next.continuation.chatId;
    setState(current => ({ recoveryChatIds: [...new Set([...current.recoveryChatIds, recoveringChatId])] }));
    await new Promise(resolve => setTimeout(resolve, Math.min(30_000, 2000 * 2 ** (recoveryFailures - 1))));
@@ -1037,6 +1037,9 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	const startingPath = typeof window === 'undefined' ? null : window.location.pathname;
 	const foreground = () => state.activeChatId === (turn.chatId || chatId) && (startingPath === null || window.location.pathname === startingPath);
 	const requestId = continuation ? await continuationRequestId(chatId!, continuation.previousRequestId) : options.requestId ?? uuid();
+ // Computing a continuation id is asynchronous; an account/source change
+ // or Stop during that gap must not dispatch through a newly bound client.
+ if (state.userId !== userId || generation !== accountGeneration || !client || (continuation && stoppedRequests.has(continuation.previousRequestId))) return {ok:false,error:'This continuation was cancelled before sending.',text:trimmed};
 	const settings = mergeSettingsPatch(options.settings || {});
 	if (!continuation && !options.chatId && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);

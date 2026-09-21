@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { useActionRunConfirm } from '~/components/Actions/ActionRunConfirm';
 import type { TtActionConfirmHandler, TtActionUnownedHandler } from '~/components/Actions/useTtActionClicks';
-import { installSuite, installSuiteOnServer, suiteKeyFromActionKey } from '~/components/Builder/installSuite';
+import { installSuiteOnServer, suiteKeyFromActionKey } from '~/components/Builder/installSuite';
 import { LiveTemplate, useComponentArgValues, useThingSource } from '~/components/Builder/liveComponent';
 import type { ThingSourceBinding } from '~/components/Builder/liveComponent';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
@@ -612,12 +612,9 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   // the catalog: a Link, so the component page stays where they were
   const [installedHref, setInstalledHref] = React.useState<string | null>(null);
 
-  // Install the suite for the viewer. App suites go through the one-request
-  // idempotent server install (every page keeps its key, so /p/<key> now
-  // serves the viewer's own copy); the demo suites keep the part-by-part
-  // client install and open the personal copy by id.
+  // All suites install idempotently and retain their keyed private pages.
   const installForViewer = React.useCallback(
-    async (candidate: string): Promise<{ href: string | null } | null> => {
+    async (candidate: string, onlyMissing = false): Promise<{ href: string | null } | null> => {
       const target = ALL_SUITES.find((entry) => entry.key === candidate) || null;
       if (!target) return null;
       if (!user?.id) {
@@ -626,26 +623,12 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
         return null;
       }
       lopuRef.current({ title: `Installing ${target.emoji} ${target.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
-      if (target.app) {
-        const installed = await installSuiteOnServer(target.key);
-        const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
-        lopuRef.current({
-          title: `${target.emoji} ${target.title} installed ✨`,
-          description: `${installed.created} things created · ${installed.updated} refreshed — this component now runs your own programs.`,
-          status: 'success',
-          duration: 6000,
-          link: { label: 'Open your copy', href }
-        });
-        return { href };
-      }
-      const installed = await installSuite((payload) => apiRef.current.v1.things.create(payload), target, { seeded: true });
-      const href = `/p/${encodeURIComponent(installed.pageId)}`;
+      const installed = await installSuiteOnServer(target.key, { onlyMissing });
+      const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
       lopuRef.current({
         title: `${target.emoji} ${target.title} installed ✨`,
-        description: 'This component now runs your own programs.',
-        status: 'success',
-        duration: 6000,
-        link: { label: 'Open your copy', href }
+        description: `${installed.created} things created · ${installed.updated} refreshed.`,
+        status: 'success', duration: 6000, link: { label: 'Open your copy', href }
       });
       return { href };
     },
@@ -660,7 +643,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
       const candidate = suiteKeyFromActionKey(action, ALL_SUITES) || suiteKey;
       if (!candidate) return false;
       try {
-        const outcome = await installForViewer(candidate);
+        const outcome = await installForViewer(candidate, true);
         if (!outcome) return false;
         scheduleHandoff(() => {
           setInstalledHref(outcome.href);
