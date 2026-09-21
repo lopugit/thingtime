@@ -49,6 +49,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21 — **Codex (AI)**: Keep mobile sign-in hints above the floating
+  assistant and DevKit buttons, with bounded scrolling for short viewports.
+  Verified while testing the remote integration catalogue preview.
+
 - 2026-09-21 — **Codex (AI)**: Add the curated remote integration runtime, opaque
   preview documents, cancellable workers, credential-safe read-only provider
   requests, capability negotiation and reusable Component Thing rendering.
