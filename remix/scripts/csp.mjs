@@ -110,3 +110,15 @@ export const designBundlesCsp = serialize({
 // /authorize must additionally never render inside a frame (UI-redress
 // hardening) — same policy plus frame-ancestors 'none'.
 export const authorizeCsp = `${prodCsp}; frame-ancestors 'none'`;
+
+// Dedicated opaque-origin document for opted-in library demos. The app shell
+// keeps its original policy. No credentials, same-origin fetches, navigation,
+// popups, forms or top-level access are granted to downloaded packages.
+export const librarySandboxCsp = serialize({
+  'default-src': ["'none'"],
+  'script-src': ["'self'", "'unsafe-inline'", 'https://esm.sh', 'blob:'],
+  'worker-src': ['blob:'],
+  'connect-src': ['https://esm.sh', 'https://api.github.com', 'https://api.open-meteo.com', 'https://pokeapi.co', 'https://jsonplaceholder.typicode.com', 'https://openlibrary.org', 'https://hacker-news.firebaseio.com', 'https://rickandmortyapi.com', 'https://api.tvmaze.com'],
+  'style-src': ["'unsafe-inline'"], 'img-src': ['data:', 'blob:'], 'font-src': ['data:'],
+  'frame-src': ["'self'"], 'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts']
+});
