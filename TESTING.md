@@ -2,6 +2,10 @@
 
 ## Remote brightness and files
 
+- [ ] A running macOS app with an empty or whitespace-only name must use its
+  bundle identifier in the heartbeat. Blank identifiers are skipped before the
+  64-app limit; the full state update must still reach the server.
+
 - [ ] On a paired Apple Silicon Mac, change main-display and per-display
   brightness, verify the real panel and next telemetry value, then restore it.
   A display without a usable setter stays unavailable. Existing pairings gain
