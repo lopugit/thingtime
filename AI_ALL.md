@@ -479,6 +479,41 @@ points, not the individual files.
   and Vercel reads `VERCEL_GIT_COMMIT_REF` at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 
+## Native app changes must be deployed on the development machine
+
+- After any update that affects the Thingtime Mac app, Thingtime Recovery,
+  Commander, or another native app, rebuild every affected app from the final
+  changed source, reinstall it on the machine where development is being done,
+  and start it before handing the task back. This includes changes to bundled
+  UI/assets, dependencies, build settings, helpers and daemons. Local delivery
+  is part of completing the change; a commit, PR, CI build or cloud release
+  alone does not make the changed app ready for immediate testing and use.
+- Read the affected app's local instructions and use its canonical build,
+  test, signing and installation workflow. Run the required checks before
+  replacing the installed app; preserve the previous working installation if
+  the build or verification fails.
+- On macOS, install the verified runnable bundle into
+  `~/Applications/<AppName>.app`, creating `~/Applications/` if needed. Use
+  `ditto` or the app's equivalent installer to preserve the bundle and signature,
+  replace only that app, and retain its stable bundle/signing identity, settings,
+  user data and existing privacy permissions. Verify the installed signature
+  with `codesign --verify --deep --strict` and check its executable.
+- Quit the affected old app cleanly, reinstall, then launch the installed copy.
+  Restart affected helpers/daemons through their canonical lifecycle so they
+  also run the new build without duplicate processes. Preserve unsaved work;
+  do not force-quit an app with unsaved user data to complete deployment.
+- Confirm that the running executable comes from the installed location and
+  matches the rebuilt version. Open the changed app surface and perform the
+  relevant smoke check, including helper health where applicable. For native
+  targets that cannot run directly on the development host, install and launch
+  the rebuilt app in the local supported simulator or connected test device,
+  and state which target was verified.
+- Report the build-output path, installed path, running build and smoke-check
+  result. If local build, installation, launch or verification is blocked,
+  identify the exact blocker and remaining step; do not claim the app is locally
+  deployed or ready for use. Keep existing signing and explicit privacy-consent
+  requirements in force.
+
 ## Commander macOS distribution signing
 
 - For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
