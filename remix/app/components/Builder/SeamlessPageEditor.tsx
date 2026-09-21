@@ -1,3 +1,4 @@
+import { initialPageAudience } from './seamlessMode';
 import React from 'react';
 import {
 	Box,
@@ -89,7 +90,7 @@ export default function SeamlessPageEditor({
 	);
 	const [drawerOpen, setDrawerOpen] = React.useState(() => window.innerWidth >= 768);
 	const [pageName, setPageName] = React.useState(draft.resolved?.page?.crystal?.name || 'Untitled page');
-	const [acl, setAcl] = React.useState<string[]>(draft.resolved?.page?.acl || ['tt:user']);
+	const [acl, setAcl] = React.useState<string[]>(() => initialPageAudience(draft.resolved?.source, draft.resolved?.page?.acl));
 	const [preset, setPreset] = React.useState('full');
 	const [running, setRunning] = React.useState(false);
 	const [openControl, setOpenControl] = React.useState<'mode' | 'viewport' | null>(null);

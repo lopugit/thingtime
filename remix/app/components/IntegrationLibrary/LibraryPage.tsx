@@ -1,3 +1,5 @@
+import { libraryBuilderHref, libraryExamplePageId, libraryServicePageId } from '~/library/builderLinks';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import React from 'react';
 import { Badge, Box, Button, Flex, Input, Select, SimpleGrid, Text } from '@chakra-ui/react';
 import { Link, useParams, useSearchParams } from 'react-router';
@@ -61,7 +63,11 @@ function Detail({ example }: { example: LibraryExample }) {
 		  }\n${JSON.stringify({ url: example.request!.url, params: example.request!.params || {}, input: example.input }, null, 2)}`;
 	return (
 		<>
-			<Link to="/library">← All 500 examples</Link>
+			<Flex gap={3} flexWrap="wrap">
+				<Link to="/library">← All 500 examples</Link>
+				<Link to={libraryBuilderHref(libraryServicePageId(example.provider))}>All {example.provider} in Builder</Link>
+				<Link to={libraryBuilderHref(libraryExamplePageId(example.id))}>Open example in Builder →</Link>
+			</Flex>
 			<PageHeader eyebrow={`${example.provider} / ${example.category}`} title={example.title} variant="ink" subtitle={example.description} />
 			<Flex gap={2} flexWrap="wrap">
 				<Badge>{kinds[example.kind]}</Badge>
@@ -162,6 +168,20 @@ export default function LibraryPage() {
 	const { id } = useParams();
 	const user = useCurrentUser();
 	const [params, setParams] = useSearchParams();
+	const [seeding, setSeeding] = React.useState(false);
+	const lopu = useLopu();
+	const seedBuilder = async () => {
+		setSeeding(true);
+		try {
+			await requireThingtimeCapability('api.admin-webpages-seed-demos', '1.2.0');
+			const response = await fetch('/api/v1/admin/webpages/seed-demos?catalog=integrations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+			const data = await response.json();
+			if (!response.ok || !data.ok || data.skipped) throw new Error(data.error || 'Some pages could not be prepared. Check the seed report.');
+			lopu({ title: 'Builder library ready', description: `${data.created} new · ${data.refreshed} refreshed · ${data.unchanged} unchanged Things`, status: 'success' });
+		} catch (error) {
+			lopu({ title: 'Could not prepare builder pages', description: error instanceof Error ? error.message : 'Please try again.', status: 'error' });
+		} finally { setSeeding(false); }
+	};
 	const q = params.get('q') || '';
 	const category = params.get('category') || '';
 	const kind = params.get('kind') || '';
@@ -196,6 +216,10 @@ export default function LibraryPage() {
 	const example = id ? getLibraryExample(id) : null;
 	return (
 		<PageShell width={1180}>
+			<Flex gap={3} flexWrap="wrap">
+				<Button as={Link} to={libraryBuilderHref()} size="sm" variant="outline">Open builder index →</Button>
+				{user?.isAdmin && <Button size="sm" variant="ghost" onClick={seedBuilder} isLoading={seeding}>Prepare builder pages</Button>}
+			</Flex>
 			{id ? (
 				example ? (
 					<Detail key={`${id}:${user?.id || 'anonymous'}`} example={example} />

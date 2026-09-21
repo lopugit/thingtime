@@ -180,3 +180,11 @@ lint passed with zero errors; full TypeScript matches the 89-diagnostic clean-ma
 baseline exactly. The 63-pass native simulator result remains applicable because
 the native implementation did not change during these web integrations. Exact
 head CI, preview and production verification are recorded on the PR.
+
+Main integration through `31bbf2779` preserves PR #875's integration builder
+index, provider/example pages, private initial audience and bootstrap capacity
+repair. The unified Commander modal retains its compact navigation trigger;
+main's long-account-name truncation and builder library links remain in place.
+The refreshed production build, Vercel-output verification and TypeScript ratchet
+passed (89 existing diagnostics). The complete canonical unit suite passed
+3,554 tests with zero failures and six explicit skips after this integration.

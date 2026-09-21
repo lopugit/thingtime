@@ -1,3 +1,4 @@
+import { libraryBuilderHref } from '~/library/builderLinks';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
@@ -92,7 +93,8 @@ const AccountPagesList = () => {
 				title="Builder 🧱"
 				subtitle="Build webpages from Thingtime components and actions — manage their settings, privacy and content in one place."
 				after={
-					<Flex gap={2} alignItems="center" flexWrap="wrap">
+					<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
+						<Button as={Link} to={libraryBuilderHref()} size="sm" variant="outline">Integration library</Button>
 						<Button as={Link} to="/docs/builder" size="sm" variant="outline">Builder docs</Button>
 						<Button as={Link} to="/builder/demos" size="sm" variant="outline" data-testid="builder-demo-library">
 							Demo library 🧱

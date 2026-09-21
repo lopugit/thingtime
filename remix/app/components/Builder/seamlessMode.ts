@@ -19,3 +19,8 @@ export const pageRuntimeSearch = (pathname: string, search: string): string => {
 	}
 	return params.toString();
 };
+
+// A shared/system template starts a new owner-private copy. Editing an owned
+// page retains its chosen audience. The user can explicitly share the copy.
+export const initialPageAudience = (source: 'user' | 'system' | null | undefined, acl?: string[]): string[] =>
+	source === 'user' && acl?.length ? acl : ['tt:user'];

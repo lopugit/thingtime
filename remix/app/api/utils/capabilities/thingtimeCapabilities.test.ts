@@ -394,7 +394,7 @@ test('Thing discussions and linked post references negotiate additive contracts 
 test('functional demo capabilities advertise compatible catalog and install contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.com');
   for (const feature of ['api.webpages-demos', 'api.webpages-suites-install', 'api.admin-webpages-seed-demos']) {
-    assert.equal(manifest.features[feature]?.version, '1.1.0');
+    assert.equal(manifest.features[feature]?.version, feature === 'api.admin-webpages-seed-demos' ? '1.2.0' : '1.1.0');
     assert.ok(capabilitySatisfies(manifest.features[feature].version, '1.1.0'));
   }
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);
