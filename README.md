@@ -3706,3 +3706,29 @@ credentialed requests. The endpoint is bounded to 20 requests/minute/account,
 24 KiB request bodies, 16 KiB inputs, 256 KiB upstream responses and a 12-second
 upstream timeout. Run `corepack pnpm --dir remix run test:library` for boundaries,
 credential redaction, reusable Thing validation and capability coverage.
+
+### The 500-example integration library
+
+Browse `/library` for 500 executable recipes across 42 libraries/services: 380
+transformation actions, 45 visual components and 75 API Things. There are 468
+credential-free examples and 32 examples with provider-specific API-key entry.
+Search, category/provider/type/access filters and pagination keep the catalogue
+small on screen; selecting a card shows editable inputs, live output, source and
+links to official docs. Browsing performs no integration-provider requests.
+
+Save a private copy to create sample data, an input-preparation Action Thing and
+a runnable Component Thing. Add `IntegrationExample` to builder markup with a
+curated `exampleId` and optional `inputJson`; it never accepts code or keys in
+markup. Preparation actions return inputs; remote execution occurs when Run is
+pressed in the component. Keys are entered separately for each open demo.
+
+API capability `api.library-request` 1.1.0 adds the curated credentialed provider
+registry. Each provider's account link explains its key and access requirements.
+Credentialed examples use only read-only GETs; Stripe is test-mode only. Real
+account authorization/quota behavior requires the visitor's own valid key.
+
+For browser acceptance, open `/scripts/library-browser-check.html` on the Vite
+dev server and press **Run all public examples**. The harness executes only
+credential-free catalogue defaults, four at a time, through the actual isolated
+runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
+is not copied into production static assets. Provider outages can change results.

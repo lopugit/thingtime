@@ -1,12 +1,16 @@
 # TESTING.md — per-area manual test checklists
 
-## Sign-in hint clearance
+## Integration catalogue
 
-- [ ] On signed-out desktop, 390px and 320px mobile pages, show both the preview
-  sign-in hint and account suggestion card. Keep default Lopu/DevKit launchers
-  visible; Not now and account controls must remain unobscured and clickable.
-  Scroll long hints on a short viewport; the card must stay within the viewport.
-
+- [ ] Assert 500 unique recipes, pinned CDN URLs and schema-valid private saved
+  Things with `test:library`. Run the real browser harness, inspect every failure,
+  correct obsolete provider endpoints/defaults and rerun corrected examples.
+- [ ] At desktop and 390px widths, search for no results, reset filters, select a
+  provider/type/access filter, paginate and scroll the full page to its footer.
+  Open Try it, Source and Reuse; check wrapping and horizontal overflow.
+- [ ] Save one example, open all three private Things, run the component, and
+  verify that its Action Thing prepares the same input payload. Retry a partial
+  save using the same copy identifier; account switches start a fresh copy.
 
 ## Remote integration runtime
 
@@ -7860,6 +7864,12 @@ in `thingtime-media-gallery-profile` (Vite 18420 / HMR 18421 / Nitro 18422).
 Tailscale/Funnel is unavailable because its installed launcher points to a
 missing `/Applications/Tailscale.app`; no public mapping was changed.
 
+## Sign-in hint clearance
+
+- [ ] On signed-out desktop, 390px and 320px mobile pages, show both the preview
+  sign-in hint and account suggestion card. Keep default Lopu/DevKit launchers
+  visible; Not now and account controls must remain unobscured and clickable.
+  Scroll long hints on a short viewport; the card must stay within the viewport.
 
 ## Functional catalog controls (2026-09-21)
 
