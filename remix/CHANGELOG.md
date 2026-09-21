@@ -56,6 +56,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   failed transfers and keep file bytes out of device history/events. Verified
   real brightness round-trip, repeated native/web tests, a full web build and
   desktop/mobile browser states. [QA and rollout](../PRs/878-codex-remote-device-files-fix-brightness-and-shared-file-browser.md).
+- 2026-09-21 — **Codex (AI)**: Production franchise follow-up: restore saved
+  comment attachments in workspace galleries, clear committed upload batches,
+  and show safe Google Places setup or gateway error guidance. Contracts:
+  api.things 1.24.0 and api.builder-workspaces 1.0.1.
+  [PR #876 details](../PRs/876-codex-franchise-production-polish-media-galleries-and-places-errors.md).
 
 - 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action. Long account names now truncate in the mobile header, with a compact search trigger. Retired a stale Connections lookup that could block seeding at the MongoDB index limit. [PR #875 notes](../PRs/875-codex-library-builder-pages-integration-builder-pages.md).
 - **2026-09-20 · Claude (AI):** Developer-experience follow-ups. Filesystem

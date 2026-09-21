@@ -2,7 +2,7 @@ import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapa
 import { FILESYSTEM_CHUNK_BYTES, FILESYSTEM_MAX_BYTES, normalizeFilesystemResult, type FilesystemEntry, type FilesystemInput, type FilesystemResult } from '~/api/utils/devices/deviceFilesystemCore';
 import type { ThingsThing } from './thingsCore';
 
-export const FILESYSTEM_REQUIREMENTS = { 'api.devices-commands': '1.9.0', 'api.devices-node-commands': '1.9.0', 'api.devices-node-state': '1.9.0', 'api.attachment-uploads': '1.5.0', 'api.things-bulk': '1.5.0', 'api.things': '1.24.0', 'api.attachment-upload-complete': '1.4.0', 'api.attachment-content': '1.11.0' } as const;
+export const FILESYSTEM_REQUIREMENTS = { 'api.devices-commands': '1.9.0', 'api.devices-node-commands': '1.9.0', 'api.devices-node-state': '1.9.0', 'api.attachment-uploads': '1.5.0', 'api.things-bulk': '1.5.0', 'api.things': '1.25.0', 'api.attachment-upload-complete': '1.4.0', 'api.attachment-content': '1.11.0' } as const;
 export const requireFilesystemCapabilities = () => Promise.all(Object.entries(FILESYSTEM_REQUIREMENTS).map(([feature, version]) => requireThingtimeCapability(feature, version)));
 export type FileLocation = { deviceId: string; path: string; folderId?: undefined; label?: undefined } | { deviceId?: undefined; folderId: string | null; label?: string; path?: undefined };
 export type FileClipboard = { ownerId: string; mode: 'copy' | 'cut'; location: FileLocation; items: ThingsThing[] };
