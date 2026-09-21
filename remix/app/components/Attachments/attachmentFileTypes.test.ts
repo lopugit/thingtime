@@ -78,7 +78,7 @@ test('profile and inline-thumbnail pickers match their own validators', () => {
 	const { mimes, heic } = acceptParts(inline.accept);
 	assert.deepEqual(mimes, [...PROFILE_THUMBNAIL_CONTENT_TYPES]);
 	assert.ok(heic);
-	for (const rejected of ['image/avif', 'image/gif']) assert.ok(!mimes.includes(rejected), `${rejected} must not be offered`);
+	for (const rejected of ['image/avif', 'image/gif']) assert.ok(!(mimes as readonly string[]).includes(rejected), `${rejected} must not be offered`);
 	assert.equal(inline.label, 'JPEG (.jpg, .jpeg), PNG, WebP, HEIC, HEIF');
 });
 

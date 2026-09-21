@@ -2,6 +2,7 @@ import { createClaudeOAuthClient } from '../ai/claudeOAuth';
 import OpenAI, { toFile } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAttachmentDownload } from '../attachments/attachments';
+import { fetchStoredObject } from '../attachments/localAttachmentStorage';
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
 import {
 	resolveAiPreferredAnthropicChoice,
@@ -68,7 +69,8 @@ export const readRecordingBytes = async (ownerId: string, attachmentId: string):
 	if (!AUDIO_TYPES.has(download.contentType) || download.size < 1 || download.size > RECORDING_MAX_AUDIO_BYTES) {
 		throw new RecordingFailure('format');
 	}
-	const response = await fetch(download.url, { redirect: 'error', signal: AbortSignal.timeout(30_000) }).catch(() => {
+	// Signed object URLs: real S3 over the network, the local stand-in in-process.
+	const response = await fetchStoredObject(download.url, { redirect: 'error', signal: AbortSignal.timeout(30_000) }).catch(() => {
 		throw new RecordingFailure('download');
 	});
 	if (!response.ok || !response.body) throw new RecordingFailure('download');

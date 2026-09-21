@@ -1,5 +1,7 @@
 # TESTING.md — per-area manual test checklists
 
+- Connections/index rollout: keep external-source authorization and private-subspace membership fences after merging shared readers. Stub DNS alongside fetch in outbound redirect tests so machine-local `.test` resolution cannot bypass credential-stripping assertions.
+
 ## Integration catalogue
 
 - [ ] As an admin, Prepare builder pages twice: the first call creates the
@@ -1637,6 +1639,20 @@ email whose link points at the attacker.
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
       `npm run worktree-setup`: every direct Remix dependency is linked and
       `npm --prefix remix run ensure-deps -- --check` passes.
+- [ ] Fresh-worktree bootstrap (`remix/scripts/worktree-bootstrap.cjs`): create
+      a linked worktree (`git worktree add ../tt-check -b tmp/check`), confirm
+      the tracked `post-checkout` hook wrote `worktree-bootstrap.log` in the Git
+      directory and that `remix/node_modules/.pnpm`, missing env files copied
+      from the main checkout (the `.env*` entries of `.worktreeinclude`), and
+      `.claude/launch.json` (entries `thingtime-web-<derived port>` attaching to
+      the PM2 stack and `thingtime-web-<derived port>-foreground`) exist;
+      `git config --worktree --get core.hooksPath` prints `.githooks`.
+      `npm run worktree-bootstrap` a second time changes nothing. Start
+      `npm run worktree-setup` while the background bootstrap is still
+      installing: the second run prints "Another dependency install is
+      running; waiting" and both finish with a complete `node_modules`
+      (`remix/node_modules/.thingtime-install.lock` is gone afterwards). Remove
+      the worktree afterwards.
 - [ ] With the pnpm virtual store present but top-level `eslint` and `vite`
       links removed, run `npm run worktree-setup`: both links are restored
       without copying dependency files from another checkout.
@@ -1863,6 +1879,20 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
+      with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
+      `remix/.env` and the dev stack restarted, run
+      `node remix/scripts/seed-fixture.mjs create --files 3 --name demo`, enable
+      uploads (admin login flags or `ADMIN_USERNAMES` + `resume`), then confirm
+      `remix/.local-attachments/objects/<id>/<version>.bin|.json` exist, the
+      post page renders the images (WebP `width=` previews return 200), the
+      content endpoint 302s to a signed `/api/v1/attachments/local-object` URL
+      that streams the bytes (Range → 206), the download-all archive unzips
+      cleanly, and `cleanup` deletes the post/folder and every object file.
+      An unsigned or expired `local-object` URL answers 403; with the variable
+      unset every request answers 404; the module throws when `VERCEL` is set.
+      `npm --prefix remix run test:attachments` covers the multipart, copy,
+      signature and traversal cases without a server.
 - [ ] Download all (PR: download-all attachments): a post with two or more
       stored attachments shows a `Download all · N files · size` pill under its
       gallery/file rows (single-file posts and linked-only galleries show none).
@@ -3237,6 +3267,11 @@ email whose link points at the attacker.
 - [ ] Run `npm run test:graphify-cas`. Confirm Graphify-only edits leave the
       source fingerprint unchanged, source edits change it, and computing a
       fingerprint leaves the real staged index byte-for-byte unchanged.
+- [ ] Snapshot immutability: after `scripts/graphify update .`,
+      `stat -f %Lp graphify-out/snapshots/v1/*/*/GRAPH_REPORT.md` prints `444`;
+      running the upstream `graphify update` (or an old hook) through the root
+      alias fails with EACCES instead of dirtying the committed snapshot, and
+      `git status` stays clean.
 - [ ] Finalize the same portable output twice and confirm it deduplicates to
       one artifact path. Finalize two valid variants for one source fingerprint
       and confirm both remain immutable while the deterministic selector picks
@@ -5965,7 +6000,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       its own sub-directory named after the post, recordings sit at the folder
       level, and children another viewer cannot see are excluded (share the
       folder as hidden, open its `/api/v1/attachments/archive?id=<folder>` URL
-      logged out: only public/unlisted children's files appear). The item ⋯ /
+      logged out: only public children's files appear — an unlisted child opens
+      by its own exact id and is never enumerated through a folder). The
+      manifest's `skipped` count is non-zero only for the folder's owner or an
+      administrator; a stranger's manifest says `0` even when files were
+      withheld, and an empty folder and a fully-withheld folder answer the same
+      404 message. Browsing back into an unchanged folder fires no second
+      manifest probe (Network tab); adding or deleting a post in it does. The item ⋯ /
       right-click menu on folders, posts, pages and media shows a **Files**
       section (`Download all files`, `Share download link`); multi-selections
       hide it. Downloading a folder with nothing downloadable toasts the server
@@ -6805,6 +6846,67 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
 
+## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
+
+Automated first: `pnpm --dir remix run verify:connections` (94 real-API
+checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
+
+- [ ] `/connections` renders the provider catalog signed-out with a quiet
+      sign-in card; signed in, connecting the Demo provider adds it under
+      "Your connections" with Feed + Unlink working, and reconnecting the
+      same handle reports "Already connected".
+- [ ] Connecting the same external identity from a SECOND Thingtime account
+      converges on the same external account (many-to-many): both accounts
+      read the same posts through their own links, and each earns its own
+      acl grant even when the other account's sync fired first (the shared
+      per-account cooldown must never strand the second user's grants).
+- [ ] `/connections/feed` merges all connections newest-first with per-
+      connection tabs; external posts render through the native PostCard
+      with the third-party author (never "Anonymous"), comments and
+      reactions work natively, and `/post/<ext-post-…>` permalinks resolve
+      with aggregated counts.
+- [ ] A "warn" AI feed filter veils matched posts behind the ⚠️ card with a
+      working "Show anyway" button (reason + source line shown); a "hide"
+      filter drops them with the "N posts hidden" summary; pausing a filter
+      stops matching; verdicts stay stable across reads (cached) and editing
+      the prompt re-classifies.
+- [ ] SSO connect: unconfigured providers show "Needs setup" (disabled);
+      configured ones show "Sign in with <name>" and redirect to the
+      provider's own login; the callback lands on /connections with the
+      "Account linked" toast (or the oauthError toast on decline/forged
+      state); the fields-based POST /api/v1/connections always refuses SSO
+      providers with a pointer at oauth/begin; no token material ever appears
+      in any API response or client store.
+- [ ] Virtual YouTube list: searching a channel ID/URL/@handle returns a
+      Subscribe row keylessly (name search only with YOUTUBE_API_KEY, and the
+      hint line says so); first Subscribe auto-creates the "My YouTube
+      channels" connection; the connection row shows "N channels"; Unsubscribe
+      removes just that channel; the merged uploads feed interleaves channels
+      newest-first; two users' lists stay independent while a shared video
+      stays ONE post (one external-post-source row per sourcing account) with
+      unified comments.
+- [ ] Feed deepening: scrolling past the synced end (or "Fetch older from
+      your apps") pulls older provider pages without resetting scroll
+      position, and repeated deepens stop at the per-account depth cap.
+- [ ] Personal-provider posts stay invisible (404) to non-linked users;
+      `ext-` shareIds are refused on generic create/update; the connections
+      kinds never appear in the generic /things browser; unlink removes only
+      the caller's link and the shared account retires with its last link.
+- [ ] Relational source membership (regression — the post doc must never grow
+      per linker): with two Thingtime accounts linked to ONE external
+      identity, a synced post's `acl` is exactly the constant `tt:extsourced`
+      (personal) or `tt:all` (public) — never `tt:extacct/<accountId>`, which
+      would both grow without bound on a viral post and disclose the other
+      members' external-account ids through `PublicPost.acl`. The post carries
+      no `sourceIds` array; membership is one `external-post-source` row per
+      (post, account). Unlinking revokes that viewer instantly while every
+      other linked member still sees the post, and a feed page never shows the
+      same post twice even when two of the viewer's own accounts source it.
+- [ ] Migration `relational-external-post-sources` (admin → /docs/schemas):
+      dry run reports the pending legacy posts, the live run creates the
+      membership rows + rewrites the acl + unsets `sourceIds`, a legacy
+      `tt:extacct/` post stays visible to its linked member both BEFORE and
+      AFTER the run, and a second run is a no-op.
 
 ## Commander emoji paste recovery
 
@@ -7785,7 +7887,6 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
 - [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
 
-
 - [ ] Account invitations default to Never expire; select each dated expiry. Reload and show/copy a pending invite, including clipboard-denied fallback. Legacy replacement warns before invalidating the old link; cancelled/claimed/expired rows have no link control. Check desktop and 390px page/popup top to bottom with dropdown open. Never-expiring gifts survive expiry sweeps; dated gifts refund once; another owner cannot reveal/replace a link.
 ### Lopu uploads, provider media and mobile keyboard (2026-09-16)
 
@@ -7841,7 +7942,6 @@ storage only; do not describe it as a production upload or provider acceptance.
 - [ ] Drag all four edges and four corners. Opposite edges stay anchored; frame bounds stay within the viewport. Dock to top/left/bottom/right, select overlay/split, and resize each divider. Split reduces the actual page rectangle; overlay preserves it. Scroll the page fully in each mode; fixed navigation remains in the page area and DevKit/Edit controls stay behind overlay Lopu.
 - [ ] Shrink split page width to 320px: compact navigation controls do not collide, page content has no horizontal overflow, and the drawer/quick switcher remain accessible. On mobile, check the full sheet, minimise/restore, page picker and conversation controls in a short viewport.
 - [ ] Both capability manifests advertise api.lopu-chats-reply 1.12.0. Page-bearing clients refuse 1.11 origins, while continuation without pages keeps its 1.11 requirement. Invalid page arrays/URLs fail before writes. Real route tests must prove sanitized references reach the provider and persisted message, and opt-out omits implicit page context.
-
 
 ### Lopu message queue and Send now (2026-09-18)
 
@@ -7913,6 +8013,26 @@ Local validation: http://localhost:18420/scripts/inherited-audience-preview.html
 in `thingtime-media-gallery-profile` (Vite 18420 / HMR 18421 / Nitro 18422).
 Tailscale/Funnel is unavailable because its installed launcher points to a
 missing `/Applications/Tailscale.app`; no public mapping was changed.
+
+## Funding and support (`/support`, landing funding section)
+
+- [ ] Signed out, open `/support` directly and reload; contribution, paid setup
+      enquiry and sponsorship enquiry paths remain visible without signing in.
+- [ ] At desktop and 375px widths, scroll the homepage and `/support` from top
+      to bottom. Cards, sticky navigation, form controls and footer links stay
+      reachable without horizontal overflow, clipping or overlap.
+- [ ] Homepage support links and the shared footer reach `/support`. Contribution
+      links reach the real Thingtime GoFundMe campaign. No Indiegogo prelaunch
+      link, hard-coded raised total/backer count/deadline, merch entitlement or
+      lifetime AI promise appears in the active funding section or FAQ.
+- [ ] Switch between setup and sponsorship enquiries, enter a brief including
+      punctuation/newlines, and inspect the generated email recipient, subject
+      and body. The visitor can edit the message; preparing it never sends it.
+- [ ] Copy the enquiry on desktop and mobile. If clipboard access is unavailable,
+      the visible draft and contact address remain available to copy manually.
+- [ ] Open the homepage funding FAQ with keyboard and pointer. Donation terms remain separate
+      from paid services and Lopu credits; no payment-success claim is shown
+      merely from clicking an outbound link or returning to the page.
 
 ## Sign-in hint clearance
 
