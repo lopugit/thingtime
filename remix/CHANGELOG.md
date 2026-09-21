@@ -49,6 +49,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21: Make demo forms run real Actions, preserve confirmation through
+  composed pages, show results inline, and support bounded local component
+  controls. Site forms and requests save private Things; template copying
+  installs their dependencies. Added responsive browser regression coverage.
+
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
   one stored (uncompressed) ZIP of every file the caller may already read —

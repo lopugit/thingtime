@@ -1,7 +1,7 @@
 // Shared by the browser renderer and server-side authored-markup discovery.
 // Unknown tags render only their children; dropped markup containers never do.
 export const HTML_ALLOWED_TAGS = new Set([
-	'tt-upload', 'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'img', 'button',
+	'details', 'summary', 'tt-upload', 'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'img', 'button',
 	'ul', 'ol', 'li', 'section', 'article', 'header', 'footer', 'nav', 'aside', 'main',
 	'strong', 'em', 'small', 'b', 'i', 'u', 's', 'mark', 'sub', 'sup', 'code', 'pre',
 	'blockquote', 'hr', 'br', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'figure',
