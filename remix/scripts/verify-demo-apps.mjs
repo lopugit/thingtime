@@ -95,7 +95,7 @@ console.log(`\n▶ verify-demo-apps against ${base}`);
 	} else console.log(`  · seed skipped (status ${seeded.status}) — set TT_VERIFY_ADMIN_USER/PASS to seed`);
 	const demos = await api('GET', '/api/v1/webpages/demos');
 	const suites = demos.data?.suites || [];
-	for (const key of ['dusted']) check(`demos lists the ${key} app`, suites.some((suite) => suite.key === key && suite.app), suites.map((suite) => suite.key));
+	for (const key of ['dusted', 'thingmon']) check(`demos lists the ${key} app`, suites.some((suite) => suite.key === key && suite.app), suites.map((suite) => suite.key));
 }
 
 const install = async (key) => {
@@ -160,6 +160,127 @@ if (!only || only.has('dusted')) {
 	const removeSample = await run('app-dusted-remove', { id: afterClear.result.items[0].id });
 	check('remove: deletes a sample task', ok(removeSample), removeSample);
 	await resolvePages(['dusted', 'dusted-done', 'dusted-task']);
+}
+
+// ── 2. Thingmon ─────────────────────────────────────────────────────────────
+if (!only || only.has('thingmon')) {
+	console.log('\n■ Thingmon');
+	await install('thingmon');
+	const empty = await run('app-thingmon-state');
+	check('state before start: no keeper, six zones, meadow unlocked', ok(empty) && empty.result?.hasKeeper === false && empty.result?.zones?.length === 6 && empty.result.zones[0].unlocked === true && empty.result.zones[5].unlocked === false, empty.result?.zones);
+	const badStarter = await run('app-thingmon-start', { name: 'Ada', starterId: 2 });
+	check('start refuses a non-starter species', !ok(badStarter) && /Cindrel/.test(badStarter.error || ''), badStarter);
+	const start = await run('app-thingmon-start', { name: '  Ada  ', starterId: 4 });
+	check('start creates the keeper and Puddlin', ok(start) && /Puddlin/.test(start.result?.message || ''), start);
+	const again = await run('app-thingmon-start', { name: 'x', starterId: 1 });
+	check('start twice is a no-op', ok(again) && again.result?.title === 'Welcome back', again);
+	const state = await run('app-thingmon-state');
+	const s = state.result || {};
+	check('state after start: keeper Ada, 20 shards, one in party, lead Puddlin Lv5', s.hasKeeper === true && s.keeper?.name === 'Ada' && s.keeper?.shards === 20 && s.partyCount === 1 && s.lead?.species === 'Puddlin' && s.lead?.level === 5 && s.lead?.hpPercent === 100, { name: s.keeper?.name, shards: s.keeper?.shards, lead: s.lead && [s.lead.species, s.lead.level] });
+	check('state paints the bag and dex counts', s.bag?.shard_crystal === 5 && s.bag?.tonic === 2 && s.dexCaughtCount === 1 && s.dexSeenCount === 1 && s.bagList?.length === 5, { bag: s.bag, dex: [s.dexCaughtCount, s.dexSeenCount] });
+	const locked = await run('app-thingmon-explore', { zone: 'skybluff' });
+	check('explore refuses a locked zone', !ok(locked) && /unlock/.test(locked.error || ''), locked);
+	const explore = await run('app-thingmon-explore', { zone: 'meadow' });
+	check('explore meadow opens a battle', ok(explore) && typeof explore.result?.encounter?.species === 'string' && explore.result.encounter.level >= 2 && explore.result.encounter.level <= 7, explore);
+	const twice = await run('app-thingmon-explore', { zone: 'meadow' });
+	check('explore during a battle is refused', !ok(twice) && /finish the battle/.test(twice.error || ''), twice);
+	const inBattle = await run('app-thingmon-state');
+	const b = inBattle.result?.battle;
+	check('state in battle: wild + player views, log, zone colour', inBattle.result?.inBattle === true && typeof b?.wild?.sprite === 'string' && b?.player?.species === 'Puddlin' && Array.isArray(b?.recentLog) && b.recentLog.length === 1 && typeof b?.zoneColor === 'string', b && { wild: b.wild?.species, player: b.player?.species, log: b.recentLog });
+	// fight it out (a Lv5 starter vs a Lv2–7 wild — the pack ends it within a few turns either way)
+	let outcome = 'continue';
+	let turns = 0;
+	let last = null;
+	while (outcome === 'continue' && turns < 30) {
+		last = await run('app-thingmon-battle-move', { moveIndex: 1 });
+		if (!ok(last)) break;
+		outcome = last.result?.outcome;
+		turns += 1;
+	}
+	check(`battle-move resolves turns until a verdict (${turns} turns → ${outcome})`, !!last && ok(last) && (outcome === 'won' || outcome === 'fainted'), last);
+	const after = await run('app-thingmon-state');
+	check('after the battle: no active battle, ledger moved', after.result?.inBattle === false && ((outcome === 'won' && after.result?.keeper?.wins === 1 && after.result?.keeper?.shards > 20) || (outcome === 'fainted' && after.result?.keeper?.losses === 1 && after.result?.lead?.hpPercent === 100)), { wins: after.result?.keeper?.wins, losses: after.result?.keeper?.losses, shards: after.result?.keeper?.shards, leadHp: after.result?.lead?.hpPercent });
+	if (outcome === 'fainted') await run('app-thingmon-heal');
+	// a catch attempt: explore, throw shard crystals until it is caught or the crystals run out
+	let caught = false;
+	let crystals = 5;
+	let catchResult = null;
+	for (let attempt = 0; attempt < 6 && !caught; attempt++) {
+		const st = await run('app-thingmon-state');
+		if (!st.result?.inBattle) {
+			if ((st.result?.lead?.hpPercent ?? 0) < 40) await run('app-thingmon-heal');
+			const ex = await run('app-thingmon-explore', { zone: 'meadow' });
+			if (!ok(ex)) break;
+		}
+		if (crystals <= 0) break;
+		catchResult = await run('app-thingmon-battle-catch', { itemId: 'shard-crystal' });
+		if (!ok(catchResult)) break;
+		crystals -= 1;
+		caught = catchResult.result?.caught === true;
+		if (catchResult.result?.outcome === 'fainted') await run('app-thingmon-heal');
+	}
+	check(`battle-catch rolls the capture (caught=${caught}, crystals left ${crystals})`, !!catchResult && ok(catchResult) && typeof catchResult.result?.caught === 'boolean' && /threw|Gotcha|broke|wobbled/i.test(catchResult.result?.message || ''), catchResult);
+	const bagAfter = await run('app-thingmon-state');
+	check('crystals were consumed from the bag', bagAfter.result?.bag?.shard_crystal === crystals, bagAfter.result?.bag);
+	if (bagAfter.result?.inBattle) {
+		const flee = await run('app-thingmon-battle-flee');
+		check('battle-flee answers with escaped/log', ok(flee) && typeof flee.result?.escaped === 'boolean', flee);
+		if (!flee.result?.escaped) {
+			let fled = false;
+			for (let i = 0; i < 6 && !fled; i++) {
+				const again = await run('app-thingmon-battle-flee');
+				fled = again.result?.escaped === true || again.result?.outcome === 'fainted' || !ok(again);
+			}
+		}
+	}
+	const noCrystals = await run('app-thingmon-battle-catch', { itemId: 'prism-crystal' });
+	check('battle-catch without a battle (or without that crystal) is refused', !ok(noCrystals), noCrystals);
+	const team = await run('app-thingmon-team');
+	check('team lists the party with move lines and evolve readiness', ok(team) && team.result?.hasKeeper === true && team.result?.party?.length >= 1 && typeof team.result.party[0].movesLine === 'string' && typeof team.result.party[0].canEvolve === 'boolean', team.result?.party?.[0]);
+	const leadId = team.result?.party?.[0]?.id;
+	const rename = await run('app-thingmon-rename', { id: leadId, nickname: ' Bubbles ' });
+	check('rename trims and sets the nickname', ok(rename) && /Bubbles/.test(rename.result?.message || ''), rename);
+	const renamed = await run('app-thingmon-team');
+	check('rename readback: name is Bubbles', renamed.result?.party?.[0]?.name === 'Bubbles' && renamed.result.party[0].nickname === 'Bubbles', renamed.result?.party?.[0]);
+	const clearNick = await run('app-thingmon-rename', { id: leadId, nickname: '' });
+	check('explicit empty nickname clears it', ok(clearNick) && /cleared/.test(clearNick.result?.message || ''), clearNick);
+	const daily = await run('app-thingmon-daily');
+	check('daily bonus pays 30 shards on a streak of 1', ok(daily) && /\+30 shards/.test(daily.result?.message || ''), daily);
+	const dailyAgain = await run('app-thingmon-daily');
+	check('daily bonus refuses a second claim today', !ok(dailyAgain) && /Already claimed/.test(dailyAgain.error || ''), dailyAgain);
+	const shardsBefore = (await run('app-thingmon-state')).result?.keeper?.shards;
+	const buy = await run('app-thingmon-buy', { itemId: 'tonic', qty: 2 });
+	check('buy 2 tonics costs 30 shards', ok(buy) && buy.result?.shards === shardsBefore - 30, { before: shardsBefore, after: buy.result?.shards, buy });
+	const tooRich = await run('app-thingmon-buy', { itemId: 'prism-crystal', qty: 10 });
+	check('buy refuses what you cannot afford', !ok(tooRich) && /costs/.test(tooRich.error || ''), tooRich);
+	const tonic = await run('app-thingmon-use-item', { id: leadId, itemId: 'tonic' });
+	check('use-item answers (consumed only when HP is missing)', ok(tonic) && typeof tonic.result?.consumed === 'boolean', tonic);
+	const dex1 = await run('app-thingmon-dex', { page: 1 });
+	check('dex page 1: 30 species, starter caught, pages=2', ok(dex1) && dex1.result?.items?.length === 30 && dex1.result?.pages === 2 && dex1.result.items[3]?.caught === true && dex1.result.items[3]?.seen === true && dex1.result?.caughtCount >= 1, { count: dex1.result?.items?.length, pages: dex1.result?.pages, puddlin: dex1.result?.items?.[3] });
+	const dex2 = await run('app-thingmon-dex', { page: 2 });
+	check('dex page 2: the last 30 with legendaries unseen', ok(dex2) && dex2.result?.items?.length === 30 && dex2.result.items[29]?.name === 'Terravine' && dex2.result.items[29]?.seen === false, dex2.result?.items?.[29]);
+	const species = await run('app-thingmon-species', { id: 5 });
+	check('species: pack record merged with the seeded system data thing', ok(species) && species.result?.species?.name === 'Rippleo' && species.result?.evolvesFrom?.name === 'Puddlin' && species.result?.evolvesTo?.name === 'Tidalisk' && typeof species.result?.species?.baseStats?.hpPct === 'number', { name: species.result?.species?.name, fromSystem: species.result?.fromSystemData, from: species.result?.evolvesFrom?.name, to: species.result?.evolvesTo?.name });
+	check('species: the seeded public species data thing was found in system scope', species.result?.fromSystemData === true, 'seed-demos must have run (TT_VERIFY_ADMIN_USER/PASS)');
+	const partyNow = (await run('app-thingmon-team')).result?.party || [];
+	if (partyNow.length >= 2) {
+		const boxed = await run('app-thingmon-deposit', { id: partyNow[1].id });
+		check('deposit sends a second party member to the box', ok(boxed) && /box/.test(boxed.result?.message || ''), boxed);
+		const back = await run('app-thingmon-withdraw', { id: partyNow[1].id });
+		check('withdraw brings it back to the party', ok(back) && /Joined/.test(back.result?.message || ''), back);
+		const lead = await run('app-thingmon-set-lead', { id: partyNow[1].id });
+		check('set-lead swaps the party order', ok(lead) && (await run('app-thingmon-team')).result?.party?.[0]?.id === partyNow[1].id, lead);
+	} else {
+		const boxed = await run('app-thingmon-deposit', { id: leadId });
+		check('deposit refuses to box the last party member', !ok(boxed) && /at least one/.test(boxed.error || ''), boxed);
+	}
+	const keeperName = await run('app-thingmon-keeper-name', { name: 'Keeper Ada' });
+	check('keeper-name renames the keeper', ok(keeperName) && (await run('app-thingmon-state')).result?.keeper?.name === 'Keeper Ada', keeperName);
+	await resolvePages(['thingmon', 'thingmon-team', 'thingmon-dex', 'thingmon-species', 'thingmon-shop', 'thingmon-keeper']);
+	const reset = await run('app-thingmon-reset');
+	check('reset deletes keeper, creatures and battles through each → discard', ok(reset) && reset.result?.removed >= 3, reset);
+	const gone = await run('app-thingmon-state');
+	check('state after reset: no keeper again', ok(gone) && gone.result?.hasKeeper === false, gone.result);
 }
 
 console.log(`\n${passed} passed · ${failed} failed`);

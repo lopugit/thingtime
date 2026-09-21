@@ -8,13 +8,15 @@ import { BEHAVIOUR_SUITES, registerAppSuite, type BehaviourSuite } from '../beha
 import { pokeworldSuite } from './pokeworld.ts';
 import { starsalignSuite } from './starsalign.ts';
 import { dustedSuite } from './dusted.ts';
+import { thingmonSuite } from './thingmon.ts';
 
 registerAppSuite(pokeworldSuite);
 registerAppSuite(starsalignSuite);
 registerAppSuite(dustedSuite);
+registerAppSuite(thingmonSuite);
 
-export const APP_SUITE_LIST: BehaviourSuite[] = [pokeworldSuite, starsalignSuite, dustedSuite];
+export const APP_SUITE_LIST: BehaviourSuite[] = [pokeworldSuite, starsalignSuite, dustedSuite, thingmonSuite];
 
 export const ALL_SUITES: BehaviourSuite[] = [...BEHAVIOUR_SUITES, ...APP_SUITE_LIST];
 
-export { pokeworldSuite, starsalignSuite, dustedSuite };
+export { pokeworldSuite, starsalignSuite, dustedSuite, thingmonSuite };

@@ -143,15 +143,19 @@ export const makeKit = (t: Theme) => {
 		el('div', { background: t.soft, borderRadius: t.radius, padding: '12px 14px', display: 'grid', gap: '2px', ...style }, [text(value, { fontSize: '24px', fontWeight: 800, color: t.ink, lineHeight: 1.1 }), muted(caption, { fontSize: '12px' })]);
 	const notice = (content: unknown, tone: 'info' | 'danger' | 'ok' = 'info'): Node =>
 		el('div', { fontFamily: t.font, fontSize: '13px', padding: '10px 12px', borderRadius: '10px', background: tone === 'danger' ? '#fdecec' : tone === 'ok' ? '#e6f6ee' : t.soft, color: tone === 'danger' ? t.danger : tone === 'ok' ? t.ok : t.text }, [content]);
+	const signInCard = (appName: string, blurb: string): Node => card([strong(`Welcome to ${appName}`), text(blurb), row([link('Log in with Thingtime', '/login', 'solid'), link('Create an account', '/register')])]);
 	// the state gates every source-bound component renders through: sign-in,
 	// install, loading, error, and the gallery/builder's inert preview
+	// a seeded app page answers anonymous visitors through the shared,
+	// read-only runtime (state 'ok' with nothing of theirs in it), so the
+	// sign-in card is keyed on the viewer, not only on the source state
 	const gates = (appName: string, blurb: string, ready: unknown, options: { loading?: string; inert?: unknown } = {}): Node[] => [
-		whenState('signed-out', card([strong(`Welcome to ${appName}`), text(blurb), row([link('Log in with Thingtime', '/login', 'solid'), link('Create an account', '/register')])])),
+		whenState('signed-out', signInCard(appName, blurb)),
 		whenState('not-installed', card([strong(`Install ${appName}`), text('Installing copies the app’s programs into your own things — every control then runs as you, on your own data. Re-installing later updates them in place.'), row([button('Install the app ✨', '$install')])])),
 		whenState('loading', card([muted(options.loading || 'Loading…')])),
 		whenState('error', card([strong('Something went wrong', { color: t.danger }), muted('{error}'), row([button('Retry', '$refresh', {}, 'ghost')])])),
 		whenState('inert', options.inert === undefined ? card([strong(appName), text(blurb), muted('Open the page to use it live — the builder canvas and the gallery show a static preview.')]) : options.inert),
-		whenState('ok', ready)
+		whenState('ok', ifTruthy('viewer.signedIn', ready, signInCard(appName, blurb)))
 	];
 	return { t, text, strong, title, muted, label, card, soft, row, stack, grid, divider, pill, button, link, textLink, input, textarea, select, option, checkbox, field, group, upload, img, sprite, bar, stat, notice, gates, inputStyle, buttonStyle };
 };
