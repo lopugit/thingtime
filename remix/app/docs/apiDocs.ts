@@ -634,13 +634,13 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
-    id: 'builder-workspaces', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'builder',
+    id: 'builder-workspaces', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'builder',
     title: 'Service workspaces', endpoint: '/api/v1/builder/workspaces',
     summary: 'Folder-backed service management for builder apps, with live role and customer-scoped access.',
     detail: 'GET reads a 250-record cursor page from one workspace (maximum 5,000 records). POST accepts initialize, save, archive, move, bindPage, configureMaps, searchAddresses and place. Initialization creates the owner Admin membership; it cannot be removed or demoted. Archive is reversible and preserves related history. Records are ordinary quota-accounted data Things, organized in native folders. Admins manage members; Employees and Lopu users manage operations; Customer and B2B members see only their linked customer, properties, jobs and visits. Every linked reference must belong to the same workspace. Updates require expectedUpdatedAt. Comments and media use the existing Thing comment/upload APIs and recheck the live workspace membership on every read. No caller-selected owner, query, route, code or credentials are accepted.',
     auth: { mode: 'session-or-bearer', description: 'A full first-party Thingtime user session or user JWT. Scoped PAT/app credentials and custom data endpoints are not supported.' },
     methods: ['GET', 'POST'],
-    steps: ['Negotiate api.builder-workspaces >= 1.0.0 against this origin.', 'Initialize with a stable rootId, name and IANA timeZone; retrying resumes folder creation.', 'Save typed records with stable ids and expectedUpdatedAt on edits. Follow nextCursor until null.', 'Archive memberships to revoke access immediately, including inherited comments and media.'],
+    steps: ['Negotiate api.builder-workspaces >= 1.0.1 against this origin. Google Places configuration failures return 409 with safe setup guidance; quota returns 429 and temporary provider failures return 502.', 'Initialize with a stable rootId, name and IANA timeZone; retrying resumes folder creation.', 'Save typed records with stable ids and expectedUpdatedAt on edits. Follow nextCursor until null.', 'Archive memberships to revoke access immediately, including inherited comments and media.'],
     requestExamples: [{ name: 'Read workspace', description: 'Read records visible to the current role.', method: 'GET', query: { rootId: 'my-service-workspace' } }, { name: 'Create workspace', description: 'Create an owned folder structure.', method: 'POST', body: { operation: 'initialize', rootId: 'my-service-workspace', name: 'My service business', timeZone: 'Australia/Melbourne' } }],
     responseExamples: [{ status: 200, description: 'Authorized workspace records.', body: { ok: true, role: 'Admin', records: [], nextCursor: null } }, { status: 409, description: 'Stale edit; reload before retrying.', body: { ok: false, error: 'This record changed. Refresh before saving your edits.' } }],
     notes: ['tt:service-workspace is a dynamic custom audience, valid only for an owner-matched workspace record or its bound builder page. It grants read/comment, never generic shared write. Memberships are owner-private.', 'Google Maps requires a separately configured, HTTP-referrer-restricted GOOGLE_MAPS_JAVASCRIPT_API_KEY in the owner Secure Vault; this key is intentionally browser-visible to authorized workspace readers. GOOGLE_PLACES_API_KEY stays server-only and enables fixed Google Places autocomplete/detail calls. configureMaps selects an owned Vault environment, null for Ungrouped, or __auto__ for unique matching entries. Ambiguous key matches fail closed. Responses expose only the intentionally browser-visible JavaScript key; they never expose the server Places key. Place IDs are retained; Google coordinates are fetched for the map without a persistent coordinate cache.']
@@ -9108,13 +9108,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
     // Builder SDK: action definitions accept registered provider lookup capabilities.
-    featureVersion: '1.23.0',
-    contractVersion: '1.23.0',
+    featureVersion: '1.24.0',
+    contractVersion: '1.24.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'First-party target comment lists include an attachments array with ready, authorized media metadata; app-namespace and custom-database lists do not expose first-party attachments. Attachment moderation and owner/purpose binding remain enforced in one batch query per page. ' +
       'Canonical exact-id Thing and media URLs open unlisted (tt:hidden) audiences without a key, including inherited comments and media. Ordinary feed/search/profile discovery stays gated; private/group-only audiences, moderation and token scopes remain enforced. Legacy key parameters are accepted, but are not required or emitted in share links. First-party single-Thing reads include audience: {sourceId, acl, linkKey?} on the Thing and post/parent/root cards, resolving the full inherited chain without altering the stored child acl. The ancestor key is returned only to its owner or a viewer who already presented that exact key; group membership and remembered discovery alone never disclose it. App-namespace projections do not include audience. Missing/cyclic chains fail closed, and blocked/pending ancestors constrain descendant access. ' +
       'Action definitions support lookup steps with registered provider capabilities and literal Vault entry ids; see /docs/builder/lookups. Component native uploads also accept initial value and attachmentId props for editing saved records. ' +
 			'Post creation and attachment sync have no attachment-count cap; ordered relational attachments still require unique owned ready ids, storage quota, upload approval and the bounded JSON body. Comment/message/profile limits remain unchanged. ' +

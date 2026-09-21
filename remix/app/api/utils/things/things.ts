@@ -448,6 +448,8 @@ export type PublicSubspaceMod = {
 
 // Generic projection for non-post things (and the unified read endpoint).
 export type PublicThing = {
+  // First-party target comment lists include authorized, bounded media metadata.
+  attachments?: AttachmentPublicMetadata[];
   audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
@@ -3786,6 +3788,15 @@ export const listThings = async (
     visible = page.filter((_, index) => verdicts[index]);
   }
   const projected = await toPublicThings(visible, viewer);
+  if (query.targetId && !app && !isCustomMongoEndpointActive()) {
+    const comments = visible.filter(doc => thingtimeOf(doc).includes('comment'));
+    const media = await resolvePostAttachments(
+      comments.map(doc => doc.shareId),
+      new Map(comments.map(doc => [doc.shareId, { ownerId: doc.ownerId, purpose: 'comment' as const }])),
+      viewer.id
+    );
+    for (const thing of projected) if (thing.thingtime.includes('comment')) thing.attachments = media.get(thing.id) || [];
+  }
   for (const thing of projected) if (thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive') {
     // Library entries are private root summaries, never history or stored
     // authority. Only the dedicated snapshot route returns archived people.

@@ -12,7 +12,8 @@ import {
 	moveWorkspaceVisit,
 	bindWorkspacePage
 } from '../app/api/utils/serviceWorkspaces/workspaces';
-import { createThing, getThing, updateThing, addComment } from '../app/api/utils/things/things';
+import { createThing, getThing, updateThing, addComment, listThings } from '../app/api/utils/things/things';
+import { getThingsCollection } from '../app/api/utils/mongodb/collections';
 import { createUserVaultGroup, saveUserVaultSecret, moveUserVaultEntry, revealUserVaultValue } from '../app/api/utils/lopu/userVault';
 async function main() {
 	assert.equal(process.env.TT_SERVICE_TEST_LOCAL, '1', 'Set TT_SERVICE_TEST_LOCAL=1 for this opt-in test');
@@ -110,6 +111,38 @@ async function main() {
 	await assert.rejects(save('usage', { visitId: visit.id, equipmentId: tool.id, batteryId: vehicle.id }), /Choose a battery/);
 	const comment = await addComment(users.customer, address.id, { text: 'Test access note', shareId: randomUUID() });
 	assert.equal(comment.ok, true, 'customer can comment on linked property');
+	if (!comment.ok) throw new Error('Comment fixture failed');
+	// Metadata-only attachment fixtures in the isolated replica. No storage
+	// objects or production credentials are involved.
+	const mediaIds = { ready: randomUUID(), blocked: randomUUID(), wrongOwner: randomUUID() };
+	await (
+		await getThingsCollection()
+	).insertMany(
+		Object.entries(mediaIds).map(([kind, shareId]) => ({
+			shareId,
+			thingtime: ['attachment'],
+			ownerId: kind === 'wrongOwner' ? users.stranger.id : users.customer.id,
+			targetId: comment.comment.id,
+			acl: ['tt:inherit'],
+			attachmentState: 'ready',
+			attachmentPurpose: 'comment',
+			crystal: { name: 'fixture.png', size: 68, contentType: 'image/png', mediaKind: 'image' },
+			moderation: { status: kind === 'blocked' ? 'blocked' : 'approved' },
+			createdAt: new Date(),
+			updatedAt: new Date()
+		})) as any
+	);
+	for (const actor of [users.customer, users.employee]) {
+		const page = await listThings(actor, { targetId: address.id, thingtime: ['comment'] });
+		assert.ok(page.ok);
+		if (!page.ok) throw new Error('Media page failed');
+		assert.deepEqual(
+			page.things.find((item) => item.id === comment.comment.id)?.attachments?.map((item) => item.id),
+			[mediaIds.ready],
+			'authorized comment lists retain ready media and omit blocked/wrong-owner bindings'
+		);
+	}
+	assert.equal((await listThings(users.stranger, { targetId: address.id, thingtime: ['comment'] })).ok, false);
 	const beforeMove = (await snapshot()).records.find((r: any) => r.id === visit.id)!;
 	await moveWorkspaceVisit(users.employee, {
 		rootId,
@@ -152,6 +185,11 @@ async function main() {
 	await archiveWorkspaceRecord(users.owner, { rootId, id: membership.id, expectedUpdatedAt: membership.updatedAt });
 	assert.equal((await getThing(users.customer, address.id)).ok, false, 'revocation applies to generic things');
 	assert.equal((await getThing(users.customer, pageId)).ok, false, 'revocation applies to page');
+	assert.equal(
+		(await listThings(users.customer, { targetId: address.id, thingtime: ['comment'] })).ok,
+		false,
+		'revocation prevents media metadata reads'
+	);
 	await assert.rejects(readWorkspace(users.customer, rootId), /revoked/);
 	const group = await createUserVaultGroup(users.owner.id, { name: 'Production' });
 	const secret = await saveUserVaultSecret(users.owner.id, { name: 'Test token', key: 'QA_TOKEN', value: 'synthetic-local-value' });

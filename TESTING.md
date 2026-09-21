@@ -8072,6 +8072,14 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   and announces completion without affecting another instance. Repeat at phone
   width; drawers are flush to the left/top/bottom and keep the close control usable.
 
+- Service workspace production regressions: save an uploaded image, reload the
+  record, and verify the gallery plus thumbnail/banner actions. After saving,
+  the upload tray must clear and the next Before/After batch must be independent.
+  A revoked member and unrelated account must not read comment media metadata;
+  blocked and wrong-owner attachments stay absent. A Google Places configuration
+  rejection must show specific safe setup guidance; gateway HTML must show a
+  retry message rather than a JSON parser exception. Run test:service-workspaces
+  and the isolated test-service-workspace-local.ts smoke.
 - Integration builder mobile header: with a long display name at 320px/390px,
   account text truncates without covering Commander or neighboring controls;
   the full name remains available to assistive technology and on hover.
@@ -8082,3 +8090,5 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   lookup can run the integration seed with legacy read layouts still enabled.
   Bootstrap retires that obsolete non-unique index before creating missing
   current indexes; unique constraints and saved Things remain intact.
+
+- Upcoming visits: completing a future-dated visit removes it from the dashboard upcoming list while keeping it in the planner and property visit history. Cancelled and archived visits also remain absent from upcoming visits.

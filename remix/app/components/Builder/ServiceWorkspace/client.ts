@@ -1,5 +1,6 @@
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import type { ServiceRecord, ServiceRole } from '~/schemas/serviceWorkspace';
+import { readWorkspaceResponse } from './workspaceResponse';
 export type WorkspaceSnapshot = {
 	rootId: string;
 	name: string;
@@ -15,7 +16,7 @@ export type WorkspaceSnapshot = {
 	nextCursor: number | null;
 };
 export async function workspaceRequest(rootId: string, body?: Record<string, unknown>, cursor?: number): Promise<any> {
-	await requireThingtimeCapability('api.builder-workspaces', '1.0.0');
+	await requireThingtimeCapability('api.builder-workspaces', '1.0.1');
 	const response = await fetch(
 		body
 			? '/api/v1/builder/workspaces'
@@ -28,9 +29,7 @@ export async function workspaceRequest(rootId: string, body?: Record<string, unk
 			...(body ? { method: 'POST', body: JSON.stringify({ ...body, rootId }) } : {})
 		}
 	);
-	const result = await response.json();
-	if (!response.ok || !result.ok) throw Object.assign(new Error(result.error || 'Workspace request failed'), { status: response.status });
-	return result;
+	return readWorkspaceResponse(response);
 }
 export async function readAllWorkspace(rootId: string): Promise<WorkspaceSnapshot> {
 	const result: WorkspaceSnapshot = await workspaceRequest(rootId);
