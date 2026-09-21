@@ -1029,7 +1029,7 @@ function GenericThingPage() {
 						) : null}
 
 						{thing && isThingOwner && ['scheduled-task', 'reminder'].includes(thing.crystal?.type) ? <ScheduledTaskPanel key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} /> : null}
-						{thing && (!post || !sections.preview) ? <ThingComments thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
+						{thing && (!post || !sections.preview) ? <ThingComments collectionControls thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
 
 						{diagnostic?.revealables.length ? (
 							<SensitiveThingReveal

@@ -31,6 +31,7 @@ import {
   viewerOf,
   withLinkKeys
 } from '~/api/utils/things/things';
+import { isCustomMongoEndpointActive } from '~/api/utils/mongodb/endpoint';
 import { parseCommentSort } from '~/api/utils/things/updownCore';
 import { sharedThingRead } from './sharedThingRead';
 import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
@@ -107,6 +108,17 @@ export const loader = async ({ request }: { request: Request }) => {
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
+  const commentProjection = params.has('commentProjection');
+  if (commentProjection) {
+    const id = (params.get('id') || '').trim(), target = (params.get('target') || '').trim();
+    const invalid = ['commentProjection', 'id', 'target', 'thingtime', 'cursor', 'limit'].some(key => params.getAll(key).length > 1) || params.get('commentProjection') !== 'true' || actor.kind === 'app' || isCustomMongoEndpointActive() ||
+      ['archive', 'sharedRoot', 'appId', 'folder', 'commentSort'].some(key => params.has(key)) ||
+      (id ? params.has('target') || ['thingtime', 'cursor', 'limit'].some(key => params.has(key))
+          : params.has('id') || !target || csv(params.get('thingtime')).length !== 1 || csv(params.get('thingtime'))[0] !== 'comment') ||
+      (params.has('limit') && !/^(?:[1-9]|1[0-9]|20)$/.test(params.get('limit') || ''));
+    if (invalid) return json({ ok: false, error: 'Invalid first-party discussion projection request' }, { status: 400, headers: cors });
+  }
+
   if (params.has('archive')) {
     const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
     if (actor.kind !== 'user' || user?.accountKind !== 'user') return json({ ok: false, error: 'Sign in to read your archive' }, { status: 401, headers });
@@ -150,7 +162,7 @@ export const loader = async ({ request }: { request: Request }) => {
     // durable discovery state is bounded per authenticated user or request IP.
     const canRemember = (actor.kind === 'anonymous' || (actor.kind === 'user' && user?.accountKind === 'user'));
     const discoveryAllowed = canRemember && (await enforceRateLimit(request, 'things.views', user ? `user:${user.id}` : null, { failClosed: true })).allowed;
-    const result = await getThing(viewer, id, app, { commentSort: commentSort.sort, rememberDiscovery: discoveryAllowed, discoveryIp: foundPostVisitIp(request) });
+    const result = await getThing(viewer, id, app, { commentProjection, commentSort: commentSort.sort, rememberDiscovery: discoveryAllowed, discoveryIp: foundPostVisitIp(request) });
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
@@ -166,6 +178,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const result = await listThings(
     viewer,
     {
+      commentProjection,
       thingtime: csv(params.get('thingtime')),
       targetId: (params.get('target') || '').trim() || null,
       folder: (params.get('folder') || '').trim() || null,
@@ -179,7 +192,7 @@ export const loader = async ({ request }: { request: Request }) => {
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }
-  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
+  return json({ ok: true, things: result.things, nextCursor: result.nextCursor, ...(result.comments ? { comments: result.comments } : {}) }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):

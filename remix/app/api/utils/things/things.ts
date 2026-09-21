@@ -1,3 +1,4 @@
+import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
 import { isFolderThing, folderThingMatch } from '../../../schemas/folderThing';
 import { postThingReferences, type PostThingReference } from '../../../components/Feed/postThingReferences';
 import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
@@ -352,6 +353,19 @@ export type PublicComment = {
   comments?: PublicComment[];
   targetId: string | null;
   createdAt: string;
+};
+
+// Opt-in, bounded discussion reads never imply unloaded totals are zero.
+export type PublicCommentPageItem = Omit<PublicComment, 'reactionCounts' | 'viewerReactions' | 'votes' | 'commentCount' | 'comments' | 'authorFlair'> & {
+  audience?: ResolvedAudience;
+  comments: [];
+  repliesLoaded: false;
+  attachmentsTruncated?: true;
+};
+export type PublicDiscussion = Omit<PublicPost, 'reactionCounts' | 'viewerReactions' | 'votes' | 'commentCount' | 'commentCounts' | 'comments' | 'shareCount' | 'viewCount' | 'viewStats' | 'authorFlair' | 'subspace' | 'flair'> & {
+  comments: [];
+  repliesLoaded: false;
+  attachmentsTruncated?: true;
 };
 
 export type PublicPost = {
@@ -2833,6 +2847,78 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   return docs.map((doc) => project(doc, true));
 };
 
+// A bounded direct-body projection for discussion pages. Callers must first
+// authorize every source. No originals, siblings, replies or engagement rows
+// are read here; those require their own authorized, cursor-bounded request.
+const toPublicDiscussionPage = async (
+  docs: ThingDoc[], viewer: Viewer, projected: PublicThing[]
+): Promise<PublicDiscussion[]> => {
+  if (!docs.length) return [];
+  const byId = new Map(projected.map(thing => [thing.id, thing]));
+  const redacted = (doc: ThingDoc) => doc.subspaceMod?.status === 'removed' && doc.ownerId !== viewer?.id &&
+    !canModerateSubspace(viewer?.subspaceRoles?.get(subspaceIdOfDoc(doc) || '') || null);
+  const readable = docs.filter(doc => !redacted(doc));
+  const references = [...new Set(readable.flatMap(doc => postThingReferences(crystalOf(doc).thing).map(item => item.id)))];
+  const linkedDocs = (await resolvePostLinkedThings(references, viewer)).filter(doc => !doc.appId && !redacted(doc));
+  const linked = new Map((await toPublicThings(linkedDocs, viewer)).map(thing => [thing.id, thing]));
+  const attachments = new Map<string, AttachmentPublicMetadata[]>();
+  if (readable.length) {
+    const things = await getThingsCollection();
+    // $topN retains only 26 documents per source even for legacy roots with
+    // unlimited media. Only canonical inherited, same-owner attachments can
+    // ride the source's authority. Explicit/private ACLs and app rows do not.
+    const groups = await things.aggregate([
+      { $match: withMatch({ thingtime: 'attachment', attachmentState: 'ready', acl: [ACL_INHERIT], appId: { $in: [null] } },
+        { $or: readable.map(doc => ({ targetId: doc.shareId, ownerId: doc.ownerId,
+          attachmentPurpose: thingtimeOf(doc).includes('comment') ? 'comment' : { $in: ['post', null] } })) },
+        visibleRelatedModerationClause(viewer?.id || null)) },
+      { $set: { discussionAttachmentOrder: { $cond: [
+        { $and: [{ $isNumber: '$attachmentSortIndex' }, { $gte: ['$attachmentSortIndex', 0] }, { $lte: ['$attachmentSortIndex', Number.MAX_SAFE_INTEGER] }] },
+        '$attachmentSortIndex', Number.MAX_SAFE_INTEGER] } } },
+      { $group: { _id: '$targetId', docs: { $topN: { n: 26, sortBy: { discussionAttachmentOrder: 1, createdAt: 1, shareId: 1 },
+        output: { shareId: '$shareId', ownerId: '$ownerId', targetId: '$targetId', attachmentSortIndex: '$attachmentSortIndex',
+          crystal: '$crystal', moderation: '$moderation', createdAt: '$createdAt' } } } } }
+    ] as any).toArray();
+    for (const group of groups) {
+      const media = orderAttachmentDocsByStoredSort(group.docs as any[]).flatMap(doc => {
+        const item = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, { ownerView: !!viewer?.id && doc.ownerId === viewer.id });
+        return item ? [item] : [];
+      });
+      attachments.set(group._id, media);
+    }
+  }
+  return docs.map(doc => {
+    const thing = byId.get(doc.shareId)!;
+    const crystal = crystalOf(doc);
+    const hidden = redacted(doc);
+    const media = attachments.get(doc.shareId) || [];
+    // The generic companion must not leak the removed body either.
+    const { comments: _comments, replies: _replies, reactions: _reactions, ...directCrystal } = thing.crystal;
+    thing.crystal = hidden ? { type: crystal.type || 'text' } : directCrystal;
+    if (hidden) { thing.extended = null; thing.geo = null; thing.tags = []; }
+    thing.attachments = media.slice(0, 25);
+    return {
+      id: doc.shareId, thingtime: thing.thingtime, type: (crystal.type as PostType) || 'text', author: thing.author,
+      audience: thing.audience, visibility: thing.visibility as PostVisibility, acl: thing.acl,
+      ...(thing.linkKey ? { linkKey: thing.linkKey } : {}),
+      text: hidden ? '' : String(crystal.text || ''),
+      richText: !hidden && crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText) ? crystal.richText as Record<string, any> : null,
+      images: hidden ? [] : (crystal.images as string[]) || [], attachments: thing.attachments,
+      ...(media.length > 25 ? { attachmentsTruncated: true as const } : {}),
+      mediaLayout: hidden ? null : mediaLayoutOf(crystal), listing: hidden ? null : (crystal.listing as MarketplaceListing) || null,
+      thing: !hidden && crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? crystal.thing as Record<string, any> : null,
+      ...(!hidden && postThingReferences(crystal.thing).length ? { linkedThings: postThingReferences(crystal.thing).map(ref => ({ ...ref, thing: linked.get(ref.id) || null })) } : {}),
+      tags: hidden ? [] : thing.tags, title: !hidden && typeof crystal.title === 'string' ? crystal.title : null,
+      subspaceMod: doc.subspaceMod?.status === 'removed' ? { status: 'removed' as const, removed: true,
+        reason: hidden ? null : doc.subspaceMod.reason || null, removedAt: doc.subspaceMod.removedAt ? new Date(doc.subspaceMod.removedAt).toISOString() : null,
+        pinned: false, locked: doc.subspaceMod.locked === true, nsfw: false, spoiler: false, viewerCanModerate: !hidden && doc.ownerId !== viewer?.id } : null,
+      comments: [] as [], repliesLoaded: false as const,
+      isShare: !!targetIdOf(doc) && thing.thingtime.includes('share'), shareOf: null,
+      extended: hidden ? null : thing.extended, geo: hidden ? null : thing.geo, createdAt: thing.createdAt
+    };
+  });
+};
+
 export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer, resolveAudience = false): Promise<PublicThing[]> => {
   if (!docs.length) return [];
   const viewer = asViewer(viewerInput);
@@ -3636,15 +3722,21 @@ export const listUserPosts = async (
 // /post/:id deep-link pages render as full cards; for them the thread context
 // comes along: parent = the thing commented on, root = the top of the thread
 // (each null when deleted or not visible to the viewer).
-export const getThing = async (
+type ThingRead<P> = { ok: true; thing: PublicThing; post: P | null; discussion: (PublicDiscussion & { sourceThingId: string }) | null; parent: PublicPost | null; root: PublicPost | null };
+export function getThing(viewer: string | Viewer, shareId: unknown, app: AppLens, options: PostProjectionOptions & { commentProjection: true }): Promise<Fail | ThingRead<PublicDiscussion>>;
+export function getThing(viewer: string | Viewer, shareId: unknown, app?: AppLens, options?: PostProjectionOptions & { commentProjection?: false }): Promise<Fail | ThingRead<PublicPost>>;
+export function getThing(viewer: string | Viewer, shareId: unknown, app: AppLens, options: PostProjectionOptions & { commentProjection?: boolean }): Promise<Fail | ThingRead<PublicPost | PublicDiscussion>>;
+export async function getThing(
   viewerInput: string | Viewer,
   shareId: unknown,
   app: AppLens = null,
-  options: PostProjectionOptions = {}
-): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; discussion: (PublicPost & { sourceThingId: string }) | null; parent: PublicPost | null; root: PublicPost | null }> => {
+  options: PostProjectionOptions & { commentProjection?: boolean } = {}
+): Promise<Fail | ThingRead<PublicPost | PublicDiscussion>> {
+  if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
+  if (options.commentProjection && doc.appId) return fail(404, 'Thing not found');
   if (!app) {
     const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
     viewer = withThingLink(viewer, terminal?.shareId || doc.shareId);
@@ -3670,12 +3762,21 @@ export const getThing = async (
 	// aggregates (those resolvers are target-generic), and the parent walk
 	// links the page back to the post the media is bound to.
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
+  const isPost = isPostLikeThing(doc) || isComment || isMediaAttachment;
+  if (options.commentProjection || !isPost) {
+    // Generic discussion is new in Things 1.26: keep its default read bounded
+    // too, so an outer Thing detail fetch cannot transmit hidden descendants.
+    if (isCustomMongoEndpointActive() || doc.appId) return { ok: true, thing, post: null, discussion: null, parent: null, root: null };
+    const projected = (await toPublicDiscussionPage([doc], viewer, [thing]))[0];
+    return { ok: true, thing, post: isPost ? projected : null,
+      discussion: isPost ? null : { ...projected, sourceThingId: doc.shareId }, parent: null, root: null };
+  }
 	const projected = (await toPublicPosts([doc], viewer, { ...options, resolveAudience: true }))[0];
 	// Synced external posts retain the same permalink shape as native posts.
 	const post = isPostLikeThing(doc) || isComment || isMediaAttachment ? projected : null;
   // One stable discussion view per original Thing; no duplicate stored post,
   // no writes on read, and all existing comments retain their target/ACL.
-  const discussion = post ? null : { ...projected, sourceThingId: doc.shareId };
+  const discussion = null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -3713,9 +3814,10 @@ export const getThing = async (
     }
   }
   return { ok: true, thing, post, discussion, parent, root };
-};
+}
 
 export type ListThingsQuery = {
+  commentProjection?: boolean;
   thingtime?: string[];
   targetId?: string | null;
   // folder browse (own-things mode only): 'root' = things not filed anywhere,
@@ -3738,16 +3840,27 @@ export const listThings = async (
   query: ListThingsQuery,
   app: AppLens = null,
   context: { archiveOwnerId?: string } = {}
-): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
+): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null; comments?: PublicCommentPageItem[] }> => {
+  const cursorScope = { targetId: query.targetId || '', viewerId: asViewer(viewerInput)?.id || '', tokenId: asViewer(viewerInput)?.pat?.tokenId || '' };
+  const discussionCursor = query.commentProjection && query.cursor != null ? decodeDiscussionCursor(query.cursor, cursorScope) : null;
+  if (query.commentProjection) {
+    if (app || query.appId != null || isCustomMongoEndpointActive()) return fail(400, 'Discussion projection requires first-party home storage');
+    if (!query.targetId || query.folder || query.thingtime?.length !== 1 || query.thingtime[0] !== 'comment') return fail(400, 'Discussion projection requires target and thingtime=comment');
+    if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 20)) return fail(400, 'limit must be an integer between 1 and 20');
+    if (query.cursor != null && !discussionCursor) return fail(400, 'Invalid discussion cursor');
+    if (!discussionCursorConfigured()) return fail(503, 'Discussion pagination is unavailable');
+  }
   let viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
 
   let match: Record<string, any>;
+  let discussionTarget: ThingDoc | null = null;
   if (query.targetId) {
     if (query.folder) return fail(400, 'folder filtering applies to your own things, not a target listing');
     const target = await findViewableThingAs(query.targetId, viewer, app);
-    if (!target) return fail(404, 'Thing not found');
+    if (!target || (query.commentProjection && target.appId)) return fail(404, 'Thing not found');
+    if (query.commentProjection) discussionTarget = target;
     if (!app) {
       const terminal = await resolveInheritChain(target, d => aclOf(d).includes(ACL_INHERIT), findThing);
       viewer = withThingLink(viewer, terminal?.shareId || target.shareId);
@@ -3796,19 +3909,48 @@ export const listThings = async (
     if (fence) match = withMatch(match, fence);
   }
 
-  const parsed = parseChronoCursor(query.cursor);
+  if (query.commentProjection) match = withMatch(match, { appId: { $in: [null] }, thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] } });
+  const parsed = query.commentProjection ? discussionCursor : parseChronoCursor(query.cursor);
   const pageMatch = parsed ? withMatch(match, chronoCursorClause(parsed)) : match;
 
   const things = await getThingsCollection();
-  const docs = (await things
+  let docs = (await things
     .find(pageMatch as any)
     .sort({ createdAt: -1, shareId: 1 })
     .limit(limit + 1)
     .toArray()) as any as ThingDoc[];
 
+  if (discussionTarget?.comments?.length) {
+    // Legacy embedded comments have no independent ACL: their authorized
+    // parent is their audience. Merge the old bounded residue into the same
+    // stable cursor window without loading any descendants or migrating on read.
+    const legacySeen = new Set<string>();
+    const legacy = discussionTarget.comments.slice(0, MAX_COMMENTS_PER_POST).flatMap(entry => {
+      const createdAt = new Date(entry.createdAt), id = entry.id;
+      if (typeof id !== 'string' || !id || id.length > MAX_SHARE_ID_CHARS || /[$.\s\u0000-\u001f]/.test(id) || !Number.isFinite(+createdAt) || typeof entry.userId !== 'string' || !entry.userId) return [];
+      if (legacySeen.has(id)) return [];
+      legacySeen.add(id);
+      if (parsed && !(createdAt < parsed.createdAt || (+createdAt === +parsed.createdAt && id > parsed.id))) return [];
+      return [{ shareId: id, ownerId: entry.userId, schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+        thingtime: ['comment'], targetId: discussionTarget!.shareId, acl: [ACL_INHERIT],
+        crystal: { text: String(entry.text || '') }, tags: [], createdAt, updatedAt: createdAt } as ThingDoc];
+    });
+    // A partially migrated standalone row is authoritative, even if private;
+    // never resurrect its public embedded predecessor just outside this page.
+    const legacyIds = legacy.map(doc => doc.shareId);
+    const existing = legacyIds.length ? await things.find({ shareId: { $in: legacyIds } } as any).project({ shareId: 1 }).toArray() : [];
+    const storedIds = new Set(existing.map(doc => doc.shareId));
+    docs = [...docs, ...legacy.filter(doc => !storedIds.has(doc.shareId))]
+      .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt) || (a.shareId < b.shareId ? -1 : a.shareId > b.shareId ? 1 : 0))
+      .slice(0, limit + 1);
+  }
+
   const page = docs.slice(0, limit);
   const last = page[page.length - 1];
-  const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
+  const nextCursor = docs.length > limit && last
+    ? query.commentProjection ? encodeDiscussionCursor({ createdAt: new Date(last.createdAt), id: last.shareId }, cursorScope)
+      : `${new Date(last.createdAt).getTime()}_${last.shareId}`
+    : null;
   // Per-doc audience check before projecting. Comments/reactions carry
   // ['tt:inherit'] and short-circuit to the already-viewable target, but a
   // thing attached to a target can carry its OWN acl (e.g. a private share:
@@ -3824,7 +3966,11 @@ export const listThings = async (
     const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
     visible = page.filter((_, index) => verdicts[index]);
   }
-  const projected = await toPublicThings(visible, viewer);
+  const projected = await toPublicThings(visible, viewer, query.commentProjection === true);
+  if (query.commentProjection) {
+    const comments = (await toPublicDiscussionPage(visible, viewer, projected)).map(post => ({ ...post, targetId: targetIdOf(visible.find(doc => doc.shareId === post.id)!) }));
+    return { ok: true, things: projected, nextCursor, comments };
+  }
   if (query.targetId && !app && !isCustomMongoEndpointActive()) {
     const comments = visible.filter(doc => thingtimeOf(doc).includes('comment'));
     const media = await resolvePostAttachments(

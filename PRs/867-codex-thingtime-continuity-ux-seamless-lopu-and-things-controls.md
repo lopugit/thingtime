@@ -195,3 +195,14 @@ through the shared post discussion component and retains the Places diagnostic
 fixes and visit filtering. Things advances to 1.25.0 so the separately added media
 and discussion/reference contracts have distinct negotiated versions. Final
 combined-source checks and deployed acceptance are recorded on the PR.
+
+Main integration through `4094a9a15` preserves PR #879's shared list controls,
+including paginated and filtered Thing discussions. Authorized older comment
+pages retain rich post rows, reactions, nested replies and attached Things through
+an optional batched projection; the Things capability advances to 1.26.0.
+Acceptance checks cover searching beyond the initial twenty comments, bounded
+cursor loading, denied rows, page-size changes and empty filters. The shared
+acceptance callback still refreshes service galleries only after a committed
+comment. Final combined-source and deployment evidence is recorded on the PR.
+
+Discussion pagination QA: private twenty-five-comment fixture returned twenty plus five unique rows, found an older-page search match, and loaded its nested reply only on expansion. Chrome desktop and 390px checks passed all fixed page sizes, Author filters, empty search, infinite completion and page-bottom layout. The bounded projection omits unloaded replies and unknown totals, preserves bounded legacy comments, and encrypts target/viewer/token-scoped cursor positions so denied hidden IDs never appear in pagination tokens. Canonical Things tests passed 293 cases. Final integrated build and security evidence is recorded on the PR.

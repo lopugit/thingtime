@@ -952,18 +952,19 @@ export function useApi() {
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => {
-          await requireThingtimeCapability('api.things', '1.25.0');
+          await requireThingtimeCapability('api.things', '1.26.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
-          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
+          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
         },
 				[]
 			),
       list: useCallback(
-        async (args) => {
-          await requireThingtimeCapability('api.things', args?.target ? '1.22.0' : '1.14.0');
+        async (args, options?: { signal?: AbortSignal }) => {
+          await requireThingtimeCapability('api.things', args?.commentProjection ? '1.26.0' : args?.target ? '1.22.0' : '1.14.0');
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
+              commentProjection: args?.commentProjection ? true : undefined,
               key: args?.key,
               thingtime: args?.thingtime,
               folder: args?.folder,
@@ -971,7 +972,7 @@ export function useApi() {
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
               appId: args?.appId
-            })}`
+            })}`, options
           );
         },
         []
@@ -982,7 +983,7 @@ export function useApi() {
       }, []),
       update: useCallback(
         async (args) => {
-          if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.25.0');
+          if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.26.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
@@ -1009,7 +1010,7 @@ export function useApi() {
         [asyncFetcher]
       ),
       renameLibrary: useCallback(async (args: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
-        await requireThingtimeCapability('api.things', '1.25.0');
+        await requireThingtimeCapability('api.things', '1.26.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
       }, [asyncFetcher]),
       // multi-select move/copy/delete/share — see /docs/api things-bulk
@@ -1050,7 +1051,7 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-          if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.25.0');
+          if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.26.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');

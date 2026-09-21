@@ -987,7 +987,7 @@ export const ThingsPage = () => {
       }
       try {
         const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-        await requireThingtimeCapability('api.things', '1.25.0');
+        await requireThingtimeCapability('api.things', '1.26.0');
         const response = isManagedLibraryThing(thing)
           ? await apiRef.current.v1.things.renameLibrary({ id: thing.id, displayTitle: name, expectedUpdatedAt: thing.updatedAt })
           : thing.thingtime.includes('attachment')

@@ -53,12 +53,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   management, one aggregate iOS chat Live Activity, Builder settings and unified
   Commander navigation. Things now share post discussions, attach existing
   Things, recognize legacy folders, preserve scalar previews and expose broader
-  management/rename controls. Action-run delivery defaults off; unlisted social
+  management/rename controls. Shared discussions preserve paginated search and
+  filters with authorized rich comment batches (Things 1.26.0). Action-run delivery defaults off; unlisted social
   previews retain context without indexing. Fix Nitro shell asset registration
   and writable Graphify working copies. Pre-merge review also hardens abandoned
   server task cancellation, workflow admission recovery and persisted local
   retry limits. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
   for validation and device/deployment limits.
+
+- 2026-09-21 — **Codex (AI)**: Added shared franchise list controls with search, relevant filters, result counts, 5/10/15/20 page sizes and infinite scrolling across records, histories, comments, media and planner days. Removed the eight-visit dashboard cutoff; paged planner moves retain the full day order. Details: [PR #879](../PRs/879-codex-franchise-list-controls-paginate-and-filter-franchise-lists.md).
 
 - 2026-09-21 — **Codex (AI):** Require native app changes, including Thingtime
   Mac, Thingtime Recovery and Commander, to be rebuilt, verified, reinstalled

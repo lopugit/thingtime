@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
+import { createDiscussionCommentPager, mergeDiscussionComments } from './discussionCommentPages';
 
 // Execute the actual submission closures with a deferred server and small UI
 // stand-ins. This checks acceptance ordering and rejection handling without
@@ -31,7 +32,7 @@ function harness(callback: () => void | Promise<unknown>) {
   const fresh = { note() {}, swap() {}, drop() { effects.dropped++; } };
   const bindings = {
     api: { v1: { things: { comment: () => { effects.writes++; return response; } } } },
-    post, comment: post, user: { id: 'viewer' }, commentText: 'New note', replyText: 'New note',
+    cursorReplies: false, post, comment: post, user: { id: 'viewer' }, commentText: 'New note', replyText: 'New note',
     buildPendingComment: () => ({ id: 'pending', pending: true }),
     clearCommentDraft() {}, clearReplyDraft() {}, freshComments: fresh, freshReplies: fresh,
     onChanged: (_id: string, change: (current: typeof post) => typeof post) => { post = change(post); },
@@ -102,4 +103,62 @@ test('shared discussions and every nested/focused reply row forward the acceptan
   const discussion = readFileSync(new URL('../Things/ThingComments.tsx', import.meta.url), 'utf8');
   assert.match(discussion, /<Discussion[^>]*onCommentAdded=\{onCommentAdded\}/);
   assert.match(discussion, /<PostCard[^>]*onCommentAdded=\{onCommentAdded\}/);
+});
+
+test('narrow discussion reaction actions keep omitted totals unknown until the server accepts', () => {
+  const toggle = closure('applyReactionToggle', {});
+  const reconcile = closure('reconcileReactionToken', {});
+  const pending = toggle({ id: 'comment' }, '❤️', true);
+  assert.equal(pending.reactionCounts, undefined);
+  assert.deepEqual(Array.from(pending.viewerReactions), ['❤️']);
+  const accepted = reconcile(pending, '❤️', { '❤️': 5 }, ['❤️']);
+  assert.equal(accepted.reactionCounts['❤️'], 5);
+  const rejected = reconcile(pending, '❤️', undefined, undefined);
+  assert.equal(rejected.reactionCounts, undefined);
+  assert.equal(rejected.viewerReactions.length, 0);
+});
+
+test('accepted cursor replies refresh once without writing the broad thread cache', async () => {
+  let refreshes = 0, cacheWrites = 0;
+  const h = harness(() => { refreshes++; });
+  h.bindings.cursorReplies = true;
+  h.bindings.setCachedThread = () => { cacheWrites++; };
+  const sending = closure('submitReply', h.bindings)();
+  h.accept({ comment: { id: 'accepted', text: 'New reply' } });
+  await sending;
+  await settle();
+  assert.equal(refreshes, 1);
+  assert.equal(cacheWrites, 0);
+});
+
+test('opening cursor replies reads one authorized page and rejects stale or revoked results', async () => {
+  for (const outcome of ['accepted', 'aborted', 'revoked']) {
+    let complete!: (value: unknown) => void;
+    let calls = 0, rows: any[] = [], hasMore = true, error = '';
+    const request = { pager: createDiscussionCommentPager(), controller: new AbortController() };
+    const bindings = {
+      Error, React: { useCallback: (fn: unknown) => fn }, cursorThread: { current: request }, fetchingRef: { current: false }, pending: false,
+      comment: { id: 'target-comment' }, sharedAccess: { key: 'held-key' }, createDiscussionCommentPager, AbortController,
+      api: { v1: { things: { list: (args: any, options: any) => {
+        calls++;
+        assert.equal(args.target, 'target-comment'); assert.equal(args.commentProjection, true); assert.equal(args.limit, 20);
+        assert.equal(options.signal, request.controller.signal);
+        return new Promise(resolve => { complete = resolve; });
+      } } } },
+      setReplies: (change: any) => { rows = typeof change === 'function' ? change(rows) : change; },
+      mergeDiscussionComments, mergeReactionOverlays: (_time: number, values: unknown) => values,
+      setRepliesLoading() {}, setReplyLoadError: (next: string) => { error = next; },
+      setRepliesHaveMore: (next: boolean) => { hasMore = next; }
+    };
+    const load = closure('loadReplyPage', bindings);
+    const pending = load();
+    await load();
+    assert.equal(calls, 1, 'a duplicate click cannot load the same page twice');
+    if (outcome === 'aborted') { request.controller.abort(); request.pager.dispose(); }
+    complete(outcome === 'revoked' ? { ok: false, status: 404, error: 'Revoked' } : { ok: true, comments: [{ id: 'authorized-reply' }], nextCursor: null });
+    await pending;
+    assert.equal(rows.length, outcome === 'accepted' ? 1 : 0);
+    if (outcome !== 'aborted') assert.equal(hasMore, false);
+    if (outcome === 'revoked') assert.equal(error, 'Revoked');
+  }
 });

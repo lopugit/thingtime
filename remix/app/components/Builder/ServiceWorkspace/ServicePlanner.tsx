@@ -1,4 +1,6 @@
 import React from 'react';
+import { CollectionList, CollectionSizeSelect } from '~/components/Collections/CollectionList';
+import type { CollectionSize } from '~/components/Collections/collectionWindow';
 import { serviceDateOffset, serviceTitle, serviceWeekStart, type ServiceRecord } from '~/schemas/serviceWorkspace';
 import { workspaceRequest } from './client';
 
@@ -12,7 +14,9 @@ export function ServicePlanner({
 	report,
 	timeZone,
 	menu,
-	context
+	context,
+	searchText,
+	team
 }: {
 	rootId: string;
 	records: ServiceRecord[];
@@ -24,10 +28,20 @@ export function ServicePlanner({
 	timeZone: string;
 	menu: (record: ServiceRecord) => React.ReactNode;
 	context: (record: ServiceRecord) => React.ReactNode;
+	searchText: (record: ServiceRecord) => string;
+	team: { id: string; name: string }[];
 }) {
 	const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 	const [date, setDate] = React.useState(today);
 	const [mode, setMode] = React.useState<'day' | 'week'>('week');
+	const [query, setQuery] = React.useState('');
+	const [status, setStatus] = React.useState('');
+	const [employee, setEmployee] = React.useState('');
+	const [size, setSize] = React.useState<CollectionSize>(10);
+	const matches = (record: ServiceRecord) =>
+		searchText(record).toLowerCase().includes(query.trim().toLowerCase()) &&
+		(!status || (record.values.status || 'Scheduled') === status) &&
+		(!employee || (record.values.employeeId || '__unassigned__') === employee);
 	const [moving, setMoving] = React.useState(false);
 	const [dragging, setDragging] = React.useState<string | null>(null);
 	const busy = React.useRef(false);
@@ -101,9 +115,56 @@ export function ServicePlanner({
 				{timeZone} · {canEdit ? 'Drag visits between days or use the move controls. Open a visit to set its time.' : 'Your upcoming visits.'}
 				{moving ? ' Saving move…' : ''}
 			</p>
+			<div className="tt-collection">
+				<div className="tt-collection-controls">
+					<label className="tt-collection-search">
+						<input
+							type="search"
+							aria-label="Search planner"
+							placeholder="Search jobs, addresses, customers or crew…"
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+						/>
+					</label>
+					<label className="tt-collection-field">
+						Status
+						<select aria-label="Planner status" value={status} onChange={(event) => setStatus(event.target.value)}>
+							<option value="">All</option>
+							{['Scheduled', 'In progress', 'Completed', 'Cancelled'].map((value) => (
+								<option key={value}>{value}</option>
+							))}
+						</select>
+					</label>
+					<label className="tt-collection-field">
+						Employee
+						<select aria-label="Planner employee" value={employee} onChange={(event) => setEmployee(event.target.value)}>
+							<option value="">All</option>
+							<option value="__unassigned__">Unassigned</option>
+							{team.map((member) => (
+								<option key={member.id} value={member.id}>
+									{member.name}
+								</option>
+							))}
+						</select>
+					</label>
+					<CollectionSizeSelect label="visits per day" value={size} onChange={setSize} />
+					{(query || status || employee) && (
+						<button
+							onClick={() => {
+								setQuery('');
+								setStatus('');
+								setEmployee('');
+							}}
+						>
+							Clear planner filters
+						</button>
+					)}
+				</div>
+			</div>
 			<div className={`sw-planner sw-planner-${mode}`}>
 				{days.map((day) => {
 					const items = visits.filter((r) => r.values.date === day).sort((a, b) => (a.values.order || 0) - (b.values.order || 0));
+					const matching = items.filter(matches);
 					return (
 						<section
 							key={day}
@@ -120,71 +181,86 @@ export function ServicePlanner({
 						>
 							<header>
 								<h3>{new Date(day + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric' })}</h3>
-								<span>{items.length}</span>
+								<span>{matching.length === items.length ? items.length : `${matching.length} / ${items.length}`}</span>
 							</header>
-							{items.map((visit, index) => (
-								<article
-									key={visit.id}
-									className="sw-visit"
-									draggable={canEdit && !moving}
-									onDragStart={(e) => {
-										setDragging(visit.id);
-										e.dataTransfer.effectAllowed = 'move';
-										e.dataTransfer.setData('text/plain', visit.id);
-									}}
-									onDragEnd={() => setDragging(null)}
-									onDragOver={(e) => {
-										if (dragging) {
-											e.preventDefault();
-											e.stopPropagation();
-										}
-									}}
-									onDrop={(e) => {
-										e.preventDefault();
-										e.stopPropagation();
-										const record = records.find((r) => r.id === dragging);
-										if (record) void move(record, day, visit);
-									}}
-								>
-									<button className="sw-card-open" onClick={() => open(visit.id)}>
-										<span className="sw-badge">{visit.values.status || 'Scheduled'}</span>
-										<strong>{serviceTitle(visit)}</strong>
-										<span className="sw-visit-time">{visit.values.time || 'Time to be set'}</span>
-										{context(visit)}
-									</button>
-									{menu(visit)}
-									{canEdit && (
-										<div className="sw-move-controls">
-											<button
-												disabled={moving || index === 0}
-												aria-label={`Move ${serviceTitle(visit)} up`}
-												onClick={() => void move(visit, day, items[index - 1])}
+							<CollectionList
+								label={`Visits on ${day}`}
+								items={matching}
+								searchText={searchText}
+								size={size}
+								hideSearch
+								hideSize
+								empty="No matching visits"
+								resetKey={`${query}:${status}:${employee}`}
+							>
+								{(visible) =>
+									visible.map((visit) => {
+										const index = items.findIndex((item) => item.id === visit.id);
+										return (
+											<article
+												key={visit.id}
+												className="sw-visit"
+												draggable={canEdit && !moving}
+												onDragStart={(e) => {
+													setDragging(visit.id);
+													e.dataTransfer.effectAllowed = 'move';
+													e.dataTransfer.setData('text/plain', visit.id);
+												}}
+												onDragEnd={() => setDragging(null)}
+												onDragOver={(e) => {
+													if (dragging) {
+														e.preventDefault();
+														e.stopPropagation();
+													}
+												}}
+												onDrop={(e) => {
+													e.preventDefault();
+													e.stopPropagation();
+													const record = records.find((r) => r.id === dragging);
+													if (record) void move(record, day, visit);
+												}}
 											>
-												↑
-											</button>
-											<button
-												disabled={moving || index === items.length - 1}
-												aria-label={`Move ${serviceTitle(visit)} down`}
-												onClick={() => void move(visit, day, items[index + 2])}
-											>
-												↓
-											</button>
-											<label>
-												Move to
-												<input
-													type="date"
-													aria-label={`Move ${serviceTitle(visit)} to date`}
-													value={day}
-													disabled={moving}
-													onChange={(e) => e.target.value && void move(visit, e.target.value)}
-													onInput={(e) => e.currentTarget.value && e.currentTarget.value !== day && void move(visit, e.currentTarget.value)}
-												/>
-											</label>
-										</div>
-									)}
-								</article>
-							))}
-							{!items.length && <p className="sw-empty-small">No visits scheduled</p>}
+												<button className="sw-card-open" onClick={() => open(visit.id)}>
+													<span className="sw-badge">{visit.values.status || 'Scheduled'}</span>
+													<strong>{serviceTitle(visit)}</strong>
+													<span className="sw-visit-time">{visit.values.time || 'Time to be set'}</span>
+													{context(visit)}
+												</button>
+												{menu(visit)}
+												{canEdit && (
+													<div className="sw-move-controls">
+														<button
+															disabled={moving || index === 0}
+															aria-label={`Move ${serviceTitle(visit)} up`}
+															onClick={() => void move(visit, day, items[index - 1])}
+														>
+															↑
+														</button>
+														<button
+															disabled={moving || index === items.length - 1}
+															aria-label={`Move ${serviceTitle(visit)} down`}
+															onClick={() => void move(visit, day, items[index + 2])}
+														>
+															↓
+														</button>
+														<label>
+															Move to
+															<input
+																type="date"
+																aria-label={`Move ${serviceTitle(visit)} to date`}
+																value={day}
+																disabled={moving}
+																onChange={(e) => e.target.value && void move(visit, e.target.value)}
+																onInput={(e) => e.currentTarget.value && e.currentTarget.value !== day && void move(visit, e.currentTarget.value)}
+															/>
+														</label>
+													</div>
+												)}
+											</article>
+										);
+									})
+								}
+							</CollectionList>
 							{canEdit && (
 								<button className="sw-add-day" onClick={() => create(day)}>
 									+ Schedule visit

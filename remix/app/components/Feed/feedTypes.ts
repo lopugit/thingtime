@@ -84,13 +84,14 @@ export type PostComment = {
   richText?: EditorJsDoc | null;
   images: string[];
 	attachments: PublicAttachment[];
+  attachmentsTruncated?: boolean;
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
 	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   thing: Record<string, any> | null;
   tags: string[];
-  reactionCounts: Record<string, number>;
-  viewerReactions: string[];
+  reactionCounts?: Record<string, number>;
+  viewerReactions?: string[];
   // up/down votes — the separate focused reaction kind (POST /api/v1/things/updown).
   // Optional while older deployments roll out; treat absence as no votes.
   votes?: PublicUpdownVotes;
@@ -98,7 +99,9 @@ export type PostComment = {
   // subspaces / when they wear none). Optional during rollout.
   authorFlair?: PublicAuthorFlair | null;
   // direct replies — the comment's own /post/:id page shows the thread
-  commentCount: number;
+  commentCount?: number;
+  // Cursor projections omit unknown totals and hydrate replies on demand.
+  repliesLoaded?: false;
   // nested replies (threads ship two levels deep, ≤ 5 per level, oldest →
   // newest; deeper levels arrive empty and load on demand)
   comments?: PostComment[];
@@ -125,15 +128,16 @@ export type PublicPost = {
   // Stable metadata only. Content always resolves through the authenticated
   // attachment endpoint; feed payloads never carry S3 keys or signed URLs.
   attachments: PublicAttachment[];
+  attachmentsTruncated?: boolean;
 	// owner-chosen gallery layout for the visual attachments (null = masonry)
 	mediaLayout: PostMediaLayout | null;
   listing: MarketplaceListing | null;
   // thingtime posts: the free-form structured thing (crystal.thing)
   thing: Record<string, any> | null;
   tags: string[];
-  reactionCounts: Record<string, number>;
+  reactionCounts?: Record<string, number>;
   // every reaction token the viewer has toggled on this post (multi-react)
-  viewerReactions: string[];
+  viewerReactions?: string[];
   // up/down votes — the separate focused reaction kind beside the emoji
   // reactions (POST /api/v1/things/updown). Optional during rollout.
   votes?: PublicUpdownVotes;
@@ -147,7 +151,8 @@ export type PublicPost = {
   // name — a template or custom text). Optional during rollout.
   authorFlair?: PublicAuthorFlair | null;
   subspaceMod?: PublicSubspaceMod | null;
-  commentCount: number;
+  commentCount?: number;
+  repliesLoaded?: false;
   // Viewer-relative count layers. Optional while older deployments roll out;
   // commentCount remains the backward-compatible total.
   commentCounts?: { direct: number; replies: number; total: number; loaded: number };
