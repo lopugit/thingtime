@@ -34,6 +34,11 @@ test('uncustomized pages use the press-kit PNG and safe shared page titles', asy
 	const custom = await resolveSocialMeta(new Request('https://thingtime.example/feed'));
 	assert.match(custom.tags.find((tag) => tag.key === 'og:image')!.content, /\/social-card\?/);
 	assert.equal(pageTitle('/branding', '[LC]'), '[LC] Thingtime - Brand resources');
+	// the connections routes label from the SHARED table, so the server-rendered
+	// social meta and the client-set document.title agree (root.tsx used to carry
+	// its own copy of this one case)
+	assert.equal(pageTitle('/connections'), 'Thingtime - Connections');
+	assert.equal(pageTitle('/connections/feed'), 'Thingtime - Connections');
 	assert.equal(pageTitle('/profile-secret'), DEFAULT_PAGE_TITLE);
 	assert.equal(pageTitle('/', '[LC]'), `[LC] ${DEFAULT_PAGE_TITLE}`);
 });

@@ -35,6 +35,18 @@ test('zip path segments never carry separators, traversal, control characters or
 	assert.equal(safeArchiveSegment(`${'y'.repeat(99)}...`, 'fallback'), 'y'.repeat(99));
 });
 
+test('long segments lose stem characters, never their extension, and duplicates fold case the way filesystems do', () => {
+	const long = safeArchiveSegment(`${'a'.repeat(120)}.jpg`, 'file');
+	assert.ok(long.endsWith('.jpg'));
+	assert.equal(Array.from(long).length, 100);
+	assert.equal(safeArchiveSegment('b'.repeat(300), 'file'), 'b'.repeat(100), 'no extension: plain truncation');
+	assert.equal(safeArchiveSegment(`${'c'.repeat(120)}.${'x'.repeat(40)}`, 'file').length, 100, 'an over-long suffix is not an extension');
+	const paths = new ArchivePathAllocator();
+	assert.equal(paths.claim('', 'ı.jpg'), 'ı.jpg');
+	// dotless ı and i collide on case-insensitive filesystems, so the second one is renamed
+	assert.equal(paths.claim('', 'I.jpg'), 'I (2).jpg');
+});
+
 test('display names prefer folder names, media filenames, page titles and post openers with stable fallbacks', () => {
 	assert.equal(archiveDisplayName('folder', { name: 'Recipes 🍜' }, 'folder-1'), 'Recipes 🍜');
 	assert.equal(archiveDisplayName('folder', {}, 'folder-abc-123'), 'folder-folderab');

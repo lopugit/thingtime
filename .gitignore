@@ -113,3 +113,7 @@ macos/ThingtimeWidgets/build/
 # Native Widgets distribution artifacts
 macos/ThingtimeWidgets/release/
 macos/ThingtimeWidgets/release-upload/
+
+# Claude Code per-checkout tooling state (worktree-derived dev ports, local permissions)
+.claude/launch.json
+.claude/settings.local.json
