@@ -77,7 +77,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
   useEffect(() => {
     if (!ownerId) return;
     const controller = new AbortController();
-    void fileRequest('/api/v1/devices', undefined, controller.signal).then(result => setDevices(result.devices || [])).catch(() => {});
+    void requireFilesystemCapabilities().then(() => fileRequest('/api/v1/devices', undefined, controller.signal)).then(result => setDevices(result.devices || [])).catch(() => {});
     return () => controller.abort();
   }, [ownerId]);
   const approve: FileApproval = useCallback((request, signal) => new Promise<void>((resolve, reject) => {
@@ -93,6 +93,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     } });
   }), []);
   const list = useCallback(async (target: FileLocation, signal: AbortSignal, includeHidden = hidden) => {
+    await requireFilesystemCapabilities(); signal.throwIfAborted();
     const result: ThingsThing[] = [];
     if (target.deviceId) {
       let cursor: number | undefined;
