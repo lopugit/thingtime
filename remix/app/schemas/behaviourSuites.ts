@@ -110,6 +110,11 @@ export type SuitePageDef = {
 	blocks: (ctx: DemoBlockCtx, refs: SuiteRefs, suite: BehaviourSuite) => DemoBlock[];
 };
 
+// PUBLIC CONTENT an app ships (a species catalogue, a story, a question
+// bank): seeded once as public system data things (data-app-<suite>-<id>)
+// that installed programs read in `system` scope — never part of an install.
+export type SuiteContentDef = { id: string; schema: string; tags?: string[]; values: Record<string, unknown> };
+
 export type SuiteAppDef = {
 	tagline: string;
 	// which SuitePageDef key is the entry page (defaults to the first page)
@@ -135,6 +140,8 @@ export type BehaviourSuite = {
 	// multi-page APP suites — installed as a whole, pages link by key
 	pages?: SuitePageDef[];
 	app?: SuiteAppDef;
+	// app content (see SuiteContentDef) — a pure generator, seeded by seed.ts
+	content?: () => SuiteContentDef[];
 };
 
 // ---------------------------------------------------------------------------

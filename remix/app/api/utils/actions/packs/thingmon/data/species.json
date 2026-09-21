@@ -1,0 +1,1977 @@
+[
+	{
+		"id": 1,
+		"slug": "cindrel",
+		"name": "Cindrel",
+		"stage": 1,
+		"types": [
+			"ember"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 2,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"embercave",
+			"meadow"
+		],
+		"genus": "Kindling thingmon",
+		"flavor": "Cute, small, and a warm fox-like thing whose tail ember never quite goes out.",
+		"baseStats": {
+			"hp": 50,
+			"atk": 50,
+			"def": 38,
+			"spd": 45
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.3,
+		"weightKg": 5,
+		"sprite": "/demos/thingmon/01-cindrel.png",
+		"line": "cinder",
+		"archetype": "beast"
+	},
+	{
+		"id": 2,
+		"slug": "flamlet",
+		"name": "Flamlet",
+		"stage": 2,
+		"types": [
+			"ember"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 3,
+			"level": 26
+		},
+		"evolvesFrom": 1,
+		"habitats": [
+			"embercave",
+			"meadow"
+		],
+		"genus": "Kindling thingmon",
+		"flavor": "Grown bolder: a warm fox-like thing whose tail ember never quite goes out, now with something to prove.",
+		"baseStats": {
+			"hp": 72,
+			"atk": 62,
+			"def": 58,
+			"spd": 61
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 1,
+		"weightKg": 31.3,
+		"sprite": "/demos/thingmon/02-flamlet.png",
+		"line": "cinder",
+		"archetype": "beast"
+	},
+	{
+		"id": 3,
+		"slug": "pyrothorn",
+		"name": "Pyrothorn",
+		"stage": 3,
+		"types": [
+			"ember"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 2,
+		"habitats": [
+			"embercave"
+		],
+		"genus": "Kindling thingmon",
+		"flavor": "Fully grown — a warm fox-like thing whose tail ember never quite goes out. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 100,
+			"atk": 96,
+			"def": 88,
+			"spd": 90
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 107,
+		"sprite": "/demos/thingmon/03-pyrothorn.png",
+		"line": "cinder",
+		"archetype": "beast"
+	},
+	{
+		"id": 4,
+		"slug": "puddlin",
+		"name": "Puddlin",
+		"stage": 1,
+		"types": [
+			"tide"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 5,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"tidepool",
+			"duskmarsh"
+		],
+		"genus": "Puddle thingmon",
+		"flavor": "Cute, small, and a shy droplet that giggles when it rains.",
+		"baseStats": {
+			"hp": 59,
+			"atk": 37,
+			"def": 44,
+			"spd": 35
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.3,
+		"weightKg": 6.8,
+		"sprite": "/demos/thingmon/04-puddlin.png",
+		"line": "puddle",
+		"archetype": "blob"
+	},
+	{
+		"id": 5,
+		"slug": "rippleo",
+		"name": "Rippleo",
+		"stage": 2,
+		"types": [
+			"tide"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 6,
+			"level": 26
+		},
+		"evolvesFrom": 4,
+		"habitats": [
+			"tidepool",
+			"duskmarsh"
+		],
+		"genus": "Puddle thingmon",
+		"flavor": "Grown bolder: a shy droplet that giggles when it rains, now with something to prove.",
+		"baseStats": {
+			"hp": 75,
+			"atk": 63,
+			"def": 61,
+			"spd": 52
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 27.8,
+		"sprite": "/demos/thingmon/05-rippleo.png",
+		"line": "puddle",
+		"archetype": "blob"
+	},
+	{
+		"id": 6,
+		"slug": "tidalisk",
+		"name": "Tidalisk",
+		"stage": 3,
+		"types": [
+			"tide"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 5,
+		"habitats": [
+			"tidepool"
+		],
+		"genus": "Puddle thingmon",
+		"flavor": "Fully grown — a shy droplet that giggles when it rains. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 101,
+			"atk": 87,
+			"def": 95,
+			"spd": 87
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 91.1,
+		"sprite": "/demos/thingmon/06-tidalisk.png",
+		"line": "puddle",
+		"archetype": "blob"
+	},
+	{
+		"id": 7,
+		"slug": "sproutle",
+		"name": "Sproutle",
+		"stage": 1,
+		"types": [
+			"bloom"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 8,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"meadow",
+			"duskmarsh"
+		],
+		"genus": "Seedling thingmon",
+		"flavor": "Cute, small, and a hopping seed that roots wherever it naps.",
+		"baseStats": {
+			"hp": 53,
+			"atk": 43,
+			"def": 43,
+			"spd": 39
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.3,
+		"weightKg": 5,
+		"sprite": "/demos/thingmon/07-sproutle.png",
+		"line": "sprout",
+		"archetype": "sprite"
+	},
+	{
+		"id": 8,
+		"slug": "thistlon",
+		"name": "Thistlon",
+		"stage": 2,
+		"types": [
+			"bloom"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 9,
+			"level": 26
+		},
+		"evolvesFrom": 7,
+		"habitats": [
+			"meadow",
+			"duskmarsh"
+		],
+		"genus": "Seedling thingmon",
+		"flavor": "Grown bolder: a hopping seed that roots wherever it naps, now with something to prove.",
+		"baseStats": {
+			"hp": 75,
+			"atk": 55,
+			"def": 62,
+			"spd": 55
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 23,
+		"sprite": "/demos/thingmon/08-thistlon.png",
+		"line": "sprout",
+		"archetype": "sprite"
+	},
+	{
+		"id": 9,
+		"slug": "verdantis",
+		"name": "Verdantis",
+		"stage": 3,
+		"types": [
+			"bloom"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 8,
+		"habitats": [
+			"meadow"
+		],
+		"genus": "Seedling thingmon",
+		"flavor": "Fully grown — a hopping seed that roots wherever it naps. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 101,
+			"atk": 85,
+			"def": 94,
+			"spd": 81
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.6,
+		"weightKg": 107.2,
+		"sprite": "/demos/thingmon/09-verdantis.png",
+		"line": "sprout",
+		"archetype": "sprite"
+	},
+	{
+		"id": 10,
+		"slug": "zapik",
+		"name": "Zapik",
+		"stage": 1,
+		"types": [
+			"spark"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 11,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"meadow",
+			"skybluff"
+		],
+		"genus": "Static thingmon",
+		"flavor": "Cute, small, and a twitchy creature that charges itself by running in circles.",
+		"baseStats": {
+			"hp": 48,
+			"atk": 49,
+			"def": 42,
+			"spd": 43
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 5.8,
+		"sprite": "/demos/thingmon/10-zapik.png",
+		"line": "zap",
+		"archetype": "beast"
+	},
+	{
+		"id": 11,
+		"slug": "voltrix",
+		"name": "Voltrix",
+		"stage": 2,
+		"types": [
+			"spark"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 12,
+			"level": 26
+		},
+		"evolvesFrom": 10,
+		"habitats": [
+			"meadow",
+			"skybluff"
+		],
+		"genus": "Static thingmon",
+		"flavor": "Grown bolder: a twitchy creature that charges itself by running in circles, now with something to prove.",
+		"baseStats": {
+			"hp": 66,
+			"atk": 63,
+			"def": 54,
+			"spd": 65
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 30.6,
+		"sprite": "/demos/thingmon/11-voltrix.png",
+		"line": "zap",
+		"archetype": "beast"
+	},
+	{
+		"id": 12,
+		"slug": "thundrake",
+		"name": "Thundrake",
+		"stage": 3,
+		"types": [
+			"spark"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 11,
+		"habitats": [
+			"meadow"
+		],
+		"genus": "Static thingmon",
+		"flavor": "Fully grown — a twitchy creature that charges itself by running in circles. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 97,
+			"atk": 93,
+			"def": 90,
+			"spd": 94
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.6,
+		"weightKg": 105.2,
+		"sprite": "/demos/thingmon/12-thundrake.png",
+		"line": "zap",
+		"archetype": "beast"
+	},
+	{
+		"id": 13,
+		"slug": "snowbi",
+		"name": "Snowbi",
+		"stage": 1,
+		"types": [
+			"frost"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 14,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"frostpeak",
+			"skybluff"
+		],
+		"genus": "Flurry thingmon",
+		"flavor": "Cute, small, and a round bird whose feathers are tiny snowflakes.",
+		"baseStats": {
+			"hp": 48,
+			"atk": 46,
+			"def": 47,
+			"spd": 39
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 6.7,
+		"sprite": "/demos/thingmon/13-snowbi.png",
+		"line": "snow",
+		"archetype": "bird"
+	},
+	{
+		"id": 14,
+		"slug": "glacielle",
+		"name": "Glacielle",
+		"stage": 2,
+		"types": [
+			"frost"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 15,
+			"level": 26
+		},
+		"evolvesFrom": 13,
+		"habitats": [
+			"frostpeak",
+			"skybluff"
+		],
+		"genus": "Flurry thingmon",
+		"flavor": "Grown bolder: a round bird whose feathers are tiny snowflakes, now with something to prove.",
+		"baseStats": {
+			"hp": 71,
+			"atk": 60,
+			"def": 67,
+			"spd": 51
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 31.4,
+		"sprite": "/demos/thingmon/14-glacielle.png",
+		"line": "snow",
+		"archetype": "bird"
+	},
+	{
+		"id": 15,
+		"slug": "rimeghast",
+		"name": "Rimeghast",
+		"stage": 3,
+		"types": [
+			"frost"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 14,
+		"habitats": [
+			"frostpeak"
+		],
+		"genus": "Flurry thingmon",
+		"flavor": "Fully grown — a round bird whose feathers are tiny snowflakes. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 94,
+			"atk": 92,
+			"def": 91,
+			"spd": 82
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 93,
+		"sprite": "/demos/thingmon/15-rimeghast.png",
+		"line": "snow",
+		"archetype": "bird"
+	},
+	{
+		"id": 16,
+		"slug": "pebblit",
+		"name": "Pebblit",
+		"stage": 1,
+		"types": [
+			"stone"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 17,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"embercave",
+			"frostpeak"
+		],
+		"genus": "Rubble thingmon",
+		"flavor": "Cute, small, and a stack of pebbles that decided to be a creature.",
+		"baseStats": {
+			"hp": 55,
+			"atk": 41,
+			"def": 54,
+			"spd": 28
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 6.2,
+		"sprite": "/demos/thingmon/16-pebblit.png",
+		"line": "pebble",
+		"archetype": "golem"
+	},
+	{
+		"id": 17,
+		"slug": "cragmaw",
+		"name": "Cragmaw",
+		"stage": 2,
+		"types": [
+			"stone"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 18,
+			"level": 26
+		},
+		"evolvesFrom": 16,
+		"habitats": [
+			"embercave",
+			"frostpeak"
+		],
+		"genus": "Rubble thingmon",
+		"flavor": "Grown bolder: a stack of pebbles that decided to be a creature, now with something to prove.",
+		"baseStats": {
+			"hp": 75,
+			"atk": 62,
+			"def": 69,
+			"spd": 48
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.8,
+		"weightKg": 28.9,
+		"sprite": "/demos/thingmon/17-cragmaw.png",
+		"line": "pebble",
+		"archetype": "golem"
+	},
+	{
+		"id": 18,
+		"slug": "monolythe",
+		"name": "Monolythe",
+		"stage": 3,
+		"types": [
+			"stone"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 17,
+		"habitats": [
+			"embercave"
+		],
+		"genus": "Rubble thingmon",
+		"flavor": "Fully grown — a stack of pebbles that decided to be a creature. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 99,
+			"atk": 91,
+			"def": 92,
+			"spd": 78
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.6,
+		"weightKg": 98.5,
+		"sprite": "/demos/thingmon/18-monolythe.png",
+		"line": "pebble",
+		"archetype": "golem"
+	},
+	{
+		"id": 19,
+		"slug": "umbrit",
+		"name": "Umbrit",
+		"stage": 1,
+		"types": [
+			"shade"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 20,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"duskmarsh",
+			"embercave"
+		],
+		"genus": "Moth thingmon",
+		"flavor": "Cute, small, and a moth that flies toward the dark instead of the light.",
+		"baseStats": {
+			"hp": 47,
+			"atk": 46,
+			"def": 43,
+			"spd": 39
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 5.8,
+		"sprite": "/demos/thingmon/19-umbrit.png",
+		"line": "umbra",
+		"archetype": "bug"
+	},
+	{
+		"id": 20,
+		"slug": "duskwing",
+		"name": "Duskwing",
+		"stage": 2,
+		"types": [
+			"shade"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 21,
+			"level": 26
+		},
+		"evolvesFrom": 19,
+		"habitats": [
+			"duskmarsh",
+			"embercave"
+		],
+		"genus": "Moth thingmon",
+		"flavor": "Grown bolder: a moth that flies toward the dark instead of the light, now with something to prove.",
+		"baseStats": {
+			"hp": 66,
+			"atk": 68,
+			"def": 63,
+			"spd": 56
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 23.3,
+		"sprite": "/demos/thingmon/20-duskwing.png",
+		"line": "umbra",
+		"archetype": "bug"
+	},
+	{
+		"id": 21,
+		"slug": "nocturnex",
+		"name": "Nocturnex",
+		"stage": 3,
+		"types": [
+			"shade"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 20,
+		"habitats": [
+			"duskmarsh"
+		],
+		"genus": "Moth thingmon",
+		"flavor": "Fully grown — a moth that flies toward the dark instead of the light. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 97,
+			"atk": 95,
+			"def": 84,
+			"spd": 85
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.8,
+		"weightKg": 76.9,
+		"sprite": "/demos/thingmon/21-nocturnex.png",
+		"line": "umbra",
+		"archetype": "bug"
+	},
+	{
+		"id": 22,
+		"slug": "lumin",
+		"name": "Lumin",
+		"stage": 1,
+		"types": [
+			"glow"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 23,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"skybluff",
+			"meadow"
+		],
+		"genus": "Wisp thingmon",
+		"flavor": "Cute, small, and a floating spark that hums old lullabies.",
+		"baseStats": {
+			"hp": 51,
+			"atk": 45,
+			"def": 47,
+			"spd": 44
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.5,
+		"weightKg": 5.9,
+		"sprite": "/demos/thingmon/22-lumin.png",
+		"line": "lumin",
+		"archetype": "sprite"
+	},
+	{
+		"id": 23,
+		"slug": "glimmerie",
+		"name": "Glimmerie",
+		"stage": 2,
+		"types": [
+			"glow"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 24,
+			"level": 26
+		},
+		"evolvesFrom": 22,
+		"habitats": [
+			"skybluff",
+			"meadow"
+		],
+		"genus": "Wisp thingmon",
+		"flavor": "Grown bolder: a floating spark that hums old lullabies, now with something to prove.",
+		"baseStats": {
+			"hp": 74,
+			"atk": 58,
+			"def": 59,
+			"spd": 57
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.8,
+		"weightKg": 29,
+		"sprite": "/demos/thingmon/23-glimmerie.png",
+		"line": "lumin",
+		"archetype": "sprite"
+	},
+	{
+		"id": 24,
+		"slug": "starlune",
+		"name": "Starlune",
+		"stage": 3,
+		"types": [
+			"glow"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 23,
+		"habitats": [
+			"skybluff"
+		],
+		"genus": "Wisp thingmon",
+		"flavor": "Fully grown — a floating spark that hums old lullabies. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 94,
+			"atk": 90,
+			"def": 87,
+			"spd": 88
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 87.6,
+		"sprite": "/demos/thingmon/24-starlune.png",
+		"line": "lumin",
+		"archetype": "sprite"
+	},
+	{
+		"id": 25,
+		"slug": "magmite",
+		"name": "Magmite",
+		"stage": 1,
+		"types": [
+			"ember",
+			"stone"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 26,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"embercave"
+		],
+		"genus": "Slag thingmon",
+		"flavor": "Cute, small, and a chunk of cooled lava with a molten heart.",
+		"baseStats": {
+			"hp": 53,
+			"atk": 51,
+			"def": 49,
+			"spd": 29
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 5,
+		"sprite": "/demos/thingmon/25-magmite.png",
+		"line": "magma",
+		"archetype": "golem"
+	},
+	{
+		"id": 26,
+		"slug": "slagbone",
+		"name": "Slagbone",
+		"stage": 2,
+		"types": [
+			"ember",
+			"stone"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 27,
+			"level": 26
+		},
+		"evolvesFrom": 25,
+		"habitats": [
+			"embercave"
+		],
+		"genus": "Slag thingmon",
+		"flavor": "Grown bolder: a chunk of cooled lava with a molten heart, now with something to prove.",
+		"baseStats": {
+			"hp": 75,
+			"atk": 72,
+			"def": 71,
+			"spd": 49
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 33.3,
+		"sprite": "/demos/thingmon/26-slagbone.png",
+		"line": "magma",
+		"archetype": "golem"
+	},
+	{
+		"id": 27,
+		"slug": "vulcanoth",
+		"name": "Vulcanoth",
+		"stage": 3,
+		"types": [
+			"ember",
+			"stone"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 26,
+		"habitats": [
+			"embercave"
+		],
+		"genus": "Slag thingmon",
+		"flavor": "Fully grown — a chunk of cooled lava with a molten heart. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 96,
+			"atk": 101,
+			"def": 96,
+			"spd": 78
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.6,
+		"weightKg": 107.3,
+		"sprite": "/demos/thingmon/27-vulcanoth.png",
+		"line": "magma",
+		"archetype": "golem"
+	},
+	{
+		"id": 28,
+		"slug": "chillip",
+		"name": "Chillip",
+		"stage": 1,
+		"types": [
+			"tide",
+			"frost"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 29,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"tidepool",
+			"frostpeak"
+		],
+		"genus": "Iceberg thingmon",
+		"flavor": "Cute, small, and a fish that swims through ice as if it were water.",
+		"baseStats": {
+			"hp": 54,
+			"atk": 47,
+			"def": 49,
+			"spd": 38
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 5.8,
+		"sprite": "/demos/thingmon/28-chillip.png",
+		"line": "chill",
+		"archetype": "fish"
+	},
+	{
+		"id": 29,
+		"slug": "frostfin",
+		"name": "Frostfin",
+		"stage": 2,
+		"types": [
+			"tide",
+			"frost"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 30,
+			"level": 26
+		},
+		"evolvesFrom": 28,
+		"habitats": [
+			"tidepool",
+			"frostpeak"
+		],
+		"genus": "Iceberg thingmon",
+		"flavor": "Grown bolder: a fish that swims through ice as if it were water, now with something to prove.",
+		"baseStats": {
+			"hp": 75,
+			"atk": 64,
+			"def": 73,
+			"spd": 54
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 28.7,
+		"sprite": "/demos/thingmon/29-frostfin.png",
+		"line": "chill",
+		"archetype": "fish"
+	},
+	{
+		"id": 30,
+		"slug": "berglord",
+		"name": "Berglord",
+		"stage": 3,
+		"types": [
+			"tide",
+			"frost"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 29,
+		"habitats": [
+			"tidepool"
+		],
+		"genus": "Iceberg thingmon",
+		"flavor": "Fully grown — a fish that swims through ice as if it were water. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 105,
+			"atk": 89,
+			"def": 92,
+			"spd": 79
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.8,
+		"weightKg": 90,
+		"sprite": "/demos/thingmon/30-berglord.png",
+		"line": "chill",
+		"archetype": "fish"
+	},
+	{
+		"id": 31,
+		"slug": "petalume",
+		"name": "Petalume",
+		"stage": 1,
+		"types": [
+			"bloom",
+			"glow"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 32,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"meadow"
+		],
+		"genus": "Bloom thingmon",
+		"flavor": "Cute, small, and a flower whose petals glow brighter the more it is admired.",
+		"baseStats": {
+			"hp": 56,
+			"atk": 44,
+			"def": 44,
+			"spd": 37
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.5,
+		"weightKg": 6,
+		"sprite": "/demos/thingmon/31-petalume.png",
+		"line": "petal",
+		"archetype": "sprite"
+	},
+	{
+		"id": 32,
+		"slug": "blossara",
+		"name": "Blossara",
+		"stage": 2,
+		"types": [
+			"bloom",
+			"glow"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 33,
+			"level": 26
+		},
+		"evolvesFrom": 31,
+		"habitats": [
+			"meadow"
+		],
+		"genus": "Bloom thingmon",
+		"flavor": "Grown bolder: a flower whose petals glow brighter the more it is admired, now with something to prove.",
+		"baseStats": {
+			"hp": 76,
+			"atk": 64,
+			"def": 61,
+			"spd": 55
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.8,
+		"weightKg": 30.4,
+		"sprite": "/demos/thingmon/32-blossara.png",
+		"line": "petal",
+		"archetype": "sprite"
+	},
+	{
+		"id": 33,
+		"slug": "lumiflora",
+		"name": "Lumiflora",
+		"stage": 3,
+		"types": [
+			"bloom",
+			"glow"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 32,
+		"habitats": [
+			"meadow"
+		],
+		"genus": "Bloom thingmon",
+		"flavor": "Fully grown — a flower whose petals glow brighter the more it is admired. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 98,
+			"atk": 95,
+			"def": 89,
+			"spd": 86
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 99.9,
+		"sprite": "/demos/thingmon/33-lumiflora.png",
+		"line": "petal",
+		"archetype": "sprite"
+	},
+	{
+		"id": 34,
+		"slug": "statik",
+		"name": "Statik",
+		"stage": 1,
+		"types": [
+			"spark",
+			"shade"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 35,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"skybluff",
+			"duskmarsh"
+		],
+		"genus": "Stormwisp thingmon",
+		"flavor": "Cute, small, and a crackle of static that haunts old radios.",
+		"baseStats": {
+			"hp": 48,
+			"atk": 47,
+			"def": 38,
+			"spd": 52
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 6.2,
+		"sprite": "/demos/thingmon/34-statik.png",
+		"line": "static",
+		"archetype": "sprite"
+	},
+	{
+		"id": 35,
+		"slug": "voltghast",
+		"name": "Voltghast",
+		"stage": 2,
+		"types": [
+			"spark",
+			"shade"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 36,
+			"level": 26
+		},
+		"evolvesFrom": 34,
+		"habitats": [
+			"skybluff",
+			"duskmarsh"
+		],
+		"genus": "Stormwisp thingmon",
+		"flavor": "Grown bolder: a crackle of static that haunts old radios, now with something to prove.",
+		"baseStats": {
+			"hp": 62,
+			"atk": 65,
+			"def": 56,
+			"spd": 66
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 26.2,
+		"sprite": "/demos/thingmon/35-voltghast.png",
+		"line": "static",
+		"archetype": "sprite"
+	},
+	{
+		"id": 36,
+		"slug": "stormwraith",
+		"name": "Stormwraith",
+		"stage": 3,
+		"types": [
+			"spark",
+			"shade"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 35,
+		"habitats": [
+			"skybluff"
+		],
+		"genus": "Stormwisp thingmon",
+		"flavor": "Fully grown — a crackle of static that haunts old radios. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 94,
+			"atk": 96,
+			"def": 81,
+			"spd": 91
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 80.7,
+		"sprite": "/demos/thingmon/36-stormwraith.png",
+		"line": "static",
+		"archetype": "sprite"
+	},
+	{
+		"id": 37,
+		"slug": "buggle",
+		"name": "Buggle",
+		"stage": 1,
+		"types": [
+			"bloom",
+			"stone"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 38,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"meadow",
+			"embercave"
+		],
+		"genus": "Beetle thingmon",
+		"flavor": "Cute, small, and a beetle whose shell is a pebble it grew into.",
+		"baseStats": {
+			"hp": 62,
+			"atk": 50,
+			"def": 56,
+			"spd": 32
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.3,
+		"weightKg": 6.9,
+		"sprite": "/demos/thingmon/37-buggle.png",
+		"line": "beetle",
+		"archetype": "bug"
+	},
+	{
+		"id": 38,
+		"slug": "beetlore",
+		"name": "Beetlore",
+		"stage": 2,
+		"types": [
+			"bloom",
+			"stone"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 39,
+			"level": 26
+		},
+		"evolvesFrom": 37,
+		"habitats": [
+			"meadow",
+			"embercave"
+		],
+		"genus": "Beetle thingmon",
+		"flavor": "Grown bolder: a beetle whose shell is a pebble it grew into, now with something to prove.",
+		"baseStats": {
+			"hp": 76,
+			"atk": 62,
+			"def": 71,
+			"spd": 47
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 1,
+		"weightKg": 30.8,
+		"sprite": "/demos/thingmon/38-beetlore.png",
+		"line": "beetle",
+		"archetype": "bug"
+	},
+	{
+		"id": 39,
+		"slug": "scarabor",
+		"name": "Scarabor",
+		"stage": 3,
+		"types": [
+			"bloom",
+			"stone"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 38,
+		"habitats": [
+			"meadow"
+		],
+		"genus": "Beetle thingmon",
+		"flavor": "Fully grown — a beetle whose shell is a pebble it grew into. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 105,
+			"atk": 93,
+			"def": 102,
+			"spd": 76
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 95.2,
+		"sprite": "/demos/thingmon/39-scarabor.png",
+		"line": "beetle",
+		"archetype": "bug"
+	},
+	{
+		"id": 40,
+		"slug": "squidge",
+		"name": "Squidge",
+		"stage": 1,
+		"types": [
+			"tide",
+			"shade"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 41,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"tidepool",
+			"duskmarsh"
+		],
+		"genus": "Tentacle thingmon",
+		"flavor": "Cute, small, and a squid that writes with its own ink and never finishes a sentence.",
+		"baseStats": {
+			"hp": 56,
+			"atk": 50,
+			"def": 45,
+			"spd": 46
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 5.6,
+		"sprite": "/demos/thingmon/40-squidge.png",
+		"line": "squid",
+		"archetype": "fish"
+	},
+	{
+		"id": 41,
+		"slug": "tentakit",
+		"name": "Tentakit",
+		"stage": 2,
+		"types": [
+			"tide",
+			"shade"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 42,
+			"level": 26
+		},
+		"evolvesFrom": 40,
+		"habitats": [
+			"tidepool",
+			"duskmarsh"
+		],
+		"genus": "Tentacle thingmon",
+		"flavor": "Grown bolder: a squid that writes with its own ink and never finishes a sentence, now with something to prove.",
+		"baseStats": {
+			"hp": 73,
+			"atk": 64,
+			"def": 68,
+			"spd": 62
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 1,
+		"weightKg": 31.9,
+		"sprite": "/demos/thingmon/41-tentakit.png",
+		"line": "squid",
+		"archetype": "fish"
+	},
+	{
+		"id": 42,
+		"slug": "krakenoth",
+		"name": "Krakenoth",
+		"stage": 3,
+		"types": [
+			"tide",
+			"shade"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 41,
+		"habitats": [
+			"tidepool"
+		],
+		"genus": "Tentacle thingmon",
+		"flavor": "Fully grown — a squid that writes with its own ink and never finishes a sentence. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 95,
+			"atk": 96,
+			"def": 94,
+			"spd": 91
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.8,
+		"weightKg": 80.7,
+		"sprite": "/demos/thingmon/42-krakenoth.png",
+		"line": "squid",
+		"archetype": "fish"
+	},
+	{
+		"id": 43,
+		"slug": "frostfae",
+		"name": "Frostfae",
+		"stage": 1,
+		"types": [
+			"glow",
+			"frost"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 44,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"frostpeak",
+			"skybluff"
+		],
+		"genus": "Aurora thingmon",
+		"flavor": "Cute, small, and a bird that paints the sky when it stretches.",
+		"baseStats": {
+			"hp": 52,
+			"atk": 43,
+			"def": 47,
+			"spd": 41
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 6.7,
+		"sprite": "/demos/thingmon/43-frostfae.png",
+		"line": "aurora",
+		"archetype": "bird"
+	},
+	{
+		"id": 44,
+		"slug": "auroril",
+		"name": "Auroril",
+		"stage": 2,
+		"types": [
+			"glow",
+			"frost"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 45,
+			"level": 26
+		},
+		"evolvesFrom": 43,
+		"habitats": [
+			"frostpeak",
+			"skybluff"
+		],
+		"genus": "Aurora thingmon",
+		"flavor": "Grown bolder: a bird that paints the sky when it stretches, now with something to prove.",
+		"baseStats": {
+			"hp": 71,
+			"atk": 60,
+			"def": 70,
+			"spd": 56
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 28.4,
+		"sprite": "/demos/thingmon/44-auroril.png",
+		"line": "aurora",
+		"archetype": "bird"
+	},
+	{
+		"id": 45,
+		"slug": "borealisk",
+		"name": "Borealisk",
+		"stage": 3,
+		"types": [
+			"glow",
+			"frost"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 44,
+		"habitats": [
+			"frostpeak"
+		],
+		"genus": "Aurora thingmon",
+		"flavor": "Fully grown — a bird that paints the sky when it stretches. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 103,
+			"atk": 92,
+			"def": 96,
+			"spd": 83
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.8,
+		"weightKg": 103.3,
+		"sprite": "/demos/thingmon/45-borealisk.png",
+		"line": "aurora",
+		"archetype": "bird"
+	},
+	{
+		"id": 46,
+		"slug": "sparkit",
+		"name": "Sparkit",
+		"stage": 1,
+		"types": [
+			"ember",
+			"spark"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 47,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"embercave",
+			"skybluff"
+		],
+		"genus": "Blaze thingmon",
+		"flavor": "Cute, small, and a hound that runs so fast its paws leave sparks.",
+		"baseStats": {
+			"hp": 51,
+			"atk": 51,
+			"def": 41,
+			"spd": 49
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.3,
+		"weightKg": 5.9,
+		"sprite": "/demos/thingmon/46-sparkit.png",
+		"line": "blaze",
+		"archetype": "beast"
+	},
+	{
+		"id": 47,
+		"slug": "blazehound",
+		"name": "Blazehound",
+		"stage": 2,
+		"types": [
+			"ember",
+			"spark"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 48,
+			"level": 26
+		},
+		"evolvesFrom": 46,
+		"habitats": [
+			"embercave",
+			"skybluff"
+		],
+		"genus": "Blaze thingmon",
+		"flavor": "Grown bolder: a hound that runs so fast its paws leave sparks, now with something to prove.",
+		"baseStats": {
+			"hp": 67,
+			"atk": 72,
+			"def": 52,
+			"spd": 70
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.8,
+		"weightKg": 24.3,
+		"sprite": "/demos/thingmon/47-blazehound.png",
+		"line": "blaze",
+		"archetype": "beast"
+	},
+	{
+		"id": 48,
+		"slug": "infernox",
+		"name": "Infernox",
+		"stage": 3,
+		"types": [
+			"ember",
+			"spark"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 47,
+		"habitats": [
+			"embercave"
+		],
+		"genus": "Blaze thingmon",
+		"flavor": "Fully grown — a hound that runs so fast its paws leave sparks. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 95,
+			"atk": 93,
+			"def": 87,
+			"spd": 92
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 86.9,
+		"sprite": "/demos/thingmon/48-infernox.png",
+		"line": "blaze",
+		"archetype": "beast"
+	},
+	{
+		"id": 49,
+		"slug": "shardow",
+		"name": "Shardow",
+		"stage": 1,
+		"types": [
+			"stone",
+			"shade"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 50,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"frostpeak",
+			"duskmarsh"
+		],
+		"genus": "Obsidian thingmon",
+		"flavor": "Cute, small, and a splinter of night-black glass that dislikes mirrors.",
+		"baseStats": {
+			"hp": 49,
+			"atk": 54,
+			"def": 53,
+			"spd": 33
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.4,
+		"weightKg": 6.7,
+		"sprite": "/demos/thingmon/49-shardow.png",
+		"line": "shard",
+		"archetype": "golem"
+	},
+	{
+		"id": 50,
+		"slug": "obsidra",
+		"name": "Obsidra",
+		"stage": 2,
+		"types": [
+			"stone",
+			"shade"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 51,
+			"level": 26
+		},
+		"evolvesFrom": 49,
+		"habitats": [
+			"frostpeak",
+			"duskmarsh"
+		],
+		"genus": "Obsidian thingmon",
+		"flavor": "Grown bolder: a splinter of night-black glass that dislikes mirrors, now with something to prove.",
+		"baseStats": {
+			"hp": 65,
+			"atk": 65,
+			"def": 73,
+			"spd": 48
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.8,
+		"weightKg": 23.2,
+		"sprite": "/demos/thingmon/50-obsidra.png",
+		"line": "shard",
+		"archetype": "golem"
+	},
+	{
+		"id": 51,
+		"slug": "nightspire",
+		"name": "Nightspire",
+		"stage": 3,
+		"types": [
+			"stone",
+			"shade"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 50,
+		"habitats": [
+			"frostpeak"
+		],
+		"genus": "Obsidian thingmon",
+		"flavor": "Fully grown — a splinter of night-black glass that dislikes mirrors. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 96,
+			"atk": 101,
+			"def": 96,
+			"spd": 76
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.8,
+		"weightKg": 86.3,
+		"sprite": "/demos/thingmon/51-nightspire.png",
+		"line": "shard",
+		"archetype": "golem"
+	},
+	{
+		"id": 52,
+		"slug": "murklet",
+		"name": "Murklet",
+		"stage": 1,
+		"types": [
+			"shade",
+			"tide"
+		],
+		"rarity": "common",
+		"evolvesTo": {
+			"id": 53,
+			"level": 12
+		},
+		"evolvesFrom": null,
+		"habitats": [
+			"duskmarsh",
+			"tidepool"
+		],
+		"genus": "Bog thingmon",
+		"flavor": "Cute, small, and a slow serpent that lives under the reeds and collects lost keys.",
+		"baseStats": {
+			"hp": 51,
+			"atk": 46,
+			"def": 47,
+			"spd": 43
+		},
+		"catchRate": 190,
+		"baseExp": 60,
+		"heightM": 0.3,
+		"weightKg": 7.1,
+		"sprite": "/demos/thingmon/52-murklet.png",
+		"line": "murk",
+		"archetype": "serpent"
+	},
+	{
+		"id": 53,
+		"slug": "bogwyrm",
+		"name": "Bogwyrm",
+		"stage": 2,
+		"types": [
+			"shade",
+			"tide"
+		],
+		"rarity": "uncommon",
+		"evolvesTo": {
+			"id": 54,
+			"level": 26
+		},
+		"evolvesFrom": 52,
+		"habitats": [
+			"duskmarsh",
+			"tidepool"
+		],
+		"genus": "Bog thingmon",
+		"flavor": "Grown bolder: a slow serpent that lives under the reeds and collects lost keys, now with something to prove.",
+		"baseStats": {
+			"hp": 76,
+			"atk": 63,
+			"def": 64,
+			"spd": 62
+		},
+		"catchRate": 90,
+		"baseExp": 120,
+		"heightM": 0.9,
+		"weightKg": 28.5,
+		"sprite": "/demos/thingmon/53-bogwyrm.png",
+		"line": "murk",
+		"archetype": "serpent"
+	},
+	{
+		"id": 54,
+		"slug": "abyssaur",
+		"name": "Abyssaur",
+		"stage": 3,
+		"types": [
+			"shade",
+			"tide"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": 53,
+		"habitats": [
+			"duskmarsh"
+		],
+		"genus": "Bog thingmon",
+		"flavor": "Fully grown — a slow serpent that lives under the reeds and collects lost keys. Trainers speak of it in a lower voice.",
+		"baseStats": {
+			"hp": 102,
+			"atk": 91,
+			"def": 95,
+			"spd": 84
+		},
+		"catchRate": 35,
+		"baseExp": 200,
+		"heightM": 1.7,
+		"weightKg": 76.9,
+		"sprite": "/demos/thingmon/54-abyssaur.png",
+		"line": "murk",
+		"archetype": "serpent"
+	},
+	{
+		"id": 55,
+		"slug": "solaris",
+		"name": "Solaris",
+		"stage": 3,
+		"types": [
+			"ember",
+			"glow"
+		],
+		"rarity": "legendary",
+		"evolvesTo": null,
+		"evolvesFrom": null,
+		"habitats": [
+			"skybluff"
+		],
+		"genus": "Sunheart thingmon",
+		"flavor": "Said to be a piece of noon that fell off the sun. Only a keeper with a full-ish dex ever meets one.",
+		"baseStats": {
+			"hp": 120,
+			"atk": 113,
+			"def": 110,
+			"spd": 113
+		},
+		"catchRate": 8,
+		"baseExp": 320,
+		"heightM": 3.4,
+		"weightKg": 175.6,
+		"sprite": "/demos/thingmon/55-solaris.png",
+		"line": "solaris",
+		"archetype": "sprite"
+	},
+	{
+		"id": 56,
+		"slug": "tempestra",
+		"name": "Tempestra",
+		"stage": 3,
+		"types": [
+			"spark",
+			"tide"
+		],
+		"rarity": "legendary",
+		"evolvesTo": null,
+		"evolvesFrom": null,
+		"habitats": [
+			"skybluff"
+		],
+		"genus": "Tempest thingmon",
+		"flavor": "A storm with wings; every feather is a different weather. Only a keeper with a full-ish dex ever meets one.",
+		"baseStats": {
+			"hp": 112,
+			"atk": 107,
+			"def": 109,
+			"spd": 115
+		},
+		"catchRate": 8,
+		"baseExp": 320,
+		"heightM": 2.6,
+		"weightKg": 262.6,
+		"sprite": "/demos/thingmon/56-tempestra.png",
+		"line": "tempest",
+		"archetype": "bird"
+	},
+	{
+		"id": 57,
+		"slug": "glacierex",
+		"name": "Glacierex",
+		"stage": 3,
+		"types": [
+			"frost",
+			"stone"
+		],
+		"rarity": "legendary",
+		"evolvesTo": null,
+		"evolvesFrom": null,
+		"habitats": [
+			"frostpeak"
+		],
+		"genus": "Glacier thingmon",
+		"flavor": "A walking glacier that carves valleys when it is bored. Only a keeper with a full-ish dex ever meets one.",
+		"baseStats": {
+			"hp": 120,
+			"atk": 108,
+			"def": 123,
+			"spd": 92
+		},
+		"catchRate": 8,
+		"baseExp": 320,
+		"heightM": 2.4,
+		"weightKg": 195.5,
+		"sprite": "/demos/thingmon/57-glacierex.png",
+		"line": "glacier",
+		"archetype": "golem"
+	},
+	{
+		"id": 58,
+		"slug": "umbraking",
+		"name": "Umbraking",
+		"stage": 3,
+		"types": [
+			"shade"
+		],
+		"rarity": "legendary",
+		"evolvesTo": null,
+		"evolvesFrom": null,
+		"habitats": [
+			"duskmarsh"
+		],
+		"genus": "Nightfall thingmon",
+		"flavor": "The shadow that other shadows are afraid of. Only a keeper with a full-ish dex ever meets one.",
+		"baseStats": {
+			"hp": 111,
+			"atk": 115,
+			"def": 108,
+			"spd": 108
+		},
+		"catchRate": 8,
+		"baseExp": 320,
+		"heightM": 2.6,
+		"weightKg": 149.7,
+		"sprite": "/demos/thingmon/58-umbraking.png",
+		"line": "umbraking",
+		"archetype": "beast"
+	},
+	{
+		"id": 59,
+		"slug": "chronomoth",
+		"name": "Chronomoth",
+		"stage": 3,
+		"types": [
+			"glow",
+			"shade"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": null,
+		"habitats": [
+			"embercave"
+		],
+		"genus": "Hourglass thingmon",
+		"flavor": "A moth whose wingbeats keep the time of the whole world. Seen rarely, and never twice in the same place.",
+		"baseStats": {
+			"hp": 95,
+			"atk": 94,
+			"def": 84,
+			"spd": 90
+		},
+		"catchRate": 30,
+		"baseExp": 240,
+		"heightM": 2.4,
+		"weightKg": 254.2,
+		"sprite": "/demos/thingmon/59-chronomoth.png",
+		"line": "chrono",
+		"archetype": "bug"
+	},
+	{
+		"id": 60,
+		"slug": "terravine",
+		"name": "Terravine",
+		"stage": 3,
+		"types": [
+			"bloom",
+			"stone"
+		],
+		"rarity": "rare",
+		"evolvesTo": null,
+		"evolvesFrom": null,
+		"habitats": [
+			"meadow"
+		],
+		"genus": "Rootwyrm thingmon",
+		"flavor": "A vine so old it has become a landscape. Seen rarely, and never twice in the same place.",
+		"baseStats": {
+			"hp": 103,
+			"atk": 89,
+			"def": 96,
+			"spd": 71
+		},
+		"catchRate": 30,
+		"baseExp": 240,
+		"heightM": 2.4,
+		"weightKg": 215.2,
+		"sprite": "/demos/thingmon/60-terravine.png",
+		"line": "terra",
+		"archetype": "serpent"
+	}
+]
