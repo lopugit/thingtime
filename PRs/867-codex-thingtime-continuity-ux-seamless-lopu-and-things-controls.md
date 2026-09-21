@@ -188,3 +188,10 @@ main's long-account-name truncation and builder library links remain in place.
 The refreshed production build, Vercel-output verification and TypeScript ratchet
 passed (89 existing diagnostics). The complete canonical unit suite passed
 3,554 tests with zero failures and six explicit skips after this integration.
+
+The subsequent main release `9672862e4` adds service media refresh after comments
+and authorized media on target comment lists. Integration preserves those paths
+through the shared post discussion component and retains the Places diagnostic
+fixes and visit filtering. Things advances to 1.25.0 so the separately added media
+and discussion/reference contracts have distinct negotiated versions. Final
+combined-source checks and deployed acceptance are recorded on the PR.

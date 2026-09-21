@@ -215,6 +215,9 @@ export type PostCardProps = {
   onChanged?: (id: string, next: PostChange) => void;
   // card-level signals: expand/react/comment/share
   onEngagement?: (event: EngagementEvent) => void;
+  // Accepted comments/replies may refresh related media without changing the
+  // optimistic engagement signal or turning a refresh failure into a retry.
+  onCommentAdded?: () => void | Promise<unknown>;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
   discussionOnly?: boolean;
@@ -225,6 +228,10 @@ export type PostCardProps = {
 	// media pages: the parent post's gallery this media belongs to, so the menu
 	// can offer "Download all" for the whole set instead of the single file
 	gallery?: { id: string; fileCount: number } | null;
+};
+
+const notifyCommentAdded = (callback?: () => void | Promise<unknown>) => {
+  void Promise.resolve().then(() => callback?.()).catch(() => {});
 };
 
 const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
@@ -816,6 +823,7 @@ const CommentRow = (props: {
   comment: PostComment;
   onChanged: (id: string, change: CommentChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
+  onCommentAdded?: () => void | Promise<unknown>;
   // 1 = a post's direct comment; grows down the thread. Only depth-1 rows
   // auto-open their preloaded replies (the default two-level view) — deeper
   // rows reveal ONE more depth per tap, and rows AT the visual cap refocus
@@ -824,7 +832,7 @@ const CommentRow = (props: {
   // the focused root of a drilled-in thread panel opens its replies on mount
   defaultOpen?: boolean;
 }) => {
-  const { comment, onChanged, onEngagement, depth = 1, defaultOpen } = props;
+  const { comment, onChanged, onEngagement, onCommentAdded, depth = 1, defaultOpen } = props;
 
   const api = useApi();
   const user = useCurrentUser();
@@ -1108,6 +1116,7 @@ const CommentRow = (props: {
         );
         return deduped;
       });
+      notifyCommentAdded(onCommentAdded);
     } catch (err: any) {
       freshReplies.drop(pendingReply.id);
       setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
@@ -1134,6 +1143,7 @@ const CommentRow = (props: {
     onChanged(comment.id, (current) => ({ ...current, commentCount: current.commentCount + 1 }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
     setRichReplyOpen(false);
+    notifyCommentAdded(onCommentAdded);
   };
 
   const handleReplyChanged = (id: string, change: CommentChange) => {
@@ -1327,7 +1337,7 @@ const CommentRow = (props: {
             {repliesLoading && replies === null && <ReplySkeleton />}
             {repliesOpen &&
               shownReplies.map((reply) => (
-                <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} depth={depth + 1} />
+                <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} depth={depth + 1} />
               ))}
             {repliesOpen &&
               !(repliesLoading && replies === null) &&
@@ -1410,7 +1420,7 @@ export const PostCard = React.memo(function PostCard(props: PostCardProps) {
 });
 
 function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing, gallery, discussionOnly } = props;
+  const { post, onChanged, onEngagement, onCommentAdded, defaultCommentsOpen, mediaThing, gallery, discussionOnly } = props;
 	const sharedPath = useSharedThingPath();
   const sharedAccess = useSharedAccess();
 	const permalinkPath = sharedPath(sharePathForThing(post));
@@ -1989,6 +1999,7 @@ function PostCardImpl(props: PostCardProps) {
         comments: prev.comments.map((comment) => (comment.id === pendingComment.id ? resp.comment : comment)),
         commentCount: resp.commentCount
       }));
+      notifyCommentAdded(onCommentAdded);
     } catch (err: any) {
       freshComments.drop(pendingComment.id);
       onChanged?.(post.id, (prev) => ({
@@ -2012,6 +2023,7 @@ function PostCardImpl(props: PostCardProps) {
     }));
     onEngagement?.({ thingId: post.id, signal: 'comment' });
     setRichCommentOpen(false);
+    notifyCommentAdded(onCommentAdded);
   };
 
   // a comment changed (reaction toggled) — swap it inside the freshest post
@@ -2621,7 +2633,7 @@ function PostCardImpl(props: PostCardProps) {
               </Flex>
               <CommentSortContext.Provider value={commentSort}>
                 <SubspaceReportContext.Provider value={subspaceReportContext}>
-                  <CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} defaultOpen />
+                  <CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} defaultOpen />
                 </SubspaceReportContext.Provider>
               </CommentSortContext.Provider>
             </Flex>
@@ -2661,7 +2673,7 @@ function PostCardImpl(props: PostCardProps) {
             <CommentSortContext.Provider value={commentSort}>
               <SubspaceReportContext.Provider value={subspaceReportContext}>
                 {shownComments.map((comment) => (
-                  <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
+                  <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} />
                 ))}
               </SubspaceReportContext.Provider>
             </CommentSortContext.Provider>

@@ -57,7 +57,7 @@ Canonical `test:lopu` includes workflow/admission and reload/account-switch
 regressions; `test:lopu-ui` covers presentation and client state.
 
 Thing discussions, linked references and metadata rename require `api.things`
-1.24.0; rich linked comments require `api.things-comment` 1.8.0. Client negotiation
+1.25.0; rich linked comments require `api.things-comment` 1.8.0. Client negotiation
 must reject main's earlier 1.23.0/1.7.0 workspace-only contracts for those features.
 
 ## Verify
