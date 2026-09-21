@@ -13199,13 +13199,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-webpages-seed-demos',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'admin',
     title: 'Seed the builder demo library',
     endpoint: '/api/v1/admin/webpages/seed-demos',
     summary: 'Upserts every builder demo page and every behaviour-suite part (schemas, components, actions, data, pages) as system-owned public things.',
     detail:
+      'Optional POST query catalog=integrations seeds only the integration library: one index, one page per provider, one page and component per example. It returns the ordinary seed report without suites; GET remains the general census: totalSeeded includes integration pages, while demosSeeded and suitesSeeded count only their respective catalogues. Unknown catalog values return 400. No keys or live output are stored. ' +
       'The write path for the builder demo library: the deterministic schemas/webpageDemos catalog seeds one ' +
       'system-owned webpage thing per demo (shareId webpage-demo-<slug>, reserved prefix, pageKey demo-<slug>, ' +
       'tags webpage/demo/<family>/<kind>), and the schemas/behaviourSuites catalog seeds every suite part — ' +
@@ -13227,6 +13228,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'POST with an empty body — the demo catalog is server-side and deterministic.',
+      'Use ?catalog=integrations to prepare the integration builder hierarchy independently; negotiate api.admin-webpages-seed-demos >=1.2.0 first.',
       'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
       'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } to check the census without writing — the three seeded counts are disjoint, so a suite page counts once, under suitesSeeded.',
       'Re-run after the catalogs change — converges, never duplicates.',
@@ -13283,7 +13285,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST with an empty body — the seed table is server-side and deterministic.',
       'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
-      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } — totalSeeded counts every system webpage (site pages, the global doc, and demo-library pages), and the three seeded counts partition it.',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } — totalSeeded counts every system webpage (site pages, the global doc, and demo-library pages), and the category counts cover site, demo and suite pages; totalSeeded also includes the separately seeded integration library.',
       'Re-run after adding routes to the seed table — converges, never duplicates.',
       'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
     ],
