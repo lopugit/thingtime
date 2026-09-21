@@ -14,6 +14,7 @@ import {
 	Search,
 	Leaf,
 	ArrowLeft,
+	Pencil,
 	Plus,
 	RefreshCw,
 	Map as MapIcon
@@ -370,7 +371,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 							<>
 								{canEdit && !selected.values.archived && !selected.values.workspaceOwner && (selected.kind !== 'member' || data.role === 'Admin') && (
 									<button onClick={() => edit(selected)}>
-										<PencilIcon />
+										<Pencil size={15} />
 										Edit
 									</button>
 								)}
@@ -780,7 +781,4 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 			</AlertDialog>
 		</div>
 	);
-}
-function PencilIcon() {
-	return <Settings2 size={15} />;
 }

@@ -46,6 +46,26 @@ export function loadServiceMaps(key: string): Promise<any> {
 	});
 	return sdk;
 }
+// A placeId resolves to the same coordinates every time, so each property costs
+// one Places lookup per page session. Without this, re-filtering the map replays
+// one billed lookup per property on every keystroke, and a workspace with a
+// handful of properties drains the shared per-user write budget in seconds.
+// Memory only: nothing is persisted, so a reload still re-reads from Google.
+const placeLocations = new Map<string, Promise<{ lat: number; lng: number } | null>>();
+function locateServiceAddress(rootId: string, address: ServiceRecord): Promise<{ lat: number; lng: number } | null> {
+	const key = `${rootId}:${address.values.placeId}`;
+	let pending = placeLocations.get(key);
+	if (!pending) {
+		pending = workspaceRequest(rootId, { operation: 'place', recordId: address.id })
+			.then((place) => (place.location ? { lat: place.location.latitude, lng: place.location.longitude } : null))
+			.catch((error) => {
+				placeLocations.delete(key);
+				throw error;
+			});
+		placeLocations.set(key, pending);
+	}
+	return pending;
+}
 export function ServiceAddressSearch({
 	rootId,
 	selected,
@@ -142,50 +162,76 @@ export function ServiceMap({
 	report: (error: unknown) => void;
 }) {
 	const host = React.useRef<HTMLDivElement>(null);
+	const map = React.useRef<any>(null);
+	const [sdk, setSdk] = React.useState<{ maps: any; AdvancedMarkerElement: any } | null>(null);
 	const [loading, setLoading] = React.useState(false);
 	const addressKey = addresses.map((r) => `${r.id}:${r.updatedAt}`).join('|');
 	const addressRecords = React.useRef(addresses);
 	addressRecords.current = addresses;
 	const callbacks = React.useRef({ open, report });
 	callbacks.current = { open, report };
+	// The SDK and the map instance are built once. Google exposes no disposal for
+	// a Map, so rebuilding one per search keystroke would strand a live instance
+	// on every edit of the filter.
 	React.useEffect(() => {
 		if (!apiKey) return;
 		let live = true;
-		const markers: any[] = [];
 		setLoading(true);
 		void loadServiceMaps(apiKey)
 			.then(async (maps) => {
 				const [{ Map }, { AdvancedMarkerElement }] = await Promise.all([maps.importLibrary('maps'), maps.importLibrary('marker')]);
 				if (!live || !host.current) return;
-				const map = new Map(host.current, {
+				map.current = new Map(host.current, {
 					center: { lat: -37.81, lng: 144.96 },
 					zoom: 11,
 					mapId: 'DEMO_MAP_ID',
 					renderingType: maps.RenderingType.RASTER,
 					mapTypeControl: true
 				});
-				const bounds = new maps.LatLngBounds();
-				let count = 0;
-				const list = addressRecords.current.filter((r) => r.values.placeId).slice(0, 50);
-				for (let start = 0; live && start < list.length; start += 4) {
-					await Promise.all(
-						list.slice(start, start + 4).map(async (address) => {
-							const place = await workspaceRequest(rootId, { operation: 'place', recordId: address.id });
-							if (!live || !place.location) return;
-							const position = { lat: place.location.latitude, lng: place.location.longitude };
-							const marker = new AdvancedMarkerElement({ map, position, title: serviceTitle(address), gmpClickable: true });
-							marker.addListener('click', () => callbacks.current.open(address.id));
-							markers.push(marker);
-							bounds.extend(position);
-							count++;
-						})
-					);
-				}
-				if (live && count) {
-					map.fitBounds(bounds);
-					if (count === 1) maps.event.addListenerOnce(map, 'idle', () => map.setZoom(15));
-				}
+				setSdk({ maps, AdvancedMarkerElement });
 			})
+			.catch((error) => {
+				if (live) {
+					setLoading(false);
+					callbacks.current.report(error);
+				}
+			});
+		return () => {
+			live = false;
+		};
+	}, [apiKey]);
+	React.useEffect(() => {
+		if (!sdk || !map.current) return;
+		let live = true;
+		const markers: any[] = [];
+		setLoading(true);
+		void (async () => {
+			const bounds = new sdk.maps.LatLngBounds();
+			let count = 0;
+			const list = addressRecords.current.filter((r) => r.values.placeId).slice(0, 50);
+			for (let start = 0; live && start < list.length; start += 4) {
+				await Promise.all(
+					list.slice(start, start + 4).map(async (address) => {
+						const position = await locateServiceAddress(rootId, address);
+						if (!live || !position) return;
+						const marker = new sdk.AdvancedMarkerElement({
+							map: map.current,
+							position,
+							title: serviceTitle(address),
+							gmpClickable: true
+						});
+						marker.addListener('click', () => callbacks.current.open(address.id));
+						markers.push(marker);
+						bounds.extend(position);
+						count++;
+					})
+				);
+			}
+			if (live && count) {
+				map.current.fitBounds(bounds);
+				if (count === 1) sdk.maps.event.addListenerOnce(map.current, 'idle', () => map.current.setZoom(15));
+			}
+		})()
 			.catch((error) => {
 				if (live) callbacks.current.report(error);
 			})
@@ -198,7 +244,7 @@ export function ServiceMap({
 				marker.map = null;
 			});
 		};
-	}, [apiKey, rootId, addressKey]);
+	}, [sdk, rootId, addressKey]);
 	if (!apiKey)
 		return (
 			<div className="sw-empty">
