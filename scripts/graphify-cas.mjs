@@ -720,7 +720,7 @@ function isIgnored(root, relativePath) {
  * writable so pruning can still remove a superseded snapshot.
  */
 export function markSnapshotReadOnly(snapshotPath) {
-  for (const name of [...PORTABLE_FILES, ...LOCAL_DERIVED_FILES, "snapshot.json"]) {
+  for (const name of SNAPSHOT_FILES) {
     const file = path.join(snapshotPath, name)
     if (!existsSync(file)) continue
     const mode = statSync(file).mode & 0o777

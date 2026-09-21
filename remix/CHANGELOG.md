@@ -64,7 +64,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   worktrees (deps, env copy, derived-port `.claude/launch.json`, relative
   `core.hooksPath`). Validation: `test:attachments`, `test:api-capabilities`,
   `test:graphify-cas`, seed → archive → cleanup against the local stand-in.
-  Details: [PR note](../PRs/dx-local-storage-fixtures-feature-maps.md).
+  Details: [PR #863 note](../PRs/863-claude-dx-local-storage-fixtures-feature-maps--developer-experience-follow-ups.md).
+
+- **2026-09-21 · Claude (AI):** Once-over review fixes for download-all
+  archives and the local attachment stand-in. Archive: the 280 s deadline is a
+  timer that aborts stalled upstream reads and now covers planning too (504 on
+  overrun); `manifest=1`/HEAD probes authorize without presigning on their own
+  `attachments.archiveManifest` window; bound rows past the cap return 413
+  instead of a shorter ZIP; the traversal budget counts only visible Things;
+  blocked linked media is withheld from `links.txt`; the `skipped` count is
+  owner/admin-only and 404s carry one message; `sharedRoot` resolves a
+  composition-only media root; long names keep their extension; client toasts,
+  folder-pill caching and hook placement tightened (`api.attachment-archive`
+  1.0.1). Stand-in: signing-secret retry, `PrivateS3ConfigError` on Vercel,
+  foreign version ids as absent objects, honoured abort signals, one pipeline
+  per completion, 400 for cancelled part PUTs, optional
+  `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, ETag/304
+  (`api.attachment-local-object` 1.0.1). Scripts: install lock in
+  `ensure-dependencies.js`, `.worktreeinclude`-driven env copy and an attach
+  entry in `.claude/launch.json`, seed-fixture cleanup/validation/realpath
+  fixes, ratchet hard-fail on duplicate declarations. Details:
+  [PR #865 note](../PRs/865-claude-dx-once-over-fixes--archive-and-local-storage-review-fixes.md).
 
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams

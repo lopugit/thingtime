@@ -19,17 +19,32 @@
 //
 // The tracked .githooks/post-checkout runs this automatically (in the
 // background) the first time a linked worktree is checked out without deps.
+// ensure-dependencies holds an install lock, so that background run and a
+// developer's own `npm run worktree-setup` never write node_modules at once.
 
 const { execFileSync, spawnSync } = require('node:child_process');
 const { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { resolveDevContext } = require('./worktree-ports.cjs');
 
-const remixDir = path.resolve(__dirname, '..');
+// The list of ignored local setup worth carrying into a worktree is the root
+// `.worktreeinclude` (what Codex-managed worktrees copy). Only its env-file
+// entries apply here — never node_modules or generated build state, which the
+// bootstrap rebuilds instead. This fallback covers checkouts without the file.
+const DEFAULT_ENV_FILES = ['.env', '.env.local', 'remix/.env', 'remix/.env.local', 'remix/.env.development', 'api/.env', 'api/.env.local'];
 
-// Ignored local setup worth carrying into a worktree. Tracked files never
-// appear here; node_modules is rebuilt from the store instead of copied.
-const ENV_FILES = ['.env', '.env.local', 'remix/.env', 'remix/.env.local', 'remix/.env.development', 'api/.env', 'api/.env.local'];
+const LAUNCH_VERSION = '0.0.1';
+
+const readEnvFileList = (root) => {
+  const file = path.join(root, '.worktreeinclude');
+  if (!existsSync(file)) return DEFAULT_ENV_FILES;
+  const entries = readFileSync(file, 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#') && !line.endsWith('/'))
+    .filter((line) => /^\.env(\.|$)/.test(path.posix.basename(line)));
+  return entries.length ? entries : DEFAULT_ENV_FILES;
+};
 
 const parseArgs = (argv) => {
   const options = { deps: true, env: true, launch: true, hooks: true, quiet: false, cwd: process.cwd() };
@@ -78,14 +93,15 @@ const relinkDependencies = (root, log) => {
   return true;
 };
 
-const copyEnvFiles = (root, mainCheckout, log) => {
+const copyEnvFiles = (root, mainCheckout, log, envFiles = readEnvFileList(root)) => {
   if (!mainCheckout || mainCheckout === root) return [];
   const copied = [];
-  for (const relative of ENV_FILES) {
+  // one `git ls-files` for the whole list: tracked paths are never copied
+  const tracked = new Set((git(['ls-files', '--', ...envFiles], mainCheckout) || '').split('\n').filter(Boolean));
+  for (const relative of envFiles) {
     const source = path.join(mainCheckout, relative);
     const destination = path.join(root, relative);
-    if (!existsSync(source) || existsSync(destination)) continue;
-    if (git(['ls-files', '--error-unmatch', '--', relative], mainCheckout) !== undefined) continue; // tracked: never copy
+    if (tracked.has(relative) || !existsSync(source) || existsSync(destination)) continue;
     mkdirSync(path.dirname(destination), { recursive: true });
     copyFileSync(source, destination);
     copied.push(relative);
@@ -95,40 +111,51 @@ const copyEnvFiles = (root, mainCheckout, log) => {
 };
 
 // .claude/launch.json is per-checkout tooling state (ignored): the preview
-// tools read the dev server port from it, so it must carry THIS checkout's
-// derived port rather than the main checkout's 9999.
-const writeLaunchConfig = (root, context, log) => {
-  const file = path.join(root, '.claude', 'launch.json');
-  const entry = {
-    name: `thingtime-web-${context.ports.web}`,
+// tools read the dev server from it, so it must carry THIS checkout's derived
+// port rather than the main checkout's 9999. Two entries:
+//   thingtime-web-<port>            attaches to the PM2-managed stack (url only)
+//   thingtime-web-<port>-foreground owns a fresh `npm --prefix remix run dev`
+// The PM2 stack binds the derived ports, so the foreground entry only starts
+// cleanly while that stack is stopped (Vite is strictPort); attach otherwise.
+const launchEntries = (context) => [
+  { name: `thingtime-web-${context.ports.web}`, url: `http://127.0.0.1:${context.ports.web}` },
+  {
+    name: `thingtime-web-${context.ports.web}-foreground`,
     runtimeExecutable: 'npm',
     runtimeArgs: ['--prefix', 'remix', 'run', 'dev'],
     port: context.ports.web
-  };
-  let existing = { version: '0.0.1', configurations: [] };
+  }
+];
+
+const writeLaunchConfig = (root, context, log) => {
+  const file = path.join(root, '.claude', 'launch.json');
+  let existing = { version: LAUNCH_VERSION, configurations: [] };
+  let current = null;
   if (existsSync(file)) {
+    current = readFileSync(file, 'utf8');
     try {
-      const parsed = JSON.parse(readFileSync(file, 'utf8'));
-      if (parsed && Array.isArray(parsed.configurations)) existing = { version: parsed.version || '0.0.1', ...parsed };
+      const parsed = JSON.parse(current);
+      if (parsed && Array.isArray(parsed.configurations)) existing = { version: LAUNCH_VERSION, ...parsed };
     } catch {
       /* unreadable: rewrite */
     }
   }
   // Replace every stale thingtime-web entry (other worktrees' ports copied in),
   // keep anything else the developer added.
-  const kept = existing.configurations.filter((config) => !(config && typeof config.name === 'string' && /^thingtime-web-\d+$/.test(config.name)));
-  const next = { ...existing, version: existing.version || '0.0.1', configurations: [entry, ...kept] };
-  const serialized = `${JSON.stringify(next, null, 2)}\n`;
-  if (existsSync(file) && readFileSync(file, 'utf8') === serialized) return false;
+  const kept = existing.configurations.filter((config) => !(config && typeof config.name === 'string' && /^thingtime-web-\d+(-foreground)?$/.test(config.name)));
+  const serialized = `${JSON.stringify({ ...existing, configurations: [...launchEntries(context), ...kept] }, null, 2)}\n`;
+  if (current === serialized) return false;
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, serialized);
-  log(`[bootstrap] wrote .claude/launch.json (${entry.name})`);
+  log(`[bootstrap] wrote .claude/launch.json (thingtime-web-${context.ports.web} attach + -foreground)`);
   return true;
 };
 
 // Hooks are opt-in per checkout (see .githooks/README.md). An absolute
 // hooksPath copied from another checkout makes every worktree run THAT
-// checkout's hook files; the relative form resolves per worktree.
+// checkout's hook files; the relative form resolves per worktree. Git already
+// resolves a relative shared value per worktree, so the per-worktree override
+// is only written when the effective value is not the relative one.
 const configureHooks = (root, linked, log) => {
   const current = git(['config', '--get', 'core.hooksPath'], root);
   if (current === '.githooks') return false;
@@ -147,18 +174,16 @@ const main = () => {
   const log = options.quiet ? () => {} : (message) => console.log(message);
   const checkout = describeCheckout(options.cwd);
   const context = resolveDevContext(path.join(checkout.root, 'remix'));
-  const summary = { root: checkout.root, linked: checkout.linked, deps: false, env: [], launch: false, hooks: false };
-  if (options.deps) summary.deps = relinkDependencies(checkout.root, log);
-  if (options.env) summary.env = copyEnvFiles(checkout.root, checkout.mainCheckout, log);
-  if (options.launch) summary.launch = writeLaunchConfig(checkout.root, context, log);
-  if (options.hooks) summary.hooks = configureHooks(checkout.root, checkout.linked, log);
+  if (options.deps) relinkDependencies(checkout.root, log);
+  if (options.env) copyEnvFiles(checkout.root, checkout.mainCheckout, log);
+  if (options.launch) writeLaunchConfig(checkout.root, context, log);
+  if (options.hooks) configureHooks(checkout.root, checkout.linked, log);
   log(`[bootstrap] ${checkout.linked ? 'linked worktree' : 'main checkout'} ${path.basename(checkout.root)} ready`);
   log(`[bootstrap] vite http://127.0.0.1:${context.ports.web} · nitro http://127.0.0.1:${context.ports.api} · hmr ${context.ports.hmr} · pm2 ${context.pm2NameBase}`);
   log('[bootstrap] start it with: npm run web-pms   (or: npm --prefix remix run dev)');
-  return summary;
 };
 
-module.exports = { ENV_FILES, copyEnvFiles, configureHooks, describeCheckout, relinkDependencies, writeLaunchConfig };
+module.exports = { DEFAULT_ENV_FILES, copyEnvFiles, configureHooks, describeCheckout, launchEntries, readEnvFileList, relinkDependencies, writeLaunchConfig };
 
 if (require.main === module) {
   try {

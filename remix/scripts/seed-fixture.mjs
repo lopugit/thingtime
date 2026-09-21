@@ -31,7 +31,7 @@
 // stays in the local database.
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -216,16 +216,22 @@ const create = async (options) => {
 		return;
 	}
 	if (existsSync(stateFile(options.name))) throw new Error(`${path.relative(process.cwd(), stateFile(options.name))} already exists — resume or clean it up first`);
+	// Everything that can fail on the developer's side is checked BEFORE the
+	// first request: a missing flag must never leave a half-created fixture.
+	let adminPassword = null;
+	if (options.adminUser) {
+		if (!options.adminPasswordFile) throw new Error('--admin-user needs --admin-password-file (never pass a password on the command line)');
+		adminPassword = readFileSync(options.adminPasswordFile, 'utf8').trim();
+		if (!adminPassword) throw new Error(`${options.adminPasswordFile} is empty`);
+	}
 	const session = new Session(base);
 	const state = { name: options.name, base, createdAt: new Date().toISOString(), username, password, userId: null, folderId: null, postId: null, attachmentIds: [], filesRequested: options.files, folderRequested: options.folder, visibility: options.visibility };
 	const registered = await session.json('POST', '/api/v1/auth/register', { username, password, email: `${username}@example.test` });
-	state.userId = registered.user?.id || null;
+	state.userId = idOf(registered.user, 'register');
 	console.log(`[seed] registered ${username} (${state.userId})`);
 	saveState(state);
 
 	if (options.adminUser) {
-		if (!options.adminPasswordFile) throw new Error('--admin-user needs --admin-password-file (never pass a password on the command line)');
-		const adminPassword = readFileSync(options.adminPasswordFile, 'utf8').trim();
 		const admin = new Session(base);
 		await admin.json('POST', '/api/v1/login', { username: options.adminUser, password: adminPassword });
 		await admin.json('POST', '/api/v1/admin/users/public-uploads', { userId: state.userId, enabled: true, scope: 'all' });
@@ -235,6 +241,15 @@ const create = async (options) => {
 	await materialize(session, state);
 };
 
+// The one true response shape per endpoint (register → user, things → post /
+// thing). A shape change surfaces as an error here instead of a null id that
+// would make every later resume step re-create what already exists.
+const idOf = (record, step) => {
+	const id = record && typeof record === 'object' && typeof record.id === 'string' ? record.id : null;
+	if (!id) throw new Error(`[seed] ${step}: the API response carried no id (${record ? Object.keys(record).join(', ') || 'empty object' : 'no record'})`);
+	return id;
+};
+
 // Everything after registration is resumable: each step checks the saved state
 // first, so `resume` after enabling uploads (or after a crash) never creates a
 // second folder, post or duplicate attachment.
@@ -242,7 +257,7 @@ const materialize = async (session, state) => {
 	const file = stateFile(state.name);
 	if (state.folderRequested && !state.folderId) {
 		const folder = await session.json('POST', '/api/v1/things', { thingtime: ['folder'], crystal: { name: `Fixture ${state.name}`, icon: '🧪' } });
-		state.folderId = folder.thing?.id || folder.id || null;
+		state.folderId = idOf(folder.thing || folder.post, 'create folder');
 		saveState(state);
 		console.log(`[seed] folder ${state.folderId}`);
 	}
@@ -272,7 +287,7 @@ const materialize = async (session, state) => {
 			visibility: state.visibility,
 			attachmentIds: state.attachmentIds
 		});
-		state.postId = post.post?.id || post.thing?.id || post.id || null;
+		state.postId = idOf(post.post, 'create post');
 		saveState(state);
 		console.log(`[seed] post ${state.postId}`);
 	}
@@ -297,19 +312,37 @@ const resume = async (file) => {
 	await materialize(session, state);
 };
 
+// Tear down exactly what the state file records. The file is removed only
+// once every recorded Thing is gone; a failed delete keeps it so the fixture
+// stays findable by `list` and a later `cleanup` can finish the job.
 const cleanup = async (file) => {
 	const state = JSON.parse(readFileSync(file, 'utf8'));
 	const session = new Session(state.base);
 	await session.json('POST', '/api/v1/login', { username: state.username, password: state.password });
 	const steps = [];
-	if (state.postId) {
-		await session.json('DELETE', '/api/v1/things', { id: state.postId }).then(() => steps.push(`post ${state.postId} (attachments cascade)`), (error) => steps.push(`post ${state.postId}: ${error.message}`));
-	}
-	if (state.folderId) {
-		await session.json('DELETE', '/api/v1/things', { id: state.folderId }).then(() => steps.push(`folder ${state.folderId}`), (error) => steps.push(`folder ${state.folderId}: ${error.message}`));
-	}
-	if (state.userId) {
-		await session.json('POST', '/api/v1/auth/accounts/remove', { userId: state.userId }).then(() => steps.push('session signed out'), (error) => steps.push(`sign-out: ${error.message}`));
+	const failures = [];
+	const attempt = async (label, run, { required = true } = {}) => {
+		try {
+			await run();
+			steps.push(label);
+			return true;
+		} catch (error) {
+			// already gone counts as done
+			if (required && error.status === 404) {
+				steps.push(`${label} (already gone)`);
+				return true;
+			}
+			steps.push(`${label}: FAILED — ${error.message}`);
+			if (required) failures.push(label);
+			return false;
+		}
+	};
+	if (state.postId && (await attempt(`post ${state.postId} (attachments cascade)`, () => session.json('DELETE', '/api/v1/things', { id: state.postId })))) state.postId = null;
+	if (state.folderId && (await attempt(`folder ${state.folderId}`, () => session.json('DELETE', '/api/v1/things', { id: state.folderId })))) state.folderId = null;
+	if (state.userId) await attempt('session signed out', () => session.json('POST', '/api/v1/auth/accounts/remove', { userId: state.userId }), { required: false });
+	if (failures.length) {
+		saveState(state);
+		throw new Error(`cleanup of ${state.name} is incomplete (${failures.join('; ')}); state kept in ${path.relative(process.cwd(), file)} — rerun cleanup after fixing the cause:\n  ${steps.join('\n  ')}`);
 	}
 	rmSync(file, { force: true });
 	console.log(`[seed] cleaned up ${state.name}:\n  ${steps.join('\n  ')}\n  user row ${state.username} remains (no account-deletion API)`);
@@ -341,7 +374,18 @@ const main = async () => {
 	return undefined;
 };
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Node realpaths the entry module, so compare real paths: invoking the script
+// through a symlinked checkout must run it, not exit silently.
+const invokedDirectly = () => {
+	if (!process.argv[1]) return false;
+	try {
+		return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+	} catch {
+		return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+	}
+};
+
+if (invokedDirectly()) {
 	main().catch((error) => {
 		console.error(`[seed] ${error.message}`);
 		process.exit(1);
