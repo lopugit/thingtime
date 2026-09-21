@@ -7863,3 +7863,34 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   sign-in hint and account suggestion card. Keep default Lopu/DevKit launchers
   visible; Not now and account controls must remain unobscured and clickable.
   Scroll long hints on a short viewport; the card must stay within the viewport.
+
+## Functional catalog controls (2026-09-21)
+
+- [ ] At `/tests/functional-demos.html`, use the first component's text field,
+      checkbox, Toggle, Increase and range. Its visible summary changes; the
+      second component does not. A parent render preserves the edit. Reset
+      restores all visible fields and the summary. Open More and scroll to the
+      bottom at desktop and 390px without overlap or horizontal overflow.
+- [ ] In guestbook, RSVP and calculator demos, change the native form fields.
+      Required, email and number constraints block invalid submits. Confirm
+      shows the actual values; cancel writes nothing. A successful first run
+      installs its suite and shows the result without navigating away.
+- [ ] Contact/newsletter demos and site CTAs create private saved Things with
+      inspectable links. They claim no external delivery. Use template installs
+      its required suite before copying; the copied page remains functional
+      after reload. Automatic dependency installation preserves customized parts. Explicit reinstall refreshes controls without duplicating suite parts or overwriting saved data.
+      Run `TT_FUNCTIONAL_TEST_URL=http://127.0.0.1:<port> node --import tsx --test
+      app/api/utils/webpages/functionalDemos.integration.test.ts` from `remix/`
+      for real API proof (local server only; exact fixture Things are cleaned up).
+- [ ] Local controls work signed out on curated demo live panes. Server Actions
+      still require sign-in and remain owner-scoped. Browse thumbnails and
+      stranger-authored controls remain inert. Switching account, component or
+      defaults does not reveal the preceding component's local values/result.
+- [ ] Video demos use a native player; changing its URL changes the actual src.
+      Play/pause, seeking, volume and fullscreen work for a compatible URL.
+      Source URLs and markup continue through the existing safety allowlists.
+- Native catalog controls: a dialog opens only after a click, traps focus, closes
+  with Escape/Close and restores focus; a nested local Action remains within its
+  component. A countdown starts, pauses, resets, catches up after delayed ticks
+  and announces completion without affecting another instance. Repeat at phone
+  width; drawers are flush to the left/top/bottom and keep the close control usable.

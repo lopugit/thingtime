@@ -148,7 +148,7 @@ export const AutoLoginPopup = () => {
 		return (
 			<Flex
 				position="fixed"
-				bottom={["calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 160px)", 6]}
+				bottom={['calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 160px)', 6]}
 				right={[4, 24]}
 				left={[4, 'auto']}
 				zIndex={1800}
@@ -156,7 +156,7 @@ export const AutoLoginPopup = () => {
 				rowGap={2}
 				width={['auto', '360px']}
 				maxWidth="calc(100vw - 32px)"
-				maxHeight={["calc(100dvh - 176px - var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)))", "calc(100dvh - 48px)"]}
+				maxHeight={['calc(100dvh - 176px - var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)))', 'calc(100dvh - 48px)']}
 				overflowY="auto"
 				background="var(--tt-card, #ffffff)"
 				border="1px solid var(--tt-border, #ececef)"
@@ -250,7 +250,7 @@ export const AutoLoginPopup = () => {
 			position="fixed"
 			// clear of the bottom-right floating bubbles (DevKit/notifications):
 			// lifted on mobile, shifted left of them on desktop
-			bottom={["calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 160px)", 6]}
+			bottom={['calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 160px)', 6]}
 			right={[4, 24]}
 			left={[4, 'auto']}
 			zIndex={1800}
@@ -258,8 +258,8 @@ export const AutoLoginPopup = () => {
 			rowGap={2}
 			width={['auto', '360px']}
 			maxWidth="calc(100vw - 32px)"
-				maxHeight={["calc(100dvh - 176px - var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)))", "calc(100dvh - 48px)"]}
-				overflowY="auto"
+			maxHeight={['calc(100dvh - 176px - var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)))', 'calc(100dvh - 48px)']}
+			overflowY="auto"
 			background="var(--tt-card, #ffffff)"
 			border="1px solid var(--tt-border, #ececef)"
 			borderRadius="var(--tt-radius-lg, 16px)"
