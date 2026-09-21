@@ -8090,3 +8090,5 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   lookup can run the integration seed with legacy read layouts still enabled.
   Bootstrap retires that obsolete non-unique index before creating missing
   current indexes; unique constraints and saved Things remain intact.
+
+- Upcoming visits: completing a future-dated visit removes it from the dashboard upcoming list while keeping it in the planner and property visit history. Cancelled and archived visits also remain absent from upcoming visits.

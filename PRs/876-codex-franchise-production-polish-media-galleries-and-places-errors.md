@@ -30,3 +30,5 @@ and actionable Places guidance require this follow-up deployment verification.
 
 Local web: http://localhost:18940. Tailscale/Funnel unavailable because its
 installed launcher points to a missing Tailscale.app executable.
+
+Production QA also caught future-dated completed visits in Upcoming visits. The dashboard now excludes completed visits while the planner and property history retain them.

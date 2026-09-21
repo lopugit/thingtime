@@ -603,7 +603,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 						{sectionList(
 							'Upcoming visits',
 							visits
-								.filter((r) => r.values.date > today && r.values.status !== 'Cancelled')
+								.filter((r) => r.values.date > today && r.values.status !== 'Cancelled' && r.values.status !== 'Completed')
 								.sort((a, b) => a.values.date.localeCompare(b.values.date))
 								.slice(0, 8)
 						)}
