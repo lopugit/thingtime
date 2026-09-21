@@ -53,6 +53,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   assistant and DevKit buttons, with bounded scrolling for short viewports.
   Verified while testing the remote integration catalogue preview.
 
+- 2026-09-21 — **Codex (AI)**: Enable 500 remote integration examples across 42
+  libraries/services with searchable `/library` pages, editable demos, source,
+  provider account/key entry and private reusable Things. The catalogue extends
+  the previously delivered isolated runtime with capability 1.1.0. [Acceptance notes](../PRs/869-codex-third-party-catalogue-500-remote-integration-examples.md).
+
 - 2026-09-21: Make demo forms run real Actions, preserve confirmation through
   composed pages, show results inline, and support bounded local component
   controls. Site forms and requests save private Things; template copying
