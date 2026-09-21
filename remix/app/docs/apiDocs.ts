@@ -633,6 +633,18 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 ];
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
+  endpoint({
+    id: 'builder-workspaces', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'builder',
+    title: 'Service workspaces', endpoint: '/api/v1/builder/workspaces',
+    summary: 'Folder-backed service management for builder apps, with live role and customer-scoped access.',
+    detail: 'GET reads a 250-record cursor page from one workspace (maximum 5,000 records). POST accepts initialize, save, archive, move, bindPage, configureMaps, searchAddresses and place. Initialization creates the owner Admin membership; it cannot be removed or demoted. Archive is reversible and preserves related history. Records are ordinary quota-accounted data Things, organized in native folders. Admins manage members; Employees and Lopu users manage operations; Customer and B2B members see only their linked customer, properties, jobs and visits. Every linked reference must belong to the same workspace. Updates require expectedUpdatedAt. Comments and media use the existing Thing comment/upload APIs and recheck the live workspace membership on every read. No caller-selected owner, query, route, code or credentials are accepted.',
+    auth: { mode: 'session-or-bearer', description: 'A full first-party Thingtime user session or user JWT. Scoped PAT/app credentials and custom data endpoints are not supported.' },
+    methods: ['GET', 'POST'],
+    steps: ['Negotiate api.builder-workspaces >= 1.0.0 against this origin.', 'Initialize with a stable rootId, name and IANA timeZone; retrying resumes folder creation.', 'Save typed records with stable ids and expectedUpdatedAt on edits. Follow nextCursor until null.', 'Archive memberships to revoke access immediately, including inherited comments and media.'],
+    requestExamples: [{ name: 'Read workspace', description: 'Read records visible to the current role.', method: 'GET', query: { rootId: 'my-service-workspace' } }, { name: 'Create workspace', description: 'Create an owned folder structure.', method: 'POST', body: { operation: 'initialize', rootId: 'my-service-workspace', name: 'My service business', timeZone: 'Australia/Melbourne' } }],
+    responseExamples: [{ status: 200, description: 'Authorized workspace records.', body: { ok: true, role: 'Admin', records: [], nextCursor: null } }, { status: 409, description: 'Stale edit; reload before retrying.', body: { ok: false, error: 'This record changed. Refresh before saving your edits.' } }],
+    notes: ['tt:service-workspace is a dynamic custom audience, valid only for an owner-matched workspace record or its bound builder page. It grants read/comment, never generic shared write. Memberships are owner-private.', 'Google Maps requires a separately configured, HTTP-referrer-restricted GOOGLE_MAPS_JAVASCRIPT_API_KEY in the owner Secure Vault; this key is intentionally browser-visible to authorized workspace readers. GOOGLE_PLACES_API_KEY stays server-only and enables fixed Google Places autocomplete/detail calls. configureMaps selects an owned Vault environment, null for Ungrouped, or __auto__ for unique matching entries. Ambiguous key matches fail closed. Responses expose only the intentionally browser-visible JavaScript key; they never expose the server Places key. Place IDs are retained; Google coordinates are fetched for the map without a persistent coordinate cache.']
+  }),
 	endpoint({
 		id: 'things-actions', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Thing actions',
 		endpoint: '/api/v1/things/actions', methods: ['POST'],
@@ -4830,8 +4842,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// first catalog model), providerTemplates carry `models[]` (efforts, speeds,
 		// audioInput 'realtime' for direct-voice models), four more kinds
 		// (mistral, deepseek, groq, cohere) — compatible additions.
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
@@ -4843,6 +4855,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'GET the provider templates, environments, and redacted entry metadata.',
 			'POST create-group, save-secret, or save-provider to create write-only records.',
+			'POST move-entry with id and groupId to move a secret or provider between owned environments; null or an empty string means Ungrouped. Only metadata changes; the encrypted value is preserved without decryption.',
 			'POST delete with an owner-scoped record id to remove it.'
 		],
 		requestExamples: [
@@ -5916,14 +5929,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.9.0',
-		featureVersion: '1.9.0',
+		contractVersion: '1.10.0',
+		featureVersion: '1.10.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
-			'Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
+			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Unlisted post/page/comment media opens by canonical attachment id without a secret key. Current parent ACL, moderation and storage gates are rechecked on every request. Saved profile discoveries remain tied to the account or anonymous browser identity; IP metadata never grants access. ' +
 			'Comment galleries follow canonical visibility inheritance through parent comments and media items, including after copying. ' +
 			'Subspace branding images require a live subspace and the exact current icon/banner slot binding. Branding is public directory identity even for private subspaces; replaced or deleted slots grant no public access. ' +
@@ -8582,7 +8595,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Shared things (picker grant)',
     endpoint: '/api/v1/oauth/shared',
     summary: 'Read the things the user hand-picked to share with your app.',
-    detail: 'First-party single reads of an unlisted post or inherited child permalink remember a protected post-discovery relationship for the account or anonymous browser. The browser keeps a cryptographic token in localStorage and mirrors it to the same-origin __Host-tt_found_browser cookie for media requests. Only the one-way anonymous identity, link-generation digest and private visit IP are stored server-side. Revisits and author-profile listings require the same identity and current hidden key generation; rotation and removal revoke collected access. Scoped tokens, app namespaces and custom data endpoints do not acquire discoveries. ' +
+    detail: 'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. First-party single reads of an unlisted post or inherited child permalink remember a protected post-discovery relationship for the account or anonymous browser. The browser keeps a cryptographic token in localStorage and mirrors it to the same-origin __Host-tt_found_browser cookie for media requests. Only the one-way anonymous identity, link-generation digest and private visit IP are stored server-side. Revisits and author-profile listings require the same identity and current hidden key generation; rotation and removal revoke collected access. Scoped tokens, app namespaces and custom data endpoints do not acquire discoveries. ' +
       'GET with the app-scoped Bearer token; requires the things scope. Returns exactly the set the ' +
       'user ticked on the consent screen — read-only, ownership re-checked at read time (things the ' +
       'user has since deleted drop out), projected to content fields only ({ shareId, thingtime, ' +
@@ -9069,8 +9082,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
     // Builder SDK: action definitions accept registered provider lookup capabilities.
-    featureVersion: '1.23.0',
-    contractVersion: '1.23.0',
+    featureVersion: '1.24.0',
+    contractVersion: '1.24.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -9610,14 +9623,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.8.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-			'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
+			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'Rich Thingtime comments accept the same bounded thing-collection reference envelope as posts, and comment/feed/profile projections carry permission-checked linkedThings. Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root ACL through the complete reply and media-parent chain, so private or circle-limited content stays private.',
     auth: {
       mode: 'session-or-bearer',
@@ -12849,14 +12862,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     detail:
-      'Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
+      'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
       'component things by componentKey or shareId, container blocks lay children out, text blocks carry short ' +
       'copy, and native blocks mark where a built-in Thingtime screen sits on a site page. This endpoint resolves ' +
       'ONE page — by id (a standalone /p/ page), by path (the site page bound to an app route, where a ' +

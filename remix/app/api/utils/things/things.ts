@@ -3,6 +3,7 @@ import { postThingReferences, type PostThingReference } from '../../../component
 import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
 import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
 import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { serviceWorkspaceCanRead, workspaceRootFor } from '../serviceWorkspaces/access';
 import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -2326,6 +2327,23 @@ export type PostProjectionOptions = {
   commentSort?: CommentSort | null;
 };
 
+// One Viewer per reference page preserves request-local membership caches.
+// Every source still passes its own live ACL check; the ids only grant the same
+// canonical unlisted links explicitly attached by the author.
+export const resolvePostLinkedThings = async (
+  ids: readonly string[], viewer: Viewer,
+  lookup = batchedThingLookup(), authorize = canViewInherited
+): Promise<ThingDoc[]> => {
+  const uniqueIds = [...new Set(ids)];
+  const linkedViewer: NonNullable<Viewer> = { id: '', ...viewer, linkThingIds: new Set([...(viewer?.linkThingIds || []), ...uniqueIds]) };
+  const docs = await Promise.all(uniqueIds.map(async id => {
+    const doc = await lookup(id);
+    if (!doc || isProtectedThingtime(thingtimeOf(doc)) || thingtimeOf(doc).some(kind => MESSENGER_THINGTIME.includes(kind as any))) return null;
+    return await authorize(doc, linkedViewer, lookup) ? doc : null;
+  }));
+  return docs.filter((doc): doc is ThingDoc => !!doc);
+};
+
 export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer, options: PostProjectionOptions = {}): Promise<PublicPost[]> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const viewerId = viewer?.id || null;
@@ -2357,15 +2375,8 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     viewer?.id ? savedTargetIds(viewer, allDocs.map((doc) => doc.shareId)) : Promise.resolve(new Set<string>())
   ]);
   const linkedIds = [...new Set([...allDocs, ...Array.from(related.commentsByTarget.values()).flatMap(entries => entries.flatMap(entry => entry.doc ? [entry.doc] : []))].flatMap(doc => postThingReferences(crystalOf(doc).thing).map(item => item.id)))];
-  const linkedLookup = batchedThingLookup();
-  const linkedDocs = await Promise.all(linkedIds.map(async id => {
-    const linked = await linkedLookup(id);
-    // Managed/account/chat payloads are never post embeds. References grant no
-    // new permission; each source is checked against its current audience.
-    if (!linked || isProtectedThingtime(thingtimeOf(linked)) || thingtimeOf(linked).some(kind => MESSENGER_THINGTIME.includes(kind as any))) return null;
-    return await canViewInherited(linked, withThingLink(viewer, id), linkedLookup) ? linked : null;
-  }));
-  const linkedPublic = await toPublicThings(linkedDocs.filter((doc): doc is ThingDoc => !!doc), viewer);
+  const linkedDocs = await resolvePostLinkedThings(linkedIds, viewer);
+  const linkedPublic = await toPublicThings(linkedDocs, viewer);
   const linkedById = new Map(linkedPublic.map(thing => [thing.id, thing]));
 
 
@@ -2756,6 +2767,7 @@ const customEngageBlocks = async (viewer: Viewer, doc: ThingDoc): Promise<boolea
     ? await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing)
     : doc;
   if (!terminal) return true; // broken chain fails closed
+  if (workspaceRootFor(terminal) && await serviceWorkspaceCanRead(terminal, viewer)) return false;
   if (!aclOf(terminal).includes(ACL_CUSTOM)) return false;
   const enriched = await withFriendIds(viewer);
   return customEngageBlocksAcl(enriched, aclOf(terminal), String(terminal.ownerId));
@@ -2801,6 +2813,7 @@ export const canViewInherited = async (
   if (terminal) {
     const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
     if (canView(terminal, linkedViewer)) return true;
+    if (!patVisibilityBlocksAcl(viewer, aclOf(terminal)) && await serviceWorkspaceCanRead(terminal, viewer)) return true;
     if (isCustomMongoEndpointActive()) return false;
     return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
   }

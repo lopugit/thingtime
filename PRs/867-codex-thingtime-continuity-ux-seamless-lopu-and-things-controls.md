@@ -96,7 +96,7 @@ source snapshots, fixing refreshes that failed with permission denied.
   signed device build and the existing private APNs configuration. No TestFlight
   upload is included.
 - Full TypeScript verification reports 115 diagnostics versus 116 in a clean
-  extraction of base `9c0f4ea17` using the same compiler and dependencies. Matching
+  extraction of base `f5e3b0cd38` using the same compiler and dependencies. Matching
   file, error code, message, column and source line found zero introduced errors;
   the removed error is Nitro's duplicate serverAssets property. The checked-in
   ratchet value of 108 is already stale on the base and was not changed.
@@ -109,7 +109,7 @@ The owner explicitly authorized merging this PR into `main` after pre-merge veri
 
 ## Pre-merge review (2026-09-21)
 
-Integrated `main` through `50dd31b7b`, retaining the new remote integration
+Integrated `main` through `f5e3b0cd38`, retaining service workspaces, Vault environments, the remote integration
 catalog, functional native component controls, mobile sign-in clearance and
 admin catalog importer. Preserved both sides of documentation and capability
 coverage; regenerated the graph as one consistent snapshot.
@@ -144,3 +144,25 @@ that an external side effect stopped. Unacknowledged work therefore needs
 attention and remains fenced; it is never silently replayed or unlocked. The
 local automatic retry budget also survives polling/reload instead of resetting
 with each recovery invocation. Explicit manual Continue remains intentional.
+
+Final combined validation after the pre-merge fixes: Lopu 300, Lopu UI 202,
+chat streaming 29, Things 277, feed 56, webpages 104 (three optional integration
+checks skipped), and capability suites 75 all passed. Independent lifecycle
+review passed 37 core cases with no remaining finding; the full failure/recovery
+regression set passed 52 cases. Production build and Vercel output verification
+passed. Full TypeScript comparison remains 115 current versus 116 in clean main
+with zero introduced diagnostics. Changed-source lint has zero errors after the
+renderer import-order correction.
+
+Main now publishes the prior Things/comment version numbers for workspaces, so
+this release advances `api.things` to 1.24.0 and `api.things-comment` to 1.8.0,
+with matching client requirements and tests that reject the prior versions. Both
+built manifests also preserve main's workspace, Vault and attachment contracts.
+
+Workspace integration preserves contextual discussion descriptions and gates
+workspace controls behind the native interactive context. Linked post projections
+reuse a request-local viewer for membership caching while authorizing every
+source separately. Chrome at 1440×1000 and 390×844 confirmed the static hint in
+both inert catalog panes, usable mobile settings, and aligned page bottoms.
+All 18 QA fixtures are retained privately, with owner access and anonymous
+access denial verified. No permanent fixture deletion was performed.

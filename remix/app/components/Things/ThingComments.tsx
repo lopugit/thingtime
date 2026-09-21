@@ -9,11 +9,11 @@ import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 
 // The corresponding discussion projection shares the original Thing id. This
 // preserves existing threads, nested replies, and dynamically inherited ACLs.
-export function ThingComments({ thingId, linkKey = '', initialPost }: { thingId: string; linkKey?: string; initialPost?: PublicPost | null }) {
+export function ThingComments({ thingId, linkKey = '', initialPost, description }: { thingId: string; linkKey?: string; initialPost?: PublicPost | null; description?: string }) {
   const user = useCurrentUser();
-  return <Discussion key={`${user?.id || 'anonymous'}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} initialPost={initialPost} />;
+  return <Discussion key={`${user?.id || 'anonymous'}:${thingId}:${linkKey}`} thingId={thingId} linkKey={linkKey} initialPost={initialPost} description={description} />;
 }
-function Discussion({ thingId, linkKey, initialPost }: { thingId: string; linkKey: string; initialPost?: PublicPost | null }) {
+function Discussion({ thingId, linkKey, initialPost, description }: { thingId: string; linkKey: string; initialPost?: PublicPost | null; description?: string }) {
   const api = useApi();
   const apiRef = React.useRef(api); apiRef.current = api;
   const [post, setPost] = React.useState<PublicPost | null>(() => initialPost || null);
@@ -36,6 +36,7 @@ function Discussion({ thingId, linkKey, initialPost }: { thingId: string; linkKe
   }, [thingId, linkKey, revision]);
   const onChanged = React.useCallback((id: string, change: PostChange) => setPost(previous => previous && previous.id === id ? typeof change === 'function' ? change(previous) : change : previous), []);
   return <Box minW={0} data-testid="thing-comments" data-discussion-source={thingId}>
+    {description && <Text color="var(--tt-muted)" fontSize="sm" mb={2}>{description}</Text>}
     {post && <SharedMediaProvider linkKey={linkKey}><PostCard post={post} onChanged={onChanged} defaultCommentsOpen discussionOnly /></SharedMediaProvider>}
     {error && <Text role="alert" color="red.500" fontSize="sm">{error}</Text>}
     <Button size="sm" variant="ghost" mt={2} onClick={() => setRevision(value => value + 1)}>Refresh comments</Button>

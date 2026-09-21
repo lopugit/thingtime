@@ -93,7 +93,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
     <RenameDialog thing={renameOpen && thing ? thing as ThingsThing : null} onClose={() => setRenameOpen(false)} onRename={async (target, title) => {
       try {
         const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-        await requireThingtimeCapability('api.things', '1.23.0');
+        await requireThingtimeCapability('api.things', '1.24.0');
         const response = isManagedLibraryThing(target)
           ? await api.v1.things.renameLibrary({ id, displayTitle: title, expectedUpdatedAt: target.updatedAt })
           : target.thingtime.includes('attachment')
