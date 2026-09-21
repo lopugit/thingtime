@@ -30,7 +30,14 @@ test('the install lock serialises concurrent installers and discards a stale loc
 
 		// a live lock held by another process blocks until that process releases it
 		mkdirSync(lockPath);
-		const holder = spawn(process.execPath, ['-e', `setTimeout(() => require('node:fs').rmSync(${JSON.stringify(lockPath)}, { recursive: true, force: true }), 700)`], { stdio: 'ignore' });
+		// The path travels as an argv value, not as interpolated source: under
+		// `node -e` the first user argument is process.argv[1], so the holder needs
+		// no quoting or escaping of its own (JSON.stringify is not a JS escaper).
+		const holder = spawn(
+			process.execPath,
+			['-e', "setTimeout(() => require('node:fs').rmSync(process.argv[1], { recursive: true, force: true }), 700)", lockPath],
+			{ stdio: 'ignore' }
+		);
 		const logs = [];
 		const started = Date.now();
 		const result = withInstallLock(() => Date.now() - started, { lockPath, logger: { log: (message) => logs.push(message), warn() {} } });
