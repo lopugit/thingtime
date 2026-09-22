@@ -135,6 +135,18 @@ export const makeKit = (t: Theme) => {
 	// a FORM GROUP — a control inside reads only this group's named fields
 	const group = (children: unknown[], style: Style = {}): Node => el('fieldset', { border: 'none', margin: 0, padding: 0, minWidth: 0, display: 'grid', gap: '10px', ...style }, children);
 	const upload = (name: string, props: Record<string, unknown> = {}): Node => ({ tag: 'tt-upload', props: { name, ...props } });
+	// a NATIVE <dialog> (PR #870): the trigger button is rendered by the runtime
+	// from `name`; the children stay inside the component DOM, so a ttAction
+	// control in them delegates exactly like one on the page
+	const dialog = (name: string, title: string, children: unknown[]): Node => ({ tag: 'tt-dialog', props: { name, title }, children });
+	// a destructive control behind a confirmation dialog
+	const confirmButton = (name: string, title: string, blurb: unknown, control: Node): Node => dialog(name, title, [el('div', { display: 'grid', gap: '12px', fontFamily: t.font, color: t.text, fontSize: '14px' }, [blurb, row([control])])]);
+	// a NATIVE countdown (PR #870): seconds, start/pause/reset handled by the runtime
+	const countdown = (seconds: number | string): Node => ({ tag: 'tt-countdown', props: { value: seconds } });
+	// a LOCAL control ($ui, PR #870): changes bounded scalar state in this
+	// component instance only — no run, no sign-in — and the template reads the
+	// key back like an arg
+	const localButton = (content: unknown, input: Record<string, unknown>, tone: 'solid' | 'ghost' | 'danger' | 'ok' | 'soft' = 'ghost', style: Style = {}): Node => ({ tag: 'button', props: { type: 'button', style: buttonStyle(tone, style) }, ttAction: '$ui', ttActionInputs: input, children: [content] });
 	const img = (src: string, alt: string, style: Style = {}): Node => ({ tag: 'img', props: { src, alt, style: { display: 'block', maxWidth: '100%', ...style } } });
 	const sprite = (src: string, alt: string, size = 64, style: Style = {}): Node => img(src, alt, { width: `${size}px`, height: `${size}px`, imageRendering: 'pixelated', ...style });
 	const bar = (percentArg: string, color: unknown = t.ok, style: Style = {}): Node =>
@@ -157,7 +169,7 @@ export const makeKit = (t: Theme) => {
 		whenState('inert', options.inert === undefined ? card([strong(appName), text(blurb), muted('Open the page to use it live — the builder canvas and the gallery show a static preview.')]) : options.inert),
 		whenState('ok', ifTruthy('viewer.signedIn', ready, signInCard(appName, blurb)))
 	];
-	return { t, text, strong, title, muted, label, card, soft, row, stack, grid, divider, pill, button, link, textLink, input, textarea, select, option, checkbox, field, group, upload, img, sprite, bar, stat, notice, gates, inputStyle, buttonStyle };
+	return { t, text, strong, title, muted, label, card, soft, row, stack, grid, divider, pill, button, link, textLink, input, textarea, select, option, checkbox, field, group, upload, dialog, confirmButton, countdown, localButton, img, sprite, bar, stat, notice, gates, inputStyle, buttonStyle };
 };
 
 // ── step helpers (theme-free) ───────────────────────────────────────────────
