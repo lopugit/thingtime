@@ -42,6 +42,7 @@ import { ServiceJobContext } from './ServiceJobContext';
 import { CollectionList } from '~/components/Collections/CollectionList';
 import { collectionStyles } from '~/components/Collections/collectionStyles';
 import { serviceListFilters } from './serviceListFilters';
+import { popTrail, pushTrail, serviceParentRecordId } from './serviceNavigation';
 
 type Section = 'overview' | 'planner' | 'map' | 'setup' | 'trash' | ServiceKind;
 const NAV = [
@@ -78,6 +79,8 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 	const [data, setData] = React.useState<WorkspaceSnapshot | null>(null);
 	const [section, setSection] = React.useState<Section>('overview');
 	const [selectedId, setSelectedId] = React.useState<string | null>(null);
+	// Records the viewer opened on the way to the current one (see serviceNavigation).
+	const [trail, setTrail] = React.useState<string[]>([]);
 	const [query, setQuery] = React.useState('');
 	const [trash, setTrash] = React.useState(false);
 	const [draft, setDraft] = React.useState<ServiceDraft | null>(null);
@@ -137,8 +140,18 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 	const active = records.filter((r) => !r.values.archived);
 	const selected = records.find((r) => r.id === selectedId);
 	const recordById = (id: string) => records.find((r) => r.id === id);
+	const previous = trail.length ? recordById(trail[trail.length - 1]) : undefined;
 	const open = (id: string) => {
+		setTrail((current) => pushTrail(current, selectedId, id));
 		setSelectedId(id);
+		setQuery('');
+	};
+	// Back returns to the record the viewer came from (property → job → visit),
+	// and to the section list once the trail is exhausted.
+	const back = () => {
+		const next = popTrail(trail, (id) => records.some((r) => r.id === id));
+		setTrail(next.trail);
+		setSelectedId(next.id);
 		setQuery('');
 	};
 	const create = (kind: ServiceKind, defaults: Record<string, any> = {}) => setDraft({ kind, defaults });
@@ -268,7 +281,21 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 	);
 	async function initialize() {
 		await mutate({ operation: 'initialize', name, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }, 'Workspace created');
-		if (runtime.pageId) await mutate({ operation: 'bindPage', pageId: runtime.pageId }, 'Builder page connected');
+		if (!runtime.pageId) return;
+		// A builder page that was never saved cannot be bound yet: say so and
+		// point at Setup instead of surfacing the generic failure toast.
+		try {
+			await workspaceRequest(rootId, { operation: 'bindPage', pageId: runtime.pageId });
+			await refresh();
+			lopu({ title: 'Builder page connected', status: 'success' });
+		} catch {
+			lopu({
+				title: 'Save this page to connect it',
+				description: 'Once the page is saved, use Setup → “Connect this builder page to team access” so your team can open it.',
+				status: 'info',
+				duration: 8000
+			});
+		}
 	}
 	if (!user)
 		return (
@@ -342,6 +369,7 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 						onClick={() => {
 							setSection(item.id);
 							setSelectedId(null);
+							setTrail([]);
 							setQuery('');
 							setTrash(false);
 						}}
@@ -360,9 +388,9 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 				<div className="sw-page-heading">
 					<div>
 						{selected && (
-							<button className="sw-back" onClick={() => setSelectedId(null)}>
+							<button className="sw-back" onClick={back}>
 								<ArrowLeft size={14} />
-								Back to {NAV.find((n) => n.id === section)?.label.toLowerCase() || 'records'}
+								Back to {previous ? serviceTitle(previous) : NAV.find((n) => n.id === section)?.label.toLowerCase() || 'records'}
 							</button>
 						)}
 						<p className="sw-eyebrow">
@@ -746,10 +774,14 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 					data={data}
 					close={() => setDraft(null)}
 					report={report}
-					saved={async (id) => {
+					saved={async (id, outcome) => {
 						await refresh();
 						setDraft(null);
-						setSelectedId(id);
+						// A new child record (time/usage log, sub-job, customer link)
+						// keeps the viewer on the parent it was added from.
+						const parent = outcome.created ? serviceParentRecordId(outcome.kind, outcome.values, selectedId) : null;
+						if (!parent) open(id);
+						else if (parent !== selectedId) open(parent);
 						lopu({ title: 'Record saved', status: 'success' });
 					}}
 				/>
@@ -778,7 +810,9 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 										void mutate({ operation: 'archive', id: pendingDelete.id, expectedUpdatedAt: pendingDelete.updatedAt }, 'Moved to Trash')
 											.then(() => {
 												setPendingDelete(null);
-												setSelectedId(null);
+												// Deleting the open record returns to where it was opened
+												// from; deleting from a list keeps the current page.
+												if (pendingDelete.id === selectedId) back();
 											})
 											.catch(() => {});
 								}}

@@ -7,6 +7,7 @@ import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
+import { NativeControlsEnabled } from './NativeComponentControls';
 import { defaultsFromArgs, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
 import { type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { LiveTemplate, useThingSource } from './liveComponent';
@@ -683,6 +684,11 @@ const BlockFrame = ({
 	);
 };
 
+// Native app tags an html block may carry (see HtmlThingRenderer.renderNode).
+// Exported so the editor hint and its regression test agree on the list.
+export const NATIVE_APP_TAGS = ['tt-service-workspace'] as const;
+export const hasNativeApp = (html: string): boolean => NATIVE_APP_TAGS.some((tag) => new RegExp(`<${tag}(?=[\\s>/])`, 'i').test(html));
+
 // Sanitised rich markup, parsed once per html string and drawn with a real
 // document typography scale (Chakra's reset would otherwise render headings
 // at body size — the "Editor.js heading doesn't render" bug).
@@ -1087,8 +1093,31 @@ const BlockView = (
 			body = <Box as="img" src={src} alt={block.alt || ''} maxWidth="100%" borderRadius="var(--tt-radius-md, 12px)" />;
 		}
 	} else if (block.type === 'html') {
+		// Authored markup may carry a native app tag (the service workspace).
+		// Those apps read NativeControlsEnabled, which only LiveTemplate used to
+		// provide — so an html block showed the inert placeholder on every
+		// surface, the live /p/ page included. Native apps are live for exactly
+		// the viewers whose page runtime is live (`interactive`), in every
+		// runtime mode: the seamless editor keeps the real app visible while
+		// arranging blocks (its edit click gate still selects the block rather
+		// than driving the app), View and the live page run it. Inert surfaces
+		// (classic canvas, previews, Builder mode) keep the placeholder.
 		body = block.html ? (
-			<RichHtmlView html={block.html} sx={richSx} />
+			<NativeControlsEnabled.Provider value={!!interactive}>
+				{interactive && chrome && chrome.seamlessMode !== 'view' && hasNativeApp(block.html) ? (
+					<Text
+						as="p"
+						fontSize="12px"
+						lineHeight="1.4"
+						color="var(--tt-muted, #9a9aa6)"
+						marginBottom={2}
+						data-testid={`native-app-hint-${block.id}`}
+					>
+						🌿 Live app preview — switch to View, or open the page, to use it.
+					</Text>
+				) : null}
+				<RichHtmlView html={block.html} sx={richSx} />
+			</NativeControlsEnabled.Provider>
 		) : !chrome ? null : (
 			<Flex
 				alignItems="center"

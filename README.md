@@ -20,6 +20,11 @@ media titles/descriptions, attachments and optional Before/After groups. Time lo
 use the workspace IANA time zone and reject ambiguous or nonexistent DST times.
 The day/week planner supports dragging, ordering buttons and date controls.
 The bounded workspace API pages 250 records at a time, up to 5,000 records.
+The workspace runs live on its page (`/p/<id>`, no special mode needed) and
+inside the seamless editor's Edit, Layout and View modes; Builder mode,
+component-library previews and feed embeds show an inert placeholder instead.
+Back returns to the record you came from (property → job → visit), and adding a
+log, sub-job or customer link keeps its parent record open.
 
 Fork-safe maps and Vault setup:
 
