@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
 let task: any;
 let replies: any[] = [];
+let replayEvents: any[] | null = null;
 const ndjson = (events: any[]) => events.map(event => JSON.stringify(event)).join('\n') + '\n';
 mock.module('./aiTasks.client', { namedExports: {
  bindAiTaskOwner: () => {}, getAiTasks: () => [task], refreshAiTasks: async () => {}, stopAiTaskRequest: async () => {},
- readAiTaskOutput: async () => ({task, output:ndjson([
+ readAiTaskOutput: async () => ({task, output:ndjson(replayEvents ?? [
   {type:'meta',chatId:'chat',requestId:task.requestId,userMessageId:'user'},
   {type:'done',assistantMessageId:'saved',stopReason:'error',continuationSafe:true,recoveryFailures:task.failures}
  ])})
@@ -26,7 +27,7 @@ const load = async (owner = 'owner') => {
 };
 const flush = () => new Promise(resolve => setImmediate(resolve));
 beforeEach(() => {
- resetLopuStoreForTests(); replies = [];
+ resetLopuStoreForTests(); replies = []; replayEvents = null;
  task = {id:'task',requestId:'previous',chatId:'chat',path:'/api/v1/lopu/chats/reply',management:'client',status:'needs-attention',contentType:'application/x-ndjson',updatedAt:'1',failures:5};
 });
 test('saved retry limit survives independent polls, reload and account switches; manual Continue intentionally retries', async () => {
@@ -67,3 +68,34 @@ test('account switch while the continuation id is hashing prevents stale dispatc
   assert.deepEqual(getLopuStoreSnapshot().turns,{});
  } finally {digest.mock.restore();}
 });
+
+
+for (const management of ['client', 'server']) {
+ for (const hasMeta of [true, false]) {
+  test(`stopped ${management} recovery with ${hasMeta ? 'persisted' : 'missing'} message identity stays idle after polling and reload without an empty user bubble`, async () => {
+   const { buildLopuTimeline } = await import('./lopuTurnCore');
+   const { canContinueLopuReply, shouldAutoContinueLopuReply } = await import('./lopuRecovery');
+   task = { ...task, id: `stopped-${management}-${hasMeta}`, status: 'stopped', workflowStatus: management === 'server' ? 'stopped' : null, management };
+   replayEvents = [
+    ...(hasMeta ? [{ type: 'meta', chatId: 'chat', requestId: task.requestId, userMessageId: 'outside-loaded-history' }] : []),
+    { type: 'done', assistantMessageId: 'saved-stop', stopReason: 'aborted', continuationSafe: false, recoveryFailures: 0 }
+   ];
+   for (let reload = 0; reload < 2; reload++) {
+    if (reload) resetLopuStoreForTests();
+    await load();
+    for (let poll = 0; poll < 2; poll++) {
+     task.updatedAt = `${reload}-${poll}`;
+     await recoverLopuBackgroundTasks(); await flush();
+     const state = getLopuStoreSnapshot();
+     const turn = state.turns[task.requestId];
+     assert.ok(turn);
+     assert.equal(shouldAutoContinueLopuReply(turn), false);
+     assert.equal(canContinueLopuReply(turn.status, turn.stopReason), true, 'manual Retry remains available');
+     const items = buildLopuTimeline(state.messages.chat || [], [turn], 'owner');
+     assert.deepEqual(items.map(item => item.kind), ['turn'], 'recovery retains its terminal assistant control without fabricating user content');
+     assert.equal(replies.length, 0, 'polling and reload never resume a manually stopped task');
+    }
+   }
+  });
+ }
+}

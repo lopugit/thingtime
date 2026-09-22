@@ -138,6 +138,17 @@ it into private temporary storage before execution. No runtime download or
 Anthropic API-key fallback is performed. Provider access checks distinguish
 OAuth configuration from model/allowance verification by a real reply.
 
+For Vercel deployments, run `npm --prefix remix run build` so packaging and
+`verify:vercel-output` validate every emitted Node function that invokes Claude,
+including Workflow steps. Each function needs its own pinned runtime assets and
+size verification; the main Nitro function and Workflow step execute in separate
+filesystem roots. Workflow generation can emit an arm64 function independently
+of an x64 Linux builder. The packager aligns each Claude-consuming function’s
+CPU architecture with its packaged executable and verifies that match; flow and
+webhook functions retain their emitted configuration. Keep the canonical
+post-build packaging/verification stages in a fork’s build command. Authenticated server-managed Claude execution still
+requires a deployed smoke test with the existing OAuth setup above.
+
 Local worktree verification: `http://localhost:15080/admin/system` (Nitro
 15082, HMR 15081). Tailscale/Funnel was unavailable on this machine during
 verification because the configured Tailscale executable was missing. Standard
