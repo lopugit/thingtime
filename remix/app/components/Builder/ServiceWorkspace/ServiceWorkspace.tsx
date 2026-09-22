@@ -282,13 +282,20 @@ function Workspace({ rootId, name }: { rootId: string; name: string }) {
 	async function initialize() {
 		await mutate({ operation: 'initialize', name, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }, 'Workspace created');
 		if (!runtime.pageId) return;
-		// A builder page that was never saved cannot be bound yet: say so and
-		// point at Setup instead of surfacing the generic failure toast.
+		// A builder page that was never saved has no page Thing to bind, so
+		// bindPage answers 404: say so and point at Setup instead of surfacing
+		// the generic failure toast. Every OTHER failure (403 not the owner,
+		// 409 changed elsewhere, timeout, 5xx) is a real error — reporting it
+		// as "save this page" would send the viewer after the wrong problem.
 		try {
 			await workspaceRequest(rootId, { operation: 'bindPage', pageId: runtime.pageId });
 			await refresh();
 			lopu({ title: 'Builder page connected', status: 'success' });
-		} catch {
+		} catch (failure) {
+			if ((failure as any)?.status !== 404) {
+				report(failure);
+				return;
+			}
 			lopu({
 				title: 'Save this page to connect it',
 				description: 'Once the page is saved, use Setup → “Connect this builder page to team access” so your team can open it.',
