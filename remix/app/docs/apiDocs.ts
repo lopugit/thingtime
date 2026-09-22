@@ -4694,10 +4694,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.14.1',
-    featureVersion: '1.14.1',
+    contractVersion: '1.14.2',
+    featureVersion: '1.14.2',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.14.2 corrects packaged Claude runtime availability for server-managed Vercel Workflow replies. It uses the existing shared OAuth credential selection and preserves model settings, tool permissions, cancellation and continuation rules; the public request and event shapes are unchanged. ' +
       'Version 1.14.1 routes native-tool gpt-5.6-sol replies through the Responses transport, preserving selected reasoning effort and fast priority instead of sending an unsupported Chat Completions combination. Provider conversation storage is disabled; encrypted reasoning is retained only within the active tool loop. The public event shape, tool permissions, confirmation checks and continuation boundaries remain compatible. Other models and text-tool providers retain their existing transport. ' +
       'Version 1.14 adds management (client or server) and explicit continueFromRequestId with automaticContinuation. The server supplies the continuation prompt, checks the latest saved assistant boundary and uses a deterministic resume request ID. Continuations cannot resubmit attachments, confirmation grants or old draft snapshots. Persisted user metadata and meta events mark continuation=true so the transcript omits synthetic user bubbles. done and persisted assistant metadata include continuationSafe and recoveryFailures; automatic recovery requires true and fewer than five consecutive saved errors. The server derives this streak from the preceding checkpoint, so polling, reloads and account switches cannot reset it. Successful checkpoints reset the streak; explicit manual Continue starts a fresh bounded streak. Manual Stop, archived conversations, newer messages, incomplete tools and pending confirmations block automatic continuation. create_thing now accepts type folder plus optional owned folderId and stores the canonical folder kind. ' +
       'Version 1.13 consumes persisted user notes at provider boundaries without aborting an in-flight request or tool. Notes do not grant tool approval. ' +

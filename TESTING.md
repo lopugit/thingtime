@@ -8098,11 +8098,30 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Continuity, Builder, navigation and Things regression checks (2026-09-21)
 
+- [ ] Stop a background reply before it produces text, then poll and reload.
+      Recovery must retain the terminal assistant state and manual Retry control
+      without adding an empty user bubble, duplicating an already-saved terminal
+      reply, or dispatching another reply. Verify
+      both local and Vercel management, a missing/unloaded user-message identity,
+      and an attachment-only genuine user turn that must remain visible.
+- [ ] Build the Vercel output and verify the Claude runtime in both the Nitro
+      server function and each Workflow step function that can invoke it. Resolve
+      the pinned runtime from an isolated function working directory without
+      repository node_modules. Check the native executable matches the emitted
+      function architecture; missing manifests, archives or corrupt runtime
+      metadata must fail the build. A successful main API shell
+      alone does not prove the Workflow runtime is packaged.
+- [ ] On the deployed preview, send a harmless Claude reply with Vercel management
+      using an authorized account and existing OAuth credentials. Confirm the
+      worker reaches the provider, persists the response and completes without
+      a package-resolution error; reload while it runs and recheck Stop. Verify
+      reply 1.14.2 on both manifests. Repeat on production after release; a local
+      bundle check alone does not prove authenticated provider execution.
 - [ ] On a deployed preview with an authorized account, send a harmless native-tool
       GPT-5.6 Sol reply at High effort in local and Vercel management. Confirm the
       selected effort survives a read-only tool hop, its receipt is saved once and
       the reply reaches a terminal state. Reload the server-managed chat while it
-      runs. Both manifests must advertise reply 1.14.1; a provider rejection must
+      runs. Both manifests must advertise reply 1.14.2; a provider rejection must
       retain accurate settings and an honest error without exposing credentials.
       Mocked provider tests alone do not prove this live acceptance.
 - [ ] Reject a provider tool batch before execution when streamed and completed

@@ -904,11 +904,37 @@ export type LopuTimelineItem =
  * their user row. A placed turn absorbs the Lopu rows that follow it — its
  * own persisted segments and any optimistic row — so a turn never shows
  * twice; a turn whose user row is not (yet) in the list is appended at the
- * end with its own optimistic user bubble. System rows are never drawn.
+ * end with its own optimistic user bubble when it has user content. An empty
+ * recovered terminal turn yields to its saved assistant reply. System rows are
+ * never drawn.
  */
 export const buildLopuTimeline = (messages: ChatMessage[], turns: LopuTurnState[], viewerId: string): LopuTimelineItem[] => {
+	const savedAssistantStops = new Map<string, Set<string>>();
+	const savedAssistantMeta = new Map<string, { requestId: string; stopReason: string }>();
+	for (const message of messages) {
+		if (message.systemType || message.deleted || isOptimisticLopuMessage(message) || !isLopuAssistantMessage(message)) continue;
+		const meta = lopuMessageMeta(message);
+		if (meta?.continuation || (!message.text.trim() && !message.attachments?.length)) continue;
+		// Persisted-row Retry needs both fields. Keep the recovered control when
+		// legacy history cannot identify the request and its terminal state.
+		if (meta?.requestId && meta.stopReason) {
+			savedAssistantMeta.set(message.id, { requestId: meta.requestId, stopReason: meta.stopReason });
+			const stops = savedAssistantStops.get(meta.requestId) || new Set<string>();
+			stops.add(meta.stopReason);
+			savedAssistantStops.set(meta.requestId, stops);
+		}
+	}
+	const timelineTurns = turns.filter(turn => {
+		const savedMessagesLoaded = turn.messages.every(message => {
+			const saved = savedAssistantMeta.get(message.id);
+			return saved?.requestId === turn.requestId && saved?.stopReason === turn.stopReason;
+		});
+		const emptyRecoveredTurn = !isLopuTurnActive(turn) && !turn.userText.trim() && !turn.userAttachments?.length &&
+			!turn.text.trim() && !turn.segments.length && !turn.tools.length && savedMessagesLoaded;
+		return !emptyRecoveredTurn || !turn.stopReason || !savedAssistantStops.get(turn.requestId)?.has(turn.stopReason);
+	});
 	const byUserMessageId = new Map<string, LopuTurnState>();
-	for (const turn of turns) byUserMessageId.set(turn.userMessageId, turn);
+	for (const turn of timelineTurns) byUserMessageId.set(turn.userMessageId, turn);
 	const placed = new Set<string>();
 	const items: LopuTimelineItem[] = [];
 	let absorbing = false;
@@ -925,9 +951,13 @@ export const buildLopuTimeline = (messages: ChatMessage[], turns: LopuTurnState[
 			absorbing = true;
 		}
 	}
-	for (const turn of turns) {
+	for (const turn of timelineTurns) {
 		if (placed.has(turn.requestId)) continue;
-		if (!turn.continuation) items.push({ kind: 'message', message: buildUserMessage(turn, viewerId), role: 'user' });
+		// Recovered background turns may have only provider output and no loaded
+		// user row. Keep their assistant state without inventing an empty input.
+		if (!turn.continuation && (turn.userText.trim() || turn.userAttachments?.length)) {
+			items.push({ kind: 'message', message: buildUserMessage(turn, viewerId), role: 'user' });
+		}
 		items.push({ kind: 'turn', turn });
 	}
 	return items;

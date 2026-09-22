@@ -49,6 +49,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Hide empty user placeholders reconstructed from
+  background reply output after reload, and retain an already-saved terminal
+  reply instead of appending an empty duplicate. Preserve attachment-only
+  messages, active output and manual Retry; stopped tasks remain stopped.
+
+- 2026-09-22 — **Codex (AI)**: Include the pinned Claude runtime in Vercel
+  Workflow execution packaging and check the worker bundle independently of the
+  main server. Align each Claude-consuming function’s CPU architecture with
+  its packaged executable. Reply capability 1.14.2 records the correction for a
+  production failure before provider invocation. The follow-up PR records
+  deployed acceptance and final release evidence; see the
+  [follow-up note](../PRs/883-codex-lopu-workflow-claude-runtime-fix-claude-workflow-runtime-and-stop-recovery-display.md).
 - 2026-09-22 — **Claude (AI)**: The five demo apps adopt PR #870's native
   controls — confirmation dialogs (`tt-dialog`) on every destructive control,
   a focus-timer countdown (`tt-countdown`) with `$ui` length pickers, a `$ui`
