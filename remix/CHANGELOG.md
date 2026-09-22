@@ -77,6 +77,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   its bundle identifier as the name and skips blank identifiers before paging,
   preventing HTTP 400 responses that hide brightness and file capabilities.
 
+- 2026-09-21 — **Claude (AI)**: Five creative builder demo app suites on the
+  📱 Apps tab — ✅ Done & Dusted (todo), 🔮 Thingmon (creature collector with
+  60 generated original pixel-art species and a new `thingmon` domain pack),
+  📸 Snapquest (photo hunt with real uploads), 📖 Branchwood (choose-your-own-
+  adventure), 🌱 Pixel Garden (time-based growth on an interval source).
+  Adds `schemas/appSuites/kit.ts`, `BehaviourSuite.content` (generic seeding
+  of app content), `scripts/generate-thingmon-sprites.mjs` and the live
+  verifier `scripts/verify-demo-apps.mjs` (151 checks). Details, gotchas
+  (rolldown + JSON initialisers, nested `$item` lambdas) and the manual
+  checklist: `PRs/864-claude-thingtime-builder-demos-2e2672--creative-demo-app-suites.md`
+  and `TESTING.md`.
+
 - **2026-09-21 · Codex (AI):** Seamless Lopu continuation with browser/server
   management, one aggregate iOS chat Live Activity, Builder settings and unified
   Commander navigation. Things now share post discussions, attach existing

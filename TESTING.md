@@ -8050,6 +8050,51 @@ in `thingtime-media-gallery-profile` (Vite 18420 / HMR 18421 / Nitro 18422).
 Tailscale/Funnel is unavailable because its installed launcher points to a
 missing `/Applications/Tailscale.app`; no public mapping was changed.
 
+## Builder demo app suites (2026-09-21) — `remix/app/schemas/appSuites/{dusted,thingmon,snapquest,branchwood,garden}.ts`
+
+Automated: `npm --prefix remix run test:schemas` (every part of every suite
+clears its kind gate in both materialisations), `test:action-packs` (the
+`thingmon` pack), and the live verifier
+`node remix/scripts/verify-demo-apps.mjs http://127.0.0.1:<nitro-port>` with
+`TT_VERIFY_ADMIN_USER/PASS` naming an `ADMIN_USERNAMES` account (151 checks:
+register → seed-demos → install → run every program → resolve every page).
+`TT_VERIFY_ONLY=thingmon,garden` narrows it.
+
+Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
+
+- [ ] `/builder/demos` → 📱 Apps lists Done & Dusted, Thingmon, Snapquest,
+      Branchwood, Pixel Garden with taglines; each card opens
+      `/builder/demos/<key>` with PREVIEW + LIVE panes and Install app.
+- [ ] Signed OUT, `/p/thingmon` shows the sign-in card (not the starter
+      picker); signed in, the seeded page shows the Install card, and after
+      Install the page re-resolves to the viewer's twin (builder bar appears).
+- [ ] Thingmon: pick a starter + name → Begin (toast narrates) → keeper card
+      shows shards/dex/lead; Explore Meadow opens the arena (wild + player
+      sprites, HP bars, log, one button per move, crystals, tonics, Run);
+      a move updates both HP bars and the log; a Shard crystal either
+      catches ("Gotcha!", party count rises on Team) or the wild replies;
+      Team: rename reads only its own row, Tonic/To box/Lead/Evolve work;
+      Dex: unseen species are silhouettes, `?page=2` paginates, a card opens
+      `/p/thingmon-species?id=`; Shop: Buy sends only that row's qty; Keeper:
+      Daily bonus once per day, Start over empties everything.
+- [ ] Done & Dusted: add a task with a date and an uploaded file (Upload →
+      Use file → Add); the board refetches; chips `?filter=today|overdue|high`
+      and `?project=inbox` filter; Edit opens `/p/dusted-task?edit=<id>`
+      prefilled (select/date/textarea/upload initialise from the record);
+      Snooze moves the due date a day; Find renders `last.result`; Done page
+      Undo + Clear all done (each → delete).
+- [ ] Snapquest: board shows 24 challenges, today's featured pick, category
+      chips; a challenge page refuses Claim without a file, accepts after
+      Use file; the gallery shows the private photo; Un-claim reopens it.
+- [ ] Branchwood: Begin → choices as buttons, a locked choice shows its hint
+      inline; reach an ending → "THE END", Play again keeps endings found;
+      Journal lists the path with titles.
+- [ ] Pixel Garden: Open → six beds; Plant reads only that bed's seed
+      select; the percentage moves within 15 s without clicking (interval
+      source); Water refuses a fresh bed; a radish is harvestable after ~3
+      minutes; Shed shows the catalogue; Compost resets.
+- [ ] Mobile (390px): the arena stacks, move buttons wrap, dex grid is 3-up,
+      no horizontal overflow on any app page.
 
 ## Continuity, Builder, navigation and Things regression checks (2026-09-21)
 
