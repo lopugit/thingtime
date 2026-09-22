@@ -12,6 +12,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-22 — **Claude (AI)**: Service workspaces (the builder's franchise
+  app block) run live again on `/p/` pages and in the seamless editor. Html
+  blocks now provide `NativeControlsEnabled` for live viewers in every runtime
+  mode (Edit/Layout show a preview hint, View and the page run the app; Builder
+  mode and previews stay inert with a named placeholder). Workspace Back
+  returns to the previous record, new logs/sub-jobs/links keep their parent
+  open, and creating a workspace on an unsaved page explains how to connect
+  it. Validation: `test:webpages`, `test:service-workspaces`, `test:editorjs`,
+  lint, ratchet, `build:client`, local desktop/390px click-through. Details:
+  [PR #888](../PRs/888-claude-task-completion-43f339--run-service-workspaces-live-on-pages-and-in-the-editor.md).
+
 - 2026-09-19 — **Claude (AI)**: Brand logo SEO. Every public shell now
   publishes an `Organization` JSON-LD node (logo = the 1024px voxel tree icon,
   wordmark image, `sameAs` profiles) linked from `WebSite.publisher`; the
