@@ -2934,15 +2934,23 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 
 ### Trusted `develop`-target PR deployments
 
-A pull request's base branch does not select its Vercel environment. A feature
-branch targeting `develop` is therefore still an ordinary Preview unless the
-trusted controller in `.github/workflows/develop-pr-preview.yml` explicitly
-deploys its exact head SHA to the `develop` Custom Environment. Thingtime now
-also assigns the current `develop` runtime variables to generic Preview, so an
-ordinary newly built Preview shares the development data/services even without
-the controller. The controller remains responsible for the stable
-`pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
-comment, and marker-scoped cleanup.
+A pull request's base branch does not select its Vercel environment, and it
+does not gate the preview either: every same-repository PR — whether it targets
+`develop`, `main`, `github-actions` or another feature branch — gets its exact
+head SHA deployed by the trusted controller in
+`.github/workflows/develop-pr-preview.yml` into the `develop` Custom
+Environment by default, and published at
+`https://pr-<number>.previews.dev.thingtime.com` until the PR closes. The only
+base-independent requirements are the trust gates below and a head that
+carries `remix/` (controller-only branches have nothing to build and take the
+skip/reconcile path). Thingtime also assigns the current `develop` runtime
+variables to generic Preview, so an ordinary newly built Preview shares the
+development data/services even without the controller. The controller remains
+responsible for the stable alias, identity/SHA gates, status comment, and
+marker-scoped cleanup. A `production`-environment preview of a PR is an
+explicit admin choice made through the admin preview lane
+(`deploy-admin-pr-previews.mjs`, published under
+`pr-<number>.previews.thingtime.com`); it never happens by default.
 
 The workflow deliberately separates authorization, compilation, and
 publication. Product branches retain only a
@@ -2953,8 +2961,9 @@ Vercel secret, checks out no code, and emits only a bounded
 `github-actions`, proves the source workflow path/run, repository,
 same-repository PR, head SHA, action, and triggering actor through GitHub's API,
 then re-reads the live PR. Both the PR author and triggering actor must be
-explicitly allowlisted, currently hold write/admin permission, and the
-non-draft PR must still target `develop`.
+explicitly allowlisted and currently hold write/admin permission, and the PR
+must be non-draft. Its base branch is not part of the gate: `develop`, `main`
+and feature-branch targets all preview into the `develop` environment.
 
 A separate environment-free GitHub job checks out exactly that authorized SHA,
 installs locked dependencies, and generates `.vercel/output` without any
