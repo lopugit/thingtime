@@ -134,7 +134,11 @@ export const useThingSource = ({
 			return;
 		}
 		let cancelled = false;
-		setState((current) => (current.result === undefined || current.status === 'signed-out' || current.status === 'inert' ? { ...current, status: 'loading' } : current));
+		// a seeded page the viewer has not installed keeps saying so across
+		// refetches (an interval source ticks every few seconds — flipping the
+		// Install card to "Loading…" on each tick unmounts the button under the
+		// pointer); install itself re-resolves the page, so nothing is stale
+		setState((current) => ((current.result === undefined && current.status !== 'not-installed') || current.status === 'signed-out' || current.status === 'inert' ? { ...current, status: 'loading' } : current));
 		(async () => {
 			try {
 				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick, l: local });

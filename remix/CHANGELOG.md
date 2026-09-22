@@ -12,6 +12,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-22 — **Claude (AI)**: PR preview docs. README and the preview
+  listener's manual-dispatch description now state what the protected
+  controller already does: every same-repository PR previews into the
+  `develop` environment at `pr-<n>.previews.dev.thingtime.com` regardless of
+  its base branch (`develop`, `main`, feature branches); production-environment
+  previews stay an explicit admin choice. Evidence: PR #888 (base `main`) was
+  built and published by the controller. No workflow logic changed.
+
+- 2026-09-22 — **Claude (AI)**: Service workspaces (the builder's franchise
+  app block) run live again on `/p/` pages and in the seamless editor. Html
+  blocks now provide `NativeControlsEnabled` for live viewers in every runtime
+  mode (Edit/Layout show a preview hint, View and the page run the app; Builder
+  mode and previews stay inert with a named placeholder). Workspace Back
+  returns to the previous record, new logs/sub-jobs/links keep their parent
+  open, and creating a workspace on an unsaved page explains how to connect
+  it. Validation: `test:webpages`, `test:service-workspaces`, `test:editorjs`,
+  lint, ratchet, `build:client`, local desktop/390px click-through. Details:
+  [PR #888](../PRs/888-claude-task-completion-43f339--run-service-workspaces-live-on-pages-and-in-the-editor.md).
+
 - 2026-09-19 — **Claude (AI)**: Brand logo SEO. Every public shell now
   publishes an `Organization` JSON-LD node (logo = the 1024px voxel tree icon,
   wordmark image, `sameAs` profiles) linked from `WebSite.publisher`; the
@@ -49,6 +68,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Hide empty user placeholders reconstructed from
+  background reply output after reload, and retain an already-saved terminal
+  reply instead of appending an empty duplicate. Preserve attachment-only
+  messages, active output and manual Retry; stopped tasks remain stopped.
+
+- 2026-09-22 — **Codex (AI)**: Include the pinned Claude runtime in Vercel
+  Workflow execution packaging and check the worker bundle independently of the
+  main server. Align each Claude-consuming function’s CPU architecture with
+  its packaged executable. Reply capability 1.14.2 records the correction for a
+  production failure before provider invocation. The follow-up PR records
+  deployed acceptance and final release evidence; see the
+  [follow-up note](../PRs/883-codex-lopu-workflow-claude-runtime-fix-claude-workflow-runtime-and-stop-recovery-display.md).
+- 2026-09-22 — **Claude (AI)**: The five demo apps adopt PR #870's native
+  controls — confirmation dialogs (`tt-dialog`) on every destructive control,
+  a focus-timer countdown (`tt-countdown`) with `$ui` length pickers, a `$ui`
+  "Hide unseen" toggle on the Thingmon dex — and return tidy results for the
+  runtime's inline result panel. [PR #886 note](../PRs/886-claude-builder-demos-native-controls--demo-apps-adopt-native-controls.md).
 - 2026-09-22 — **Codex (AI)**: Route native-tool GPT-5.6 Sol chat replies through
   Responses while retaining the selected reasoning effort and speed. The reply
   contract advances to 1.14.1 after authenticated preview QA exposed a rejected
@@ -63,6 +99,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   macOS application has a blank display name. The native heartbeat now uses
   its bundle identifier as the name and skips blank identifiers before paging,
   preventing HTTP 400 responses that hide brightness and file capabilities.
+
+- 2026-09-21 — **Claude (AI)**: Five creative builder demo app suites on the
+  📱 Apps tab — ✅ Done & Dusted (todo), 🔮 Thingmon (creature collector with
+  60 generated original pixel-art species and a new `thingmon` domain pack),
+  📸 Snapquest (photo hunt with real uploads), 📖 Branchwood (choose-your-own-
+  adventure), 🌱 Pixel Garden (time-based growth on an interval source).
+  Adds `schemas/appSuites/kit.ts`, `BehaviourSuite.content` (generic seeding
+  of app content), `scripts/generate-thingmon-sprites.mjs` and the live
+  verifier `scripts/verify-demo-apps.mjs` (151 checks). Details, gotchas
+  (rolldown + JSON initialisers, nested `$item` lambdas) and the manual
+  checklist: `PRs/864-claude-thingtime-builder-demos-2e2672--creative-demo-app-suites.md`
+  and `TESTING.md`.
 
 - **2026-09-21 · Codex (AI):** Seamless Lopu continuation with browser/server
   management, one aggregate iOS chat Live Activity, Builder settings and unified

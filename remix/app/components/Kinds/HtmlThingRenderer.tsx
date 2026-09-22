@@ -12,9 +12,29 @@ const ServiceWorkspace = React.lazy(() => import('../Builder/ServiceWorkspace/Se
 // Native workspace controls touch persisted account data. Inert component and
 // Thing previews must neither mount their data loader nor offer those controls.
 // Interactive shared pages remain available to their authorized staff members.
-export function InteractiveWorkspace({ children }: { children: React.ReactNode }) {
+// Live page surfaces (LiveTemplate for components, the html block view for
+// authored markup) provide NativeControlsEnabled; nothing else should.
+export function InteractiveWorkspace({ name, children }: { name?: string; children: React.ReactNode }) {
 	const interactive = React.useContext(NativeControlsEnabled);
-	return interactive ? <>{children}</> : <div>Open this component in an interactive page to use its service workspace.</div>;
+	if (interactive) return <>{children}</>;
+	return (
+		<div
+			role="note"
+			style={{
+				display: 'grid',
+				gap: 4,
+				padding: '16px 18px',
+				border: '1px dashed var(--tt-border, #ececef)',
+				borderRadius: 'var(--tt-radius-md, 12px)',
+				color: 'var(--tt-muted, #5a5a66)',
+				fontSize: 14,
+				lineHeight: 1.45
+			}}
+		>
+			<strong style={{ color: 'var(--tt-ink, #16161a)' }}>🌿 {name || 'Service workspace'}</strong>
+			<span>This service workspace runs on the live page. Open the page (View or Visit) to use it — previews keep it inert.</span>
+		</div>
+	);
 }
 
 
@@ -224,7 +244,16 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const tag = String(node.tag || 'div').toLowerCase();
-	if (tag === 'tt-service-workspace') return <InteractiveWorkspace key={key}><React.Suspense fallback={<div aria-busy="true">Opening workspace…</div>}><ServiceWorkspace rootId={node.props?.rootId ?? node.props?.rootid} name={typeof node.props?.name === 'string' ? node.props.name : undefined} /></React.Suspense></InteractiveWorkspace>;
+	if (tag === 'tt-service-workspace') {
+		const name = typeof node.props?.name === 'string' ? node.props.name : undefined;
+		return (
+			<InteractiveWorkspace key={key} name={name}>
+				<React.Suspense fallback={<div aria-busy="true">Opening workspace…</div>}>
+					<ServiceWorkspace rootId={node.props?.rootId ?? node.props?.rootid} name={name} />
+				</React.Suspense>
+			</InteractiveWorkspace>
+		);
+	}
 	if (tag === 'tt-countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
 	if (tag === 'tt-dialog') return <ComponentDialog key={key} title={node.props?.title} name={node.props?.name} type={node.props?.type}>{renderChildren(node.children, depth + 1, state)}</ComponentDialog>;
 	if (tag === 'tt-upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} value={node.props?.value} attachmentId={node.props?.attachmentId} />;

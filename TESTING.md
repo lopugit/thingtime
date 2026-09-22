@@ -8050,14 +8050,78 @@ in `thingtime-media-gallery-profile` (Vite 18420 / HMR 18421 / Nitro 18422).
 Tailscale/Funnel is unavailable because its installed launcher points to a
 missing `/Applications/Tailscale.app`; no public mapping was changed.
 
+## Builder demo app suites (2026-09-21) — `remix/app/schemas/appSuites/{dusted,thingmon,snapquest,branchwood,garden}.ts`
+
+Automated: `npm --prefix remix run test:schemas` (every part of every suite
+clears its kind gate in both materialisations), `test:action-packs` (the
+`thingmon` pack), and the live verifier
+`node remix/scripts/verify-demo-apps.mjs http://127.0.0.1:<nitro-port>` with
+`TT_VERIFY_ADMIN_USER/PASS` naming an `ADMIN_USERNAMES` account (151 checks:
+register → seed-demos → install → run every program → resolve every page).
+`TT_VERIFY_ONLY=thingmon,garden` narrows it.
+
+Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
+
+- [ ] `/builder/demos` → 📱 Apps lists Done & Dusted, Thingmon, Snapquest,
+      Branchwood, Pixel Garden with taglines; each card opens
+      `/builder/demos/<key>` with PREVIEW + LIVE panes and Install app.
+- [ ] Signed OUT, `/p/thingmon` shows the sign-in card (not the starter
+      picker); signed in, the seeded page shows the Install card, and after
+      Install the page re-resolves to the viewer's twin (builder bar appears).
+- [ ] Thingmon: pick a starter + name → Begin (toast narrates) → keeper card
+      shows shards/dex/lead; Explore Meadow opens the arena (wild + player
+      sprites, HP bars, log, one button per move, crystals, tonics, Run);
+      a move updates both HP bars and the log; a Shard crystal either
+      catches ("Gotcha!", party count rises on Team) or the wild replies;
+      Team: rename reads only its own row, Tonic/To box/Lead/Evolve work;
+      Dex: unseen species are silhouettes, `?page=2` paginates, a card opens
+      `/p/thingmon-species?id=`; Shop: Buy sends only that row's qty; Keeper:
+      Daily bonus once per day, Start over empties everything.
+- [ ] Done & Dusted: add a task with a date and an uploaded file (Upload →
+      Use file → Add); the board refetches; chips `?filter=today|overdue|high`
+      and `?project=inbox` filter; Edit opens `/p/dusted-task?edit=<id>`
+      prefilled (select/date/textarea/upload initialise from the record);
+      Snooze moves the due date a day; Find renders `last.result`; Done page
+      Undo + Clear all done (each → delete).
+- [ ] Snapquest: board shows 24 challenges, today's featured pick, category
+      chips; a challenge page refuses Claim without a file, accepts after
+      Use file; the gallery shows the private photo; Un-claim reopens it.
+- [ ] Branchwood: Begin → choices as buttons, a locked choice shows its hint
+      inline; reach an ending → "THE END", Play again keeps endings found;
+      Journal lists the path with titles.
+- [ ] Pixel Garden: Open → six beds; Plant reads only that bed's seed
+      select; the percentage moves within 15 s without clicking (interval
+      source); Water refuses a fresh bed; a radish is harvestable after ~3
+      minutes; Shed shows the catalogue; Compost resets.
+- [ ] Mobile (390px): the arena stacks, move buttons wrap, dex grid is 3-up,
+      no horizontal overflow on any app page.
 
 ## Continuity, Builder, navigation and Things regression checks (2026-09-21)
 
+- [ ] Stop a background reply before it produces text, then poll and reload.
+      Recovery must retain the terminal assistant state and manual Retry control
+      without adding an empty user bubble, duplicating an already-saved terminal
+      reply, or dispatching another reply. Verify
+      both local and Vercel management, a missing/unloaded user-message identity,
+      and an attachment-only genuine user turn that must remain visible.
+- [ ] Build the Vercel output and verify the Claude runtime in both the Nitro
+      server function and each Workflow step function that can invoke it. Resolve
+      the pinned runtime from an isolated function working directory without
+      repository node_modules. Check the native executable matches the emitted
+      function architecture; missing manifests, archives or corrupt runtime
+      metadata must fail the build. A successful main API shell
+      alone does not prove the Workflow runtime is packaged.
+- [ ] On the deployed preview, send a harmless Claude reply with Vercel management
+      using an authorized account and existing OAuth credentials. Confirm the
+      worker reaches the provider, persists the response and completes without
+      a package-resolution error; reload while it runs and recheck Stop. Verify
+      reply 1.14.2 on both manifests. Repeat on production after release; a local
+      bundle check alone does not prove authenticated provider execution.
 - [ ] On a deployed preview with an authorized account, send a harmless native-tool
       GPT-5.6 Sol reply at High effort in local and Vercel management. Confirm the
       selected effort survives a read-only tool hop, its receipt is saved once and
       the reply reaches a terminal state. Reload the server-managed chat while it
-      runs. Both manifests must advertise reply 1.14.1; a provider rejection must
+      runs. Both manifests must advertise reply 1.14.2; a provider rejection must
       retain accurate settings and an honest error without exposing credentials.
       Mocked provider tests alone do not prove this live acceptance.
 - [ ] Reject a provider tool batch before execution when streamed and completed
@@ -8191,6 +8255,21 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   rejection must show specific safe setup guidance; gateway HTML must show a
   retry message rather than a JSON parser exception. Run test:service-workspaces
   and the isolated test-service-workspace-local.ts smoke.
+- Native app blocks (the builder's Service workspace html block): the live
+  page `/p/<id>` (with and without `?mode=visit`) and the seamless editor's
+  Edit, Layout and View modes must render the real workspace — Edit/Layout show
+  the "Live app preview" hint and clicks select the block; View and the live
+  page run it. Builder mode, component-library previews and feed embeds keep
+  the placeholder that names the workspace and never mount its loader. Run
+  test:webpages (webpageBlocksNativeApp.test.ts) and test:editorjs.
+- Workspace record navigation: open property → job → visit; each Back returns
+  to the previous record ("Back to Lawn & edges"), then to the section list.
+  Adding a time log, usage log, sub-job or customer link keeps the parent open
+  with the new row listed; editing an existing record keeps its page. Deleting
+  a record from a list stays on the current page; deleting the open record
+  returns to where it was opened from. Creating a workspace on a never-saved
+  builder page shows the "Save this page to connect it" notice, and Setup →
+  "Connect this builder page" works after saving.
 - Integration builder mobile header: with a long display name at 320px/390px,
   account text truncates without covering Commander or neighboring controls;
   the full name remains available to assistive technology and on hover.
@@ -8231,3 +8310,16 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   must stop automatic loading, with an explicit retry for recoverable failures.
 
 - Device command confidentiality: generic Thing exact-id and discussion reads must reject owned device-command rows, including live and expired filesystem results and upload chunks. Only the dedicated device command result endpoint may return its authorized, unexpired result.
+
+### Native controls in the demo apps (2026-09-22, PR #886)
+
+- [ ] Done & Dusted `/p/dusted`: the Focus timer card shows 25 minutes; the
+      15/25/50 buttons change the length with no network run (signed out too);
+      Start counts down, Pause/Reset work. Done page: "Clear all done…" opens
+      a native dialog; Escape closes it; "Yes, clear them" runs the delete.
+- [ ] Thingmon `/p/thingmon-dex`: "Hide unseen" hides the silhouettes and
+      flips to "Show all"; paging keeps the grid. `/p/thingmon-keeper`:
+      "Delete my Thingmon data…" opens a dialog; the red button inside runs
+      the reset. `/p/thingmon`: Explore shows a one-line result panel (no JSON).
+- [ ] Snapquest challenge page: "Un-claim…" confirms in a dialog. Pixel Garden
+      shed: "Compost the garden…" confirms in a dialog.
