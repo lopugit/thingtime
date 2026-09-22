@@ -12,6 +12,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-22 — **Claude (AI)**: PR preview docs. README and the preview
+  listener's manual-dispatch description now state what the protected
+  controller already does: every same-repository PR previews into the
+  `develop` environment at `pr-<n>.previews.dev.thingtime.com` regardless of
+  its base branch (`develop`, `main`, feature branches); production-environment
+  previews stay an explicit admin choice. Evidence: PR #888 (base `main`) was
+  built and published by the controller. No workflow logic changed.
+
 - 2026-09-22 — **Claude (AI)**: Service workspaces (the builder's franchise
   app block) run live again on `/p/` pages and in the seamless editor. Html
   blocks now provide `NativeControlsEnabled` for live viewers in every runtime
