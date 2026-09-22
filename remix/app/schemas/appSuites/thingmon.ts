@@ -263,8 +263,9 @@ const dex: SuiteComponentDef = {
 				'Thingmon',
 				'The dex.',
 				el('div', { display: 'grid', gap: '10px' }, [
-					k.row([k.strong('Dex', { fontSize: '17px' }), k.muted('{result.caughtCount} caught · {result.seenCount} seen · {result.total} total'), k.row([k.link('← Prev', '/p/thingmon-dex?page={result.prevPage}', 'ghost', SMALL), k.muted('page {result.page}/{result.pages}'), k.link('Next →', '/p/thingmon-dex?page={result.nextPage}', 'ghost', SMALL)], { gap: '6px', marginLeft: 'auto' })]),
-					el('div', { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }, [each('result.items', dexCard(), { max: 30 })]),
+					k.row([k.strong('Dex', { fontSize: '17px' }), k.muted('{result.caughtCount} caught · {result.seenCount} seen · {result.total} total'), k.localButton(ifTruthy('hideUnseen', 'Show all', 'Hide unseen'), { op: 'toggle', key: 'hideUnseen' }, 'soft', SMALL), k.row([k.link('← Prev', '/p/thingmon-dex?page={result.prevPage}', 'ghost', SMALL), k.muted('page {result.page}/{result.pages}'), k.link('Next →', '/p/thingmon-dex?page={result.nextPage}', 'ghost', SMALL)], { gap: '6px', marginLeft: 'auto' })]),
+					// the toggle is a $ui local control: it filters the grid in this component instance without a run
+					el('div', { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }, [each('result.items', ifTruthy('hideUnseen', ifTruthy('item.seen', dexCard()), dexCard()), { max: 30 })]),
 					ifTruthy('result.hasKeeper', null, k.notice('Sign in and start a journey to reveal what you have met — the catalogue itself is public system data.'))
 				])
 			)
@@ -362,7 +363,7 @@ const keeperCard: SuiteComponentDef = {
 							k.grid([k.stat('{result.keeper.shards}', 'shards'), k.stat('{result.keeper.wins}', 'wins'), k.stat('{result.keeper.losses}', 'losses'), k.stat('{result.keeper.catches}', 'catches'), k.stat('{result.keeper.explores}', 'expeditions'), k.stat('{result.keeper.streak}', 'daily streak')], 110),
 							k.muted('Journey started {result.startedOn} · last daily bonus {result.keeper.lastDaily}')
 						]),
-						k.card([k.strong('Start over', { color: T.danger }), k.text('Deletes your keeper, every creature and every battle record (up to 20 of each per run — run it again for a very full box). The catalogue and the app itself stay.'), k.group([k.row([k.button('Delete my Thingmon data', refs.actionKey('reset'), {}, 'danger')])])])
+						k.card([k.strong('Start over', { color: T.danger }), k.text('Deletes your keeper, every creature and every battle record (up to 20 of each per run — run it again for a very full box). The catalogue and the app itself stay.'), k.group([k.row([k.confirmButton('Delete my Thingmon data…', 'Start over?', k.text('This deletes your keeper, every creature and every battle record. There is no undo.'), k.button('Yes, delete everything', refs.actionKey('reset'), {}, 'danger'))])])])
 					]),
 					k.card([k.strong('No keeper yet'), k.row([k.link('→ Play', '/p/thingmon', 'solid')])])
 				)
@@ -512,7 +513,8 @@ const exploreAction: SuiteActionDef = {
 			values: { state: 'active', zone: '$input.zone', wild: '$step.11', playerId: '$step.9.id', turn: 0, attempts: 0, log: [concat('A wild ', '$step.11.species', ' (Lv ', '$step.11.level', ') appeared in the ', '$step.6.name', '!')], startedAt: '$now', endedAt: null }
 		}, // 12
 		{ op: 'things.update', id: firstId('$step.1'), values: { zone: '$input.zone', explores: x('add', coalesce(get('$step.3', 'explores', null), 0), 1), dexSeen: x('uniq', x('append', listOf('$step.3', 'dexSeen'), '$step.11.speciesId')), lastMessage: concat('A wild ', '$step.11.species', ' appeared in the ', '$step.6.name', '!'), updatedAt: '$now' } }, // 13
-		returnValue({ title: concat('A wild ', '$step.11.species', '!'), message: concat('Lv ', '$step.11.level', ' · ', '$step.11.typeLine', '. ', '$step.9.crystal.species', ' steps forward.'), encounter: '$step.11' })
+		// scalars only: the runtime's inline result panel lists every returned field
+		returnValue({ title: concat('A wild ', '$step.11.species', '!'), message: concat('Lv ', '$step.11.level', ' · ', '$step.11.typeLine', '. ', '$step.9.crystal.species', ' steps forward.'), species: '$step.11.species', level: '$step.11.level' })
 	],
 	capabilities: (refs) => [caps(refs, 'things.read', 'keeper', 'critter', 'battle'), caps(refs, 'things.update', 'keeper'), caps(refs, 'things.create', 'battle')],
 	limits: { timeoutMs: 8000, maxOperations: 24 }

@@ -144,7 +144,7 @@ const claim: SuiteComponentDef = {
 								k.notice('Claimed on {result.capture.capturedOn} for {result.capture.points} points ✓', 'ok'),
 								ifTruthy('result.capture.photo', k.img('{result.capture.photo}', '{result.challenge.title}', { maxHeight: '360px', borderRadius: '12px', objectFit: 'cover' })),
 								ifTruthy('result.capture.note', k.text('“{result.capture.note}”', { fontStyle: 'italic' })),
-								k.group([k.row([k.button('Un-claim', refs.actionKey('uncapture'), { id: '{result.capture.id}' }, 'danger', SMALL), k.muted('Deletes the capture thing; the private file stays in your account.')])])
+								k.group([k.row([k.confirmButton('Un-claim…', 'Un-claim this challenge?', k.text('Deletes the capture record so you can redo it. The private file stays in your account.'), k.button('Yes, un-claim', refs.actionKey('uncapture'), { id: '{result.capture.id}' }, 'danger', SMALL)), k.muted('Confirmed in a native dialog.')])])
 							]),
 							k.group([
 								k.field('Your photo', k.upload('photo', { imageOnly: true, title: 'Photo evidence' }), 'Upload, wait for processing, choose “Use file” — the form receives photo and photoAttachmentId.'),
@@ -273,7 +273,7 @@ const uncaptureAction: SuiteActionDef = {
 	description: 'Deletes one of your captures (the uploaded file stays in your account).',
 	category: 'snapquest',
 	inputs: [{ name: 'id', type: 'string', label: 'Capture id', required: true, maxLength: 80 }],
-	steps: () => [{ op: 'things.delete', id: '$input.id' }, returnValue({ id: '$input.id', message: 'Un-claimed — the challenge is open again.' })],
+	steps: () => [{ op: 'things.delete', id: '$input.id' }, returnValue({ message: 'Un-claimed — the challenge is open again.' })],
 	capabilities: (refs) => [{ capability: 'things.delete', schemas: [refs.schema('capture')] }],
 	limits: { timeoutMs: 4000, maxOperations: 4 }
 };

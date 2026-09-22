@@ -118,7 +118,7 @@ const shed: SuiteComponentDef = {
 								)
 							])
 						]),
-						k.card([k.strong('Compost everything', { color: T.danger }), k.text('Digs up every bed and resets coins to twenty. Your harvest ledger is kept.'), k.group([k.row([k.button('Compost the garden', refs.actionKey('compost'), {}, 'danger')])])])
+						k.card([k.strong('Compost everything', { color: T.danger }), k.text('Digs up every bed and resets coins to twenty. Your harvest ledger is kept.'), k.group([k.row([k.confirmButton('Compost the garden…', 'Compost everything?', k.text('Every bed is dug up and coins go back to twenty. The harvest ledger is kept.'), k.button('Yes, compost it', refs.actionKey('compost'), {}, 'danger'))])])])
 					]),
 					k.card([k.strong('No garden yet'), k.row([k.link('→ Garden', '/p/garden', 'solid')])])
 				)

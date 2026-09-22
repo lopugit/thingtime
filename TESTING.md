@@ -8295,3 +8295,16 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   must stop automatic loading, with an explicit retry for recoverable failures.
 
 - Device command confidentiality: generic Thing exact-id and discussion reads must reject owned device-command rows, including live and expired filesystem results and upload chunks. Only the dedicated device command result endpoint may return its authorized, unexpired result.
+
+### Native controls in the demo apps (2026-09-22, PR #886)
+
+- [ ] Done & Dusted `/p/dusted`: the Focus timer card shows 25 minutes; the
+      15/25/50 buttons change the length with no network run (signed out too);
+      Start counts down, Pause/Reset work. Done page: "Clear all done…" opens
+      a native dialog; Escape closes it; "Yes, clear them" runs the delete.
+- [ ] Thingmon `/p/thingmon-dex`: "Hide unseen" hides the silhouettes and
+      flips to "Show all"; paging keeps the grid. `/p/thingmon-keeper`:
+      "Delete my Thingmon data…" opens a dialog; the red button inside runs
+      the reset. `/p/thingmon`: Explore shows a one-line result panel (no JSON).
+- [ ] Snapquest challenge page: "Un-claim…" confirms in a dialog. Pixel Garden
+      shed: "Compost the garden…" confirms in a dialog.
