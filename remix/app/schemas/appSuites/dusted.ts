@@ -196,6 +196,19 @@ const editor: SuiteComponentDef = {
 		])
 };
 
+const focus: SuiteComponentDef = {
+	key: 'focus',
+	name: 'Focus timer',
+	description: 'A native countdown (tt-countdown) whose length is picked by local $ui controls — no server run, no sign-in, state lives in this component instance.',
+	args: [{ name: 'seconds', type: 'number', label: 'Focus length (seconds)', default: 1500 }],
+	render: () =>
+		k.card([
+			k.row([k.strong('Focus timer ⏱', { fontSize: '17px' }), k.muted(pick('seconds', { 900: '15 minutes', 1500: '25 minutes', 3000: '50 minutes' }, '{seconds} seconds'), { marginLeft: 'auto' })]),
+			k.row([k.localButton('15 min', { op: 'set', key: 'seconds', value: 900 }, 'ghost', SMALL), k.localButton('25 min', { op: 'set', key: 'seconds', value: 1500 }, 'ghost', SMALL), k.localButton('50 min', { op: 'set', key: 'seconds', value: 3000 }, 'ghost', SMALL)], { gap: '6px' }),
+			k.countdown('{seconds}'),
+			k.muted('Pick a length (a local control — the page runs nothing), start, and get one task done before it ends.', { fontSize: '12px' })
+		])
+};
 const doneList: SuiteComponentDef = {
 	key: 'done',
 	name: 'Done list',
@@ -209,7 +222,7 @@ const doneList: SuiteComponentDef = {
 				el('div', { display: 'grid', gap: '10px' }, [
 					k.row([k.strong('Done ✓', { fontSize: '17px' }), k.muted('{result.stats.doneTotal} finished · {result.stats.doneToday} today', { marginLeft: 'auto' })]),
 					each('result.done', taskRow(refs, { done: true }), { max: 30, empty: k.soft([k.strong('Nothing finished yet'), k.muted('Tick a task on the board and it lands here.')]) }),
-					k.group([k.row([k.button('Clear all done', refs.actionKey('clear-done'), {}, 'danger'), k.muted('Runs the remove action once per finished task (each → child action).')])])
+					k.group([k.row([k.confirmButton('Clear all done…', 'Clear every finished task?', k.text('Deletes every finished task — up to 20 per run. This cannot be undone.'), k.button('Yes, clear them', refs.actionKey('clear-done'), {}, 'danger')), k.muted('A native dialog confirms; the delete then runs once per finished task (each → child action).')])])
 				])
 			)
 		])
@@ -364,7 +377,8 @@ const removeAction: SuiteActionDef = {
 	description: 'Deletes one of your task data things.',
 	category: 'todo',
 	inputs: [{ name: 'id', type: 'string', label: 'Task id', required: true, maxLength: 80 }],
-	steps: () => [{ op: 'things.delete', id: '$input.id' }, returnValue({ id: '$input.id', message: 'Deleted.' })],
+	// no `id` in the result: the runtime's inline result panel would link a thing that no longer exists
+	steps: () => [{ op: 'things.delete', id: '$input.id' }, returnValue({ message: 'Deleted.' })],
 	capabilities: (refs) => taskCaps(refs, 'things.delete'),
 	limits: { timeoutMs: 4000, maxOperations: 4 }
 };
@@ -407,7 +421,8 @@ const findAction: SuiteActionDef = {
 	steps: (refs) => [
 		search(refs.schema('task'), { where: { status: 'open' }, match: { title: '$input.q' }, limit: 12, sort: { field: 'createdAt', dir: 'desc' } }),
 		compute(today()),
-		returnValue({ items: viewRows('$step.1', '$step.2'), count: len('$step.1'), q: '$input.q', message: concat(len('$step.1'), ' open task(s) match') })
+		// silent: the finder card renders last.result itself, so neither the toast nor the inline result panel repeats it
+		returnValue({ items: viewRows('$step.1', '$step.2'), count: len('$step.1'), q: '$input.q', silent: true })
 	],
 	capabilities: (refs) => taskCaps(refs, 'things.read'),
 	limits: { timeoutMs: 4000, maxOperations: 6 }
@@ -443,7 +458,7 @@ export const dustedSuite: BehaviourSuite = {
 			]
 		}
 	],
-	components: [nav, composer, board, stats, finder, editor, doneList],
+	components: [nav, composer, board, stats, finder, editor, doneList, focus],
 	actions: [overviewAction, addAction, toggleAction, editAction, snoozeAction, removeAction, clearDoneAction, taskAction, findAction],
 	data: [
 		{ schema: 'task', values: { title: 'Water the monstera', notes: 'It droops on Thursdays.', status: 'open', priority: 'low', due: '2026-09-10', project: 'home', file: '', fileAttachmentId: '', createdOn: '2026-09-08', doneAt: null } },
@@ -461,7 +476,8 @@ export const dustedSuite: BehaviourSuite = {
 					boundBlock(ctx, refs, 'stats', 'stats', 'overview'),
 					componentBlock(ctx, refs, 'composer', 'composer'),
 					boundBlock(ctx, refs, 'board', 'board', 'overview', { filter: '{query.filter}', project: '{query.project}' }),
-					componentBlock(ctx, refs, 'finder', 'finder')
+					componentBlock(ctx, refs, 'finder', 'finder'),
+					componentBlock(ctx, refs, 'focus', 'focus')
 				])
 		},
 		{ key: 'done', name: 'Done', description: 'Finished tasks, undo, clear.', blocks: (ctx, refs) => appShell(ctx, refs, 'nav', 'done', [boundBlock(ctx, refs, 'done', 'done', 'overview')]) },

@@ -181,7 +181,7 @@ if (!only || only.has('thingmon')) {
 	const locked = await run('app-thingmon-explore', { zone: 'skybluff' });
 	check('explore refuses a locked zone', !ok(locked) && /unlock/.test(locked.error || ''), locked);
 	const explore = await run('app-thingmon-explore', { zone: 'meadow' });
-	check('explore meadow opens a battle', ok(explore) && typeof explore.result?.encounter?.species === 'string' && explore.result.encounter.level >= 2 && explore.result.encounter.level <= 7, explore);
+	check('explore meadow opens a battle', ok(explore) && typeof explore.result?.species === 'string' && explore.result.level >= 2 && explore.result.level <= 7, explore);
 	const twice = await run('app-thingmon-explore', { zone: 'meadow' });
 	check('explore during a battle is refused', !ok(twice) && /finish the battle/.test(twice.error || ''), twice);
 	const inBattle = await run('app-thingmon-state');
