@@ -40,8 +40,9 @@ test('event handlers and script sinks stay out of the allowlist', () => {
 
 
 test('inert HTML previews do not mount service workspace data or controls', () => {
-  const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: { tag: 'tt-service-workspace', props: { rootId: 'private-workspace' } } }));
-  assert.match(markup, /interactive page/);
+  const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: { tag: 'tt-service-workspace', props: { rootId: 'private-workspace', name: 'Jim’s Mowing HQ' } } }));
+  assert.match(markup, /runs on the live page/);
+  assert.match(markup, /Jim’s Mowing HQ/, 'the placeholder names the workspace instead of a generic component');
   assert.doesNotMatch(markup, /Opening workspace|Create workspace|private-workspace/);
   let mounts = 0;
   const WorkspaceProbe = () => { mounts++; return React.createElement('button', null, 'Save workspace'); };

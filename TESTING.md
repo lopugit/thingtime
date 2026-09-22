@@ -8255,6 +8255,21 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   rejection must show specific safe setup guidance; gateway HTML must show a
   retry message rather than a JSON parser exception. Run test:service-workspaces
   and the isolated test-service-workspace-local.ts smoke.
+- Native app blocks (the builder's Service workspace html block): the live
+  page `/p/<id>` (with and without `?mode=visit`) and the seamless editor's
+  Edit, Layout and View modes must render the real workspace — Edit/Layout show
+  the "Live app preview" hint and clicks select the block; View and the live
+  page run it. Builder mode, component-library previews and feed embeds keep
+  the placeholder that names the workspace and never mount its loader. Run
+  test:webpages (webpageBlocksNativeApp.test.ts) and test:editorjs.
+- Workspace record navigation: open property → job → visit; each Back returns
+  to the previous record ("Back to Lawn & edges"), then to the section list.
+  Adding a time log, usage log, sub-job or customer link keeps the parent open
+  with the new row listed; editing an existing record keeps its page. Deleting
+  a record from a list stays on the current page; deleting the open record
+  returns to where it was opened from. Creating a workspace on a never-saved
+  builder page shows the "Save this page to connect it" notice, and Setup →
+  "Connect this builder page" works after saving.
 - Integration builder mobile header: with a long display name at 320px/390px,
   account text truncates without covering Commander or neighboring controls;
   the full name remains available to assistive technology and on hover.

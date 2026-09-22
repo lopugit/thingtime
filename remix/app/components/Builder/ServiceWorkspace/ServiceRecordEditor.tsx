@@ -16,7 +16,7 @@ export function ServiceRecordEditor({
 	draft: ServiceDraft;
 	data: WorkspaceSnapshot;
 	close: () => void;
-	saved: (id: string) => Promise<void>;
+	saved: (id: string, outcome: { kind: ServiceKind; values: Record<string, any>; created: boolean }) => Promise<void>;
 	report: (error: unknown) => void;
 }) {
 	const [values, setValues] = React.useState<Record<string, any>>(() => ({
@@ -44,7 +44,7 @@ export function ServiceRecordEditor({
 				values: submittedValues,
 				...(draft.record ? { expectedUpdatedAt: draft.record.updatedAt } : {})
 			});
-			await saved(response.id);
+			await saved(response.id, { kind: draft.kind, values: submittedValues, created: !draft.record });
 		} catch (failure) {
 			setError(failure instanceof Error ? failure.message : 'Could not save');
 			report(failure);
