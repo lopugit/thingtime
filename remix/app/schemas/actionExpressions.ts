@@ -160,7 +160,24 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	'pokeworld.defaultTrainer': sig(0, 0, 'The starting trainer: name, gender, bag, badges, party, box, pokédex.', { pack: 'pokeworld' }),
 	'pokeworld.badges': sig(0, 0, 'The eight Hoenn badges.', { pack: 'pokeworld' }),
 	'pokeworld.expGain': sig(1, 1, 'Award experience for a defeat: { member, defeatedSpeciesId, defeatedLevel } → member (levelled), gained, leveledUp.', { pack: 'pokeworld' }),
-	'pokeworld.levelFor': sig(2, 2, 'The level a growth rate reaches at a total experience.', { pack: 'pokeworld' })
+	'pokeworld.levelFor': sig(2, 2, 'The level a growth rate reaches at a total experience.', { pack: 'pokeworld' }),
+	'thingmon.species': sig(1, 1, 'A Thingmon species record (types, stats, rarity, evolution, sprite) by id or slug.', { pack: 'thingmon' }),
+	'thingmon.dex': sig(0, 2, 'A page of the 60-species Thingmon dex: (page?, perPage?).', { pack: 'thingmon' }),
+	'thingmon.zones': sig(0, 0, 'The six expedition zones with level ranges and dex unlocks.', { pack: 'thingmon' }),
+	'thingmon.items': sig(0, 0, 'The capture-crystal and tonic catalogue with shard prices.', { pack: 'thingmon' }),
+	'thingmon.starters': sig(0, 0, 'The three starter species.', { pack: 'thingmon' }),
+	'thingmon.typeChart': sig(0, 0, 'The eight types, their strengths and resistances, and the move library.', { pack: 'thingmon' }),
+	'thingmon.newCritter': sig(1, 1, 'A full creature record for { speciesId, level, nickname?, iv? }.', { pack: 'thingmon' }),
+	'thingmon.encounter': sig(1, 1, 'Roll a wild creature for { zone, dexCaught? } (rarity-weighted; legendaries need a fuller dex).', { pack: 'thingmon' }),
+	'thingmon.battleTurn': sig(1, 1, 'Resolve one battle turn from { player, wild, moveIndex } (speed order, types, crits, status, drain).', { pack: 'thingmon' }),
+	'thingmon.catchRoll': sig(1, 1, 'A capture attempt from { player, wild, itemId } → caught, shakes, log (+ the wild’s reply on a miss).', { pack: 'thingmon' }),
+	'thingmon.fleeRoll': sig(1, 1, 'A flee attempt from { player, wild, attempts } → escaped, log (+ the wild’s reply on a miss).', { pack: 'thingmon' }),
+	'thingmon.wildTurn': sig(1, 1, 'The wild creature acts alone (after an item is used): { player, wild } → player, wild, log, outcome.', { pack: 'thingmon' }),
+	'thingmon.expGain': sig(1, 1, 'Award experience for a win: { member, defeated | amount } → member (levelled), gained, leveledUp, canEvolve.', { pack: 'thingmon' }),
+	'thingmon.evolve': sig(1, 1, 'Evolve a creature that has reached its evolution level → member, from, to.', { pack: 'thingmon' }),
+	'thingmon.useItem': sig(1, 1, 'Apply a tonic or elixir: { member, itemId, inBattle? } → member, message, consumed.', { pack: 'thingmon' }),
+	'thingmon.heal': sig(1, 1, 'A creature at full HP with every condition cleared.', { pack: 'thingmon' }),
+	'thingmon.stats': sig(1, 1, 'Level-scaled stats for { speciesId, level, iv? }.', { pack: 'thingmon' })
 };
 
 export const EXPRESSION_FUNCTION_NAMES = Object.keys(EXPRESSION_CATALOGUE);

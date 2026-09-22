@@ -408,6 +408,21 @@ const appContentDefinitions = (): SeedDefinition[] => {
 			}
 		});
 	}
+	// every app suite that declares `content` (the newer apps) seeds it the
+	// same way — one generic path instead of a hand-written loop per app
+	for (const suite of ALL_SUITES) {
+		if (!suite.content) continue;
+		for (const entry of suite.content()) {
+			const shareId = `data-app-${suite.key}-${entry.id}`;
+			definitions.push({
+				shareId,
+				uniqueKey: `app:${shareId}`,
+				kind: 'data',
+				tags: ['app', suite.key, 'content', entry.schema, ...(entry.tags || [])],
+				crystalInput: { ...entry.values, schema: schemaNameOf(suite.key, entry.schema), schemaId: schemaIdOf(suite.key, entry.schema) }
+			});
+		}
+	}
 	for (const species of POKEWORLD_SPECIES_SEED) {
 		const shareId = `data-app-pokeworld-species-${species.id}`;
 		definitions.push({

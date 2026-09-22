@@ -20,6 +20,11 @@ media titles/descriptions, attachments and optional Before/After groups. Time lo
 use the workspace IANA time zone and reject ambiguous or nonexistent DST times.
 The day/week planner supports dragging, ordering buttons and date controls.
 The bounded workspace API pages 250 records at a time, up to 5,000 records.
+The workspace runs live on its page (`/p/<id>`, no special mode needed) and
+inside the seamless editor's Edit, Layout and View modes; Builder mode,
+component-library previews and feed embeds show an inert placeholder instead.
+Back returns to the record you came from (property → job → visit), and adding a
+log, sub-job or customer link keeps its parent record open.
 
 Fork-safe maps and Vault setup:
 
@@ -132,6 +137,17 @@ executable with a SHA-256/size manifest, checks the function size, and expands
 it into private temporary storage before execution. No runtime download or
 Anthropic API-key fallback is performed. Provider access checks distinguish
 OAuth configuration from model/allowance verification by a real reply.
+
+For Vercel deployments, run `npm --prefix remix run build` so packaging and
+`verify:vercel-output` validate every emitted Node function that invokes Claude,
+including Workflow steps. Each function needs its own pinned runtime assets and
+size verification; the main Nitro function and Workflow step execute in separate
+filesystem roots. Workflow generation can emit an arm64 function independently
+of an x64 Linux builder. The packager aligns each Claude-consuming function’s
+CPU architecture with its packaged executable and verifies that match; flow and
+webhook functions retain their emitted configuration. Keep the canonical
+post-build packaging/verification stages in a fork’s build command. Authenticated server-managed Claude execution still
+requires a deployed smoke test with the existing OAuth setup above.
 
 Local worktree verification: `http://localhost:15080/admin/system` (Nitro
 15082, HMR 15081). Tailscale/Funnel was unavailable on this machine during
@@ -2918,15 +2934,23 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 
 ### Trusted `develop`-target PR deployments
 
-A pull request's base branch does not select its Vercel environment. A feature
-branch targeting `develop` is therefore still an ordinary Preview unless the
-trusted controller in `.github/workflows/develop-pr-preview.yml` explicitly
-deploys its exact head SHA to the `develop` Custom Environment. Thingtime now
-also assigns the current `develop` runtime variables to generic Preview, so an
-ordinary newly built Preview shares the development data/services even without
-the controller. The controller remains responsible for the stable
-`pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
-comment, and marker-scoped cleanup.
+A pull request's base branch does not select its Vercel environment, and it
+does not gate the preview either: every same-repository PR — whether it targets
+`develop`, `main`, `github-actions` or another feature branch — gets its exact
+head SHA deployed by the trusted controller in
+`.github/workflows/develop-pr-preview.yml` into the `develop` Custom
+Environment by default, and published at
+`https://pr-<number>.previews.dev.thingtime.com` until the PR closes. The only
+base-independent requirements are the trust gates below and a head that
+carries `remix/` (controller-only branches have nothing to build and take the
+skip/reconcile path). Thingtime also assigns the current `develop` runtime
+variables to generic Preview, so an ordinary newly built Preview shares the
+development data/services even without the controller. The controller remains
+responsible for the stable alias, identity/SHA gates, status comment, and
+marker-scoped cleanup. A `production`-environment preview of a PR is an
+explicit admin choice made through the admin preview lane
+(`deploy-admin-pr-previews.mjs`, published under
+`pr-<number>.previews.thingtime.com`); it never happens by default.
 
 The workflow deliberately separates authorization, compilation, and
 publication. Product branches retain only a
@@ -2937,8 +2961,9 @@ Vercel secret, checks out no code, and emits only a bounded
 `github-actions`, proves the source workflow path/run, repository,
 same-repository PR, head SHA, action, and triggering actor through GitHub's API,
 then re-reads the live PR. Both the PR author and triggering actor must be
-explicitly allowlisted, currently hold write/admin permission, and the
-non-draft PR must still target `develop`.
+explicitly allowlisted and currently hold write/admin permission, and the PR
+must be non-draft. Its base branch is not part of the gate: `develop`, `main`
+and feature-branch targets all preview into the `develop` environment.
 
 A separate environment-free GitHub job checks out exactly that authorized SHA,
 installs locked dependencies, and generates `.vercel/output` without any

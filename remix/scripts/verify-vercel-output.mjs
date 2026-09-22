@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 import { authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
+import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
@@ -19,6 +20,7 @@ if (readJson(join(serverFunctionDir, '.vc-config.json')).maxDuration < 300) {
  throw new Error('Background AI needs a 300-second server function budget for execution and persistence.');
 }
 const tracedServerPackage = readJson(join(serverFunctionDir, 'package.json'));
+await verifyClaudeOAuthArtifacts();
 
 const filesBelow = (dir) =>
 	readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
