@@ -49,6 +49,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Claude (AI)**: The five demo apps adopt PR #870's native
+  controls — confirmation dialogs (`tt-dialog`) on every destructive control,
+  a focus-timer countdown (`tt-countdown`) with `$ui` length pickers, a `$ui`
+  "Hide unseen" toggle on the Thingmon dex — and return tidy results for the
+  runtime's inline result panel. [PR #886 note](../PRs/886-claude-builder-demos-native-controls--demo-apps-adopt-native-controls.md).
 - 2026-09-22 — **Codex (AI)**: Route native-tool GPT-5.6 Sol chat replies through
   Responses while retaining the selected reasoning effort and speed. The reply
   contract advances to 1.14.1 after authenticated preview QA exposed a rejected
