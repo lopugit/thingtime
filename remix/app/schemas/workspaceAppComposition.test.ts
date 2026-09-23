@@ -208,3 +208,17 @@ test('media stage groups preserve unlabelled gallery files and requested page', 
 	);
 	assert.equal(result.mediaCursor, 'more');
 });
+
+test('ungrouped map credentials retain the existing null environment contract', async () => {
+	const requests: any[] = [];
+	await executeBrowserAction(prepare('qa-builder-maps-setup', { rootId: app.rootId, environmentId: '' }), host([], requests));
+	assert.equal(requests[0].body.environmentId, null);
+	const setup = app.definitions.find((d) => d.crystal.componentKey === 'qa-builder-setup')!;
+	const rendered: any = resolveTemplate(setup.crystal.render, {
+		result: { view: 'setup', owner: true, mapsEnvironmentId: null, mapsEnvironments: [] }
+	});
+	const encoded = JSON.stringify(rendered);
+	assert.ok(encoded.includes('Ungrouped'));
+	assert.ok(!encoded.includes('Disabled'));
+	assert.ok(encoded.includes('"name":"environmentId","value":""'));
+});

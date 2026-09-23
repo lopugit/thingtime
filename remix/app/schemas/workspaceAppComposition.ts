@@ -810,7 +810,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			req({
 				operation: 'configureMaps',
 				rootId: '$input.rootId',
-				environmentId: x('if', x('eq', '$input.environmentId', '__disabled__'), null, '$input.environmentId')
+				environmentId: x('if', x('eq', '$input.environmentId', ''), null, '$input.environmentId')
 			}),
 			ret({ message: 'Map environment saved' })
 		]
@@ -833,7 +833,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 								'select',
 								[
 									e('option', ['Automatic'], { value: '__auto__' }),
-									e('option', ['Disabled'], { value: '__disabled__' }),
+									e('option', ['Ungrouped'], { value: '' }),
 									each('result.mapsEnvironments', e('option', ['{item.name}'], { value: '{item.id}' }), '')
 								],
 								{ name: 'environmentId', value: '{result.mapsEnvironmentId}', style: inputStyle }
