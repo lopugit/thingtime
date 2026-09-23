@@ -4,6 +4,7 @@ import { workspaceAppComposition } from './workspaceAppComposition';
 import { validateThingtimeCrystal } from './registry';
 import { executeBrowserAction, type BrowserActionHost } from '../components/Actions/browserActionRuntime';
 import type { PreparedBrowserAction } from './browserActions';
+import { resolveTemplate } from '../components/ComponentsLibrary/componentTemplate';
 const app = workspaceAppComposition({ namespace: 'qa-builder', rootId: 'existing-root', pagePath: '/p/existing-page' });
 function prepare(key: string, inputs: Record<string, unknown>): PreparedBrowserAction {
 	const definition = app.definitions.find((d) => d.crystal.actionKey === key);
@@ -113,4 +114,111 @@ test('component sources reject unsafe or malformed references instead of silentl
 		{ action: 'read', refresh: 'everywhere' }
 	])
 		assert.equal(validateThingtimeCrystal(['component'], { ...original.crystal, source }).ok, false);
+});
+
+test('planner day/week navigation and filters use the saved Action contract', async () => {
+	const records = [
+		{ id: 'v1', kind: 'visit', values: { title: 'Trim', date: '2026-09-23', status: 'Scheduled', employeeId: 'm1' } },
+		{ id: 'v2', kind: 'visit', values: { title: 'Cut', date: '2026-09-24', status: 'Completed', employeeId: 'm2' } }
+	];
+	const day: any = await executeBrowserAction(
+		prepare('qa-builder-read', { rootId: app.rootId, view: 'planner', date: '2026-09-23', period: 'day', status: 'Scheduled', employee: 'm1' }),
+		host(records)
+	);
+	assert.equal(day.days.length, 1);
+	assert.equal(day.previousDate, '2026-09-22');
+	assert.equal(day.nextDate, '2026-09-24');
+	assert.deepEqual(
+		day.days[0].records.map((r: any) => r.id),
+		['v1']
+	);
+	const week: any = await executeBrowserAction(
+		prepare('qa-builder-read', { rootId: app.rootId, view: 'planner', date: '2026-09-23' }),
+		host(records)
+	);
+	assert.equal(week.days.length, 7);
+	assert.equal(week.nextDate, '2026-09-30');
+});
+
+test('detail references show authorized titles and category-specific equipment choices', async () => {
+	const records = [
+		{ id: 'property', kind: 'address', values: { title: 'Garden' } },
+		{ id: 'job', kind: 'job', values: { title: 'Trim', addressId: 'property' } },
+		{ id: 'battery', kind: 'equipment', values: { title: 'Pack', category: 'Battery' } },
+		{ id: 'van', kind: 'equipment', values: { title: 'Van', category: 'Vehicle' } }
+	];
+	const result: any = await executeBrowserAction(prepare('qa-builder-read', { rootId: app.rootId, view: 'detail', id: 'job' }), host(records));
+	assert.deepEqual(
+		result.recordFields.find((f: any) => f.label === 'Address'),
+		{ label: 'Address', value: 'Garden', id: 'property' }
+	);
+	assert.deepEqual(
+		result.options.battery.map((r: any) => r.id),
+		['battery']
+	);
+	assert.deepEqual(
+		result.options.vehicle.map((r: any) => r.id),
+		['van']
+	);
+	const hidden: any = await executeBrowserAction(
+		prepare('qa-builder-read', { rootId: app.rootId, view: 'detail', id: 'job' }),
+		host(records.filter((r) => r.id !== 'property'))
+	);
+	assert.equal(hidden.recordFields.find((f: any) => f.label === 'Address').value, 'Unavailable record');
+});
+
+test('customer and non-admin member forms contain no Save controls', async () => {
+	for (const [role, view, form] of [
+		['Customer', 'new-address', 'form-address'],
+		['Employee', 'new-member', 'form-member']
+	]) {
+		const gateway = host([]),
+			request = gateway.request;
+		gateway.request = async (...args) => ({ ...((await request(...args)) as Record<string, unknown>), role });
+		const result = await executeBrowserAction(prepare('qa-builder-read', { rootId: app.rootId, view }), gateway);
+		const definition = app.definitions.find((d) => d.crystal.componentKey === 'qa-builder-' + form)!;
+		const rendered = JSON.stringify(resolveTemplate(definition.crystal.render, { result }));
+		assert.ok(rendered.includes('Your role can view'));
+		assert.ok(!rendered.includes('data-tt-action'));
+	}
+});
+
+test('media stage groups preserve unlabelled gallery files and requested page', async () => {
+	const gateway = host([record(1)]),
+		request = gateway.request;
+	gateway.request = async (...args) =>
+		args[0].path === '/api/v1/things'
+			? {
+					things: [
+						{ id: 'b', crystal: { text: '[Before] Lawn' } },
+						{ id: 'a', crystal: { text: '[After] Lawn' } },
+						{ id: 'g', crystal: { text: 'Existing file' } }
+					],
+					nextCursor: 'more'
+			  }
+			: request(...args);
+	const result: any = await executeBrowserAction(prepare('qa-builder-read', { rootId: app.rootId, view: 'detail', id: 'customer-1' }), gateway);
+	assert.deepEqual(
+		result.mediaGroups.map((g: any) => [g.title, g.items.map((r: any) => r.id)]),
+		[
+			['Before', ['b']],
+			['After', ['a']],
+			['Gallery', ['g']]
+		]
+	);
+	assert.equal(result.mediaCursor, 'more');
+});
+
+test('ungrouped map credentials retain the existing null environment contract', async () => {
+	const requests: any[] = [];
+	await executeBrowserAction(prepare('qa-builder-maps-setup', { rootId: app.rootId, environmentId: '' }), host([], requests));
+	assert.equal(requests[0].body.environmentId, null);
+	const setup = app.definitions.find((d) => d.crystal.componentKey === 'qa-builder-setup')!;
+	const rendered: any = resolveTemplate(setup.crystal.render, {
+		result: { view: 'setup', owner: true, mapsEnvironmentId: null, mapsEnvironments: [] }
+	});
+	const encoded = JSON.stringify(rendered);
+	assert.ok(encoded.includes('Ungrouped'));
+	assert.ok(!encoded.includes('Disabled'));
+	assert.ok(encoded.includes('"name":"environmentId","value":""'));
 });

@@ -214,7 +214,7 @@ const fieldProps = (tag: string, props: Record<string, unknown>): Record<string,
 	const out: Record<string, unknown> = { ...props };
 	// Local bindings are controlled by LiveTemplate's bounded instance state.
 	// Keep the DOM in sync after another control changes a value or resets it.
-	if (out['data-tt-action'] === '$ui') return { ...out, onChange: () => {} };
+	if (out['data-tt-action'] === '$ui') return { ...out, value: out.value ?? '', onChange: () => {} };
 	if ('value' in out) {
 		out.defaultValue = out.value;
 		delete out.value;

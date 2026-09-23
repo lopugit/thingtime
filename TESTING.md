@@ -2,6 +2,15 @@
 
 ## Editable record app primitives
 
+- [ ] Local draft fallbacks use saved values only before editing. Clearing text
+  stays empty; source refreshes retain the draft; navigating to a different
+  record or starting another entry clears it. An address selection updates
+  address and place ID together; typing the address clears the old place ID.
+- [ ] Switch planner day/week, date, employee and status, then navigate dates.
+  Filters persist in the URL and controls; large employee choices remain
+  searchable. Linked fields open authorized records by readable title. Viewer
+  roles and non-admin team views do not display write forms. Before/After and
+  unlabelled Gallery media remain visible across cursor pages.
 - [ ] Save and reopen a Component with its own source Action; create, PATCH and
   POST update preserve the binding. A page override still wins. Malformed
   source inputs/refresh policies fail instead of disappearing.
@@ -8398,3 +8407,5 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
       the reset. `/p/thingmon`: Explore shows a one-line result panel (no JSON).
 - [ ] Snapquest challenge page: "Un-claim…" confirms in a dialog. Pixel Garden
       shed: "Compost the garden…" confirms in a dialog.
+
+- Builder record navigation: throttle the source request, follow a related record link, and verify old edit/archive controls disappear before the new result arrives. Reopening the same binding may paint its cached data; another record, viewer, page or sharing context must not inherit it.

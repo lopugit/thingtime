@@ -21,6 +21,16 @@ test('Builder nested scope values preserve structure without executing template-
 	assert.deepEqual(resolveTemplate({ ttEach: { arg: 'result.items', node: '{item.label}' } }, { result: { items: [data] } }), ['Buy tubes']);
 });
 
+test('draft fallback reads another safe scope path only when the draft is absent', () => {
+	const binding = { ttArg: 'draft', fallback: 'result.value' };
+	assert.equal(resolveTemplate(binding, { result: { value: 'Saved value' } }), 'Saved value');
+	for (const value of ['', 0, false, null]) assert.equal(resolveTemplate(binding, { draft: value, result: { value: 'Saved' } }), value);
+	assert.equal(resolveTemplate({ ttArg: 'absent', fallback: 'constructor.prototype' }, {}), undefined);
+	assert.deepEqual(resolveTemplate(binding, { result: { value: { ttArg: 'secret' } }, secret: 'no' }), { ttArg: 'secret' });
+	const large = resolveTemplate({ ttRepeat: { count: 24, node: binding } }, { result: { value: 'x'.repeat(MAX_RESOLVED_CHARS) } });
+	assert.ok(JSON.stringify(large).length <= MAX_RESOLVED_CHARS + 256);
+});
+
 test('Builder nested ttArg and ttFormat share the existing text expansion ceiling', () => {
 	const scope = { result: { payload: { text: 'x'.repeat(MAX_RESOLVED_CHARS * 2) } } };
 	for (const leaf of [{ ttArg: 'result.payload' }, { ttFormat: { arg: 'result.payload', kind: 'json' } }]) {
