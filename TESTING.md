@@ -8415,6 +8415,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Web standards Builder app (2026-09-24)
 
+- [ ] Change class initial/increment/setter values and observe private state,
+  static fields and brand checks; change `this`/`super` receivers and generator
+  values. Compare postfix/prefix returns, logical assignment with null/false,
+  do-while with a negative limit, switch default/fall-through, labelled breaks,
+  async iteration, and real template cooked/raw arrays. Save/read/update a
+  class Component through the API and confirm the full program survives.
+- [ ] Template segments containing backticks, `${...}` and zero through five
+  adjacent backslashes remain literal text in plain and tagged templates.
+  Control characters, Unicode separators, emoji and lone surrogates preserve
+  their cooked values without executing source-looking segment text.
+- [ ] Malformed switch case entries and rest parameters in class setters fail
+  with the compiler validation message before any worker is launched.
+- [ ] Inspect `Element.prototype.classList` and `Document.prototype.URL`: report
+  accessor availability without Illegal invocation. An intermediate accessor
+  reports an unresolved receiver requirement, not unsupported or a guessed
+  value. Getter side effects must never run during inspection.
+- [ ] Warm the prior runtime URL, then deploy changed compiler nodes. The
+  no-store runtime HTML must reference a new script digest and load current
+  code. Verify both runtime responses use no-store, the HTML digest matches JS
+  bytes and scoped opaque CSP still applies before filesystem routing.
+
 - [ ] Change event cancelability and preventDefault; observe the dispatch return
   and defaultPrevented flag. Once/removal/aborted observable subscriptions stop
   later deliveries. stopPropagation retains same-target listeners, while

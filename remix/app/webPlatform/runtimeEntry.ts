@@ -1,6 +1,7 @@
 import { compilePlatformProgram, validatePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
 import { runPlatformWorker } from './workerLifecycle';
+import { inspectPlatformInterface } from './interfaceProbe';
 import type { PlatformNode } from './types';
 let started = false;
 addEventListener('message', (event) => {
@@ -126,18 +127,7 @@ addEventListener('message', (event) => {
 				probe = { selector, supported: CSS.supports(`selector(${selector})`), matches: root.querySelectorAll(selector).length };
 			}
 			if (p.kind === 'interface') {
-				let value: any = window;
-				for (const part of p.name.split('.')) {
-					if (['__proto__', 'constructor'].includes(part)) throw new Error('Invalid inspection path');
-					value = value?.[part];
-				}
-				probe = {
-					interface: p.name,
-					available: value !== undefined,
-					type: typeof value,
-					context: 'opaque-origin document',
-					members: value ? Object.getOwnPropertyNames(value.prototype || value).slice(0, 100) : []
-				};
+				probe = inspectPlatformInterface(p.name, window);
 			}
 		}
 		if (!program.steps?.length) {

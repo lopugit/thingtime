@@ -240,7 +240,7 @@ const librarySandboxPlugin = (): Plugin => ({
     server.middlewares.use((req,res,next) => {
       const path = req.url?.split('?')[0];
       if (path === '/platform/runtime.html' || path === '/platform/runtime.js') {
-        const file = fileURLToPath(new URL(path.endsWith('.html') ? './public/platform/runtime.html' : './dist/platform/runtime.js', import.meta.url));
+        const file = fileURLToPath(new URL(`./dist${path}`, import.meta.url));
         if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:platform');return; }
         res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
         res.setHeader('Content-Security-Policy',platformRuntimeCsp);
