@@ -1,5 +1,6 @@
 import { compilePlatformProgram, validatePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
+import { runPlatformWorker } from './workerLifecycle';
 import type { PlatformNode } from './types';
 let started = false;
 addEventListener('message', (event) => {
@@ -148,40 +149,8 @@ addEventListener('message', (event) => {
 		const source = compilePlatformWorker(program);
 		const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
 		const worker = new Worker(url);
-		let done = false;
-		const stop = () => {
-			worker.terminate();
-			URL.revokeObjectURL(url);
-		};
-		const timer = setTimeout(() => {
-			if (done) return;
-			done = true;
-			stop();
-			send(false, 'The program exceeded its 2-second execution limit.');
-		}, 2000);
-		worker.onmessage = (e) => {
-			if (done) return;
-			done = true;
-			clearTimeout(timer);
-			stop();
-			send(e.data.ok === true, e.data.result);
-		};
-		worker.onerror = () => {
-			if (done) return;
-			done = true;
-			clearTimeout(timer);
-			stop();
-			send(false, 'The browser could not execute this program. Check feature support and the program definition.');
-		};
-		addEventListener(
-			'pagehide',
-			() => {
-				clearTimeout(timer);
-				stop();
-			},
-			{ once: true }
-		);
-		worker.postMessage(input);
+		const stop = runPlatformWorker(worker, input, send, () => URL.revokeObjectURL(url));
+		addEventListener('pagehide', stop, { once: true });
 	} catch (e) {
 		send(false, e instanceof Error ? e.message : 'Invalid platform program');
 	}

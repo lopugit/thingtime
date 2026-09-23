@@ -8,7 +8,7 @@ export const parameter = (name: string, label: string, value: unknown, type: 'te
 export const global = (name: string) => ({ op: 'global', name });
 export const input = (name: string) => ({ op: 'input', name });
 export const literal = (value: unknown) => ({ op: 'literal', value });
-export const get = (target: unknown, key: string) => ({ op: 'get', target, key });
+export const get = (target: unknown, key: unknown) => ({ op: 'get', target, key });
 export const method = (target: unknown, key: string, args: unknown[] = []) => ({ op: 'method', target, key, args });
 export const make = (name: string, args: unknown[] = []) => ({ op: 'new', target: global(name), args });
 export const returns = (value: unknown) => [{ op: 'return', value }];
