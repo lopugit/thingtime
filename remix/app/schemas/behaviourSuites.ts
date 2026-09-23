@@ -91,6 +91,7 @@ export type SuiteComponentDef = {
 	render: (refs: SuiteRefs) => Record<string, unknown>;
 };
 export type SuiteActionDef = {
+	runtime?: 'browser';
 	key: string;
 	name: string;
 	description: string;
@@ -1362,6 +1363,7 @@ export const materializeSuite = (suite: BehaviourSuite, mode: SuiteMode): Materi
 				category: action.category,
 				version: 1,
 				inputs: action.inputs,
+				...(action.runtime ? { runtime: action.runtime } : {}),
 				steps: action.steps(refs),
 				capabilities: action.capabilities(refs),
 				...(action.limits ? { limits: action.limits } : {})

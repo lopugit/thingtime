@@ -66,7 +66,7 @@ export type ServerInstalledSuite = {
 };
 
 export const installSuiteOnServer = async (key: string, options: { onlyMissing?: boolean } = {}): Promise<ServerInstalledSuite> => {
-	await requireThingtimeCapability('api.webpages-suites-install', '1.1.0');
+	await requireThingtimeCapability('api.webpages-suites-install', key === 'web-standards' ? '1.2.0' : '1.1.0');
 	const response = await fetch('/api/v1/webpages/suites/install', {
 		method: 'POST',
 		credentials: 'include',
