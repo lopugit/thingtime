@@ -9,6 +9,19 @@ import { ComponentDataScope } from './ComponentSelect';
 // to two levels. Visible siblings split their parent's allowance; pagination
 // gets a fresh pass and cannot accumulate mutable resolver state.
 const Nesting = React.createContext({ depth: 0, rows: 1000 });
+// Every other CollectionList caller reads a couple of named fields, so its
+// per-item, per-render search call is cheap. A whole row record is not, and
+// this control admits 10,000 of them, so serialise each row at most once.
+// Rows arrive as fresh immutable values from a resolved read; the entries go
+// away with them.
+const rowSearchText = new WeakMap<object, string>();
+const searchTextForRow = (item: Record<string, any>): string => {
+	const cached = rowSearchText.get(item);
+	if (cached !== undefined) return cached;
+	const text = JSON.stringify(item);
+	rowSearchText.set(item, text);
+	return text;
+};
 export function ComponentCollection({
 	itemsPath,
 	itemTemplate,
@@ -37,7 +50,7 @@ export function ComponentCollection({
 			<CollectionList<Record<string, any>>
 				label={typeof label === 'string' ? label : 'Records'}
 				items={items}
-				searchText={(item) => JSON.stringify(item)}
+				searchText={searchTextForRow}
 				empty={typeof empty === 'string' ? empty : 'Nothing here yet.'}
 				hideSearch={hideSearch === true}
 				hideSize={hideSize === true}
