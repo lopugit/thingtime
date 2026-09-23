@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,134 have interactive recipes (227 HTML, 1,059 CSS, 576
-JavaScript and 272 Web API entries); the rest are
+editable program. 2,254 have interactive recipes (227 HTML, 1,059 CSS, 576
+JavaScript and 392 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -124,6 +124,19 @@ do not first construct an unrelated receiver: invalid `URL.canParse` input can
 return false and `URL.parse` can return null. Inputs are limited to parameters
 actually referenced by the saved program. Browser support remains independently
 checked, and Window-only matrix string parsing stays context-dependent.
+
+`eventFixtures.ts` supplies event delivery, listener removal/once/subscription,
+legacy event properties, and abort reason/composition/timeout examples.
+`streamFixtures.ts` and `controllerFixtures.ts` supply readable/writable/transform
+streams, reader/writer locks, queue strategies, cancellation/errors, BYOB
+requests, encoding and compression. They share data-node builders in
+`programBuilders.ts`; no catalogue routing or new permission is added to the
+runtime. Transform streams consume their readable side concurrently with writes
+to respect backpressure. Controller examples obtain actual native controllers
+from stream callbacks and return queue/delivery observations, never opaque
+controller objects. Unsupported members such as `ReadableStream.from` in some
+browsers remain explicitly reported. Event propagation uses a standalone target;
+ancestor capture/bubbling still needs a document-context example.
 
 For runtime-only browser checks after a full build, set
 `TT_STANDARDS_AUDIT_BUILT=1`. The audit serves only the two built runtime assets

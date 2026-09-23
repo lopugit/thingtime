@@ -1,7 +1,10 @@
-import { parameter, global, input, literal, get, method, make, returns, base, recipe } from './programBuilders';
+import { eventApiRecipe } from './eventFixtures';
+import { streamApiRecipe } from './streamFixtures';
+import { controllerApiRecipe } from './controllerFixtures';
+import { parameter, base, recipe } from './programBuilders';
 import { javascriptRecipe } from './javascriptRecipes';
 import { workerApiRecipe } from './webApiFixtures';
-import type { Feature, PlatformNode, PlatformProgram, Recipe } from './types';
+import type { Feature, PlatformNode, Recipe } from './types';
 const node = (tag: string, children: PlatformNode[] = [], attributes: Record<string, string | number | boolean> = {}): PlatformNode => ({
 	tag,
 	attributes,
@@ -395,34 +398,17 @@ function cssRecipe(f: Feature): Recipe {
 }
 
 function webApiRecipe(f: Feature): Recipe {
-	const worked = workerApiRecipe(f);
+	const worked = eventApiRecipe(f) || streamApiRecipe(f) || controllerApiRecipe(f) || workerApiRecipe(f);
 	if (worked) return worked;
 	const p = base(f),
 		name = f.interface || f.name;
-	const examples: Record<string, PlatformProgram> = {
-		Event: {
-			...p,
-			requires: [['Event']],
-			parameters: [parameter('type', 'Event name', 'thingtime')],
-			steps: returns(get(make('Event', [input('type')]), 'type'))
-		},
-		AbortController: {
-			...p,
-			requires: [['AbortController']],
-			steps: [
-				{ op: 'let', name: 'controller', value: make('AbortController') },
-				{ op: 'expression', value: method({ op: 'variable', name: 'controller' }, 'abort', ['Stopped by the demo']) },
-				...returns(get(get({ op: 'variable', name: 'controller' }, 'signal'), 'aborted'))
-			]
-		}
-	};
-	if (examples[name] && ['interface', 'constructor'].includes(f.kind)) return recipe(examples[name]);
 	return recipe(
 		{ ...p, probe: { kind: 'interface', name: f.member && f.kind !== 'constructor' ? `${name}${f.static ? '' : '.prototype'}.${f.member}` : name } },
 		'requires-context',
 		'Inspect availability in an isolated document. A full demo of this API needs its receiver, lifecycle, resource or permission context; browser globals are not automatically called.'
 	);
 }
+
 export function featureRecipe(feature: Feature): Recipe {
 	if (feature.language === 'html') return htmlRecipe(feature);
 	if (feature.language === 'css') return cssRecipe(feature);

@@ -8437,7 +8437,23 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 - Builder app portability: preview each generated Component and Action through the signed mutation workflow before migration. A valid app must fit without raising review limits; confirm record labels, zero values, empty text, archived references, missing references, and every planner day match the original app after title normalization.
 
-## Web standards Builder app (2026-09-23)
+## Web standards Builder app (2026-09-24)
+
+- [ ] Change event cancelability and preventDefault; observe the dispatch return
+  and defaultPrevented flag. Once/removal/aborted observable subscriptions stop
+  later deliveries. stopPropagation retains same-target listeners, while
+  stopImmediatePropagation stops them. Delivery-time target/currentTarget and
+  eventPhase are captured before the event resets. Test abort reasons, first
+  signal selection, onabort, timeouts and throwIfAborted with both states.
+- [ ] Run stream examples with changed chunks, reasons and BYOB capacity. Check
+  tee outputs, pipeTo closure, concurrent transform reads/writes, writer queue
+  pressure and lock release. BYOB responds with real bytes and invalidates its
+  view; controller errors reject reads/writes, while transform termination
+  closes readable output and rejects writes. Split UTF-8 decoding and
+  compression round trips preserve content. A missing ReadableStream.from
+  reports unsupported; invalid byte/format inputs remain errors. Saved event
+  and stream Components retain callbacks, full programs and exactly their used
+  parameters through the normal API. No account/network capability is added.
 
 - [ ] Run the runtime audit with `TT_STANDARDS_AUDIT_LANGUAGES=webapi`. Exercise
   URL/query/header/form mutations, Blob byte slices, body JSON/form decoding,
