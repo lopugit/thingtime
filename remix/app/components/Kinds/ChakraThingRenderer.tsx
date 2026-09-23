@@ -1,3 +1,7 @@
+import { ComponentSelect } from '../Builder/ComponentSelect';
+import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
+import { ComponentMap } from '../Builder/ComponentMap';
+import { ComponentDialog, ComponentForm, ComponentCountdown } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
 import React from 'react';
 import { mapRenderMediaProps } from '../Sharing/renderMediaCore';
@@ -250,6 +254,12 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 
 	const name = typeof node.chakra === 'string' ? node.chakra : 'Box';
 	if (name === 'IntegrationExample') return <React.Suspense key={key} fallback={<Text>Integration example</Text>}><LibraryExample exampleId={node.props?.exampleId} inputJson={node.props?.inputJson} /></React.Suspense>;
+	if (name === 'SelectRecords') return <ComponentSelect key={key} {...node.props} />;
+	if (name === 'Map') return <ComponentMap key={key} {...node.props} />;
+	if (name === 'Attachments') return <ComponentAttachments key={key} {...node.props} />;
+	if (name === 'Media') return <ComponentMedia key={key} {...node.props} />;
+	if (name === 'Countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
+	if (name === 'Form' || name === 'Dialog') { const Native = name === 'Form' ? ComponentForm : ComponentDialog; return <Native key={key} {...node.props}>{renderChildren(node.children,depth+1,state)}</Native>; }
 	if (name === 'Upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} value={node.props?.value} attachmentId={node.props?.attachmentId} />;
 	const Component = ALLOWED_COMPONENTS[name];
 	if (!Component) {

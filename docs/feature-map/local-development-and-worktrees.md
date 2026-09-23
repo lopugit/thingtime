@@ -38,6 +38,7 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 | --- | --- |
 | Unit suites (node --test via tsx) | `npm --prefix remix run test:<suite>` — `test:attachments`, `test:things`, `test:feed`, `test:api-capabilities`, `test:acl`, … (`test:unit` runs them all) |
 | Headless API suite against a live stack | `npm --prefix remix run test:api -- --base http://127.0.0.1:<nitro>` |
+| Editable app composition fixture | `remix/scripts/test-builder-app-local.ts`, with explicit `TT_BUILDER_QA_ORIGIN` and private `TT_BUILDER_QA_SESSION`; loopback-only, real API, stable synthetic IDs. See README "Builder component SDK". |
 | Lint changed files | `corepack pnpm --dir remix run lint:files -- <files>` |
 | Types | `corepack pnpm --dir remix run typecheck` (raw) and `typecheck:ratchet` (warns above `scripts/typecheck-baseline.json`; lower the baseline with `--update-baseline` when the count drops) |
 | Vercel output contract | `npm --prefix remix run verify:vercel-output` |
