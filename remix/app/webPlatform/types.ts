@@ -28,6 +28,8 @@ export type PlatformProgram = {
 	document?: PlatformNode[];
 	styles?: { selector?: string; declarations?: Record<string, string>; rule?: string }[];
 	steps?: PlatformExpression[];
+	/** Availability hints, checked in the worker without invoking accessors. */
+	requires?: string[][];
 	// DOM operations are a bounded vocabulary. JavaScript is compiled from data
 	// to an isolated, terminable worker; it never executes in the account origin.
 	dom?: { target: string; event?: string; method: string; args?: unknown[] }[];

@@ -67,6 +67,19 @@ export function validatePlatformProgram(raw: unknown): PlatformProgram {
 		parameterNames.add(param.name);
 		if (!['text', 'number', 'boolean', 'json'].includes(param.type)) throw new Error('Unsupported parameter type');
 	}
+	if (
+		p.requires !== undefined &&
+		(!Array.isArray(p.requires) ||
+			p.requires.length > 32 ||
+			p.requires.some(
+				(path) =>
+					!Array.isArray(path) ||
+					!path.length ||
+					path.length > 8 ||
+					path.some((part) => typeof part !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(part) || ['__proto__', 'constructor'].includes(part))
+			))
+	)
+		throw new Error('Expected bounded feature availability paths');
 	return p;
 }
 /** Data-only ECMAScript authoring. No source-code escape, eval, arbitrary import,

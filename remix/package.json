@@ -122,7 +122,8 @@
     "verify:embed": "node scripts/verify-embed-bundle.mjs",
     "test:passkeys": "node --import tsx --test app/hooks/passkey*.test.ts app/api/utils/auth/webauthnChallenge.test.ts app/api/utils/auth/vaultPasskey.test.ts app/api/utils/auth/appleAppAssociation.test.ts",
     "build:platform": "vite build --config vite.platform.config.ts",
-    "test:web-platform": "node --import tsx --test app/webPlatform/*.test.ts"
+    "test:web-platform": "node --import tsx --test app/webPlatform/*.test.ts",
+    "audit:web-platform": "node --import tsx scripts/audit-web-standards.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",

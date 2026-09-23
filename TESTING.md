@@ -8435,6 +8435,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Web standards Builder app (2026-09-23)
 
+- [ ] Run `audit:web-platform` against the local managed runtime. Default
+  JavaScript fixtures exercise valid receivers/callbacks for Intl, Object,
+  Reflect, Promise, Set/Map, resizable buffers and byte encodings. Missing
+  capabilities report `unsupported` before execution; final-property getters
+  are not invoked during availability checks. Invalid input remains an error.
 - [ ] Install `web-standards` through the suite API on a disposable local stack.
   Reinstall with `onlyMissing`; IDs stay stable and customized parts remain.
   Run `TT_STANDARDS_TEST_URL=http://127.0.0.1:<web-port>
