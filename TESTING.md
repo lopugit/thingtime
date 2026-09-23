@@ -2,6 +2,15 @@
 
 ## Editable record app primitives
 
+- [ ] As a team member, open an ordinary shared page and choose its saved
+  `$install` control. Cancel the copy dialog, then copy and open it on desktop
+  and mobile. The page, Components and Actions are private and owned by the
+  member; referenced team records retain their original access. Revoke the
+  member and verify fresh reads/writes fail even from their owned copy.
+  Changing account/page during the capability request prevents the write;
+  changing it during copying prevents stale navigation or success UI.
+  Refresh an open copied page after revocation: old records and edit controls
+  disappear. Network errors and temporary server failures retain prior data.
 - [ ] Copy a saved app with linked Actions and Components. Navigation, map
   markers, address suggestions and save receipts stay on the copied page;
   executable references point at copied Actions while the authorized data root

@@ -73,3 +73,14 @@ test('pagination refuses an origin without its runtime contract before making th
  await assert.rejects(host.request({ ...step, runtimeVersion: '1.8.0' }, 'actor', signal()), /Pagination is unavailable/);
  assert.equal(requests, 0);
 });
+
+test('browser failures retain permission status for clearing revoked source data', async () => {
+ const host = createBrowserActionHost(() => 'actor', (async () => Response.json({ ok: false, error: 'Access revoked' }, { status: 403 })) as typeof fetch, async () => {});
+ const result = await finishBrowserAction({ status: 'prepared', execution: 'browser', actionId: 'read', viewer: { id: 'actor' }, inputs: {}, program: {
+  name: 'Permission failure', runtime: 'browser', capabilities: [{ capability: 'http.request', endpoints: ['GET /api/v1/things'] }],
+  steps: [{ op: 'http.request', path: '/api/v1/things', method: 'GET', feature: 'api.things', minimumVersion: '1.28.0' }]
+ } }, host);
+ assert.equal(result.status, 'error');
+ assert.equal(result.errorStatus, 403);
+ assert.equal(result.result, null);
+});

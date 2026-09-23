@@ -188,7 +188,7 @@ export const WebpageRuntimeProvider = ({
 				body: JSON.stringify({ action, inputs, sharedRoot: pageId, ...(linkKey ? { key: linkKey } : {}) })
 			});
 			const data = await response.json();
-			if (!response.ok || !data?.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Shared control failed');
+			if (!response.ok || !data?.ok) throw Object.assign(new Error(typeof data?.error === 'string' ? data.error : 'Shared control failed'), { status: response.status });
 			return data;
 		},
 		[pageId, linkKey]
