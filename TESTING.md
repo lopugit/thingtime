@@ -8425,6 +8425,8 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   adjacent backslashes remain literal text in plain and tagged templates.
   Control characters, Unicode separators, emoji and lone surrogates preserve
   their cooked values without executing source-looking segment text.
+- [ ] Malformed switch case entries and rest parameters in class setters fail
+  with the compiler validation message before any worker is launched.
 - [ ] Inspect `Element.prototype.classList` and `Document.prototype.URL`: report
   accessor availability without Illegal invocation. An intermediate accessor
   reports an unresolved receiver requirement, not unsupported or a guessed

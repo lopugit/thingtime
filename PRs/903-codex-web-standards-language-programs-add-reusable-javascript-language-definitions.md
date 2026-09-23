@@ -51,6 +51,10 @@ worker checks across backslash parity, source-looking substitutions, control
 characters, Unicode separators and lone surrogates. All preserve literal text
 without execution; the rebuilt runtime passes digest/CSP/cache verification.
 
+Repository review also tightened malformed switch-case validation and rejects
+rest parameters in class setters before generating source. Both cases have
+focused rejection tests and manual checklist entries.
+
 ## Validation and remaining acceptance
 
 - All 18,798 catalogue programs compile and pass Component write validation.
