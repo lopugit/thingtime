@@ -68,6 +68,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-23 — **Codex (AI)**: Builder Components retain saved source bindings;
+  reusable form, searchable selection, map and attachment primitives support
+  record screens authored as editable Things. Browser Actions add bounded
+  `each` and configurable expression budgets (protocol 1.9), and populated
+  textareas reopen without a renderer crash. The local composition fixture
+  exercises the existing record API without migrating live records or ACLs.
+  Details: [PR #893](../PRs/893-codex-editable-builder-app--reusable-record-controls.md).
+
+
 - 2026-09-23 — **Codex (AI)**: Saved browser Actions can collect cursor-backed
   GET lists with configurable response fields, deduplication and explicit
   budgets. Every page retains account/capability checks; incomplete lists

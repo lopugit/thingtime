@@ -1,3 +1,4 @@
+import { parseBrowserExpressionLimits } from './browserActions';
 import { BROWSER_ACTION_EXPANDED_LIMITS } from './browserActions';
 import { parseActionRequestPagination } from './actionRequestPagination';
 import { BROWSER_ACTION_OPS, actionHttpEndpoint, isActionHttpEndpoint } from './browserActions';
@@ -1444,6 +1445,7 @@ const componentSchema: ThingtimeSchema = {
 			description: 'The design language this component follows; user-authored components default to custom.'
 		},
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. buttons, forms, feedback, navigation, flow.' },
+		{ name: 'source', type: 'record', required: false, description: 'Viewer-owned Action binding: { action, inputs?, refresh?: load/manual/interval, intervalMs? }. Source values resolve into result/state/error; the page can override this binding.' },
 		{ name: 'componentKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions to their source component.' },
 		{ name: 'familyKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Groups the library renditions (designs) of one functional component — /components shows one card per family.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a componentKey.' },
@@ -5416,6 +5418,50 @@ const sanitizeComponentArgs = (input: unknown): { ok: true; args: Record<string,
 	return { ok: true, args };
 };
 
+const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<string, unknown> } | Fail => {
+	if (typeof input !== 'object' || Array.isArray(input)) return fail(400, `Component/page source must be an object`);
+	const rawSource = input as Record<string, unknown>;
+	const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
+	if (!action || action.length > MAX_ACTION_KEY_CHARS || !ACTION_KEY_PATTERN.test(action)) {
+		return fail(400, `Component/page source.action must be an actionKey (lowercase-dashed slug)`);
+	}
+	const source: Record<string, unknown> = { action };
+	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
+		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
+			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
+		}
+		const inputs: Record<string, unknown> = {};
+		const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
+		if (entries.length > MAX_ACTION_INPUTS) return fail(400, `Component/page source.inputs can hold at most ${MAX_ACTION_INPUTS} entries`);
+		for (const [key, value] of entries) {
+			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
+				return fail(400, `Component/page source input "${key.slice(0, 40)}" is not a valid input name`);
+			}
+			const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
+			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a string, number, or boolean`);
+			if (scalar !== null) inputs[key] = scalar;
+		}
+		if (Object.keys(inputs).length) source.inputs = inputs;
+	}
+	// refresh: 'load' (default — again after every control run), 'manual'
+	// (once, on load), or 'interval' (also every intervalMs — a clock, a
+	// live tally; bounded so a page can never poll the executor hard)
+	if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
+		if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval') {
+			return fail(400, `Component/page source.refresh must be load, manual, or interval`);
+		}
+		if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
+	}
+	if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
+		const intervalMs = Number(rawSource.intervalMs);
+		if (!Number.isInteger(intervalMs) || intervalMs < MIN_WEBPAGE_SOURCE_INTERVAL_MS || intervalMs > MAX_WEBPAGE_SOURCE_INTERVAL_MS) {
+			return fail(400, `Component/page source.intervalMs must be ${MIN_WEBPAGE_SOURCE_INTERVAL_MS}–${MAX_WEBPAGE_SOURCE_INTERVAL_MS}`);
+		}
+		if (source.refresh === 'interval') source.intervalMs = intervalMs;
+	}
+	return { ok: true as const, source };
+};
+
 const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
 	const name = typeof input.name === 'string' ? input.name.trim() : '';
 	if (!name) return fail(400, 'Components need a name');
@@ -5500,6 +5546,12 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 	const render = sanitizeSchemaRender(input.render);
 	if (isFail(render)) return render;
 	crystal.render = render.render;
+
+	if (input.source !== undefined && input.source !== null) {
+		const checked = sanitizeSourceBinding(input.source);
+		if (isFail(checked)) return checked;
+		crystal.source = checked.source;
+	}
 
 	return { ok: true, crystal };
 };
@@ -5645,47 +5697,9 @@ const sanitizeWebpageBlock = (
 		// scalars whose strings may carry {arg} / {query.<name>} tokens, and
 		// nothing here widens what the viewer could run by hand.
 		if (raw.source !== undefined && raw.source !== null) {
-			if (typeof raw.source !== 'object' || Array.isArray(raw.source)) return fail(400, `Block ${id} source must be an object`);
-			const rawSource = raw.source as Record<string, unknown>;
-			const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
-			if (!action || action.length > MAX_ACTION_KEY_CHARS || !ACTION_KEY_PATTERN.test(action)) {
-				return fail(400, `Block ${id} source.action must be an actionKey (lowercase-dashed slug)`);
-			}
-			const source: Record<string, unknown> = { action };
-			if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
-				if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
-					return fail(400, `Block ${id} source.inputs must be an object of scalar input values`);
-				}
-				const inputs: Record<string, unknown> = {};
-				const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
-				if (entries.length > MAX_ACTION_INPUTS) return fail(400, `Block ${id} source.inputs can hold at most ${MAX_ACTION_INPUTS} entries`);
-				for (const [key, value] of entries) {
-					if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
-						return fail(400, `Block ${id} source input "${key.slice(0, 40)}" is not a valid input name`);
-					}
-					const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
-					if (scalar === null && value !== null) return fail(400, `Block ${id} source input ${key} must be a string, number, or boolean`);
-					if (scalar !== null) inputs[key] = scalar;
-				}
-				if (Object.keys(inputs).length) source.inputs = inputs;
-			}
-			// refresh: 'load' (default — again after every control run), 'manual'
-			// (once, on load), or 'interval' (also every intervalMs — a clock, a
-			// live tally; bounded so a page can never poll the executor hard)
-			if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
-				if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval') {
-					return fail(400, `Block ${id} source.refresh must be load, manual, or interval`);
-				}
-				if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
-			}
-			if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
-				const intervalMs = Number(rawSource.intervalMs);
-				if (!Number.isInteger(intervalMs) || intervalMs < MIN_WEBPAGE_SOURCE_INTERVAL_MS || intervalMs > MAX_WEBPAGE_SOURCE_INTERVAL_MS) {
-					return fail(400, `Block ${id} source.intervalMs must be ${MIN_WEBPAGE_SOURCE_INTERVAL_MS}–${MAX_WEBPAGE_SOURCE_INTERVAL_MS}`);
-				}
-				if (source.refresh === 'interval') source.intervalMs = intervalMs;
-			}
-			block.source = source;
+			const checked = sanitizeSourceBinding(raw.source);
+			if (isFail(checked)) return checked;
+			block.source = checked.source;
 		}
 		return { ok: true, block };
 	}
@@ -6497,6 +6511,12 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	const crystal: Record<string, unknown> = { name };
 	if (input.runtime !== undefined && input.runtime !== 'server' && input.runtime !== 'browser') return fail(400, 'Action runtime must be server or browser');
 	if (input.runtime === 'browser') crystal.runtime = 'browser';
+	if (input.expressionLimits !== undefined) {
+		const parsed = parseBrowserExpressionLimits(input.expressionLimits);
+		if (input.runtime !== 'browser' || !parsed) return fail(400, 'Expression limits require browser execution and bounded nodes/listItems');
+		crystal.expressionLimits = parsed;
+	}
+
 
 	const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
 	if (description) crystal.description = description;

@@ -31,6 +31,7 @@ function ProgramEditor({ initial, onClose, onCreated }: {
   const isRequest = op === 'http.request' || op === 'http.request.pages';
   const next = isRequest ? { op: 'http.request', ...(op === 'http.request.pages' ? { pagination: { cursorParam: 'cursor', cursorPath: 'nextCursor', itemsPath: 'things', itemKey: 'id', maxPages: 20, maxItems: 5000 } } : {}), method: 'GET', path: '/api/v1/things', feature: 'api.things', minimumVersion: '1.28.0', query: { limit: 20 } }
    : op === 'compute' ? { op, value: '' }
+   : op === 'each' ? { op, action: 'child-action', list: [], inputs: { item: '$item' }, max: 20 }
    : { op, action: 'child-action', inputs: {} };
   const steps = [...(program.steps || [])];
   const index = steps.at(-1)?.op === 'return' ? steps.length - 1 : steps.length;
@@ -66,6 +67,8 @@ function ProgramEditor({ initial, onClose, onCreated }: {
    <Button size="sm" isDisabled={!program} onClick={() => addStep('http.request.pages')}>Add paginated request</Button>
    <Button size="sm" isDisabled={!program} onClick={() => addStep('compute')}>Add computation</Button>
    <Button size="sm" isDisabled={!program} onClick={() => addStep('actions.invoke')}>Invoke Action</Button>
+   <Button size="sm" isDisabled={!program} onClick={() => addStep('each')}>For each item</Button>
+   {program?.runtime === 'browser' ? <Button size="sm" onClick={() => setProgram({ ...program, expressionLimits: program.expressionLimits || { nodes: 20000, listItems: 1000 } })}>Expression limits</Button> : null}
    <Button size="sm" isDisabled={!program} onClick={() => setProgram({ ...program, capabilities: deriveRequiredCapabilities(program.steps || []) })}>Derive permissions</Button>
   </Flex>
   {error || !program ? <Text role="alert" color="red.600" mb={3}>{error || 'The program contains invalid JSON.'}</Text> : null}

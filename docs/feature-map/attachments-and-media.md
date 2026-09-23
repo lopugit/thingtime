@@ -43,6 +43,7 @@ until an admin enables them (`POST /api/v1/admin/users/public-uploads`).
 | Surface | Path |
 | --- | --- |
 | Composer uploads (XHR PUT to signed part URLs, retries, drafts) | `app/components/Attachments/useAttachmentUploads.ts`, `AttachmentComposer.tsx` |
+| Editable Component draft uploads and media | `app/components/Builder/ComponentAttachments.tsx`: `tt-attachments` reuses the composer; the saved Action commits. `tt-media` reuses `PostAttachments` with authorized source metadata. |
 | Rendering a post's gallery, file rows, NSFW shield, download-all pill | `app/components/Attachments/PostAttachments.tsx` |
 | Lightbox | `app/components/Attachments/MediaLightbox.tsx` |
 | Media Thing page `/media/:id` | `app/routes/media.tsx` (annotate, download, gallery download-all) |

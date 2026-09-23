@@ -1,10 +1,11 @@
+import { ComponentDataScope } from './ComponentSelect';
 import { NativeControlsEnabled } from './NativeComponentControls';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
 import { useNavigate } from 'react-router';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { LOCAL_UI_ACTION, reduceLocalUi } from '../Actions/localUiAction';
+import { LOCAL_UI_ACTION, reduceLocalUi, localQueryHref } from '../Actions/localUiAction';
 import { ActionResult, type ControlResult } from './ActionResult';
 import { Box } from '@chakra-ui/react';
 
@@ -237,6 +238,7 @@ export const LiveTemplate = ({
 	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
 	const active = local.identity === identity ? local : { identity, values: {} };
 	const onLocal = (input: Record<string, unknown>) => {
+		if (input.op === 'query') { const href = localQueryHref(runtime.pageId, input.params); if (href) navigate(href); return; }
 		if (input.op === 'copy' && typeof input.value === 'string' && input.value.length <= 5000) {
 			if (!navigator.clipboard) { lopu({ title: 'Clipboard unavailable', description: 'Copy is available on secure pages.', status: 'info' }); return; }
 			navigator.clipboard?.writeText(input.value).then(() => lopu({ title: 'Copied', status: 'success' })).catch(() => lopu({ title: 'Could not copy', description: 'Your browser did not allow clipboard access.', status: 'error' }));
@@ -258,7 +260,7 @@ export const LiveTemplate = ({
 	const resolved = React.useMemo(() => (render ? alreadyResolved ? render : resolveTemplate(render, liveScope) : null), [render, scopeKey, alreadyResolved]); // eslint-disable-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
 	if (!resolved) return null;
 	return (
-		<NativeControlsEnabled.Provider key={identity} value={interactive}><ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
+		<NativeControlsEnabled.Provider key={identity} value={interactive}><ComponentDataScope.Provider value={liveScope}><ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
 			<Box
 				onClickCapture={interactive ? (event) => {
 					if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
@@ -273,6 +275,7 @@ export const LiveTemplate = ({
 				} : undefined}
 				onKeyDownCapture={interactive ? (event) => {
 					const field = event.target as HTMLInputElement;
+					if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
 					if (event.key !== 'Enter' || event.nativeEvent.isComposing || field.tagName !== 'INPUT' || ['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)) return;
 					const group = field.closest('fieldset') || event.currentTarget;
 					const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
@@ -290,6 +293,6 @@ export const LiveTemplate = ({
 				{interactive && active.outcome ? <ActionResult outcome={active.outcome} /> : null}
 				{children}
 			</Box>
-		</ComponentUploadEnabled.Provider></NativeControlsEnabled.Provider>
+		</ComponentUploadEnabled.Provider></ComponentDataScope.Provider></NativeControlsEnabled.Provider>
 	);
 };
