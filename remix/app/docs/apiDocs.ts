@@ -9146,8 +9146,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.31.0',
-    contractVersion: '1.31.0',
+    featureVersion: '1.32.0',
+    contractVersion: '1.32.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
