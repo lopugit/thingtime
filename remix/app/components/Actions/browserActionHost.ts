@@ -10,7 +10,7 @@ export function createBrowserActionHost(actor: () => string | undefined, transpo
 	const request: BrowserActionHost['request'] = async (step, id, signal) => {
 		assertIdentity(id);
 		if (!actionHttpEndpoint(step.method, step.path)) throw new Error('Invalid Action request destination');
-		await requireCapability('api.actions-run', '1.7.0');
+		await requireCapability('api.actions-run', step.runtimeVersion || '1.7.0');
 		await requireCapability(step.feature, step.minimumVersion);
 		assertIdentity(id);
 		signal.throwIfAborted();
@@ -32,7 +32,7 @@ export function createBrowserActionHost(actor: () => string | undefined, transpo
 		return data;
 	};
 	return { assertIdentity, request, prepare: async (action, inputs, id, signal) => {
-		const response: any = await request({ path: '/api/v1/actions/run', method: 'POST', feature: 'api.actions-run', minimumVersion: '1.7.0', maxResultBytes: 256 * 1024, query: {}, body: { action, inputs, source: 'component', execution: 'browser' } }, id, signal);
+		const response: any = await request({ path: '/api/v1/actions/run', method: 'POST', feature: 'api.actions-run', minimumVersion: '1.7.0', maxResultBytes: 256 * 1024, query: {}, body: { action, inputs, source: 'component', execution: 'browser', executionVersion: '1.8.0' } }, id, signal);
 		if (response.status !== 'prepared') throw new Error('Use a browser Action when composing browser flows');
 		return response;
 	} };

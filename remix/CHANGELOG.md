@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-23 — **Codex (AI)**: Saved browser Actions can collect cursor-backed
+  GET lists with configurable response fields, deduplication and explicit
+  budgets. Every page retains account/capability checks; incomplete lists
+  fail visibly. Versioned client preparation protects older clients from
+  silently truncating lists. The full-program composer includes a paginated
+  request preset. See [browser Action documentation](../docs/builder-browser-actions.md).
+
+
 - 2026-09-23 — **Codex (AI)**: Add saved browser Action request flows with
   endpoint allowlists, semantic capability negotiation, account fencing,
   shared execution limits and session traces. Add nested Fields/Source editing

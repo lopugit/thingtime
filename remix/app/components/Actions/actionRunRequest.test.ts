@@ -43,3 +43,12 @@ test('action and inputs are always present keys, so an omitted input list still 
 	assert.equal(body.inputs, undefined);
 	assert.deepEqual(Object.keys(body), ['action', 'inputs']);
 });
+
+
+test('browser preparation advertises the implemented execution version, never caller-supplied claims', () => {
+ const body = buildActionRunBody({ action: 'a', source: 'component', execution: 'browser' });
+ assert.equal(body.execution, 'browser');
+ assert.equal(body.executionVersion, '1.8.0');
+ assert.equal(body.source, 'component');
+ assert.equal('executionVersion' in buildActionRunBody({ action: 'a' }), false);
+});
