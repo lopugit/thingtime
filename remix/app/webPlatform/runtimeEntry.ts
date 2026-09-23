@@ -1,4 +1,5 @@
 import { compilePlatformProgram, validatePlatformProgram } from './compiler';
+import { compilePlatformWorker } from './workerSource';
 import type { PlatformNode } from './types';
 let started = false;
 addEventListener('message', (event) => {
@@ -9,8 +10,8 @@ addEventListener('message', (event) => {
 	const send = (ok: boolean, result: unknown) =>
 		parent.postMessage({ type: 'tt-platform-result', runId, ok, text: JSON.stringify(result, null, 2).slice(0, 65536) }, '*');
 	try {
-		const program = validatePlatformProgram(raw),
-			compiled = compilePlatformProgram(program);
+		const program = validatePlatformProgram(raw);
+		compilePlatformProgram(program);
 		const root = document.getElementById('surface')!;
 		let nodes = 0;
 		const substitute = (value: unknown) =>
@@ -144,8 +145,7 @@ addEventListener('message', (event) => {
 		}
 		// Compile data to a Blob module; neither eval nor Function is used. Infinite
 		// loops/RegExps/getters run in a separate worker and are actually terminated.
-		const serialise = `const seen=new WeakSet();let count=0;function clean(value,depth=0){if(++count>1500||depth>8)return '[bounded]';if(typeof value==='bigint')return value.toString()+'n';if(typeof value==='symbol'||typeof value==='function')return String(value);if(value===undefined)return '[undefined]';if(typeof value==='number'&&!Number.isFinite(value))return String(value);if(typeof value==='string')return value.slice(0,12000);if(!value||typeof value!=='object')return value;if(seen.has(value))return '[circular]';seen.add(value);if(value instanceof Map)return {type:'Map',entries:clean([...value],depth+1)};if(value instanceof Set)return {type:'Set',values:clean([...value],depth+1)};if(value instanceof Date||value instanceof RegExp||value instanceof Error)return String(value);if(ArrayBuffer.isView(value))return {type:value.constructor.name,values:Array.from(value).slice(0,1000)};if(value instanceof ArrayBuffer)return {type:'ArrayBuffer',byteLength:value.byteLength};if(Array.isArray(value))return value.slice(0,200).map(x=>clean(x,depth+1));return Object.fromEntries(Object.entries(value).slice(0,100).map(([k,v])=>[k,clean(v,depth+1)]));}`;
-		const source = `${serialise}\nonmessage=async event=>{const input=event.data;try{const result=await(async()=>{${compiled}})();postMessage({ok:true,result:clean(result)})}catch(e){postMessage({ok:false,result:String(e?.message||e).slice(0,1000)})}}`;
+		const source = compilePlatformWorker(program);
 		const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
 		const worker = new Worker(url);
 		let done = false;
