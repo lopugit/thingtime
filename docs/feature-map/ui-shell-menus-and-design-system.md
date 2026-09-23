@@ -50,6 +50,12 @@ workspace loaders, while interactive shared pages retain authorized staff access
 
 ## House rules
 
+`Kinds/HtmlTemplateField.tsx` keeps data-authored input, textarea and select
+defaults in sync when asynchronous results arrive. It preserves visitor edits
+when the current value differs from the previous default. Its opt-in browser
+regression covers initial/changed defaults and dirty fields; the Web standards
+browser acceptance also checks reload and repeated search through the renderer.
+
 - Optimistic rendering: never flash a spinner when prior or cached state
   exists; paint the last-known value and reconcile.
 - Every new user-facing feature gets a sensible settings surface when there is

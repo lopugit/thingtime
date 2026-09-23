@@ -96,7 +96,7 @@ test('isolated runtime cannot inherit account authority, network origins, eval o
 	assert.ok(!csp.includes('unsafe-eval'));
 	assert.ok(!csp.includes('https:'));
 	const runtime = readFileSync(new URL('./runtimeEntry.ts', import.meta.url), 'utf8');
-	assert.ok(runtime.includes('worker.terminate()'));
+	assert.ok(readFileSync(new URL('./workerLifecycle.ts', import.meta.url), 'utf8').includes('worker.terminate()'));
 	assert.ok(/event\.source\s*!==\s*parent/.test(runtime));
 	assert.ok(/'script',\s*'iframe'/.test(runtime));
 });
