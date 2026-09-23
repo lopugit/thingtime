@@ -28,7 +28,7 @@ export function createBrowserActionHost(actor: () => string | undefined, transpo
 		assertIdentity(id);
 		const data = await readActionResponse(response, step.maxResultBytes, signal);
 		assertIdentity(id);
-		if (!response.ok || data?.ok === false) throw new Error(data?.error || `Request failed (${response.status})`);
+		if (!response.ok || data?.ok === false) throw Object.assign(new Error(data?.error || `Request failed (${response.status})`), { status: response.status });
 		return data;
 	};
 	return { assertIdentity, request, prepare: async (action, inputs, id, signal) => {
@@ -47,7 +47,7 @@ export async function finishBrowserAction(response: any, host: BrowserActionHost
 		const result = await executeBrowserAction(response as PreparedBrowserAction, trackedHost);
 		return { ok: true, status: 'ok', execution: 'browser', actionId: response.actionId, result, cache: 'no-store', durationMs: Date.now() - start, opsUsed: trace.length, trace };
 	} catch (error) {
-		return { ok: true, status: 'error', execution: 'browser', actionId: response.actionId, result: null, cache: 'no-store', error: error instanceof Error ? error.message : 'Browser action failed', durationMs: Date.now() - start, opsUsed: trace.length, trace };
+		return { ok: true, status: 'error', execution: 'browser', actionId: response.actionId, result: null, cache: 'no-store', error: error instanceof Error ? error.message : 'Browser action failed', errorStatus: (error as { status?: number })?.status, durationMs: Date.now() - start, opsUsed: trace.length, trace };
 	}
 }
 

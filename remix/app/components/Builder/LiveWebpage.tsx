@@ -19,6 +19,7 @@ import { mapCssMediaUrls } from '../Sharing/renderMediaCore';
 import { getNativeSection, NativeSectionView } from './nativeSections';
 import { BuilderViewport, type BuilderViewportSize } from './BuilderViewport';
 import { type SeamlessMode, isSeamlessMode, usesPageRuntime } from './seamlessMode';
+import { useCopyPage } from './useCopyPage';
 
 const SeamlessPageEditor = React.lazy(() => import('./SeamlessPageEditor'));
 
@@ -76,6 +77,7 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 	const [editorChrome, setEditorChrome] = React.useState<BuilderChrome | null>(null);
 	const page = draft.resolved?.page || null;
 	const isOwner = !!user?.id && page?.author?.id === user.id;
+	const copy = useCopyPage({ id: page?.id, linkKey, name: page?.crystal?.name });
 	const editorMode =
 		!!builderPageId && (isOwner || !!user?.id) && !runMode
 			? isSeamlessMode(requestedMode)
@@ -273,8 +275,9 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 			pageKey={typeof page?.crystal?.pageKey === 'string' ? page.crystal.pageKey : null}
 			suiteKey={suiteKey}
 			source={draft.resolved?.source || null}
-			onInstall={isSeeded ? onInstall : undefined}
+			onInstall={isSeeded ? onInstall : page && !isOwner ? copy.requestCopy : undefined}
 		>
+			{copy.dialog}
 			<SharedPageSurface
 				flexDirection="column"
 				width="100%"

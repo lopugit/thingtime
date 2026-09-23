@@ -1,5 +1,6 @@
 import { ComponentDataScope } from './ComponentSelect';
 import { NativeControlsEnabled } from './NativeComponentControls';
+import { sourceFailure } from './sourceFailure';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
 import { useNavigate } from 'react-router';
@@ -62,6 +63,7 @@ export type ThingSourceScope = {
 	viewer: unknown;
 	query: Record<string, string>;
 	installing: boolean;
+	installAvailable: boolean;
 	hasSource: boolean;
 };
 
@@ -151,6 +153,11 @@ export const useThingSource = ({
 				: current;
 		});
 		const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
+		const fail = (error: unknown) => {
+			const failure = sourceFailure(error, !!runtime.sharedRun);
+			if (failure.clear) clearSourceCache(viewerId, pageId, cacheId);
+			setState((current) => ({ ...current, status: failure.status, error: failure.error, ...(failure.clear ? { result: undefined } : {}) }));
+		};
 
 		(async () => {
 			try {
@@ -168,17 +175,11 @@ export const useThingSource = ({
 					}
 					setState({ identity: runtime.identity, binding, status: 'ok', result: response.result ?? null, error: null });
 				} else {
-					setState((current) => ({ ...current, status: 'error', error: response?.error || 'The source action failed' }));
+					fail(response);
 				}
 			} catch (error: unknown) {
 				if (stale()) return;
-				const message = (error as { error?: string; message?: string })?.error || (error as { message?: string })?.message || '';
-				const unowned = /no action you own matches/i.test(message);
-				setState((current) => ({
-					...current,
-					status: unowned ? 'not-installed' : 'error',
-					error: unowned ? null : message || 'The source action failed'
-				}));
+				fail(error);
 			}
 		})();
 		return () => {
@@ -210,9 +211,10 @@ export const useThingSource = ({
 			viewer: runtime.viewer,
 			query: runtime.query,
 			installing: runtime.installing,
+			installAvailable: !!runtime.install,
 			hasSource: !!source
 		}),
-		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, source, interactive, active, canRun]
+		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, runtime.install, source, interactive, active, canRun]
 	);
 	const refetch = React.useCallback(() => setLocal((current) => current + 1), []);
 	return { scope, refetch };
@@ -266,7 +268,7 @@ export const LiveTemplate = ({
 	const navigate = useNavigate();
 	const lopu = useLopu();
 	const baseScope = Object.fromEntries(
-		Object.entries(scope).filter(([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'hasSource'].includes(key))
+		Object.entries(scope).filter(([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource'].includes(key))
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
 	const identity = JSON.stringify([user?.id, runtime.pageId, runtime.query, render, baseScope]);
