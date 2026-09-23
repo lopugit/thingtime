@@ -85,14 +85,6 @@ export const useThingSource = ({
 	const sourceKey = JSON.stringify(source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
-	const [state, setState] = React.useState<{ status: ThingSourceState; result: unknown; error: string | null }>(() => ({
-		status: !source ? 'inert' : !canRun ? 'signed-out' : !interactive ? 'inert' : 'loading',
-		// keyed by the viewer too, so this optimistic seed can only ever be the
-		// CURRENT viewer's own last result — never the previous account's, and
-		// nothing at all when signed out (see writeSourceCache)
-		result: source && !runtime.sharedRun ? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId) : undefined,
-		error: null
-	}));
 	// inputs interpolate {arg} tokens against the args and {query.x} against
 	// the URL — the same substitution the template itself gets
 	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
@@ -102,13 +94,33 @@ export const useThingSource = ({
 		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
 	}, [inputsKey]);
+	const binding = JSON.stringify([sourceKey, inputsKey, cacheId]);
+	const initial = React.useMemo(
+		() => ({
+			identity: runtime.identity,
+			binding,
+			status: (!active ? 'inert' : !canRun ? 'signed-out' : 'loading') as ThingSourceState,
+			result: active && canRun && !runtime.sharedRun ? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId, binding) : undefined,
+			error: null as string | null
+		}),
+		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.viewer.id, runtime.pageId, cacheId]
+	);
+	const [storedState, setState] = React.useState(initial);
+	// A new target must never render the preceding target's controls, even
+	// during the render before the effect starts its replacement request.
+	const state = storedState.identity === runtime.identity && storedState.binding === binding ? storedState : initial;
+	const currentIdentity = React.useRef({ identity: runtime.identity, binding });
+	currentIdentity.current = { identity: runtime.identity, binding };
 	const manual = source?.refresh === 'manual';
 	// 'interval' sources tick on their own clock (bounded by the gate) on top
 	// of the runtime's version — a clock or live tally refreshes without a
 	// click and without touching `last`
 	const intervalMs =
 		source?.refresh === 'interval'
-			? Math.max(MIN_WEBPAGE_SOURCE_INTERVAL_MS, Math.min(MAX_WEBPAGE_SOURCE_INTERVAL_MS, Number(source.intervalMs) || DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS))
+			? Math.max(
+					MIN_WEBPAGE_SOURCE_INTERVAL_MS,
+					Math.min(MAX_WEBPAGE_SOURCE_INTERVAL_MS, Number(source.intervalMs) || DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS)
+			  )
 			: 0;
 	const [tick, setTick] = React.useState(0);
 	React.useEffect(() => {
@@ -123,15 +135,8 @@ export const useThingSource = ({
 	const pageId = runtime.pageId;
 
 	React.useEffect(() => {
-		if (!source) return;
-		// signed-out wins over inert: the template offers the sign-in even on
-		// a seeded page that is not (yet) interactive for this viewer
-		if (!canRun) {
-			setState((current) => (current.status === 'signed-out' ? current : { ...current, status: 'signed-out' }));
-			return;
-		}
-		if (!active) {
-			setState((current) => (current.status === 'inert' ? current : { ...current, status: 'inert' }));
+		if (!source || !active || !canRun) {
+			setState(initial);
 			return;
 		}
 		let cancelled = false;
@@ -139,39 +144,66 @@ export const useThingSource = ({
 		// refetches (an interval source ticks every few seconds — flipping the
 		// Install card to "Loading…" on each tick unmounts the button under the
 		// pointer); install itself re-resolves the page, so nothing is stale
-		setState((current) => ((current.result === undefined && current.status !== 'not-installed') || current.status === 'signed-out' || current.status === 'inert' ? { ...current, status: 'loading' } : current));
+		setState((current) => {
+			if (current.identity !== runtime.identity || current.binding !== binding) return initial;
+			return (current.result === undefined && current.status !== 'not-installed') || current.status === 'signed-out' || current.status === 'inert'
+				? { ...current, status: 'loading' }
+				: current;
+		});
+		const stale = () => cancelled || currentIdentity.current.identity !== runtime.identity || currentIdentity.current.binding !== binding;
+
 		(async () => {
 			try {
 				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick, l: local });
-				const response: any = await runtime.load(shareKey, () => runtime.sharedRun
-					? runtime.sharedRun(source.action, inputs)
-					: apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' }));
-				if (cancelled) return;
+				const response: any = await runtime.load(shareKey, () =>
+					runtime.sharedRun
+						? runtime.sharedRun(source.action, inputs)
+						: apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' })
+				);
+				if (stale()) return;
 				if (response?.status === 'ok') {
 					if (!runtime.sharedRun) {
 						if (response.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
-						else writeSourceCache(viewerId, pageId, cacheId, response.result ?? null);
+						else writeSourceCache(viewerId, pageId, cacheId, response.result ?? null, binding);
 					}
-					setState({ status: 'ok', result: response.result ?? null, error: null });
+					setState({ identity: runtime.identity, binding, status: 'ok', result: response.result ?? null, error: null });
 				} else {
 					setState((current) => ({ ...current, status: 'error', error: response?.error || 'The source action failed' }));
 				}
 			} catch (error: unknown) {
-				if (cancelled) return;
+				if (stale()) return;
 				const message = (error as { error?: string; message?: string })?.error || (error as { message?: string })?.message || '';
 				const unowned = /no action you own matches/i.test(message);
-				setState((current) => ({ ...current, status: unowned ? 'not-installed' : 'error', error: unowned ? null : message || 'The source action failed' }));
+				setState((current) => ({
+					...current,
+					status: unowned ? 'not-installed' : 'error',
+					error: unowned ? null : message || 'The source action failed'
+				}));
 			}
 		})();
 		return () => {
 			cancelled = true;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are the serialised forms; runVersion folds the runtime's refetch signal, the interval tick and manual refetches; runtime.load is version-keyed
-	}, [active, signedIn, canRun, runtime.sharedRun, viewerId, sourceKey, inputsKey, runVersion, pageId, cacheId]);
+	}, [
+		active,
+		signedIn,
+		canRun,
+		runtime.sharedRun,
+		runtime.identity,
+		runtime.load,
+		viewerId,
+		sourceKey,
+		inputsKey,
+		runVersion,
+		pageId,
+		cacheId,
+		binding
+	]);
 
 	const scope = React.useMemo<ThingSourceScope>(
 		() => ({
-			result: interactive ? state.result : undefined,
+			result: active && canRun ? state.result : undefined,
 			state: interactive ? state.status : 'inert',
 			error: state.error,
 			last: runtime.last,
@@ -180,7 +212,7 @@ export const useThingSource = ({
 			installing: runtime.installing,
 			hasSource: !!source
 		}),
-		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, source, interactive]
+		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, source, interactive, active, canRun]
 	);
 	const refetch = React.useCallback(() => setLocal((current) => current + 1), []);
 	return { scope, refetch };
@@ -233,15 +265,28 @@ export const LiveTemplate = ({
 	const user = useCurrentUser();
 	const navigate = useNavigate();
 	const lopu = useLopu();
-	const baseScope = Object.fromEntries(Object.entries(scope).filter(([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'hasSource'].includes(key)));
-	const identity = JSON.stringify([user?.id, runtime.pageId, render, baseScope]);
+	const baseScope = Object.fromEntries(
+		Object.entries(scope).filter(([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'hasSource'].includes(key))
+	);
+	// Explicit navigation starts a new component draft; source refreshes do not.
+	const identity = JSON.stringify([user?.id, runtime.pageId, runtime.query, render, baseScope]);
 	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
 	const active = local.identity === identity ? local : { identity, values: {} };
 	const onLocal = (input: Record<string, unknown>) => {
-		if (input.op === 'query') { const href = localQueryHref(runtime.pageId, input.params); if (href) navigate(href); return; }
+		if (input.op === 'query') {
+			const href = localQueryHref(runtime.pageId, input.params);
+			if (href) navigate(href);
+			return;
+		}
 		if (input.op === 'copy' && typeof input.value === 'string' && input.value.length <= 5000) {
-			if (!navigator.clipboard) { lopu({ title: 'Clipboard unavailable', description: 'Copy is available on secure pages.', status: 'info' }); return; }
-			navigator.clipboard?.writeText(input.value).then(() => lopu({ title: 'Copied', status: 'success' })).catch(() => lopu({ title: 'Could not copy', description: 'Your browser did not allow clipboard access.', status: 'error' }));
+			if (!navigator.clipboard) {
+				lopu({ title: 'Clipboard unavailable', description: 'Copy is available on secure pages.', status: 'info' });
+				return;
+			}
+			navigator.clipboard
+				?.writeText(input.value)
+				.then(() => lopu({ title: 'Copied', status: 'success' }))
+				.catch(() => lopu({ title: 'Could not copy', description: 'Your browser did not allow clipboard access.', status: 'error' }));
 			return;
 		}
 		if (input.op === 'search' && typeof input.value === 'string') {
@@ -253,46 +298,92 @@ export const LiveTemplate = ({
 			values: reduceLocalUi(previous.identity === identity ? previous.values : {}, baseScope, input)
 		}));
 	};
-	const onTtAction = useTtActionClicks({ onUnowned, confirm, onLocal,
-		onResult: (outcome) => setLocal((previous) => ({ ...(previous.identity === identity ? previous : { identity, values: {} }), outcome })) });
+	const onTtAction = useTtActionClicks({
+		onUnowned,
+		confirm,
+		onLocal,
+		onResult: (outcome) => setLocal((previous) => ({ ...(previous.identity === identity ? previous : { identity, values: {} }), outcome }))
+	});
 	const liveScope = { ...scope, ...active.values };
 	const scopeKey = JSON.stringify(liveScope);
-	const resolved = React.useMemo(() => (render ? alreadyResolved ? render : resolveTemplate(render, liveScope) : null), [render, scopeKey, alreadyResolved]); // eslint-disable-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
+	const resolved = React.useMemo(
+		() => (render ? (alreadyResolved ? render : resolveTemplate(render, liveScope)) : null),
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
+		[render, scopeKey, alreadyResolved]
+	);
 	if (!resolved) return null;
 	return (
-		<NativeControlsEnabled.Provider key={identity} value={interactive}><ComponentDataScope.Provider value={liveScope}><ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
-			<Box
-				onClickCapture={interactive ? (event) => {
-					if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
-				} : undefined}
-				onChangeCapture={interactive ? (event) => {
-					const field = event.target as HTMLInputElement;
-					if (field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;
-					try {
-						const input = JSON.parse(field.getAttribute('data-tt-action-inputs') || '{}');
-						onLocal({ ...input, op: 'set', value: field.type === 'checkbox' ? field.checked : field.type === 'number' || field.type === 'range' ? Number(field.value) : field.value });
-					} catch {}
-				} : undefined}
-				onKeyDownCapture={interactive ? (event) => {
-					const field = event.target as HTMLInputElement;
-					if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
-					if (event.key !== 'Enter' || event.nativeEvent.isComposing || field.tagName !== 'INPUT' || ['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)) return;
-					const group = field.closest('fieldset') || event.currentTarget;
-					const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
-					if (submit) {
-						const action = submit.getAttribute('data-tt-action');
-						const inputs = submit.getAttribute('data-tt-action-inputs') || '';
-						if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) { event.preventDefault(); submit.click(); }
-					}
-				} : undefined}
-				onDoubleClickCapture={onDoubleClickCapture}
-				width="100%"
-				data-live={interactive ? 'true' : 'false'}
-			>
-				{isChakraThingNode(resolved) ? <ChakraThingRenderer node={resolved as ChakraThingNode} /> : <HtmlThingRenderer node={resolved as HtmlThingNode} />}
-				{interactive && active.outcome ? <ActionResult outcome={active.outcome} /> : null}
-				{children}
-			</Box>
-		</ComponentUploadEnabled.Provider></ComponentDataScope.Provider></NativeControlsEnabled.Provider>
+		<NativeControlsEnabled.Provider key={identity} value={interactive}>
+			<ComponentDataScope.Provider value={liveScope}>
+				<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
+					<Box
+						onClickCapture={
+							interactive
+								? (event) => {
+										if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
+								  }
+								: undefined
+						}
+						onChangeCapture={
+							interactive
+								? (event) => {
+										const field = event.target as HTMLInputElement;
+										if (field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;
+										try {
+											const input = JSON.parse(field.getAttribute('data-tt-action-inputs') || '{}');
+											onLocal({
+												...input,
+												op: 'set',
+												value:
+													field.type === 'checkbox'
+														? field.checked
+														: field.type === 'number' || field.type === 'range'
+														? Number(field.value)
+														: field.value
+											});
+										} catch {}
+								  }
+								: undefined
+						}
+						onKeyDownCapture={
+							interactive
+								? (event) => {
+										const field = event.target as HTMLInputElement;
+										if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
+										if (
+											event.key !== 'Enter' ||
+											event.nativeEvent.isComposing ||
+											field.tagName !== 'INPUT' ||
+											['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
+										)
+											return;
+										const group = field.closest('fieldset') || event.currentTarget;
+										const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
+										if (submit) {
+											const action = submit.getAttribute('data-tt-action');
+											const inputs = submit.getAttribute('data-tt-action-inputs') || '';
+											if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
+												event.preventDefault();
+												submit.click();
+											}
+										}
+								  }
+								: undefined
+						}
+						onDoubleClickCapture={onDoubleClickCapture}
+						width="100%"
+						data-live={interactive ? 'true' : 'false'}
+					>
+						{isChakraThingNode(resolved) ? (
+							<ChakraThingRenderer node={resolved as ChakraThingNode} />
+						) : (
+							<HtmlThingRenderer node={resolved as HtmlThingNode} />
+						)}
+						{interactive && active.outcome ? <ActionResult outcome={active.outcome} /> : null}
+						{children}
+					</Box>
+				</ComponentUploadEnabled.Provider>
+			</ComponentDataScope.Provider>
+		</NativeControlsEnabled.Provider>
 	);
 };
