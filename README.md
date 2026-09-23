@@ -4176,3 +4176,14 @@ For runtime-only verification after `corepack pnpm --dir remix run build`, use
 serves the built HTML and JavaScript with their canonical CSP, needs no running
 app server and closes after the audit. Use an explicit HTTPS preview URL for a
 hosted runtime audit.
+
+The opt-in `HtmlTemplateField.browser.test.ts` regression needs only
+`TT_PLAYWRIGHT_MODULE`; it bundles the real field component into an intercepted
+Chrome fixture without account data. For the complete browser/API flow, use
+`remix/scripts/check-web-standards-browser.mjs` with an explicit local
+`TT_STANDARDS_TEST_URL` and `TT_STANDARDS_TEST_DATABASE_HOST` pointing to a
+disposable database. Set `TT_STANDARDS_TEST_BUILT_CLIENT=1` after a full build to
+serve public built client files inside the browser test while keeping API calls
+on that local stack. An optional `TT_STANDARDS_TEST_SESSION_FILE` must be an
+ignored, private file belonging to that same local origin; never use production
+credentials for these fixture writes.

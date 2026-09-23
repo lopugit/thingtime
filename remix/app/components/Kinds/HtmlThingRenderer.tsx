@@ -9,6 +9,7 @@ import { ComponentMap } from '../Builder/ComponentMap';
 import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
 import React from 'react';
+import { HtmlTemplateField } from './HtmlTemplateField';
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import {
@@ -347,7 +348,10 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 			const children = Array.isArray(node.children) ? node.children : [node.children];
 			props.defaultValue = children.filter((value) => typeof value === 'string' || typeof value === 'number').join('');
 		}
-		return React.createElement(tag, { ...props, key });
+		return <HtmlTemplateField key={key} tag={tag} fieldProps={props} />;
+	}
+	if (FIELD_TAGS.has(tag) && props['data-tt-action'] !== '$ui') {
+		return <HtmlTemplateField key={key} tag={tag as 'input' | 'select'} fieldProps={props}>{tag === 'input' ? undefined : renderChildren(node.children, depth + 1, state)}</HtmlTemplateField>;
 	}
 	if (tag === 'a')
 		return (

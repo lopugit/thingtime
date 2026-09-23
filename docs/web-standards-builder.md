@@ -58,7 +58,9 @@ matching response-header CSP even when opened directly. It has no account
 bridge, credential storage, network, popup or form-submission grant. Executable
 HTML attributes and embedded documents are rejected. JavaScript comes from a
 bounded data compiler, with no raw-source escape or eval, and runs in a worker
-terminated after two seconds. Regexps execute there; native input patterns are
+terminated after two seconds of execution. Worker startup is separately bounded
+at ten seconds, so process startup cannot consume the execution allowance.
+Regexps execute there; native input patterns are
 excluded because main-thread validation cannot be terminated. DOM methods have
 an explicit allowlist and event budget. CSS/document changes remain local to the
 frame. This runtime intentionally cannot demonstrate APIs needing permissions
@@ -68,6 +70,9 @@ it has not been granted.
 `params` from their nearest fieldset inside the component. Form constraints are
 checked; excluded password/file fields preserve defaults; empty text clears a
 value. The existing same-page query encoder still rejects reserved parameters.
+Shared HTML template fields adopt late defaults only while their current value
+still matches the previous default. Reloaded search/select filters therefore
+stay aligned with results, while delayed reads preserve visitor edits.
 
 ## Build and validation
 
@@ -81,6 +86,14 @@ checks, use a disposable local database and set `TT_STANDARDS_TEST_URL` plus
 creating a temporary account, and removes only the fixture Things it created.
 The browser checklist is in `TESTING.md`.
 
+After a full build, the browser acceptance script also accepts
+`TT_STANDARDS_TEST_BUILT_CLIENT=1`. It intercepts only public client build files
+from `.vercel/output/static`; API calls still use the explicit managed local
+stack and disposable database. This exercises the built client without starting
+another app server or waiting for Vite's development module graph. The runtime
+fixture applies the canonical isolated CSP; deployment headers are independently
+checked by the build verifier and hosted preview checks.
+
 `audit:web-platform` executes every interactive JavaScript recipe in the actual
 served opaque iframe and worker. It uses a fresh Chrome context and an empty
 host page, needs no account, creates no Things, and records passed, unsupported,
@@ -92,7 +105,12 @@ preview URL is also supported; no browser credentials are loaded. See README
 for setup.
 
 JavaScript receivers, callbacks and arguments live in `javascriptFixtures.ts`
-and `javascriptRecipes.ts` as editable program data. The generic worker has no
+and `javascriptRecipes.ts` as editable program data. `javascriptSyntax.ts` adds
+worked operators/control-flow examples; `javascriptSymbols.ts` supplies computed
+symbol members and suitable receivers. The compiler supports optional property
+access and `let`/`const`/`var` declarations as reusable data operations. Exact
+clause matching keeps abstract algorithms from inheriting an unrelated example.
+The generic worker has no
 feature-specific dispatch. Its regression tests execute the same worker source
 used by the browser, including asynchronous results and missing-feature paths.
 

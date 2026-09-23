@@ -1,6 +1,8 @@
 import type { Feature, Recipe } from './types';
 import { parameter, global, input, get, method, make, returns, base, recipe } from './programBuilders';
 import { javascriptFixture } from './javascriptFixtures';
+import { javascriptSymbolRecipe } from './javascriptSymbols';
+import { javascriptSyntaxRecipe } from './javascriptSyntax';
 export function javascriptRecipe(f: Feature): Recipe {
 	const p = base(f),
 		name = f.name
@@ -8,7 +10,7 @@ export function javascriptRecipe(f: Feature): Recipe {
 			.split(' (')[0]
 			.trim();
 	const parts = name.split('.');
-	const specialized = javascriptFixture(f, name);
+	const specialized = javascriptSyntaxRecipe(f) || javascriptSymbolRecipe(f) || javascriptFixture(f, name);
 	if (specialized) return specialized;
 	if (
 		f.kind === 'built-in' &&
@@ -221,23 +223,6 @@ export function javascriptRecipe(f: Feature): Recipe {
 			'Runs this built-in with an editable receiver and arguments. Unsupported methods and invalid argument combinations return the browser error.'
 		);
 	}
-	const byName: Record<string, unknown> = {
-		Addition: { op: 'binary', operator: '+', left: input('a'), right: input('b') },
-		Multiplicative: { op: 'binary', operator: '*', left: input('a'), right: input('b') },
-		Exponentiation: { op: 'binary', operator: '**', left: input('a'), right: input('b') },
-		Equality: { op: 'binary', operator: '===', left: input('a'), right: input('b') },
-		Relational: { op: 'binary', operator: '<', left: input('a'), right: input('b') },
-		Conditional: { op: 'conditional', test: input('a'), then: 'truthy', else: 'falsy' },
-		Logical: { op: 'binary', operator: '&&', left: input('a'), right: input('b') },
-		Bitwise: { op: 'binary', operator: '|', left: input('a'), right: input('b') }
-	};
-	for (const [term, expression] of Object.entries(byName))
-		if (f.kind === 'language' && f.name.includes(term))
-			return recipe({
-				...p,
-				parameters: [parameter('a', 'Left operand', 3, 'json'), parameter('b', 'Right operand', 2, 'json')],
-				steps: returns(expression)
-			});
 	return recipe(
 		{
 			...p,

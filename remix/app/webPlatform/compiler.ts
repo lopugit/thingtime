@@ -114,7 +114,7 @@ export function compilePlatformProgram(raw: unknown): string {
 				return `BigInt(${quoted(node.value)})`;
 			case 'get':
 				if (['constructor', '__proto__'].includes(node.key)) throw new Error('Dynamic code constructors are unavailable');
-				return `(${e(node.target)})[${e(node.key)}]`;
+				return `(${e(node.target)})${node.optional === true ? '?.' : ''}[${e(node.key)}]`;
 			case 'call':
 				return `(${e(node.target)})(${args(node.args || [])})`;
 			case 'method':
@@ -161,7 +161,9 @@ export function compilePlatformProgram(raw: unknown): string {
 				checkpoint(depth);
 				switch (n.op) {
 					case 'let':
-						return `let ${identifier(n.name)}=${expr(n.value)};`;
+					case 'const':
+					case 'var':
+						return `${n.op} ${identifier(n.name)}=${expr(n.value)};`;
 					case 'assign':
 						return `${identifier(n.name)}=${expr(n.value)};`;
 					case 'return':

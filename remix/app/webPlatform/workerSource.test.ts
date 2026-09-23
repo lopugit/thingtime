@@ -9,12 +9,14 @@ async function execute(program: unknown, globals: Record<string, unknown> = {}, 
 	let response: any;
 	const context = {
 		...globals,
-		input: structuredClone(input),
+		inputJSON: JSON.stringify(input),
 		postMessage: (value: unknown) => {
 			response = value;
 		}
 	};
-	await vm.runInNewContext(`${compilePlatformWorker(program)}; onmessage({data: input})`, context, { timeout: 500 });
+	// A worker's structured-clone input belongs to its own realm. Recreate JSON
+	// there so prototype/instanceof examples do not accidentally test VM hosts.
+	await vm.runInNewContext(`${compilePlatformWorker(program)}; onmessage({data: JSON.parse(inputJSON)})`, context, { timeout: 500 });
 	return JSON.parse(JSON.stringify(response));
 }
 
@@ -58,10 +60,37 @@ test('missing browser features are reported before program execution', async () 
 	assert.deepEqual(result.result.missing, ['AbsentStandard']);
 });
 
-test('symbol clauses are not mistaken for ordinary Intl method names', () => {
+test('symbol clauses use computed symbol keys rather than ordinary Intl method names', async () => {
 	const feature = WEB_FEATURES.find((f) => f.name === 'Intl.Collator.prototype [ %Symbol.toStringTag% ]');
 	assert.ok(feature);
-	assert.equal(featureRecipe(feature).coverage, 'inspection');
+	const { program, coverage } = featureRecipe(feature);
+	assert.equal(coverage, 'interactive');
+	assert.deepEqual(await execute(program), { ok: true, result: 'Intl.Collator' });
+});
+
+test('syntax fixtures exercise the named operations and symbol methods preserve their receivers', async () => {
+	for (const [name, expected] of [
+		['Bitwise NOT Operator ( ~ )', -4],
+		['The Unsigned Right Shift Operator ( >>> )', { '>>>': 0 }],
+		['Additive Operators', { '+': 5, '-': 1 }],
+		['The break Statement', [1, 2]],
+		['The continue Statement', [1, 2, 4, 5]],
+		['The try Statement', ['Example error', 'finally ran']],
+		['Async Arrow Function Definitions', 8],
+		['Array.prototype [ %Symbol.iterator% ] ( )', [1, 2, 3]],
+		['get Array [ %Symbol.species% ]', 'Array'],
+		['RegExp.prototype [ %Symbol.search% ] ( string )', 1],
+		['Function.prototype [ %Symbol.hasInstance% ] ( V )', true]
+	] as const) {
+		const f = WEB_FEATURES.find((f) => f.language === 'javascript' && f.name === name);
+		assert.ok(f, name);
+		const { program, coverage } = featureRecipe(f);
+		assert.equal(coverage, 'interactive', name);
+		const input = Object.fromEntries((program.parameters || []).map((p) => [p.name, p.default]));
+		assert.deepEqual(await execute(program, {}, input), { ok: true, result: expected }, name);
+	}
+	const optional = WEB_FEATURES.find((f) => f.name === 'Optional Chains')!;
+	assert.deepEqual(await execute(featureRecipe(optional).program, {}, { object: null, key: 'name' }), { ok: true, result: '[undefined]' });
 });
 
 test('availability detection never calls final or intermediate accessors', async () => {
