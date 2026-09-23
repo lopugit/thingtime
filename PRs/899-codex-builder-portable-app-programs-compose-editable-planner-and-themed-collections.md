@@ -17,7 +17,9 @@ Before the latest develop merge: client, library and embed builds passed; typech
 
 After integrating PR #897: all 204 focused tests pass in one serial run. Real local API checks saved 53 definitions, copied all 54 page/definition Things, denied foreign Action execution, denied reads after team revocation and restored the synthetic membership. Chrome verified copied-app planner ordering, date changes, drag/drop between days, status filtering, visit creation, job-title defaults, preservation of typed titles and dialog completion. Desktop and 390px checks cover overview, planner, customers and the visit form. Production HQ has not been changed by this PR.
 
-The subsequent PR #898 integration only conflicted in the changelog. A repeat of the overlapping suites under heavy workstation load hit three timing assertions and one Action deadline; those results require a clean rerun before delivery. Graph semantic extraction also stalled during AST work and was stopped; the final graph refresh must be verified separately.
+The subsequent PR #898 integration only conflicted in the changelog. A repeat of the overlapping suites under severe workstation load hit three timing assertions and one Action deadline. The hosted build, typecheck ratchet, unit tests, full API suite, both CodeQL analyses and GitGuardian all passed on integrated source commit `da5fce06e`. The 55-Thing transfer also imported successfully through the real local API: all 32 Component references were remapped, the existing QA root was preserved, and the imported planner rendered and reordered visits in Chrome. The local Vite proxy initially reset the import connection; using the same Nitro route directly succeeded.
+
+Graph semantic refresh could not complete: the local Codex proxy returned `502 codex_execution_failed`. The structural graph is refreshed separately; new semantic coverage for this PR note is not claimed.
 
 ## Platform rollout
 
