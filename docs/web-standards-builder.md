@@ -22,7 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. Roughly 1,800 have interactive recipes; the rest are
+editable program. 2,134 have interactive recipes (227 HTML, 1,059 CSS, 576
+JavaScript and 272 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -113,6 +114,16 @@ clause matching keeps abstract algorithms from inheriting an unrelated example.
 The generic worker has no
 feature-specific dispatch. Its regression tests execute the same worker source
 used by the browser, including asynchronous results and missing-feature paths.
+
+`webApiFixtures.ts` authors worker-compatible API receivers and member recipes:
+URLs, name/value collections, blobs/files, request/response metadata and bodies,
+text encoding, DOM exceptions and geometry. Methods that mutate a receiver
+return its observed state; opaque native results are projected into meaningful
+values (bytes, entries, body text or geometry coordinates). Static operations
+do not first construct an unrelated receiver: invalid `URL.canParse` input can
+return false and `URL.parse` can return null. Inputs are limited to parameters
+actually referenced by the saved program. Browser support remains independently
+checked, and Window-only matrix string parsing stays context-dependent.
 
 For runtime-only browser checks after a full build, set
 `TT_STANDARDS_AUDIT_BUILT=1`. The audit serves only the two built runtime assets

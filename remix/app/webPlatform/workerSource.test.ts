@@ -123,3 +123,65 @@ test('availability paths remain bounded and data only', () => {
 		assert.throws(() => compilePlatformWorker({ version: 1, title: 'Invalid requirement', requires }), /availability paths/);
 	}
 });
+
+test('Web API recipes exercise mutable receivers, byte conversion and body consumption', async () => {
+	const globals = { URL, URLSearchParams, Headers, Request, Response, FormData, Blob, File, TextEncoder, TextDecoder, DOMException };
+	const run = async (name: string, overrides = {}) => {
+		const f = WEB_FEATURES.find((f) => f.language === 'webapi' && f.name === name);
+		assert.ok(f, name);
+		const { program, coverage } = featureRecipe(f);
+		assert.equal(coverage, 'interactive', name);
+		const input = { ...Object.fromEntries((program.parameters || []).map((p) => [p.name, p.default])), ...overrides };
+		return execute(program, globals, input);
+	};
+	assert.deepEqual(await run('URLSearchParams.append', { key: 'color', value: 'gold' }), {
+		ok: true,
+		result: [
+			['color', 'purple'],
+			['color', 'teal'],
+			['name', 'Thingtime'],
+			['color', 'gold']
+		]
+	});
+	assert.deepEqual(await run('URLSearchParams.getAll'), { ok: true, result: ['purple', 'teal'] });
+	assert.deepEqual(await run('Headers.getSetCookie'), { ok: true, result: ['demo=a', 'demo=b'] });
+	assert.deepEqual(await run('FormData.set', { key: 'color', value: 'gold' }), {
+		ok: true,
+		result: [
+			['color', 'gold'],
+			['name', 'Thingtime']
+		]
+	});
+	assert.deepEqual(await run('Blob.slice'), { ok: true, result: 'Hello' });
+	assert.deepEqual(await run('Body.json', { body: '{"answer":42}' }), { ok: true, result: { answer: 42 } });
+	assert.deepEqual(await run('Body.formData'), {
+		ok: true,
+		result: [
+			['name', 'Thingtime'],
+			['color', 'purple']
+		]
+	});
+	assert.deepEqual(await run('TextEncoder.encodeInto', { text: '🌈x', capacity: 4 }), {
+		ok: true,
+		result: { read: 2, written: 4, bytes: { type: 'Uint8Array', values: [240, 159, 140, 136] } }
+	});
+	assert.deepEqual(await run('TextDecoder.decode', { bytes: [240, 159, 140, 136] }), { ok: true, result: '🌈' });
+	assert.deepEqual(await run('DOMException.code'), { ok: true, result: 11 });
+	assert.deepEqual(await run('URL.canParse', { url: 'http://[' }), { ok: true, result: false });
+	assert.deepEqual(await run('URL.parse', { url: 'http://[' }), { ok: true, result: null });
+	const invalid = await run('Body.json', { body: 'not json' });
+	assert.equal(invalid.ok, false);
+	assert.match(invalid.result, /JSON/);
+});
+
+test('Web API members retain missing-capability reporting and unimplemented contexts', async () => {
+	const f = WEB_FEATURES.find((f) => f.language === 'webapi' && f.name === 'Blob.textStream')!;
+	const missing = await execute(featureRecipe(f).program, { Blob: class Blob {} });
+	assert.equal(missing.ok, false);
+	assert.equal(missing.result.status, 'unsupported');
+	assert.deepEqual(missing.result.missing, ['Blob.prototype.textStream']);
+	for (const name of ['DOMMatrix.setMatrixValue', 'Geolocation']) {
+		const feature = WEB_FEATURES.find((f) => f.language === 'webapi' && f.name === name)!;
+		assert.equal(featureRecipe(feature).coverage, 'requires-context');
+	}
+});
