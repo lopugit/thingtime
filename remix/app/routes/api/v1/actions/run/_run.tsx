@@ -1,5 +1,5 @@
 import { json, readJsonBody } from '~/api/http';
-import { getScopedUser } from '~/api/utils/auth/scopedUser';
+import { getScopedActor } from '~/api/utils/auth/scopedUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { runAction } from '~/api/utils/actions/execute';
 import { isFail, viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
@@ -12,7 +12,8 @@ import { resolveSharedComposition } from '~/api/utils/actions/sharedComposition'
 const MAX_BODY_BYTES = 96 * 1024; // 64KB input ceiling + envelope headroom
 
 export const action = async ({ request }: { request: Request }) => {
-	const user = await getScopedUser(request, 'actions.run');
+	const actor = await getScopedActor(request, 'actions.run');
+	const user = actor?.user;
 	const limit = await enforceRateLimit(request, 'actions.run', user ? `user:${user.id}` : null);
 	if (!limit.allowed) {
 		return json({ ok: false, error: 'Actions are running very fast — take a breather ⚡' }, rateLimitedResponseInit(limit));
@@ -26,7 +27,7 @@ export const action = async ({ request }: { request: Request }) => {
 	const viewer = await withFriendIds(withLinkKeys(user ? viewerOf(user) : null, [typeof body?.key === 'string' ? body.key : '']));
 	const shared = sharedRoot ? await resolveSharedComposition(viewer, sharedRoot, { contentRoot: true }) : undefined;
 	if (isFail(shared)) return json({ ok: false, error: shared.error }, { status: shared.status });
-	const result = await runAction(user ? viewerOf(user) : null, { action: body?.action, inputs: body?.inputs, source: body?.source, execution: body?.execution }, shared);
+	const result = await runAction(user ? viewerOf(user) : null, { action: body?.action, inputs: body?.inputs, source: body?.source, execution: body?.execution }, shared, { firstPartyActorId: actor?.kind === 'account' ? user?.id : undefined });
 	if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
 	return json(result, { headers: { 'Cache-Control': 'private, no-store' } });
 };

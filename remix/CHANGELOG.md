@@ -73,7 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   shared execution limits and session traces. Add nested Fields/Source editing
   for saved Builder definitions and a full Action authoring mode with stale
   edit protection. Existing native workspaces are not yet converted. See
-  [the contract and local verification](../docs/builder-browser-actions.md).
+  [PR #890 acceptance notes](../PRs/890-codex-editable-service-components--editable-builder-definitions-and-browser-actions.md).
 
 - 2026-09-22 — **Codex (AI)**: Hide empty user placeholders reconstructed from
   background reply output after reload, and retain an already-saved terminal

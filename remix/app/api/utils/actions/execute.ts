@@ -917,7 +917,8 @@ export const inspectActionProgram = async (viewer: Viewer, reference: string): P
 export const runAction = async (
 	viewer: Viewer,
 	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown },
-	shared?: SharedComposition
+	shared?: SharedComposition,
+	context?: { firstPartyActorId?: string }
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
 	// account authority. Only stored composition reads are added below.
@@ -950,7 +951,7 @@ export const runAction = async (
 	const validated = validateRunInputs(program.inputs, request.inputs);
 	if (isFail(validated)) return validated;
 	if (program.crystal.runtime === 'browser') {
-		if (shared || program.ownerId !== viewer.id || viewer.pat) return fail(403, 'Browser flows require your own Action and a first-party session');
+		if (shared || program.ownerId !== viewer.id || viewer.pat || context?.firstPartyActorId !== viewer.id) return fail(403, 'Browser flows require your own Action and a first-party session');
 		if (request.execution !== 'browser') return fail(409, 'This Action runs in the browser. Use a client supporting api.actions-run 1.7.0');
 		// This is preparation, not execution. Do not record a successful run.
 		return { ok: true, status: 'prepared', execution: 'browser', actionId: program.id, viewer: { id: viewer.id, username: viewer.username }, program: program.crystal, inputs: validated.inputs };
