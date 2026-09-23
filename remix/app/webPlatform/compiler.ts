@@ -8,6 +8,21 @@ const identifier = (value: unknown) => {
 		throw new Error('Use a supported identifier');
 	return value;
 };
+// Property keys reach the dynamic-code entry points (Function through
+// .constructor, indirect eval), so this check must not depend on how a key is
+// spelled: a literal node and a one-element array read the same property as the
+// bare string. Genuinely computed keys stay available for indexing; those are
+// contained by the runtime document's CSP, which grants no 'unsafe-eval'.
+const dynamicCodeKeys = new Set(['constructor', '__proto__', 'eval']);
+const staticKey = (node: unknown): string | null => {
+	if (node && typeof node === 'object' && !Array.isArray(node)) return (node as { op?: unknown }).op === 'literal' ? staticKey((node as { value: unknown }).value) : null;
+	return node === null || node === undefined ? null : String(node);
+};
+const checkedKey = <T>(node: T): T => {
+	const key = staticKey(node);
+	if (key !== null && dynamicCodeKeys.has(key)) throw new Error('Dynamic code constructors are unavailable');
+	return node;
+};
 const quoted = (v: unknown) => {
 	const s = JSON.stringify(v);
 	if (s === undefined) throw new Error('Expected JSON data');
@@ -100,12 +115,12 @@ export function compilePlatformProgram(raw: unknown): string {
 				if (!/^-?\d{1,1000}$/.test(node.value)) throw new Error('Invalid BigInt');
 				return `BigInt(${quoted(node.value)})`;
 			case 'get':
-				if (['constructor', '__proto__'].includes(node.key)) throw new Error('Dynamic code constructors are unavailable');
-				return `(${e(node.target)})[${e(node.key)}]`;
+				return `(${e(node.target)})[${e(checkedKey(node.key))}]`;
 			case 'call':
 				return `(${e(node.target)})(${args(node.args || [])})`;
 			case 'method':
-				if (['constructor', '__proto__', 'eval'].includes(node.key)) throw new Error('Dynamic code constructors are unavailable');
+				// The emitted key is always this exact string, so checking it is complete.
+				if (dynamicCodeKeys.has(String(node.key))) throw new Error('Dynamic code constructors are unavailable');
 				return `(${e(node.target)})[${quoted(String(node.key))}](${args(node.args || [])})`;
 			case 'new':
 				return `new (${e(node.target)})(${args(node.args || [])})`;

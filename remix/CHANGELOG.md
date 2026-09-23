@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-23 — **Lopu (AI)**: The Web Platform program compiler refuses
+  `constructor`/`__proto__`/`eval` property keys however they are spelled. The
+  previous check compared the authored spelling only, so a literal node or a
+  one-element array reached the same property and emitted a working `Function`
+  constructor call. Computed keys stay available for indexing.
+
 - 2026-09-23 — **Codex (AI)**: Added the reusable Web standards Builder suite,
   a sourced standards inventory and editable isolated HTML/CSS/JavaScript demo
   programs. Inspection/context-dependent entries retain explicit coverage gaps.

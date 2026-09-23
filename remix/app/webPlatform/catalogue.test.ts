@@ -83,6 +83,27 @@ test('declarative JS returns real built-in results and rejects source escapes', 
 	for (let i = 0; i < 35; i++) deeply.value = { ...deeply };
 	assert.throws(() => compilePlatformProgram({ version: 1, title: 'deep', steps: [{ op: 'return', value: deeply }] }));
 });
+test('dynamic-code property keys are refused however they are spelled', () => {
+	// A literal node and a one-element array read the same property as the bare
+	// string, so the check cannot compare the authored spelling alone.
+	const arrow = { op: 'function', params: ['x'], value: { op: 'variable', name: 'x' } };
+	const compileBody = (value: unknown) => ({ version: 1 as const, title: 'key', steps: [{ op: 'return', value }] });
+	const compile = (value: unknown) => () => compilePlatformProgram(compileBody(value));
+	for (const name of ['constructor', '__proto__', 'eval'])
+		for (const key of [name, { op: 'literal', value: name }, [name], { op: 'literal', value: [name] }]) {
+			assert.throws(compile({ op: 'get', target: arrow, key }), /Dynamic code constructors/, `get ${name} ${JSON.stringify(key)}`);
+			assert.throws(compile({ op: 'method', target: arrow, key: name, args: [] }), /Dynamic code constructors/, `method ${name}`);
+		}
+	// Reaching Function through .constructor is the concrete escape this blocks.
+	assert.throws(
+		compile({ op: 'call', target: { op: 'get', target: arrow, key: { op: 'literal', value: 'constructor' } }, args: [{ op: 'literal', value: 'return 1' }] }),
+		/Dynamic code constructors/
+	);
+	// Ordinary property reads, prototype lookups and computed indexing still compile.
+	assert.match(compilePlatformProgram(compileBody({ op: 'get', target: { op: 'global', name: 'Array' }, key: 'prototype' })), /\["prototype"\]/);
+	assert.match(compilePlatformProgram(compileBody({ op: 'get', target: { op: 'variable', name: 'a' }, key: { op: 'variable', name: 'i' } })), /\(a\)\[i\]/);
+	assert.match(compilePlatformProgram(compileBody({ op: 'get', target: arrow, key: 'name' })), /\["name"\]/);
+});
 test('malformed parameter descriptors cannot reach the React surface', () => {
 	for (const parameters of [{ name: 'x' }, [{ name: 'x', label: {}, type: 'text' }], Array(2).fill({ name: 'x', label: 'X', type: 'text' })]) {
 		assert.throws(() => compilePlatformProgram({ version: 1, title: 'Invalid', parameters }));
