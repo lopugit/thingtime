@@ -118,6 +118,8 @@ const argValue = (scope: ComponentScope, name: string): unknown => {
 	return current;
 };
 
+export const componentScopeValue = argValue;
+
 const scalarText = (value: unknown): string => {
 	if (value === undefined || value === null) return '';
 	if (typeof value === 'string') return value;

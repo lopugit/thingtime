@@ -107,6 +107,29 @@ export const builderGuideSections = [
 		example: builderLookupExample
 	},
 	{
+		id: 'browser-flows',
+		title: 'Compose browser requests',
+		paragraphs: [
+			'An Action with runtime: browser uses http.request steps with a literal same-origin /api/v1 path, method, feature, minimumVersion, and query/body expressions. Declare each method/path in the http.request capability endpoints allowlist. Credentials stay outside the program; each request checks the current account and the endpoint permissions.',
+			'GET requests may declare pagination: { cursorParam, cursorPath, itemsPath, itemKey?, maxPages, maxItems }. Every page spends the same time, operation and result budgets. Repeated cursors and incomplete or oversized lists fail visibly. Pagination and expanded timeout/result limits require execution protocol 1.8 or newer.',
+			'Use actions.invoke for one child, or each: { action, list, inputs, max } to call an allowlisted browser Action once per item. Child inputs may read $item and $index. Browser each requires protocol 1.9 and refuses a list larger than max before making requests; use slice to author an explicit batch. Every child is prepared as the current account, and parent budgets include all children.',
+			'Browser expressionLimits may configure nodes up to 1,000,000 and listItems up to 10,000 (defaults 20,000 and 1,000). The inspector shows effective limits. Children cannot raise a parent limit. Larger expression budgets also require protocol 1.9; they do not remove page, input, output, timeout or account boundaries. Compute and return use the shared expression grammar without eval or raw JavaScript.',
+			'Browser execution returns a local result and trace. It does not create a server action-run record. HTTP and lookup source results are not persisted to the source cache. Shared read-only Action execution cannot run browser programs.'
+		]
+	},
+	{
+		id: 'record-controls',
+		title: 'Reusable record controls',
+		paragraphs: [
+			'A Component can save its own source: { action, inputs?, refresh?, intervalMs? }; a page block can override it. Source bindings use the same validation on create and update. Lists, forms, navigation and planner layouts remain ordinary editable templates; domain requests belong in Actions.',
+			'Use tt-form (Chakra Form) as a fieldset with identityName, identity, revisionName, revision and resetKey. New forms generate one UUID; existing forms use identity. The revision is captured when the form opens. Refetches and failures preserve both, so retrying an ambiguous create can use the same id and a stale edit cannot silently adopt a newer revision. Only an explicit resetKey change or a different identity starts another draft. The Action and API must enforce idempotency and concurrency.',
+			'For large reference lists use tt-select (Chakra SelectRecords) with name, optionsPath, valuePath, labelPath, value, title and required. optionsPath names an array in the component scope, for example result.customers; valuePath and labelPath default to id/title. Search and twenty-choice pages avoid truncating to the template repetition limit. Selection stays stable while the source refreshes. Sources over 10,000 choices must be filtered or paged.',
+			'tt-map (Chakra Map) draws supplied points [{lat,lng,title,href?}] with a browser apiKey, optional latitude/longitude/zoom/height/mapId/fitBounds, and a title. It has no record or lookup API logic. Saved Actions supply coordinates; same-origin marker links navigate on a click. It displays up to 1,000 points and refuses larger input. Keys need Google Maps JavaScript API billing and website restrictions; keep server-only provider credentials in Vault.',
+			'tt-attachments (Chakra Attachments) selects account-owned drafts using name, purpose (comment or post), targetId, maxFiles, imageOnly and title. It submits comma-separated IDs through the named hidden field. A saved Action commits those IDs through the appropriate API and returns them; bind committedTargetId and committedIds to that exact result so successful files are retained. Failed saves preserve drafts. Start another entry by resetting the surrounding tt-form. tt-media (Chakra Media) displays the authorized attachment metadata and postId returned by a source Action.',
+			'For local page navigation bind $ui with { op: query, params: { view: customers, q: searchText } }. Query values are encoded and the destination stays on the current Builder page; reserved identity/editor keys are refused. Ordinary internal template links use client navigation, and a dialog closes when one of its links is followed.'
+		]
+	},
+	{
 		id: 'troubleshooting',
 		title: 'Test and troubleshoot',
 		paragraphs: [

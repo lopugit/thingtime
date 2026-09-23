@@ -205,6 +205,8 @@ export type ExpressionContext = {
 	// lambda scope binds $item / $index for lambda evaluations
 	resolve: (value: unknown, lambda?: ExpressionLambdaScope) => unknown;
 	budget: { nodes: number };
+	maxListItems?: number;
+	checkpoint?: () => void;
 	packs: Record<string, ((args: unknown[]) => unknown) | undefined>;
 	onPackCall?: (name: string) => void;
 	random: () => number;
@@ -251,7 +253,7 @@ const toText = (value: unknown): string => {
 };
 
 const toList = (value: unknown, ctx: ExpressionContext, label: string): unknown[] => {
-	if (Array.isArray(value)) return value;
+	if (Array.isArray(value)) return ctx.maxListItems === undefined ? value : capList(value, ctx);
 	if (value === null || value === undefined) return [];
 	return ctx.fail(`${label} expected a list, got ${describe(value)}`);
 };
@@ -288,8 +290,9 @@ const compare = (a: unknown, b: unknown): number => {
 	return left < right ? -1 : left > right ? 1 : 0;
 };
 
+const listLimit = (ctx: ExpressionContext) => ctx.maxListItems ?? MAX_EXPRESSION_LIST_LENGTH;
 const capList = (list: unknown[], ctx: ExpressionContext): unknown[] => {
-	if (list.length > MAX_EXPRESSION_LIST_LENGTH) ctx.fail(`Expression lists cap at ${MAX_EXPRESSION_LIST_LENGTH} elements`);
+	if (list.length > listLimit(ctx)) ctx.fail(`Expression lists cap at ${listLimit(ctx)} elements`);
 	return list;
 };
 
@@ -397,7 +400,8 @@ const partsIn = (date: Date, timeZone: string | undefined): Record<string, numbe
 };
 
 export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext, lambda?: ExpressionLambdaScope): unknown => {
-	if (ctx.budget.nodes <= 0) ctx.fail(`Expression budget exhausted (max ${MAX_EXPRESSION_NODES_PER_RUN} evaluations per run)`);
+	ctx.checkpoint?.();
+	if (ctx.budget.nodes <= 0) ctx.fail(`Expression evaluation budget exhausted`);
 	ctx.budget.nodes -= 1;
 	const fn = String(expression[0]);
 	const signature = catalogueSignature(fn);
@@ -434,7 +438,8 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 	const each = (list: unknown[], lambdaIndex: number): unknown[] => {
 		const body = rawArgs[lambdaIndex];
 		return list.map((item, index) => {
-			if (ctx.budget.nodes <= 0) ctx.fail(`Expression budget exhausted (max ${MAX_EXPRESSION_NODES_PER_RUN} evaluations per run)`);
+			ctx.checkpoint?.();
+			if (ctx.budget.nodes <= 0) ctx.fail(`Expression evaluation budget exhausted`);
 			ctx.budget.nodes -= 1;
 			return body === undefined ? item : ctx.resolve(body, { item, index });
 		});
@@ -606,7 +611,7 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			const source = text(0);
 			const out: string[] = [];
 			const push = (piece: string): void => {
-				if (out.length >= MAX_EXPRESSION_LIST_LENGTH) ctx.fail(`Expression lists cap at ${MAX_EXPRESSION_LIST_LENGTH} elements`);
+				if (out.length >= listLimit(ctx)) ctx.fail(`Expression lists cap at ${listLimit(ctx)} elements`);
 				out.push(piece);
 			};
 			// no separator = one element per CODE POINT, exactly like the [...text]
@@ -731,7 +736,7 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			// and stop at the cap: the same refusal now costs O(cap).
 			const out: unknown[] = [];
 			const push = (entry: unknown): void => {
-				if (out.length >= MAX_EXPRESSION_LIST_LENGTH) ctx.fail(`Expression lists cap at ${MAX_EXPRESSION_LIST_LENGTH} elements`);
+				if (out.length >= listLimit(ctx)) ctx.fail(`Expression lists cap at ${listLimit(ctx)} elements`);
 				out.push(entry);
 			};
 			for (const value of list(0)) {

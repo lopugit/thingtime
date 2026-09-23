@@ -1,4 +1,4 @@
-import { BROWSER_ACTION_EXPANDED_LIMITS, actionHttpEndpoint } from '~/schemas/browserActions';
+import { BROWSER_ACTION_EXPANDED_LIMITS, BROWSER_EXPRESSION_DEFAULTS, BROWSER_EXPRESSION_CEILINGS, actionHttpEndpoint } from '~/schemas/browserActions';
 import {
 	ACTION_LIMIT_CEILINGS,
 	ACTION_LIMIT_DEFAULTS,
@@ -24,6 +24,7 @@ export type ActionCrystal = {
 	steps?: Record<string, unknown>[];
 	capabilities?: ActionCapabilityEntry[];
 	limits?: Record<string, number>;
+	expressionLimits?: Record<string, number>;
 };
 
 export type ActionThing = {
@@ -64,6 +65,9 @@ export const actionLimitsOf = (crystal: ActionCrystal | null | undefined): Recor
 	for (const key of Object.keys(ACTION_LIMIT_DEFAULTS) as (keyof typeof ACTION_LIMIT_DEFAULTS)[]) {
 		const value = typeof declared[key] === 'number' ? declared[key] : ACTION_LIMIT_DEFAULTS[key];
 		merged[key] = Math.min(value, ceilings[key]);
+	}
+	if (crystal?.runtime === 'browser') {
+		for (const key of ['nodes','listItems'] as const) merged[`expression.${key}`] = Math.min(crystal.expressionLimits?.[key] ?? BROWSER_EXPRESSION_DEFAULTS[key], BROWSER_EXPRESSION_CEILINGS[key]);
 	}
 	return merged;
 };
@@ -255,7 +259,9 @@ export const ACTION_LIMIT_LABELS: Record<string, (value: number) => string> = {
 	maxDepth: (value) => `depth ${value}`,
 	maxChildActions: (value) => `${value} child actions`,
 	maxResultBytes: (value) => `${Math.round(value / 1024)}KB result`,
-	maxInputBytes: (value) => `${Math.round(value / 1024)}KB input`
+	maxInputBytes: (value) => `${Math.round(value / 1024)}KB input`,
+	'expression.nodes': value => `${value.toLocaleString()} expression evaluations`,
+	'expression.listItems': value => `${value.toLocaleString()} items per expression list`
 };
 
 // The complement summary — what this program can NEVER touch. The first
