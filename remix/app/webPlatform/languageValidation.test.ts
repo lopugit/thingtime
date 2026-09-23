@@ -33,4 +33,12 @@ test('structured language nodes reject malformed input and combined nesting budg
 	for (let n = 0; n < 20; n++) nested = { op: 'function-expression', params: [], body: [{ op: 'return', value: nested }] };
 	assert.throws(() => compile(returns(nested)), /complexity budget/);
 	assert.throws(() => compile([null]), /statement/);
+	// Malformed case entries must raise the compiler's own error, not a property-access TypeError.
+	for (const cases of [[null], ['case'], [{ test: 1, body: [] }, null]])
+		assert.throws(() => compile([{ op: 'switch', value: 1, cases }]), /bounded switch cases/);
+	// A rest parameter passes the setter arity check but cannot be emitted as source.
+	assert.throws(
+		() => compile([{ op: 'class', name: 'Example', members: [{ kind: 'set', name: 'value', params: [{ name: 'rest', rest: true }], body: [] }] }]),
+		/Invalid accessor parameters/
+	);
 });

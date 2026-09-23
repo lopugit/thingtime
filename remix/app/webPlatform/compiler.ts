@@ -135,7 +135,13 @@ export function compilePlatformProgram(raw: unknown): string {
 					return `constructor(${args}){${steps(member.body || [], depth + 1)}}`;
 				}
 				if (['get', 'set'].includes(member.kind)) {
-					if (member.async || member.generator || (member.params || []).length !== (member.kind === 'get' ? 0 : 1))
+					// A rest parameter satisfies the setter arity check but is illegal source.
+					if (
+						member.async ||
+						member.generator ||
+						(member.params || []).length !== (member.kind === 'get' ? 0 : 1) ||
+						(member.params || []).some((p: any) => p && p.rest === true)
+					)
 						throw new Error('Invalid accessor parameters or modifiers');
 					return `${prefix}${member.kind} ${key}(${args}){${steps(member.body || [], depth + 1)}}`;
 				}
@@ -298,7 +304,12 @@ export function compilePlatformProgram(raw: unknown): string {
 					case 'label':
 						return `${identifier(n.name)}:${steps([n.body], depth + 1)}`;
 					case 'switch': {
-						if (!Array.isArray(n.cases) || n.cases.length > 40 || n.cases.filter((c: any) => c.default === true).length > 1)
+						if (
+							!Array.isArray(n.cases) ||
+							n.cases.length > 40 ||
+							n.cases.some((c: any) => !c || typeof c !== 'object') ||
+							n.cases.filter((c: any) => c.default === true).length > 1
+						)
 							throw new Error('Expected bounded switch cases with at most one default');
 						return `switch(${expr(n.value, depth + 1)}){${n.cases
 							.map((c: any) => `${c.default === true ? 'default' : `case ${expr(c.test, depth + 1)}`}:${steps(c.body || [], depth + 1)}`)
