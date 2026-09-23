@@ -2,6 +2,19 @@
 
 ## Editable record app primitives
 
+- [ ] Copy a saved app with linked Actions and Components. Navigation, map
+  markers, address suggestions and save receipts stay on the copied page;
+  executable references point at copied Actions while the authorized data root
+  stays unchanged. No private copied Actions execute for a foreign viewer.
+- [ ] Traverse customer → property → job → visit. Page each related section
+  beyond six records, create a child from its parent, and verify a new identity
+  with prefilled references. Duplicate without copying media/ownership metadata.
+  Time totals exclude archived entries; future completed/cancelled visits stay
+  out of Upcoming. Quick status/image changes reject stale revisions and
+  preserve unrelated fields. With the upload form expanded, selecting an image
+  must not submit its shareId/title/attachment fields to the image Action.
+  Post and page comments and nested replies.
+
 - [ ] Local draft fallbacks use saved values only before editing. Clearing text
   stays empty; source refreshes retain the draft; navigating to a different
   record or starting another entry clears it. An address selection updates

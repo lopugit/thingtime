@@ -127,6 +127,18 @@ async function main() {
 		description: 'Local disposable fixture'
 	});
 	const result: any = await run('read', { rootId, view: 'customer' });
+	if (process.env.TT_BUILDER_QA_COPY === '1') {
+		const copied = await call('/api/v1/things/fork', { id: pageId });
+		assert.equal(copied.copied, app.definitions.length + 1);
+		const page = (await call('/api/v1/things?id=' + copied.id)).thing;
+		const block = page.crystal.blocks[0].children[0];
+		assert.equal(block.args.pagePath, '');
+		const navigation = (await call('/api/v1/things?id=' + block.component)).thing;
+		assert.notEqual(navigation.crystal.source.action, 'qa-editable-app-read');
+		const copiedRead: any = await executeBrowserAction(await prepare(navigation.crystal.source.action, { rootId, view: 'customer' }), host);
+		assert.ok(copiedRead.records.some((r: any) => r.id === 'qa-builder-customer'));
+		console.log({ copiedPage: origin + '/p/' + copied.id, copied: copied.copied, sharedDataRoot: copiedRead.rootId });
+	}
 	console.log({
 		page: origin + '/p/' + pageId,
 		definitions: app.definitions.length,

@@ -67,7 +67,7 @@ test('map composition requests coordinates only for the visible address page', a
 	);
 	assert.equal(result.mapPoints.length, 12);
 	assert.equal(requests.filter((r) => r.body?.operation === 'place').length, 12);
-	assert.equal(result.mapPoints[0].href, '/p/existing-page?view=detail&id=address-12');
+	assert.equal(result.mapPoints[0].href, '?view=detail&id=address-12');
 });
 
 test('media reads remain scoped to the selected record and carry the requested cursor', async () => {
@@ -190,9 +190,9 @@ test('media stage groups preserve unlabelled gallery files and requested page', 
 		args[0].path === '/api/v1/things'
 			? {
 					things: [
-						{ id: 'b', crystal: { text: '[Before] Lawn' } },
-						{ id: 'a', crystal: { text: '[After] Lawn' } },
-						{ id: 'g', crystal: { text: 'Existing file' } }
+						{ id: 'b', attachments: [{ id: 'image-b' }], crystal: { text: '[Before] Lawn' } },
+						{ id: 'a', attachments: [{ id: 'image-a' }], crystal: { text: '[After] Lawn' } },
+						{ id: 'g', attachments: [{ id: 'image-g' }], crystal: { text: 'Existing file' } }
 					],
 					nextCursor: 'more'
 			  }
@@ -221,4 +221,186 @@ test('ungrouped map credentials retain the existing null environment contract', 
 	assert.ok(encoded.includes('Ungrouped'));
 	assert.ok(!encoded.includes('Disabled'));
 	assert.ok(encoded.includes('"name":"environmentId","value":""'));
+});
+
+const relatedFixture: any[] = [
+	{ id: 'c', kind: 'customer', values: { firstName: 'Sam' } },
+	{ id: 'p', kind: 'address', values: { title: 'Garden' } },
+	{ id: 'l', kind: 'link', values: { customerId: 'c', addressId: 'p' } },
+	{ id: 'j', kind: 'job', values: { title: 'Mow', addressId: 'p' } },
+	{
+		id: 'v',
+		kind: 'visit',
+		values: { title: 'Mow today', jobId: 'j', employeeId: 'crew', status: 'Scheduled', date: '2026-09-23' },
+		updatedAt: 'seen'
+	},
+	{ id: 't', kind: 'time', values: { visitId: 'v', title: 'Lawn', minutes: 25 } },
+	{ id: 'old-time', kind: 'time', values: { visitId: 'v', minutes: 100, archived: true } },
+	{ id: 'battery', kind: 'equipment', values: { title: 'Battery', category: 'Battery' } },
+	{ id: 'u', kind: 'usage', values: { visitId: 'v', equipmentId: 'tool', batteryId: 'battery', vehicleId: 'van' } }
+];
+
+test('linked records, reverse links and time totals use only active authorized records', async () => {
+	const read = async (id: string) =>
+		executeBrowserAction(prepare('qa-builder-read', { rootId: app.rootId, view: 'detail', id }), host(relatedFixture)) as Promise<any>;
+	const customer = await read('c');
+	assert.deepEqual(
+		customer.relatedGroups.find((g: any) => g.key === 'properties').items.map((r: any) => r.id),
+		['p']
+	);
+	const property = await read('p');
+	assert.deepEqual(
+		property.relatedGroups.find((g: any) => g.key === 'customers').items.map((r: any) => r.id),
+		['c']
+	);
+	assert.deepEqual(
+		property.relatedGroups.find((g: any) => g.key === 'visits').items.map((r: any) => r.id),
+		['v']
+	);
+	const visit = await read('v');
+	assert.equal(visit.loggedMinutes, 25);
+	assert.deepEqual(
+		visit.relatedGroups.find((g: any) => g.key === 'times').items.map((r: any) => r.id),
+		['t']
+	);
+	const battery = await read('battery');
+	assert.deepEqual(
+		battery.relatedGroups[0].items.map((r: any) => r.id),
+		['u']
+	);
+	const restricted: any = await executeBrowserAction(
+		prepare('qa-builder-read', { rootId: app.rootId, view: 'detail', id: 'c' }),
+		host(relatedFixture.filter((r) => r.id !== 'p'))
+	);
+	assert.equal(restricted.relatedGroups.find((g: any) => g.key === 'properties').total, 0);
+});
+
+test('related sections page every matching record independently', async () => {
+	const records = [
+		...relatedFixture,
+		...Array.from({ length: 19 }, (_, i) => ({
+			id: `visit-${i}`,
+			kind: 'visit',
+			values: { jobId: 'j', date: `2026-10-${String(i + 1).padStart(2, '0')}` }
+		}))
+	];
+	const ids = new Set();
+	for (const relatedPage of ['1', '2', '3', '4']) {
+		const result: any = await executeBrowserAction(
+			prepare('qa-builder-read', { rootId: app.rootId, view: 'detail', id: 'j', related: 'visits', relatedPage }),
+			host(records)
+		);
+		const group = result.relatedGroups.find((g: any) => g.key === 'visits');
+		assert.ok(group.items.length <= 6);
+		group.items.forEach((r: any) => ids.add(r.id));
+		assert.equal(group.hasNext, relatedPage !== '4');
+	}
+	assert.equal(ids.size, 20);
+});
+
+test('child defaults and duplication never reuse record identity or private media bindings', async () => {
+	const read = async (inputs: any, records = relatedFixture) =>
+		executeBrowserAction(prepare('qa-builder-read', { rootId: app.rootId, ...inputs }), host(records)) as Promise<any>;
+	const visit = await read({ view: 'new-visit', parentId: 'j', date: '2026-09-23' });
+	assert.equal(visit.formId, '');
+	assert.equal(visit.formRevision, '');
+	assert.equal(visit.formValues.jobId, 'j');
+	assert.equal(visit.formValues.title, 'Mow');
+	const time = await read({ view: 'new-time', parentId: 'v' });
+	assert.equal(time.formValues.visitId, 'v');
+	assert.equal(time.formValues.employeeId, 'crew');
+	const copy = await read(
+		{ view: 'new-equipment', copyId: 'battery' },
+		relatedFixture.map((r) =>
+			r.id === 'battery' ? { ...r, values: { ...r.values, thumbnailId: 'private-image', userId: 'someone', archived: true } } : r
+		)
+	);
+	assert.equal(copy.formValues.title, 'Battery (copy)');
+	assert.equal(copy.formValues.thumbnailId, undefined);
+	assert.equal(copy.formValues.userId, undefined);
+	assert.equal(copy.formValues.archived, undefined);
+	const missing = await read({ view: 'new-time', parentId: 'hidden' });
+	assert.equal(missing.formValues.visitId, undefined);
+	const wrongKind = await read({ view: 'new-equipment', copyId: 'j' });
+	assert.equal(wrongKind.formValues.title, undefined);
+});
+
+test('quick field updates retain original concurrency stamp and reject unrelated fields before writing', async () => {
+	const inputs = { rootId: app.rootId, id: 'v', expectedUpdatedAt: 'seen', field: 'status', value: 'Completed' };
+	const requests: any[] = [];
+	await executeBrowserAction(prepare('qa-builder-set-field', inputs), host(relatedFixture, requests));
+	assert.equal(requests.length, 2);
+	assert.equal(requests[1].body.values.title, 'Mow today');
+	assert.equal(requests[1].body.values.status, 'Completed');
+	assert.equal(requests[1].body.expectedUpdatedAt, 'seen');
+	for (const changed of [
+		{ expectedUpdatedAt: 'old' },
+		{ field: 'role', value: 'Admin' },
+		{ field: 'bannerId', value: 'image' },
+		{ value: 'bad-status' },
+		{ id: 'hidden' }
+	]) {
+		const calls: any[] = [];
+		await assert.rejects(executeBrowserAction(prepare('qa-builder-set-field', { ...inputs, ...changed }), host(relatedFixture, calls)));
+		assert.ok(calls.every((call) => call.method === 'GET'));
+	}
+});
+
+test('thread reads and comment writes keep target and retry identity explicit', async () => {
+	const calls: any[] = [];
+	const result: any = await executeBrowserAction(
+		prepare('qa-builder-read', { rootId: app.rootId, view: 'detail', id: 'v', threadId: 'comment-thread', mediaCursor: 'cursor' }),
+		host(relatedFixture, calls)
+	);
+	assert.equal(result.commentTarget, 'comment-thread');
+	assert.equal(calls.find((c) => c.path === '/api/v1/things').query.target, 'comment-thread');
+	await executeBrowserAction(
+		prepare('qa-builder-save-comment', { id: 'comment-thread', shareId: 'retry-id', text: 'Note' }),
+		host(relatedFixture, calls)
+	);
+	assert.deepEqual(calls.at(-1).body, { id: 'comment-thread', shareId: 'retry-id', text: 'Note' });
+});
+
+test('copied app navigation and save receipts are independent of original page and Action keys', async () => {
+	const { rewriteComposition } = await import('../api/utils/actions/forkCompositionCore');
+	const copied = app.definitions.map((def) => ({ ...def, crystal: rewriteComposition(def.thingtime, def.crystal, (_kind, key) => 'copy-' + key) }));
+	assert.ok(!JSON.stringify(app.blocks).includes('/p/existing-page'));
+	assert.ok(!JSON.stringify(app.definitions).includes('/p/existing-page'));
+	const form = copied.find((def) => def.crystal.componentKey === 'qa-builder-form-customer')!;
+	const rendered = JSON.stringify(
+		resolveTemplate(form.crystal.render, {
+			pagePath: '',
+			result: { view: 'new-customer', canEdit: true, formValues: {} },
+			last: { action: 'copy-qa-builder-save-customer', ok: true, result: { operation: 'save-customer', id: 'saved' } }
+		})
+	);
+	assert.ok(rendered.includes('copy-qa-builder-save-customer'));
+	assert.ok(rendered.includes('Open saved record'));
+	assert.ok(rendered.includes('?view=detail&id=saved'));
+	const read = copied.find((def) => def.crystal.actionKey === 'qa-builder-read')!;
+	assert.equal(read.crystal.steps.find((step: any) => step.op === 'each').action, 'copy-qa-builder-place');
+	assert.equal(form.crystal.source.action, 'copy-qa-builder-read');
+});
+
+test('upcoming visits omit completed and cancelled work', async () => {
+	const records = ['Scheduled', 'In progress', 'Completed', 'Cancelled'].map((status) => ({
+		id: status,
+		kind: 'visit',
+		values: { date: '2026-09-24', status }
+	}));
+	const result: any = await executeBrowserAction(prepare('qa-builder-read', { rootId: app.rootId, date: '2026-09-23' }), host(records));
+	assert.deepEqual(
+		result.upcomingVisits.map((r: any) => r.id),
+		['Scheduled', 'In progress']
+	);
+});
+
+test('quick updates can find a record beyond the default expression list limit', async () => {
+	const records = [...Array.from({ length: 4999 }, (_, i) => record(i)), ...relatedFixture.filter((r) => r.id === 'v')];
+	const requests: any[] = [];
+	await executeBrowserAction(
+		prepare('qa-builder-set-field', { rootId: app.rootId, id: 'v', expectedUpdatedAt: 'seen', field: 'status', value: 'Completed' }),
+		host(records, requests)
+	);
+	assert.equal(requests.at(-1).body.id, 'v');
 });
