@@ -349,7 +349,10 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 		// the identical template with a '{a}' leaf stayed at 1.0x. Charged by
 		// occurrence like the string branch above; the value is returned whole
 		// rather than truncated, so the overshoot is one arg value at most.
-		const value = argValue(scope, String(template.ttArg));
+		const selected = argValue(scope, String(template.ttArg));
+		// A fallback is another scope path, never executable template content.
+		// Explicit empty strings, false, zero and null remain deliberate values.
+		const value = selected === undefined && typeof template.fallback === 'string' ? argValue(scope, template.fallback) : selected;
 		if (value === undefined) return undefined;
 		return resolveScopeValue(value, budget);
 	}

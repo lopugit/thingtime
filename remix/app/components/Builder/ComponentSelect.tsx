@@ -25,7 +25,8 @@ export function ComponentSelect({
 	labelPath,
 	value,
 	title,
-	required
+	required,
+	stateKey
 }: {
 	name?: unknown;
 	optionsPath?: unknown;
@@ -34,6 +35,7 @@ export function ComponentSelect({
 	value?: unknown;
 	title?: unknown;
 	required?: unknown;
+	stateKey?: unknown;
 }) {
 	const enabled = React.useContext(NativeControlsEnabled),
 		scope = React.useContext(ComponentDataScope);
@@ -41,6 +43,8 @@ export function ComponentSelect({
 	const [query, setQuery] = React.useState(''),
 		[page, setPage] = React.useState(0);
 	const field = typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(name) ? name : undefined;
+	const local = typeof stateKey === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(stateKey) ? stateKey : '';
+	const selection = local ? (typeof value === 'string' ? value : '') : selected;
 	const path = (input: unknown, fallback: string) => (typeof input === 'string' && /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/.test(input) ? input : fallback);
 	const data = componentScopeValue(scope, path(optionsPath, ''));
 	let options: ReturnType<typeof selectionOptions> = [],
@@ -53,7 +57,7 @@ export function ComponentSelect({
 	const matches = options.filter((option) => option.label.toLowerCase().includes(query.toLowerCase()));
 	const current = Math.min(page, Math.max(0, Math.ceil(matches.length / 20) - 1));
 	const visible = matches.slice(current * 20, current * 20 + 20);
-	const chosen = options.find((option) => option.value === selected);
+	const chosen = options.find((option) => option.value === selection);
 	const label = typeof title === 'string' ? title.slice(0, 120) : 'Choose a record';
 	return (
 		<div data-tt-native-control style={{ display: 'grid', gap: 8, minWidth: 0 }}>
@@ -73,14 +77,16 @@ export function ComponentSelect({
 				name={field}
 				aria-label={label}
 				required={required === true}
-				value={selected}
+				value={selection}
+				data-tt-action={local ? '$ui' : undefined}
+				data-tt-action-inputs={local ? JSON.stringify({ op: 'set', key: local }) : undefined}
 				onChange={(event) => setSelected(event.target.value)}
 				disabled={!enabled}
 				style={{ width: '100%', minWidth: 0, padding: 10, boxSizing: 'border-box' }}
 			>
 				<option value="">Choose…</option>
-				{selected && !visible.some((option) => option.value === selected) ? (
-					<option value={selected}>{chosen?.label || selected} (selected)</option>
+				{selection && !visible.some((option) => option.value === selection) ? (
+					<option value={selection}>{chosen?.label || selection} (selected)</option>
 				) : null}
 				{visible.map((option) => (
 					<option key={option.value} value={option.value}>
