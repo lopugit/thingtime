@@ -1,0 +1,12 @@
+import { compilePlatformProgram, validatePlatformProgram } from './compiler';
+
+/** Build the single generic worker runtime for saved declarative programs. */
+export function compilePlatformWorker(raw: unknown): string {
+	const program = validatePlatformProgram(raw);
+	const compiled = compilePlatformProgram(program);
+	const serialise = `const seen=new WeakSet();let count=0;function clean(value,depth=0){if(++count>1500||depth>8)return '[bounded]';if(typeof value==='bigint')return value.toString()+'n';if(typeof value==='symbol'||typeof value==='function')return String(value);if(value===undefined)return '[undefined]';if(typeof value==='number'&&!Number.isFinite(value))return String(value);if(typeof value==='string')return value.slice(0,12000);if(!value||typeof value!=='object')return value;if(seen.has(value))return '[circular]';seen.add(value);if(value instanceof Map)return {type:'Map',entries:clean([...value],depth+1)};if(value instanceof Set)return {type:'Set',values:clean([...value],depth+1)};if(value instanceof Date||value instanceof RegExp||value instanceof Error)return String(value);if(ArrayBuffer.isView(value))return {type:value.constructor.name,values:Array.from(value).slice(0,1000)};if(value instanceof ArrayBuffer)return {type:'ArrayBuffer',byteLength:value.byteLength};if(Array.isArray(value))return value.slice(0,200).map(x=>clean(x,depth+1));return Object.fromEntries(Object.entries(value).slice(0,100).map(([k,v])=>[k,clean(v,depth+1)]));}`;
+	const availability = `const requires=${JSON.stringify(
+		program.requires || []
+	)};function available(path){try{let value=globalThis;for(let i=0;i<path.length;i++){const part=path[i];if(value==null||!(part in Object(value)))return false;if(i<path.length-1){const descriptor=Object.getOwnPropertyDescriptor(value,part);if(!descriptor||!('value' in descriptor))return false;value=descriptor.value}}return true}catch{return false}}`;
+	return `${serialise}\n${availability}\nonmessage=async event=>{const input=event.data;try{const missing=requires.filter(path=>!available(path));if(missing.length){postMessage({ok:false,result:{status:'unsupported',missing:missing.map(path=>path.join('.')),message:'This browser or isolated context does not expose these standard features.'}});return}const result=await(async()=>{${compiled}})();postMessage({ok:true,result:clean(result)})}catch(e){postMessage({ok:false,result:String(e?.message||e).slice(0,1000)})}}`;
+}

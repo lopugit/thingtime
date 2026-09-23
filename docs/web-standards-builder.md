@@ -41,6 +41,10 @@ The `tt-web-platform` component primitive takes a `program` object, version 1:
 - `steps`: declarative expression/statement nodes compiled into ECMAScript.
 - `dom`: bounded event/method bindings inside the isolated document.
 - `probe`: element, attribute, CSS, selector or interface inspection.
+- `requires`: bounded global/member paths checked in the worker before running
+  steps. Missing paths return `status: "unsupported"` and the missing names.
+  Support detection does not invoke accessor properties. Standards publication
+  and browser/context availability remain separate.
 
 The primitive has no catalogue ID dispatch. Users can copy a saved Component,
 edit its `render` program in Thingtime's Fields/Source editor and place it on any
@@ -76,3 +80,16 @@ checks, use a disposable local database and set `TT_STANDARDS_TEST_URL` plus
 `TT_STANDARDS_TEST_DATABASE_HOST`; the test verifies the database host before
 creating a temporary account, and removes only the fixture Things it created.
 The browser checklist is in `TESTING.md`.
+
+`audit:web-platform` executes every interactive JavaScript recipe in the actual
+served opaque iframe and worker. It uses a fresh Chrome context and an empty
+host page, needs no account, creates no Things, and records passed, unsupported,
+failed and frame-load-failed outcomes separately. It retries a frame-load failure
+once; it never retries a program error. Set `TT_STANDARDS_AUDIT_LANGUAGES` to a
+comma-separated language selection, `TT_STANDARDS_AUDIT_IDS` to limit entries,
+and `TT_STANDARDS_AUDIT_OUTPUT` to retain its JSON report. See README for setup.
+
+JavaScript receivers, callbacks and arguments live in `javascriptFixtures.ts`
+and `javascriptRecipes.ts` as editable program data. The generic worker has no
+feature-specific dispatch. Its regression tests execute the same worker source
+used by the browser, including asynchronous results and missing-feature paths.

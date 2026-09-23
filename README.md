@@ -4156,3 +4156,17 @@ specification clauses; many entries still need interactive recipes. It does
 not claim completed coverage of every standard or API. See
 [the app's data model and runtime](docs/web-standards-builder.md). The ordinary
 client build and PM2 dev lifecycle build the isolated runtime automatically.
+
+To audit default JavaScript example execution, start the managed local stack
+and use an installed Google Chrome plus Playwright (it may be installed outside
+the repository). No account or database is used by this read-only audit:
+
+```sh
+TT_STANDARDS_TEST_URL=http://127.0.0.1:<web-port> \
+TT_PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+TT_STANDARDS_AUDIT_OUTPUT=/tmp/standards-audit.json \
+corepack pnpm --dir remix run audit:web-platform
+```
+
+The report separates unavailable browser/context features from program errors.
+An empty selection, program error or exhausted frame-load retry fails the audit.

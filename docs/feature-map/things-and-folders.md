@@ -105,3 +105,6 @@ See [browser Actions and editor checks](../builder-browser-actions.md).
 `webPlatform/` holds the versioned inventory, recipe generator and generic
 isolated data-program runtime. Saved examples use ordinary Component Things,
 not native page blocks. See [runtime and coverage](../web-standards-builder.md).
+`test:web-platform` validates every catalogue definition and generic worker
+behavior; `audit:web-platform` executes interactive recipes in a fresh browser
+against a local served runtime, without creating account data.
