@@ -23,11 +23,13 @@ test('document inspection reports accessor presence without invoking native rece
 	const getter = inspectPlatformInterface('Element.prototype.classList', root);
 	assert.equal(getter.available, true);
 	assert.equal(getter.type, 'accessor');
+	assert.ok('getter' in getter);
 	assert.equal(getter.getter, true);
 	assert.equal(inspectPlatformInterface('Element.prototype.inherited', root).type, 'number');
 	assert.equal(inspectPlatformInterface('Element.prototype.absent', root).available, false);
 	const unresolved = inspectPlatformInterface('Element.prototype.classList.length', root);
 	assert.equal(unresolved.available, null);
+	assert.ok('requiresReceiver' in unresolved);
 	assert.equal(unresolved.requiresReceiver, 'Element.prototype.classList');
 	assert.ok(inspectPlatformInterface('Element.prototype', root).members.includes('classList'));
 	assert.equal(reads, 0);

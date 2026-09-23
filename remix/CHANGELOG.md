@@ -73,6 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   recipes (25 additional interactive entries). Interface inspection now reads
   descriptors without invoking getters. Runtime HTML versions its compiler URL
   by content digest; both assets use no-store to prevent stale compiler reuse.
+  Details: [PR #903](../PRs/903-codex-web-standards-language-programs-add-reusable-javascript-language-definitions.md).
 
 - 2026-09-24 — **Codex (AI)**: Add 120 interactive Web API entries for event and
   abort lifecycles, streams, native controllers, BYOB reads, queue strategies,
