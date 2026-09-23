@@ -14,7 +14,7 @@ test('copy negotiates capability, forwards only the selected root and key, and o
 			return Response.json({ ok: true, id: 'copied-page' });
 		}) as typeof fetch
 	});
-	assert.deepEqual(calls, ['api.things-fork:1.6.0', 'api.actions-run:1.7.0', '/api/v1/things/fork']);
+	assert.deepEqual(calls, ['api.things-fork:1.7.0', 'api.actions-run:1.7.0', '/api/v1/things/fork']);
 	assert.equal(result, '/p/copied-page');
 });
 
