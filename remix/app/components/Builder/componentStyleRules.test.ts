@@ -26,6 +26,14 @@ test('style rules reject scope escape, resource loads, injection and viewport po
 	const rule = (selector: string, declarations: Record<string, string>) => [{ selector, declarations }];
 	for (const selector of ['.x} body{', ':has(body)', '@import', '.x/* comment */'])
 		assert.equal(componentStyleRules(rule(selector, { color: 'red' }), 'safe'), '');
+	// A leading sibling combinator would reach the app element rendered next to
+	// this instance instead of staying inside its own subtree.
+	for (const selector of ['+ *', '+ .chrome', '.a, + .chrome', '~ .chrome'])
+		assert.equal(componentStyleRules(rule(selector, { display: 'none' }), 'safe'), '');
+	// A child combinator still selects inside the instance, and a sibling
+	// combinator between two authored nodes stays contained.
+	assert.equal(componentStyleRules(rule('> *', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) > *{color:red}');
+	assert.equal(componentStyleRules(rule('.a + .b', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) .a + .b{color:red}');
 	for (const value of [
 		'url(https://example.test/pixel)',
 		'URL (x)',
