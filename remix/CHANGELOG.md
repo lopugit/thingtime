@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-24 — **Codex (AI)**: Add 120 interactive Web API entries for event and
+  abort lifecycles, streams, native controllers, BYOB reads, queue strategies,
+  streaming text encoding and compression. Editable Component programs share
+  reusable expression builders and show observed delivery, backpressure,
+  cancellation and closure. Browser support remains independently reported;
+  no runtime permission or account access is added. See the
+  [PR #902 validation note](../PRs/902-codex-web-standards-events-streams-add-reusable-event-and-stream-lifecycle-demos.md).
+
 - 2026-09-23 — **Codex (AI)**: Add 248 reusable Web API member demos for URLs,
   collections, blobs/files, fetch objects and bodies, encoding, exceptions and
   geometry. All 272 runnable Web API recipes pass the Chrome runtime audit;
