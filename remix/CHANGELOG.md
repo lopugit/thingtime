@@ -73,6 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and image selection to the opt-in Builder composition. Copies use relative
   page links and stable save receipts. Existing records and access rules remain
   authoritative; production page migration is tracked separately.
+  [PR #895 details](../PRs/895-codex-builder-linked-workflows--editable-linked-records-and-copy-safe-app-flows.md).
 
 - 2026-09-23 — **Codex (AI)**: Editable planner/address workflows and record-bound source state. Validation and remaining migration scope: [PR #894](../PRs/894-codex-builder-app-workflows--editable-planner-address-and-record-workflows.md).
 
