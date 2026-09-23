@@ -1,3 +1,4 @@
+import { BROWSER_ACTION_OPS, actionHttpEndpoint, isActionHttpEndpoint } from './browserActions';
 import { MAX_POST_THINGS, postThingReferences } from '../components/Feed/postThingReferences.ts';
 import { isActionLookupProvider } from './actionLookups';
 // Thingtime Schemas — the single source of truth for the shapes Thingtime data
@@ -1578,6 +1579,7 @@ const webpageSchema: ThingtimeSchema = {
 // which is the whole of branching: there is still no loop primitive other
 // than the budget-bounded `each`, and no persisted code.
 export const ACTION_STEP_OPS = [
+	'http.request',
 	'lookup',
 	'things.create',
 	'things.get',
@@ -1590,7 +1592,7 @@ export const ACTION_STEP_OPS = [
 	'fail',
 	'return'
 ] as const;
-export const ACTION_CAPABILITIES = ['lookup', 'things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
+export const ACTION_CAPABILITIES = ['http.request', 'lookup', 'things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
 export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum'] as const;
 export const MAX_ACTION_STEPS = 40;
 export const MAX_ACTION_INPUTS = 16;
@@ -1689,6 +1691,7 @@ const actionSchema: ThingtimeSchema = {
 	fields: [
 		{ name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "Create customer".' },
 		{ name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this action does and when to run it.' },
+		{ name: 'runtime', type: 'string', required: false, description: 'server (default) or browser. Browser programs use request steps with the current session.' },
 		{ name: 'actionKey', type: 'string', required: false, max: MAX_ACTION_KEY_CHARS, description: 'Stable slug identity (lowercase-dashed) other actions can invoke by key.' },
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. customers, invoices, utilities.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved revisions of an actionKey.' },
@@ -6125,7 +6128,7 @@ const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record
 	return { ok: true, inputs };
 };
 
-export type ActionCapabilityEntry = { capability: string; schemas?: string[]; actions?: string[]; providers?: string[] };
+export type ActionCapabilityEntry = { capability: string; schemas?: string[]; actions?: string[]; providers?: string[]; endpoints?: string[] };
 
 const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabilities: ActionCapabilityEntry[] } => {
 	if (!Array.isArray(input)) return fail(400, 'Action capabilities must be a list');
@@ -6144,6 +6147,11 @@ const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabili
 		if (seen.has(capability)) return fail(400, `Duplicate capability: ${capability}`);
 		seen.add(capability);
 		const sanitized: ActionCapabilityEntry = { capability };
+		if (capability === 'http.request') {
+			if (!Array.isArray(raw.endpoints) || !raw.endpoints.length || raw.endpoints.length > MAX_ACTION_CAPABILITY_SCOPES || !raw.endpoints.every(isActionHttpEndpoint))
+				return fail(400, 'http.request needs a literal method and API path allowlist');
+			sanitized.endpoints = [...new Set(raw.endpoints)] as string[];
+		} else if (raw.endpoints !== undefined) return fail(400, 'Only http.request takes endpoints');
 		if (capability === 'lookup') {
 			if (!Array.isArray(raw.providers) || !raw.providers.length || raw.providers.length > MAX_ACTION_CAPABILITY_SCOPES || raw.providers.some((provider) => !isActionLookupProvider(provider))) return fail(400, 'lookup needs a registered providers allowlist');
 			sanitized.providers = [...new Set(raw.providers)] as string[];
@@ -6278,7 +6286,16 @@ const sanitizeActionSteps = (
 			return null;
 		};
 		let failure: Fail | null = null;
-		if (op === 'lookup') {
+		if (op === 'http.request') {
+			const endpoint = actionHttpEndpoint(raw.method, raw.path);
+			if (!endpoint) return fail(400, `Step ${stepIndex} needs a literal API path and HTTP method`);
+			if (!byCapability.get('http.request')?.endpoints?.includes(endpoint)) return fail(400, `Step ${stepIndex} endpoint is outside its http.request capability`);
+			if (typeof raw.feature !== 'string' || !/^api\.[a-z0-9-]+$/.test(raw.feature) || typeof raw.minimumVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(raw.minimumVersion))
+				return fail(400, `Step ${stepIndex} needs an API capability feature and minimumVersion`);
+			Object.assign(step, { method: raw.method, path: raw.path, feature: raw.feature, minimumVersion: raw.minimumVersion });
+			if (raw.method === 'GET' && raw.body !== undefined) return fail(400, 'GET request steps cannot carry a body');
+			failure = checkValues(raw.query ?? {}, 'query', true) || checkValues(raw.body, 'body', false);
+		} else if (op === 'lookup') {
 			if (!isActionLookupProvider(raw.provider)) return fail(400, `Step ${stepIndex} needs a registered lookup provider`);
 			if (!byCapability.get('lookup')?.providers?.includes(raw.provider)) return fail(400, `Step ${stepIndex} needs lookup capability for ${raw.provider}`);
 			if (typeof raw.credentialId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(raw.credentialId)) return fail(400, 'lookup credentialId must be a literal Vault entry id');
@@ -6443,6 +6460,13 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		// a system-scope search reads only what the SEED wrote — no stranger's
 		// row can enter that corpus, so it is not a public-corpus disclosure
 		if (step.op === 'things.search' && step.scope === 'system' && schema && !effects.systemReads.includes(schema)) effects.systemReads.push(schema);
+		if (step.op === 'http.request') {
+			const endpoint = actionHttpEndpoint(step.method, step.path);
+			if (endpoint && !effects.reads.includes(endpoint)) effects.reads.push(endpoint);
+			// A general API call can create, update, or delete according to its
+			// contract. Never claim a write request is a harmless read.
+			if (step.method !== 'GET') { effects.updates = true; effects.deletes = true; effects.creates.push(String(step.path)); }
+		}
 		if (step.op === 'things.update') effects.updates = true;
 		if (step.op === 'things.delete') effects.deletes = true;
 		if ((step.op === 'actions.invoke' || step.op === 'each') && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {
@@ -6463,6 +6487,8 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	if (name.length > MAX_SCHEMA_NAME_CHARS) return fail(400, `Action name is too long (max ${MAX_SCHEMA_NAME_CHARS})`);
 
 	const crystal: Record<string, unknown> = { name };
+	if (input.runtime !== undefined && input.runtime !== 'server' && input.runtime !== 'browser') return fail(400, 'Action runtime must be server or browser');
+	if (input.runtime === 'browser') crystal.runtime = 'browser';
 
 	const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
 	if (description) crystal.description = description;
@@ -6509,6 +6535,9 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	const steps = sanitizeActionSteps(input.steps, capabilities);
 	if (isFail(steps)) return steps;
 	crystal.steps = steps.steps;
+	if (input.runtime === 'browser') {
+		if (steps.steps.some((step) => !(BROWSER_ACTION_OPS as readonly string[]).includes(step.op))) return fail(400, 'Browser actions use HTTP requests, computations, child actions and returns');
+	} else if (steps.steps.some((step) => step.op === 'http.request')) return fail(400, 'HTTP request steps require the browser runtime');
 
 	// $input refs must point at declared inputs — a ref to an undeclared input
 	// would always resolve to undefined and is certainly an authoring mistake.

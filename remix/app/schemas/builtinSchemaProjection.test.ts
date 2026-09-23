@@ -39,7 +39,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   // blocks: record → dropped
   webpage: ['name', 'description', 'pageKey', 'siteRoute', 'version', 'forkOf', 'previewBg'],
   // inputs + steps + capabilities + limits: records → dropped
-  action: ['name', 'description', 'actionKey', 'category', 'version', 'forkOf'],
+  action: ['name', 'description', 'runtime', 'actionKey', 'category', 'version', 'forkOf'],
   // inputs + result + trace: records → dropped
   'action-run': ['status', 'startedAt', 'durationMs', 'opsUsed', 'depthUsed', 'childActionsUsed', 'error'],
   'post-discovery': ['authorId', 'linkKeyDigest', 'anonymousId', 'ipAddress'],

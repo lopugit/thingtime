@@ -6417,6 +6417,17 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
 
+- [ ] Browser Actions: create a request program in the full editor, reject
+      malformed JSON/undeclared endpoints, run through the browser, and verify
+      the actual record and private ACL. A preparation response creates no
+      server history; the inspector shows the actual browser trace. Another
+      account, old client, undeclared child and account change must refuse.
+- [ ] Edit a saved Action, Component and page definition in Fields and Source
+      at desktop and mobile widths. Expand nested arrays, reorder entries,
+      remove a property, save and reload. The newest definition persists;
+      leading-zero strings remain strings and stale saves refuse with 409.
+      Scroll modal/page from top to bottom; Save remains reachable.
+
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
       end to end (99 checks: closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,

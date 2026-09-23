@@ -1424,6 +1424,7 @@ const runRunAction = async (deps: ServerDeps, ctx: LopuToolContext, callId: stri
   }
   const result = await deps.actions.runAction(ctx.viewer, { action: input.action, inputs: input.inputs });
   if (result.ok === false) return { ok: false, error: failText(result) };
+  if (result.status === 'prepared') return { ok: false, error: 'This Action must be run in the browser.' };
   const summary =
     result.status === 'ok'
       ? `Ran ${input.action} in ${result.durationMs}ms (${result.opsUsed} op(s))`
