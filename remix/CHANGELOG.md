@@ -74,6 +74,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   clears previously rendered data while transient failures retain it.
   Verified with separate local team accounts, private 50-Thing copies and
   membership revocation; production app migration remains in progress.
+  [PR #896 details](../PRs/896-codex-builder-shared-app-copies--editable-shared-app-copies-with-live-access-checks.md).
 
 - 2026-09-23 — **Codex (AI)**: Add saved, editable linked-record histories,
   child-form defaults, duplication, visit totals/status controls, discussions
