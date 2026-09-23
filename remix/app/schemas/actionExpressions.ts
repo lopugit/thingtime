@@ -100,6 +100,8 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	last: sig(1, 1, 'Last element.'),
 	filter: sig(2, 2, 'Elements where the lambda is truthy.', { lambda: [1] }),
 	map: sig(2, 2, 'Lambda applied to every element.', { lambda: [1] }),
+	indexBy: sig(2, 2, 'Index elements by a non-empty string/finite-number lambda key; the last duplicate wins.', { lambda: [1] }),
+	groupBy: sig(2, 2, 'Group elements by a non-empty string/finite-number lambda key, preserving input order.', { lambda: [1] }),
 	find: sig(2, 2, 'First element where the lambda is truthy (null when none).', { lambda: [1] }),
 	findIndex: sig(2, 2, 'Index of the first match (−1 when none).', { lambda: [1] }),
 	some: sig(2, 2, 'Any element matches.', { lambda: [1] }),
@@ -147,19 +149,34 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	'pokeworld.blockFor': sig(2, 2, 'The world block { blockX, blockY } for a latitude / longitude.', { pack: 'pokeworld' }),
 	'pokeworld.block': sig(2, 2, 'The deterministic 16×16 tile block at (blockX, blockY).', { pack: 'pokeworld' }),
 	'pokeworld.view': sig(1, 3, 'The tile viewport around a trainer position: (position, radiusX?, radiusY?).', { pack: 'pokeworld' }),
-	'pokeworld.step': sig(2, 3, 'Resolve one move: (position, direction, collectedItemKeys?) → new position, outcome, encounter biome, item, sign.', { pack: 'pokeworld' }),
+	'pokeworld.step': sig(2, 3, 'Resolve one move: (position, direction, collectedItemKeys?) → new position, outcome, encounter biome, item, sign.', {
+		pack: 'pokeworld'
+	}),
 	'pokeworld.encounter': sig(1, 1, 'Roll a wild encounter for { biome, lat?, lng? } (legendary geofences apply), or null.', { pack: 'pokeworld' }),
 	'pokeworld.newPokemon': sig(1, 1, 'A full party-member record for { speciesId, level, gender?, shiny?, nickname? }.', { pack: 'pokeworld' }),
 	'pokeworld.stats': sig(1, 1, 'Level-scaled Gen III stats for { speciesId, level }.', { pack: 'pokeworld' }),
 	'pokeworld.moves': sig(2, 2, 'The move set for a species (or type list) at a level.', { pack: 'pokeworld' }),
-	'pokeworld.battleTurn': sig(1, 1, 'Resolve one battle turn from { player, wild, moveIndex } (speed order, status, accuracy, crit, STAB, chip).', { pack: 'pokeworld' }),
-	'pokeworld.catchRoll': sig(1, 1, 'A Gen III catch attempt from { wild, ball, player? } → caught, shakes, message (+ the wild’s reply turn).', { pack: 'pokeworld' }),
-	'pokeworld.runRoll': sig(1, 1, 'A run attempt from { player, wild, attempts } → escaped, message (+ the wild’s reply turn).', { pack: 'pokeworld' }),
-	'pokeworld.useItem': sig(1, 1, 'Apply a bag item to a party member: { member, itemId, inBattle? } → member, message, consumed.', { pack: 'pokeworld' }),
+	'pokeworld.battleTurn': sig(1, 1, 'Resolve one battle turn from { player, wild, moveIndex } (speed order, status, accuracy, crit, STAB, chip).', {
+		pack: 'pokeworld'
+	}),
+	'pokeworld.catchRoll': sig(1, 1, 'A Gen III catch attempt from { wild, ball, player? } → caught, shakes, message (+ the wild’s reply turn).', {
+		pack: 'pokeworld'
+	}),
+	'pokeworld.runRoll': sig(1, 1, 'A run attempt from { player, wild, attempts } → escaped, message (+ the wild’s reply turn).', {
+		pack: 'pokeworld'
+	}),
+	'pokeworld.useItem': sig(1, 1, 'Apply a bag item to a party member: { member, itemId, inBattle? } → member, message, consumed.', {
+		pack: 'pokeworld'
+	}),
 	'pokeworld.items': sig(0, 0, 'The item catalogue.', { pack: 'pokeworld' }),
 	'pokeworld.defaultTrainer': sig(0, 0, 'The starting trainer: name, gender, bag, badges, party, box, pokédex.', { pack: 'pokeworld' }),
 	'pokeworld.badges': sig(0, 0, 'The eight Hoenn badges.', { pack: 'pokeworld' }),
-	'pokeworld.expGain': sig(1, 1, 'Award experience for a defeat: { member, defeatedSpeciesId, defeatedLevel } → member (levelled), gained, leveledUp.', { pack: 'pokeworld' }),
+	'pokeworld.expGain': sig(
+		1,
+		1,
+		'Award experience for a defeat: { member, defeatedSpeciesId, defeatedLevel } → member (levelled), gained, leveledUp.',
+		{ pack: 'pokeworld' }
+	),
 	'pokeworld.levelFor': sig(2, 2, 'The level a growth rate reaches at a total experience.', { pack: 'pokeworld' }),
 	'thingmon.species': sig(1, 1, 'A Thingmon species record (types, stats, rarity, evolution, sprite) by id or slug.', { pack: 'thingmon' }),
 	'thingmon.dex': sig(0, 2, 'A page of the 60-species Thingmon dex: (page?, perPage?).', { pack: 'thingmon' }),
@@ -168,12 +185,24 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	'thingmon.starters': sig(0, 0, 'The three starter species.', { pack: 'thingmon' }),
 	'thingmon.typeChart': sig(0, 0, 'The eight types, their strengths and resistances, and the move library.', { pack: 'thingmon' }),
 	'thingmon.newCritter': sig(1, 1, 'A full creature record for { speciesId, level, nickname?, iv? }.', { pack: 'thingmon' }),
-	'thingmon.encounter': sig(1, 1, 'Roll a wild creature for { zone, dexCaught? } (rarity-weighted; legendaries need a fuller dex).', { pack: 'thingmon' }),
-	'thingmon.battleTurn': sig(1, 1, 'Resolve one battle turn from { player, wild, moveIndex } (speed order, types, crits, status, drain).', { pack: 'thingmon' }),
-	'thingmon.catchRoll': sig(1, 1, 'A capture attempt from { player, wild, itemId } → caught, shakes, log (+ the wild’s reply on a miss).', { pack: 'thingmon' }),
-	'thingmon.fleeRoll': sig(1, 1, 'A flee attempt from { player, wild, attempts } → escaped, log (+ the wild’s reply on a miss).', { pack: 'thingmon' }),
-	'thingmon.wildTurn': sig(1, 1, 'The wild creature acts alone (after an item is used): { player, wild } → player, wild, log, outcome.', { pack: 'thingmon' }),
-	'thingmon.expGain': sig(1, 1, 'Award experience for a win: { member, defeated | amount } → member (levelled), gained, leveledUp, canEvolve.', { pack: 'thingmon' }),
+	'thingmon.encounter': sig(1, 1, 'Roll a wild creature for { zone, dexCaught? } (rarity-weighted; legendaries need a fuller dex).', {
+		pack: 'thingmon'
+	}),
+	'thingmon.battleTurn': sig(1, 1, 'Resolve one battle turn from { player, wild, moveIndex } (speed order, types, crits, status, drain).', {
+		pack: 'thingmon'
+	}),
+	'thingmon.catchRoll': sig(1, 1, 'A capture attempt from { player, wild, itemId } → caught, shakes, log (+ the wild’s reply on a miss).', {
+		pack: 'thingmon'
+	}),
+	'thingmon.fleeRoll': sig(1, 1, 'A flee attempt from { player, wild, attempts } → escaped, log (+ the wild’s reply on a miss).', {
+		pack: 'thingmon'
+	}),
+	'thingmon.wildTurn': sig(1, 1, 'The wild creature acts alone (after an item is used): { player, wild } → player, wild, log, outcome.', {
+		pack: 'thingmon'
+	}),
+	'thingmon.expGain': sig(1, 1, 'Award experience for a win: { member, defeated | amount } → member (levelled), gained, leveledUp, canEvolve.', {
+		pack: 'thingmon'
+	}),
 	'thingmon.evolve': sig(1, 1, 'Evolve a creature that has reached its evolution level → member, from, to.', { pack: 'thingmon' }),
 	'thingmon.useItem': sig(1, 1, 'Apply a tonic or elixir: { member, itemId, inBattle? } → member, message, consumed.', { pack: 'thingmon' }),
 	'thingmon.heal': sig(1, 1, 'A creature at full HP with every condition cleared.', { pack: 'thingmon' }),
@@ -213,8 +242,7 @@ export type ExpressionContext = {
 	fail: (message: string) => never;
 };
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-	!!value && typeof value === 'object' && !Array.isArray(value);
+const isPlainObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 
 // Keys that must never be written onto a result object: assigning them reaches
 // Object.prototype's accessors instead of adding an own property. Shared so the
@@ -644,7 +672,10 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 			return capText(parts.join(replacement), ctx);
 		}
 		case 'padStart':
-			return capText(text(0).padStart(Math.max(0, Math.min(MAX_EXPRESSION_STRING_CHARS, Math.trunc(num(1)))), args.length > 2 ? text(2) || ' ' : ' '), ctx);
+			return capText(
+				text(0).padStart(Math.max(0, Math.min(MAX_EXPRESSION_STRING_CHARS, Math.trunc(num(1)))), args.length > 2 ? text(2) || ' ' : ' '),
+				ctx
+			);
 		case 'toNumber':
 			return isNumeric(args[0]) ? Number(args[0]) : typeof args[0] === 'boolean' ? (args[0] ? 1 : 0) : null;
 		case 'toString':
@@ -671,6 +702,25 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 		}
 		case 'map':
 			return each(list(0), 1);
+		case 'indexBy':
+		case 'groupBy': {
+			const values = capList(list(0), ctx);
+			const keys = each(values, 1);
+			const out: Record<string, unknown> = {};
+			for (let index = 0; index < values.length; index++) {
+				const value = keys[index];
+				if ((typeof value !== 'string' && (typeof value !== 'number' || !Number.isFinite(value))) || value === '')
+					ctx.fail(`${fn} needs non-empty string or finite-number keys`);
+				const key = capText(String(value), ctx);
+				if (UNSAFE_OBJECT_KEYS.has(key)) ctx.fail(`${fn} needs safe keys`);
+				if (fn === 'indexBy') out[key] = values[index];
+				else {
+					if (!Object.prototype.hasOwnProperty.call(out, key)) out[key] = [];
+					(out[key] as unknown[]).push(values[index]);
+				}
+			}
+			return out;
+		}
 		case 'find': {
 			const values = list(0);
 			const flags = each(values, 1);
@@ -839,12 +889,12 @@ export const evaluateExpression = (expression: unknown[], ctx: ExpressionContext
 				kind === 'time'
 					? { hour: 'numeric', minute: '2-digit' }
 					: kind === 'datetime'
-						? { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
-						: kind === 'weekday'
-							? { weekday: 'long' }
-							: kind === 'month'
-								? { month: 'long', year: 'numeric' }
-								: { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+					? { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+					: kind === 'weekday'
+					? { weekday: 'long' }
+					: kind === 'month'
+					? { month: 'long', year: 'numeric' }
+					: { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
 			return new Intl.DateTimeFormat('en-US', { ...options, timeZone: timeZone || 'UTC' }).format(date);
 		}
 		default: {

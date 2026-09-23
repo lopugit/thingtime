@@ -30,6 +30,6 @@ export type ActionRunArgs = {
 export const buildActionRunBody = (args?: ActionRunArgs | null): Record<string, unknown> => {
 	const body: Record<string, unknown> = { action: args?.action, inputs: args?.inputs };
 	if (typeof args?.source === 'string' && args.source) body.source = args.source;
-	if (args?.execution === 'browser') { body.execution = 'browser'; body.executionVersion = '1.9.0'; }
+	if (args?.execution === 'browser') { body.execution = 'browser'; body.executionVersion = '1.10.0'; }
 	return body;
 };

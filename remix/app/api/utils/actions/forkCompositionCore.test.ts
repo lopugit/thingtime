@@ -5,11 +5,17 @@ import { resolveTemplate } from '../../../components/ComponentsLibrary/component
 import { compositionReferences, storedComponentScope } from './sharedCompositionCore';
 
 test('forks preserve argument programs while rebinding each saved instance and fork-of-fork', () => {
-	const original = { savedArgs: { action: 'default', label: 'draw-default' }, render: { tag: 'button', ttAction: 'draw-{action}', ttActionInputs: { note: '{label}' }, children: ['{label}'] } };
+	const original = {
+		savedArgs: { action: 'default', label: 'draw-default' },
+		render: { tag: 'button', ttAction: 'draw-{action}', ttActionInputs: { note: '{label}' }, children: ['{label}'] }
+	};
 	const contexts = [undefined, { action: 'one' }, { action: 'two' }];
-	const copy = rewriteComposition(['component'], original, (_kind, ref) => ref.startsWith('draw-') ? `copy-${ref}` : ref, contexts);
-	const second = rewriteComposition(['component'], copy, (_kind, ref) => ref.startsWith('copy-draw-') ? `second-${ref}` : ref, contexts);
-	for (const [doc, prefix] of [[copy, 'copy-'], [second, 'second-copy-']] as const) {
+	const copy = rewriteComposition(['component'], original, (_kind, ref) => (ref.startsWith('draw-') ? `copy-${ref}` : ref), contexts);
+	const second = rewriteComposition(['component'], copy, (_kind, ref) => (ref.startsWith('copy-draw-') ? `second-${ref}` : ref), contexts);
+	for (const [doc, prefix] of [
+		[copy, 'copy-'],
+		[second, 'second-copy-']
+	] as const) {
 		assert.equal(doc.render.ttAction, 'draw-{action}');
 		assert.deepEqual(doc.savedArgs, original.savedArgs);
 		for (const args of contexts) {
@@ -18,15 +24,25 @@ test('forks preserve argument programs while rebinding each saved instance and f
 			assert.equal(result.props['data-tt-action-inputs'], '{"note":"draw-default"}');
 			assert.deepEqual(result.children, ['draw-default']);
 			assert.equal(result.ttActionRefs, undefined);
-			assert.deepEqual(compositionReferences(['component'], doc, args).map(({ ref }) => ref), [`${prefix}draw-${args?.action || 'default'}`]);
+			assert.deepEqual(
+				compositionReferences(['component'], doc, args).map(({ ref }) => ref),
+				[`${prefix}draw-${args?.action || 'default'}`]
+			);
 		}
 	}
 	assert.equal((original.render as any).ttActionRefs, undefined);
 });
 
 test('forks rewrite executable references and capability scopes without rewriting ordinary content', () => {
-	const original = { name: 'child', steps: [{ op: 'actions.invoke', action: 'child' }, { op: 'return', value: 'child' }], capabilities: [{ capability: 'actions.invoke', actions: ['child'] }] };
-	const copy = rewriteComposition(['action'], original, (_kind, ref) => ref === 'child' ? 'copy-child' : ref);
+	const original = {
+		name: 'child',
+		steps: [
+			{ op: 'actions.invoke', action: 'child' },
+			{ op: 'return', value: 'child' }
+		],
+		capabilities: [{ capability: 'actions.invoke', actions: ['child'] }]
+	};
+	const copy = rewriteComposition(['action'], original, (_kind, ref) => (ref === 'child' ? 'copy-child' : ref));
 	assert.equal(copy.steps[0].action, 'copy-child');
 	assert.deepEqual(copy.capabilities[0].actions, ['copy-child']);
 	assert.equal(copy.steps[1].value, 'child');
@@ -35,8 +51,18 @@ test('forks rewrite executable references and capability scopes without rewritin
 });
 
 test('forks retarget nested components and conditional controls', () => {
-	assert.equal(rewriteComposition(['webpage'], { blocks: [{ type: 'container', children: [{ type: 'component', component: 'card', source: { action: 'load' } }] }] }, (_kind, ref) => `copy-${ref}`).blocks[0].children[0].source.action, 'copy-load');
-	assert.equal(rewriteComposition(['component'], { render: { ttIf: { then: { ttAction: 'draw' } } } }, (_kind, ref) => `copy-${ref}`).render.ttIf.then.ttAction, 'copy-draw');
+	assert.equal(
+		rewriteComposition(
+			['webpage'],
+			{ blocks: [{ type: 'container', children: [{ type: 'component', component: 'card', source: { action: 'load' } }] }] },
+			(_kind, ref) => `copy-${ref}`
+		).blocks[0].children[0].source.action,
+		'copy-load'
+	);
+	assert.equal(
+		rewriteComposition(['component'], { render: { ttIf: { then: { ttAction: 'draw' } } } }, (_kind, ref) => `copy-${ref}`).render.ttIf.then.ttAction,
+		'copy-draw'
+	);
 });
 
 test('copied schema buttons run the copied action, without changing data or the original', () => {
@@ -45,4 +71,21 @@ test('copied schema buttons run the copied action, without changing data or the 
 	assert.equal(copy.render.children[0].ttAction, 'copy-draw');
 	assert.equal(copy.render.children[0].ttActionInputs.note, 'draw');
 	assert.equal(original.render.children[0].ttAction, 'draw');
+});
+
+test('copied collection rows and dialog completion bindings follow the copied actions', () => {
+	const original = {
+		render: {
+			tag: 'tt-collection',
+			props: {
+				itemsPath: 'result.rows',
+				itemTemplate: { ttTemplate: { tag: 'tt-dialog', props: { closeOnAction: 'save' }, children: [{ tag: 'button', ttAction: 'save' }] } }
+			}
+		}
+	};
+	const copy = rewriteComposition(['component'], original, (_kind, ref) => (ref === 'save' ? 'copy-save' : ref));
+	assert.equal(copy.render.props.itemTemplate.ttTemplate.props.closeOnAction, 'copy-save');
+	assert.equal(copy.render.props.itemTemplate.ttTemplate.children[0].ttAction, 'copy-save');
+	assert.deepEqual(compositionReferences(['component'], copy), [{ kind: 'action', ref: 'copy-save' }]);
+	assert.equal(original.render.props.itemTemplate.ttTemplate.children[0].ttAction, 'save');
 });
