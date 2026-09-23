@@ -101,6 +101,10 @@ See [browser Actions and editor checks](../builder-browser-actions.md).
 
 ## Web standards app
 
+Worker-compatible Web API member recipes live in `app/webPlatform/webApiFixtures.ts`.
+They preserve complete editable programs when saved as Components; native
+receiver results are projected into bytes, entries, text and geometry values.
+
 `schemas/appSuites/webStandards.ts` authors the reusable page/components/actions.
 `webPlatform/` holds the versioned inventory, recipe generator and generic
 isolated data-program runtime. Saved examples use ordinary Component Things,

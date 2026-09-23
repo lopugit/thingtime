@@ -8435,6 +8435,14 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Web standards Builder app (2026-09-23)
 
+- [ ] Run the runtime audit with `TT_STANDARDS_AUDIT_LANGUAGES=webapi`. Exercise
+  URL/query/header/form mutations, Blob byte slices, body JSON/form decoding,
+  UTF-8 encodeInto capacity and geometry transforms with changed inputs. Check
+  observed return values, not only successful compilation. Invalid
+  `URL.canParse` input returns false and `URL.parse` returns null; invalid body
+  JSON remains an error. Missing members report unsupported before execution.
+  Window-only matrix string parsing remains marked as needing context.
+
 - [ ] Run `audit:web-platform` against the local managed runtime. Default
   JavaScript fixtures exercise valid receivers/callbacks for Intl, Object,
   Reflect, Promise, Set/Map, resizable buffers and byte encodings. Missing
