@@ -3,6 +3,8 @@ import { parameter, global, input, get, method, make, returns, base, recipe } fr
 import { javascriptFixture } from './javascriptFixtures';
 import { javascriptSymbolRecipe } from './javascriptSymbols';
 import { javascriptSyntaxRecipe } from './javascriptSyntax';
+import { javascriptDefinitionsRecipe } from './javascriptDefinitions';
+import { javascriptControlRecipe } from './javascriptControl';
 export function javascriptRecipe(f: Feature): Recipe {
 	const p = base(f),
 		name = f.name
@@ -10,7 +12,12 @@ export function javascriptRecipe(f: Feature): Recipe {
 			.split(' (')[0]
 			.trim();
 	const parts = name.split('.');
-	const specialized = javascriptSyntaxRecipe(f) || javascriptSymbolRecipe(f) || javascriptFixture(f, name);
+	const specialized =
+		javascriptDefinitionsRecipe(f) ||
+		javascriptControlRecipe(f) ||
+		javascriptSyntaxRecipe(f) ||
+		javascriptSymbolRecipe(f) ||
+		javascriptFixture(f, name);
 	if (specialized) return specialized;
 	if (
 		f.kind === 'built-in' &&

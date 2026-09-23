@@ -4163,7 +4163,18 @@ inventory and manifest together. The snapshot includes drafts and internal
 specification clauses; many entries still need interactive recipes. It does
 not claim completed coverage of every standard or API. See
 [the app's data model and runtime](docs/web-standards-builder.md). The ordinary
-client build and PM2 dev lifecycle build the isolated runtime automatically.
+client build and PM2 dev lifecycle build the isolated runtime automatically. Both
+`/platform/runtime.html` and `/platform/runtime.js` must retain `no-store` on
+custom hosting/CDNs. The built HTML uses the runtime's content digest in its
+script URL; publish that generated HTML and matching JS together. Do not replace
+it with the unbuilt public template or strip its query version.
+
+Language examples also contain editable class/function definitions, generators,
+private/static fields, accessors, inheritance, template literals/tags and
+control-flow nodes. All use the same reusable program primitive. Interface
+inspection reports accessor presence without invoking it; paths crossing an
+accessor require a receiver-specific demo. No new credentials or permissions
+are needed for these in-memory examples.
 
 To audit default JavaScript example execution, start the managed local stack
 and use an installed Google Chrome plus Playwright (it may be installed outside
