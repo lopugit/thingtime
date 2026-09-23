@@ -1,5 +1,6 @@
 import { parameter, global, input, literal, get, method, make, returns, base, recipe } from './programBuilders';
 import { javascriptRecipe } from './javascriptRecipes';
+import { workerApiRecipe } from './webApiFixtures';
 import type { Feature, PlatformNode, PlatformProgram, Recipe } from './types';
 const node = (tag: string, children: PlatformNode[] = [], attributes: Record<string, string | number | boolean> = {}): PlatformNode => ({
 	tag,
@@ -394,69 +395,24 @@ function cssRecipe(f: Feature): Recipe {
 }
 
 function webApiRecipe(f: Feature): Recipe {
+	const worked = workerApiRecipe(f);
+	if (worked) return worked;
 	const p = base(f),
 		name = f.interface || f.name;
 	const examples: Record<string, PlatformProgram> = {
-		URL: {
+		Event: {
 			...p,
-			parameters: [parameter('url', 'URL', 'https://example.com/path?name=Thingtime#hello')],
-			steps: returns(method(make('URL', [input('url')]), 'toJSON'))
-		},
-		URLSearchParams: {
-			...p,
-			parameters: [parameter('query', 'Query', 'name=Thingtime&color=purple&color=teal')],
-			steps: returns(method(global('Array'), 'from', [method(make('URLSearchParams', [input('query')]), 'entries')]))
-		},
-		TextEncoder: {
-			...p,
-			parameters: [parameter('text', 'Text', 'Hello 🌈')],
-			steps: returns(method(make('TextEncoder'), 'encode', [input('text')]))
-		},
-		TextDecoder: {
-			...p,
-			parameters: [parameter('bytes', 'UTF-8 bytes', [72, 101, 108, 108, 111], 'json')],
-			steps: returns(method(make('TextDecoder'), 'decode', [make('Uint8Array', [input('bytes')])]))
-		},
-		Blob: {
-			...p,
-			parameters: [parameter('text', 'Contents', 'Hello Thingtime')],
-			steps: returns({ op: 'await', value: method(make('Blob', [{ op: 'array', items: [input('text')] }]), 'text') })
-		},
-		Event: { ...p, parameters: [parameter('type', 'Event name', 'thingtime')], steps: returns(get(make('Event', [input('type')]), 'type')) },
-		DOMException: {
-			...p,
-			parameters: [parameter('message', 'Message', 'A demonstration error')],
-			steps: returns(make('DOMException', [input('message'), 'InvalidStateError']))
+			requires: [['Event']],
+			parameters: [parameter('type', 'Event name', 'thingtime')],
+			steps: returns(get(make('Event', [input('type')]), 'type'))
 		},
 		AbortController: {
 			...p,
+			requires: [['AbortController']],
 			steps: [
 				{ op: 'let', name: 'controller', value: make('AbortController') },
 				{ op: 'expression', value: method({ op: 'variable', name: 'controller' }, 'abort', ['Stopped by the demo']) },
 				...returns(get(get({ op: 'variable', name: 'controller' }, 'signal'), 'aborted'))
-			]
-		},
-		Headers: {
-			...p,
-			parameters: [parameter('headers', 'Headers', { Accept: 'application/json', 'Content-Type': 'text/plain' }, 'json')],
-			steps: returns(method(global('Array'), 'from', [method(make('Headers', [input('headers')]), 'entries')]))
-		},
-		Request: {
-			...p,
-			parameters: [parameter('url', 'URL (no request is sent)', 'https://example.com/demo')],
-			steps: returns(get(make('Request', [input('url')]), 'url'))
-		},
-		Response: {
-			...p,
-			parameters: [parameter('text', 'Response body', 'Hello from a local Response')],
-			steps: returns({ op: 'await', value: method(make('Response', [input('text')]), 'text') })
-		},
-		FormData: {
-			...p,
-			steps: [
-				{ op: 'let', name: 'form', value: make('FormData') },
-				{ op: 'expression', value: method({ op: 'variable', name: 'form' }, 'append', ['name', 'Thingtime']) },
-				...returns(method(global('Array'), 'from', [method({ op: 'variable', name: 'form' }, 'entries')]))
 			]
 		}
 	};
