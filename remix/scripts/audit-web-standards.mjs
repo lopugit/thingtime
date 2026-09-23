@@ -23,7 +23,7 @@ async function builtRuntimeFixture() {
 		)
 	);
 	const server = createServer((request, response) => {
-		const asset = assets.get(request.url);
+		const asset = assets.get(request.url?.split('?')[0]);
 		if (!asset) {
 			response.writeHead(404);
 			response.end();

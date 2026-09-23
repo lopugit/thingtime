@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-24 — **Codex (AI)**: Web standards language programs. Added reusable
+  class/function/generator, template and control-flow nodes with 28 authored
+  recipes (25 additional interactive entries). Interface inspection now reads
+  descriptors without invoking getters. Runtime HTML versions its compiler URL
+  by content digest; both assets use no-store to prevent stale compiler reuse.
+
 - 2026-09-24 — **Codex (AI)**: Add 120 interactive Web API entries for event and
   abort lifecycles, streams, native controllers, BYOB reads, queue strategies,
   streaming text encoding and compression. Editable Component programs share

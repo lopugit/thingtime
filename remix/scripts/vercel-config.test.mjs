@@ -8,10 +8,31 @@ import { gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { prodCsp, devCsp } from './csp.mjs';
+import { platformRuntimeCsp } from './csp.mjs';
+import { execFileSync } from 'node:child_process';
 import { claudeRuntimeFunctions, packageClaudeOAuthArtifacts, verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const vercelConfig = JSON.parse(readFileSync(resolve(repositoryRoot, 'vercel.json'), 'utf8'));
+
+test('emitted Web Platform routes prevent stale compiler reuse and keep document CSP scoped', async (t) => {
+	const root = await fs.mkdtemp(join(tmpdir(), 'thingtime-platform-routes-'));
+	t.after(() => fs.rm(root, { recursive: true, force: true }));
+	const output = join(root, '.vercel/output');
+	await fs.mkdir(join(output, 'functions/__server.func'), { recursive: true });
+	await fs.writeFile(join(output, 'config.json'), JSON.stringify({ routes: [{ handle: 'filesystem' }, { src: '/(?:.*)', dest: '/__server' }] }));
+	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
+	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
+	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	for (const extension of ['html', 'js']) {
+		const matches = routes.filter(route => route.src === `^/platform/runtime\\.${extension}$`);
+		assert.equal(matches.length, 1);
+		assert.equal(matches[0].headers['Cache-Control'], 'no-store');
+		assert.equal(matches[0].continue, true);
+		assert.ok(routes.indexOf(matches[0]) < routes.findIndex(route => route.handle === 'filesystem'));
+		assert.equal(matches[0].headers['Content-Security-Policy'], extension === 'html' ? platformRuntimeCsp : undefined);
+	}
+});
 
 test('Vercel cron path and schedule pairs are unique', () => {
 	const crons = vercelConfig.crons ?? [];
