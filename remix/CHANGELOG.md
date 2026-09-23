@@ -68,6 +68,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-23: Fence Builder source results, cached bindings and action receipts across record navigation and viewer/page/sharing changes so stale controls cannot target the previous record.
+
+- 2026-09-23 — **Codex (AI)**: Editable app flows add day/week planner filters, readable record references, category-specific equipment choices, role-gated forms, grouped media and a saved address-search Action. Reusable local draft fallbacks, atomic patches and configurable select state preserve typed values through refreshes and reset on navigation. Local fixture validation only; live app migration remains separate.
+
 - 2026-09-23 — **Codex (AI)**: Builder Components retain saved source bindings;
   reusable form, searchable selection, map and attachment primitives support
   record screens authored as editable Things. Browser Actions add bounded
