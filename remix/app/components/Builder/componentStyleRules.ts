@@ -16,6 +16,10 @@ export function componentStyleRules(value: unknown, scope: string): string {
 				.flatMap(([key, value]) => {
 					if (!/^(--)?[a-z][a-z0-9-]{0,60}$/.test(key) || typeof value !== 'string' || value.length > 300) return [];
 					if (/[{};@\\<>]/.test(value) || /url\s*\(|expression\s*\(|javascript:|image-set\s*\(/i.test(value)) return [];
+					// `/` stays legal for `font`, `grid-area` and `aspect-ratio`, but a
+					// comment delimiter would run past this declaration and silently
+					// swallow every later rule in the same instance stylesheet.
+					if (/\/\*|\*\//.test(value)) return [];
 					// Match the renderer's containment boundary. Untrusted CSS cannot
 					// place a viewport overlay over the surrounding Thingtime controls.
 					if (key === 'position' && !/^(static|relative)(\s*!important)?$/i.test(value.trim())) return [];

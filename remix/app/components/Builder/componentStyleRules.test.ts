@@ -31,9 +31,17 @@ test('style rules reject scope escape, resource loads, injection and viewport po
 		'URL (x)',
 		'image-set("https://example.test/pixel")',
 		'red;}body{color:red',
-		'red\\3b color:red'
+		'red\\3b color:red',
+		'red/*',
+		'*/red'
 	])
 		assert.equal(componentStyleRules(rule('.x', { color: value }), 'safe'), '');
+	// A comment delimiter must not hide the rules authored after it.
+	assert.equal(
+		componentStyleRules([{ selector: '.a', declarations: { color: 'red/*' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	assert.match(componentStyleRules(rule('.x', { font: '12px/1.5 serif', 'aspect-ratio': '16 / 9' }), 'safe'), /font:12px\/1\.5 serif;aspect-ratio:16 \/ 9/);
 	assert.equal(componentStyleRules(rule('.x', { position: 'fixed', 'z-index': '99999' }), 'safe'), '');
 	assert.equal(componentStyleRules(rule('.x', { color: 'red' }), 'bad"scope'), '');
 	assert.equal(componentStyleRules(Array(221).fill(rule('.x', { color: 'red' })[0]), 'safe'), '');
