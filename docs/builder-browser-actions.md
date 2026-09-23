@@ -68,6 +68,42 @@ The protocol is `api.actions-run` **1.7.0**, `api.things` **1.28.0** and
 programs. Ordinary server programs retain their existing execution/history.
 This foundation does not itself convert existing native workspace blocks.
 
+## Cursor pagination
+
+A GET request can collect a cursor-backed list with editable fields:
+
+```json
+"pagination": {
+  "cursorParam": "cursor",
+  "cursorPath": "nextCursor",
+  "itemsPath": "things",
+  "itemKey": "id",
+  "maxPages": 20,
+  "maxItems": 5000
+}
+```
+
+The response must contain the configured list and cursor; `null` ends the list.
+Dot paths select nested response fields. The first response supplies metadata;
+subsequent pages replace the list and cursor. An optional item key deduplicates
+overlapping pages, preserving first-seen order and the latest item values.
+Repeated cursors, missing fields, changed accounts and exhausted budgets fail
+the Action without returning a partial list. No request is retried. Every page
+spends the same operation, time and result-byte budgets as other steps.
+Browser programs may explicitly raise `timeoutMs` up to 120000 and
+`maxResultBytes` up to 8388608; these larger envelopes also require the 1.8
+execution protocol. Defaults and server Action limits stay unchanged.
+
+Use the composer's **Add paginated request** preset, then edit its destination,
+capability and response fields. Configure page/item budgets alongside the
+Action's existing limits; these budgets protect a run from a broken server loop.
+
+Pagination requires `api.actions-run` **1.8.0**, `api.things` **1.29.0** for
+creation/PATCH and `api.things-update` **1.6.0** for that update route. Clients
+send `executionVersion: "1.8.0"` when preparing browser programs. The server
+refuses pagination for older or incompatible execution clients before any
+request can run. Programs without pagination retain their 1.7 runtime contract.
+
 ## Verification
 
 - `npm --prefix remix run test:actions`

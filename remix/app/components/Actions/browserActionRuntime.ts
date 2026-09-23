@@ -1,8 +1,10 @@
+import { requestActionPages } from './actionRequestPagination';
+import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import { evaluateExpression, MAX_EXPRESSION_NODES_PER_RUN, type ExpressionContext, type ExpressionLambdaScope } from '~/schemas/actionExpressions';
 import { ACTION_LIMIT_CEILINGS, ACTION_LIMIT_DEFAULTS, parseActionRef, sanitizeActionCrystal } from '~/schemas/registry';
-import { actionHttpEndpoint, type PreparedBrowserAction } from '~/schemas/browserActions';
+import { BROWSER_ACTION_EXPANDED_LIMITS, actionHttpEndpoint, type PreparedBrowserAction } from '~/schemas/browserActions';
 
-type RequestStep = { path: string; method: string; query: Record<string, unknown>; body?: unknown; feature: string; minimumVersion: string; maxResultBytes: number };
+type RequestStep = { path: string; method: string; query: Record<string, unknown>; body?: unknown; feature: string; minimumVersion: string; maxResultBytes: number; runtimeVersion?: string };
 export type BrowserActionTrace = { step: string; op: string; ms: number; status: 'ok' | 'skipped' | 'error' };
 export type BrowserActionHost = {
 	// The host pins every authenticated request to this identity on the server.
@@ -43,7 +45,7 @@ export async function executeBrowserAction(prepared: PreparedBrowserAction, host
 		return refuse('This action was not prepared for browser execution');
 	const program = checked.crystal;
 	const now = host.now ?? Date.now;
-	const limits = Object.fromEntries(Object.entries(ACTION_LIMIT_DEFAULTS).map(([key, fallback]) => [key, Math.min(Number((program.limits as any)?.[key]) || fallback, (ACTION_LIMIT_CEILINGS as any)[key])]));
+	const limits = Object.fromEntries(Object.entries(ACTION_LIMIT_DEFAULTS).map(([key, fallback]) => [key, Math.min(Number((program.limits as any)?.[key]) || fallback, ({ ...ACTION_LIMIT_CEILINGS, ...BROWSER_ACTION_EXPANDED_LIMITS } as any)[key])]));
 	const shared = budget ?? { expression: { nodes: MAX_EXPRESSION_NODES_PER_RUN }, stack: [], frames: [], signal: AbortSignal.timeout(limits.timeoutMs) };
 	if (bytes(prepared.inputs) > limits.maxInputBytes) refuse('The action inputs exceed their byte budget');
 	if (shared.stack.includes(prepared.actionId) || shared.frames.some((frame, index) => shared.stack.length - index >= frame.maxDepth)) return refuse('Recursive or overly deep action flow');
@@ -91,7 +93,18 @@ export async function executeBrowserAction(prepared: PreparedBrowserAction, host
 			if (step.op === 'http.request') {
 				const endpoint = actionHttpEndpoint(step.method, step.path);
 				if (!endpoint || !(program.capabilities as any[])?.some((cap) => cap.capability === 'http.request' && cap.endpoints?.includes(endpoint))) refuse('Request is outside this action’s declared endpoints');
-				result = await bounded(host.request({ path: step.path, method: step.method, query: object(resolve(step.query ?? {})), ...(step.body === undefined ? {} : { body: resolve(step.body) }), feature: step.feature, minimumVersion: step.minimumVersion, maxResultBytes: limits.maxResultBytes }, prepared.viewer.id, signal), signal);
+				const request = async (query: Record<string, unknown>, page = 1) => {
+					ensure();
+					if (page > 1 && shared.frames.some((frame) => --frame.remaining < 0)) refuse('The action operation budget was exceeded');
+					const started = now();
+					const pageTrace: BrowserActionTrace = { step: `${trace.step}.page.${page}`, op: step.op, ms: 0, status: 'error' };
+					try {
+						const response = await bounded(host.request({ path: step.path, method: step.method, query, ...(step.body === undefined ? {} : { body: resolve(step.body) }), feature: step.feature, minimumVersion: step.minimumVersion, maxResultBytes: limits.maxResultBytes, runtimeVersion: browserActionMinimumVersion(program) }, prepared.viewer.id, signal), signal);
+						ensure(); pageTrace.status = 'ok'; return response;
+					} finally { if (page > 1) { pageTrace.ms = now() - started; host.recordStep?.(pageTrace); } }
+				};
+				const query = object(resolve(step.query ?? {}));
+				result = step.pagination ? await requestActionPages(step.pagination, query, request, limits.maxResultBytes) : await request(query);
 			} else if (step.op === 'actions.invoke') {
 				if (!(program.capabilities as any[])?.some((cap) => cap.capability === 'actions.invoke' && cap.actions?.includes(step.action))) refuse('Child action is outside this action’s allowlist');
 				if (shared.frames.some((frame) => --frame.children < 0)) refuse('The child action budget was exceeded');
