@@ -10,7 +10,7 @@ export async function copyPage(
 ): Promise<string | null> {
 	const current = () => !boundary.signal.aborted && boundary.current();
 	if (!current()) return null;
-	await ports.requireCapability('api.things-fork', '1.6.0');
+	await ports.requireCapability('api.things-fork', '1.7.0');
 	await ports.requireCapability('api.actions-run', '1.7.0'); // shared expected-actor request fence
 	if (!current()) return null;
 	const response = await ports.fetch('/api/v1/things/fork', {

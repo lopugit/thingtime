@@ -1,10 +1,23 @@
 import React from 'react';
-import { NativeControlsEnabled } from './NativeComponentControls';
+import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { componentScopeValue } from '../ComponentsLibrary/componentTemplate';
 
 // Native controls can page a reference into already-authorized source data
 // without expanding thousands of option nodes in the template resolver.
 export const ComponentDataScope = React.createContext<Record<string, unknown>>({});
+export function selectionPatch(fills: unknown, item: unknown): Record<string, string | number | boolean> {
+	const values: Record<string, string | number | boolean> = {};
+	if (!Array.isArray(fills) || !item || typeof item !== 'object' || Array.isArray(item)) return values;
+	for (const fill of fills.slice(0, 16)) {
+		if (!fill || typeof fill !== 'object' || typeof fill.key !== 'string' || typeof fill.path !== 'string') continue;
+		if (!/^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(fill.key) || ['__proto__', 'constructor', 'prototype'].includes(fill.key)) continue;
+		if (fill.whenEmpty === true && fill.current !== undefined && fill.current !== null && fill.current !== '') continue;
+		const value = componentScopeValue(item as Record<string, unknown>, fill.path);
+		if ((typeof value === 'string' && value.length <= 2000) || (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean')
+			values[fill.key] = value;
+	}
+	return values;
+}
 export function selectionOptions(data: unknown, valuePath = 'id', labelPath = 'title') {
 	if (!Array.isArray(data)) return [];
 	if (data.length > 10000) throw new Error('Filter or page the source to at most 10,000 choices.');
@@ -26,7 +39,12 @@ export function ComponentSelect({
 	value,
 	title,
 	required,
-	stateKey
+	stateKey,
+	compact,
+	filterPath,
+	filterValue,
+	clear,
+	fills
 }: {
 	name?: unknown;
 	optionsPath?: unknown;
@@ -36,9 +54,15 @@ export function ComponentSelect({
 	title?: unknown;
 	required?: unknown;
 	stateKey?: unknown;
+	compact?: unknown;
+	filterPath?: unknown;
+	filterValue?: unknown;
+	clear?: unknown;
+	fills?: unknown;
 }) {
 	const enabled = React.useContext(NativeControlsEnabled),
 		scope = React.useContext(ComponentDataScope);
+	const onLocal = React.useContext(ComponentLocalControl);
 	const [selected, setSelected] = React.useState(typeof value === 'string' ? value : '');
 	const [query, setQuery] = React.useState(''),
 		[page, setPage] = React.useState(0);
@@ -50,7 +74,11 @@ export function ComponentSelect({
 	let options: ReturnType<typeof selectionOptions> = [],
 		error = '';
 	try {
-		options = selectionOptions(data, path(valuePath, 'id'), path(labelPath, 'title'));
+		const filtered =
+			typeof filterPath === 'string' && filterValue !== undefined && Array.isArray(data)
+				? data.filter((item) => componentScopeValue(item, path(filterPath, '')) === filterValue)
+				: data;
+		options = selectionOptions(filtered, path(valuePath, 'id'), path(labelPath, 'title'));
 	} catch (failure) {
 		error = (failure as Error).message;
 	}
@@ -59,6 +87,36 @@ export function ComponentSelect({
 	const visible = matches.slice(current * 20, current * 20 + 20);
 	const chosen = options.find((option) => option.value === selection);
 	const label = typeof title === 'string' ? title.slice(0, 120) : 'Choose a record';
+	const change = (event: React.ChangeEvent<HTMLSelectElement>) => {
+		const next = event.target.value;
+		setSelected(next);
+		if (!enabled || !next || !Array.isArray(data)) return;
+		const item = data.find((entry) => String(componentScopeValue(entry, path(valuePath, 'id'))) === next);
+		const values = selectionPatch(fills, item);
+		if (Object.keys(values).length) onLocal?.({ op: 'patch', values });
+	};
+	// A compact select has nowhere to show `error`, so an over-large source must
+	// fall through to the full control rather than render an empty, silent list.
+	if (compact === true && !error && options.length <= 160)
+		return (
+			<select
+				name={field}
+				aria-label={label}
+				required={required === true}
+				value={selection}
+				data-tt-action={local ? '$ui' : undefined}
+				data-tt-action-inputs={local ? JSON.stringify({ op: 'set', key: local, ...(Array.isArray(clear) ? { clear } : {}) }) : undefined}
+				onChange={change}
+				disabled={!enabled}
+			>
+				<option value="">Choose…</option>
+				{options.map((option) => (
+					<option key={option.value} value={option.value}>
+						{option.label}
+					</option>
+				))}
+			</select>
+		);
 	return (
 		<div data-tt-native-control style={{ display: 'grid', gap: 8, minWidth: 0 }}>
 			<input
@@ -79,8 +137,8 @@ export function ComponentSelect({
 				required={required === true}
 				value={selection}
 				data-tt-action={local ? '$ui' : undefined}
-				data-tt-action-inputs={local ? JSON.stringify({ op: 'set', key: local }) : undefined}
-				onChange={(event) => setSelected(event.target.value)}
+				data-tt-action-inputs={local ? JSON.stringify({ op: 'set', key: local, ...(Array.isArray(clear) ? { clear } : {}) }) : undefined}
+				onChange={change}
 				disabled={!enabled}
 				style={{ width: '100%', minWidth: 0, padding: 10, boxSizing: 'border-box' }}
 			>
