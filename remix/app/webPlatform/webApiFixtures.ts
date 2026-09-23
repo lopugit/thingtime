@@ -1,14 +1,25 @@
 import type { Feature, PlatformExpression, PlatformProgram, Recipe } from './types';
-import { base, get, global, input, literal, make, method, parameter, recipe, returns } from './programBuilders';
+import {
+	variable,
+	awaited,
+	object,
+	array,
+	declare,
+	perform,
+	project,
+	base,
+	get,
+	global,
+	input,
+	literal,
+	make,
+	method,
+	parameter,
+	recipe,
+	returns
+} from './programBuilders';
 
-const variable = (name: string) => ({ op: 'variable', name });
 const receiver = variable('receiver');
-const awaited = (value: unknown) => ({ op: 'await', value });
-const object = (entries: Record<string, unknown>) => ({ op: 'object', entries: Object.entries(entries) });
-const array = (...items: unknown[]) => ({ op: 'array', items });
-const declare = (name: string, value: unknown): PlatformExpression => ({ op: 'let', name, value });
-const perform = (value: unknown): PlatformExpression => ({ op: 'expression', value });
-const project = (value: unknown, names: string[]) => object(Object.fromEntries(names.map((name) => [name, get(value, name)])));
 const entries = (value: unknown) => method(global('Array'), 'from', [method(value, 'entries')]);
 type Parameters = NonNullable<PlatformProgram['parameters']>;
 type Operation = { parameters?: Parameters; steps?: PlatformExpression[]; result: unknown; requires?: string[][] };
