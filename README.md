@@ -3908,6 +3908,35 @@ Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
 on 2026-09-18 because the installed CLI shim referenced a missing application
 binary. Other worktrees derive their own ports via `npm run web-ports`.
 
+The reusable record controls and browser Action protocol are documented at
+`/docs/builder/record-controls` and `/docs/builder/browser-flows`. `tt-map`
+accepts a **browser** Maps JavaScript API key restricted to the exact website
+origins and API in your Google project. This public browser key is distinct
+from the server-only Vault credential used by `lookup`; never substitute the
+server credential. Maps are optional and missing setup is shown explicitly.
+
+An opt-in local composition fixture exercises ordinary saved Components and
+Actions through the real API. It does not migrate existing pages. Start a
+disposable local replica-set database and the PM2 worktree stack first; register
+a fixture user through `/api/v1/auth/register`. Save its API session response
+as a private, untracked JSON file containing `cookie` and `user.id` (mode 0600).
+Then, from `remix/`, run:
+
+```sh
+TT_BUILDER_QA_ORIGIN=http://127.0.0.1:<web-port> \
+TT_BUILDER_QA_SESSION=/private/path/to/local-fixture-session.json \
+node --import tsx scripts/test-builder-app-local.ts
+```
+
+The script refuses non-loopback origins and uses stable `qa-*` fixture IDs.
+Open `/p/qa-editable-builder-page` for records and
+`/p/qa-reference-page` for 181 searchable reference choices. For real file QA,
+use the local attachment storage setup above and enable fixture uploads through
+the normal local admin flow. Only use this fixture against disposable data.
+The 2026-09-23 editable-app checkout uses `http://localhost:17120`, HMR 17121,
+Nitro 17122, and its disposable Mongo replica set on 17123. Tailscale/Funnel
+remains unavailable: the installed shim points to a missing Tailscale app.
+
 
 ### Chat continuity and iOS activity (2026-09-21)
 

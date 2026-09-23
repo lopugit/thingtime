@@ -83,3 +83,39 @@ test('a child deadline aborts a hanging host independently of its parent', async
   assert.equal(childSignal?.aborted, true);
  } finally { clearTimeout(keepAlive); }
 });
+
+test('each prepares every child under the pinned identity and resolves item/index inputs', async () => {
+ const parent = program([{op:'each',action:'child',list:['a','b'],inputs:{query:'$item',position:'$index'},max:2}]);
+ parent.capabilities = [{capability:'actions.invoke',actions:['child']}];
+ const calls: unknown[] = [];
+ const value = await executeBrowserAction(prepared(parent),host({prepare:async (action,inputs,actor)=>{
+  calls.push([action,inputs,actor]);
+  return {...prepared({...program([{op:'return',value:'$input.query'}])}),actionId:'child',inputs};
+ }}));
+ assert.deepEqual(value,['a','b']);
+ assert.deepEqual(calls,[['child',{query:'a',position:0},'viewer-1'],['child',{query:'b',position:1},'viewer-1']]);
+});
+
+test('each refuses oversized batches before a child request, and never retries a failed child',async()=>{
+ const parent=program([{op:'each',action:'child',list:[1,2],max:1}]); parent.capabilities=[{capability:'actions.invoke',actions:['child']}];
+ let count=0;
+ const gateway=host({prepare:async()=>{count++;throw new Error('Child failure');}});
+ await assert.rejects(executeBrowserAction(prepared(parent),gateway),/item budget/); assert.equal(count,0);
+ parent.steps[0].max=2;
+ await assert.rejects(executeBrowserAction(prepared(parent),gateway),/Child failure/); assert.equal(count,1);
+});
+
+test('expression limits reject unsafe declarations and cannot be raised by children',async()=>{
+ for(const expressionLimits of [{nodes:0},{listItems:10001},{nodes:1.5},{unknown:1}]) assert.equal(sanitizeActionCrystal({...program(),expressionLimits}).ok,false);
+ const parent={...program([{op:'actions.invoke',action:'child'}]),expressionLimits:{nodes:5,listItems:2},capabilities:[{capability:'actions.invoke',actions:['child']}]};
+ const child: Record<string,any>={...program([{op:'compute',value:{ttExpr:['map',[1,2,3],'$item']}}]),expressionLimits:{nodes:10000,listItems:5000}};
+ await assert.rejects(executeBrowserAction(prepared(parent),host({prepare:async()=>({...prepared(child),actionId:'child'})})),/list|budget/i);
+ child.steps=Array.from({length:6},()=>({op:'compute',value:{ttExpr:['add',1,2]}}));
+ await assert.rejects(executeBrowserAction(prepared(parent),host({prepare:async()=>({...prepared(child),actionId:'child'})})),/budget/);
+});
+
+test('sibling Actions spend the same parent expression budget',async()=>{
+ const parent={...program([{op:'actions.invoke',action:'child'},{op:'actions.invoke',action:'child'}]),expressionLimits:{nodes:3},capabilities:[{capability:'actions.invoke',actions:['child']}]};
+ const child={...program([{op:'compute',value:{ttExpr:['add',1,2]}},{op:'compute',value:{ttExpr:['add',1,2]}}]),expressionLimits:{nodes:1000}};
+ await assert.rejects(executeBrowserAction(prepared(parent),host({prepare:async()=>({...prepared(child),actionId:'child'})})),/budget/);
+});

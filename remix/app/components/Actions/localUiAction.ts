@@ -34,3 +34,18 @@ export const reduceLocalUi = (
 	} else return current;
 	return scalar(value) ? { ...current, [key]: value } : current;
 };
+
+// Explicit user navigation only. Parameters are encoded, never concatenated
+// into executable URLs, and navigation remains on the current Builder page.
+export function localQueryHref(pageId: string | null, params: unknown): string | null {
+ if (!pageId || !/^[A-Za-z0-9_-]{1,160}$/.test(pageId) || !params || typeof params !== 'object' || Array.isArray(params)) return null;
+ const values = Object.entries(params);
+ if (values.length > 32) return null;
+ const query = new URLSearchParams();
+ for (const [key, value] of values) {
+  if (!/^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(key) || ['key','mode','__proto__','constructor','prototype'].includes(key) || !scalar(value)) return null;
+  if (String(value).length > 200) return null;
+  query.set(key, String(value));
+ }
+ return `/p/${encodeURIComponent(pageId)}?${query.toString()}`;
+}
