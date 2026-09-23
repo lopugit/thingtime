@@ -197,6 +197,20 @@ test('effects summarize creates, scoped reads, updates, and invokes', () => {
 	assert.equal(effects.returns, true);
 });
 
+// Effects feed chip lists keyed by their own value (ActionDetailPage,
+// ActionsPage, thing.tsx all key on `c-${entry}`), so a repeated write path
+// would render duplicate React keys and say "creates" twice for one endpoint.
+test('repeated write requests on one path report a single create effect', () => {
+	const effects = deriveActionEffects([
+		{ op: 'http.request', method: 'POST', path: '/api/v1/things', feature: 'api.things', minimumVersion: '1.28.0' },
+		{ op: 'http.request', method: 'PATCH', path: '/api/v1/things', feature: 'api.things', minimumVersion: '1.28.0' }
+	]);
+	assert.deepEqual(effects.creates, ['/api/v1/things']);
+	assert.deepEqual(effects.reads, ['POST /api/v1/things', 'PATCH /api/v1/things']);
+	assert.equal(effects.updates, true);
+	assert.equal(effects.deletes, true);
+});
+
 // ── the reference grammar ───────────────────────────────────────────────────
 
 test('parseActionRef: literals, escapes, and proto segments', () => {

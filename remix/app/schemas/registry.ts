@@ -6465,7 +6465,13 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 			if (endpoint && !effects.reads.includes(endpoint)) effects.reads.push(endpoint);
 			// A general API call can create, update, or delete according to its
 			// contract. Never claim a write request is a harmless read.
-			if (step.method !== 'GET') { effects.updates = true; effects.deletes = true; effects.creates.push(String(step.path)); }
+			if (step.method !== 'GET') {
+				effects.updates = true;
+				effects.deletes = true;
+				// Same dedupe every other effect uses: two write steps on one
+				// path (create then patch a thing) are one chip, not two.
+				if (!effects.creates.includes(String(step.path))) effects.creates.push(String(step.path));
+			}
 		}
 		if (step.op === 'things.update') effects.updates = true;
 		if (step.op === 'things.delete') effects.deletes = true;
