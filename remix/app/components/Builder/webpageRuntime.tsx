@@ -181,7 +181,7 @@ export const WebpageRuntimeProvider = ({
 	const identity = React.useMemo(() => ({}), [viewer.id, pageId, shared, linkKey, enabled]);
 	const sharedRun = React.useCallback(
 		async (action: string, inputs: Record<string, unknown>) => {
-			await requireThingtimeCapability('api.actions-run', '1.10.0');
+			await requireThingtimeCapability('api.actions-run', '1.11.0');
 			const response = await fetch('/api/v1/actions/run', {
 				method: 'POST',
 				credentials: 'include',

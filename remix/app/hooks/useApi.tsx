@@ -995,7 +995,7 @@ export function useApi() {
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
           if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
-          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.10.0') await requireThingtimeCapability('api.things', '1.31.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           return asyncFetcher.submit(
@@ -1069,7 +1069,7 @@ export function useApi() {
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
           if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
-          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.10.0') await requireThingtimeCapability('api.things', '1.31.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
