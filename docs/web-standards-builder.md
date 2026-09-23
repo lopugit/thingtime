@@ -22,7 +22,7 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,254 have interactive recipes (227 HTML, 1,059 CSS, 576
+editable program. 2,279 have interactive recipes (227 HTML, 1,059 CSS, 601
 JavaScript and 392 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
@@ -44,7 +44,10 @@ The `tt-web-platform` component primitive takes a `program` object, version 1:
 - `probe`: element, attribute, CSS, selector or interface inspection.
 - `requires`: bounded global/member paths checked in the worker before running
   steps. Missing paths return `status: "unsupported"` and the missing names.
-  Support detection does not invoke accessor properties. Standards publication
+  Support detection does not invoke accessor properties. Document interface
+  probes also inspect descriptors: a final accessor reports presence without
+  calling it, and an intermediate accessor reports an unresolved receiver
+  requirement rather than guessing availability. Standards publication
   and browser/context availability remain separate.
 
 The primitive has no catalogue ID dispatch. Users can copy a saved Component,
@@ -79,7 +82,11 @@ stay aligned with results, while delayed reads preserve visitor edits.
 
 `build:platform` builds the static runner. `build:client` includes it, and the
 PM2 dev entry point builds/watches it. Vite and Vercel both apply the isolated
-CSP; `verify:vercel-output` requires the runtime and its policy.
+CSP; `verify:vercel-output` requires the runtime and its policy. Both runtime
+assets use `Cache-Control: no-store`. The built document references the exact
+SHA-256 of its JavaScript as a query version, so clients with a previously cached
+fixed URL request the new compiler immediately. The artifact verifier checks
+the digest, headers and routing order. Vite serves the same built document.
 
 Run `pnpm --dir remix run test:web-platform`. For actual API ownership/install
 checks, use a disposable local database and set `TT_STANDARDS_TEST_URL` plus
@@ -142,3 +149,30 @@ For runtime-only browser checks after a full build, set
 `TT_STANDARDS_AUDIT_BUILT=1`. The audit serves only the two built runtime assets
 on an ephemeral loopback port with the canonical isolated CSP, then closes that
 fixture. This does not start an app server or validate app/API navigation.
+
+## Reusable language definitions
+
+`javascriptDefinitions.ts` and `javascriptControl.ts` author 28 language
+examples, adding 25 interactive entries and replacing three simpler recipes.
+They exercise functions, default/rest parameters, classes with private and static
+fields, accessors and static blocks, inheritance, `this`, `super`, `new.target`,
+sync/async generators, template literals/tags, assignment/update/delete/sequence,
+block scope, labels, switch fall-through, and synchronous/asynchronous loops.
+
+These are complete editable program nodes. The generic compiler supports
+`function-expression` / `function-declaration`, arrow `function` bodies, `class`
+expressions/declarations and members, `yield`, `private-get` / `private-in`,
+`assign-expression`, `update`, `delete`, `sequence`, `group`, `template-literal`,
+`tagged-template`, `block`, `empty`, `label`, `switch`, `for`, `do-while`,
+`for-in` and `for-await-of`. Existing `for-of`, `while`, conditionals and exception
+handling compose with these nodes. Parameter descriptors accept a name with a
+default expression or a final rest parameter. All expression/statement nesting
+shares the compiler's depth and node budgets; execution still runs in a bounded
+throwaway worker. Invalid JavaScript contexts remain browser syntax errors.
+
+Template segments are cooked strings; the compiler encodes their source escapes
+and the tag receives the resulting real cooked/raw arrays and uncoerced values.
+The parameter example covers default/rest rather than destructuring. The meta
+property example covers `new.target`; modules/imports and `import.meta` still
+need dedicated authoring support. Interactive category counts do not imply that
+every grammar alternative inside a clause has been demonstrated.

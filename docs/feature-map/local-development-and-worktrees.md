@@ -72,3 +72,8 @@ for that exact PR. Report the pushed branch, PR URL and the Vercel preview
 `[Unreleased]`, a `PRs/<number>-<branch-slug>--<title-slug>.md` note for large
 PRs (rename it once the PR number exists), `TESTING.md` lines for new bug
 classes, and refresh the Graphify snapshot before the final commit.
+
+The Web Platform runner is built by `build:platform` into `dist/platform`. Its
+HTML references the exact JavaScript digest, and Vite/Vercel serve both assets
+with no-store. Keep these outputs together when copying a runtime for testing;
+`verify:vercel-output` checks the digest, isolated CSP and cache-header order.

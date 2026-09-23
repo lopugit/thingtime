@@ -58,6 +58,7 @@ config.routes = [
     continue: true
   },
   { src: '^/platform/runtime\\.html$', headers: { 'Content-Security-Policy': platformRuntimeCsp, 'Cache-Control': 'no-store' }, continue: true },
+  { src: '^/platform/runtime\\.js$', headers: { 'Cache-Control': 'no-store' }, continue: true },
   { src: '^/library/sandbox\\.html$', headers: { 'Content-Security-Policy': librarySandboxCsp, 'Cache-Control': 'no-store' }, continue: true },
   { src: '^/library/sdk\\.html$', headers: { 'Content-Security-Policy': librarySdkCsp, 'Cache-Control': 'no-store' }, continue: true },
   // Self-contained static prototype pages use inline scripts; same policy with
