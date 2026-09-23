@@ -1,3 +1,4 @@
+import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
 import { useCallback, useRef } from 'react';
 import { useCurrentUser } from './useCurrentUser';
@@ -993,7 +994,7 @@ export function useApi() {
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
-          if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', '1.28.0');
+          if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           return asyncFetcher.submit(
             {
@@ -1065,7 +1066,7 @@ export function useApi() {
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
-          if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', '1.28.0');
+          if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;

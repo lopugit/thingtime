@@ -21,3 +21,9 @@ export type PreparedBrowserAction = {
 	program: Record<string, any>;
 	inputs: Record<string, unknown>;
 };
+
+// Browser runs do not occupy a server worker between requests. Their optional
+// larger envelopes are negotiated by the 1.8 execution protocol; defaults stay
+// small, and server Actions retain their original ceilings.
+export const BROWSER_ACTION_EXPANDED_LIMITS = { timeoutMs: 120_000, maxResultBytes: 8 * 1024 * 1024 } as const;
+export const BROWSER_ACTION_LEGACY_LIMITS = { timeoutMs: 10_000, maxResultBytes: 256 * 1024 } as const;

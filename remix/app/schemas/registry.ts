@@ -1,3 +1,5 @@
+import { BROWSER_ACTION_EXPANDED_LIMITS } from './browserActions';
+import { parseActionRequestPagination } from './actionRequestPagination';
 import { BROWSER_ACTION_OPS, actionHttpEndpoint, isActionHttpEndpoint } from './browserActions';
 import { MAX_POST_THINGS, postThingReferences } from '../components/Feed/postThingReferences.ts';
 import { isActionLookupProvider } from './actionLookups';
@@ -6186,15 +6188,16 @@ const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabili
 	return { ok: true, capabilities };
 };
 
-const sanitizeActionLimits = (input: unknown): Fail | { ok: true; limits: Record<string, number> } => {
+const sanitizeActionLimits = (input: unknown, browser = false): Fail | { ok: true; limits: Record<string, number> } => {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Action limits must be an object');
 	const raw = input as Record<string, unknown>;
 	const limits: Record<string, number> = {};
+	const ceilings = browser ? { ...ACTION_LIMIT_CEILINGS, ...BROWSER_ACTION_EXPANDED_LIMITS } : ACTION_LIMIT_CEILINGS;
 	for (const key of Object.keys(ACTION_LIMIT_CEILINGS) as (keyof typeof ACTION_LIMIT_CEILINGS)[]) {
 		if (raw[key] === undefined || raw[key] === null) continue;
 		const value = Number(raw[key]);
 		if (!Number.isInteger(value) || value < 1) return fail(400, `Limit ${key} must be a positive integer`);
-		limits[key] = Math.min(value, ACTION_LIMIT_CEILINGS[key]);
+		limits[key] = Math.min(value, ceilings[key]);
 	}
 	const unknown = Object.keys(raw).find((key) => !(key in ACTION_LIMIT_CEILINGS));
 	if (unknown) return fail(400, `Unknown limit "${unknown.slice(0, 40)}"`);
@@ -6295,6 +6298,11 @@ const sanitizeActionSteps = (
 			Object.assign(step, { method: raw.method, path: raw.path, feature: raw.feature, minimumVersion: raw.minimumVersion });
 			if (raw.method === 'GET' && raw.body !== undefined) return fail(400, 'GET request steps cannot carry a body');
 			failure = checkValues(raw.query ?? {}, 'query', true) || checkValues(raw.body, 'body', false);
+			if (raw.pagination !== undefined) {
+				const pagination = parseActionRequestPagination(raw.pagination);
+				if (raw.method !== 'GET' || !pagination) return fail(400, 'Pagination needs a GET request and valid cursor/items paths and budgets');
+				step.pagination = pagination;
+			}
 		} else if (op === 'lookup') {
 			if (!isActionLookupProvider(raw.provider)) return fail(400, `Step ${stepIndex} needs a registered lookup provider`);
 			if (!byCapability.get('lookup')?.providers?.includes(raw.provider)) return fail(400, `Step ${stepIndex} needs lookup capability for ${raw.provider}`);
@@ -6569,7 +6577,7 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	if (inputRefIssue) return inputRefIssue;
 
 	if (input.limits !== undefined && input.limits !== null) {
-		const limits = sanitizeActionLimits(input.limits);
+		const limits = sanitizeActionLimits(input.limits, input.runtime === 'browser');
 		if (isFail(limits)) return limits;
 		if (Object.keys(limits.limits).length) crystal.limits = limits.limits;
 	}
