@@ -14,10 +14,11 @@ export function useAsyncFetcher() {
   const submit = useCallback(
     async (
       data,
-      opts: { action: string; method?: string; encType?: string; signal?: AbortSignal; errorContext?: string }
+      opts: { action: string; method?: string; encType?: string; signal?: AbortSignal; errorContext?: string; expectedActor?: string }
     ) => {
       const nextOpts = { ...defaultOpts, ...opts };
       const headers = new Headers();
+      if (nextOpts.expectedActor) headers.set('X-Thingtime-Expected-Actor', nextOpts.expectedActor);
       let body: BodyInit | undefined;
 
       if (nextOpts.encType === 'application/json') {

@@ -1,3 +1,4 @@
+import { actionHttpEndpoint } from '~/schemas/browserActions';
 import {
 	ACTION_LIMIT_CEILINGS,
 	ACTION_LIMIT_DEFAULTS,
@@ -12,6 +13,7 @@ import {
 // cannot drift from the behaviour.
 
 export type ActionCrystal = {
+	runtime?: 'server' | 'browser';
 	name?: string;
 	description?: string;
 	actionKey?: string;
@@ -25,6 +27,7 @@ export type ActionCrystal = {
 };
 
 export type ActionThing = {
+	author?: { id: string };
 	id: string;
 	thingtime: string[];
 	crystal: ActionCrystal;
@@ -76,6 +79,7 @@ export const describeActionStep = (step: Record<string, unknown>, names?: Record
 	const op = String(step.op || '');
 	const schema = typeof step.schema === 'string' ? displayRef(step.schema, names) : 'data';
 	const guard = step.when !== undefined ? ' (when a condition holds)' : '';
+	if (op === 'http.request') return `${String(step.method)} ${String(step.path)} in your browser${guard}`;
 	if (op === 'lookup') return `Send query to ${String(step.provider)} using your Vault credential${guard}`;
 	if (op === 'things.create') return `Create a ${schema} thing${guard}`;
 	if (op === 'things.get') return `Read ${String(step.id || 'a thing')}${guard}`;
@@ -108,6 +112,7 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	const unscoped = new Set<string>();
 	const invoked = new Set<string>();
 	const providers = new Set<string>();
+	const endpoints = new Set<string>();
 	let invokeUnscoped = false;
 	const need = (capability: string, schema?: string | null) => {
 		if (!scopes.has(capability)) scopes.set(capability, new Set());
@@ -116,6 +121,7 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	};
 	for (const step of steps) {
 		if (!step || typeof step !== 'object') continue;
+		if (step.op === 'http.request') { need('http.request'); const endpoint = actionHttpEndpoint(step.method, step.path); if (endpoint) endpoints.add(endpoint); }
 		const schema = typeof step.schema === 'string' ? step.schema : null;
 		if (step.op === 'lookup') { need('lookup'); if (typeof step.provider === 'string') providers.add(step.provider); }
 		if (step.op === 'things.create') need('things.create', schema);
@@ -130,6 +136,7 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	}
 	return [...scopes.entries()].map(([capability, schemaSet]) => ({
 		capability,
+		...(capability === 'http.request' ? { endpoints: [...endpoints] } : {}),
 		...(capability === 'lookup' ? { providers: [...providers] } : {}),
 		...(schemaSet.size && !unscoped.has(capability) ? { schemas: [...schemaSet] } : {}),
 		...(capability === 'actions.invoke' && invoked.size && !invokeUnscoped ? { actions: [...invoked] } : {})
@@ -258,8 +265,8 @@ export const actionCannotAccess = (
 	const list: string[] = [];
 	const declared = capabilities || [];
 	const has = (capability: string) => declared.some((entry) => entry.capability === capability);
-	if (!has('lookup') && !has('actions.invoke')) list.push('No network', 'No secrets');
-	if (!has('things.delete')) list.push('No deletes');
+	if (!has('lookup') && !has('actions.invoke') && !has('http.request')) list.push('No network', 'No secrets');
+	if (!has('things.delete') && !has('http.request') && !has('actions.invoke')) list.push('No deletes');
 	// An action that invokes another action cannot honestly claim the absolute
 	// negatives: the child runs on ITS own declaration, so "Cannot create
 	// things" would be a claim about code this page never read. Child programs
@@ -271,13 +278,14 @@ export const actionCannotAccess = (
 	// an affirmative — it belongs in the Effects chips (deriveActionEffects
 	// .deletes), where a destructive op reads as one, not here where the
 	// prefix would invert it.
-	const composes = has('actions.invoke');
+	const composes = has('actions.invoke') || has('http.request');
 	if (!has('things.read') && !composes) list.push('Cannot read things');
 	if (!has('things.create') && !composes) list.push('Cannot create things');
 	if (!has('things.update') && !composes) list.push('Cannot update things');
 	if (!composes) list.push('Cannot invoke other actions');
-	else list.push('Runs other actions — their effects are listed on their own pages');
+	else if (has('actions.invoke')) list.push('Runs other actions — their effects are listed on their own pages');
 	for (const entry of declared) {
+		if (entry.endpoints?.length) list.push('Requests outside the declared API endpoints');
 		if (entry.schemas?.length) list.push(`${entry.capability} only: ${entry.schemas.map((ref) => displayRef(ref, names)).join(', ')}`);
 		if (entry.actions?.length) list.push(`invoke only: ${entry.actions.join(', ')}`);
 	}

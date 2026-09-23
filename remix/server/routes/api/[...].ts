@@ -1,4 +1,6 @@
 import { defineHandler } from 'nitro/h3';
+import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
+import { getCurrentUser } from '../../../app/api/utils/auth/getCurrentUser';
 import { recordErrorLog, withErrorLogRequest } from '../../../app/api/utils/errors/errorLogs';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
@@ -403,6 +405,9 @@ export default defineHandler(async (event) => {
   if (shouldProxyApiToFallback(event.req)) {
     // Fresh vault verification must stay on the selected deployment. Never
     // forward passwords/assertions to a fallback origin or reveal its keys.
+    if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
+      return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    }
     if (path === 'v1/vault/reveal') {
       return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
         status: 503,
@@ -451,6 +456,8 @@ export default defineHandler(async (event) => {
 
   try {
 		const response = await runWithMongoEndpoint(mongoEndpoint, async () => {
+      const identityFailure = await enforceExpectedActor(event.req, getCurrentUser);
+      if (identityFailure) return identityFailure;
       if (event.req.headers.has('X-Thingtime-Background-Id')) {
         const { startBackgroundTask } = await import('../../../app/api/utils/lopu/backgroundTasks');
         return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
