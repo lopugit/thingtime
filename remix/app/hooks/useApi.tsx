@@ -1,5 +1,7 @@
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
+import { useCurrentUser } from './useCurrentUser';
+import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
@@ -80,6 +82,9 @@ const toQuery = (args?: Record<string, unknown>) => {
 
 export function useApi() {
   const asyncFetcher = useAsyncFetcher();
+  const actionUser = useCurrentUser();
+  const actionActor = useRef(actionUser?.id);
+  actionActor.current = actionUser?.id;
 
   const v1 = {
     tiers: useCallback(async (options?: { signal?: AbortSignal }) => {
@@ -988,11 +993,15 @@ export function useApi() {
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
+          if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', '1.28.0');
+          if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           return asyncFetcher.submit(
             {
               id: args?.id,
               geo: args?.geo,
               crystal: args?.crystal,
+              ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
+              ...(args?.replaceCrystal === true ? { replaceCrystal: true } : {}),
               acl: args?.acl,
               visibility: args?.visibility,
               tags: args?.tags,
@@ -1005,7 +1014,7 @@ export function useApi() {
               // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH' }
+            { action: '/api/v1/things', method: 'PATCH', expectedActor: args?.expectedActor }
           );
         },
         [asyncFetcher]
@@ -1056,9 +1065,11 @@ export function useApi() {
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
+          if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', '1.28.0');
+          if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
-					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal }));
+					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor: args?.expectedActor }));
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
 					}
@@ -1433,7 +1444,14 @@ export function useApi() {
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => { await requireThingtimeCapability('api.actions-run', '1.6.0'); return asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }); }, [asyncFetcher]),
+      run: useCallback(async (args) => {
+        const actor = actionActor.current;
+        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
+        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor });
+        if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
+        return finishBrowserAction(response, createBrowserActionHost(() => actionActor.current));
+      }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
       // creation rides the unified path: things.create({ thingtime: ['action'], crystal })

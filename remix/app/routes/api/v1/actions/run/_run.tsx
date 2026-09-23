@@ -26,7 +26,7 @@ export const action = async ({ request }: { request: Request }) => {
 	const viewer = await withFriendIds(withLinkKeys(user ? viewerOf(user) : null, [typeof body?.key === 'string' ? body.key : '']));
 	const shared = sharedRoot ? await resolveSharedComposition(viewer, sharedRoot, { contentRoot: true }) : undefined;
 	if (isFail(shared)) return json({ ok: false, error: shared.error }, { status: shared.status });
-	const result = await runAction(user ? viewerOf(user) : null, { action: body?.action, inputs: body?.inputs, source: body?.source }, shared);
+	const result = await runAction(user ? viewerOf(user) : null, { action: body?.action, inputs: body?.inputs, source: body?.source, execution: body?.execution }, shared);
 	if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
 	return json(result, { headers: { 'Cache-Control': 'private, no-store' } });
 };

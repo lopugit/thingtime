@@ -1,4 +1,5 @@
 import React from 'react';
+import { ActionProgramComposer } from './ActionProgramComposer';
 import { Box, Button, Checkbox, Flex, Input, Select, Stack, Text, Textarea } from '@chakra-ui/react';
 import { Plus, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
@@ -57,6 +58,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 	lopuRef.current = lopu;
 	const navigate = useNavigate();
 
+	const [fullProgram, setFullProgram] = React.useState(false);
 	const [name, setName] = React.useState('');
 	const [keyTouched, setKeyTouched] = React.useState(false);
 	const [actionKey, setActionKey] = React.useState('');
@@ -136,9 +138,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 		});
 	}, [builtSteps, scopeEdits]);
 
-	const save = React.useCallback(async () => {
-		setSaving(true);
-		try {
+	const buildCrystal = () => {
 			const crystal: Record<string, unknown> = { name: name.trim() };
 			if (description.trim()) crystal.description = description.trim();
 			if (actionKey.trim()) crystal.actionKey = actionKey.trim();
@@ -154,6 +154,13 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 			if (inputDescriptors.length) crystal.inputs = inputDescriptors;
 			crystal.steps = builtSteps;
 			if (capabilities.length) crystal.capabilities = capabilities;
+		return crystal;
+	};
+
+	const save = async () => {
+		setSaving(true);
+		try {
+			const crystal = buildCrystal();
 			const response = await apiRef.current.v1.things.create({ thingtime: ['action'], crystal });
 			const id = response?.thing?.id;
 			if (!id) throw response;
@@ -170,7 +177,9 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 		} finally {
 			setSaving(false);
 		}
-	}, [name, description, actionKey, category, inputs, builtSteps, capabilities, navigate, onCreated]);
+	};
+
+	if (fullProgram) return <ActionProgramComposer initial={buildCrystal()} onClose={onClose} onCreated={onCreated} />;
 
 	return (
 		<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
@@ -181,6 +190,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 				</Button>
 			</Flex>
 
+			<Button size="sm" mb={4} onClick={() => setFullProgram(true)}>Edit full program · requests, expressions and flows</Button>
 			<Stack spacing={4}>
 				<Flex gap={3} wrap="wrap">
 					<Box flex="1" minW="220px">
@@ -305,7 +315,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 										onChange={(event) => setSteps((prior) => prior.map((entry, i) => (i === index ? { ...emptyStep(event.target.value), values: entry.values } : entry)))}
 										value={row.op}
 									>
-										{ACTION_STEP_OPS.filter((op) => op !== 'return').map((op) => (
+										{ACTION_STEP_OPS.filter((op) => op !== 'return' && op !== 'http.request').map((op) => (
 											<option key={op} value={op}>
 												{op}
 											</option>

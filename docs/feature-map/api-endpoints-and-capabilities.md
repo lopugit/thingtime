@@ -98,3 +98,12 @@ Browser Mapbox and Google SDKs use `app/library/sdkSandbox.ts` and the separatel
 restricted `/library/sdk.html` document. Browser keys never enter saved Things.
 Run `npm --prefix remix run test:library`, included in `test:unit`, for catalog,
 builder hierarchy, credential boundaries, and SDK recipe contract coverage.
+
+## Browser Action programs
+
+`api.actions-run` 1.7.0 prepares owner-only browser programs; `api.things` 1.28.0
+and `api.things-update` 1.5.0 store the runtime and request grammar. The shared
+HTTP catch-all checks `expectedActor.ts` before endpoint execution. Browser
+transport/interpreter live in `components/Actions/browserActionHost.ts` and
+`browserActionRuntime.ts`; no endpoint-specific UI behavior lives there.
+See [authoring and verification](../builder-browser-actions.md).

@@ -24,10 +24,12 @@ export type ActionRunArgs = {
 	// forwarded verbatim rather than filtered against a value allowlist, so a
 	// later source cannot vanish the same way this one did.
 	source?: unknown;
+	execution?: unknown;
 };
 
 export const buildActionRunBody = (args?: ActionRunArgs | null): Record<string, unknown> => {
 	const body: Record<string, unknown> = { action: args?.action, inputs: args?.inputs };
 	if (typeof args?.source === 'string' && args.source) body.source = args.source;
+	if (args?.execution === 'browser') body.execution = 'browser';
 	return body;
 };

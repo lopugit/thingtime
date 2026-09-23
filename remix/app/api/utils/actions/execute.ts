@@ -1,3 +1,4 @@
+import type { PreparedBrowserAction } from '~/schemas/browserActions';
 import { runLookup } from './lookup';
 import { revealUserVaultValue } from '../lopu/userVault';
 import { randomUUID } from 'node:crypto';
@@ -118,6 +119,7 @@ type ActionProgram = {
 };
 
 export type RunActionResult =
+	| PreparedBrowserAction
 	| Fail
 	| {
 			ok: true;
@@ -481,6 +483,7 @@ const executeProgram = async (
 	// What the parent must NOT do is assert absolute negatives it cannot know
 	// ("Cannot create things") while invoking a child that does — that half is
 	// enforced in actionInspect.actionCannotAccess.
+	if (program.crystal.runtime === 'browser') runError('Browser actions must run in the browser, not inside a server program');
 	const effective = program.capabilities;
 	if (budget.stack.includes(program.id)) {
 		runError(`Recursive invocation refused: ${program.id} is already running (stack: ${budget.stack.join(' → ')})`);
@@ -913,7 +916,7 @@ export const inspectActionProgram = async (viewer: Viewer, reference: string): P
 
 export const runAction = async (
 	viewer: Viewer,
-	request: { action?: unknown; inputs?: unknown; source?: unknown },
+	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown },
 	shared?: SharedComposition
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
@@ -946,6 +949,12 @@ export const runAction = async (
 	}
 	const validated = validateRunInputs(program.inputs, request.inputs);
 	if (isFail(validated)) return validated;
+	if (program.crystal.runtime === 'browser') {
+		if (shared || program.ownerId !== viewer.id || viewer.pat) return fail(403, 'Browser flows require your own Action and a first-party session');
+		if (request.execution !== 'browser') return fail(409, 'This Action runs in the browser. Use a client supporting api.actions-run 1.7.0');
+		// This is preparation, not execution. Do not record a successful run.
+		return { ok: true, status: 'prepared', execution: 'browser', actionId: program.id, viewer: { id: viewer.id, username: viewer.username }, program: program.crystal, inputs: validated.inputs };
+	}
 
 	const startedAt = new Date();
 	const budget: ActionBudget = {
