@@ -4132,7 +4132,9 @@ key, so refreshing comments after a server restart starts a new cursor chain.
 ### Web standards Builder app
 
 The worker-compatible Web API recipes include URL members, headers/query/form
-collections, blobs/files, response bodies, encoding, DOM exceptions and geometry.
+collections, blobs/files, response bodies, encoding, DOM exceptions, geometry,
+events/abort signals, streams and their controllers. Stream examples include
+backpressure, BYOB reads, text encoding across chunk boundaries and compression.
 These are editable Component program definitions using in-memory receivers.
 Audit that family with `TT_STANDARDS_AUDIT_LANGUAGES=webapi` and the runtime audit
 setup below; it needs no account, permissions or external request.

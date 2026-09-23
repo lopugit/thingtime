@@ -188,3 +188,192 @@ test('Web API members retain missing-capability reporting and unimplemented cont
 		assert.equal(featureRecipe(feature).coverage, 'requires-context');
 	}
 });
+
+async function runWebApiFeature(name: string, globals: Record<string, unknown>, overrides = {}) {
+	const feature = WEB_FEATURES.find((f) => f.language === 'webapi' && f.name === name);
+	assert.ok(feature, name);
+	const { program, coverage } = featureRecipe(feature);
+	assert.equal(coverage, 'interactive', name);
+	return execute(program, globals, { ...Object.fromEntries((program.parameters || []).map((p) => [p.name, p.default])), ...overrides });
+}
+
+test('event programs observe cancellation, listener identity and abort lifecycles', async () => {
+	const globals = { Event, CustomEvent, EventTarget, AbortController, AbortSignal, DOMException };
+	const run = (name: string, overrides = {}) => runWebApiFeature(name, globals, overrides);
+	const prevented = await run('Event.preventDefault');
+	assert.equal(prevented.ok, true);
+	assert.equal(prevented.result.dispatchAccepted, false);
+	assert.equal(prevented.result.configuration.defaultPrevented, true);
+	assert.equal((await run('Event.preventDefault', { cancelable: false })).result.dispatchAccepted, true);
+	assert.deepEqual(
+		(await run('Event.stopPropagation')).result.delivery.map((entry: any) => entry.listener),
+		['first', 'second']
+	);
+	assert.deepEqual(
+		(await run('Event.stopImmediatePropagation')).result.delivery.map((entry: any) => entry.listener),
+		['first']
+	);
+	assert.deepEqual((await run('Event.returnValue')).result, { before: true, after: false, defaultPrevented: true });
+	assert.equal((await run('Event.returnValue', { cancelable: false })).result.defaultPrevented, false);
+	assert.deepEqual(await run('CustomEvent.detail', { detail: { answer: 42 } }), { ok: true, result: { answer: 42 } });
+	assert.equal((await run('EventTarget.addEventListener', { once: true })).result.received.length, 1);
+	assert.equal((await run('EventTarget.removeEventListener')).result.received.length, 1);
+	assert.deepEqual((await run('EventTarget.dispatchEvent')).result.dispatchAccepted, [false, false]);
+	const any = await run('AbortSignal.any', { useSecond: false, reason: 'custom reason' });
+	assert.deepEqual(any.result.after, { aborted: true, reason: 'custom reason' });
+	assert.equal(any.result.firstAborted, true);
+	assert.equal(any.result.secondAborted, false);
+	assert.deepEqual((await run('AbortSignal.onabort', { reason: 'Changed' })).result.events, [{ aborted: true, reason: 'Changed' }]);
+	assert.deepEqual((await run('AbortSignal.throwIfAborted', { abort: false })).result, { aborted: false, outcome: 'No exception' });
+	assert.deepEqual((await run('AbortSignal.throwIfAborted', { reason: 'Stopped' })).result, { aborted: true, outcome: 'Stopped' });
+	// Node's native AbortSignal.timeout timer is unref'ed. Keep this one test alive
+	// while awaiting the real signal instead of substituting a timer mock.
+	const keepAlive = setTimeout(() => {}, 1000);
+	try {
+		assert.deepEqual(await run('AbortSignal.timeout'), { ok: true, result: { aborted: true, reasonName: 'TimeoutError' } });
+	} finally {
+		clearTimeout(keepAlive);
+	}
+	const missing = await runWebApiFeature('EventTarget.when', { EventTarget: class EventTarget {}, Event, AbortController });
+	assert.equal(missing.result.status, 'unsupported');
+	assert.deepEqual(missing.result.missing, ['EventTarget.prototype.when']);
+});
+
+test('stream programs consume data and preserve cancellation, pressure and lock semantics', async () => {
+	const globals = {
+		ReadableStream,
+		WritableStream,
+		TransformStream,
+		ReadableStreamDefaultReader,
+		ReadableStreamBYOBReader,
+		WritableStreamDefaultWriter,
+		CountQueuingStrategy,
+		ByteLengthQueuingStrategy,
+		TextEncoderStream,
+		TextDecoderStream,
+		CompressionStream,
+		DecompressionStream,
+		TextEncoder,
+		Response
+	};
+	const run = (name: string, overrides = {}) => runWebApiFeature(name, globals, overrides);
+	assert.deepEqual((await run('ReadableStream.tee', { chunks: ['one', 'two'] })).result, [
+		['one', 'two'],
+		['one', 'two']
+	]);
+	assert.deepEqual((await run('ReadableStream.pipeTo', { chunks: [1, 2] })).result, { received: [1, 2], closed: true, sourceLocked: false });
+	assert.deepEqual((await run('ReadableStream.pipeThrough', { chunks: ['one'], prefix: '!' })).result, ['!one']);
+	const cancelled = (await run('ReadableStream.cancel', { reason: 'Finished' })).result;
+	assert.deepEqual(cancelled.cancellations, ['Finished']);
+	assert.equal(cancelled.readAfterCancel.done, true);
+	assert.deepEqual((await run('ReadableStream.locked')).result, { before: false, during: true, after: false });
+	assert.deepEqual((await run('ReadableStreamBYOBReader.read', { capacity: 2, bytes: [1, 2, 3] })).result, {
+		read: { done: false, value: { type: 'Uint8Array', values: [1, 2] } },
+		lockedAfterRelease: false
+	});
+	assert.deepEqual((await run('WritableStreamDefaultWriter.ready', { chunk: 'Changed' })).result, {
+		before: 1,
+		queued: 0,
+		ready: 1,
+		received: ['Changed']
+	});
+	assert.deepEqual((await run('WritableStreamDefaultWriter.abort', { reason: 'Stopped' })).result, { abortReason: 'Stopped', locked: false });
+	assert.deepEqual((await run('TransformStream', { chunks: ['one', 'two'], prefix: '!' })).result.output, ['!one', '!two']);
+	assert.deepEqual((await run('ByteLengthQueuingStrategy.size', { bytes: [1, 2], highWaterMark: 4 })).result, { highWaterMark: 4, chunkSize: 2 });
+	assert.deepEqual((await run('TextDecoderStream')).result, ['🌈']);
+	assert.equal((await run('CompressionStream', { text: 'A changed payload' })).result.roundTrip, 'A changed payload');
+	assert.equal((await run('TextDecoderStream', { chunks: [[255]], fatal: true })).ok, false);
+	const missing = await runWebApiFeature('ReadableStream.from', { ReadableStream: class ReadableStream {} });
+	assert.equal(missing.result.status, 'unsupported');
+	assert.deepEqual(missing.result.missing, ['ReadableStream.from']);
+});
+
+test('controller programs obtain live controllers and demonstrate queue closure, errors and BYOB response', async () => {
+	const globals = {
+		ReadableStream,
+		WritableStream,
+		TransformStream,
+		ReadableStreamDefaultController,
+		ReadableByteStreamController,
+		ReadableStreamBYOBRequest,
+		WritableStreamDefaultController,
+		TransformStreamDefaultController
+	};
+	const run = (name: string, overrides = {}) => runWebApiFeature(name, globals, overrides);
+	const queue = (await run('ReadableByteStreamController.enqueue', { bytes: [1, 2], highWaterMark: 8 })).result;
+	assert.equal(queue.desiredSizeBefore, 8);
+	assert.equal(queue.desiredSizeQueued, 6);
+	assert.deepEqual(queue.read.value, { type: 'Uint8Array', values: [1, 2] });
+	assert.equal(queue.afterClose.done, true);
+	assert.equal(queue.lockedAfter, false);
+	for (const name of ['ReadableStreamBYOBRequest.respond', 'ReadableStreamBYOBRequest.respondWithNewView']) {
+		const byob = (await run(name, { bytes: [10, 20, 30], capacity: 2 })).result;
+		assert.deepEqual(byob.request, { requestedBytes: 2, respondedBytes: 2, viewAfterRespond: null });
+		assert.deepEqual(byob.read.value, { type: 'Uint8Array', values: [10, 20] });
+		assert.equal(byob.lockedAfter, false);
+	}
+	assert.deepEqual((await run('ReadableStreamDefaultController.error', { reason: 'Producer failed' })).result, {
+		closedReason: 'Producer failed',
+		readReason: 'Producer failed',
+		desiredSize: null
+	});
+	assert.deepEqual((await run('WritableStreamDefaultController.error', { reason: 'Sink failed' })).result, {
+		closedReason: 'Sink failed',
+		writeReason: 'Sink failed',
+		signalAborted: false
+	});
+	const aborted = (await run('WritableStreamDefaultController.signal', { reason: 'Cancelled' })).result;
+	assert.equal(aborted.before, false);
+	assert.deepEqual(aborted.after, { aborted: true, reason: 'Cancelled' });
+	assert.equal(aborted.abortCallbackReason, 'Cancelled');
+	const terminated = (await run('TransformStreamDefaultController.terminate')).result;
+	assert.equal(terminated.read.done, true);
+	assert.equal(terminated.writeError, 'TypeError');
+	assert.equal((await run('TransformStreamDefaultController.error', { reason: 'Bad chunk' })).result.read, 'Bad chunk');
+});
+
+test('event and stream Components retain exactly the inputs used by their complete saved programs', () => {
+	const families = new Set([
+		'Event',
+		'CustomEvent',
+		'EventTarget',
+		'AbortController',
+		'AbortSignal',
+		'ReadableStream',
+		'WritableStream',
+		'TransformStream',
+		'ReadableStreamDefaultReader',
+		'ReadableStreamBYOBReader',
+		'ReadableStreamGenericReader',
+		'WritableStreamDefaultWriter',
+		'ByteLengthQueuingStrategy',
+		'CountQueuingStrategy',
+		'TextEncoderStream',
+		'TextDecoderStream',
+		'CompressionStream',
+		'DecompressionStream',
+		'ReadableStreamDefaultController',
+		'ReadableByteStreamController',
+		'ReadableStreamBYOBRequest',
+		'WritableStreamDefaultController',
+		'TransformStreamDefaultController'
+	]);
+	let checked = 0;
+	for (const feature of WEB_FEATURES.filter((f) => f.language === 'webapi' && families.has(f.interface || f.name))) {
+		const { program, coverage } = featureRecipe(feature);
+		if (coverage !== 'interactive') continue;
+		const used = new Set<string>();
+		const visit = (value: any) => {
+			if (!value || typeof value !== 'object' || value.op === 'literal') return;
+			if (value.op === 'input') used.add(value.name);
+			Object.values(value).forEach(visit);
+		};
+		visit(program.steps);
+		const parameters = (program.parameters || []).map((p) => p.name);
+		assert.equal(new Set(parameters).size, parameters.length, feature.name);
+		assert.deepEqual([...used].sort(), parameters.sort(), feature.name);
+		assert.doesNotThrow(() => compilePlatformWorker(JSON.parse(JSON.stringify(program))), feature.name);
+		checked++;
+	}
+	assert.ok(checked >= 124);
+});

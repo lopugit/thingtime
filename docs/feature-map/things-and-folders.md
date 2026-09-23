@@ -104,6 +104,9 @@ See [browser Actions and editor checks](../builder-browser-actions.md).
 Worker-compatible Web API member recipes live in `app/webPlatform/webApiFixtures.ts`.
 They preserve complete editable programs when saved as Components; native
 receiver results are projected into bytes, entries, text and geometry values.
+`eventFixtures.ts`, `streamFixtures.ts` and `controllerFixtures.ts` add listener,
+abort, stream and controller lifecycles. Shared data-node constructors live in
+`programBuilders.ts`; the runtime continues to execute complete saved programs.
 
 `schemas/appSuites/webStandards.ts` authors the reusable page/components/actions.
 `webPlatform/` holds the versioned inventory, recipe generator and generic
