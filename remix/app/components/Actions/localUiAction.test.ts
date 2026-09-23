@@ -27,3 +27,11 @@ test('cycles operate on a bounded declared set', () => {
 	assert.deepEqual(reduceLocalUi({}, { tab: 'last' }, { op: 'cycle', key: 'tab', values: ['first', 'last'] }), { tab: 'first' });
 	assert.deepEqual(reduceLocalUi({}, {}, { op: 'cycle', key: 'tab', values: [] }), {});
 });
+
+test('query navigation encodes values and stays on the current page',async()=>{
+ const {localQueryHref}=await import('./localUiAction');
+ assert.equal(localQueryHref('page-1',{q:'A&B #?',page:2} ),'/p/page-1?q=A%26B+%23%3F&page=2');
+ for(const params of [{mode:'edit'},{key:'secret'},{x:{}},{x:'a'.repeat(201)},JSON.parse('{"__proto__":"x"}')]) assert.equal(localQueryHref('page-1',params),null);
+ assert.equal(localQueryHref('https://evil.example',{}),null);
+ assert.equal(localQueryHref(null,{}),null);
+});

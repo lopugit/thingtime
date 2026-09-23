@@ -1,4 +1,8 @@
-import { ComponentDialog, ComponentCountdown, NativeControlsEnabled } from '../Builder/NativeComponentControls';
+import { ComponentSelect } from '../Builder/ComponentSelect';
+import { Link, useInRouterContext } from 'react-router';
+import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
+import { ComponentMap } from '../Builder/ComponentMap';
+import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
 import React from 'react';
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
@@ -233,6 +237,12 @@ export type HtmlThingNode =
 
 type RenderState = { count: number; mediaUrl: (url: string) => string };
 
+function ComponentLink({ href, children, ...props }: Record<string, any>) {
+ const inRouter = useInRouterContext();
+ if (inRouter && typeof href === 'string' && /^\/(?!\/)/.test(href) && !href.startsWith('/api/') && !props.download) return <Link {...props} to={href}>{children}</Link>;
+ return <a {...props} href={href}>{children}</a>;
+}
+
 const renderNode = (node: HtmlThingNode, key: number, depth: number, state: RenderState): React.ReactNode => {
 	if (state.count >= MAX_NODES || depth > MAX_DEPTH) return null;
 	state.count++;
@@ -254,6 +264,11 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 			</InteractiveWorkspace>
 		);
 	}
+	if (tag === 'tt-attachments') return <ComponentAttachments key={key} {...node.props} />;
+	if (tag === 'tt-media') return <ComponentMedia key={key} {...node.props} />;
+	if (tag === 'tt-select') return <ComponentSelect key={key} {...node.props} />;
+	if (tag === 'tt-map') return <ComponentMap key={key} {...node.props} />;
+	if (tag === 'tt-form') return <ComponentForm key={key} identityName={node.props?.identityName} identity={node.props?.identity} revisionName={node.props?.revisionName} revision={node.props?.revision} resetKey={node.props?.resetKey}>{renderChildren(node.children, depth + 1, state)}</ComponentForm>;
 	if (tag === 'tt-countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
 	if (tag === 'tt-dialog') return <ComponentDialog key={key} title={node.props?.title} name={node.props?.name} type={node.props?.type}>{renderChildren(node.children, depth + 1, state)}</ComponentDialog>;
 	if (tag === 'tt-upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} value={node.props?.value} attachmentId={node.props?.attachmentId} />;
@@ -268,6 +283,16 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
+	if (tag === 'textarea') {
+		// React forbids textarea children whenever a value/defaultValue exists,
+		// even an empty array. Legacy text children become an initial value.
+		if (!('value' in props) && !('defaultValue' in props)) {
+			const children = Array.isArray(node.children) ? node.children : [node.children];
+			props.defaultValue = children.filter(value => typeof value === 'string' || typeof value === 'number').join('');
+		}
+		return React.createElement(tag, { ...props, key });
+	}
+	if (tag === 'a') return <ComponentLink key={key} {...props}>{renderChildren(node.children,depth+1,state)}</ComponentLink>;
 	if (VOID_TAGS.has(tag)) {
 		return React.createElement(tag, { ...props, key });
 	}

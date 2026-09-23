@@ -955,8 +955,8 @@ export const runAction = async (
 	if (program.crystal.runtime === 'browser') {
 		if (shared || program.ownerId !== viewer.id || viewer.pat || context?.firstPartyActorId !== viewer.id) return fail(403, 'Browser flows require your own Action and a first-party session');
 		if (request.execution !== 'browser') return fail(409, 'This Action runs in the browser. Use a client supporting api.actions-run 1.7.0');
-		if (browserActionMinimumVersion(program.crystal) === '1.8.0' && !capabilitySatisfies(typeof request.executionVersion === 'string' ? request.executionVersion : undefined, '1.8.0'))
-			return fail(409, 'This Action needs a client supporting api.actions-run 1.8.0 for pagination or its configured limits');
+		if (browserActionMinimumVersion(program.crystal) !== '1.7.0' && !capabilitySatisfies(typeof request.executionVersion === 'string' ? request.executionVersion : undefined, browserActionMinimumVersion(program.crystal)))
+			return fail(409, `This Action needs a client supporting api.actions-run ${browserActionMinimumVersion(program.crystal)} for its configured limits`);
 		// This is preparation, not execution. Do not record a successful run.
 		return { ok: true, status: 'prepared', execution: 'browser', actionId: program.id, viewer: { id: viewer.id, username: viewer.username }, program: program.crystal, inputs: validated.inputs };
 	}

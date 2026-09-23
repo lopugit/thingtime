@@ -69,3 +69,19 @@ test('interactive shared pages still mount workspace controls for enrolled nonow
     assert.equal(shared, true, 'shared runtime is not mistaken for an inert preview');
   } finally { router.dispose(); }
 });
+
+test('populated textarea templates never receive competing children and defaultValue',()=>{
+ for(const children of [[],['legacy text'],undefined]) {
+  const markup=renderToStaticMarkup(React.createElement(HtmlThingRenderer,{node:{tag:'textarea',props:{name:'notes',value:'Saved notes'},children}}));
+  assert.match(markup,/>Saved notes<\/textarea>/);
+ }
+ const legacy=renderToStaticMarkup(React.createElement(HtmlThingRenderer,{node:{tag:'textarea',children:['Legacy notes']}}));
+ assert.match(legacy,/>Legacy notes<\/textarea>/);
+});
+
+test('authored form identity and revision fields render once inside an inert boundary',()=>{
+ const markup=renderToStaticMarkup(React.createElement(HtmlThingRenderer,{node:{tag:'tt-form',props:{identityName:'id',identity:'record-1',revisionName:'expectedUpdatedAt',revision:'original-stamp'},children:[{tag:'input',props:{name:'title',value:'Existing record'}}]}}));
+ assert.match(markup,/<fieldset disabled=""/);
+ assert.match(markup,/name="id" value="record-1"/);
+ assert.match(markup,/name="expectedUpdatedAt" value="original-stamp"/);
+});

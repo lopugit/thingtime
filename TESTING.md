@@ -1,5 +1,35 @@
 # TESTING.md — per-area manual test checklists
 
+## Editable record app primitives
+
+- [ ] Save and reopen a Component with its own source Action; create, PATCH and
+  POST update preserve the binding. A page override still wins. Malformed
+  source inputs/refresh policies fail instead of disappearing.
+- [ ] Open a populated textarea, change it and save. No textarea/value render
+  crash or false session-recovery screen. Internal links retain the SPA, and
+  a drawer closes after following one of its links.
+- [ ] In a tt-form create a record, repeat the same save and verify one ID.
+  While editing, update that record from another client; both the first save
+  and a retry after source refetch must reject the stale original revision.
+  Start another clears the draft and generates a different operation ID.
+- [ ] Search and page a tt-select source with more than 160 choices. A selected
+  item outside the visible page remains selected; Enter in its search input
+  must not submit the surrounding save form. Check long labels at 375px.
+- [ ] Run a browser each with item/index inputs. Oversized batches fail before
+  the first request, failed children are not retried, account changes stop
+  later children, and child/sibling compute work shares the parent's limits.
+  Protocol 1.8 refuses each/expressionLimits; 1.9 accepts them.
+- [ ] Draft attachments → saved Action → readback → reload: committed files
+  survive, failed saves retain drafts, repeat saves use the same shareId, and
+  another record's result cannot mark this draft committed. Test linked and
+  uploaded files, gallery/lightbox, Before/After labels and media pagination.
+- [ ] Maps request only the visible page of coordinates through saved Actions;
+  the map control itself makes no record requests. Check missing setup and
+  provider failure, marker links, and the unchanged native compatibility path.
+- [ ] Scroll forms, planner, drawer and opened media controls top-to-bottom at
+  desktop and mobile widths; inspect clipping, overflow, focus and overlap.
+  The composition fixture is local-only and does not prove a live migration.
+
 ## Browser Action pagination
 
 - [ ] In Actions → New Action → full program, add a paginated request. Edit

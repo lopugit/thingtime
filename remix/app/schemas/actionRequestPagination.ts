@@ -24,6 +24,7 @@ export function parseActionRequestPagination(raw: unknown): ActionRequestPaginat
 	return { cursorParam: spec.cursorParam, cursorPath: spec.cursorPath, itemsPath: spec.itemsPath,
 		...(spec.itemKey === undefined ? {} : { itemKey: spec.itemKey as string }), maxPages, maxItems };
 }
-export const browserActionMinimumVersion = (program: Record<string, unknown>): '1.7.0' | '1.8.0' =>
+export const browserActionMinimumVersion = (program: Record<string, unknown>): '1.7.0' | '1.8.0' | '1.9.0' =>
+	program.expressionLimits !== undefined || (Array.isArray(program.steps) && program.steps.some(step => step?.op === 'each')) ? '1.9.0' :
 	(Array.isArray(program.steps) && program.steps.some((step) => step?.pagination !== undefined)) ||
 	Object.entries(BROWSER_ACTION_LEGACY_LIMITS).some(([key, limit]) => Number((program.limits as Record<string, unknown> | undefined)?.[key]) > limit) ? '1.8.0' : '1.7.0';
