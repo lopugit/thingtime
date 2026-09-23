@@ -89,3 +89,11 @@ use `file-import` drafts and `recordingTransfer.ts` preserves the purpose.
 contracts; `test:devices` covers leases, private result expiry and byte redaction.
 Native `RemoteFilesystemTests` exercise actual temporary-directory bytes and
 no-follow operations. The manual checklist is “Remote brightness and files”.
+
+## Editable Builder definitions
+
+`Builder/DefinitionEditor/ThingDefinitionEditor.tsx` exposes owner-only fields
+and source editing through the canonical Things update path. Component/page
+menus and the Action inspector reuse it. It preserves Thing identity and ACLs,
+replaces the validated crystal, and refuses stale `expectedUpdatedAt` writes.
+See [browser Actions and editor checks](../builder-browser-actions.md).

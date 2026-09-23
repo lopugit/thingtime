@@ -1,4 +1,5 @@
 import React from 'react';
+import { ThingDefinitionEditor } from '../Builder/DefinitionEditor/ThingDefinitionEditor';
 import {
 	Box,
 	Button,
@@ -16,7 +17,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { readLocalCache } from '~/hooks/localCache';
+import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { CARD_STYLES } from '~/theme/card';
 import { ActionChip } from './ActionChip';
 import { opChipTone } from './ActionsPage';
@@ -201,7 +202,9 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 						<ActionChip size="md" tone={lastRun.status === 'ok' ? 'ok' : 'danger'}>{lastRun.status}</ActionChip>
 						{typeof lastRun.durationMs === 'number' ? (
 							<Text color={MUTED} fontSize="xs">
-								{lastRun.durationMs}ms · {lastRun.opsUsed} ops · depth {lastRun.depthUsed} · {lastRun.childActionsUsed} child actions
+								{lastRun.durationMs}ms · {lastRun.opsUsed} ops
+                                {lastRun.depthUsed != null ? ` · depth ${lastRun.depthUsed}` : ''}
+                                {lastRun.childActionsUsed != null ? ` · ${lastRun.childActionsUsed} child actions` : ''}
 							</Text>
 						) : null}
 					</Flex>
@@ -260,6 +263,7 @@ export const ActionDetailPage = () => {
 		action: null,
 		missing: false
 	});
+	const [editing, setEditing] = React.useState(false);
 	const [runs, setRuns] = React.useState<RunRecord[]>([]);
 	const [schemaNames, setSchemaNames] = React.useState<Record<string, string>>({});
 	const [usedBy, setUsedBy] = React.useState<{ id: string; name: string; componentKey: string | null }[]>([]);
@@ -276,6 +280,7 @@ export const ActionDetailPage = () => {
 	const [seenKey, setSeenKey] = React.useState(requestKey);
 	if (seenKey !== requestKey) {
 		setSeenKey(requestKey);
+		setEditing(false);
 		setRuns([]);
 		setUsedBy([]);
 		setSchemaNames({});
@@ -388,6 +393,12 @@ export const ActionDetailPage = () => {
 					<Box minH="200px" />
 				) : (
 					<>
+						{editing ? <ThingDefinitionEditor id={action.id} onClose={() => setEditing(false)} onSaved={(saved) => {
+                            setState({ key: requestKey, action: saved as ActionThing, missing: false });
+                            const cacheKey = `tt-actions-${user?.id || 'anon'}`;
+                            const cached = readLocalCache<{ actions?: ActionThing[] }>(cacheKey);
+                            if (cached?.actions) writeLocalCache(cacheKey, { ...cached, actions: cached.actions.map((entry) => entry.id === saved.id ? saved : entry) });
+                        }} /> : null}
 						<Box {...CARD_STYLES} p={{ base: 5, md: 6 }}>
 							<Flex align="flex-start" justify="space-between" gap={3} wrap="wrap">
 								<Box minW={0}>
@@ -409,6 +420,7 @@ export const ActionDetailPage = () => {
 										</Text>
 									) : null}
 								</Box>
+								{action.author?.id === user?.id && user?.id ? <Button size="sm" onClick={() => setEditing(true)}>Edit definition</Button> : null}
 								<Button as={Link} rightIcon={<ExternalLink size={13} />} size="xs" to={`/thing/${encodeURIComponent(action.id)}`} variant="ghost">
 									Thing view
 								</Button>
@@ -466,6 +478,7 @@ export const ActionDetailPage = () => {
 														{entry.capability}
 														{entry.schemas?.length ? `: ${entry.schemas.map((ref) => displayRef(ref, schemaNames)).join(', ')}` : ''}
 														{entry.actions?.length ? `: ${entry.actions.join(', ')}` : ''}
+                                                {entry.endpoints?.length ? `: ${entry.endpoints.join(', ')}` : ''}
 													{entry.providers?.length ? `: ${entry.providers.join(', ')}` : ''}
 													</ActionChip>
 												))
@@ -562,7 +575,7 @@ export const ActionDetailPage = () => {
 								</Text>
 							</Box>
 						) : null}
-						{user ? <RunPanel action={action} key={action.id} onRan={loadRuns} /> : null}
+						{user ? <RunPanel action={action} key={`${action.id}:${user.id}`} onRan={loadRuns} /> : null}
 
 						<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
 							<Text {...monoLabel} mb={2}>
@@ -589,7 +602,7 @@ export const ActionDetailPage = () => {
 								</Stack>
 							) : (
 								<Text color={MUTED} fontSize="sm">
-									No runs yet — this panel is the inspectable trail every invocation leaves.
+									{crystal.runtime === 'browser' ? 'Browser runs show their trace above for this session. They do not create server run records.' : 'No server runs yet.'}
 								</Text>
 							)}
 						</Box>

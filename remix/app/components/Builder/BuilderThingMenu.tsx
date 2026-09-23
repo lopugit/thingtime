@@ -1,4 +1,5 @@
 import React from 'react';
+import { ThingDefinitionEditor } from './DefinitionEditor/ThingDefinitionEditor';
 import { MenuItem } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
 import { useApi } from '~/hooks/useApi';
@@ -36,7 +37,7 @@ function BuilderThingActions({
 	const navigate = useNavigate();
 	const lopu = useLopu();
 	const [thing, setThing] = React.useState<ThingsThing | null>(null);
-	const [dialog, setDialog] = React.useState<'share' | 'rename' | null>(null);
+	const [dialog, setDialog] = React.useState<'share' | 'rename' | 'definition' | null>(null);
 	const [busy, setBusy] = React.useState(false);
 	const active = React.useRef(true);
 	const pending = React.useRef(false);
@@ -102,6 +103,7 @@ function BuilderThingActions({
 				onImported={onChanged}
 				menuItems={
 					<>
+						<MenuItem onClick={() => setDialog('definition')} isDisabled={!own || busy || !!disabledReason}>Edit definition…</MenuItem>
 						<MenuItem onClick={() => setDialog('share')} isDisabled={!own || busy || !!disabledReason}>
 							Privacy and sharing…
 						</MenuItem>
@@ -137,6 +139,7 @@ function BuilderThingActions({
 					</>
 				}
 			/>
+			{dialog === 'definition' ? <ThingDefinitionEditor id={id} onClose={() => setDialog(null)} onSaved={() => void changed()} /> : null}
 			<ShareDialog
 				things={dialog === 'share' && thing ? [thing] : []}
 				onClose={() => setDialog(null)}
