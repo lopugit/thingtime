@@ -28,14 +28,15 @@ function ProgramEditor({ initial, onClose, onCreated }: {
  try { program = JSON.parse(source); } catch {}
  const setProgram = (value: any) => { setSource(JSON.stringify(value, null, 2)); setError(''); };
  const addStep = (op: string) => {
-  const next = op === 'http.request' ? { op, method: 'GET', path: '/api/v1/things', feature: 'api.things', minimumVersion: '1.28.0', query: { limit: 20 } }
+  const isRequest = op === 'http.request' || op === 'http.request.pages';
+  const next = isRequest ? { op: 'http.request', ...(op === 'http.request.pages' ? { pagination: { cursorParam: 'cursor', cursorPath: 'nextCursor', itemsPath: 'things', itemKey: 'id', maxPages: 20, maxItems: 5000 } } : {}), method: 'GET', path: '/api/v1/things', feature: 'api.things', minimumVersion: '1.28.0', query: { limit: 20 } }
    : op === 'compute' ? { op, value: '' }
    : { op, action: 'child-action', inputs: {} };
   const steps = [...(program.steps || [])];
   const index = steps.at(-1)?.op === 'return' ? steps.length - 1 : steps.length;
   if (steps[index]?.op === 'return' && steps[index].value === `$step.${index}`) steps[index] = { ...steps[index], value: `$step.${index + 1}` };
   steps.splice(index, 0, next);
-  setProgram({ ...program, ...(op === 'http.request' ? { runtime: 'browser' } : {}), steps, capabilities: deriveRequiredCapabilities(steps) });
+  setProgram({ ...program, ...(isRequest ? { runtime: 'browser' } : {}), steps, capabilities: deriveRequiredCapabilities(steps) });
  };
  const save = async () => {
   if (pending.current || !program) return;
@@ -62,6 +63,7 @@ function ProgramEditor({ initial, onClose, onCreated }: {
   {mode === 'fields' && program ? <DefinitionValueEditor value={program} onChange={setProgram} /> : <Textarea aria-label="Action program source" rows={20} value={source} onChange={(event) => { setSource(event.target.value); setError(''); }} fontFamily="mono" fontSize="sm" />}
   <Flex gap={2} my={4} wrap="wrap">
    <Button size="sm" isDisabled={!program} onClick={() => addStep('http.request')}>Add request</Button>
+   <Button size="sm" isDisabled={!program} onClick={() => addStep('http.request.pages')}>Add paginated request</Button>
    <Button size="sm" isDisabled={!program} onClick={() => addStep('compute')}>Add computation</Button>
    <Button size="sm" isDisabled={!program} onClick={() => addStep('actions.invoke')}>Invoke Action</Button>
    <Button size="sm" isDisabled={!program} onClick={() => setProgram({ ...program, capabilities: deriveRequiredCapabilities(program.steps || []) })}>Derive permissions</Button>

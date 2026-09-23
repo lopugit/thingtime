@@ -1,5 +1,19 @@
 # TESTING.md — per-area manual test checklists
 
+## Browser Action pagination
+
+- [ ] In Actions → New Action → full program, add a paginated request. Edit
+  its destination, cursor and list fields in Fields and Source. Check the
+  entire composer at desktop and 375px widths, including expanded arrays and
+  the save controls; no clipping or horizontal overflow.
+- [ ] Run an owned paginated GET against two real pages. Verify all records
+  exactly once, including serials beginning with zero. Missing/repeated
+  cursors, expired sessions, account changes and page/item/byte/time limits
+  must fail clearly without presenting a partial list as complete.
+- [ ] Prepare that Action with no execution version, 1.7 and 2.0 clients:
+  each must receive 409. A 1.8 client succeeds. Ordinary 1.7 browser programs
+  and server Actions keep their previous execution and limit behavior.
+
 ## Remote brightness and files
 
 - [ ] A running macOS app with an empty or whitespace-only name must use its

@@ -56,9 +56,20 @@ test('browser results report only executed/skipped steps and never invent a pers
 });
 test('manifest declares the new authoring and execution contracts', () => {
  const features = createApiCapabilitiesManifest().features;
- for (const [feature, required] of Object.entries({ 'api.actions-run': '1.7.0', 'api.things': '1.28.0', 'api.things-update': '1.5.0' })) {
+ for (const [feature, required] of Object.entries({ 'api.actions-run': '1.8.0', 'api.things': '1.29.0', 'api.things-update': '1.6.0' })) {
   assert.ok(capabilitySatisfies(features[feature], required), feature);
  }
  assert.equal(capabilitySatisfies('1.6.0', '1.7.0'), false);
  assert.equal(capabilitySatisfies('2.0.0', '1.7.0'), false);
+});
+
+
+test('pagination refuses an origin without its runtime contract before making the first request', async () => {
+ let requests = 0;
+ const host = createBrowserActionHost(() => 'actor', (async () => { requests++; return Response.json({}); }) as typeof fetch,
+  async (feature, version) => {
+   if (feature === 'api.actions-run' && !capabilitySatisfies('1.7.0', version)) throw new Error('Pagination is unavailable');
+  });
+ await assert.rejects(host.request({ ...step, runtimeVersion: '1.8.0' }, 'actor', signal()), /Pagination is unavailable/);
+ assert.equal(requests, 0);
 });
