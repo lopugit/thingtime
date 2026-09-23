@@ -73,7 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   well-known symbol members. Builder fields adopt asynchronous defaults while
   preserving visitor edits. Isolated workers get a bounded startup phase before
   their unchanged two-second execution limit; regression checks cover delayed
-  startup, cancellation and filter reloads.
+  startup, cancellation and filter reloads. See
+  [PR #900 validation and delivery notes](../PRs/900-codex-web-standards-syntax-and-controls-expand-standards-language-demos-and-preserve-builder-filter-values.md).
 
 - 2026-09-23 — **Codex (AI)**: Added authored declarative JavaScript fixtures
   for Intl, Object/Reflect, collections, promises, buffers and byte encodings.
