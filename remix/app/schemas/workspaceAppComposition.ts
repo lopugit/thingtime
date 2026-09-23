@@ -69,7 +69,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 	const source = {
 		action: key('read'),
 		inputs: Object.fromEntries(
-			['view', 'id', 'page', 'q', 'date', 'status', 'employee', 'period', 'mediaCursor']
+			['view', 'id', 'page', 'q', 'date', 'status', 'employee', 'period', 'mediaCursor', 'related', 'relatedPage', 'parentId', 'copyId', 'threadId']
 				.map((name) => [name, `{query.${name}}`])
 				.concat([['rootId', '{rootId}']])
 		),
@@ -82,7 +82,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				name,
 				actionKey: key(name),
 				runtime: 'browser',
-				...(name === 'read' ? { expressionLimits: { nodes: 1000000, listItems: 5000 } } : {}),
+				...(['read', 'set-field'].includes(name) ? { expressionLimits: { nodes: 1000000, listItems: 5000 } } : {}),
 				inputs,
 				capabilities: deriveRequiredCapabilities(steps),
 				limits: { timeoutMs: 30000, maxOperations: 100, maxChildActions: 20, maxResultBytes: 4194304 },
@@ -96,7 +96,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				name: label,
 				componentKey: key(name),
 				description: 'Editable Builder composition. Layout, labels, fields and Action bindings are saved in this Component.',
-				args: [s('rootId', { default: rootId }), s('pagePath', { default: pagePath })],
+				args: [s('rootId', { default: rootId }), s('pagePath', { default: '' })],
 				source,
 				render: e('section', view ? [equal('result.view', view, e('div', children, { style: grid }))] : children, {
 					style: { ...grid, color: '#203e2c', fontFamily: 'system-ui, sans-serif' }
@@ -107,6 +107,15 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 	const recordCard = e(
 		'article',
 		[
+			test(
+				'item.values.thumbnailId',
+				e('img', [], {
+					src: '/api/v1/attachments/content?id={item.values.thumbnailId}',
+					alt: '',
+					loading: 'lazy',
+					style: { width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px' }
+				})
+			),
 			e('strong', ['{item.title}']),
 			e('span', ['{item.values.date} {item.values.time} · {item.values.status}']),
 			e('p', ['{item.values.description}']),
@@ -116,6 +125,62 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 	);
 	const mapRecords = (list: Json) => x('map', list, x('merge', '$item', { title: title('$item') }));
 	const activeKind = (kind: string) => x('filter', '$step.1.records', x('and', x('eq', '$item.kind', kind), x('not', '$item.values.archived')));
+	const related = (kind: string, predicate: Json) => x('filter', `$step.6.${kind}`, predicate);
+	const matchesRecord = (field: string) => x('eq', `$item.values.${field}`, '$step.2.id');
+	const linkedIds = (field: string, idField: string) => x('map', related('link', matchesRecord(field)), `$item.values.${idField}`);
+	// Resolve joins once per selected record. Every candidate comes from the
+	// server's role-filtered snapshot; no reference can fetch hidden records.
+	const relationGroups = [
+		{
+			owner: 'customer',
+			key: 'properties',
+			label: 'Properties',
+			kind: 'address',
+			match: x('includes', '$step.12.addressIds', '$item.id'),
+			create: 'link',
+			createLabel: 'Link property'
+		},
+		{ owner: 'customer', key: 'links', label: 'Customer address links', kind: 'link', match: matchesRecord('customerId') },
+		{
+			owner: 'address',
+			key: 'customers',
+			label: 'Customers',
+			kind: 'customer',
+			match: x('includes', '$step.12.customerIds', '$item.id'),
+			create: 'link',
+			createLabel: 'Link customer'
+		},
+		{ owner: 'address', key: 'jobs', label: 'Jobs', kind: 'job', match: matchesRecord('addressId'), create: 'job', createLabel: 'Create job' },
+		{ owner: 'address', key: 'visits', label: 'Visit history', kind: 'visit', match: x('includes', '$step.12.jobIds', '$item.values.jobId') },
+		{ owner: 'address', key: 'links', label: 'Customer address links', kind: 'link', match: matchesRecord('addressId') },
+		{
+			owner: 'job',
+			key: 'visits',
+			label: 'Scheduled visits & history',
+			kind: 'visit',
+			match: matchesRecord('jobId'),
+			create: 'visit',
+			createLabel: 'Schedule visit'
+		},
+		{ owner: 'job', key: 'subjobs', label: 'Sub-jobs', kind: 'subjob', match: matchesRecord('jobId'), create: 'subjob', createLabel: 'Add sub-job' },
+		{ owner: 'visit', key: 'times', label: 'Time logs', kind: 'time', match: matchesRecord('visitId'), create: 'time', createLabel: 'Log time' },
+		{
+			owner: 'visit',
+			key: 'usage',
+			label: 'Tools, batteries & travel',
+			kind: 'usage',
+			match: matchesRecord('visitId'),
+			create: 'usage',
+			createLabel: 'Log usage'
+		},
+		{
+			owner: 'equipment',
+			key: 'usage',
+			label: 'Usage history',
+			kind: 'usage',
+			match: x('includes', ['$item.values.equipmentId', '$item.values.batteryId', '$item.values.vehicleId'], '$step.2.id')
+		}
+	];
 	const view = x('coalesce', '$input.view', 'overview');
 	const periodDays = x('if', x('eq', '$input.period', 'day'), 1, 7);
 	const recordFields = x(
@@ -145,7 +210,25 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 	);
 	action(
 		'read',
-		[s('rootId', { required: true }), ...['view', 'id', 'page', 'q', 'date', 'status', 'employee', 'period', 'mediaCursor'].map((name) => s(name))],
+		[
+			s('rootId', { required: true }),
+			...[
+				'view',
+				'id',
+				'page',
+				'q',
+				'date',
+				'status',
+				'employee',
+				'period',
+				'mediaCursor',
+				'related',
+				'relatedPage',
+				'parentId',
+				'copyId',
+				'threadId'
+			].map((name) => s(name))
+		],
 		[
 			req(),
 			calc(x('find', '$step.1.records', x('eq', '$item.id', '$input.id'))),
@@ -197,6 +280,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				canEdit: x(
 					'and',
 					x('includes', ['Admin', 'Employee', 'Lopu'], '$step.1.role'),
+					x('not', '$step.2.values.archived'),
 					x('or', x('eq', '$step.1.role', 'Admin'), x('and', x('ne', view, 'member'), x('ne', view, 'new-member'), x('ne', '$step.2.kind', 'member')))
 				),
 				record: '$step.2',
@@ -248,19 +332,134 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				path: '/api/v1/things',
 				feature: 'api.things',
 				minimumVersion: '1.24.0',
-				query: { target: '$input.id', thingtime: 'comment', limit: 12, cursor: '$input.mediaCursor' },
+				query: { target: x('coalesce', '$input.threadId', '$input.id'), thingtime: 'comment', limit: 12, cursor: '$input.mediaCursor' },
 				when: x('and', x('eq', view, 'detail'), x('not', x('isEmpty', '$input.id')))
 			},
+			calc({
+				addressIds: x('if', x('eq', '$step.2.kind', 'customer'), linkedIds('customerId', 'addressId'), []),
+				customerIds: x('if', x('eq', '$step.2.kind', 'address'), linkedIds('addressId', 'customerId'), []),
+				jobIds: x('if', x('eq', '$step.2.kind', 'address'), x('map', related('job', matchesRecord('addressId')), '$item.id'), []),
+				parent: x('find', '$step.1.records', x('and', x('eq', '$item.id', '$input.parentId'), x('not', '$item.values.archived'))),
+				copy: x(
+					'find',
+					'$step.1.records',
+					x('and', x('eq', '$item.id', '$input.copyId'), x('eq', view, x('concat', 'new-', '$item.kind')), x('ne', '$item.kind', 'member'))
+				)
+			}),
+			calc(
+				x(
+					'filter',
+					relationGroups.map((group) =>
+						x(
+							'if',
+							x('eq', '$step.2.kind', group.owner),
+							{
+								key: group.key,
+								label: group.label,
+								create: group.create || '',
+								createLabel: group.createLabel || '',
+								records: x('sortBy', related(group.kind, group.match), x('concat', '$item.values.date', ' ', '$item.values.time', ' ', '$item.title'))
+							},
+							null
+						)
+					),
+					'$item'
+				)
+			),
+			calc(
+				x(
+					'map',
+					'$step.13',
+					x('merge', x('omit', '$item', ['records']), {
+						total: x('length', '$item.records'),
+						page: x(
+							'max',
+							1,
+							x(
+								'min',
+								x('ceil', x('div', x('length', '$item.records'), 6)),
+								x('if', x('eq', '$input.related', '$item.key'), x('coalesce', x('toNumber', '$input.relatedPage'), 1), 1)
+							)
+						),
+						all: '$item.records'
+					})
+				)
+			),
+			calc({
+				editing: x('eq', view, 'edit'),
+				formId: x('if', x('eq', view, 'edit'), '$step.2.id', ''),
+				formRevision: x('if', x('eq', view, 'edit'), '$step.2.updatedAt', ''),
+				formValues: x(
+					'if',
+					x('eq', view, 'edit'),
+					'$step.2.values',
+					x(
+						'if',
+						'$step.12.copy',
+						x(
+							'merge',
+							x('omit', '$step.12.copy.values', ['thumbnailId', 'bannerId', 'archived', 'userId', 'order']),
+							x('if', '$step.12.copy.values.title', { title: x('concat', '$step.12.copy.values.title', ' (copy)') }, {})
+						),
+						x(
+							'merge',
+							{ date: '$step.8', status: 'Scheduled' },
+							x('if', x('eq', '$step.12.parent.kind', 'customer'), { customerId: '$step.12.parent.id' }, {}),
+							x('if', x('eq', '$step.12.parent.kind', 'address'), { addressId: '$step.12.parent.id' }, {}),
+							x('if', x('eq', '$step.12.parent.kind', 'job'), { jobId: '$step.12.parent.id', title: '$step.12.parent.values.title' }, {}),
+							x(
+								'if',
+								x('eq', '$step.12.parent.kind', 'visit'),
+								{ visitId: '$step.12.parent.id', title: '$step.12.parent.values.title', employeeId: '$step.12.parent.values.employeeId' },
+								{}
+							)
+						)
+					)
+				),
+				loggedMinutes: x(
+					'if',
+					x('eq', '$step.2.kind', 'visit'),
+					x('sum', related('time', matchesRecord('visitId')), x('toNumber', '$item.values.minutes')),
+					0
+				),
+				relatedGroups: x(
+					'map',
+					'$step.14',
+					x('merge', x('omit', '$item', ['all']), {
+						items: x('slice', '$item.all', x('mul', x('sub', '$item.page', 1), 6), x('mul', '$item.page', 6)),
+						previous: x('max', 1, x('sub', '$item.page', 1)),
+						next: x('add', '$item.page', 1),
+						hasNext: x('gt', '$item.total', x('mul', '$item.page', 6))
+					})
+				),
+				todayVisits: x('slice', x('filter', '$step.6.visit', x('eq', '$item.values.date', '$step.8')), 0, 12),
+				upcomingVisits: x(
+					'slice',
+					x(
+						'sortBy',
+						x(
+							'filter',
+							'$step.6.visit',
+							x('and', x('gt', '$item.values.date', '$step.8'), x('not', x('includes', ['Completed', 'Cancelled'], '$item.values.status')))
+						),
+						'$item.values.date'
+					),
+					0,
+					12
+				)
+			}),
 			ret(
-				x('merge', '$step.9', {
+				x('merge', '$step.9', '$step.15', {
 					mapPoints: '$step.10',
 					media: '$step.11.things',
+					commentTarget: x('coalesce', '$input.threadId', '$input.id'),
+					showMedia: x('and', '$step.2', x('isEmpty', '$input.threadId')),
 					mediaCursor: '$step.11.nextCursor',
 					mediaGroups: ['Before', 'After', 'Gallery'].map((stage) => ({
 						title: stage,
 						items: x(
 							'filter',
-							x('coalesce', '$step.11.things', []),
+							x('filter', x('coalesce', '$step.11.things', []), x('not', x('isEmpty', '$item.attachments'))),
 							stage === 'Gallery'
 								? x('and', x('not', x('startsWith', '$item.crystal.text', '[Before]')), x('not', x('startsWith', '$item.crystal.text', '[After]')))
 								: x('startsWith', '$item.crystal.text', `[${stage}]`)
@@ -307,6 +506,11 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 		'Overview',
 		[
 			e('h2', ['Overview']),
+			e('h3', ['Today']),
+			each('result.todayVisits', recordCard, 'No visits scheduled for today.'),
+			e('h3', ['Upcoming visits']),
+			each('result.upcomingVisits', recordCard, 'No upcoming visits.'),
+			link('Browse all visits', '{pagePath}?view=visit'),
 			e(
 				'div',
 				SERVICE_KINDS.map((kind) =>
@@ -324,7 +528,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 		[s('rootId', { required: true }), s('query', { required: true, maxLength: 200 }), s('sessionToken')],
 		[
 			req({ operation: 'searchAddresses', rootId: '$input.rootId', query: '$input.query', sessionToken: '$input.sessionToken' }),
-			ret({ suggestions: '$step.1.suggestions', silent: true })
+			ret({ operation: 'search-addresses', suggestions: '$step.1.suggestions', silent: true })
 		]
 	);
 	const addressSearch = test(
@@ -353,8 +557,8 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 					{ identityName: 'sessionToken' }
 				),
 				equal(
-					'last.action',
-					key('search-addresses'),
+					'last.result.operation',
+					'search-addresses',
 					test(
 						'last.ok',
 						e(
@@ -402,7 +606,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				expectedUpdatedAt: '$input.expectedUpdatedAt',
 				values: Object.fromEntries([...fields.map((field) => field.key), ...mediaFields].map((name) => [name, `$input.${name}`]))
 			}),
-			ret({ id: '$step.1.id', message: `${SERVICE_LABELS[kind]} saved`, title: 'Saved' })
+			ret({ operation: `save-${kind}`, silent: true, id: '$step.1.id', message: `${SERVICE_LABELS[kind]} saved`, title: 'Saved' })
 		]);
 		component(
 			`list-${kind}`,
@@ -444,8 +648,9 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			const props: Json = {
 				name: field.key,
 				required: !!field.required,
-				value: field.key === 'address' ? draft('addressDraft', 'result.record.values.address') : arg(`result.record.values.${field.key}`),
-				style: inputStyle
+				value: field.key === 'address' ? draft('addressDraft', 'result.formValues.address') : arg(`result.formValues.${field.key}`),
+				style: inputStyle,
+				...(field.key === 'username' ? { readOnly: arg('result.editing') } : {})
 			};
 			const child = field.ref
 				? e('tt-select', [], {
@@ -488,17 +693,17 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				[
 					hidden('rootId', '{rootId}'),
 					...mediaFields.map((name) =>
-						hidden(name, name === 'placeId' ? draft('placeDraft', 'result.record.values.placeId') : `{result.record.values.${name}}`)
+						hidden(name, name === 'placeId' ? draft('placeDraft', 'result.formValues.placeId') : `{result.formValues.${name}}`)
 					),
 					...fieldNodes,
 					button('Save', key(`save-${kind}`)),
-					equal('last.action', key(`save-${kind}`), test('last.ok', link('Open saved record', '{pagePath}?view=detail&id={last.result.id}')))
+					equal('last.result.operation', `save-${kind}`, test('last.ok', link('Open saved record', '{pagePath}?view=detail&id={last.result.id}')))
 				],
 				{
 					identityName: 'id',
-					identity: '{result.record.id}',
+					identity: '{result.formId}',
 					revisionName: 'expectedUpdatedAt',
-					revision: '{result.record.updatedAt}',
+					revision: '{result.formRevision}',
 					resetKey: '{formVersion}'
 				}
 			),
@@ -530,6 +735,63 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			)
 		]);
 	}
+	// A field update re-reads authorized values, but keeps the revision the user
+	// actually saw. A stale screen must fail rather than overwrite newer work.
+	action(
+		'set-field',
+		[
+			s('rootId', { required: true }),
+			s('id', { required: true }),
+			s('expectedUpdatedAt', { required: true }),
+			s('field', { required: true }),
+			s('value')
+		],
+		[
+			req(),
+			calc(x('find', '$step.1.records', x('eq', '$item.id', '$input.id'))),
+			{
+				op: 'fail',
+				message: 'This record changed or is unavailable. Refresh before retrying.',
+				when: x('or', x('not', '$step.2'), x('ne', '$step.2.updatedAt', '$input.expectedUpdatedAt'))
+			},
+			{
+				op: 'fail',
+				message: 'This field cannot be changed here.',
+				when: x(
+					'not',
+					x(
+						'or',
+						x(
+							'and',
+							x('eq', '$step.2.kind', 'visit'),
+							x('eq', '$input.field', 'status'),
+							x('includes', ['Scheduled', 'In progress', 'Completed', 'Cancelled'], '$input.value')
+						),
+						x('and', x('includes', ['customer', 'address', 'equipment'], '$step.2.kind'), x('eq', '$input.field', 'thumbnailId')),
+						x('and', x('eq', '$step.2.kind', 'address'), x('eq', '$input.field', 'bannerId'))
+					)
+				)
+			},
+			req({
+				operation: 'save',
+				rootId: '$input.rootId',
+				kind: '$step.2.kind',
+				id: '$input.id',
+				expectedUpdatedAt: '$input.expectedUpdatedAt',
+				values: x(
+					'merge',
+					'$step.2.values',
+					x(
+						'if',
+						x('eq', '$input.field', 'status'),
+						{ status: '$input.value' },
+						x('if', x('eq', '$input.field', 'thumbnailId'), { thumbnailId: '$input.value' }, { bannerId: '$input.value' })
+					)
+				)
+			}),
+			ret({ message: 'Record updated', operation: 'set-field', silent: true, id: '$input.id' })
+		]
+	);
 	action(
 		'archive',
 		[
@@ -559,6 +821,22 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 					'article',
 					[
 						e('h2', ['{result.recordTitle}']),
+						test(
+							'result.record.values.bannerId',
+							e('img', [], {
+								src: '/api/v1/attachments/content?id={result.record.values.bannerId}',
+								alt: '{result.recordTitle}',
+								style: { width: '100%', maxHeight: '280px', objectFit: 'cover', borderRadius: '10px' }
+							})
+						),
+						test(
+							'result.record.values.thumbnailId',
+							e('img', [], {
+								src: '/api/v1/attachments/content?id={result.record.values.thumbnailId}',
+								alt: '',
+								style: { width: '96px', height: '96px', objectFit: 'cover', borderRadius: '8px' }
+							})
+						),
 						e('dl', [
 							each(
 								'result.recordFields',
@@ -580,6 +858,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 								'div',
 								[
 									link('Edit', '{pagePath}?view=edit&id={result.record.id}'),
+									equal('result.record.kind', 'member', '', link('Duplicate', '{pagePath}?view=new-{result.record.kind}&copyId={result.record.id}')),
 									e(
 										'tt-dialog',
 										[
@@ -595,6 +874,59 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 								],
 								{ style: row }
 							)
+						),
+						equal(
+							'result.record.kind',
+							'visit',
+							e(
+								'section',
+								[
+									e('h3', ['Total logged time']),
+									e('strong', ['{result.loggedMinutes} min']),
+									test(
+										'result.canEdit',
+										e(
+											'div',
+											['Scheduled', 'In progress', 'Completed', 'Cancelled'].map((status) =>
+												button(status, key('set-field'), {
+													rootId: '{rootId}',
+													id: '{result.record.id}',
+													expectedUpdatedAt: '{result.record.updatedAt}',
+													field: 'status',
+													value: status
+												})
+											),
+											{ style: row }
+										)
+									)
+								],
+								{ style: grid }
+							)
+						),
+						each(
+							'result.relatedGroups',
+							e(
+								'section',
+								[
+									e('h3', ['{item.label}']),
+									e('p', ['{item.total} records · page {item.page}']),
+									test(
+										'result.canEdit',
+										test('item.create', link('{item.createLabel}', '{pagePath}?view=new-{item.create}&parentId={result.record.id}'))
+									),
+									each('item.items', recordCard),
+									e(
+										'div',
+										[
+											link('Previous', '{pagePath}?view=detail&id={result.record.id}&related={item.key}&relatedPage={item.previous}'),
+											test('item.hasNext', link('Next', '{pagePath}?view=detail&id={result.record.id}&related={item.key}&relatedPage={item.next}'))
+										],
+										{ style: row }
+									)
+								],
+								{ style: grid }
+							),
+							''
 						),
 						link('Open Thing', '/thing/{result.record.id}')
 					],
@@ -858,7 +1190,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				lat: '$step.1.location.latitude',
 				lng: '$step.1.location.longitude',
 				title: '$input.title',
-				href: x('concat', pagePath, '?view=detail&id=', '$input.recordId')
+				href: x('concat', '?view=detail&id=', '$input.recordId')
 			})
 		]
 	);
@@ -942,9 +1274,120 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			ret({ targetId: '$input.id', committedIds: x('split', '$input.attachmentIds', ','), message: 'Media saved', silent: true })
 		]
 	);
+	action(
+		'save-comment',
+		[s('id', { required: true }), s('shareId', { required: true }), s('text', { required: true, maxLength: 3000 })],
+		[
+			{
+				op: 'http.request',
+				method: 'POST',
+				path: '/api/v1/things/comment',
+				feature: 'api.things-comment',
+				minimumVersion: '1.7.0',
+				body: { id: '$input.id', shareId: '$input.shareId', text: '$input.text' }
+			},
+			ret({ operation: 'save-comment', silent: true, message: 'Comment saved' })
+		]
+	);
+	component(
+		'comments',
+		'Record discussion',
+		[
+			test(
+				'result.record',
+				e(
+					'section',
+					[
+						e('h2', ['Comments & updates']),
+						test('query.threadId', link('Back to record discussion', '{pagePath}?view=detail&id={result.record.id}')),
+						each(
+							'result.media',
+							e(
+								'article',
+								[
+									e('p', ['{item.crystal.text}']),
+									e('tt-media', [], { attachments: arg('item.attachments'), postId: '{item.id}' }),
+									e(
+										'div',
+										[link('Replies', '{pagePath}?view=detail&id={result.record.id}&threadId={item.id}'), link('Open comment', '/thing/{item.id}')],
+										{ style: row }
+									)
+								],
+								{ style: cardStyle }
+							),
+							'No comments on this page.'
+						),
+						test(
+							'result.mediaCursor',
+							link('More comments', '{pagePath}?view=detail&id={result.record.id}&threadId={query.threadId}&mediaCursor={result.mediaCursor}')
+						),
+						e(
+							'tt-form',
+							[
+								hidden('id', '{result.commentTarget}'),
+								e('label', ['Add a comment', e('textarea', [], { name: 'text', required: true, maxLength: 3000, style: inputStyle })]),
+								button('Post comment', key('save-comment'))
+							],
+							{ identityName: 'shareId', resetKey: '{commentVersion}' }
+						),
+						button('Start another comment', '$ui', { op: 'increment', key: 'commentVersion' })
+					],
+					{ style: grid }
+				)
+			)
+		],
+		'detail'
+	);
+	const imagePicker = test(
+		'result.canEdit',
+		each(
+			'item.attachments',
+			equal(
+				'item.mediaKind',
+				'image',
+				e(
+					'div',
+					[
+						e('span', ['{item.name}']),
+						...['customer', 'address', 'equipment'].map((kind) =>
+							equal(
+								'result.record.kind',
+								kind,
+								button(kind === 'customer' ? 'Use as profile photo' : 'Use as thumbnail', key('set-field'), {
+									rootId: '{rootId}',
+									id: '{result.record.id}',
+									expectedUpdatedAt: '{result.record.updatedAt}',
+									field: 'thumbnailId',
+									value: '{item.id}'
+								})
+							)
+						),
+						equal(
+							'result.record.kind',
+							'address',
+							button('Use as banner', key('set-field'), {
+								rootId: '{rootId}',
+								id: '{result.record.id}',
+								expectedUpdatedAt: '{result.record.updatedAt}',
+								field: 'bannerId',
+								value: '{item.id}'
+							})
+						)
+					],
+					{ style: row }
+				)
+			),
+			''
+		)
+	);
 	const mediaEntry = e(
 		'article',
-		[e('p', ['{item.crystal.text}']), e('tt-media', [], { attachments: arg('item.attachments'), postId: '{item.id}' })],
+		[
+			e('p', ['{item.crystal.text}']),
+			e('tt-media', [], { attachments: arg('item.attachments'), postId: '{item.id}' }),
+			// Keep independent image actions out of the nearby upload form's fields.
+			e('fieldset', [imagePicker], { style: { border: 0, padding: 0, margin: 0, minWidth: 0 } })
+		],
 		{ style: cardStyle }
 	);
 	component(
@@ -952,7 +1395,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 		'Record media',
 		[
 			test(
-				'result.record',
+				'result.showMedia',
 				e(
 					'div',
 					[
@@ -975,7 +1418,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 									'result.mediaCursor',
 									button('More media', '$ui', {
 										op: 'query',
-										params: { view: 'detail', id: '{result.record.id}', mediaCursor: '{result.mediaCursor}' }
+										params: { view: 'detail', id: '{result.record.id}', threadId: '{query.threadId}', mediaCursor: '{result.mediaCursor}' }
 									})
 								)
 							],
@@ -1040,7 +1483,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				type: 'component',
 				component,
 				align: 'stretch',
-				args: { rootId, pagePath }
+				args: { rootId, pagePath: '' }
 			}))
 		}
 	];

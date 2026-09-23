@@ -21,7 +21,9 @@ export function mapPoints(value: unknown): MapPoint[] {
 		)
 			return [];
 		const href =
-			typeof point.href === 'string' && /^\/(?!\/)/.test(point.href) && !/[\\\u0000-\u0020]/.test(point.href) ? point.href.slice(0, 2000) : undefined;
+			typeof point.href === 'string' && /^(?:\/(?!\/)|[?#])/.test(point.href) && !/[\\\u0000-\u0020]/.test(point.href)
+				? point.href.slice(0, 2000)
+				: undefined;
 		return [{ lat: point.lat, lng: point.lng, title: typeof point.title === 'string' ? point.title.slice(0, 200) : '', ...(href ? { href } : {}) }];
 	});
 }
