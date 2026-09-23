@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-23 — **Codex (AI)**: Expand the reusable Web standards catalogue to
+  576 runnable JavaScript examples, including language control flow and
+  well-known symbol members. Builder fields adopt asynchronous defaults while
+  preserving visitor edits. Isolated workers get a bounded startup phase before
+  their unchanged two-second execution limit; regression checks cover delayed
+  startup, cancellation and filter reloads.
+
 - 2026-09-23 — **Codex (AI)**: Added authored declarative JavaScript fixtures
   for Intl, Object/Reflect, collections, promises, buffers and byte encodings.
   The shared isolated worker reports unavailable features before execution,

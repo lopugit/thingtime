@@ -108,3 +108,6 @@ not native page blocks. See [runtime and coverage](../web-standards-builder.md).
 `test:web-platform` validates every catalogue definition and generic worker
 behavior; `audit:web-platform` executes interactive recipes in a fresh browser
 against a local or HTTPS preview runtime, without creating account data.
+`javascriptSyntax.ts` and `javascriptSymbols.ts` author language and symbol
+fixtures. `workerLifecycle.ts` separately bounds startup and execution, with
+controlled-clock regressions for timeouts, cancellation and duplicate readiness.

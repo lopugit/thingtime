@@ -8430,6 +8430,19 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   The URL and card list use actual field values. Clear the search; empty text
   clears the query. Change coverage; navigation and pagination preserve filters.
   Query controls collect only declared names from their own form group.
+- [ ] Reload filtered results and navigate between language links. Search,
+  language and coverage fields adopt the returned defaults; Explore again keeps
+  those filters. While a response is delayed, edit a field: the late default
+  must preserve that draft. Run the opt-in `HtmlTemplateField.browser.test.ts`
+  with `TT_PLAYWRIGHT_MODULE` for all field types. It bundles the actual field
+  component into an intercepted browser fixture, without an app server or data.
+  The full `check-web-standards-browser.mjs` flow supports
+  `TT_STANDARDS_TEST_BUILT_CLIENT=1` after a build, retaining real local API
+  calls while intercepting only public built client assets.
+- [ ] Exercise unary/shift operators, break/continue, try/catch/finally, optional
+  access with null, and computed Symbol iterator/RegExp/species properties.
+  Saved definitions retain the complete program and editable inputs. Abstract
+  clauses without their own fixture remain inspection-only.
 - [ ] Run dialog, open/close it and use Escape. Change CSS display and confirm
   computed output changes. Change Array.prototype.at arguments from `[0]` to
   `[2]`; the result changes from 1 to 4. Save example template, follow its Thing
@@ -8439,6 +8452,9 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   the runtime directly still has its opaque-origin CSP. Raw source, dynamic
   evaluation, script/iframe tags, event-handler attributes and input patterns
   do not execute in the account document. Stop removes the frame and worker.
+  Worker startup has a separate ten-second bound; the two-second execution
+  clock begins only after readiness. A slow start must not be labelled a
+  runaway program, and repeated ready messages cannot extend execution.
 - [ ] Switch account/component and verify inputs, draft and result reset. At
   desktop and 390px inspect navigation, search, detail, editable program and
   results through the footer: no horizontal overflow, clipping or overlap.
