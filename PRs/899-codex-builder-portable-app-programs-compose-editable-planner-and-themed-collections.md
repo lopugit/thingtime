@@ -15,7 +15,9 @@ The editable HQ migration still depended on fixed row rendering and lacked the o
 
 Before the latest develop merge: client, library and embed builds passed; typechecking matched the existing 89-error baseline; changed-file lint and whitespace checks passed. Focused suites passed after correcting stale capability expectations. A wall-clock split-performance assertion is sensitive to load on this workstation.
 
-After merging develop: all 204 focused tests pass in one serial run. Real local API checks saved 53 definitions, copied all 54 page/definition Things, denied foreign Action execution, denied reads after team revocation and restored the synthetic membership. Chrome verified copied-app planner ordering, date changes, drag/drop between days, status filtering, visit creation, job-title defaults, preservation of typed titles and dialog completion. Desktop and 390px checks cover overview, planner, customers and the visit form. Production HQ has not been changed by this PR.
+After integrating PR #897: all 204 focused tests pass in one serial run. Real local API checks saved 53 definitions, copied all 54 page/definition Things, denied foreign Action execution, denied reads after team revocation and restored the synthetic membership. Chrome verified copied-app planner ordering, date changes, drag/drop between days, status filtering, visit creation, job-title defaults, preservation of typed titles and dialog completion. Desktop and 390px checks cover overview, planner, customers and the visit form. Production HQ has not been changed by this PR.
+
+The subsequent PR #898 integration only conflicted in the changelog. A repeat of the overlapping suites under heavy workstation load hit three timing assertions and one Action deadline; those results require a clean rerun before delivery. Graph semantic extraction also stalled during AST work and was stopped; the final graph refresh must be verified separately.
 
 ## Platform rollout
 

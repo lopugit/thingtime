@@ -73,6 +73,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-23 — **Codex (AI)**: Add inherited Component theme tokens, instance-scoped CSS rules, deferred editable collection rows and configurable dialog/selection behavior. Builder app authoring uses the original HQ styles and saved relationship calculations. Copying preserves row Actions, media and dialog completion references. Index/group expressions negotiate Action protocol 1.11; production HQ data migration remains a separate reviewed operation.
 
 - 2026-09-23 — **Codex (AI)**: Normalize Builder app record titles once and use shared field descriptors so each saved Action fits the existing signed mutation preview. Preserve reference permissions, archived labels, zero values, and empty text.
+- 2026-09-23 — **Codex (AI)**: Added authored declarative JavaScript fixtures
+  for Intl, Object/Reflect, collections, promises, buffers and byte encodings.
+  The shared isolated worker reports unavailable features before execution,
+  without invoking getters during support detection. A local browser audit now
+  checks catalogue recipe execution separately from definition validation. See
+  [PR #898 validation notes](../PRs/898-codex-web-standards-runtime-coverage-fix-javascript-standards-fixtures-and-browser-availability-reporting.md).
+
 - 2026-09-23 — **Codex (AI)**: Added the reusable Web standards Builder suite,
   a sourced standards inventory and editable isolated HTML/CSS/JavaScript demo
   programs. Inspection/context-dependent entries retain explicit coverage gaps.
