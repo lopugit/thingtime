@@ -69,6 +69,25 @@ test('media bindings reject malformed IDs, bound work and charge generated text'
 	assert.ok(JSON.stringify(mapResolvedCopiedMedia(nested, refs, { chars: 100 })).length < JSON.stringify(nested).length);
 });
 
+test('an unaffordable collection row map is dropped without spending the rest of the tree budget', () => {
+	const refs = new Map([['a', 'longer-copy-id']]);
+	const tree = {
+		tag: 'div',
+		children: [
+			{ tag: 'tt-collection', props: { itemTemplate: { tag: 'img' } } },
+			{ tag: 'img', props: { src: '/api/v1/attachments/content?id=a' } }
+		]
+	};
+	const budget = { chars: 20 };
+	const out: any = mapResolvedCopiedMedia(tree, refs, budget);
+	// The row map costs 24 characters, so the deferred row is dropped ...
+	assert.equal(out.children[0].props.itemTemplate, undefined);
+	// ... but text it never generated must not be charged, so later media in the
+	// same tree still resolves against the untouched shared budget.
+	assert.equal(out.children[1].props.src, '/api/v1/attachments/content?id=longer-copy-id');
+	assert.equal(budget.chars, 7);
+});
+
 test('late media bindings preserve split-fragment loops, inactive branches and unrelated input data', () => {
 	const source = {
 		savedArgs: { prefix: 'att_', images: ['source'], show: false },

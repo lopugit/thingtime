@@ -95,7 +95,9 @@ export function ComponentSelect({
 		const values = selectionPatch(fills, item);
 		if (Object.keys(values).length) onLocal?.({ op: 'patch', values });
 	};
-	if (compact === true && options.length <= 160)
+	// A compact select has nowhere to show `error`, so an over-large source must
+	// fall through to the full control rather than render an empty, silent list.
+	if (compact === true && !error && options.length <= 160)
 		return (
 			<select
 				name={field}

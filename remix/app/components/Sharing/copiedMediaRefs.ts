@@ -72,8 +72,12 @@ export const mapResolvedCopiedMedia = (tree: unknown, refs: ReadonlyMap<string, 
 				for (const [source, target] of refs) if (!combined.has(source)) combined.set(source, target);
 				const pairs = [...combined];
 				const cost = JSON.stringify(pairs).length;
-				fields.itemTemplate = combined.size > 512 || cost > budget.chars ? undefined : { ...row, ttMediaRefs: pairs };
-				budget.chars -= Math.min(cost, budget.chars);
+				// Only charge for a map actually written. Charging for a dropped row
+				// would zero the shared budget and silently stop every later
+				// collection and URL rewrite in the same tree.
+				const carried = combined.size <= 512 && cost <= budget.chars;
+				fields.itemTemplate = carried ? { ...row, ttMediaRefs: pairs } : undefined;
+				if (carried) budget.chars -= cost;
 			}
 		}
 		for (const key of ['children', 'rawChildren']) if (out[key]) out[key] = render(out[key], depth + 1);
