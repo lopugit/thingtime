@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-23 — **Codex (AI)**: Add saved, editable linked-record histories,
+  child-form defaults, duplication, visit totals/status controls, discussions
+  and image selection to the opt-in Builder composition. Copies use relative
+  page links and stable save receipts. Existing records and access rules remain
+  authoritative; production page migration is tracked separately.
+
 - 2026-09-23 — **Codex (AI)**: Editable planner/address workflows and record-bound source state. Validation and remaining migration scope: [PR #894](../PRs/894-codex-builder-app-workflows--editable-planner-address-and-record-workflows.md).
 
 - 2026-09-23: Fence Builder source results, cached bindings and action receipts across record navigation and viewer/page/sharing changes so stale controls cannot target the previous record.
