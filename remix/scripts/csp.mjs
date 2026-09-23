@@ -141,3 +141,13 @@ export const librarySdkCsp = serialize({
  'font-src': ['data:', 'https://fonts.gstatic.com'], 'worker-src': ['blob:'],
  'frame-src': ["'self'"], 'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts']
 });
+
+// Generic Web Platform runtime: no application authority or network. Compiled
+// declarative JavaScript is a terminable Blob worker, never eval in the app.
+export const platformRuntimeCsp = serialize({
+ 'default-src': ["'none'"], 'script-src': ["'self'", 'blob:'],
+ 'worker-src': ['blob:'], 'connect-src': ['data:', 'blob:'],
+ 'style-src': ["'unsafe-inline'"], 'img-src': ['data:', 'blob:'],
+ 'media-src': ['data:', 'blob:'], 'font-src': ['data:'],
+ 'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts']
+});

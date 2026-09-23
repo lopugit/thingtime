@@ -3,7 +3,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
+import { platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
@@ -369,3 +369,7 @@ if (!librarySandboxTokens.includes('allow-scripts') || librarySandboxTokens.incl
 const sdkHeaders = routes.find(route => route.src === '^/library/sdk\\.html$' && route.headers?.['Content-Security-Policy'] === librarySdkCsp);
 if (!sdkHeaders || routes.indexOf(sdkHeaders) < cspHeadersIndex || routes.indexOf(sdkHeaders) > spaIndex || !sdkHeaders.continue) throw new Error('SDK CSP must stay scoped to its isolated document.');
 if (getDirectiveSources(librarySdkCsp,'sandbox').join(' ') !== 'allow-scripts') throw new Error('SDK previews must retain opaque-origin containment.');
+
+const platformHeaders = routes.find(route => route.src === '^/platform/runtime\\.html$' && route.headers?.['Content-Security-Policy'] === platformRuntimeCsp);
+if (!platformHeaders || getDirectiveSources(platformRuntimeCsp,'sandbox').join(' ') !== 'allow-scripts') throw new Error('Web Platform runtime must retain opaque-origin containment.');
+for (const filename of ['platform/runtime.html','platform/runtime.js']) if (!existsSync(join('.vercel/output/static', filename))) throw new Error(`Missing Web Platform runtime ${filename}`);

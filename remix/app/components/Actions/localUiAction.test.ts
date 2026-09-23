@@ -49,3 +49,17 @@ test('query navigation encodes values and stays on the current page', async () =
 	assert.equal(localQueryHref('https://evil.example', {}), null);
 	assert.equal(localQueryHref(null, {}), null);
 });
+
+
+test('query forms collect only declared names, preserve exclusions and require opt-in', async () => {
+	const { localQueryFormInput, localQueryHref } = await import('./localUiAction');
+	const input = { op: 'query', form: true, params: { q: 'old', language: 'html', absent: 'kept' } };
+	const next = localQueryFormInput(input, { q: '', language: 'css', secret: 'not declared' });
+	assert.deepEqual(next.params, { q: '', language: 'css', absent: 'kept' });
+	assert.equal(localQueryHref('page', next.params), '/p/page?q=&language=css&absent=kept');
+	assert.deepEqual(input.params, { q: 'old', language: 'html', absent: 'kept' });
+	const plain = { op: 'query', params: { q: 'old' } };
+	assert.equal(localQueryFormInput(plain, { q: 'new' }), plain);
+	const reserved = localQueryFormInput({ op: 'query', form: true, params: { mode: '' } }, { mode: 'edit' });
+	assert.equal(localQueryHref('page', reserved.params), null);
+});

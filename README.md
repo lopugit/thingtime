@@ -4127,3 +4127,32 @@ both preview and production deployments; never use a public JWT key. No new
 secret variable is required. Production fails closed with HTTP 503 when none is
 configured. Local development without a configured secret uses an ephemeral
 key, so refreshing comments after a server restart starts a new cursor chain.
+
+
+### Web standards Builder app
+
+The reusable `web-standards` suite is installed for the signed-in account using
+`POST /api/v1/webpages/suites/install` with
+`{"key":"web-standards","onlyMissing":true}`. Open the returned `entryPageId`
+in Builder, or visit `/p/web-standards`. Normal database/auth configuration is
+required; no new external credentials are needed. Installation creates private
+Things and does not change another account. Use a first-party account session;
+never place session cookies or tokens in a saved page, Component or repository.
+Explicit reinstall without `onlyMissing` refreshes suite definitions.
+
+The inventory is a checked-in standards snapshot, so running the app does not
+fetch specification sites. To refresh it, install the pinned extraction tools
+outside the repository and run:
+
+```sh
+npm install --prefix /tmp/tt-standards-tools --ignore-scripts @webref/css@8.7.5 @webref/elements@2.9.0 @webref/idl@3.84.0
+node remix/scripts/sync-web-standards.mjs --tools=/tmp/tt-standards-tools/node_modules
+corepack pnpm --dir remix run test:web-platform
+```
+
+Review source/status and coverage changes before committing the generated
+inventory and manifest together. The snapshot includes drafts and internal
+specification clauses; many entries still need interactive recipes. It does
+not claim completed coverage of every standard or API. See
+[the app's data model and runtime](docs/web-standards-builder.md). The ordinary
+client build and PM2 dev lifecycle build the isolated runtime automatically.
