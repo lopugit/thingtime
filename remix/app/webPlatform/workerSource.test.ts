@@ -167,6 +167,9 @@ test('Web API recipes exercise mutable receivers, byte conversion and body consu
 	});
 	assert.deepEqual(await run('TextDecoder.decode', { bytes: [240, 159, 140, 136] }), { ok: true, result: '🌈' });
 	assert.deepEqual(await run('DOMException.code'), { ok: true, result: 11 });
+	assert.deepEqual(await run('DOMException.ABORT_ERR'), { ok: true, result: 20 });
+	const constant = WEB_FEATURES.find((f) => f.name === 'DOMException.ABORT_ERR')!;
+	assert.deepEqual(featureRecipe(constant).program.parameters, []);
 	assert.deepEqual(await run('URL.canParse', { url: 'http://[' }), { ok: true, result: false });
 	assert.deepEqual(await run('URL.parse', { url: 'http://[' }), { ok: true, result: null });
 	const invalid = await run('Body.json', { body: 'not json' });

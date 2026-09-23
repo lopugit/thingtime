@@ -31,13 +31,13 @@ function fromFixture(f: Feature, fixture: Fixture): Recipe | undefined {
 	let requires: string[][] = [[fixture.global]];
 	if (['interface', 'interface mixin', 'constructor'].includes(f.kind)) operation = { result: fixture.summary };
 	else if (f.kind === 'iterable' && fixture.iterable) operation = { result: fixture.iterable };
-	else if (f.kind === 'attribute' && Object.hasOwn(fixture.properties || {}, f.member || '')) {
+	else if (f.kind === 'attribute' && Object.prototype.hasOwnProperty.call(fixture.properties || {}, f.member || '')) {
 		operation = { result: fixture.properties![f.member!] };
 		requires.push([fixture.global, 'prototype', f.member!]);
 	} else if (f.kind === 'const' && fixture.constants) {
 		operation = { result: get(global(fixture.global), f.member!) };
 		requires.push([fixture.global, f.member!]);
-	} else if (f.kind === 'operation' && Object.hasOwn(fixture.operations || {}, f.member || '')) {
+	} else if (f.kind === 'operation' && Object.prototype.hasOwnProperty.call(fixture.operations || {}, f.member || '')) {
 		operation = fixture.operations![f.member!];
 		requires.push(f.static ? [fixture.global, f.member!] : [fixture.global, 'prototype', f.member!]);
 	}
@@ -203,7 +203,7 @@ function fetchFixture(name: string): Fixture {
 	const props = request
 		? 'cache credentials destination duplex integrity isHistoryNavigation isReloadNavigation keepalive method mode redirect referrer referrerPolicy targetAddressSpace url'
 		: 'ok redirected status statusText type url bodyUsed';
-	const properties = Object.fromEntries(props.split(' ').map((k) => [k, get(receiver, k)]));
+	const properties: Record<string, unknown> = Object.fromEntries(props.split(' ').map((k) => [k, get(receiver, k)]));
 	properties.headers = entries(get(receiver, 'headers'));
 	properties.signal = project(get(receiver, 'signal'), ['aborted', 'reason']);
 	properties.body = awaited(method(make('Response', [get(receiver, 'body')]), 'text'));

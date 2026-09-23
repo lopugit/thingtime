@@ -72,7 +72,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   collections, blobs/files, fetch objects and bodies, encoding, exceptions and
   geometry. All 272 runnable Web API recipes pass the Chrome runtime audit;
   missing browser/context support remains explicit. Definitions retain their
-  full program and only the inputs they use.
+  full program and only the inputs they use. See
+  [PR #901 validation and scope](../PRs/901-codex-web-standards-worker-api-add-reusable-web-api-member-demos-and-receiver-fixtures.md).
 
 - 2026-09-23 — **Codex (AI)**: Expand the reusable Web standards catalogue to
   576 runnable JavaScript examples, including language control flow and
