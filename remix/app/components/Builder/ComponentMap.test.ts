@@ -15,3 +15,12 @@ test('map points accept only finite coordinates and local click destinations', (
 	assert.ok(points.slice(1).every((point) => !point.href));
 	assert.throws(() => mapPoints(Array(1001).fill({ lat: 0, lng: 0 })), /1,000/);
 });
+
+test('copied map links can target their current page without permitting other origins', () => {
+	const points = mapPoints([
+		{ lat: 1, lng: 2, href: '?view=detail&id=record' },
+		{ lat: 1, lng: 2, href: '#details' }
+	]);
+	assert.equal(points[0].href, '?view=detail&id=record');
+	assert.equal(points[1].href, '#details');
+});
