@@ -1,6 +1,6 @@
 import React from 'react';
 import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
-import { LOCAL_UI_ACTION } from './localUiAction';
+import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
 import { useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
@@ -134,7 +134,16 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			if (action === LOCAL_UI_ACTION) {
 				try {
 					const input = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
-					if (input && typeof input === 'object' && !Array.isArray(input)) localRef.current?.(input);
+					if (input && typeof input === 'object' && !Array.isArray(input)) {
+						const wrapper = event.currentTarget as HTMLElement;
+						const fieldset = control.closest('fieldset') as HTMLElement | null;
+						const group = fieldset && wrapper.contains(fieldset) ? fieldset : wrapper;
+						if (input.op === 'query' && input.form === true) {
+							const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
+							if (invalid) { invalid.reportValidity(); return; }
+							localRef.current?.(localQueryFormInput(input, gatherFormFields(group)));
+						} else localRef.current?.(input);
+					}
 				} catch {}
 				return;
 			}

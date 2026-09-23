@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-23 — **Codex (AI)**: Added the reusable Web standards Builder suite,
+  a sourced standards inventory and editable isolated HTML/CSS/JavaScript demo
+  programs. Inspection/context-dependent entries retain explicit coverage gaps.
+  Shared query-form controls now collect their declared fields; development and
+  Vercel builds include the sandboxed runtime. See the
+  [PR #897 validation and coverage notes](../PRs/897-codex-web-standards-builder-add-reusable-web-standards-builder-catalogue-and-isolated-demos.md).
+
+
 - 2026-09-23 — **Codex (AI)**: Ordinary shared Builder pages can expose an
   editable copy through the reusable `$install` control. Copying pins the
   account and preserves connected-record permissions. Revoked source access

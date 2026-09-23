@@ -1,3 +1,4 @@
+import { webStandardsPack } from './webstandards';
 import { astroPack } from './astro/index';
 import { pokeworldPack } from './pokeworld/index';
 import { thingmonPack } from './thingmon/index';
@@ -10,6 +11,7 @@ import type { ActionPack, PackContext, PackFunction } from './types';
 // and a catalogue entry with no binding is a run-time refusal.
 
 export const ACTION_PACKS: ActionPack = {
+	...webStandardsPack,
 	...astroPack,
 	...pokeworldPack,
 	...thingmonPack

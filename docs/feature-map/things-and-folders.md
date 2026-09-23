@@ -97,3 +97,11 @@ and source editing through the canonical Things update path. Component/page
 menus and the Action inspector reuse it. It preserves Thing identity and ACLs,
 replaces the validated crystal, and refuses stale `expectedUpdatedAt` writes.
 See [browser Actions and editor checks](../builder-browser-actions.md).
+
+
+## Web standards app
+
+`schemas/appSuites/webStandards.ts` authors the reusable page/components/actions.
+`webPlatform/` holds the versioned inventory, recipe generator and generic
+isolated data-program runtime. Saved examples use ordinary Component Things,
+not native page blocks. See [runtime and coverage](../web-standards-builder.md).

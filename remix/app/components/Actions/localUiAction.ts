@@ -63,3 +63,13 @@ export function localQueryHref(pageId: string | null, params: unknown): string |
 	}
 	return `/p/${encodeURIComponent(pageId)}?${query.toString()}`;
 }
+
+// Form navigation is opt-in and only collects explicitly declared parameter
+// names. The caller uses gatherFormFields, which excludes credentials/files.
+// Empty text wins; untouched or excluded fields preserve authored defaults.
+export function localQueryFormInput(input: Record<string, unknown>, fields: Record<string, unknown>): Record<string, unknown> {
+	if (input.op !== 'query' || input.form !== true || !input.params || typeof input.params !== 'object' || Array.isArray(input.params)) return input;
+	return { ...input, params: Object.fromEntries(Object.entries(input.params).map(([key, value]) => [key,
+		Object.prototype.hasOwnProperty.call(fields, key) ? fields[key] : value
+	])) };
+}
