@@ -4131,6 +4131,12 @@ key, so refreshing comments after a server restart starts a new cursor chain.
 
 ### Web standards Builder app
 
+The worker-compatible Web API recipes include URL members, headers/query/form
+collections, blobs/files, response bodies, encoding, DOM exceptions and geometry.
+These are editable Component program definitions using in-memory receivers.
+Audit that family with `TT_STANDARDS_AUDIT_LANGUAGES=webapi` and the runtime audit
+setup below; it needs no account, permissions or external request.
+
 The reusable `web-standards` suite is installed for the signed-in account using
 `POST /api/v1/webpages/suites/install` with
 `{"key":"web-standards","onlyMissing":true}`. Open the returned `entryPageId`

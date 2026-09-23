@@ -74,6 +74,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-23 — **Codex (AI)**: Normalize Builder app record titles once and use shared field descriptors so each saved Action fits the existing signed mutation preview. Preserve reference permissions, archived labels, zero values, and empty text.
 
+- 2026-09-23 — **Codex (AI)**: Add 248 reusable Web API member demos for URLs,
+  collections, blobs/files, fetch objects and bodies, encoding, exceptions and
+  geometry. All 272 runnable Web API recipes pass the Chrome runtime audit;
+  missing browser/context support remains explicit. Definitions retain their
+  full program and only the inputs they use. See
+  [PR #901 validation and scope](../PRs/901-codex-web-standards-worker-api-add-reusable-web-api-member-demos-and-receiver-fixtures.md).
+
 - 2026-09-23 — **Codex (AI)**: Expand the reusable Web standards catalogue to
   576 runnable JavaScript examples, including language control flow and
   well-known symbol members. Builder fields adopt asynchronous defaults while
