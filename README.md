@@ -4170,3 +4170,9 @@ corepack pnpm --dir remix run audit:web-platform
 
 The report separates unavailable browser/context features from program errors.
 An empty selection, program error or exhausted frame-load retry fails the audit.
+
+For runtime-only verification after `corepack pnpm --dir remix run build`, use
+`TT_STANDARDS_AUDIT_BUILT=1` in place of the test URL. This ephemeral test fixture
+serves the built HTML and JavaScript with their canonical CSP, needs no running
+app server and closes after the audit. Use an explicit HTTPS preview URL for a
+hosted runtime audit.

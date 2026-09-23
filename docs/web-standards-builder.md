@@ -87,9 +87,16 @@ host page, needs no account, creates no Things, and records passed, unsupported,
 failed and frame-load-failed outcomes separately. It retries a frame-load failure
 once; it never retries a program error. Set `TT_STANDARDS_AUDIT_LANGUAGES` to a
 comma-separated language selection, `TT_STANDARDS_AUDIT_IDS` to limit entries,
-and `TT_STANDARDS_AUDIT_OUTPUT` to retain its JSON report. See README for setup.
+and `TT_STANDARDS_AUDIT_OUTPUT` to retain its JSON report. An explicit HTTPS
+preview URL is also supported; no browser credentials are loaded. See README
+for setup.
 
 JavaScript receivers, callbacks and arguments live in `javascriptFixtures.ts`
 and `javascriptRecipes.ts` as editable program data. The generic worker has no
 feature-specific dispatch. Its regression tests execute the same worker source
 used by the browser, including asynchronous results and missing-feature paths.
+
+For runtime-only browser checks after a full build, set
+`TT_STANDARDS_AUDIT_BUILT=1`. The audit serves only the two built runtime assets
+on an ephemeral loopback port with the canonical isolated CSP, then closes that
+fixture. This does not start an app server or validate app/API navigation.

@@ -72,7 +72,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   for Intl, Object/Reflect, collections, promises, buffers and byte encodings.
   The shared isolated worker reports unavailable features before execution,
   without invoking getters during support detection. A local browser audit now
-  checks catalogue recipe execution separately from definition validation.
+  checks catalogue recipe execution separately from definition validation. See
+  [PR #898 validation notes](../PRs/898-codex-web-standards-runtime-coverage-fix-javascript-standards-fixtures-and-browser-availability-reporting.md).
 
 - 2026-09-23 — **Codex (AI)**: Added the reusable Web standards Builder suite,
   a sourced standards inventory and editable isolated HTML/CSS/JavaScript demo
