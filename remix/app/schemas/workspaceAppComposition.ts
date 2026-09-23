@@ -473,7 +473,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 		e(
 			'header',
 			[
-				e('h1', ['{result.name}'], { style: { fontSize: '28px', fontWeight: 750 } }),
+				e('h1', [test('result.name', '{result.name}', 'Open this app')], { style: { fontSize: '28px', fontWeight: 750 } }),
 				e('p', ['{result.timeZone}']),
 				e(
 					'tt-dialog',
@@ -487,7 +487,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 								['maps', 'Map'],
 								['setup', 'Setup'],
 								['trash', 'Trash']
-							].map(([view, label]) => link(label, `{pagePath}?view=${view}`)),
+							].map(([view, label]) => link(label, `{pagePath}?view=${view}`)).concat([button('Refresh records', '$refresh')]),
 							{ style: grid, 'aria-label': 'App navigation' }
 						)
 					],
@@ -499,6 +499,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 		equal('state', 'error', e('p', ['{error}'], { role: 'alert' })),
 		equal('state', 'signed-out', link('Sign in', '/login')),
 		equal('state', 'not-installed', e('p', ['Copy this app to your account to use its Actions.'])),
+		test('installAvailable', e('div', [button('Make an editable copy', '$install')], { style: grid })),
 		equal('state', 'loading', e('p', ['Opening app…'], { role: 'status' }))
 	]);
 	component(
