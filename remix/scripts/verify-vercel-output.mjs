@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
 import { platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
@@ -373,3 +374,9 @@ if (getDirectiveSources(librarySdkCsp,'sandbox').join(' ') !== 'allow-scripts') 
 const platformHeaders = routes.find(route => route.src === '^/platform/runtime\\.html$' && route.headers?.['Content-Security-Policy'] === platformRuntimeCsp);
 if (!platformHeaders || getDirectiveSources(platformRuntimeCsp,'sandbox').join(' ') !== 'allow-scripts') throw new Error('Web Platform runtime must retain opaque-origin containment.');
 for (const filename of ['platform/runtime.html','platform/runtime.js']) if (!existsSync(join('.vercel/output/static', filename))) throw new Error(`Missing Web Platform runtime ${filename}`);
+for (const extension of ['html', 'js']) {
+ const headers = routes.find(route => route.src === `^/platform/runtime\\.${extension}$`);
+ if (!headers?.continue || headers.headers?.['Cache-Control'] !== 'no-store' || routes.indexOf(headers) < cspHeadersIndex || routes.indexOf(headers) > filesystemIndex) throw new Error(`Web Platform runtime ${extension} must be no-store before filesystem routing.`);
+}
+const runtimeDigest = createHash('sha256').update(readFileSync('.vercel/output/static/platform/runtime.js')).digest('hex');
+if (!readFileSync('.vercel/output/static/platform/runtime.html', 'utf8').includes(`src="/platform/runtime.js?v=${runtimeDigest}"`)) throw new Error('Web Platform document must reference its exact runtime digest to bypass previously cached compiler code.');
