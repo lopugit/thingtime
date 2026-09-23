@@ -1,3 +1,4 @@
+import { actionLimitsOf, describeActionStep } from './actionInspect';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { browserActionMinimumVersion, parseActionRequestPagination } from '~/schemas/actionRequestPagination';
@@ -71,6 +72,10 @@ test('larger browser envelopes are explicit and versioned without increasing ser
  assert.equal(browser.ok, true); assert.equal(server.ok, true);
  if (!browser.ok || !server.ok) return;
  assert.deepEqual(browser.crystal.limits, limits);
+ assert.equal(actionLimitsOf({ runtime: 'browser', limits }).maxResultBytes, limits.maxResultBytes);
+ assert.equal(actionLimitsOf({ runtime: 'browser', limits }).timeoutMs, limits.timeoutMs);
+ assert.equal(actionLimitsOf({ runtime: 'server', limits }).maxResultBytes, 262144);
+ assert.match(describeActionStep(program.steps[0]), /3 pages \/ 5 items/);
  assert.deepEqual(server.crystal.limits, { timeoutMs: 10000, maxResultBytes: 262144 });
  assert.equal(browserActionMinimumVersion({ steps: [], limits }), '1.8.0');
  assert.equal(browserActionMinimumVersion({ steps: [] }), '1.7.0');

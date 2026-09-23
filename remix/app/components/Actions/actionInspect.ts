@@ -1,4 +1,4 @@
-import { actionHttpEndpoint } from '~/schemas/browserActions';
+import { BROWSER_ACTION_EXPANDED_LIMITS, actionHttpEndpoint } from '~/schemas/browserActions';
 import {
 	ACTION_LIMIT_CEILINGS,
 	ACTION_LIMIT_DEFAULTS,
@@ -59,10 +59,11 @@ export const runInputDescriptorsOf = (crystal: ActionCrystal | null | undefined)
 // clamped by the server ceilings, defaults elsewhere.
 export const actionLimitsOf = (crystal: ActionCrystal | null | undefined): Record<string, number> => {
 	const declared = crystal?.limits || {};
+	const ceilings = crystal?.runtime === 'browser' ? { ...ACTION_LIMIT_CEILINGS, ...BROWSER_ACTION_EXPANDED_LIMITS } : ACTION_LIMIT_CEILINGS;
 	const merged: Record<string, number> = {};
 	for (const key of Object.keys(ACTION_LIMIT_DEFAULTS) as (keyof typeof ACTION_LIMIT_DEFAULTS)[]) {
 		const value = typeof declared[key] === 'number' ? declared[key] : ACTION_LIMIT_DEFAULTS[key];
-		merged[key] = Math.min(value, ACTION_LIMIT_CEILINGS[key]);
+		merged[key] = Math.min(value, ceilings[key]);
 	}
 	return merged;
 };
@@ -79,7 +80,10 @@ export const describeActionStep = (step: Record<string, unknown>, names?: Record
 	const op = String(step.op || '');
 	const schema = typeof step.schema === 'string' ? displayRef(step.schema, names) : 'data';
 	const guard = step.when !== undefined ? ' (when a condition holds)' : '';
-	if (op === 'http.request') return `${String(step.method)} ${String(step.path)} in your browser${guard}`;
+	if (op === 'http.request') {
+		const pages = step.pagination as { maxPages?: number; maxItems?: number } | undefined;
+		return `${String(step.method)} ${String(step.path)} in your browser${pages ? ` · up to ${pages.maxPages ?? 20} pages / ${pages.maxItems ?? 5000} items` : ''}${guard}`;
+	}
 	if (op === 'lookup') return `Send query to ${String(step.provider)} using your Vault credential${guard}`;
 	if (op === 'things.create') return `Create a ${schema} thing${guard}`;
 	if (op === 'things.get') return `Read ${String(step.id || 'a thing')}${guard}`;
