@@ -9,7 +9,7 @@ import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { HTML_ALLOWED_TAGS as ALLOWED_TAGS, HTML_VOID_TAGS as VOID_TAGS, HTML_MAX_NODES as MAX_NODES, HTML_MAX_DEPTH as MAX_DEPTH } from './htmlRenderPolicy';
 
-import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
+import { applyNoOpener, isEventHandlerProp, isExternalHref, isSafeCssText, isSafeUrl } from './safeUrl';
 
 const ServiceWorkspace = React.lazy(() => import('../Builder/ServiceWorkspace/ServiceWorkspace'));
 
@@ -237,9 +237,19 @@ export type HtmlThingNode =
 
 type RenderState = { count: number; mediaUrl: (url: string) => string };
 
+// May this href be handed to the router instead of the browser? Decided on the
+// RESOLVED origin (isExternalHref), not a `/` prefix: the URL parser folds `\`
+// into `/` for http(s), so `/\elsewhere.test` looks site-relative to a prefix
+// test but resolves to another origin. `<Link to>` would push that through
+// history.pushState, which throws SecurityError cross-origin — the link would
+// silently do nothing. `/api/` is server-rendered, and `download` needs the
+// real anchor; both keep the plain <a> they had before ComponentLink existed.
+export const isLocalHref = (href: unknown, download?: unknown): boolean =>
+	typeof href === 'string' && href.startsWith('/') && !isExternalHref(href) && !href.startsWith('/api/') && !download;
+
 function ComponentLink({ href, children, ...props }: Record<string, any>) {
  const inRouter = useInRouterContext();
- if (inRouter && typeof href === 'string' && /^\/(?!\/)/.test(href) && !href.startsWith('/api/') && !props.download) return <Link {...props} to={href}>{children}</Link>;
+ if (inRouter && isLocalHref(href, props.download)) return <Link {...props} to={href}>{children}</Link>;
  return <a {...props} href={href}>{children}</a>;
 }
 

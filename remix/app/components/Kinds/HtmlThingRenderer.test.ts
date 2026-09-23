@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { NativeControlsEnabled } from '../Builder/NativeComponentControls';
 import { WebpageRuntimeProvider, useWebpageRuntime } from '../Builder/webpageRuntime';
-import { ALLOWED_PROPS, HtmlThingRenderer, InteractiveWorkspace } from './HtmlThingRenderer.tsx';
+import { ALLOWED_PROPS, HtmlThingRenderer, InteractiveWorkspace, isLocalHref } from './HtmlThingRenderer.tsx';
 
 // The prop allowlist IS the trust boundary for component things: a component
 // crystal is untrusted data, and every name in this set is something its
@@ -77,6 +77,25 @@ test('populated textarea templates never receive competing children and defaultV
  }
  const legacy=renderToStaticMarkup(React.createElement(HtmlThingRenderer,{node:{tag:'textarea',children:['Legacy notes']}}));
  assert.match(legacy,/>Legacy notes<\/textarea>/);
+});
+
+test('client navigation is decided on the resolved origin, not a `/` prefix', () => {
+	// The href a component thing carries is untrusted data that already passed
+	// the protocol screen, so a same-origin *looking* path still has to be
+	// resolved before the router is allowed to have it.
+	assert.equal(new URL('/\\elsewhere.test', 'https://thingtime.invalid/').origin, 'https://elsewhere.test',
+		'the URL parser folds `\\` into `/` for http(s), so a prefix test cannot decide this');
+
+	for (const href of ['/p/records', '/', '/p/records?tab=media', '/p/records#notes'])
+		assert.equal(isLocalHref(href), true, `${href} is this origin and should client-navigate`);
+
+	// `<Link to>` on any of these would hand history.pushState a cross-origin
+	// url (SecurityError, silently dead link) or bypass the server route.
+	for (const href of ['/\\elsewhere.test', '//elsewhere.test', 'https://elsewhere.test/p', 'mailto:hi@elsewhere.test', 'tel:+61000', '/api/things', 'p/records'])
+		assert.equal(isLocalHref(href), false, `${href} must stay an ordinary anchor`);
+
+	assert.equal(isLocalHref('/exports/report.csv', true), false, 'a download attribute needs the real anchor');
+	assert.equal(isLocalHref(undefined), false);
 });
 
 test('authored form identity and revision fields render once inside an inert boundary',()=>{
