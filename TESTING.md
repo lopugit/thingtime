@@ -8421,6 +8421,10 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   do-while with a negative limit, switch default/fall-through, labelled breaks,
   async iteration, and real template cooked/raw arrays. Save/read/update a
   class Component through the API and confirm the full program survives.
+- [ ] Template segments containing backticks, `${...}` and zero through five
+  adjacent backslashes remain literal text in plain and tagged templates.
+  Control characters, Unicode separators, emoji and lone surrogates preserve
+  their cooked values without executing source-looking segment text.
 - [ ] Inspect `Element.prototype.classList` and `Document.prototype.URL`: report
   accessor availability without Illegal invocation. An intermediate accessor
   reports an unresolved receiver requirement, not unsupported or a guessed

@@ -45,6 +45,12 @@ the byte digest, asset existence, header order and unchanged opaque CSP. A
 configuration regression executes the actual route patcher against temporary
 output and checks both headers before filesystem routing.
 
+Template encoding now explicitly escapes backslashes before template delimiters.
+The CodeQL incomplete-escaping finding prompted 96 adversarial plain/tagged
+worker checks across backslash parity, source-looking substitutions, control
+characters, Unicode separators and lone surrogates. All preserve literal text
+without execution; the rebuilt runtime passes digest/CSP/cache verification.
+
 ## Validation and remaining acceptance
 
 - All 18,798 catalogue programs compile and pass Component write validation.

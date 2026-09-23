@@ -217,3 +217,20 @@ test('structured class, function and control flow nodes preserve native language
 		{ cooked: ['first\n', 'last'], raw: ['first\\n', 'last'], value: 4 }
 	);
 });
+
+test('template encoding preserves backslash parity, delimiters and Unicode without executing segment text', async () => {
+	// These are deliberate source-looking literal strings, never source nodes.
+	// eslint-disable-next-line no-template-curly-in-string
+	const markers = ['`', '${(() => { throw new Error("segment executed"); })()}', '${', '\\', '\r\n\t\u0000', '\u2028\u2029', '\ud800', '😀'];
+	for (let count = 0; count < 6; count++) {
+		for (const marker of markers) {
+			const text = '\\'.repeat(count) + marker + '\\'.repeat(count);
+			const template = { op: 'template-literal', strings: [text], values: [] };
+			assert.equal(await run([ret(template)]), text);
+			assert.equal(
+				await run([ret({ ...template, op: 'tagged-template', tag: { op: 'function', params: ['parts'], value: get(v('parts'), 0) } })]),
+				text
+			);
+		}
+	}
+});

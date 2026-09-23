@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   recipes (25 additional interactive entries). Interface inspection now reads
   descriptors without invoking getters. Runtime HTML versions its compiler URL
   by content digest; both assets use no-store to prevent stale compiler reuse.
+  Template encoding explicitly escapes backslashes before delimiters, with
+  adversarial plain/tagged literal regressions.
   Details: [PR #903](../PRs/903-codex-web-standards-language-programs-add-reusable-javascript-language-definitions.md).
 
 - 2026-09-24 — **Codex (AI)**: Add 120 interactive Web API entries for event and

@@ -207,7 +207,16 @@ export function compilePlatformProgram(raw: unknown): string {
 					node.strings.some((s: unknown) => typeof s !== 'string')
 				)
 					throw new Error('Expected bounded template segments and substitutions');
-				const escape = (s: string) => quoted(s).slice(1, -1).replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+				// Escape backslashes before template delimiters. Control characters and
+				// UTF-16 surrogates use JSON escapes, preserving even lone surrogates.
+				const escape = (s: string) =>
+					s
+						.replace(/\\/g, '\\\\')
+						.replace(/`/g, '\\`')
+						.replace(/\$\{/g, '\\${')
+						// Control characters must be escaped in generated template source.
+						// eslint-disable-next-line no-control-regex
+						.replace(/[\u0000-\u001f<\u2028\u2029\ud800-\udfff]/g, (character) => quoted(character).slice(1, -1));
 				const body = node.strings
 					.map((s: string, i: number) => escape(s) + (i < node.values.length ? '${(' + e(node.values[i]) + ')}' : ''))
 					.join('');
