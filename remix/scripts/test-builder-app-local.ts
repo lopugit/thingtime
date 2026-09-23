@@ -110,7 +110,7 @@ async function main() {
 		/409/
 	);
 	const prepare = async (action: string, inputs: any) =>
-		call('/api/v1/actions/run', { action, inputs, source: 'component', execution: 'browser', executionVersion: '1.10.0' });
+		call('/api/v1/actions/run', { action, inputs, source: 'component', execution: 'browser', executionVersion: '1.11.0' });
 	const host = {
 		assertIdentity: (id: string) => {
 			if (id !== actor) throw new Error('Wrong actor');

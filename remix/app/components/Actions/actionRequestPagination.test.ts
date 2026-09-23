@@ -10,7 +10,7 @@ const pagination = { cursorParam: 'cursor', cursorPath: 'paging.next', itemsPath
 test('indexed expressions negotiate their runtime before old clients can execute them', () => {
 	for (const operation of ['indexBy', 'groupBy']) {
 		const program = { steps: [{ op: 'return', value: { nested: { ttExpr: [operation, [], '$item.id'] } } }] };
-		assert.equal(browserActionMinimumVersion(program), '1.10.0');
+		assert.equal(browserActionMinimumVersion(program), '1.11.0');
 	}
 	assert.equal(browserActionMinimumVersion({ steps: [{ op: 'return', value: 'indexBy' }] }), '1.7.0');
 });

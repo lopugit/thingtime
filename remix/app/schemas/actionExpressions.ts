@@ -206,6 +206,8 @@ export const EXPRESSION_CATALOGUE: Record<string, ExpressionSignature> = {
 	'thingmon.evolve': sig(1, 1, 'Evolve a creature that has reached its evolution level → member, from, to.', { pack: 'thingmon' }),
 	'thingmon.useItem': sig(1, 1, 'Apply a tonic or elixir: { member, itemId, inBattle? } → member, message, consumed.', { pack: 'thingmon' }),
 	'thingmon.heal': sig(1, 1, 'A creature at full HP with every condition cleared.', { pack: 'thingmon' }),
+	'webstandards.browse': sig(0, 1, 'Search the versioned HTML/CSS/ECMAScript/Web API inventory and get reusable declarative demo programs.', { pack: 'webstandards' }),
+	'webstandards.component': sig(1, 1, 'Build a reusable Component crystal for a standard feature id.', { pack: 'webstandards' }),
 	'thingmon.stats': sig(1, 1, 'Level-scaled stats for { speciesId, level, iv? }.', { pack: 'thingmon' })
 };
 

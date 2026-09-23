@@ -83,7 +83,7 @@ async function main() {
 		inputs: { rootId },
 		source: 'component',
 		execution: 'browser',
-		executionVersion: '1.10.0'
+		executionVersion: '1.11.0'
 	});
 	assert.equal(foreign.data.ok, false, 'Foreign Actions never inherit the viewer authority');
 	const shared = await request(team, '/api/v1/actions/run', { action: 'qa-editable-app-read', inputs: { rootId }, sharedRoot: pageId });
@@ -95,7 +95,7 @@ async function main() {
 	assert.equal(page.author.id, team.user.id);
 	const navigation = (await call(team, '/api/v1/things?id=' + page.crystal.blocks[0].children[0].component)).thing;
 	const prepare = (action: string, inputs: any) =>
-		call(team, '/api/v1/actions/run', { action, inputs, source: 'component', execution: 'browser', executionVersion: '1.10.0' });
+		call(team, '/api/v1/actions/run', { action, inputs, source: 'component', execution: 'browser', executionVersion: '1.11.0' });
 	const host = {
 		assertIdentity: (id: string) => assert.equal(id, team.user.id),
 		request: (step: any) =>

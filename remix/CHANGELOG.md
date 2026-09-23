@@ -68,11 +68,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-23 — **Codex (AI)**: Complete saved planner date, filter and move bindings with reusable change/drag controls. Split the planner controls and days into editable Components, group daily visits once, preserve the original page-size choices and cancel delayed field changes when their binding changes. Local fixture requests now time out and negotiate Action protocol 1.10.
+- 2026-09-23 — **Codex (AI)**: Complete saved planner date, filter and move bindings with reusable change/drag controls. Split the planner controls and days into editable Components, group daily visits once, preserve the original page-size choices and cancel delayed field changes when their binding changes. Local fixture requests now time out and negotiate Action protocol 1.11. See [PR #899 implementation and validation notes](../PRs/899-codex-builder-portable-app-programs-compose-editable-planner-and-themed-collections.md).
 
-- 2026-09-23 — **Codex (AI)**: Add inherited Component theme tokens, instance-scoped CSS rules, deferred editable collection rows and configurable dialog/selection behavior. Builder app authoring uses the original HQ styles and saved relationship calculations. Copying preserves row Actions, media and dialog completion references. Index/group expressions negotiate Action protocol 1.10; production HQ data migration remains a separate reviewed operation.
+- 2026-09-23 — **Codex (AI)**: Add inherited Component theme tokens, instance-scoped CSS rules, deferred editable collection rows and configurable dialog/selection behavior. Builder app authoring uses the original HQ styles and saved relationship calculations. Copying preserves row Actions, media and dialog completion references. Index/group expressions negotiate Action protocol 1.11; production HQ data migration remains a separate reviewed operation.
 
 - 2026-09-23 — **Codex (AI)**: Normalize Builder app record titles once and use shared field descriptors so each saved Action fits the existing signed mutation preview. Preserve reference permissions, archived labels, zero values, and empty text.
+- 2026-09-23 — **Codex (AI)**: Added the reusable Web standards Builder suite,
+  a sourced standards inventory and editable isolated HTML/CSS/JavaScript demo
+  programs. Inspection/context-dependent entries retain explicit coverage gaps.
+  Shared query-form controls now collect their declared fields; development and
+  Vercel builds include the sandboxed runtime. See the
+  [PR #897 validation and coverage notes](../PRs/897-codex-web-standards-builder-add-reusable-web-standards-builder-catalogue-and-isolated-demos.md).
+
 
 - 2026-09-23 — **Codex (AI)**: Ordinary shared Builder pages can expose an
   editable copy through the reusable `$install` control. Copying pins the

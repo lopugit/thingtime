@@ -8436,3 +8436,34 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Builder record navigation: throttle the source request, follow a related record link, and verify old edit/archive controls disappear before the new result arrives. Reopening the same binding may paint its cached data; another record, viewer, page or sharing context must not inherit it.
 
 - Builder app portability: preview each generated Component and Action through the signed mutation workflow before migration. A valid app must fit without raising review limits; confirm record labels, zero values, empty text, archived references, missing references, and every planner day match the original app after title normalization.
+
+## Web standards Builder app (2026-09-23)
+
+- [ ] Install `web-standards` through the suite API on a disposable local stack.
+  Reinstall with `onlyMissing`; IDs stay stable and customized parts remain.
+  Run `TT_STANDARDS_TEST_URL=http://127.0.0.1:<web-port>
+  TT_STANDARDS_TEST_DATABASE_HOST=127.0.0.1:<mongo-port>
+  corepack pnpm --dir remix run test:web-platform` for real API install, private
+  component save/read/update, anonymous denial and exact-fixture cleanup.
+- [ ] Open `/p/web-standards`, search `dialog` with HTML selected and Explore.
+  The URL and card list use actual field values. Clear the search; empty text
+  clears the query. Change coverage; navigation and pagination preserve filters.
+  Query controls collect only declared names from their own form group.
+- [ ] Run dialog, open/close it and use Escape. Change CSS display and confirm
+  computed output changes. Change Array.prototype.at arguments from `[0]` to
+  `[2]`; the result changes from 1 to 4. Save example template, follow its Thing
+  link, edit its complete program and reuse it as a Builder component.
+- [ ] Edit the live program to an infinite loop. It times out within two seconds
+  and the outer app remains usable. A fetch to the app/API is blocked; opening
+  the runtime directly still has its opaque-origin CSP. Raw source, dynamic
+  evaluation, script/iframe tags, event-handler attributes and input patterns
+  do not execute in the account document. Stop removes the frame and worker.
+- [ ] Switch account/component and verify inputs, draft and result reset. At
+  desktop and 390px inspect navigation, search, detail, editable program and
+  results through the footer: no horizontal overflow, clipping or overlap.
+  Inspect runtime support separately from published/draft status. Inspection
+  and context-dependent entries must remain labelled as incomplete demos.
+- [ ] Run schemas, action packs, actions, components, webpages, capability and
+  Web Platform suites; build client/server and verify Vercel runtime assets/CSP.
+  Exercise the bundled server API too: JSON inventory initialization must not
+  silently vanish from Nitro's lazy module initialization.

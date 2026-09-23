@@ -20,6 +20,8 @@ import {
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
 
+const WebPlatformSurface = React.lazy(() => import('../../webPlatform/WebPlatformSurface'));
+
 const ServiceWorkspace = React.lazy(() => import('../Builder/ServiceWorkspace/ServiceWorkspace'));
 
 // Native workspace controls touch persisted account data. Inert component and
@@ -272,6 +274,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const tag = String(node.tag || 'div').toLowerCase();
+	if (tag === 'tt-web-platform') return <React.Suspense key={key} fallback={<p>Web Platform program</p>}><WebPlatformSurface program={node.props?.program} /></React.Suspense>;
 	if (tag === 'tt-service-workspace') {
 		const name = typeof node.props?.name === 'string' ? node.props.name : undefined;
 		return (

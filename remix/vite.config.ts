@@ -10,7 +10,7 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
-import { designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
+import { platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -239,6 +239,14 @@ const librarySandboxPlugin = (): Plugin => ({
   configureServer(server) {
     server.middlewares.use((req,res,next) => {
       const path = req.url?.split('?')[0];
+      if (path === '/platform/runtime.html' || path === '/platform/runtime.js') {
+        const file = fileURLToPath(new URL(path.endsWith('.html') ? './public/platform/runtime.html' : './dist/platform/runtime.js', import.meta.url));
+        if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:platform');return; }
+        res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
+        res.setHeader('Content-Security-Policy',platformRuntimeCsp);
+        res.setHeader('Cache-Control','no-store');
+        createReadStream(file).pipe(res);return;
+      }
       if (path !== '/library/sandbox.html' && path !== '/library/sdk.html' && path !== '/library/runner.js') return next();
       const file = fileURLToPath(new URL(path.endsWith('.html') ? `./public${path}` : './dist/library/runner.js', import.meta.url));
       if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:library');return; }

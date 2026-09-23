@@ -48,7 +48,7 @@ test('action and inputs are always present keys, so an omitted input list still 
 test('browser preparation advertises the implemented execution version, never caller-supplied claims', () => {
  const body = buildActionRunBody({ action: 'a', source: 'component', execution: 'browser' });
  assert.equal(body.execution, 'browser');
- assert.equal(body.executionVersion, '1.10.0');
+ assert.equal(body.executionVersion, '1.11.0');
  assert.equal(body.source, 'component');
  assert.equal('executionVersion' in buildActionRunBody({ action: 'a' }), false);
 });

@@ -1,6 +1,7 @@
 // Shared by the browser renderer and server-side authored-markup discovery.
 // Unknown tags render only their children; dropped markup containers never do.
 export const HTML_ALLOWED_TAGS = new Set([
+	'tt-web-platform',
 	'tt-service-workspace',
 	'tt-style',
 	'tt-collection',

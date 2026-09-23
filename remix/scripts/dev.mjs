@@ -89,7 +89,9 @@ console.log(
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 // Keep the isolated runner available on a fresh checkout and current during edits.
 runStep(npmCommand, ['run', 'build:library']);
+runStep(npmCommand, ['run', 'build:platform']);
 const children = [
+  spawn(npmCommand, ['run', 'build:platform', '--', '--watch'], { stdio: 'inherit' }),
   spawn(npmCommand, ['run', 'build:library', '--', '--watch'], { stdio: 'inherit' }),
   spawn(npmCommand, ['run', 'dev:nitro'], { stdio: 'inherit' }),
   spawn(npmCommand, ['run', 'dev:vite'], { stdio: 'inherit' })
