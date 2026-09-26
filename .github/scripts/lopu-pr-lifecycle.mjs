@@ -67,7 +67,26 @@ export async function settle({ repo, number, api, threads, apply = false }) {
     const p = await api(path);
     if (!eligible(p, repo) || identity(p) !== identity(initial) || !await liveRefs(p)) return 'changed';
     if (managed(p) && redundant(p, await api(`${path}/files?per_page=100`, 'pages'))) return 'close';
-    if (p.mergeable !== true || p.mergeable_state !== 'clean') return 'not-current';
+    // 'unstable' means mergeable with a non-passing NON-required check. That is
+    // already rejected by tested() below, which is the intended gate: besides
+    // naming every required context it requires checkDisposition() === 'ready',
+    // i.e. every check run AND commit status on the head is success/neutral/
+    // skipped. So demanding 'clean' here only duplicated that gate, while being
+    // stricter than the rulesets and relying on a field GitHub computes
+    // asynchronously. Keep rejecting 'blocked' (required check or review unmet),
+    // 'behind' (strict_required_status_checks_policy), 'dirty', 'draft' and
+    // 'unknown' -- this is an allowlist, so any state GitHub adds later is
+    // rejected until it is reviewed and added here.
+    //
+    // This deliberately does NOT make a red third-party check mergeable:
+    // checkDisposition() does not filter by app, so the GitHub Advanced Security
+    // aggregate 'CodeQL' concluding timed_out still yields 'checks-not-ready'
+    // (PR #832 head 08d4c5f7 has exactly 1 of 54 latest check runs red -- that
+    // aggregate -- and tested() is false there). Exempting third-party apps
+    // would also make GitGuardian advisory, so that is out of scope here; a
+    // terminal GHAS aggregate verdict is cleared by a new head SHA, which earns
+    // a fresh aggregate suite.
+    if (p.mergeable !== true || !['clean', 'unstable'].includes(p.mergeable_state)) return 'not-current';
     if (!approved(p, await api(`${path}/reviews?per_page=100`, 'pages'))) return 'needs-review';
     if (await threads(number)) return 'unresolved-review';
     const checks = await api(`commits/${p.head.sha}/check-runs?filter=latest&per_page=100`, 'checks');
