@@ -3,6 +3,7 @@ import { ComponentStyle } from './ComponentStyle';
 import type { ComponentStyleRule } from './componentStyleRules';
 import { ComponentDataScope } from './ComponentSelect';
 import { countdownDuration, countdownRemaining } from './nativeControlClock';
+import { formCompletionMatches } from './nativeControlForm';
 
 export const NativeControlsEnabled = React.createContext(false);
 export const ComponentLocalControl = React.createContext<((input: Record<string, unknown>) => void) | null>(null);
@@ -170,13 +171,15 @@ function Countdown({ duration, enabled }: { duration: number; enabled: boolean }
 
 // A configurable form boundary with one stable operation identity. Refreshes and
 // failed/ambiguous writes retain the same id; only an explicit resetKey change
-// or switching to another saved identity starts a new draft.
+// or a successful receipt matching this generated identity starts a new draft.
 export function ComponentForm({
 	identityName,
 	identity,
 	revisionName,
 	revision,
 	resetKey,
+	completion,
+	completionState,
 	children
 }: {
 	identityName?: unknown;
@@ -184,6 +187,8 @@ export function ComponentForm({
 	revisionName?: unknown;
 	revision?: unknown;
 	resetKey?: unknown;
+	completion?: unknown;
+	completionState?: unknown;
 	children: React.ReactNode;
 }) {
 	const enabled = React.useContext(NativeControlsEnabled);
@@ -198,6 +203,8 @@ export function ComponentForm({
 			revisionName={revisionName}
 			revision={revision}
 			enabled={enabled}
+			completion={completion}
+			completionState={completionState}
 		>
 			{children}
 		</FormInstance>
@@ -209,6 +216,8 @@ function FormInstance({
 	revisionName,
 	revision,
 	enabled,
+	completion,
+	completionState,
 	children
 }: {
 	name: string;
@@ -216,13 +225,21 @@ function FormInstance({
 	revisionName: unknown;
 	revision: unknown;
 	enabled: boolean;
+	completion: unknown;
+	completionState: unknown;
 	children: React.ReactNode;
 }) {
-	const [id] = React.useState(() => saved || crypto.randomUUID());
+	const [id, setId] = React.useState(() => saved || crypto.randomUUID());
+	const local = React.useContext(ComponentLocalControl);
+	React.useEffect(() => {
+		if (!enabled || saved || !formCompletionMatches(completion, name, id)) return;
+		local?.({ op: 'patch', values: completionState });
+		setId(crypto.randomUUID());
+	}, [completion, completionState, enabled, saved, name, id, local]);
 	const [stamp] = React.useState(() => (typeof revision === 'string' ? revision.slice(0, 200) : ''));
 	const stampName = typeof revisionName === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(revisionName) ? revisionName : '';
 	return (
-		<fieldset disabled={!enabled} style={{ display: 'grid', gap: 12, border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+		<fieldset key={id} disabled={!enabled} style={{ display: 'grid', gap: 12, border: 0, padding: 0, margin: 0, minWidth: 0 }}>
 			{name ? <input type="hidden" name={name} value={id} /> : null}
 			{stampName ? <input type="hidden" name={stampName} value={stamp} /> : null}
 			{children}
