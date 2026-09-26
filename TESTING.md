@@ -8411,6 +8411,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Saved-record forms never reset from this receipt. Attachment helper text and
   linked-URL controls follow their configured values; upload readiness disables
   submit while empty, pending, failed or committed, and clears after reset.
+  With attachments selected, bind `committedTargetId`/`committedIds` from the
+  same receipt and confirm the completion reset keeps every saved file: after
+  the form clears, the saved record still resolves its attachments and no
+  `POST /api/v1/attachments/delete` fires for them. Unbinding those two props
+  must be the only way to observe that delete.
 
 - Saved Components: embed `tt-discussion` for an authorized Thing. At desktop
   and 390px, post a comment and nested reply, react, search, and refresh; keep
