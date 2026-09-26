@@ -3,7 +3,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { compilePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
-import { declare, domCall, domDocument, domGet, get, returns, variable } from './programBuilders';
+import { array, awaited, declare, domCall, domDocument, domGet, fn, get, global, method, returns, variable } from './programBuilders';
 
 async function run(steps: unknown[], reply: (request: any) => unknown, input = {}) {
 	const requests: any[] = [],
@@ -11,8 +11,10 @@ async function run(steps: unknown[], reply: (request: any) => unknown, input = {
 	const context: any = { inputJSON: JSON.stringify(input) };
 	context.postMessage = (value: any) => {
 		if (value.type === 'tt-platform-dom') {
-			requests.push(JSON.parse(JSON.stringify(value)));
-			const response = JSON.parse(JSON.stringify({ type: 'tt-platform-dom-result', id: value.id, result: reply(value) }));
+			// structuredClone, not JSON: the real worker boundary rejects an
+			// uncloneable argument instead of silently dropping it.
+			requests.push(structuredClone(value));
+			const response = structuredClone({ type: 'tt-platform-dom-result', id: value.id, result: reply(value) });
 			queueMicrotask(() => context.onmessage({ data: response }));
 		} else if (value.type !== 'tt-platform-worker-ready') results.push(JSON.parse(JSON.stringify(value)));
 	};
@@ -67,6 +69,28 @@ test('repeated handles retain receiver identity and undefined native returns sta
 	assert.deepEqual(result.results, [{ ok: true, result: true }]);
 	const voidResult = await run(returns(domDocument()), () => ({ value: undefined }));
 	assert.deepEqual(voidResult.results, [{ ok: true, result: '[undefined]' }]);
+});
+
+test('a refused DOM request leaves the frame-side request numbering intact', async () => {
+	// The bridge accepts a request only when its id equals its own request count,
+	// so a refused request must not consume an id. Exceeding the concurrency
+	// budget and posting an uncloneable argument are both catchable program
+	// errors; neither may desynchronise the operations that follow.
+	const concurrent = { op: 'dom', action: 'document' };
+	const attempt = (body: unknown[]) => [{ op: 'try', body, error: 'e', catch: [] }, ...returns(domDocument())];
+	const budget = await run(
+		attempt([{ op: 'expression', value: awaited(method(global('Promise'), 'all', [array(...Array.from({ length: 33 }, () => concurrent))])) }]),
+		() => ({ value: null })
+	);
+	const uncloneable = await run(attempt(returns(domCall(null, 'append', [fn([], 1)]))), () => ({ value: null }));
+	for (const { requests } of [budget, uncloneable])
+		assert.deepEqual(
+			requests.map((request) => request.id),
+			requests.map((_, index) => index + 1),
+			'posted DOM request ids stay contiguous'
+		);
+	assert.deepEqual(budget.results, [{ ok: true, result: null }]);
+	assert.deepEqual(uncloneable.results, [{ ok: true, result: null }]);
 });
 
 test('an ordinary parameter named type cannot impersonate a bridge reply before execution', async () => {
