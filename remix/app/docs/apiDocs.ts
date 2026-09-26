@@ -12746,8 +12746,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.15.0',
-    contractVersion: '1.15.0',
+    featureVersion: '1.16.0',
+    contractVersion: '1.16.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',

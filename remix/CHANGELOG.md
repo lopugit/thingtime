@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Reusable ECMAScript receiver and prototype
+  programs fill 136 missing built-in examples and improve 22 existing ones.
+  Editable binary data, iterator consumption, weak identity, promises, function
+  receivers and local prototype extensions use existing Thingtime language
+  nodes. The catalogue reaches 2,792 interactive entries; API/client catalogue
+  negotiation advances to `api.actions-run` 1.16.0.
+
 - 2026-09-27 — **Codex (AI)**: Saved Component links keep their page and view
   mode inside Builder. Local Back controls can return through nested links
   within the same app, with an explicit fallback for direct entry.

@@ -5,6 +5,8 @@ import { javascriptSymbolRecipe } from './javascriptSymbols';
 import { javascriptSyntaxRecipe } from './javascriptSyntax';
 import { javascriptDefinitionsRecipe } from './javascriptDefinitions';
 import { javascriptControlRecipe } from './javascriptControl';
+import { javascriptReceiverRecipe } from './javascriptReceiverFixtures';
+import { javascriptPrototypeRecipe } from './javascriptPrototypeFixtures';
 export function javascriptRecipe(f: Feature): Recipe {
 	const p = base(f),
 		name = f.name
@@ -13,6 +15,8 @@ export function javascriptRecipe(f: Feature): Recipe {
 			.trim();
 	const parts = name.split('.');
 	const specialized =
+		javascriptPrototypeRecipe(f) ||
+		javascriptReceiverRecipe(f) ||
 		javascriptDefinitionsRecipe(f) ||
 		javascriptControlRecipe(f) ||
 		javascriptSyntaxRecipe(f) ||
