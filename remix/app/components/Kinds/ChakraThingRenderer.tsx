@@ -280,7 +280,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	if (name === 'Attachments') return <ComponentAttachments key={key} {...node.props} />;
 	if (name === 'Media') return <ComponentMedia key={key} {...node.props} />;
 	if (name === 'Countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
-	if (name === 'Dialog') return <ComponentDialog key={key} {...node.props} closeContent={node.props?.closeContent === undefined ? undefined : renderChildren(node.props.closeContent, depth + 1, state)}>{renderChildren(node.children, depth + 1, state)}</ComponentDialog>;
+	if (name === 'Dialog') return <ComponentDialog key={key} {...node.props} triggerContent={node.props?.triggerContent === undefined ? undefined : renderChildren(node.props.triggerContent, depth + 1, state)} closeContent={node.props?.closeContent === undefined ? undefined : renderChildren(node.props.closeContent, depth + 1, state)}>{renderChildren(node.children, depth + 1, state)}</ComponentDialog>;
 	if (name === 'Form') {
 		return (
 			<ComponentForm key={key} {...node.props}>

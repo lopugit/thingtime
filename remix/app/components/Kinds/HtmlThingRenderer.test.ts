@@ -55,9 +55,12 @@ test('Chakra menu and dialog content use their bounded renderer', () => {
 	assert.match(menu, /aria-label="Options"/);
 	assert.match(menu, /Custom trigger/);
 	assert.doesNotMatch(menu, /onclick/i);
-	const dialog = renderToStaticMarkup(React.createElement(ChakraThingRenderer, { node: { chakra: 'Dialog', props: { closeDisabled: true, closeContent: { chakra: 'Text', children: ['Custom close'] } }, children: ['Dialog content'] } }));
+	const dialog = renderToStaticMarkup(React.createElement(ChakraThingRenderer, { node: { chakra: 'Dialog', props: { role: 'alertdialog', triggerContent: { chakra: 'Text', props: { onClick: 'unsafe()' }, children: ['Confirm trigger'] }, closeDisabled: true, closeContent: { chakra: 'Text', children: ['Custom close'] } }, children: ['Dialog content'] } }));
 	assert.match(dialog, /aria-label="Close dialog" disabled=""/);
 	assert.match(dialog, /Custom close/);
+	assert.match(dialog, /role="alertdialog"/);
+	assert.match(dialog, /Confirm trigger/);
+	assert.doesNotMatch(dialog, /onclick/i);
 });
 
 
@@ -140,9 +143,11 @@ test('pending authored forms disable fields without changing saved identity or r
 
 test('custom dialog close content uses the same sanitizing renderer', () => {
  const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: {
-  tag: 'tt-dialog', props: { title: 'Custom dialog', closeLabel: 'Dismiss', closeContent: { tag: 'svg', props: { viewBox: '0 0 24 24', onLoad: 'alert(1)' }, children: [{ tag: 'path', props: { d: 'M1 1L23 23' } }] } }
+  tag: 'tt-dialog', props: { title: 'Custom dialog', triggerContent: { tag: 'span', props: { onClick: 'unsafe()' }, children: ['Open confirmation'] }, closeLabel: 'Dismiss', closeContent: { tag: 'svg', props: { viewBox: '0 0 24 24', onLoad: 'alert(1)' }, children: [{ tag: 'path', props: { d: 'M1 1L23 23' } }] } }
  } }));
  assert.match(markup, /aria-label="Dismiss"/);
+ assert.match(markup, /Open confirmation/);
+ assert.doesNotMatch(markup, /onclick/i);
  assert.match(markup, /<svg viewBox="0 0 24 24"><path d="M1 1L23 23"><\/path><\/svg>/);
  assert.doesNotMatch(markup, /onLoad|onload|alert\(1\)/);
 });

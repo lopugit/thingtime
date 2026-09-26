@@ -42,6 +42,8 @@ const dialogStyles: ComponentStyleRule[] = [
 export function ComponentDialog({
 	title,
 	name,
+	triggerContent,
+	role,
 	type,
 	autoOpen,
 	closeQuery,
@@ -54,6 +56,8 @@ export function ComponentDialog({
 }: {
 	title?: unknown;
 	name?: unknown;
+	triggerContent?: React.ReactNode;
+	role?: unknown;
 	type?: unknown;
 	autoOpen?: unknown;
 	closeQuery?: unknown;
@@ -89,6 +93,7 @@ export function ComponentDialog({
 	const dialogElement = (
 			<dialog
 				ref={dialog}
+				role={role === 'alertdialog' ? 'alertdialog' : undefined}
 				className={['tt-native-dialog', typeof className === 'string' ? className : ''].filter(Boolean).join(' ')}
 				data-type={type === 'drawer' ? 'drawer' : 'dialog'}
 				onCancel={(event) => {
@@ -122,7 +127,7 @@ export function ComponentDialog({
 		<ComponentStyle rules={dialogStyles}>
 			{autoOpen !== true && (
 				<button type="button" disabled={!enabled} onClick={() => dialog.current?.showModal()}>
-					{text(name, `Open ${label}`)}
+					{triggerContent ?? text(name, `Open ${label}`)}
 				</button>
 			)}
 			{dialogHost ? createPortal(<ComponentStyle rules={dialogStyles}>{dialogElement}</ComponentStyle>, dialogHost.element) : dialogElement}
