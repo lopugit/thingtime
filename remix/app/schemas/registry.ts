@@ -1,3 +1,4 @@
+import { copyActionJson } from './actionJsonInput.ts';
 import { parseBrowserExpressionLimits } from './browserActions';
 import { BROWSER_ACTION_EXPANDED_LIMITS } from './browserActions';
 import { parseActionRequestPagination } from './actionRequestPagination';
@@ -1597,7 +1598,7 @@ export const ACTION_STEP_OPS = [
 	'return'
 ] as const;
 export const ACTION_CAPABILITIES = ['http.request', 'lookup', 'things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
-export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum'] as const;
+export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum', 'json'] as const;
 export const MAX_ACTION_STEPS = 40;
 export const MAX_ACTION_INPUTS = 16;
 export const MAX_ACTION_CAPABILITY_ENTRIES = 8;
@@ -6111,7 +6112,13 @@ const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record
 			}
 			descriptor.values = values;
 		}
-		if (raw.default !== undefined) {
+		if (raw.default !== undefined && type === 'json') {
+			try {
+				descriptor.default = copyActionJson(raw.default);
+			} catch (error) {
+				return fail(400, `Input ${name}: ${error instanceof Error ? error.message : 'Invalid JSON default'}`);
+			}
+		} else if (raw.default !== undefined) {
 			const fallback = sanitizeComponentArgScalar(raw.default, MAX_COMPONENT_ARG_DEFAULT_CHARS);
 			if (fallback === null && raw.default !== null) return fail(400, `Input ${name} default must be a string, number, or boolean`);
 			if (fallback !== null) {

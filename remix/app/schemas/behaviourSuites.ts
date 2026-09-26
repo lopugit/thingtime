@@ -58,10 +58,10 @@ type ArgSpec = {
 
 type InputSpec = {
 	name: string;
-	type: 'string' | 'text' | 'number' | 'boolean' | 'enum';
+	type: 'string' | 'text' | 'number' | 'boolean' | 'enum' | 'json';
 	label: string;
 	required?: boolean;
-	default?: string | number | boolean;
+	default?: unknown;
 	values?: string[];
 	maxLength?: number;
 	min?: number;

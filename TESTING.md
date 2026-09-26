@@ -8533,3 +8533,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Web Platform suites; build client/server and verify Vercel runtime assets/CSP.
   Exercise the bundled server API too: JSON inventory initialization must not
   silently vanish from Nitro's lazy module initialization.
+
+### Edited Web Platform drafts and JSON Action inputs (2026-09-24)
+
+- Change a workbench definition and its inputs, including false, zero, empty
+  text, null, nested arrays and literal `{name}` / `$input.name` text. Run it,
+  save the edited Component, read the exact Thing, reload its Component preview
+  and reuse it in Builder. Definition, defaults and results must match.
+- Enter invalid program/input JSON and click Save: show a form error and make
+  no save request. Correct it and save once; one private Component is created.
+- Edit parameter defaults/types and remove a parameter: stale form overrides
+  must not reappear or replace the new defaults. Check desktop and 390px widths.
+- Create a JSON-input Action in the guided editor and inspect/run it. JSON
+  strings are literal at the API; form JSON is decoded exactly once. Verify
+  omitted defaults, explicit null and nested Action calls. Oversized resolved
+  defaults/child inputs refuse before executing; anonymous reads stay denied.

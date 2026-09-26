@@ -1,16 +1,18 @@
 import React from 'react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { validatePlatformProgram } from './compiler';
+import { platformFieldValue, reconcilePlatformInputs, snapshotPlatformDraft, type PlatformInputEdits } from './draft';
 import type { PlatformProgram } from './types';
 
 /** Generic builder primitive: the entire document, styles, program and input
  * descriptors come from the component Thing. No feature ID or app UI here. */
-export default function WebPlatformSurface({ program: raw }: { program?: unknown }) {
+export default function WebPlatformSurface({ program: raw, name }: { program?: unknown; name?: unknown }) {
 	const user = useCurrentUser();
 	const serialized = JSON.stringify([user?.id ?? null, raw ?? null]);
-	return <PlatformInstance key={serialized} raw={raw} />;
+	const fieldName = typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(name) && !['constructor', 'prototype', '__proto__'].includes(name) ? name : undefined;
+	return <PlatformInstance key={serialized} raw={raw} fieldName={fieldName} />;
 }
-function PlatformInstance({ raw }: { raw: unknown }) {
+function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string }) {
 	let initial: PlatformProgram | null = null;
 	let invalid = '';
 	try {
@@ -19,9 +21,14 @@ function PlatformInstance({ raw }: { raw: unknown }) {
 		invalid = e instanceof Error ? e.message : 'Invalid program';
 	}
 	const [definition, setDefinition] = React.useState(() => JSON.stringify(initial, null, 2));
-	const [inputs, setInputs] = React.useState<Record<string, unknown>>(() =>
-		Object.fromEntries((initial?.parameters || []).map((p) => [p.name, p.type === 'json' ? JSON.stringify(p.default) : p.default]))
-	);
+	const [inputs, setInputs] = React.useState<PlatformInputEdits>({});
+	const current = React.useMemo(() => {
+		try { return validatePlatformProgram(JSON.parse(definition)); } catch { return null; }
+	}, [definition]);
+	const draft = React.useMemo(() => {
+		try { return { value: snapshotPlatformDraft(definition, inputs), error: '' }; }
+		catch (error) { return { value: null, error: error instanceof Error ? error.message : 'Check the program and inputs' }; }
+	}, [definition, inputs]);
 	const [job, setJob] = React.useState<{ program: PlatformProgram; input: Record<string, unknown>; id: string } | null>(null);
 	const [result, setResult] = React.useState('');
 	const [error, setError] = React.useState('');
@@ -52,13 +59,8 @@ function PlatformInstance({ raw }: { raw: unknown }) {
 	if (!initial) return <p role="note">{invalid}</p>;
 	const run = () => {
 		try {
-			const program = validatePlatformProgram(JSON.parse(definition));
-			const input = Object.fromEntries(
-				(program.parameters || []).map((p) => [
-					p.name,
-					p.type === 'json' ? JSON.parse(String(inputs[p.name] ?? JSON.stringify(p.default))) : inputs[p.name] ?? p.default
-				])
-			);
+			if (!draft.value) throw new Error(draft.error);
+			const { program, input } = draft.value;
 			setJob({ program, input, id: crypto.randomUUID() });
 			setError('');
 			setResult('');
@@ -79,19 +81,20 @@ function PlatformInstance({ raw }: { raw: unknown }) {
 	};
 	return (
 		<section aria-label={initial.title} style={{ display: 'grid', gap: 14, minWidth: 0 }}>
+			{fieldName && <input type="hidden" name={fieldName} data-tt-input-type="json" value={draft.value ? JSON.stringify(draft.value.program) : ''} readOnly />}
 			<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: 12 }}>
-				{initial.parameters?.map((p) => (
+				{(current || initial).parameters?.map((p) => (
 					<label key={p.name} style={{ display: 'grid', gap: 5, fontSize: 13 }}>
 						{p.label}
 						{p.type === 'boolean' ? (
-							<input type="checkbox" checked={inputs[p.name] === true} onChange={(e) => setInputs({ ...inputs, [p.name]: e.target.checked })} />
+							<input type="checkbox" checked={platformFieldValue(p, inputs) === true} onChange={(e) => setInputs({ ...inputs, [p.name]: { type: p.type, value: e.target.checked } })} />
 						) : (
 							<input
 								style={field}
 								type={p.type === 'number' ? 'number' : 'text'}
-								value={String(inputs[p.name] ?? '')}
+								value={String(platformFieldValue(p, inputs) ?? '')}
 								maxLength={4000}
-								onChange={(e) => setInputs({ ...inputs, [p.name]: p.type === 'number' ? Number(e.target.value) : e.target.value })}
+								onChange={(e) => setInputs({ ...inputs, [p.name]: { type: p.type, value: e.target.value } })}
 							/>
 						)}
 					</label>
@@ -113,9 +116,9 @@ function PlatformInstance({ raw }: { raw: unknown }) {
 					Stop / clear
 				</button>
 			</div>
-			{error && (
+			{(error || draft.error) && (
 				<p role="status" style={{ color: '#9f1239', overflowWrap: 'anywhere' }}>
-					{error}
+					{draft.error || error}
 				</p>
 			)}
 			{job && (
@@ -156,13 +159,21 @@ function PlatformInstance({ raw }: { raw: unknown }) {
 			<details>
 				<summary style={{ cursor: 'pointer', fontSize: 13 }}>Edit reusable program</summary>
 				<p style={{ fontSize: 13 }}>
-					Change the document, CSS rules, parameters and Action steps. Run uses this draft. Save the definition on your Component Thing to keep it.
+					Change the document, CSS rules, parameters and Action steps. Run uses this draft.
+					{fieldName ? ' Save edited component keeps the complete program and your current inputs as defaults.' : ' Save the definition on your Component Thing to keep it.'}
 				</p>
 				<textarea
 					aria-label="Web Platform program"
 					style={{ ...field, height: 260, fontFamily: 'monospace', fontSize: 12 }}
 					value={definition}
-					onChange={(e) => setDefinition(e.target.value)}
+					onChange={(e) => {
+						const value = e.target.value;
+						setDefinition(value);
+						try {
+							const next = validatePlatformProgram(JSON.parse(value));
+							setInputs(previous => reconcilePlatformInputs(next, previous));
+						} catch { /* Keep edits while incomplete JSON is being typed. */ }
+					}}
 					maxLength={24576}
 				/>
 			</details>
