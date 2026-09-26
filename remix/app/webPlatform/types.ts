@@ -25,6 +25,9 @@ export type PlatformProgram = {
 	title: string;
 	description?: string;
 	parameters?: { name: string; label: string; type: 'text' | 'number' | 'boolean' | 'json'; default: unknown }[];
+	/** Enables native form validation/submit events in the opaque frame.
+	 * Navigation remains canceled and denied by the runtime's form-action CSP. */
+	allowFormEvents?: boolean;
 	document?: PlatformNode[];
 	styles?: { selector?: string; declarations?: Record<string, string>; rule?: string }[];
 	steps?: PlatformExpression[];
@@ -32,7 +35,9 @@ export type PlatformProgram = {
 	requires?: string[][];
 	// DOM operations are a bounded vocabulary. JavaScript is compiled from data
 	// to an isolated, terminable worker; it never executes in the account origin.
-	dom?: { target: string; event?: string; method: string; args?: unknown[] }[];
+	/** Omit method to observe a real event. A top-level {op: 'element', selector}
+	 * argument references an element inside this program's rendered surface. */
+	dom?: { target: string; event?: string; method?: string; args?: unknown[] }[];
 	probe?: { kind: 'element' | 'attribute' | 'css' | 'selector' | 'interface'; name: string; value?: string; target?: string };
 };
 export type Recipe = { program: PlatformProgram; coverage: 'interactive' | 'inspection' | 'requires-context'; note: string };

@@ -1,4 +1,5 @@
 import type { PlatformProgram } from './types';
+import { validateLiveDOMBinding } from './liveDOM';
 const identifier = (value: unknown) => {
 	if (
 		typeof value !== 'string' ||
@@ -49,6 +50,7 @@ export function validatePlatformProgram(raw: unknown): PlatformProgram {
 	const p = raw as PlatformProgram;
 	if (p.version !== 1 || typeof p.title !== 'string' || p.title.length > 200) throw new Error('Unsupported Web Platform program version or title');
 	if (JSON.stringify(p).length > 24576) throw new Error('Program exceeds 24 KB');
+	if (p.allowFormEvents !== undefined && typeof p.allowFormEvents !== 'boolean') throw new Error('Expected a boolean form event context');
 	if (
 		(p.parameters && !Array.isArray(p.parameters)) ||
 		(p.steps && !Array.isArray(p.steps)) ||
@@ -59,6 +61,7 @@ export function validatePlatformProgram(raw: unknown): PlatformProgram {
 		throw new Error('Program collections must be arrays');
 	if ((p.parameters?.length || 0) > 16 || (p.steps?.length || 0) > 100 || (p.dom?.length || 0) > 40)
 		throw new Error('Program exceeds its operation budget');
+	for (const operation of p.dom || []) validateLiveDOMBinding(operation);
 	const parameterNames = new Set<string>();
 	for (const param of p.parameters || []) {
 		identifier(param.name);

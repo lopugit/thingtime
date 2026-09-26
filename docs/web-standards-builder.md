@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,649 have interactive recipes (227 HTML, 1,059 CSS, 601
-JavaScript and 762 Web API entries); the rest are
+editable program. 2,656 have interactive recipes (227 HTML, 1,059 CSS, 601
+JavaScript and 769 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -40,7 +40,11 @@ The `tt-web-platform` component primitive takes a `program` object, version 1:
 - `document`: an editable tree of tags, attributes and text.
 - `styles`: selectors/declarations or stylesheet rules.
 - `steps`: declarative expression/statement nodes compiled into ECMAScript.
-- `dom`: bounded event/method bindings inside the isolated document.
+- `dom`: bounded event/method bindings inside the isolated document. Omit
+  `method` to observe a native event; `{op: "element", selector: "#send"}`
+  arguments refer only to elements in the rendered program.
+- `allowFormEvents`: explicit opt-in for native form validation/submit events.
+  This never enables submission navigation or account access.
 - `probe`: element, attribute, CSS, selector or interface inspection.
 - `requires`: bounded global/member paths checked in the worker before running
   steps. Missing paths return `status: "unsupported"` and the missing names.
@@ -56,9 +60,13 @@ Builder page. The live program editor runs an unsaved draft; **Save edited compo
 the current program and inputs as a private reusable Component. Inputs and running workers clear across account
 and component boundaries.
 
-The runtime document has an opaque origin in an `allow-scripts` iframe, with a
-matching response-header CSP even when opened directly. It has no account
-bridge, credential storage, network, popup or form-submission grant. Executable
+The runtime document has an opaque origin in an `allow-scripts` iframe.
+Programs with `allowFormEvents: true` additionally enable `allow-forms` for native
+validation and submit events. The response-header sandbox permits these events
+but grants no same-origin, popup or account authority, even when opened directly.
+`form-action 'none'` forbids submission navigation; an early capture listener
+also cancels real submit events before any authored operation runs. Network and
+credential storage remain unavailable. Executable
 HTML attributes and embedded documents are rejected. JavaScript comes from a
 bounded data compiler, with no raw-source escape or eval, and runs in a worker
 terminated after two seconds of execution. Worker startup is separately bounded
@@ -91,10 +99,29 @@ buttons, forms, fieldsets, labels/legends, datalists, output, meter/progress,
 ValidityState and form/option/radio collections. Native selection offsets and
 control values are returned explicitly because HTML serialization omits dirty
 control state. Missing browser members report unsupported. Constructors,
-active pickers, reset/submission and user-editing-only validity still need
+active pickers, direct submission and pattern validation still need
 separate contexts. In Chromium, native form reset returns without changing
 controls when the document has no frame; it is excluded from this detached
 policy rather than counted as an interactive implementation.
+
+## Live form events
+
+`liveFormFixtures.ts` adds nine active-document recipes: reset, requestSubmit,
+SubmitEvent/submitter, form check/reportValidity and badInput/tooLong/tooShort.
+Seven were previously missing contexts; two form validation examples now also
+allow visitor editing. Reset restores input, textarea, checkbox and select
+defaults. Submission validates a required control and exposes the actual
+submitter, including a referenced button passed to requestSubmit. The three
+user-editing-only validity examples use real typing before reading native flags.
+
+`liveDOM.ts` backs ordinary program bindings with bounded event observations,
+prototype method lookup and scalar native node/validity projections. Named form
+controls cannot replace reset, requestSubmit or listener registration. Up to ten
+receipts are retained per run, with each string limited to 256 characters and
+the existing 200-event budget. Immediate calls run after every listener is
+registered; immediate failures remain errors. Programs and context selection
+survive canonical Component save/read unchanged. `api.actions-run` 1.15.0
+advertises the additive recipe and binding contract.
 
 ## Build and validation
 
