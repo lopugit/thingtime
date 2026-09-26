@@ -272,13 +272,14 @@ export const LiveTemplate = ({
 	const lopu = useLopu();
 	const baseScope = Object.fromEntries(
 		Object.entries(scope).filter(
-			([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource'].includes(key)
+			([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction'].includes(key)
 		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
 	const identity = JSON.stringify([user?.id, runtime.pageId, runtime.query, render, baseScope]);
 	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
 	const active = local.identity === identity ? local : { identity, values: {} };
+	const [pending, setPending] = React.useState<{ identity: string; action: string | null }>({ identity, action: null });
 	const onLocal = (input: Record<string, unknown>) => {
 		if (input.op === 'query' || input.op === 'back') {
 			if (input.op === 'back' && hasComponentBackEntry(runtime.pageId, location, location.state)) {
@@ -316,9 +317,11 @@ export const LiveTemplate = ({
 		onUnowned,
 		confirm,
 		onLocal,
+		onPending: (action) => setPending((previous) => action !== null || previous.identity === identity ? { identity, action } : previous),
 		onResult: (outcome) => setLocal((previous) => ({ ...(previous.identity === identity ? previous : { identity, values: {} }), outcome }))
 	});
-	const liveScope = { ...scope, ...active.values };
+	const pendingAction = pending.identity === identity ? pending.action : null;
+	const liveScope = { ...scope, ...active.values, pending: pendingAction !== null, pendingAction };
 	const scopeKey = JSON.stringify(liveScope);
 	const resolved = React.useMemo(
 		() => (render ? (alreadyResolved ? render : resolveTemplate(render, liveScope)) : null),

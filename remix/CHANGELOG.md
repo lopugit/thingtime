@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Live Components expose scoped pending Action
+  state for authored saving labels and disabled forms. Dialog close content
+  and its accessible label can use the same sanitized, editable markup as
+  the rest of the app.
+
 - 2026-09-27 — **Codex (AI)**: Saved Component links keep their page and view
   mode inside Builder. Local Back controls can return through nested links
   within the same app, with an explicit fallback for direct entry.

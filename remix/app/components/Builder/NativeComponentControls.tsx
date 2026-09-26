@@ -43,6 +43,8 @@ export function ComponentDialog({
 	autoOpen,
 	closeQuery,
 	closeOnAction,
+	closeContent,
+	closeLabel,
 	className,
 	children
 }: {
@@ -52,6 +54,8 @@ export function ComponentDialog({
 	autoOpen?: unknown;
 	closeQuery?: unknown;
 	closeOnAction?: unknown;
+	closeContent?: React.ReactNode;
+	closeLabel?: unknown;
 	className?: unknown;
 	children: React.ReactNode;
 }) {
@@ -97,8 +101,8 @@ export function ComponentDialog({
 			>
 				<header className="tt-native-dialog-header">
 					<strong>{label}</strong>
-					<button type="button" aria-label="Close dialog" onClick={dismiss}>
-						×
+					<button type="button" aria-label={text(closeLabel, 'Close dialog')} onClick={dismiss}>
+						{closeContent ?? '×'}
 					</button>
 				</header>
 				{children}
@@ -173,6 +177,7 @@ function Countdown({ duration, enabled }: { duration: number; enabled: boolean }
 // failed/ambiguous writes retain the same id; only an explicit resetKey change
 // or a successful receipt matching this generated identity starts a new draft.
 export function ComponentForm({
+	disabled,
 	identityName,
 	identity,
 	revisionName,
@@ -182,6 +187,7 @@ export function ComponentForm({
 	completionState,
 	children
 }: {
+	disabled?: unknown;
 	identityName?: unknown;
 	identity?: unknown;
 	revisionName?: unknown;
@@ -205,12 +211,14 @@ export function ComponentForm({
 			enabled={enabled}
 			completion={completion}
 			completionState={completionState}
+			disabled={disabled === true}
 		>
 			{children}
 		</FormInstance>
 	);
 }
 function FormInstance({
+	disabled,
 	name,
 	saved,
 	revisionName,
@@ -220,6 +228,7 @@ function FormInstance({
 	completionState,
 	children
 }: {
+	disabled: boolean;
 	name: string;
 	saved: string;
 	revisionName: unknown;
@@ -239,7 +248,7 @@ function FormInstance({
 	const [stamp] = React.useState(() => (typeof revision === 'string' ? revision.slice(0, 200) : ''));
 	const stampName = typeof revisionName === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(revisionName) ? revisionName : '';
 	return (
-		<fieldset key={id} disabled={!enabled} style={{ display: 'grid', gap: 12, border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+		<fieldset key={id} disabled={!enabled || disabled} style={{ display: 'grid', gap: 12, border: 0, padding: 0, margin: 0, minWidth: 0 }}>
 			{name ? <input type="hidden" name={name} value={id} /> : null}
 			{stampName ? <input type="hidden" name={stampName} value={stamp} /> : null}
 			{children}

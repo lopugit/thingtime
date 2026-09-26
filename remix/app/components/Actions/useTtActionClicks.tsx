@@ -90,7 +90,7 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void }) => {
+export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -105,6 +105,8 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	localRef.current = options?.onLocal;
 	const resultRef = React.useRef(options?.onResult);
 	resultRef.current = options?.onResult;
+	const pendingRef = React.useRef(options?.onPending);
+	pendingRef.current = options?.onPending;
 	const busyRef = React.useRef(false);
 	const mountedRef = React.useRef(true);
 	React.useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
@@ -195,8 +197,10 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			const runRuntime = runtimeRef.current;
 			const runApi = apiRef.current;
 			const reportResult = resultRef.current;
+			const reportPending = pendingRef.current;
 			const onUnowned = onUnownedRef.current;
 			control.setAttribute('aria-busy', 'true');
+			reportPending?.(action);
 			(async () => {
 				try {
 					if (confirmRef.current && !runtimeRef.current.sharedRun) {
@@ -262,6 +266,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				} finally {
 					control.removeAttribute('aria-busy');
 					busyRef.current = false;
+					if (mountedRef.current) reportPending?.(null);
 				}
 			})();
 		},

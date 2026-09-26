@@ -8607,3 +8607,14 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   strings are literal at the API; form JSON is decoded exactly once. Verify
   omitted defaults, explicit null and nested Action calls. Oversized resolved
   defaults/child inputs refuse before executing; anonymous reads stay denied.
+
+
+### Authored form pending state and dialog close content (2026-09-27)
+
+- [ ] During a saved Action, bind tt-form disabled and its save label to pending.
+  Fields pause and show the authored saving label, then re-enable on success,
+  failure, or cancelled confirmation. Preserve failed drafts and existing
+  identity/revision. Navigate while pending; completion must not mark the new
+  screen busy or clear its pending state. A sibling Component remains usable.
+- [ ] Render a custom close SVG and accessible label in tt-dialog. Verify mouse
+  dismissal and Escape at desktop/390px; unsafe SVG/HTML event props stay inert.
