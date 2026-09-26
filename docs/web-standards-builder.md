@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 3,184 have interactive recipes (279 HTML, 1,059 CSS, 890
-JavaScript and 956 Web API entries); the rest are
+editable program. 3,273 have interactive recipes (301 HTML, 1,059 CSS, 890
+JavaScript and 1,023 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -496,3 +496,42 @@ The element `onerror` example does not claim the distinct Window error callback
 convention. Window lifecycle, media playback and permission-dependent events
 remain outside this batch. Browser availability is separate from having an
 editable recipe, and the full standards catalogue remains incomplete.
+
+
+## Native media programs
+
+The catalogue now contains 95 data-authored media programs (89 newly interactive
+entries and six improved HTML attribute examples). `mediaFixtures.ts` supplies
+HTML audio/video/source examples, IDL media handlers, HTMLMediaElement and
+HTMLVideoElement properties/constants, and playback, load, seek, codec and
+quality methods. The reference is the [HTML media standard](https://html.spec.whatwg.org/multipage/media.html#media-elements).
+
+The one-second PCM tone and four-second purple/teal H.264 clip are original
+fixture bytes copied into each saved program. Runtime code has no catalogue IDs
+or special demo components. `document`, `styles`, `parameters` and `dom` remain
+ordinary editable Component data served through the existing catalogue Action.
+Media source URLs are restricted to bounded local data payloads on audio, video
+and source elements. No network or device permission is added.
+
+A DOM binding can name one registered `property`. Omitting `value` reads it;
+providing a scalar or `{op: 'input', name: 'volume'}` writes a registered native
+setter. Own input references retain numeric/boolean types, including zero and
+false. Wrong types, readonly setters and unregistered properties are refused.
+Native range errors are reported. TimeRanges and MediaError use bounded native
+projections; unavailable members report unsupported. Setters do not expose src,
+remote devices, DRM, window, or arbitrary object properties.
+
+Controls set current `muted` and `volume` explicitly: setting the muted content
+attribute on a dynamically created element only establishes its default.
+`play()` reports pending, fulfilled or the actual rejected promise. An older
+promise cannot overwrite a newer command or a stopped run, and later media
+notifications retain the latest command outcome. Recent event receipts include
+current time, readiness, playback and error state. Terminal cleanup pauses media;
+programs retain the eight-media/200-operation/20-receipt limits.
+
+Playback speed, volume, mute, seek position and the selected writable property
+are editable inputs preserved by Save edited component, private storage, reopen
+and reload. Permission-sensitive playback, remote devices, MediaStreams, DRM,
+text tracks and video-frame callbacks remain separately unfinished coverage.
+The additive API contract is `api.actions-run` 1.22.0 on both manifests and the
+client requirement map. Runtime CSP remains isolated and denies external media.
