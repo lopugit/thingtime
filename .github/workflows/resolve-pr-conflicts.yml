@@ -2627,7 +2627,7 @@ jobs:
 
           if [ -n "$cancelled_worker_ids" ]; then
             remaining_pending=0
-            for wait_round in $(seq 1 12); do
+            SECONDS=0; while [ "$SECONDS" -lt 150 ]; do
               remaining_pending=0
               while IFS= read -r cancelled_run_id; do
                 [ -n "$cancelled_run_id" ] || continue
@@ -2642,11 +2642,11 @@ jobs:
                 esac
               done <<<"$cancelled_worker_ids"
               [ "$remaining_pending" -eq 0 ] && break
-              [ "$wait_round" -lt 12 ] && sleep 5
+              sleep 5
             done
             if [ "$remaining_pending" -ne 0 ]; then
-              echo "::error::$remaining_pending obsolete Lopu worker run(s) did not release queue capacity within 60 seconds; a later detector will retry safely."
-              exit 1
+              echo "::notice::$remaining_pending obsolete Lopu worker run(s) did not release queue capacity within 150 seconds; deferring dispatch to a later scan."
+              exit 0
             fi
           fi
 
