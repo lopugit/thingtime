@@ -8818,7 +8818,8 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   explicit saved setter produces `muted: true` before playback and preserves
   false after editing. Zero volume and native out-of-range rejection both work.
 - Observe actual play promise fulfillment and rejection. A later media event must
-  retain the rejection, and a later pause must fence the older promise's result.
+  retain the rejection, and a later pause or refused attribute write must fence
+  the older promise's result.
   Reset, pagehide, unsupported setup and exhausted event budget stop old bindings
   and playback. Missing methods/properties report unsupported, never success.
 - Refuse object-valued or inherited input references, wrong scalar types,

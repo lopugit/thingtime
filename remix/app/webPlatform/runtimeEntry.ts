@@ -139,6 +139,8 @@ addEventListener('message', (event) => {
 						afterDispatch(event, receipt);
 						return true;
 					}
+					// Even a refused newer command owns the latest outcome.
+					const sequence = ++commandState.sequence;
 					const args = (operation.args || []).map((value) => {
 						if (value && typeof value === 'object' && !Array.isArray(value) && (value as { op?: unknown }).op === 'element') {
 							const selector = (value as { selector?: unknown }).selector;
@@ -152,7 +154,6 @@ addEventListener('message', (event) => {
 					});
 					if (operation.method === 'setAttribute' && /^(on|src|href|srcdoc|action|formaction|is|nonce|pattern)/i.test(String(args[0])))
 						throw new Error('Attribute is not writable by this control');
-					const sequence = ++commandState.sequence;
 					const result = operation.property
 						? Object.prototype.hasOwnProperty.call(operation, 'value')
 							? writeMediaProperty(element, operation.property, resolveDOMScalar(operation.value, input))

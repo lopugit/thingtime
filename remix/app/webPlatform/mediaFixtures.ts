@@ -99,7 +99,7 @@ export function mediaRecipe(f: Feature): Recipe | undefined {
 		(property === 'error'
 			? 'This example intentionally uses invalid local media bytes to produce a native MediaError. Read error after the error event. '
 			: '') +
-		'Play the local clip, pause, seek, reload or change its speed and volume. The video changes from purple to teal; the audio is a quiet 440 Hz tone. Sound starts muted. Results show native media state and recent events. Browser playback policy and codec support still apply.';
+		'Play the local clip, pause, seek, reload or change its speed and volume. The video changes from purple to teal; the audio is a quiet 440 Hz tone. Sound is muted by default. Results show native media state and recent events. Browser playback policy and codec support still apply.';
 	p.description = `${f.name}: ${explanation}`;
 	const controls = [
 		button('play', 'Play'),

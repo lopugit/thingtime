@@ -75,6 +75,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   uses the native setter. Both manifests/client require actions-run 1.22.0.
   Local validation includes restarting a crashed Nitro worker through the
   checkout's PM2 lifecycle command while preserving the disposable API scope.
+  Details: [PR #935](../PRs/935-codex-web-standards-media-add-reusable-native-audio-and-video-programs.md).
 
 
 ### 2026-09-27 — Reusable live HTML event programs
