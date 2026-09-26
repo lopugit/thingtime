@@ -143,3 +143,11 @@ existing catalogue and Component runtime accept bounded pattern nodes in
 declarations, assignments, parameters, catches and loops. Both manifests and
 client negotiation advance together; no new execution endpoint or permission
 is introduced. See the native-pattern section in the Web standards guide.
+
+
+Web IDL option and callback programs add `api.actions-run` 1.20.0. The existing
+catalogue Action emits complete dictionary/event/fetch/geometry/stream programs;
+no new endpoint, runtime grant or storage shape is needed. Both manifest
+assertions and client negotiation advance together. `webIdlFixtures.test.ts`
+checks native semantics and edited saved data; browser checks cover geometry
+and platform-specific behavior.
