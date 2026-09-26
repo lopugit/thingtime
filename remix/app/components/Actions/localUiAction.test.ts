@@ -14,7 +14,7 @@ test('local choices and counters change only this instance and respect bounds', 
 
 test('local actions cannot replace runtime authority or grow unbounded state', () => {
 	const state = { active: '1' };
-	for (const key of ['__proto__', 'constructor', 'prototype', 'viewer', 'query', 'last', 'result', 'installAvailable', 'a.b']) {
+	for (const key of ['__proto__', 'constructor', 'prototype', 'viewer', 'query', 'last', 'result', 'installAvailable', 'pending', 'pendingAction', 'page', 'a.b']) {
 		assert.equal(reduceLocalUi(state, {}, { op: 'set', key, value: 'injected' }), state);
 	}
 	for (const value of [NaN, Infinity, {}, [], 'x'.repeat(2001)]) assert.equal(reduceLocalUi(state, {}, { op: 'set', key: 'active', value }), state);

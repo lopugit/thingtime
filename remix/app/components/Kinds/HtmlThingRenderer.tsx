@@ -318,6 +318,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 				resetKey={node.props?.resetKey}
 				completion={node.props?.completion}
 				completionState={node.props?.completionState}
+				disabled={node.props?.disabled}
 			>
 				{renderChildren(node.children, depth + 1, state)}
 			</ComponentForm>
@@ -325,7 +326,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (tag === 'tt-countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
 	if (tag === 'tt-dialog')
 		return (
-			<ComponentDialog key={key} {...node.props}>
+			<ComponentDialog key={key} {...node.props} closeContent={node.props?.closeContent === undefined ? undefined : renderChildren(node.props.closeContent, depth + 1, state)}>
 				{renderChildren(node.children, depth + 1, state)}
 			</ComponentDialog>
 		);
