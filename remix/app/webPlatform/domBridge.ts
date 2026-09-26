@@ -146,9 +146,10 @@ type Captured = {
 	calls: Map<string, { descriptor: PropertyDescriptor; policy: Method }>;
 };
 export function createPlatformDOMBridge(surface: Element) {
-	const realm = surface.ownerDocument.defaultView! as unknown as Record<string, { prototype: object }>;
-	const doc = surface.ownerDocument.implementation.createHTMLDocument('Thingtime DOM program');
-	const scope = surface.ownerDocument.defaultView!.crypto.randomUUID();
+	const surfaceDocument = surface.ownerDocument;
+	const realm = surfaceDocument.defaultView! as unknown as Record<string, { prototype: object }>;
+	const doc = surfaceDocument.implementation.createHTMLDocument('Thingtime DOM program');
+	const scope = surfaceDocument.defaultView!.crypto.randomUUID();
 	const objects = new Map<string, Entry>();
 	const ids = new WeakMap<object, string>();
 	const allocated = new WeakSet<object>();
@@ -186,37 +187,62 @@ export function createPlatformDOMBridge(surface: Element) {
 		const proto = captured.get(name)?.prototype;
 		return !!proto && Object.prototype.isPrototypeOf.call(proto, value);
 	};
+	// HTMLFormElement named controls override built-ins (including childNodes).
+	// Policy checks must read the actual tree through captured accessors, just
+	// like authored member requests, never through instance property lookups.
+	const reader = <T>(name: string, key: string) => {
+		const getter = captured.get(name)?.reads.get(key)?.get;
+		if (!getter) throw new Error(`Missing native DOM accessor ${name}.${key}`);
+		return (target: object): T => Reflect.apply(getter, target, []);
+	};
+	const method = <T>(name: string, key: string) => {
+		const fn = captured.get(name)?.calls.get(key)?.descriptor.value;
+		if (typeof fn !== 'function') throw new Error(`Missing native DOM method ${name}.${key}`);
+		return (target: object, ...args: unknown[]): T => Reflect.apply(fn, target, args);
+	};
+	const ownerDocument = reader<Document | null>('Node', 'ownerDocument');
+	const nodeType = reader<number>('Node', 'nodeType');
+	const childNodes = reader<NodeListOf<ChildNode>>('Node', 'childNodes');
+	const textContent = reader<string | null>('Node', 'textContent');
+	const localName = reader<string>('Element', 'localName');
+	const attributes = reader<NamedNodeMap>('Element', 'attributes');
+	const attrName = reader<string>('Attr', 'name');
+	const attrValue = reader<string>('Attr', 'value');
+	const body = reader<HTMLElement | null>('Document', 'body');
+	const rootNode = method<Node>('Node', 'getRootNode');
+	const importNode = method<Node>('Document', 'importNode');
+	const appendChild = method<Node>('Node', 'appendChild');
+	const replaceChildren = method<void>('Element', 'replaceChildren');
 	const inspectTree = (node: Node, depth = 0) => {
 		if (depth > 40) throw new Error('DOM tree exceeds its depth budget');
 		if (!allocated.has(node)) {
 			allocated.add(node);
 			if (++allocationCount > 600) throw new Error('DOM node allocation budget exceeded');
 		}
-		if (node.ownerDocument && node.ownerDocument !== doc) throw new Error('DOM receiver belongs to another document');
-		if (node.nodeType === 1) {
-			const element = node as Element;
-			tag(element.localName);
+		if (node !== doc && ownerDocument(node) !== doc) throw new Error('DOM receiver belongs to another document');
+		if (nodeType(node) === 1) {
+			tag(localName(node));
 			// Initial authored documents use the existing renderer policy. Receiver
 			// writes use the narrower attribute policy above; verify every projection.
-			for (const attr of Array.from(element.attributes)) {
-				if (
-					/^on/i.test(attr.name) ||
-					['srcdoc', 'is', 'nonce', 'action', 'formaction', 'ping', 'pattern', 'autofocus'].includes(attr.name.toLowerCase())
-				)
+			for (const attr of Array.from(attributes(node))) {
+				const name = attrName(attr).toLowerCase();
+				if (/^on/.test(name) || ['srcdoc', 'is', 'nonce', 'action', 'formaction', 'ping', 'pattern', 'autofocus'].includes(name))
 					throw new Error('Executable DOM attributes are unavailable');
-				if (['src', 'href', 'poster', 'data'].includes(attr.name.toLowerCase()) && !/^#|^data:image\/(png|jpeg|gif|webp);base64,/.test(attr.value))
+				if (['src', 'href', 'poster', 'data'].includes(name) && !/^#|^data:image\/(png|jpeg|gif|webp);base64,/.test(attrValue(attr)))
 					throw new Error('Use local demo resources');
 			}
 		}
-		if (node.textContent && node.textContent.length > 32768) throw new Error('DOM text budget exceeded');
-		for (const child of Array.from(node.childNodes)) inspectTree(child, depth + 1);
+		const text = textContent(node);
+		if (text && text.length > 32768) throw new Error('DOM text budget exceeded');
+		for (const child of Array.from(childNodes(node))) inspectTree(child, depth + 1);
 	};
-	for (const child of Array.from(surface.childNodes)) doc.body.appendChild(doc.importNode(child, true));
+	for (const child of Array.from(childNodes(surface))) appendChild(body(doc)!, importNode(doc, child, true));
 	inspectTree(doc);
 	const publish = () => {
 		inspectTree(doc);
 		// Keep scripts, styles and runtime scaffolding outside the projected tree.
-		surface.replaceChildren(...Array.from(doc.body?.childNodes || []).map((node) => surface.ownerDocument.importNode(node, true)));
+		const documentBody = body(doc);
+		replaceChildren(surface, ...Array.from(documentBody ? childNodes(documentBody) : []).map((node) => importNode(surfaceDocument, node, true)));
 	};
 	const encode = (value: unknown, depth = 0): unknown => {
 		if (depth > 8) throw new Error('DOM result exceeds its depth budget');
@@ -274,7 +300,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		if (['node', 'nullable-node', 'node-or-text'].includes(rule) && typeof value !== 'string') {
 			const node = receiver(value).value;
 			if (!belongs(node, 'Node')) throw new Error('Expected a node handle');
-			if (belongs(node, 'Attr')) attribute((node as Attr).name);
+			if (belongs(node, 'Attr')) attribute(attrName(node));
 			return node;
 		}
 		if (rule === 'number') {
@@ -346,7 +372,7 @@ export function createPlatformDOMBridge(surface: Element) {
 			const min = policy?.min ?? rules.length;
 			if (request.args.length < min || (!policy?.rest && request.args.length > rules.length)) throw new Error('Invalid DOM argument count');
 			const args = request.args.map((value, index) => argument(value, rules[Math.min(index, rules.length - 1)]));
-			if (request.action === 'set' && belongs(target, 'Attr')) attribute((target as Attr).name);
+			if (request.action === 'set' && belongs(target, 'Attr')) attribute(attrName(target));
 			work += args.reduce<number>((sum, value) => sum + (typeof value === 'string' ? value.length : 1), 0);
 			if (work > 65536) throw new Error('DOM input work budget exceeded');
 			let result: unknown;
@@ -366,7 +392,7 @@ export function createPlatformDOMBridge(surface: Element) {
 			if (policy?.iterable) result = Array.from(result as Iterable<unknown>);
 			const value = encode(result);
 			if (policy?.mutates || request.action === 'set') {
-				if (belongs(target, 'Node')) inspectTree((target as Node).getRootNode());
+				if (belongs(target, 'Node')) inspectTree(rootNode(target));
 				publish();
 			}
 			return { value };
