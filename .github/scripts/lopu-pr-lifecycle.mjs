@@ -67,19 +67,25 @@ export async function settle({ repo, number, api, threads, apply = false }) {
     const p = await api(path);
     if (!eligible(p, repo) || identity(p) !== identity(initial) || !await liveRefs(p)) return 'changed';
     if (managed(p) && redundant(p, await api(`${path}/files?per_page=100`, 'pages'))) return 'close';
-    // 'unstable' is mergeable with only NON-required checks red. tested() below
-    // is the real gate: it names every required context and ignores third-party
-    // apps, so demanding 'clean' here lets any third-party check veto merge --
-    // stricter than the rulesets, and contradicting tested(). Only the default
-    // branch has required_status_checks, so for a develop or github-actions PR
-    // every check is non-required and one red aggregate wedges the PR forever
-    // (PR #832 has sat at mergeable_state 'unstable' since the GitHub Advanced
-    // Security aggregate 'CodeQL' concluded timed_out on 2026-09-22, while the
-    // Analyze jobs it aggregates are green and it has 0 open alerts; GHAS opens
-    // at most one aggregate suite per head SHA, so that verdict is terminal).
-    // Keep rejecting 'blocked' (required check or review unmet), 'behind',
-    // 'dirty', 'draft', and 'unknown' -- this is an allowlist, so any state
-    // GitHub adds later is rejected until it is reviewed and added here.
+    // 'unstable' means mergeable with a non-passing NON-required check. That is
+    // already rejected by tested() below, which is the intended gate: besides
+    // naming every required context it requires checkDisposition() === 'ready',
+    // i.e. every check run AND commit status on the head is success/neutral/
+    // skipped. So demanding 'clean' here only duplicated that gate, while being
+    // stricter than the rulesets and relying on a field GitHub computes
+    // asynchronously. Keep rejecting 'blocked' (required check or review unmet),
+    // 'behind' (strict_required_status_checks_policy), 'dirty', 'draft' and
+    // 'unknown' -- this is an allowlist, so any state GitHub adds later is
+    // rejected until it is reviewed and added here.
+    //
+    // This deliberately does NOT make a red third-party check mergeable:
+    // checkDisposition() does not filter by app, so the GitHub Advanced Security
+    // aggregate 'CodeQL' concluding timed_out still yields 'checks-not-ready'
+    // (PR #832 head 08d4c5f7 has exactly 1 of 54 latest check runs red -- that
+    // aggregate -- and tested() is false there). Exempting third-party apps
+    // would also make GitGuardian advisory, so that is out of scope here; a
+    // terminal GHAS aggregate verdict is cleared by a new head SHA, which earns
+    // a fresh aggregate suite.
     if (p.mergeable !== true || !['clean', 'unstable'].includes(p.mergeable_state)) return 'not-current';
     if (!approved(p, await api(`${path}/reviews?per_page=100`, 'pages'))) return 'needs-review';
     if (await threads(number)) return 'unresolved-review';

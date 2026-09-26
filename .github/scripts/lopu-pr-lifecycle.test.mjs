@@ -61,7 +61,7 @@ test('missing, skipped-only, failed, cancelled, pending, spoofed and newer check
   assert.equal(tested(checks(), [{ id: 1, context: 'security', state: 'failure' }], 'main'), false);
 });
 function fixture({ graph = false, changeAt = Infinity, unresolved = false, failRead = false, lostWrite = false,
-  mergeable = true, mergeableState = 'clean', failChecks = false } = {}) {
+  mergeable = true, mergeableState = 'clean', failChecks = false, extraChecks = [] } = {}) {
   const p = pull(), writes = []; let reads = 0;
   p.mergeable = mergeable; p.mergeable_state = mergeableState;
   const api = async (path, mode, body) => {
@@ -77,7 +77,7 @@ function fixture({ graph = false, changeAt = Infinity, unresolved = false, failR
     if (path.startsWith('git/ref/heads/')) return { object: { sha: path.endsWith('/main') ? base : head } };
     if (path.includes('/files')) return [{ filename: graph ? 'graphify-out/test' : 'src/test' }];
     if (path.includes('/reviews')) return [review()];
-    if (path.includes('/check-runs')) return failChecks ? checks().map(c => ({ ...c, conclusion: 'failure' })) : checks();
+    if (path.includes('/check-runs')) return [...(failChecks ? checks().map(c => ({ ...c, conclusion: 'failure' })) : checks()), ...extraChecks];
     if (path.includes('/statuses')) return [];
     throw new Error(`Unexpected ${path}`);
   };
@@ -90,7 +90,7 @@ test('dry run never mutates; cleanup and merge use separate exact writes', async
   const g = fixture({ graph: true }); assert.equal(await settle({ repo, number: 42, ...g, apply: true }), 'closed-redundant');
   assert.deepEqual(g.writes[0].body, { state: 'closed' });
 });
-test('a red non-required check cannot wedge merge, but real blockers still do', async () => {
+test('mergeable_state is an allowlist of clean and unstable; real blockers still stop settlement', async () => {
   // Every pair below is a combination GitHub actually reports together: it sets
   // mergeable false for 'dirty' and null for 'unknown', and 'draft' only with
   // draft true -- which eligible() already rejects, so it is covered there.
@@ -106,6 +106,26 @@ test('a red non-required check cannot wedge merge, but real blockers still do', 
   const h = fixture({ mergeableState: 'unstable', failChecks: true });
   assert.equal(await settle({ repo, number: 42, ...h, apply: true }), 'checks-not-ready');
   assert.deepEqual(h.writes, []);
+});
+test('accepting unstable does not make a third-party check advisory', async () => {
+  // The state guard is not what gates non-required checks -- checkDisposition()
+  // inside tested() does, and it does not filter by app. These are the real
+  // shapes: the GHAS aggregate that timed out on PR #832, a red third-party
+  // scanner, and a third-party check still running. None may merge, and a
+  // green third-party check must not block. Exempting third-party apps here
+  // would make GitGuardian advisory, so this is the contract to preserve.
+  const ghas = { id: 90, app: { id: 57789, slug: 'github-advanced-security' }, name: 'CodeQL', status: 'completed', conclusion: 'timed_out' };
+  const scanner = { id: 91, app: { id: 12, slug: 'gitguardian' }, name: 'GitGuardian Security Checks', status: 'completed', conclusion: 'failure' };
+  const running = { id: 92, app: { id: 13, slug: 'vercel' }, name: 'Vercel', status: 'in_progress', conclusion: null };
+  for (const extra of [ghas, scanner, running]) {
+    const f = fixture({ mergeableState: 'unstable', extraChecks: [extra] });
+    assert.equal(await settle({ repo, number: 42, ...f, apply: true }), 'checks-not-ready');
+    assert.deepEqual(f.writes, []);
+  }
+  const ok = fixture({ mergeableState: 'unstable', extraChecks: [{ ...scanner, conclusion: 'success' }] });
+  assert.equal(await settle({ repo, number: 42, ...ok, apply: true }), 'merged');
+  // A red non-required commit status is gated the same way.
+  assert.equal(tested(checks(), [{ id: 1, context: 'ci/external', state: 'failure' }], 'main'), false);
 });
 test('head races at either snapshot or final fence cannot mutate', async () => {
   for (const changeAt of [2, 3, 4]) {
