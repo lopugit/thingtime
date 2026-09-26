@@ -127,7 +127,7 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 					key={job.id}
 					title={`${initial.title} interactive preview`}
 					src="/platform/runtime.html"
-					sandbox="allow-scripts"
+					sandbox={job.program.allowFormEvents ? 'allow-scripts allow-forms' : 'allow-scripts'}
 					referrerPolicy="no-referrer"
 					style={{
 						width: '100%',

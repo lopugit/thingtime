@@ -58,14 +58,15 @@ test('real API installs reusable standards Things idempotently and preserves pri
 				.status,
 			200
 		);
-		for (const name of ['Node.appendChild', 'HTMLInputElement.setSelectionRange', 'RadioNodeList.value']) {
+		for (const name of ['Node.appendChild', 'HTMLInputElement.setSelectionRange', 'RadioNodeList.value', 'HTMLFormElement.requestSubmit', 'HTMLFormElement.reset', 'ValidityState.tooShort']) {
 			const receiverFeature = WEB_FEATURES.find((f) => f.name === name)!;
 			const receiverRun = await request('/api/v1/actions/run', 'POST', {
 				action: action.id, inputs: { feature: receiverFeature.id, q: name, language: receiverFeature.language }
 			});
 			assert.equal(receiverRun.data.status, 'ok', receiverRun.data.error);
 			const receiverComponent = receiverRun.data.result.selected.component;
-			assert.ok(JSON.stringify(receiverComponent.render).includes('"op":"dom"'));
+			const receiverProgram = receiverComponent.render.children.find((node: any) => node.tag === 'tt-web-platform')?.props.program;
+			assert.ok(receiverProgram?.dom?.length || JSON.stringify(receiverProgram).includes('"op":"dom"'));
 			assert.equal((await request('/api/v1/things', 'PATCH', { id: saved.data.thing.id, crystal: receiverComponent })).response.status, 200);
 			const receiverRead = await request(`/api/v1/things?id=${saved.data.thing.id}`);
 			assert.deepEqual(receiverRead.data.thing.crystal.render, receiverComponent.render, `${name} preserves every saved operation and input`);
