@@ -2,9 +2,22 @@
  * on the frame thread; authored JavaScript remains in the terminable worker.
  * A detached document owns every receiver. The visible surface is a projection,
  * never a source of handles, so navigation cannot reach the runtime document. */
-type Arg = 'text' | 'selector' | 'tag' | 'attribute' | 'number' | 'boolean' | 'node' | 'nullable-node' | 'node-or-text';
+import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
+export type Arg =
+	| 'text'
+	| 'selector'
+	| 'tag'
+	| 'attribute'
+	| 'number'
+	| 'finite'
+	| 'allocation-length'
+	| 'boolean'
+	| 'node'
+	| 'nullable-node'
+	| 'node-or-text'
+	| 'node-or-index';
 type Method = { args: Arg[]; min?: number; rest?: boolean; mutates?: boolean; iterable?: boolean };
-type Policy = { reads: string; writes?: string; calls?: Record<string, Method> };
+export type Policy = { reads: string; writes?: string; writeArgs?: Record<string, Arg>; calls?: Record<string, Method> };
 const call = (args: Arg[] = [], options: Omit<Method, 'args'> = {}): Method => ({ args, ...options });
 const mutate = (args: Arg[] = [], options: Omit<Method, 'args'> = {}) => call(args, { ...options, mutates: true });
 const parentCalls = {
@@ -25,6 +38,7 @@ const parentReads = 'children firstElementChild lastElementChild childElementCou
 const childReads = 'previousElementSibling nextElementSibling';
 const iteration = { keys: call([], { iterable: true }), values: call([], { iterable: true }), entries: call([], { iterable: true }) };
 export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
+	...HTML_FORM_RECEIVER_POLICY,
 	Node: {
 		reads:
 			'nodeType nodeName baseURI isConnected ownerDocument parentNode parentElement childNodes firstChild lastChild previousSibling nextSibling nodeValue textContent ELEMENT_NODE ATTRIBUTE_NODE TEXT_NODE CDATA_SECTION_NODE ENTITY_REFERENCE_NODE ENTITY_NODE PROCESSING_INSTRUCTION_NODE COMMENT_NODE DOCUMENT_NODE DOCUMENT_TYPE_NODE DOCUMENT_FRAGMENT_NODE NOTATION_NODE DOCUMENT_POSITION_DISCONNECTED DOCUMENT_POSITION_PRECEDING DOCUMENT_POSITION_FOLLOWING DOCUMENT_POSITION_CONTAINS DOCUMENT_POSITION_CONTAINED_BY DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC',
@@ -152,6 +166,7 @@ export function createPlatformDOMBridge(surface: Element) {
 	const scope = surfaceDocument.defaultView!.crypto.randomUUID();
 	const objects = new Map<string, Entry>();
 	const ids = new WeakMap<object, string>();
+	const owners = new WeakMap<object, Node>();
 	const allocated = new WeakSet<object>();
 	let allocationCount = 0,
 		requestCount = 0,
@@ -187,6 +202,13 @@ export function createPlatformDOMBridge(surface: Element) {
 		const proto = captured.get(name)?.prototype;
 		return !!proto && Object.prototype.isPrototypeOf.call(proto, value);
 	};
+	// Resolve overrides such as HTMLSelectElement.remove before Element.remove.
+	const prototypeDepth = (value: object): number => {
+		let depth = 0;
+		for (let proto = Object.getPrototypeOf(value); proto; proto = Object.getPrototypeOf(proto)) depth++;
+		return depth;
+	};
+	const resolutionOrder = [...captured].sort(([, a], [, b]) => prototypeDepth(b.prototype) - prototypeDepth(a.prototype));
 	// HTMLFormElement named controls override built-ins (including childNodes).
 	// Policy checks must read the actual tree through captured accessors, just
 	// like authored member requests, never through instance property lookups.
@@ -260,6 +282,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		let type: string | undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(HTML_FORM_RECEIVER_POLICY),
 			'Document',
 			'Element',
 			'DocumentFragment',
@@ -297,14 +320,20 @@ export function createPlatformDOMBridge(surface: Element) {
 	};
 	const argument = (value: unknown, rule: Arg): unknown => {
 		if (rule === 'nullable-node' && value === null) return null;
+		if (rule === 'node-or-index') {
+			if (value === null) return null;
+			rule = typeof value === 'number' ? 'number' : 'node';
+		}
 		if (['node', 'nullable-node', 'node-or-text'].includes(rule) && typeof value !== 'string') {
 			const node = receiver(value).value;
 			if (!belongs(node, 'Node')) throw new Error('Expected a node handle');
 			if (belongs(node, 'Attr')) attribute(attrName(node));
 			return node;
 		}
-		if (rule === 'number') {
-			if (typeof value !== 'number' || !Number.isSafeInteger(value) || Math.abs(value) > 32768) throw new Error('Use a bounded integer DOM argument');
+		if (rule === 'number' || rule === 'finite' || rule === 'allocation-length') {
+			if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 32768 || (rule !== 'finite' && !Number.isSafeInteger(value)))
+				throw new Error('Use a bounded numeric DOM argument');
+			if (rule === 'allocation-length' && (value < 0 || value > 300)) throw new Error('DOM collection length exceeds its allocation limit');
 			return value;
 		}
 		if (rule === 'boolean') {
@@ -345,8 +374,9 @@ export function createPlatformDOMBridge(surface: Element) {
 			const target = receiver(request.target).value;
 			let descriptor: PropertyDescriptor | undefined,
 				policy: Method | undefined,
+				writeRule: Arg = 'text',
 				registered = false;
-			for (const [name, candidate] of captured) {
+			for (const [name, candidate] of resolutionOrder) {
 				if (!Object.prototype.isPrototypeOf.call(candidate.prototype, target)) continue;
 				const registeredPolicy = DOM_RECEIVER_POLICY[name];
 				registered ||=
@@ -361,14 +391,17 @@ export function createPlatformDOMBridge(surface: Element) {
 					}
 				} else {
 					descriptor = (request.action === 'get' ? candidate.reads : candidate.writes).get(request.key);
-					if (descriptor) break;
+					if (descriptor) {
+						writeRule = registeredPolicy.writeArgs?.[request.key] || 'text';
+						break;
+					}
 				}
 			}
 			if (!descriptor) {
 				if (registered) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose DOM member ${request.key}` } };
 				throw new Error(`DOM member ${request.key} is not registered for this receiver`);
 			}
-			const rules = policy?.args || (request.action === 'set' ? (['text'] as Arg[]) : []);
+			const rules = policy?.args || (request.action === 'set' ? [writeRule] : []);
 			const min = policy?.min ?? rules.length;
 			if (request.args.length < min || (!policy?.rest && request.args.length > rules.length)) throw new Error('Invalid DOM argument count');
 			const args = request.args.map((value, index) => argument(value, rules[Math.min(index, rules.length - 1)]));
@@ -390,9 +423,13 @@ export function createPlatformDOMBridge(surface: Element) {
 				};
 			}
 			if (policy?.iterable) result = Array.from(result as Iterable<unknown>);
+			const owner = belongs(target, 'Node') ? (target as Node) : owners.get(target);
+			if (result && typeof result === 'object' && !Array.isArray(result) && owner) owners.set(result, owner);
 			const value = encode(result);
 			if (policy?.mutates || request.action === 'set') {
-				if (belongs(target, 'Node')) inspectTree(rootNode(target));
+				// Collections retain their originating node, even after that subtree
+				// is detached. Indirect option allocations still spend the node budget.
+				if (owner) inspectTree(rootNode(owner));
 				publish();
 			}
 			return { value };

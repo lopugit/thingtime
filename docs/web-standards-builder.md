@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,437 have interactive recipes (227 HTML, 1,059 CSS, 601
-JavaScript and 550 Web API entries); the rest are
+editable program. 2,649 have interactive recipes (227 HTML, 1,059 CSS, 601
+JavaScript and 762 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -76,6 +76,25 @@ value. The existing same-page query encoder still rejects reserved parameters.
 Shared HTML template fields adopt late defaults only while their current value
 still matches the previous default. Reloaded search/select filters therefore
 stay aligned with results, while delayed reads preserve visitor edits.
+
+## HTML form receivers
+
+The form recipes use typed native setters, text-selection operations, validation
+state and live option/radio collections through the same generic DOM bridge.
+Boolean false and fractional numbers remain typed. Overridden members resolve
+from the most specific native interface; both select removal overloads work.
+Collection length writes are bounded before allocation, and collection mutations
+retain their originating node even when its subtree is detached.
+
+The 212 authored form examples include inputs, textareas, selects/options,
+buttons, forms, fieldsets, labels/legends, datalists, output, meter/progress,
+ValidityState and form/option/radio collections. Native selection offsets and
+control values are returned explicitly because HTML serialization omits dirty
+control state. Missing browser members report unsupported. Constructors,
+active pickers, reset/submission and user-editing-only validity still need
+separate contexts. In Chromium, native form reset returns without changing
+controls when the document has no frame; it is excluded from this detached
+policy rather than counted as an interactive implementation.
 
 ## Build and validation
 
