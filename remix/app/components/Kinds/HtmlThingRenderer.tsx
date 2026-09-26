@@ -311,6 +311,8 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 				revisionName={node.props?.revisionName}
 				revision={node.props?.revision}
 				resetKey={node.props?.resetKey}
+				completion={node.props?.completion}
+				completionState={node.props?.completionState}
 			>
 				{renderChildren(node.children, depth + 1, state)}
 			</ComponentForm>
