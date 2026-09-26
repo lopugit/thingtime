@@ -8586,3 +8586,32 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   strings are literal at the API; form JSON is decoded exactly once. Verify
   omitted defaults, explicit null and nested Action calls. Oversized resolved
   defaults/child inputs refuse before executing; anonymous reads stay denied.
+
+
+### Live Web Platform form contexts (2026-09-27)
+
+- Run `liveFormFixtures.ts` programs in the real served opaque runtime. Edit all
+  four reset controls, click the button named `reset`, and confirm authored
+  defaults return. Also use named controls `addEventListener` and `id`: native
+  binding and event target identity must survive property shadowing.
+- Request submission with the required input empty: observe `invalid` and
+  `valueMissing`, with no submit event. Type a value and request again: the real
+  canceled submit event names the referenced `send` button. Clicking the second
+  submit button instead reports `publish`. Check/reportValidity return false
+  before valid editing and true afterward; the document never navigates.
+- Type a partial number (`-`) for `badInput`, a short string for `tooShort`, and
+  type a long string before applying a smaller maxlength for `tooLong`. Inspect
+  the actual input/invalid event's native validity flags. Correct each input and
+  check again; flags clear. Change length parameters and repeat.
+- Refuse missing/out-of-surface element arguments, unregistered methods,
+  malformed observation bindings and immediate method errors without a later
+  success overwriting the error. Register observers before immediate calls.
+  After more than ten observations only ten receipts remain; repeated event
+  dispatch reaches the 200-event limit without recursive runaway.
+- Confirm form context is opt-in on the Component iframe and that Vite, built
+  Vercel output and hosted runtime CSP retain an opaque origin, network refusal
+  and `form-action 'none'`. No same-origin, popup or top-navigation grant. An
+  ordinary document program without form context retains `allow-scripts` only.
+- Save edited requestSubmit/reset programs through the canonical API and the
+  workbench, reopen/reload and reuse on a Builder page. Context, event bindings,
+  element arguments and defaults persist exactly; anonymous reads return 404.

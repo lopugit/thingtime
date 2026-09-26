@@ -144,10 +144,12 @@ export const librarySdkCsp = serialize({
 
 // Generic Web Platform runtime: no application authority or network. Compiled
 // declarative JavaScript is a terminable Blob worker, never eval in the app.
+// allow-forms enables native validation/submit events; form-action still denies
+// navigation. The embedding component additionally requires allowFormEvents.
 export const platformRuntimeCsp = serialize({
  'default-src': ["'none'"], 'script-src': ["'self'", 'blob:'],
  'worker-src': ['blob:'], 'connect-src': ['data:', 'blob:'],
  'style-src': ["'unsafe-inline'"], 'img-src': ['data:', 'blob:'],
  'media-src': ['data:', 'blob:'], 'font-src': ['data:'],
- 'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts']
+ 'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts', 'allow-forms']
 });

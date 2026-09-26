@@ -3,9 +3,11 @@ import { compilePlatformWorker } from './workerSource';
 import { runPlatformWorker } from './workerLifecycle';
 import { inspectPlatformInterface } from './interfaceProbe';
 import { createPlatformDOMBridge } from './domBridge';
+import { nativeDOMMethod, platformEventReceipt } from './liveDOM';
 import type { PlatformNode } from './types';
 // Form controls may shadow instance methods while their parent is being built.
 const appendNode = Node.prototype.appendChild;
+const listen = EventTarget.prototype.addEventListener;
 let started = false;
 addEventListener('message', (event) => {
 	if (event.source !== parent || started || event.data?.type !== 'tt-platform-start') return;
@@ -56,60 +58,63 @@ addEventListener('message', (event) => {
 			)
 			.join('\n');
 		document.head.appendChild(sheet);
-		const methods = new Set([
-			'show',
-			'showModal',
-			'close',
-			'showPopover',
-			'hidePopover',
-			'togglePopover',
-			'focus',
-			'blur',
-			'click',
-			'select',
-			'checkValidity',
-			'reportValidity',
-			'reset',
-			'requestSubmit',
-			'stepUp',
-			'stepDown',
-			'scrollIntoView',
-			'animate',
-			'setAttribute',
-			'removeAttribute',
-			'toggleAttribute'
-		]);
+		// Install cancellation before any immediate or event-driven call. The
+		// sandbox also denies form navigation; requestSubmit still dispatches its
+		// real validation/submit events, whose receipts show cancellation.
+		listen.call(document, 'submit', (event) => event.preventDefault(), true);
+		listen.call(document, 'click', (event) => {
+			const a = (event.target as Element)?.closest?.('a');
+			if (a && !a.getAttribute('href')?.startsWith('#')) event.preventDefault();
+		});
 		const events = { used: 0 };
+		const observed: ReturnType<typeof platformEventReceipt>[] = [];
+		const immediate: (() => void)[] = [];
+		let lastDOMResult: { ok: boolean; value: unknown } | undefined;
+		const reportDOM = (ok: boolean, value: unknown) => { lastDOMResult = { ok, value }; send(ok, value); };
 		for (const operation of program.dom || []) {
-			if (!methods.has(operation.method)) throw new Error('This DOM method is not registered');
-			const element = root.querySelector(operation.target) as any;
+			const element = root.querySelector(operation.target);
 			if (!element) throw new Error(`No element matches ${operation.target}`);
-			const execute = () => {
+			const execute = (event?: Event) => {
 				try {
 					if (++events.used > 200) throw new Error('Reset the demo to replenish its event budget');
-					const args = (operation.args || []).map((v) => (typeof v === 'string' ? substitute(v) : v));
+					if (!operation.method) {
+						if (!event) throw new Error('Event observation requires a dispatched event');
+						const receipt = platformEventReceipt(event);
+						observed.push(receipt);
+						if (observed.length > 10) observed.shift();
+						reportDOM(true, { event: receipt });
+						return;
+					}
+					const args = (operation.args || []).map((value) => {
+						if (value && typeof value === 'object' && !Array.isArray(value) && (value as { op?: unknown }).op === 'element') {
+							const selector = (value as { selector?: unknown }).selector;
+							if (Object.keys(value).length !== 2 || typeof selector !== 'string' || !selector || selector.length > 500)
+								throw new Error('Expected one bounded element selector');
+							const target = root.querySelector(selector);
+							if (!target) throw new Error(`No element matches ${selector}`);
+							return target;
+						}
+						return typeof value === 'string' ? substitute(value) : value;
+					});
 					if (operation.method === 'setAttribute' && /^(on|src|href|srcdoc|action|formaction|is|nonce|pattern)/i.test(String(args[0])))
 						throw new Error('Attribute is not writable by this control');
-					if (typeof element[operation.method] !== 'function') throw new Error('This browser does not implement the method');
-					const result = element[operation.method](...args);
-					send(true, { method: operation.method, result: typeof result === 'object' ? String(result) : result ?? null });
+					const result = nativeDOMMethod(element, operation.method)(...args);
+					const outcome = { method: operation.method, result: typeof result === 'object' ? String(result) : result ?? null,
+						...(observed.length ? { events: [...observed] } : {}) };
+					reportDOM(true, outcome);
 				} catch (e) {
-					send(false, e instanceof Error ? e.message : 'DOM operation failed');
+					reportDOM(false, e instanceof Error ? e.message : 'DOM operation failed');
 				}
 			};
 			if (operation.event) {
 				const [selector, eventName] = operation.event.split('|');
 				const trigger = root.querySelector(selector);
-				if (!trigger || !['click', 'input', 'change', 'submit', 'toggle', 'focus', 'blur'].includes(eventName))
-					throw new Error('Invalid event binding');
-				trigger.addEventListener(eventName, execute);
-			} else execute();
+				if (!trigger) throw new Error('Invalid event binding');
+				listen.call(trigger, eventName, execute);
+			} else immediate.push(execute);
 		}
-		document.addEventListener('submit', (e) => e.preventDefault());
-		document.addEventListener('click', (e) => {
-			const a = (e.target as Element)?.closest?.('a');
-			if (a && !a.getAttribute('href')?.startsWith('#')) e.preventDefault();
-		});
+		// Observers are ready even when declared after an immediate operation.
+		for (const execute of immediate) execute();
 		let probe: unknown;
 		if (program.probe) {
 			const p = program.probe;
@@ -134,7 +139,8 @@ addEventListener('message', (event) => {
 			}
 		}
 		if (!program.steps?.length) {
-			send(true, probe ?? { rendered: nodes, styles: program.styles?.length || 0, events: program.dom?.length || 0 });
+			if (lastDOMResult?.ok === false) send(false, lastDOMResult.value);
+			else send(true, probe ?? lastDOMResult?.value ?? { rendered: nodes, styles: program.styles?.length || 0, events: program.dom?.length || 0 });
 			return;
 		}
 		// Compile data to a Blob module; neither eval nor Function is used. Infinite

@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Reusable live form programs add native reset,
+  requestSubmit/submitter and user-edited validity examples. Shared DOM bindings
+  resolve native methods despite named form controls, preserve immediate errors,
+  and expose bounded event receipts. Form events explicitly opt in while runtime
+  CSP keeps the origin opaque and denies submission navigation. Catalogue and
+  client capability contract advance to `api.actions-run` 1.15.0.
+
+
 - 2026-09-27 — **Codex (AI)**: Web standards adds 212 reusable HTML form
   examples with typed control state, text selection, validity and live
   option/radio collections. Native overload dispatch and detached collection
