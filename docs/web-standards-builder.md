@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,945 have interactive recipes (227 HTML, 1,059 CSS, 890
-JavaScript and 769 Web API entries); the rest are
+editable program. 3,077 have interactive recipes (227 HTML, 1,059 CSS, 890
+JavaScript and 901 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -418,3 +418,46 @@ permissions remain unchanged. `bindingPatterns.test.ts` covers native semantics
 and malformed data; `javascriptBindings.test.ts` covers recipes and saved edited
 defaults. Hosted runtime and real saved-Component acceptance must use the new
 runtime artifact, not an older cached compiler.
+
+
+## Web IDL options and callbacks
+
+`webIdlFixtures.ts` and `webIdlStreamFixtures.ts` author 132 complete programs
+for dictionary, field, enum, typedef and callback entries. Dictionaries are
+passed to real APIs; they are not callable globals. Every example is editable
+saved Component data using the existing language compiler and isolated worker.
+The additive catalogue contract is `api.actions-run` 1.20.0. No runtime
+permission, source-string execution or additional endpoint is introduced.
+
+Programs cover event initialization and callback objects; once, capture,
+passive and signal listener behavior; Blob/File properties; Request/Response
+metadata and body construction; HeadersInit; decoder BOM/fatal/stream behavior;
+and point, rectangle and matrix dictionaries. Native values, validation errors
+and engine differences are retained. Request priority, private-token and
+address-space effects remain context-dependent: constructing a Request does
+not demonstrate network effects or send a request.
+
+Stream programs expose native size callbacks and desiredSize, pipe error/close/
+abort propagation, BYOB reader selection, read minimum and buffer transfer,
+source auto-allocation, and source/sink/transformer callback lifecycles.
+Callbacks are ordinary saved function nodes. Reads and writes run concurrently
+where backpressure requires it. Source/sink type and transformer reserved-type
+constraints are observable errors; absent native transformer cancellation is
+reported as unsupported. All resources belong only to the throwaway run.
+
+Demo limits are explicit: at most 32 queued/written/transformed chunks and
+4,096 supplied/allocated bytes. Numeric strings cannot bypass automatic byte
+allocation limits, and byte-array inputs cannot silently become allocation
+lengths. Geometry is verified in the real browser; missing Node geometry
+interfaces are not counted as positive execution evidence.
+
+Run `webIdlFixtures.test.ts` on Node 22 and the current runtime, the full platform
+suite, the actual local API install/save round-trip test, and the browser
+checklist. The native browser remains authoritative for File timestamp,
+passive-listener and geometry behavior.
+
+Observed Web IDL engine differences remain visible: the browser worker can ignore
+non-null RequestInit.window, and invalid UnderlyingSource.type can throw
+RangeError where Node throws TypeError. Transformer.cancel reports unsupported
+when the engine omits its callback. Node File.lastModified can retain fractions
+where the browser converts to an integer. These outcomes are not simulated.

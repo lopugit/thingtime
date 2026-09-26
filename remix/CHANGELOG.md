@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Added 132 reusable Web IDL dictionary, field,
+  enum and callback programs for events, files, fetch metadata, decoding,
+  geometry and stream lifecycles. Interactive coverage reaches 3,077 entries.
+  Saved callbacks and inputs use the existing isolated runtime; native errors
+  and unsupported features stay visible. Catalogue/client contract: 1.20.0.
+
 - 2026-09-27 — **Codex (AI)**: Added reusable native destructuring patterns
   across declarations, assignments, parameters, catches and loops. Twenty new
   examples bring coverage to 2,945; Parameter Lists now demonstrates patterns.
