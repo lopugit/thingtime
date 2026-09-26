@@ -8852,3 +8852,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   actions-run 1.23.0 manifests. Anonymous reads must return 404.
 - Inspect desktop/mobile drawings and controls for overflow. Confirm completed
   drawings remain visible, Stop clears the frame, and repeated Run starts fresh.
+
+### SVG program receivers (2026-09-27)
+
+- Run all SVG recipes in the opaque browser runtime; assert native namespaces,
+  geometry, text metrics, unit conversion, readonly animated-value exceptions,
+  transform matrices, native factories and primitive IDL constants.
+- Bbox option support must change native measurements on fixed filled, stroked,
+  marked and clipped geometry. Silently ignored dictionary fields are unsupported,
+  even when getBBox returns successfully. Input edits cannot alter the support probe.
+- Refuse external references/paint, executable attributes, foreignObject, surface
+  escape/removal, 129 SVG nodes, 33 list items and oversized initial/live/nested
+  viewport writes. Compact signed coordinates and newline-separated language
+  lists must not bypass the initial list limit. Unit conversion retains physical
+  viewport dimensions; tolerate native float precision when checking conversions.
+- Primitive constants must cross the normal worker transport without exposing
+  constructors or invoking accessors. Run the existing Canvas and DOM/form
+  boundary fixtures to retain context and ownership restrictions.
+- Edit colour, shape width and rotation, save through the authored Action, reopen,
+  reload and run the private Component. Compare preserved inputs and native angle/
+  matrix output. Anonymous reads return 404. Check desktop and 390px layout,
+  retained completed drawings, Stop cleanup and fresh repeated Run.
+- Verify exact preview/main deployment source, runtime hash, unchanged restrictive
+  CSP and both actions-run 1.24.0 manifests before production @lopu save/reload.

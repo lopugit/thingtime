@@ -3,10 +3,27 @@
  * Programs choose a detached document or their rendered surface. Surface
  * receivers permit Canvas writes and bounded tree reads, never a handle to the
  * runtime document or to connected nodes outside the program root. */
+import { SVG_RECEIVER_POLICY, SVG_LIST_TYPES } from './svgPolicy';
+import { SVG_NAMESPACE, SVG_LIMITS, svgTag, svgAttribute, svgArgument } from './svgSupport';
 import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| 'svg-matrix'
+	| 'svg-number'
+	| 'svg-text'
+	| 'svg-unit'
+	| 'svg-fragment'
+	| 'svg-point'
+	| 'svg-box-options'
+	| 'svg-length'
+	| 'svg-angle'
+	| 'svg-number-value'
+	| 'svg-point-value'
+	| 'svg-transform'
+	| 'svg-rect'
+	| 'svg-element'
+	| 'svg-nullable-element'
 	| 'canvas-size'
 	| 'pixel-size'
 	| 'canvas-blur'
@@ -59,6 +76,7 @@ const iteration = { keys: call([], { iterable: true }), values: call([], { itera
 export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 	...HTML_FORM_RECEIVER_POLICY,
 	...CANVAS_RECEIVER_POLICY,
+	...SVG_RECEIVER_POLICY,
 	Node: {
 		reads:
 			'nodeType nodeName baseURI isConnected ownerDocument parentNode parentElement childNodes firstChild lastChild previousSibling nextSibling nodeValue textContent ELEMENT_NODE ATTRIBUTE_NODE TEXT_NODE CDATA_SECTION_NODE ENTITY_REFERENCE_NODE ENTITY_NODE PROCESSING_INSTRUCTION_NODE COMMENT_NODE DOCUMENT_NODE DOCUMENT_TYPE_NODE DOCUMENT_FRAGMENT_NODE NOTATION_NODE DOCUMENT_POSITION_DISCONNECTED DOCUMENT_POSITION_PRECEDING DOCUMENT_POSITION_FOLLOWING DOCUMENT_POSITION_CONTAINS DOCUMENT_POSITION_CONTAINED_BY DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC',
@@ -188,6 +206,7 @@ export function createPlatformDOMBridge(surface: Element) {
 	const objects = new Map<string, Entry>();
 	const ids = new WeakMap<object, string>();
 	const owners = new WeakMap<object, Node>();
+	const valueKeys = new WeakMap<object, string>();
 	const allocated = new WeakSet<object>();
 	const canvases = new Set<HTMLCanvasElement>();
 	const pathCosts = new WeakMap<object, number>();
@@ -259,6 +278,7 @@ export function createPlatformDOMBridge(surface: Element) {
 	const childNodes = reader<NodeListOf<ChildNode>>('Node', 'childNodes');
 	const textContent = reader<string | null>('Node', 'textContent');
 	const localName = reader<string>('Element', 'localName');
+	const namespace = reader<string>('Element', 'namespaceURI');
 	const attributes = reader<NamedNodeMap>('Element', 'attributes');
 	const attrName = reader<string>('Attr', 'name');
 	const attrValue = reader<string>('Attr', 'value');
@@ -288,12 +308,25 @@ export function createPlatformDOMBridge(surface: Element) {
 			canvases.add(canvas);
 			if (canvases.size > CANVAS_LIMITS.canvases) throw new Error('Canvas allocation budget exceeded');
 		}
+		if (belongs(node, 'SVGSVGElement'))
+			for (const key of ['width', 'height']) {
+				const animated = reader<object>('SVGSVGElement', key)(node);
+				const length = reader<object>('SVGAnimatedLength', 'baseVal')(animated);
+				const value = reader<number>('SVGLength', 'value')(length);
+				if (!Number.isFinite(value) || value < 0 || value > SVG_LIMITS.edge) throw new Error('SVG viewport exceeds its dimension limit');
+			}
+
 		if (nodeType(node) === 1) {
-			tag(localName(node));
+			const svg = namespace(node) === SVG_NAMESPACE;
+			if (svg) {
+				if (context !== 'surface') throw new Error('SVG receivers require the active surface context');
+				svgTag(localName(node));
+			} else tag(localName(node));
 			// Initial authored documents use the existing renderer policy. Receiver
 			// writes use the narrower attribute policy above; verify every projection.
 			for (const attr of Array.from(attributes(node))) {
 				const name = attrName(attr).toLowerCase();
+				if (svg) svgAttribute(localName(node), attrName(attr), attrValue(attr), true);
 				if (/^on/.test(name) || ['srcdoc', 'is', 'nonce', 'action', 'formaction', 'ping', 'pattern', 'autofocus'].includes(name))
 					throw new Error('Executable DOM attributes are unavailable');
 				if (['src', 'href', 'poster', 'data'].includes(name) && !/^#|^data:image\/(png|jpeg|gif|webp);base64,/.test(attrValue(attr)))
@@ -336,6 +369,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		for (const name of [
 			...Object.keys(HTML_FORM_RECEIVER_POLICY),
 			...Object.keys(CANVAS_RECEIVER_POLICY),
+			...Object.keys(SVG_RECEIVER_POLICY),
 			'Document',
 			'Element',
 			'DocumentFragment',
@@ -352,7 +386,7 @@ export function createPlatformDOMBridge(surface: Element) {
 				type = name;
 				break;
 			}
-		if (!type) throw new Error('This DOM receiver type is not exposed');
+		if (!type) throw new Error('This DOM receiver type is not exposed: ' + Object.prototype.toString.call(value));
 		if (belongs(value, 'Node')) inspectTree(value as Node);
 		let id = ids.get(value);
 		if (!id) {
@@ -377,6 +411,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		return target;
 	};
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule.startsWith('svg-')) return svgArgument(value, rule, receiverType);
 		if (rule.startsWith('canvas-') || rule.startsWith('pixel-')) return canvasArgument(value, rule, receiverType);
 		if (rule === 'nullable-node' && value === null) return null;
 		if (rule === 'node-or-index') {
@@ -421,7 +456,7 @@ export function createPlatformDOMBridge(surface: Element) {
 				request.type !== 'tt-platform-dom' ||
 				!Number.isSafeInteger(request.id) ||
 				request.id !== requestCount ||
-				!['document', 'surface', 'get', 'set', 'call', 'construct'].includes(request.action) ||
+				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant'].includes(request.action) ||
 				typeof request.key !== 'string' ||
 				request.key.length > 60 ||
 				!Array.isArray(request.args) ||
@@ -437,6 +472,22 @@ export function createPlatformDOMBridge(surface: Element) {
 					if (context === 'detached') for (const child of Array.from(childNodes(surface))) appendChild(body(doc)!, importNode(doc, child, true));
 				}
 				return { value: encode(context === 'surface' ? surface : doc) };
+			}
+			if (request.action === 'constant') {
+				const name = request.target;
+				if (
+					typeof name !== 'string' ||
+					request.args.length ||
+					!/^[A-Z][A-Z0-9_]{0,59}$/.test(request.key) ||
+					!Object.prototype.hasOwnProperty.call(DOM_RECEIVER_POLICY, name) ||
+					!DOM_RECEIVER_POLICY[name].reads.split(' ').includes(request.key)
+				)
+					throw new Error('Unregistered DOM constant');
+				const descriptor = captured.get(name)?.reads.get(request.key);
+				if (!descriptor) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose ${name}.${request.key}` } };
+				if (!('value' in descriptor) || !['string', 'number', 'boolean'].includes(typeof descriptor.value))
+					throw new Error('Expected a primitive DOM constant');
+				return { value: encode(descriptor.value) };
 			}
 			if (request.action === 'construct') {
 				if (request.target !== null || !['Path2D', 'ImageData'].includes(request.key)) throw new Error('Unregistered DOM constructor');
@@ -517,11 +568,13 @@ export function createPlatformDOMBridge(surface: Element) {
 			if (
 				context === 'surface' &&
 				(policy?.mutates || request.action === 'set') &&
-				!Object.prototype.hasOwnProperty.call(CANVAS_RECEIVER_POLICY, resolvedInterface)
+				!Object.prototype.hasOwnProperty.call(CANVAS_RECEIVER_POLICY, resolvedInterface) &&
+				!Object.prototype.hasOwnProperty.call(SVG_RECEIVER_POLICY, resolvedInterface)
 			)
 				throw new Error('Surface tree mutation is not registered; use authored document nodes');
 			if (resolvedInterface === 'HTMLCanvasElement' && request.key === 'getContext' && context !== 'surface')
 				throw new Error('Canvas drawing requires the active surface context');
+			if (belongs(target, 'SVGAnimatedString') && valueKeys.get(target) === 'className') writeRule = 'svg-text';
 			const rules = policy?.args || (request.action === 'set' ? [writeRule] : []);
 			let args: unknown[] | undefined;
 			if (policy?.overloads) {
@@ -540,6 +593,30 @@ export function createPlatformDOMBridge(surface: Element) {
 				if (request.args.length < min || (!policy?.rest && request.args.length > rules.length)) throw new Error('Invalid DOM argument count');
 				args = request.args.map((value, index) => argument(value, rules[Math.min(index, rules.length - 1)]));
 			}
+
+			const svgOwner = owners.get(target);
+			if (
+				belongs(target, 'SVGLength') &&
+				svgOwner &&
+				belongs(svgOwner, 'SVGSVGElement') &&
+				['width', 'height'].includes(valueKeys.get(target) || '') &&
+				(request.action === 'set' || policy?.mutates)
+			) {
+				let value: unknown;
+				if (request.key === 'value') value = args[0];
+				else if (request.key === 'valueAsString') {
+					if (typeof args[0] !== 'string' || !/^\d+(?:\.\d+)?(?:px)?$/.test(args[0])) throw new Error('Use pixel values for SVG viewport writes');
+					value = parseFloat(args[0]);
+				} else if (request.key === 'valueInSpecifiedUnits') {
+					if (![1, 5].includes(reader<number>('SVGLength', 'unitType')(target))) throw new Error('Use pixel values for SVG viewport writes');
+					value = args[0];
+				} else if (request.key === 'newValueSpecifiedUnits') {
+					if (![1, 5].includes(Number(args[0]))) throw new Error('Use pixel values for SVG viewport writes');
+					value = args[1];
+				}
+				if (value !== undefined && (typeof value !== 'number' || value < 0 || value > SVG_LIMITS.edge))
+					throw new Error('SVG viewport exceeds its dimension limit');
+			}
 			if (request.action === 'set' && belongs(target, 'Attr')) attribute(attrName(target));
 			work += JSON.stringify(request.args).length;
 			if (work > 65536) throw new Error('DOM input work budget exceeded');
@@ -550,6 +627,11 @@ export function createPlatformDOMBridge(surface: Element) {
 					['closePath', 'moveTo', 'lineTo', 'quadraticCurveTo', 'bezierCurveTo', 'arcTo', 'rect', 'arc', 'ellipse', 'roundRect'].includes(request.key)
 				)
 					reservePath(target, 1);
+			}
+			if (request.action === 'call' && ['appendItem', 'insertItemBefore'].includes(request.key)) {
+				for (const type of SVG_LIST_TYPES)
+					if (belongs(target, type) && reader<number>(type, 'numberOfItems')(target) >= SVG_LIMITS.list)
+						throw new Error('SVG list item budget exceeded');
 			}
 			let result: unknown;
 			try {
@@ -567,7 +649,10 @@ export function createPlatformDOMBridge(surface: Element) {
 			}
 			if (policy?.iterable) result = Array.from(result as Iterable<unknown>);
 			const owner = belongs(target, 'Node') ? (target as Node) : owners.get(target);
-			if (result && typeof result === 'object' && !Array.isArray(result) && owner) owners.set(result, owner);
+			if (result && typeof result === 'object' && !Array.isArray(result) && owner) {
+				owners.set(result, owner);
+				valueKeys.set(result, belongs(target, 'Node') ? request.key : valueKeys.get(target) || request.key);
+			}
 			const value =
 				request.key === 'getContextAttributes' && belongs(target, 'CanvasRenderingContext2D') ? canvasContextAttributes(result) : encode(result);
 			if (policy?.mutates || request.action === 'set') {

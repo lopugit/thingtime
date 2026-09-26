@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Added 311 reusable SVG programs with native geometry,
+  units, text, transforms, typed lists and primitive IDL constants. Namespaced
+  documents and surface receivers keep bounded local resources; native probes
+  report ignored bounding-box options as unsupported. Actions-run advances to
+  1.24.0; private save/reload, browser boundaries and deployment checks recorded
+  in [PR #938](../PRs/938-codex-web-standards-svg-add-reusable-native-svg-programs.md).
+
 - 2026-09-27 — **Codex (AI)**: Added 145 reusable Canvas programs with native
   surface receivers, drawing, fonts, pixels, paths and typed settings. Fixed
   detached-context font no-ops by using the actual isolated surface. Bounded

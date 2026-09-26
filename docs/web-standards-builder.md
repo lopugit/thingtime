@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 3,273 have interactive recipes (301 HTML, 1,059 CSS, 890
-JavaScript and 1,023 Web API entries); the rest are
+editable program. 3,729 have interactive recipes (302 HTML, 1,059 CSS, 890
+JavaScript and 1,478 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -549,7 +549,7 @@ Programs use the existing DOM worker bridge with `action: "surface"` to obtain
 the rendered program root. `document` and `surface` contexts are mutually
 exclusive within one run. Surface tree reads are bounded to owned nodes;
 connected nodes outside that root and the runtime Document are refused.
-Only registered Canvas state/methods may mutate surface receivers. General tree
+Only registered Canvas and SVG state/methods may mutate surface receivers. General tree
 mutations continue to use detached `document` programs. This distinction matters:
 fonts on a detached Document did not honor writes in the tested browser. Canvas
 recipes therefore use the actual rendered surface and native pixel/text output.
@@ -575,3 +575,42 @@ opaque iframe releases its resources. Canvas dimensions retain native bitmap
 and state reset behavior. The API contract is actions-run 1.23.0 in both
 manifests and the client requirement map. Capture, asynchronous blob callbacks,
 OffscreenCanvas, focus-ring contexts, WebGL and WebGPU remain unfinished work.
+
+## Native SVG programs
+
+311 additional reusable programs cover SVG shapes, text measurements, gradients,
+patterns, clipping, masks, markers, transforms, native units and typed lists.
+They bring interactive coverage to 3,729/18,798. Each complete program contains
+its editable document, inputs and native operations in ordinary Component data.
+The source inventory retains its editor-draft labels; the published
+[SVG 2 Candidate Recommendation](https://www.w3.org/TR/SVG2/) is dated 4 October
+2018, not represented as a completed Recommendation.
+
+The renderer accepts `namespace: "svg"`, an `svg` root and inherited SVG children.
+It uses a closed namespace-aware tag/attribute policy. SVG receivers use the
+existing owned surface context, captured prototype methods, handle codec and
+native exception transport. Both legacy SVGPoint/SVGRect/SVGMatrix objects and
+the corresponding Geometry interfaces are recognized where browsers return them.
+`action: "constant"` reads registered primitive IDL data descriptors without
+exposing constructors or invoking getters. These are generic framework operations,
+not catalogue-specific source dispatch.
+
+Limits are 128 SVG nodes, 512px viewport edges, 32 list entries, 4,096 attribute
+characters and bounded numeric/unit inputs. Initial and live attribute writes
+and nested viewport length setters enforce their limits before native work.
+References stay local fragments; executable elements, external resources,
+foreignObject, use, animation and filter contexts remain unimplemented. Surface
+ownership and tree-mutation restrictions remain in force; CSP is unchanged.
+
+Bounding-box option programs compare native fill/stroke/marker/clip measurements
+on fixed authored geometry. Accepting an options object alone does not establish
+support: browsers that silently ignore an option report unsupported and expose
+their observed measurements. Each field has its own Boolean control. Native
+readonly animated values still throw their own errors. Unit conversion checks
+allow float precision loss instead of manufacturing exact geometry results.
+
+`svgBoundaryFixtures.ts` supplies native regression programs for namespaces,
+measurements, unit conversion, readonly values, transforms, constants, ownership,
+allocation and resource bounds. All recipes preserve edited programs through the
+canonical catalogue, private Thing storage and authored save-draft Action. The
+additive contract is `api.actions-run` 1.24.0 in both manifests and the client map.
