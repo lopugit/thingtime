@@ -113,3 +113,10 @@ JSON Action inputs and Web standards draft saving add `api.things` 1.33.0,
 `api.webpages-suites-install` 1.3.0. Both manifests and client negotiation cover
 these versions. Input validation includes resolved defaults and child calls;
 see the JSON input section in the browser Action contract above.
+
+
+Live Web Platform form-event programs require `api.actions-run` 1.15.0. The
+existing catalogue Action emits complete saved program data; `liveDOM.ts`
+provides generic native method/event backing. The explicit `allowFormEvents`
+context is confined by the runtime CSP and never enables form navigation. See
+[Web standards runtime and tests](../web-standards-builder.md).
