@@ -67,7 +67,20 @@ export async function settle({ repo, number, api, threads, apply = false }) {
     const p = await api(path);
     if (!eligible(p, repo) || identity(p) !== identity(initial) || !await liveRefs(p)) return 'changed';
     if (managed(p) && redundant(p, await api(`${path}/files?per_page=100`, 'pages'))) return 'close';
-    if (p.mergeable !== true || p.mergeable_state !== 'clean') return 'not-current';
+    // 'unstable' is mergeable with only NON-required checks red. tested() below
+    // is the real gate: it names every required context and ignores third-party
+    // apps, so demanding 'clean' here lets any third-party check veto merge --
+    // stricter than the rulesets, and contradicting tested(). Only the default
+    // branch has required_status_checks, so for a develop or github-actions PR
+    // every check is non-required and one red aggregate wedges the PR forever
+    // (PR #832 has sat at mergeable_state 'unstable' since the GitHub Advanced
+    // Security aggregate 'CodeQL' concluded timed_out on 2026-09-22, while the
+    // Analyze jobs it aggregates are green and it has 0 open alerts; GHAS opens
+    // at most one aggregate suite per head SHA, so that verdict is terminal).
+    // Keep rejecting 'blocked' (required check or review unmet), 'behind',
+    // 'dirty', 'draft', and 'unknown' -- this is an allowlist, so any state
+    // GitHub adds later is rejected until it is reviewed and added here.
+    if (p.mergeable !== true || !['clean', 'unstable'].includes(p.mergeable_state)) return 'not-current';
     if (!approved(p, await api(`${path}/reviews?per_page=100`, 'pages'))) return 'needs-review';
     if (await threads(number)) return 'unresolved-review';
     const checks = await api(`commits/${p.head.sha}/check-runs?filter=latest&per_page=100`, 'checks');

@@ -60,8 +60,10 @@ test('missing, skipped-only, failed, cancelled, pending, spoofed and newer check
   assert.equal(tested(checks().map(c => ({ ...c, app: { slug: 'spoof' } })), [], 'main'), false);
   assert.equal(tested(checks(), [{ id: 1, context: 'security', state: 'failure' }], 'main'), false);
 });
-function fixture({ graph = false, changeAt = Infinity, unresolved = false, failRead = false, lostWrite = false } = {}) {
+function fixture({ graph = false, changeAt = Infinity, unresolved = false, failRead = false, lostWrite = false,
+  mergeable = true, mergeableState = 'clean', failChecks = false } = {}) {
   const p = pull(), writes = []; let reads = 0;
+  p.mergeable = mergeable; p.mergeable_state = mergeableState;
   const api = async (path, mode, body) => {
     if (mode === 'PATCH' || mode === 'PUT') {
       writes.push({ path, mode, body }); p.state = 'closed'; p.merged = mode === 'PUT';
@@ -75,7 +77,7 @@ function fixture({ graph = false, changeAt = Infinity, unresolved = false, failR
     if (path.startsWith('git/ref/heads/')) return { object: { sha: path.endsWith('/main') ? base : head } };
     if (path.includes('/files')) return [{ filename: graph ? 'graphify-out/test' : 'src/test' }];
     if (path.includes('/reviews')) return [review()];
-    if (path.includes('/check-runs')) return checks();
+    if (path.includes('/check-runs')) return failChecks ? checks().map(c => ({ ...c, conclusion: 'failure' })) : checks();
     if (path.includes('/statuses')) return [];
     throw new Error(`Unexpected ${path}`);
   };
@@ -87,6 +89,23 @@ test('dry run never mutates; cleanup and merge use separate exact writes', async
   assert.deepEqual(f.writes, [{ path: 'pulls/42/merge', mode: 'PUT', body: { sha: head, merge_method: 'merge' } }]);
   const g = fixture({ graph: true }); assert.equal(await settle({ repo, number: 42, ...g, apply: true }), 'closed-redundant');
   assert.deepEqual(g.writes[0].body, { state: 'closed' });
+});
+test('a red non-required check cannot wedge merge, but real blockers still do', async () => {
+  // Every pair below is a combination GitHub actually reports together: it sets
+  // mergeable false for 'dirty' and null for 'unknown', and 'draft' only with
+  // draft true -- which eligible() already rejects, so it is covered there.
+  const f = fixture({ mergeableState: 'unstable' });
+  assert.equal(await settle({ repo, number: 42, ...f, apply: true }), 'merged');
+  for (const [mergeable, mergeableState] of [[true, 'blocked'], [true, 'behind'], [false, 'dirty'], [null, 'unknown']]) {
+    const g = fixture({ mergeable, mergeableState });
+    assert.equal(await settle({ repo, number: 42, ...g, apply: true }), 'not-current');
+    assert.deepEqual(g.writes, []);
+  }
+  // Relaxing the state guard must not weaken tested(): an unstable PR whose
+  // REQUIRED checks are red still cannot merge.
+  const h = fixture({ mergeableState: 'unstable', failChecks: true });
+  assert.equal(await settle({ repo, number: 42, ...h, apply: true }), 'checks-not-ready');
+  assert.deepEqual(h.writes, []);
 });
 test('head races at either snapshot or final fence cannot mutate', async () => {
   for (const changeAt of [2, 3, 4]) {
