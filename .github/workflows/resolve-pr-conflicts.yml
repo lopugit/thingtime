@@ -2645,7 +2645,7 @@ jobs:
               sleep 5
             done
             if [ "$remaining_pending" -ne 0 ]; then
-              echo "::notice::$remaining_pending obsolete Lopu worker run(s) did not release queue capacity within 180 seconds; deferring dispatch to a later scan."
+              echo "::notice::$remaining_pending obsolete Lopu worker run(s) did not release queue capacity within 150 seconds; deferring dispatch to a later scan."
               exit 0
             fi
           fi

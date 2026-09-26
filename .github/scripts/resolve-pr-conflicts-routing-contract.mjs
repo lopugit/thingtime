@@ -629,7 +629,7 @@ function assertWorkflowSource() {
   assert.match(handoffBlock, /changed state before cancellation; preserving it/);
   assert.match(
     handoffBlock,
-    /::notice::\$remaining_pending obsolete Lopu worker run\(s\) did not release queue capacity within 180 seconds; deferring dispatch to a later scan[\s\S]*?exit 0/u,
+    /::notice::\$remaining_pending obsolete Lopu worker run\(s\) did not release queue capacity within 150 seconds; deferring dispatch to a later scan[\s\S]*?exit 0/u,
     "an undrained cancellation defers with a notice; it dispatched and mutated nothing, so it must not publish a red check on every open PR",
   );
   assert.doesNotMatch(
