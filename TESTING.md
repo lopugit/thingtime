@@ -8472,6 +8472,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   native SyntaxError is catchable. Repeated handles preserve identity, native
   void results remain undefined, and missing registered browser members report
   unsupported. The rendered projection is not a live browsing-context receiver.
+- [ ] Run `DOM_BOUNDARY_FIXTURES` from `domBoundaryFixtures.ts` in the actual
+  opaque runtime. Named form controls must not hide cloned descendants or tree
+  depth, shadow native inspection/mutation accessors, or break projection.
+  Ordinary control names remain usable. A shallow Document clone must fail
+  ownership validation, just like a deep clone from another document.
 
 - [ ] Change class initial/increment/setter values and observe private state,
   static fields and brand checks; change `this`/`super` receivers and generator
