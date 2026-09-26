@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Saved collection sources load cursor pages through viewer-authorized Actions, with older-result search, deduplication, retry and bounded accumulation. Copies preserve the source Action dependency; existing collection styling and editable row templates are retained. Details: [PR #929](../PRs/929-codex-builder-paged-collections-load-editable-collections-from-paged-action-sources.md).
+
 - 2026-09-27 — **Codex (AI)**: Added 67 reusable TypedArray, iterator and
   generator intrinsic examples, taking worked coverage to 2,859 entries.
   Native byte conversions, callback traces, cleanup and protocol errors remain
