@@ -159,3 +159,11 @@ surfaces and GlobalEventHandlers attributes. Listener options, propagation and
 cancellation flags, IDL replacement/return-false behavior and bounded native
 receipts are saved data shared by the renderer, compiler and existing Thing
 write/save/reopen flow. No endpoints or permission expansion are added.
+
+
+Native media Component programs add `api.actions-run` 1.22.0. `mediaFixtures.ts`
+authors 95 complete media examples; `mediaPolicy.ts`, `liveMedia.ts` and the
+existing DOM binding interpreter provide the reusable property/method/event
+backing. Both manifests and client negotiation advance together. No endpoint,
+external media source or device grant is added. Save/reopen uses the unchanged
+opaque program and private Component write boundary.

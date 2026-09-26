@@ -8802,3 +8802,29 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   compare owner-visible program data, and verify anonymous API access is 404.
 - Check desktop/mobile preview layout and confirm both capability manifests show
   actions-run 1.21.0 plus the exact runtime asset hash before and after promotion.
+
+
+### Web Standards native media programs (2026-09-27)
+
+- Compile all media programs with `test:web-platform`, run both capability
+  manifests, and roundtrip edited numeric/boolean controls and clip bytes through
+  the real catalogue/Component API and authored save-draft Action. Verify private
+  owner readback and anonymous 404, then remove only exact disposable local IDs.
+- Run the real opaque runtime: audio/video/source load metadata, native IDL
+  lifecycle handlers, play/playing/ended/pause, seek events, speed/volume changes,
+  reload/emptied and current properties. Decode both clips; inspect video quality,
+  codec support, buffered/played/seekable ranges and invalid-media error state.
+- Dynamic `muted` content attributes do not prove current mute state. Verify the
+  explicit saved setter produces `muted: true` before playback and preserves
+  false after editing. Zero volume and native out-of-range rejection both work.
+- Observe actual play promise fulfillment and rejection. A later media event must
+  retain the rejection, and a later pause must fence the older promise's result.
+  Reset, pagehide, unsupported setup and exhausted event budget stop old bindings
+  and playback. Missing methods/properties report unsupported, never success.
+- Refuse object-valued or inherited input references, wrong scalar types,
+  arbitrary/readonly properties, mixed property/method grammar, external media
+  sources, non-media receivers, and more than eight media nodes.
+- In Builder save edited seek/speed/mute inputs, reopen/reload/run the private
+  Component and verify real playback state. Check desktop and narrow mobile
+  controls stay within the frame. Match source SHA, both 1.22.0 manifests,
+  runtime hash and restrictive CSP on preview and production.
