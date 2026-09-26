@@ -8439,6 +8439,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Web standards Builder app (2026-09-24)
 
+- [ ] Run HTML form recipes with boolean false, fractional meter values, edited
+  text-selection offsets/direction, replacement text, radio values and validity
+  messages (including empty to clear). Verify native outputs and control state;
+  serialization alone does not prove current value/checked/selection state.
+  Save/reopen/reload/reuse a form program as a private Component.
+- [ ] Run `HTML_FORM_BOUNDARY_FIXTURES` in the actual opaque runtime. Both
+  select remove overloads and option-node insertion must work. Growing a
+  detached options collection repeatedly must spend the cumulative node budget,
+  and length 301 must fail before allocation. Retained ValidityState remains
+  live. Detached form reset must be refused and remain requires-context in the
+  catalogue; a no-op native call must never count as a completed reset demo.
+
 - [ ] Run detached DOM recipes with edited text, selectors, attribute names,
   token values and text offsets. Confirm native results and projected changes:
   append/insert/replace/remove, sibling reordering, text splitting, class-token

@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Web standards adds 212 reusable HTML form
+  examples with typed control state, text selection, validity and live
+  option/radio collections. Native overload dispatch and detached collection
+  allocation limits are covered by real-browser regressions. Reset remains
+  requires-context after a native detached-document no-op was reproduced.
+  The catalogue Action contract advances to 1.14.0. Validation includes private
+  API round trips, browser execution and a full Vercel build.
+
 - 2026-09-27 — **Codex (AI)**: DOM receiver inspection and projection now use
   captured browser accessors, so named form controls cannot hide descendants
   from allocation/depth limits. Added reusable browser regressions and rejected
