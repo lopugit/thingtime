@@ -67,11 +67,7 @@ export async function settle({ repo, number, api, threads, apply = false }) {
     const p = await api(path);
     if (!eligible(p, repo) || identity(p) !== identity(initial) || !await liveRefs(p)) return 'changed';
     if (managed(p) && redundant(p, await api(`${path}/files?per_page=100`, 'pages'))) return 'close';
-    // 'unstable' is mergeable with a non-required check red. tested() below is
-    // the real gate and names every required context explicitly, so a flaky or
-    // terminally stale third-party check must not wedge the PR forever. Keep
-    // rejecting 'blocked', 'behind', 'dirty', 'draft', and 'unknown'.
-    if (p.mergeable !== true || !['clean', 'unstable'].includes(p.mergeable_state)) return 'not-current';
+    if (p.mergeable !== true || p.mergeable_state !== 'clean') return 'not-current';
     if (!approved(p, await api(`${path}/reviews?per_page=100`, 'pages'))) return 'needs-review';
     if (await threads(number)) return 'unresolved-review';
     const checks = await api(`commits/${p.head.sha}/check-runs?filter=latest&per_page=100`, 'checks');

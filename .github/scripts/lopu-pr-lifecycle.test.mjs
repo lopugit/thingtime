@@ -60,10 +60,8 @@ test('missing, skipped-only, failed, cancelled, pending, spoofed and newer check
   assert.equal(tested(checks().map(c => ({ ...c, app: { slug: 'spoof' } })), [], 'main'), false);
   assert.equal(tested(checks(), [{ id: 1, context: 'security', state: 'failure' }], 'main'), false);
 });
-function fixture({ graph = false, changeAt = Infinity, unresolved = false, failRead = false, lostWrite = false,
-  mergeableState = 'clean' } = {}) {
+function fixture({ graph = false, changeAt = Infinity, unresolved = false, failRead = false, lostWrite = false } = {}) {
   const p = pull(), writes = []; let reads = 0;
-  p.mergeable_state = mergeableState;
   const api = async (path, mode, body) => {
     if (mode === 'PATCH' || mode === 'PUT') {
       writes.push({ path, mode, body }); p.state = 'closed'; p.merged = mode === 'PUT';
@@ -89,23 +87,6 @@ test('dry run never mutates; cleanup and merge use separate exact writes', async
   assert.deepEqual(f.writes, [{ path: 'pulls/42/merge', mode: 'PUT', body: { sha: head, merge_method: 'merge' } }]);
   const g = fixture({ graph: true }); assert.equal(await settle({ repo, number: 42, ...g, apply: true }), 'closed-redundant');
   assert.deepEqual(g.writes[0].body, { state: 'closed' });
-});
-test('a red non-required check cannot wedge merge, but real blockers still do', async () => {
-  // 'unstable' means mergeable with only non-required checks red (e.g. a stale
-  // third-party aggregate). tested() still names every required context.
-  const f = fixture({ mergeableState: 'unstable' });
-  assert.equal(await settle({ repo, number: 42, ...f, apply: true }), 'merged');
-  for (const mergeableState of ['blocked', 'behind', 'dirty', 'draft', 'unknown']) {
-    const g = fixture({ mergeableState });
-    assert.equal(await settle({ repo, number: 42, ...g, apply: true }), 'not-current');
-    assert.deepEqual(g.writes, []);
-  }
-  // An unstable PR whose required checks are red must still not merge.
-  const h = fixture({ mergeableState: 'unstable' });
-  const api = async (path, mode, body) => path.includes('/check-runs')
-    ? checks().map(c => ({ ...c, conclusion: 'failure' })) : h.api(path, mode, body);
-  assert.equal(await settle({ repo, number: 42, ...h, api, apply: true }), 'checks-not-ready');
-  assert.deepEqual(h.writes, []);
 });
 test('head races at either snapshot or final fence cannot mutate', async () => {
   for (const changeAt of [2, 3, 4]) {
