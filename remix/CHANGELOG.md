@@ -72,7 +72,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   programs, taking interactive coverage to 2,925 entries. Editable native
   call/new behavior, typed-array overloads, Promise order, Proxy invariants and
   saved defaults use existing Component language nodes. The catalogue contract
-  is `api.actions-run` 1.18.0; runtime permissions are unchanged.
+  is `api.actions-run` 1.18.0; runtime permissions are unchanged. Details:
+  [PR #931](../PRs/931-codex-web-standards-constructor-programs-add-reusable-javascript-constructor-signature-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Saved collection sources load cursor pages through viewer-authorized Actions, with older-result search, deduplication, retry and bounded accumulation. Copies preserve the source Action dependency; existing collection styling and editable row templates are retained. Details: [PR #929](../PRs/929-codex-builder-paged-collections-load-editable-collections-from-paged-action-sources.md).
 

@@ -88,6 +88,7 @@ test('buffers, view construction and Date preserve their native initialization a
 	nativeError(await run('ArrayBuffer', { length: 9, maximum: 8 }), 'RangeError'); nativeError(await run('ArrayBuffer', { length: 5000 }), 'RangeError');
 	const view = await run('DataView', { offset: 2, length: 2, value: 300 }); assert.deepEqual(view.bytes, [1, 2, 44, 4, 5, 6]); assert.equal(view.byteOffset, 2); assert.equal(view.sharesBuffer, true);
 	nativeError(await run('DataView', { offset: 6, length: 1 }), 'RangeError');
+	nativeError(await run('DataView', { bytes: null, offset: 0, length: 0 }), 'RangeError');
 	for (const bytes of [5000, '5000', { length: 5000 }]) { const limited = await run('DataView', { bytes }); nativeError(limited, 'RangeError'); assert.match(limited.error.message, /This demo limits allocation/); }
 	assert.deepEqual((await run('DataView', { bytes: 6 })).bytes, [0, 255, 0, 0, 0, 0]);
 	const date = await run('Date', { args: [0] }); assert.equal(date.iso, '1970-01-01T00:00:00.000Z'); assert.equal(date.epoch, 0);

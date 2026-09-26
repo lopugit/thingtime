@@ -75,7 +75,7 @@ export function javascriptConstructorRecipe(f: Feature): Recipe | undefined {
 			'Construct the actual buffer with or without a maximum length and inspect native zero initialization. SharedArrayBuffer requires a context exposing it; this example does not grant cross-origin isolation. This demo caps allocations at 4096 bytes.');
 	}
 	if (root === 'DataView') {
-		const bytes = param('bytes', 'Backing bytes', [1, 2, 3, 4, 5, 6]); bounded(choose(binary('===', typeOf(bytes), 'object'), get(bytes, 'length'), bytes));
+		const bytes = param('bytes', 'Backing bytes', [1, 2, 3, 4, 5, 6]); bounded(choose(binary('===', typeOf(bytes), 'object'), { ...get(bytes, 'length'), optional: true }, bytes));
 		p.steps!.push(declare('bytes', make('Uint8Array', [bytes])), declare('result', invoke(array(get(v('bytes'), 'buffer'), param('offset', 'Byte offset', 1, 'number'), param('length', 'View byte length', 4, 'number')))),
 			perform(method(v('result'), 'setUint8', [0, param('value', 'Write at view index zero', 255, 'number')])));
 		return done({ byteOffset: get(v('result'), 'byteOffset'), byteLength: get(v('result'), 'byteLength'), sharesBuffer: binary('===', get(v('result'), 'buffer'), get(v('bytes'), 'buffer')), bytes: from(v('bytes')) }, 'Construct a real DataView window, write its first byte and observe the changed backing buffer. Invalid construction bounds or writes produce native errors. Backing allocation is capped at 4096 bytes by this demo.');

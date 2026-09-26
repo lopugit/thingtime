@@ -8726,4 +8726,4 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   edited defaults and behavior survive; anonymous reads remain denied. Missing
   native members and SharedArrayBuffer report unsupported in their actual context.
 
-- Constructor allocation limits: numeric, numeric-string and array-like DataView backing inputs above 4096 reject with an explicit demo-limit error; small numeric buffers still zero-initialize. Oversized iterator materialization also rejects before iteration.
+- Constructor allocation limits: numeric, numeric-string and array-like DataView backing inputs above 4096 reject with an explicit demo-limit error; small numeric buffers still zero-initialize and null preserves native conversion. Oversized iterator materialization also rejects before iteration.
