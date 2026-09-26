@@ -3,7 +3,22 @@ import test from 'node:test';
 import vm from 'node:vm';
 import { compilePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
-import { array, awaited, declare, domCall, domDocument, domGet, fn, get, global, method, returns, variable } from './programBuilders';
+import {
+	array,
+	awaited,
+	declare,
+	domCall,
+	domDocument,
+	domGet,
+	domSurface,
+	domConstruct,
+	fn,
+	get,
+	global,
+	method,
+	returns,
+	variable
+} from './programBuilders';
 import { DOM_BOUNDARY_FIXTURES } from './domBoundaryFixtures';
 
 test('real-browser DOM boundary fixtures remain valid reusable programs', () => {
@@ -105,4 +120,18 @@ test('a refused DOM request leaves the frame-side request numbering intact', asy
 test('an ordinary parameter named type cannot impersonate a bridge reply before execution', async () => {
 	const result = await run(returns(42), () => ({}), { type: 'tt-platform-dom-result', id: 1 });
 	assert.deepEqual(result.results, [{ ok: true, result: 42 }]);
+});
+
+test('surface and bounded native constructors use the same worker transport', async () => {
+	const result = await run([declare('surface', domSurface()), ...returns(domConstruct('Path2D', ['M0 0L8 8']))], (request) => ({
+		value: request.action === 'surface' ? { $dom: 'run:1', type: 'Element' } : { $dom: 'run:2', type: 'Path2D' }
+	}));
+	assert.deepEqual(
+		result.requests.map((r) => [r.action, r.target, r.key, r.args]),
+		[
+			['surface', null, '', []],
+			['construct', null, 'Path2D', ['M0 0L8 8']]
+		]
+	);
+	assert.equal(result.results[0].ok, true);
 });

@@ -8829,3 +8829,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Component and verify real playback state. Check desktop and narrow mobile
   controls stay within the frame. Match source SHA, both 1.22.0 manifests,
   runtime hash and restrictive CSP on preview and production.
+
+### Canvas program receivers (2026-09-27)
+
+- Run all Canvas recipes in the real opaque runtime. Assert actual pixels,
+  matrix values, save/restore state, width-reset transparency and native radius
+  exceptions. Explicitly verify a 24px font reads back as 24px and paints/measures
+  text; a detached Document's ignored font write is not successful coverage.
+- Verify Path2D self-addition and copies cannot grow exponentially past the
+  path budget; negative/oversized ImageData dimensions, inferred tall pixel
+  arrays, five canvases, oversized bitmap edges, filters with URLs, relative or
+  oversized fonts and foreign handles are refused before expensive work.
+- Surface handles must refuse parent/runtime-document access and root removal;
+  surface and detached contexts cannot mix. Run existing DOM/form boundary
+  fixtures to preserve detached ownership, clobber defenses and node budgets.
+- Native context outputs may contain extra browser fields; project the published
+  settings while still rejecting unknown author inputs. Missing text metrics
+  remain explicitly unsupported. No account, network or iframe permission grows.
+- Edit gradient colours/stop, save through the authored Action, reopen, reload
+  and run the private Component; verify the native pixel and preserved inputs.
+  Repeat on production @lopu after matching source, runtime hash and both
+  actions-run 1.23.0 manifests. Anonymous reads must return 404.
+- Inspect desktop/mobile drawings and controls for overflow. Confirm completed
+  drawings remain visible, Stop clears the frame, and repeated Run starts fresh.
