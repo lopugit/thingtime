@@ -22,7 +22,7 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,656 have interactive recipes (227 HTML, 1,059 CSS, 601
+editable program. 2,792 have interactive recipes (227 HTML, 1,059 CSS, 737
 JavaScript and 769 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
@@ -122,6 +122,31 @@ the existing 200-event budget. Immediate calls run after every listener is
 registered; immediate failures remain errors. Programs and context selection
 survive canonical Component save/read unchanged. `api.actions-run` 1.15.0
 advertises the additive recipe and binding contract.
+
+## ECMAScript built-in receivers
+
+All 638 indexed built-in entries now have worked recipes. This does not include
+all language productions or internal specification clauses. The receiver and
+prototype fixtures author 158 complete programs, including 136 previously
+missing examples. They cover DataView byte windows and endianness, iterator
+helpers and consumption, weak collection identity, weak references and registry
+unregistration, Function receivers, Promise callbacks, errors, symbols and
+global conversion functions. Each uses ordinary reusable language nodes.
+
+Prototype examples inspect actual descriptors and extend a fresh local receiver
+with an editable inherited label. Native intrinsic prototypes remain unchanged.
+Async/generator examples invoke structured functions of the corresponding family;
+constructor properties are inspected without invoking source-string constructors.
+Weak-reference examples retain their targets and never promise garbage collection
+or callback timing. SharedArrayBuffer remains unavailable in the isolated browser
+context and reports that explicitly; newer methods likewise require native support.
+
+The catalogue retains edition-specific ECMA-262/402 2026 source links. The
+[ECMA-262 publication page](https://ecma-international.org/publications-and-standards/standards/ecma-262/)
+identifies the published 17th edition; living TC39 draft changes are not silently
+substituted for that edition. `api.actions-run` 1.16.0 advertises the additive
+catalogue recipe contract. No compiler operation, runtime grant or storage model
+was added for these examples.
 
 ## Build and validation
 
