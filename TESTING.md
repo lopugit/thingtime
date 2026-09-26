@@ -8667,3 +8667,5 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Bind closeDisabled to pending in a menu dialog. During a delayed save, Close
   and Escape cannot dismiss it; success still closes it. With two closed sibling
   dialogs sharing that Action, only the open dialog may restore trigger focus.
+
+- Type text and spaces in a dialog opened from a menu: menu keyboard handling must not intercept modal input or move its focus.

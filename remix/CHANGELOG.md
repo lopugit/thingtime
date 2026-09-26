@@ -68,7 +68,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-27: Added editable `tt-menu` controls with bounded native popovers, keyboard navigation and scoped dialog hosting. See [PR note](../PRs/builder-menu-controls.md).
+- 2026-09-27: Added editable `tt-menu` controls with bounded native popovers, keyboard navigation and scoped dialog hosting. See [PR note](../PRs/925-codex-builder-menu-controls-editable-native-menus.md).
 
 - 2026-09-27 — **Codex (AI)**: Live Components expose scoped pending Action
   state for authored saving labels and disabled forms, plus current page identity
