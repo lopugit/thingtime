@@ -1,4 +1,8 @@
+import { ComponentChange } from '../Builder/ComponentChange';
 import { ComponentSelect } from '../Builder/ComponentSelect';
+import { ComponentStyle } from '../Builder/ComponentStyle';
+import { ComponentCollection } from '../Builder/ComponentCollection';
+import { ComponentDragSource, ComponentDropTarget } from '../Builder/ComponentDrag';
 import { Link, useInRouterContext } from 'react-router';
 import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
 import { ComponentMap } from '../Builder/ComponentMap';
@@ -8,7 +12,12 @@ import React from 'react';
 import { HtmlTemplateField } from './HtmlTemplateField';
 import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
-import { HTML_ALLOWED_TAGS as ALLOWED_TAGS, HTML_VOID_TAGS as VOID_TAGS, HTML_MAX_NODES as MAX_NODES, HTML_MAX_DEPTH as MAX_DEPTH } from './htmlRenderPolicy';
+import {
+	HTML_ALLOWED_TAGS as ALLOWED_TAGS,
+	HTML_VOID_TAGS as VOID_TAGS,
+	HTML_MAX_NODES as MAX_NODES,
+	HTML_MAX_DEPTH as MAX_DEPTH
+} from './htmlRenderPolicy';
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
 
@@ -43,7 +52,6 @@ export function InteractiveWorkspace({ name, children }: { name?: string; childr
 		</div>
 	);
 }
-
 
 // JSON → DOM renderer: lets people build their own html/css components as
 // plain JSON things (stored in Mongo like any other thing) and render them
@@ -96,6 +104,7 @@ export const ALLOWED_PROPS = new Set([
 	'aria-pressed',
 	'aria-expanded',
 	'aria-selected',
+	'aria-current',
 	'open',
 	// NOT `pattern`. Every other constraint-validation prop above is a cheap
 	// numeric/boolean compare, but `pattern` is a REGEX the browser compiles
@@ -241,9 +250,18 @@ export type HtmlThingNode =
 type RenderState = { count: number; mediaUrl: (url: string) => string };
 
 function ComponentLink({ href, children, ...props }: Record<string, any>) {
- const inRouter = useInRouterContext();
- if (inRouter && typeof href === 'string' && /^\/(?!\/)/.test(href) && !href.startsWith('/api/') && !props.download) return <Link {...props} to={href}>{children}</Link>;
- return <a {...props} href={href}>{children}</a>;
+	const inRouter = useInRouterContext();
+	if (inRouter && typeof href === 'string' && /^(?:\/(?!\/)|[?#])/.test(href) && !href.startsWith('/api/') && !props.download)
+		return (
+			<Link {...props} to={href}>
+				{children}
+			</Link>
+		);
+	return (
+		<a {...props} href={href}>
+			{children}
+		</a>
+	);
 }
 
 const renderNode = (node: HtmlThingNode, key: number, depth: number, state: RenderState): React.ReactNode => {
@@ -269,18 +287,54 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		);
 	}
 	if (tag === 'tt-attachments') return <ComponentAttachments key={key} {...node.props} />;
+	if (tag === 'tt-collection') return <ComponentCollection key={key} {...node.props} />;
+	if (tag === 'tt-change') return <ComponentChange key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentChange>;
+	if (tag === 'tt-drag') return <ComponentDragSource key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDragSource>;
+	if (tag === 'tt-drop') return <ComponentDropTarget key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDropTarget>;
+	if (tag === 'tt-style')
+		return (
+			<ComponentStyle key={key} rules={node.props?.rules}>
+				{renderChildren(node.children, depth + 1, state)}
+			</ComponentStyle>
+		);
 	if (tag === 'tt-media') return <ComponentMedia key={key} {...node.props} />;
 	if (tag === 'tt-select') return <ComponentSelect key={key} {...node.props} />;
 	if (tag === 'tt-map') return <ComponentMap key={key} {...node.props} />;
-	if (tag === 'tt-form') return <ComponentForm key={key} identityName={node.props?.identityName} identity={node.props?.identity} revisionName={node.props?.revisionName} revision={node.props?.revision} resetKey={node.props?.resetKey}>{renderChildren(node.children, depth + 1, state)}</ComponentForm>;
+	if (tag === 'tt-form')
+		return (
+			<ComponentForm
+				key={key}
+				identityName={node.props?.identityName}
+				identity={node.props?.identity}
+				revisionName={node.props?.revisionName}
+				revision={node.props?.revision}
+				resetKey={node.props?.resetKey}
+			>
+				{renderChildren(node.children, depth + 1, state)}
+			</ComponentForm>
+		);
 	if (tag === 'tt-countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
-	if (tag === 'tt-dialog') return <ComponentDialog key={key} title={node.props?.title} name={node.props?.name} type={node.props?.type}>{renderChildren(node.children, depth + 1, state)}</ComponentDialog>;
-	if (tag === 'tt-upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} value={node.props?.value} attachmentId={node.props?.attachmentId} />;
+	if (tag === 'tt-dialog')
+		return (
+			<ComponentDialog key={key} {...node.props}>
+				{renderChildren(node.children, depth + 1, state)}
+			</ComponentDialog>
+		);
+	if (tag === 'tt-upload')
+		return (
+			<ComponentUpload
+				key={key}
+				name={node.props?.name}
+				imageOnly={node.props?.imageOnly}
+				disabled={node.props?.disabled}
+				title={node.props?.title}
+				value={node.props?.value}
+				attachmentId={node.props?.attachmentId}
+			/>
+		);
 	if (!ALLOWED_TAGS.has(tag)) {
 		// unknown tag: render children in a plain span so content still shows
-		return (
-			<span key={key}>{renderChildren(node.children, depth + 1, state)}</span>
-		);
+		return <span key={key}>{renderChildren(node.children, depth + 1, state)}</span>;
 	}
 
 	const props = fieldProps(tag, sanitizeProps(node.props));
@@ -292,14 +346,19 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		// even an empty array. Legacy text children become an initial value.
 		if (!('value' in props) && !('defaultValue' in props)) {
 			const children = Array.isArray(node.children) ? node.children : [node.children];
-			props.defaultValue = children.filter(value => typeof value === 'string' || typeof value === 'number').join('');
+			props.defaultValue = children.filter((value) => typeof value === 'string' || typeof value === 'number').join('');
 		}
 		return <HtmlTemplateField key={key} tag={tag} fieldProps={props} />;
 	}
 	if (FIELD_TAGS.has(tag) && props['data-tt-action'] !== '$ui') {
 		return <HtmlTemplateField key={key} tag={tag as 'input' | 'select'} fieldProps={props}>{tag === 'input' ? undefined : renderChildren(node.children, depth + 1, state)}</HtmlTemplateField>;
 	}
-	if (tag === 'a') return <ComponentLink key={key} {...props}>{renderChildren(node.children,depth+1,state)}</ComponentLink>;
+	if (tag === 'a')
+		return (
+			<ComponentLink key={key} {...props}>
+				{renderChildren(node.children, depth + 1, state)}
+			</ComponentLink>
+		);
 	if (VOID_TAGS.has(tag)) {
 		return React.createElement(tag, { ...props, key });
 	}

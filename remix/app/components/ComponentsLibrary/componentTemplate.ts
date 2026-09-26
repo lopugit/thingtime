@@ -88,8 +88,7 @@ export type ComponentArgValues = Record<string, ComponentArgScalar | undefined>;
 // binds (result / viewer / state / last / query / item).
 export type ComponentScope = Record<string, unknown>;
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-	!!value && typeof value === 'object' && !Array.isArray(value);
+const isPlainObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 
 const BANNED_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -232,10 +231,10 @@ const formatValue = (spec: Record<string, unknown>, value: unknown): string => {
 				kind === 'time'
 					? { hour: 'numeric', minute: '2-digit' }
 					: kind === 'datetime'
-						? { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
-						: kind === 'weekday'
-							? { weekday: 'long' }
-							: { year: 'numeric', month: 'long', day: 'numeric' };
+					? { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+					: kind === 'weekday'
+					? { weekday: 'long' }
+					: { year: 'numeric', month: 'long', day: 'numeric' };
 			return new Intl.DateTimeFormat(undefined, { ...options, ...(timeZone ? { timeZone } : {}) }).format(date);
 		} catch {
 			return date.toISOString();
@@ -352,6 +351,9 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 		return out;
 	}
 	if (!isPlainObject(template)) return template;
+	// Deferred row templates retain tokens until a paged collection supplies
+	// its item scope. Copy through the same node/character budget, never eval.
+	if ('ttTemplate' in template) return resolveScopeValue(template.ttTemplate, budget);
 
 	if ('ttArg' in template) {
 		// A { ttArg } leaf drops an arg value straight into the tree, so it is
@@ -534,8 +536,7 @@ export const createTemplateResolver = (options: { preserveUnboundTokens?: boolea
 	};
 };
 
-export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): unknown =>
-	createTemplateResolver()(template, scope);
+export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): unknown => createTemplateResolver()(template, scope);
 
 // Visit executable positions in every authored branch, using the same token,
 // repeat and own-property semantics as rendering. Arguments are data, never
@@ -543,25 +544,44 @@ export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): 
 // values get one unbound visit so literal controls remain discoverable without
 // inventing item/index values from visitor input. Work shares one finite budget.
 export const visitStoredTemplateActions = (
-	template: unknown, scope: ComponentScope,
+	template: unknown,
+	scope: ComponentScope,
 	visit: (action: string, node: Record<string, unknown>, raw: string) => void
 ): void => {
 	const budget: ResolveBudget = { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS, preserveUnboundTokens: true };
 	const walk = (value: unknown, current: ComponentScope, depth = 0): void => {
 		if (budget.left-- <= 0 || budget.chars <= 0 || depth > 48 || !value || typeof value !== 'object') return;
-		if (Array.isArray(value)) { for (const child of value) { if (budget.left <= 0) break; walk(child, current, depth + 1); } return; }
+		if (Array.isArray(value)) {
+			for (const child of value) {
+				if (budget.left <= 0) break;
+				walk(child, current, depth + 1);
+			}
+			return;
+		}
 		const node = value as Record<string, unknown>;
 		const child = (next: unknown, nextScope = current) => walk(next, nextScope, depth + 1);
 		if ('ttArg' in node) return;
 		if ('ttMap' in node) {
 			const spec = isPlainObject(node.ttMap) ? node.ttMap : {};
 			child(spec.default);
-			if (isPlainObject(spec.values)) for (const branch of Object.values(spec.values)) { if (budget.left <= 0) break; child(branch); }
+			if (isPlainObject(spec.values))
+				for (const branch of Object.values(spec.values)) {
+					if (budget.left <= 0) break;
+					child(branch);
+				}
 			return;
 		}
-		if ('ttIf' in node) { const spec = isPlainObject(node.ttIf) ? node.ttIf : {}; child(spec.then); child(spec.else); return; }
+		if ('ttIf' in node) {
+			const spec = isPlainObject(node.ttIf) ? node.ttIf : {};
+			child(spec.then);
+			child(spec.else);
+			return;
+		}
 		if ('ttFormat' in node) return;
-		if ('ttMerge' in node) { child(node.ttMerge); return; }
+		if ('ttMerge' in node) {
+			child(node.ttMerge);
+			return;
+		}
 		if ('ttRepeat' in node) {
 			const spec = isPlainObject(node.ttRepeat) ? node.ttRepeat : {};
 			const raw = spec.arg !== undefined ? argValue(current, String(spec.arg)) : spec.count;
@@ -576,11 +596,33 @@ export const visitStoredTemplateActions = (
 			const raw = argValue(current, String(spec.arg));
 			const requested = Math.trunc(Number(spec.max) || 0);
 			const cap = requested > 0 ? Math.min(requested, EACH_HARD_CAP) : EACH_HARD_CAP;
-			const items = Array.isArray(raw) ? raw.slice(0, cap) : isPlainObject(raw) ? Object.keys(raw).slice(0, cap).map((key) => ({ key, value: raw[key] })) : [];
+			const items = Array.isArray(raw)
+				? raw.slice(0, cap)
+				: isPlainObject(raw)
+				? Object.keys(raw)
+						.slice(0, cap)
+						.map((key) => ({ key, value: raw[key] }))
+				: [];
 			child(spec.empty);
-			if (!items.length) child(spec.node, { ...current, item: undefined, index: undefined, n: undefined, count: undefined, first: undefined, last: undefined });
-			for (let index = 0; index < items.length && budget.left > 0; index++) child(spec.node, { ...current, item: items[index], index, n: index + 1, count: items.length, first: index === 0, last: index === items.length - 1 });
+			if (!items.length)
+				child(spec.node, { ...current, item: undefined, index: undefined, collection: undefined, n: undefined, count: undefined, first: undefined, last: undefined });
+			for (let index = 0; index < items.length && budget.left > 0; index++)
+				child(spec.node, {
+					...current,
+					item: items[index],
+					index,
+					n: index + 1,
+					count: items.length,
+					first: index === 0,
+					last: index === items.length - 1
+				});
 			return;
+		}
+		if ((node.tag === 'tt-collection' || node.chakra === 'Collection') && isPlainObject(node.props)) {
+			const row = node.props.itemTemplate;
+			// Only this control resolves its row template a second time. Row data
+			// is runtime input and must never become an inherited authority grant.
+			child(isPlainObject(row) && 'ttTemplate' in row ? row.ttTemplate : row, { ...current, item: undefined, index: undefined, collection: undefined });
 		}
 		if (typeof node.ttAction === 'string') {
 			const raw = substitute(node.ttAction, current, budget).trim();

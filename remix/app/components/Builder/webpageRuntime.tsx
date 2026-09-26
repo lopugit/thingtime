@@ -1,5 +1,6 @@
 import React from 'react';
 import { parseActionJson } from '~/schemas/actionJsonInput';
+import { ComponentDragBoundary } from './ComponentDrag';
 import { pageRuntimeSearch } from './seamlessMode';
 import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
@@ -181,7 +182,7 @@ export const WebpageRuntimeProvider = ({
 	const identity = React.useMemo(() => ({}), [viewer.id, pageId, shared, linkKey, enabled]);
 	const sharedRun = React.useCallback(
 		async (action: string, inputs: Record<string, unknown>) => {
-			await requireThingtimeCapability('api.actions-run', '1.6.0');
+			await requireThingtimeCapability('api.actions-run', '1.11.0');
 			const response = await fetch('/api/v1/actions/run', {
 				method: 'POST',
 				credentials: 'include',
@@ -278,6 +279,7 @@ export const WebpageRuntimeProvider = ({
 
 	return (
 		<WebpageRuntimeContext.Provider value={enabled ? value : INERT_RUNTIME}>
+			<ComponentDragBoundary resetKey={identity}>
 			{shared ? (
 				<SharedMediaProvider linkKey={linkKey} sharedRoot={pageId || undefined}>
 					{children}
@@ -285,6 +287,7 @@ export const WebpageRuntimeProvider = ({
 			) : (
 				children
 			)}
+			</ComponentDragBoundary>
 		</WebpageRuntimeContext.Provider>
 	);
 };

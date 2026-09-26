@@ -1,49 +1,108 @@
 import React from 'react';
+import { ComponentStyle } from './ComponentStyle';
+import type { ComponentStyleRule } from './componentStyleRules';
+import { ComponentDataScope } from './ComponentSelect';
 import { countdownDuration, countdownRemaining } from './nativeControlClock';
 
 export const NativeControlsEnabled = React.createContext(false);
+export const ComponentLocalControl = React.createContext<((input: Record<string, unknown>) => void) | null>(null);
 const text = (value: unknown, fallback: string) => (typeof value === 'string' && value.trim() ? value.slice(0, 200) : fallback);
+
+const dialogStyles: ComponentStyleRule[] = [
+	{
+		selector: ':where(.tt-native-dialog)',
+		declarations: {
+			'box-sizing': 'border-box',
+			width: 'min(560px, 92vw)',
+			'max-width': '100vw',
+			'max-height': '90dvh',
+			padding: '20px',
+			border: '1px solid var(--tt-border, #ddd)',
+			'border-radius': '12px',
+			background: 'var(--tt-card, white)',
+			color: 'inherit'
+		}
+	},
+	{
+		selector: ':where(.tt-native-dialog[data-type="drawer"])',
+		declarations: { inset: '0 auto 0 0', margin: '0', height: '100dvh', 'max-height': '100dvh', 'border-radius': '0' }
+	},
+	{
+		selector: ':where(.tt-native-dialog-header)',
+		declarations: { display: 'flex', 'justify-content': 'space-between', gap: '16px', 'margin-bottom': '16px' }
+	}
+];
 
 // Native dialogs remain inside the component DOM so the same delegated Action
 // and form boundary applies. The browser handles focus, Escape and inertness.
-export function ComponentDialog({ title, name, type, children }: { title?: unknown; name?: unknown; type?: unknown; children: React.ReactNode }) {
+export function ComponentDialog({
+	title,
+	name,
+	type,
+	autoOpen,
+	closeQuery,
+	closeOnAction,
+	className,
+	children
+}: {
+	title?: unknown;
+	name?: unknown;
+	type?: unknown;
+	autoOpen?: unknown;
+	closeQuery?: unknown;
+	closeOnAction?: unknown;
+	className?: unknown;
+	children: React.ReactNode;
+}) {
 	const enabled = React.useContext(NativeControlsEnabled);
+	const local = React.useContext(ComponentLocalControl);
+	const scope = React.useContext(ComponentDataScope);
+	const handledResult = React.useRef(scope.last);
 	const dialog = React.useRef<HTMLDialogElement>(null);
 	const label = text(title, 'Component dialog');
+	const dismiss = React.useCallback(() => {
+		dialog.current?.close();
+		if (closeQuery && typeof closeQuery === 'object' && !Array.isArray(closeQuery)) local?.({ op: 'query', params: closeQuery });
+	}, [closeQuery, local]);
+	React.useEffect(() => {
+		if (autoOpen === true && enabled && !dialog.current?.open) dialog.current?.showModal();
+	}, [autoOpen, enabled]);
+	React.useEffect(() => {
+		const last = scope.last as { action?: unknown; ok?: unknown } | undefined;
+		if (last === handledResult.current) return;
+		handledResult.current = last;
+		if (last?.ok === true && last.action === closeOnAction) dismiss();
+	}, [scope.last, closeOnAction, dismiss]);
 	return (
-		<>
-			<button type="button" disabled={!enabled} onClick={() => dialog.current?.showModal()}>
-				{text(name, `Open ${label}`)}
-			</button>
+		<ComponentStyle rules={dialogStyles}>
+			{autoOpen !== true && (
+				<button type="button" disabled={!enabled} onClick={() => dialog.current?.showModal()}>
+					{text(name, `Open ${label}`)}
+				</button>
+			)}
 			<dialog
 				ref={dialog}
+				className={['tt-native-dialog', typeof className === 'string' ? className : ''].filter(Boolean).join(' ')}
+				data-type={type === 'drawer' ? 'drawer' : 'dialog'}
+				onCancel={(event) => {
+					event.preventDefault();
+					dismiss();
+				}}
 				onClick={(event) => {
 					if (!event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && (event.target as HTMLElement).closest('a[href]'))
 						dialog.current?.close();
 				}}
 				aria-label={label}
-				style={{
-					boxSizing: 'border-box',
-					width: 'min(560px, 92vw)',
-					maxWidth: '100vw',
-					maxHeight: '90dvh',
-					padding: 20,
-					border: '1px solid var(--tt-border, #ddd)',
-					borderRadius: 12,
-					background: 'var(--tt-card, white)',
-					color: 'var(--tt-ink, #16161a)',
-					...(type === 'drawer' ? { position: 'fixed', inset: '0 auto 0 0', margin: 0, height: '100dvh', maxHeight: '100dvh', borderRadius: 0 } : {})
-				}}
 			>
-				<header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
+				<header className="tt-native-dialog-header">
 					<strong>{label}</strong>
-					<button type="button" aria-label="Close dialog" onClick={() => dialog.current?.close()}>
-						Close
+					<button type="button" aria-label="Close dialog" onClick={dismiss}>
+						×
 					</button>
 				</header>
 				{children}
 			</dialog>
-		</>
+		</ComponentStyle>
 	);
 }
 

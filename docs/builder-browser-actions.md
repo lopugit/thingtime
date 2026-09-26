@@ -137,7 +137,7 @@ Only JSON data is accepted. Resolved defaults and child invocations also obey
 the Action's total input byte budget. Cycles, executable objects, getters and
 sparse arrays are refused. The server independently validates every input.
 
-This addition requires `api.things` 1.32.0 for creation, `api.things-update`
-1.9.0 for updates, and `api.actions-run` 1.11.0 for preparation/execution.
-The browser execution grammar remains 1.9.0; JSON data adds no executable node.
+This addition requires `api.things` 1.33.0 for creation, `api.things-update`
+1.10.0 for updates, and `api.actions-run` 1.12.0 for preparation/execution.
+The browser execution grammar remains 1.11.0; JSON data adds no executable node.
 The Web standards draft-saving suite uses `api.webpages-suites-install` 1.3.0.

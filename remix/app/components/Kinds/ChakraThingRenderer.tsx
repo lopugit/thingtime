@@ -1,3 +1,7 @@
+import { ComponentChange } from '../Builder/ComponentChange';
+import { ComponentStyle } from '../Builder/ComponentStyle';
+import { ComponentCollection } from '../Builder/ComponentCollection';
+import { ComponentDragSource, ComponentDropTarget } from '../Builder/ComponentDrag';
 import { ComponentSelect } from '../Builder/ComponentSelect';
 import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
 import { ComponentMap } from '../Builder/ComponentMap';
@@ -253,14 +257,47 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const name = typeof node.chakra === 'string' ? node.chakra : 'Box';
-	if (name === 'IntegrationExample') return <React.Suspense key={key} fallback={<Text>Integration example</Text>}><LibraryExample exampleId={node.props?.exampleId} inputJson={node.props?.inputJson} /></React.Suspense>;
+	if (name === 'IntegrationExample')
+		return (
+			<React.Suspense key={key} fallback={<Text>Integration example</Text>}>
+				<LibraryExample exampleId={node.props?.exampleId} inputJson={node.props?.inputJson} />
+			</React.Suspense>
+		);
+	if (name === 'Collection') return <ComponentCollection key={key} {...node.props} />;
+	if (name === 'Change') return <ComponentChange key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentChange>;
+	if (name === 'DragSource') return <ComponentDragSource key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDragSource>;
+	if (name === 'DropTarget') return <ComponentDropTarget key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDropTarget>;
+	if (name === 'Style')
+		return (
+			<ComponentStyle key={key} rules={node.props?.rules}>
+				{renderChildren(node.children, depth + 1, state)}
+			</ComponentStyle>
+		);
 	if (name === 'SelectRecords') return <ComponentSelect key={key} {...node.props} />;
 	if (name === 'Map') return <ComponentMap key={key} {...node.props} />;
 	if (name === 'Attachments') return <ComponentAttachments key={key} {...node.props} />;
 	if (name === 'Media') return <ComponentMedia key={key} {...node.props} />;
 	if (name === 'Countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
-	if (name === 'Form' || name === 'Dialog') { const Native = name === 'Form' ? ComponentForm : ComponentDialog; return <Native key={key} {...node.props}>{renderChildren(node.children,depth+1,state)}</Native>; }
-	if (name === 'Upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} value={node.props?.value} attachmentId={node.props?.attachmentId} />;
+	if (name === 'Form' || name === 'Dialog') {
+		const Native = name === 'Form' ? ComponentForm : ComponentDialog;
+		return (
+			<Native key={key} {...node.props}>
+				{renderChildren(node.children, depth + 1, state)}
+			</Native>
+		);
+	}
+	if (name === 'Upload')
+		return (
+			<ComponentUpload
+				key={key}
+				name={node.props?.name}
+				imageOnly={node.props?.imageOnly}
+				disabled={node.props?.disabled}
+				title={node.props?.title}
+				value={node.props?.value}
+				attachmentId={node.props?.attachmentId}
+			/>
+		);
 	const Component = ALLOWED_COMPONENTS[name];
 	if (!Component) {
 		// unknown component: render children in a plain span so content shows
@@ -287,11 +324,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	);
 };
 
-const renderChildren = (
-	children: ChakraThingNode[] | ChakraThingNode | undefined,
-	depth: number,
-	state: RenderState
-): React.ReactNode => {
+const renderChildren = (children: ChakraThingNode[] | ChakraThingNode | undefined, depth: number, state: RenderState): React.ReactNode => {
 	if (children === undefined || children === null) return null;
 	const list = Array.isArray(children) ? children : [children];
 	return list.map((child, idx) => renderNode(child, idx, depth, state));

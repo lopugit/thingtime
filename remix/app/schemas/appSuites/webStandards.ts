@@ -377,7 +377,7 @@ export const webStandardsSuite: BehaviourSuite = {
 					method: 'POST',
 					path: '/api/v1/things',
 					feature: 'api.things',
-					minimumVersion: '1.32.0',
+					minimumVersion: '1.33.0',
 					query: {},
 					body: {
 						thingtime: ['component'], acl: ['tt:user'],
