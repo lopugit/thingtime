@@ -627,7 +627,33 @@ function assertWorkflowSource() {
   assert.match(handoffBlock, /case "\$live_status" in[\s\S]*?queued\)/u);
   assert.match(handoffBlock, /actions\/runs\/\$queued_run_id\/cancel/);
   assert.match(handoffBlock, /changed state before cancellation; preserving it/);
-  assert.match(handoffBlock, /did not release queue capacity within 60 seconds/);
+  assert.match(
+    handoffBlock,
+    /::notice::\$remaining_pending obsolete Lopu worker run\(s\) did not release queue capacity within 180 seconds; deferring dispatch to a later scan[\s\S]*?exit 0/u,
+    "an undrained cancellation defers with a notice; it dispatched and mutated nothing, so it must not publish a red check on every open PR",
+  );
+  assert.doesNotMatch(
+    handoffBlock,
+    /did not release queue capacity[\s\S]{0,200}?exit 1/u,
+    "GitHub retires cancelled runs asynchronously, so a slow drain is a transient race and never a job failure",
+  );
+  // GitHub acknowledges the cancel POST immediately but retires the run
+  // asynchronously. Observed on run 36254853747: cancel accepted 17:10:52Z,
+  // run reached `cancelled` 17:12:05Z -- 73s, past the old 60s budget, so the
+  // handoff failed 15s before the capacity it was waiting for came back.
+  // Bound the wait on wall clock, not on a round count: the per-round cost
+  // scales with the number of cancelled runs, so a fixed round count could
+  // overrun this job's 5-minute timeout and re-introduce the red check.
+  assert.match(
+    handoffBlock,
+    /SECONDS=0; while \[ "\$SECONDS" -lt 150 \]; do/u,
+    "the cancellation drain wait is bounded by wall clock so it cannot overrun the handoff job timeout",
+  );
+  assert.doesNotMatch(
+    handoffBlock,
+    /for wait_round in \$\(seq/u,
+    "a round-counted drain wait scales with the cancelled-run count and can exceed the job timeout",
+  );
   assert.match(
     handoffBlock,
     /actions\/concurrency_groups\/\$fleet_group_encoded[\s\S]*?\.group_members\[\]\?[\s\S]*?Resolve\|Rebase[\s\S]*?owned_numbers/u,
