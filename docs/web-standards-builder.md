@@ -22,7 +22,7 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,792 have interactive recipes (227 HTML, 1,059 CSS, 737
+editable program. 2,859 have interactive recipes (227 HTML, 1,059 CSS, 804
 JavaScript and 769 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
@@ -318,3 +318,28 @@ catchable exceptions, unavailable members, undefined values, late replies and
 cancellation/deadline behavior. The opt-in real API test now round-trips a DOM
 program through the catalogue Action and private Component update/read paths.
 The browser checklist covers actual tree mutation and refusal behavior.
+
+## ECMAScript intrinsic receivers
+
+`javascriptTypedArrayFixtures.ts` adds 40 examples for the actual shared
+TypedArray intrinsic. Editable constructor choices cover all twelve numeric
+and BigInt typed arrays. Native operations expose byte windows, signedness,
+clamping, exact decimal-string BigInts, callback order and thisArg, mutation,
+and shared versus copied backing buffers. Unsupported constructors or methods
+report their actual absence; invalid bounds retain native exceptions.
+
+`javascriptIteratorFixtures.ts` adds 27 examples for real iterator/generator
+state, helper cleanup, collection and Unicode iteration, segment containment,
+and well-known symbols. Hidden AsyncFromSync and ForIn iterators are exercised
+through actual language constructs, with that observation boundary stated in
+notes. Missing-throw cleanup is compared against
+[ECMA-262 2026](https://tc39.es/ecma262/2026/multipage/control-abstraction-objects.html#sec-%asyncfromsynciteratorprototype%.throw).
+An older engine can disagree: the output preserves its actual protocol trace
+and reports `matchesPublishedBehavior: false`, rather than emulating compliance.
+
+These 67 programs use existing data-language nodes and the same saved Component
+path. They introduce no compiler operation, runtime permission or source-code
+escape. The catalogue contract is `api.actions-run` 1.17.0 in both manifests and
+client negotiation. JavaScript coverage is now 638 built-in, 77 language and 89
+specification entries; 208 language and 850 specification entries still lack
+worked recipes. This does not imply exhaustive standards coverage.

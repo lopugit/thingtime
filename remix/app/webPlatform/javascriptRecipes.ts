@@ -7,6 +7,8 @@ import { javascriptDefinitionsRecipe } from './javascriptDefinitions';
 import { javascriptControlRecipe } from './javascriptControl';
 import { javascriptReceiverRecipe } from './javascriptReceiverFixtures';
 import { javascriptPrototypeRecipe } from './javascriptPrototypeFixtures';
+import { javascriptTypedArrayRecipe } from './javascriptTypedArrayFixtures';
+import { javascriptIteratorRecipe } from './javascriptIteratorFixtures';
 export function javascriptRecipe(f: Feature): Recipe {
 	const p = base(f),
 		name = f.name
@@ -15,6 +17,8 @@ export function javascriptRecipe(f: Feature): Recipe {
 			.trim();
 	const parts = name.split('.');
 	const specialized =
+		javascriptTypedArrayRecipe(f) ||
+		javascriptIteratorRecipe(f) ||
 		javascriptPrototypeRecipe(f) ||
 		javascriptReceiverRecipe(f) ||
 		javascriptDefinitionsRecipe(f) ||
