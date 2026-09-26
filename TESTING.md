@@ -8609,6 +8609,20 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   defaults/child inputs refuse before executing; anonymous reads stay denied.
 
 
+### Authored form pending state and dialog close content (2026-09-27)
+
+- [ ] Bind a control to page.id on a live page and in Builder; after copying
+  the page, the copied control must identify its new page. No page operation
+  may bypass API ownership/ACL checks.
+
+- [ ] During a saved Action, bind tt-form disabled and its save label to pending.
+  Fields pause and show the authored saving label, then re-enable on success,
+  failure, or cancelled confirmation. Preserve failed drafts and existing
+  identity/revision. Navigate while pending; completion must not mark the new
+  screen busy or clear its pending state. A sibling Component remains usable.
+- [ ] Render a custom close SVG and accessible label in tt-dialog. Verify mouse
+  dismissal and Escape at desktop/390px; unsafe SVG/HTML event props stay inert.
+
 ### Live Web Platform form contexts (2026-09-27)
 
 - Run `liveFormFixtures.ts` programs in the real served opaque runtime. Edit all
