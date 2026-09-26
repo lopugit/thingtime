@@ -73,6 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   geometry and stream lifecycles. Interactive coverage reaches 3,077 entries.
   Saved callbacks and inputs use the existing isolated runtime; native errors
   and unsupported features stay visible. Catalogue/client contract: 1.20.0.
+  Details: [PR #933](../PRs/933-codex-web-standards-webidl-options-add-reusable-web-idl-options-and-callback-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Added reusable native destructuring patterns
   across declarations, assignments, parameters, catches and loops. Twenty new
