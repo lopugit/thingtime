@@ -12746,14 +12746,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.13.0',
-    contractVersion: '1.13.0',
+    featureVersion: '1.14.0',
+    contractVersion: '1.14.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
-      'Web standards catalogue expressions return editable DOM receiver programs for detached document trees. The dom expression requests document/get/set/call operations through a bounded isolated worker bridge; real native receivers remain local to the run and mutations are projected into the preview. Saved programs preserve the complete operation data. ' +
+      'Web standards catalogue expressions return editable DOM receiver programs for detached document trees, including typed HTML form state, validation, text selection and live option/radio collections. Collection length writes enforce allocation limits before invoking native setters and detached collection mutations retain their owning tree budget. The dom expression requests document/get/set/call operations through a bounded isolated worker bridge; real native receivers remain local to the run and mutations are projected into the preview. Saved programs preserve the complete operation data. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +

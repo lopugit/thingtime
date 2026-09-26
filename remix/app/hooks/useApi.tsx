@@ -1453,7 +1453,7 @@ export function useApi() {
       // path in every browser while the API-level battery stayed green.
       run: useCallback(async (args) => {
         const actor = actionActor.current;
-        await requireThingtimeCapability('api.actions-run', '1.13.0');
+        await requireThingtimeCapability('api.actions-run', '1.14.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor });
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
