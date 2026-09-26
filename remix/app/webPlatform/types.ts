@@ -25,6 +25,9 @@ export type PlatformDOMBinding = {
 	target: string;
 	event?: string;
 	method?: string;
+	/** A registered native media property. Omit value to read; provide it to write. */
+	property?: string;
+	value?: string | number | boolean | { op: 'input'; name: string };
 	args?: unknown[];
 	label?: string;
 	/** IDL handler properties have native replacement and return-false semantics. */

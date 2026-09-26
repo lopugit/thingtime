@@ -1,7 +1,14 @@
+import { MEDIA_PROPERTIES, MEDIA_WRITES } from './mediaPolicy';
 import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import type { PlatformBooleanInput, PlatformDOMBinding } from './types';
 /** Shared native backing for data-authored DOM bindings. No catalogue IDs here. */
 export const LIVE_DOM_METHODS = new Set([
+	'play',
+	'pause',
+	'load',
+	'canPlayType',
+	'fastSeek',
+	'getVideoPlaybackQuality',
 	'show',
 	'showModal',
 	'close',
@@ -29,6 +36,27 @@ export const LIVE_DOM_METHODS = new Set([
 	'toggleAttribute'
 ]);
 export const LIVE_DOM_EVENTS = new Set([
+	'loadstart',
+	'loadedmetadata',
+	'loadeddata',
+	'canplay',
+	'canplaythrough',
+	'play',
+	'playing',
+	'pause',
+	'ended',
+	'emptied',
+	'durationchange',
+	'timeupdate',
+	'ratechange',
+	'volumechange',
+	'seeking',
+	'seeked',
+	'waiting',
+	'stalled',
+	'suspend',
+	'progress',
+	'resize',
 	'click',
 	'auxclick',
 	'dblclick',
@@ -92,7 +120,7 @@ export const LIVE_DOM_EVENTS = new Set([
 	'error'
 ]);
 export class UnsupportedDOMFeature extends Error {}
-function nativeDescriptor(target: object, name: string): PropertyDescriptor | undefined {
+export function nativeDescriptor(target: object, name: string): PropertyDescriptor | undefined {
 	// Named form controls can shadow any instance property. Start at the prototype.
 	for (let proto = Object.getPrototypeOf(target); proto; proto = Object.getPrototypeOf(proto)) {
 		const descriptor = Object.getOwnPropertyDescriptor(proto, name);
@@ -106,7 +134,7 @@ export function nativeDOMMethod(target: object, name: string): (...args: unknown
 	if (typeof method !== 'function') throw new UnsupportedDOMFeature('This browser does not implement the method ' + name);
 	return (...args) => Reflect.apply(method, target, args);
 }
-function nativeValue(target: object, key: string): unknown {
+export function nativeValue(target: object, key: string): unknown {
 	const descriptor = nativeDescriptor(target, key);
 	return descriptor?.get ? Reflect.apply(descriptor.get, target, []) : descriptor?.value;
 }
@@ -225,7 +253,7 @@ export function validateLiveDOMBinding(operation: unknown) {
 	if (!operation || typeof operation !== 'object' || Array.isArray(operation)) throw new Error('Expected a DOM binding');
 	const op = operation as PlatformDOMBinding;
 	const selector = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 500;
-	const allowed = new Set(['target', 'event', 'method', 'args', 'label', 'binding', 'options', ...boolKeys]);
+	const allowed = new Set(['target', 'event', 'method', 'property', 'value', 'args', 'label', 'binding', 'options', ...boolKeys]);
 	if (Object.keys(op).some((key) => !allowed.has(key))) throw new Error('Unknown DOM binding field');
 	if (!selector(op.target)) throw new Error('Expected a bounded DOM target selector');
 	if (op.label !== undefined && (typeof op.label !== 'string' || op.label.length > 100)) throw new Error('Expected a bounded binding label');
@@ -236,7 +264,15 @@ export function validateLiveDOMBinding(operation: unknown) {
 		const parts = op.event.split('|');
 		if (parts.length !== 2 || !selector(parts[0]) || !LIVE_DOM_EVENTS.has(parts[1])) throw new Error('Invalid event binding');
 	}
-	if (op.method === undefined && (op.event === undefined || op.args !== undefined))
+	if (op.property !== undefined) {
+		if (typeof op.property !== 'string' || !MEDIA_PROPERTIES.has(op.property) || op.method !== undefined || op.args !== undefined)
+			throw new Error('Expected one registered media property');
+	}
+	if (Object.prototype.hasOwnProperty.call(op, 'value')) {
+		if (!op.property || !Object.prototype.hasOwnProperty.call(MEDIA_WRITES, op.property)) throw new Error('Media property is not writable');
+		validateDOMScalar(op.value);
+	}
+	if (op.method === undefined && op.property === undefined && (op.event === undefined || op.args !== undefined))
 		throw new Error('Event observations need an event and no arguments');
 	if (op.binding !== undefined && !['listener', 'handler'].includes(op.binding)) throw new Error('Unknown event binding mode');
 	if (op.event === undefined && (op.binding !== undefined || op.options !== undefined || boolKeys.some((key) => op[key] !== undefined)))
@@ -297,4 +333,32 @@ export function bindLiveDOMEvent(
 		active = false;
 		EventTarget.prototype.removeEventListener.call(target, eventName, listener, options);
 	};
+}
+
+/** Only a scalar or an explicit own input reference can enter a native setter. */
+export function validateDOMScalar(value: unknown) {
+	if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && value.length <= 4096))
+		return;
+	if (
+		value &&
+		typeof value === 'object' &&
+		!Array.isArray(value) &&
+		Object.keys(value).length === 2 &&
+		(value as any).op === 'input' &&
+		typeof (value as any).name === 'string' &&
+		/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test((value as any).name)
+	)
+		return;
+	throw new Error('Expected a bounded scalar or input reference');
+}
+export function resolveDOMScalar(value: unknown, input: Record<string, unknown>) {
+	validateDOMScalar(value);
+	if (value && typeof value === 'object') {
+		const name = (value as { name: string }).name;
+		if (!Object.prototype.hasOwnProperty.call(input, name)) throw new Error('Missing media input');
+		value = input[name];
+		if (value && typeof value === 'object') throw new Error('Media input must be a scalar');
+		validateDOMScalar(value);
+	}
+	return value;
 }

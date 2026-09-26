@@ -4,6 +4,9 @@ import { runPlatformWorker } from './workerLifecycle';
 import { inspectPlatformInterface } from './interfaceProbe';
 import { createPlatformDOMBridge } from './domBridge';
 import { bindLiveDOMEvent, nativeDOMMethod, platformEventReceipt, UnsupportedDOMFeature } from './liveDOM';
+import { localPlatformResource } from './mediaPolicy';
+import { readMediaProperty, writeMediaProperty, mediaReceipt, mediaMethodResult } from './liveMedia';
+import { resolveDOMScalar } from './liveDOM';
 import type { PlatformNode } from './types';
 // Form controls may shadow instance methods while their parent is being built.
 const appendNode = Node.prototype.appendChild;
@@ -22,6 +25,13 @@ addEventListener('message', (event) => {
 	const stopDOM = () => {
 		domState.active = false;
 		for (const stop of unbind.splice(0)) stop();
+		for (const element of document.querySelectorAll('audio,video')) {
+			try {
+				nativeDOMMethod(element, 'pause')();
+			} catch {
+				/* A stopped run cannot retain playback. */
+			}
+		}
 	};
 	addEventListener('pagehide', stopDOM, { once: true });
 	try {
@@ -29,6 +39,7 @@ addEventListener('message', (event) => {
 		compilePlatformProgram(program);
 		const root = document.getElementById('surface')!;
 		let nodes = 0;
+		let mediaNodes = 0;
 		const substitute = (value: unknown) =>
 			typeof value === 'string'
 				? value.replace(/\[\[([A-Za-z_][A-Za-z0-9_]*)\]\]/g, (_, name) =>
@@ -41,12 +52,13 @@ addEventListener('message', (event) => {
 			if (typeof node === 'string') return document.createTextNode(substitute(node));
 			if (!node || typeof node !== 'object' || typeof node.tag !== 'string' || !/^[a-z][a-z0-9-]{0,40}$/.test(node.tag) || blocked.has(node.tag))
 				throw new Error('This document element needs a dedicated browsing context');
+			if (['audio', 'video'].includes(node.tag) && ++mediaNodes > 8) throw new Error('Document exceeds its media budget');
 			const el = document.createElement(node.tag);
 			for (const [key, value] of Object.entries(node.attributes || {})) {
 				if (/^on/i.test(key) || ['srcdoc', 'is', 'nonce', 'action', 'formaction', 'ping', 'autofocus', 'pattern'].includes(key.toLowerCase()))
 					throw new Error('Use declarative events and local document attributes');
 				const val = substitute(value);
-				if (['src', 'href', 'poster', 'data'].includes(key.toLowerCase()) && !/^#|^data:image\/(png|jpeg|gif|webp);base64,/.test(val))
+				if (['src', 'href', 'poster', 'data'].includes(key.toLowerCase()) && !localPlatformResource(val, node.tag, key.toLowerCase()))
 					throw new Error('Use local demo resources');
 				if (value === false) continue;
 				el.setAttribute(key, value === true ? '' : val);
@@ -75,12 +87,17 @@ addEventListener('message', (event) => {
 			if (a && !a.getAttribute('href')?.startsWith('#')) event.preventDefault();
 		});
 		const events = { used: 0 };
+		const commandState: { sequence: number; result?: { ok: boolean; value: unknown } } = { sequence: 0 };
 		const observed: (ReturnType<typeof platformEventReceipt> & { label?: string; defaultPreventedAfterDispatch?: boolean })[] = [];
 		const immediate: (() => boolean)[] = [];
 		let lastDOMResult: { ok: boolean; value: unknown } | undefined;
 		const reportDOM = (ok: boolean, value: unknown) => {
 			lastDOMResult = { ok, value };
 			send(ok, value);
+		};
+		const reportCommand = (ok: boolean, value: unknown) => {
+			commandState.result = { ok, value };
+			reportDOM(ok, value);
 		};
 		let eventReportQueued = false;
 		const pendingReceipts: { event: Event; receipt: (typeof observed)[number] }[] = [];
@@ -109,15 +126,21 @@ addEventListener('message', (event) => {
 						stopDOM();
 						throw new Error('Reset the demo to replenish its event budget');
 					}
-					if (!operation.method) {
+					if (!operation.method && !operation.property) {
 						if (!event) throw new Error('Event observation requires a dispatched event');
-						const receipt = { ...platformEventReceipt(event), ...(operation.label ? { label: substitute(operation.label).slice(0, 100) } : {}) };
+						const receipt = {
+							...platformEventReceipt(event),
+							...(mediaReceipt(event.target) ? { media: mediaReceipt(event.target) } : {}),
+							...(operation.label ? { label: substitute(operation.label).slice(0, 100) } : {})
+						};
 						observed.push(receipt);
 						if (observed.length > 20) observed.shift();
-						reportDOM(true, { event: receipt });
+						reportDOM(commandState.result?.ok ?? true, { event: receipt, ...(commandState.result ? { command: commandState.result.value } : {}) });
 						afterDispatch(event, receipt);
 						return true;
 					}
+					// Even a refused newer command owns the latest outcome.
+					const sequence = ++commandState.sequence;
 					const args = (operation.args || []).map((value) => {
 						if (value && typeof value === 'object' && !Array.isArray(value) && (value as { op?: unknown }).op === 'element') {
 							const selector = (value as { selector?: unknown }).selector;
@@ -131,20 +154,48 @@ addEventListener('message', (event) => {
 					});
 					if (operation.method === 'setAttribute' && /^(on|src|href|srcdoc|action|formaction|is|nonce|pattern)/i.test(String(args[0])))
 						throw new Error('Attribute is not writable by this control');
-					const result = nativeDOMMethod(element, operation.method)(...args);
+					const result = operation.property
+						? Object.prototype.hasOwnProperty.call(operation, 'value')
+							? writeMediaProperty(element, operation.property, resolveDOMScalar(operation.value, input))
+							: readMediaProperty(element, operation.property)
+						: nativeDOMMethod(element, operation.method!)(...args);
 					if (!domState.active) return false;
 					const outcome = {
-						method: operation.method,
-						result: typeof result === 'object' ? String(result) : result ?? null,
+						...(operation.property ? { property: operation.property } : { method: operation.method }),
+						result: operation.property ? result : mediaMethodResult(result),
+						...(mediaReceipt(element) ? { media: mediaReceipt(element) } : {}),
 						...(observed.length ? { events: [...observed] } : {})
 					};
-					reportDOM(true, outcome);
+					if (result instanceof Promise) {
+						reportCommand(true, { ...outcome, result: null, status: 'pending' });
+						result.then(
+							(value) => {
+								if (domState.active && sequence === commandState.sequence)
+									reportCommand(true, {
+										...outcome,
+										status: 'fulfilled',
+										result: mediaMethodResult(value),
+										media: mediaReceipt(element),
+										events: [...observed]
+									});
+							},
+							(error) => {
+								if (domState.active && sequence === commandState.sequence)
+									reportCommand(false, {
+										method: operation.method,
+										status: 'rejected',
+										name: error instanceof Error ? error.name : 'Error',
+										message: error instanceof Error ? error.message.slice(0, 256) : 'Media operation failed'
+									});
+							}
+						);
+					} else reportCommand(true, outcome);
 					return true;
 				} catch (e) {
 					if (e instanceof UnsupportedDOMFeature) {
 						stopDOM();
 						reportDOM(true, { status: 'unsupported', message: e.message });
-					} else reportDOM(false, e instanceof Error ? e.message : 'DOM operation failed');
+					} else reportCommand(false, e instanceof Error ? e.message : 'DOM operation failed');
 					return false;
 				}
 			};
