@@ -7,6 +7,7 @@ import { workerApiRecipe } from './webApiFixtures';
 import { domApiRecipe } from './domFixtures';
 import { htmlFormRecipe } from './htmlFormFixtures';
 import { liveFormRecipe } from './liveFormFixtures';
+import { liveEventRecipe } from './liveEventFixtures';
 import { webIdlRecipe } from './webIdlFixtures';
 import { webIdlStreamRecipe } from './webIdlStreamFixtures';
 import type { Feature, PlatformNode, Recipe } from './types';
@@ -104,6 +105,8 @@ const cssDefaults: Record<string, string> = {
 	'shape-margin': '12px'
 };
 function htmlRecipe(f: Feature): Recipe {
+	const live = liveEventRecipe(f);
+	if (live) return live;
 	const p = base(f);
 	if (f.kind === 'element') {
 		const tag = f.name;
@@ -405,6 +408,7 @@ function cssRecipe(f: Feature): Recipe {
 
 function webApiRecipe(f: Feature): Recipe {
 	const worked =
+		liveEventRecipe(f) ||
 		webIdlRecipe(f) ||
 		webIdlStreamRecipe(f) ||
 		liveFormRecipe(f) ||
