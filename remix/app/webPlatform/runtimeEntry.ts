@@ -4,6 +4,8 @@ import { runPlatformWorker } from './workerLifecycle';
 import { inspectPlatformInterface } from './interfaceProbe';
 import { createPlatformDOMBridge } from './domBridge';
 import type { PlatformNode } from './types';
+// Form controls may shadow instance methods while their parent is being built.
+const appendNode = Node.prototype.appendChild;
 let started = false;
 addEventListener('message', (event) => {
 	if (event.source !== parent || started || event.data?.type !== 'tt-platform-start') return;
@@ -39,7 +41,7 @@ addEventListener('message', (event) => {
 				if (value === false) continue;
 				el.setAttribute(key, value === true ? '' : val);
 			}
-			for (const child of node.children || []) el.appendChild(render(child, depth + 1));
+			for (const child of node.children || []) appendNode.call(el, render(child, depth + 1));
 			return el;
 		};
 		for (const node of program.document || []) root.appendChild(render(node));

@@ -3,7 +3,9 @@
 Branch: `codex/web-standards-dom-receivers`
 PR: https://github.com/lopugit/thingtime/pull/909
 Base: `main`, initially `111062f1abe96936e989ae2ca8245f5e4a02bc06`
-Delivery state on 26 September 2026: draft PR; not merged or deployed.
+Merged on 26 September 2026 at `645193968c0f589a0ef310cb21d0a1c43da136ba`.
+The named-control follow-up described below is tracked on
+`codex/web-standards-dom-boundaries`; its production delivery is not yet verified.
 
 ## Problem and behavior
 
@@ -39,6 +41,22 @@ unregistered properties are refused. Each run has request, handle, allocation,
 depth, selector and text-work budgets. Detached clones spend the allocation
 budget. The existing worker deadline is not extended by bridge requests.
 Completion, cancellation and failure release the worker and its handle map.
+
+Post-merge review reproduced a named-form-control bug: `input[name=childNodes]` hid
+descendants from internal inspection, allowing a bounded three-clone test to
+exceed the allocation budget. Internal reads and projection now use captured
+native getters/methods too. Legitimate control names stay supported; descendant
+allocation/depth checks and document ownership cannot depend on named instance
+properties. Shallow Document clones are also refused. These cases live as
+reusable program data in `domBoundaryFixtures.ts` and run in the real browser.
+The initial renderer also calls the captured append method so an
+`appendChild` control does not interrupt construction of later siblings.
+All four boundary fixtures pass in the real opaque runtime, and all 158 DOM
+recipes still execute. The focused suite reports 46 passed with the real API
+checks enabled; changed-file lint passes and the typecheck ratchet remains at
+89 baseline errors.
+The [HTML form named-property algorithm](https://html.spec.whatwg.org/multipage/forms.html#the-form-element)
+documents the underlying legacy override behavior.
 
 Repeated handles preserve identity inside the worker. Native undefined returns
 stay undefined. DOM exceptions remain catchable; a registered member missing
@@ -82,12 +100,12 @@ Other storage, suite and browser Action grammar versions do not change.
 
 ## Remaining delivery work
 
-Review the final PR diff and exact-head checks, verify the hosted preview,
-merge with a normal merge commit under the user's existing main authorization,
-then verify the production source and native DOM behavior on @lopu. The
+Verify the named-control follow-up on its hosted preview, merge its reviewed
+head under the user's existing main authorization, then verify the production
+source and DOM behavior on @lopu. The
 production suite should not need a data migration for catalogue/runtime changes.
 
 Graph structural extraction and the atomic graph/manifest snapshot were
-refreshed; the new source files are present in both. A fresh semantic extraction
-of changed documentation through the local LLM proxy remains to be completed.
-No fresh documentation-semantic coverage is claimed yet.
+refreshed; the new source files are present in both. The local semantic
+backend is unavailable in this session, so changed documentation has structural
+indexing only; fresh documentation-semantic coverage is not claimed.
