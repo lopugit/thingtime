@@ -1,4 +1,5 @@
 import React from 'react';
+import { parseActionJson } from '~/schemas/actionJsonInput';
 import { pageRuntimeSearch } from './seamlessMode';
 import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
@@ -367,7 +368,12 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 				return;
 			}
 		}
-		if (typeof field.value === 'string') out[name] = field.value;
+		if (typeof field.value === 'string') {
+			if (field.getAttribute('data-tt-input-type') === 'json') {
+				try { out[name] = parseActionJson(field.value); }
+				catch { throw new Error(`Check the JSON in ${name} before running this Action`); }
+			} else out[name] = field.value;
+		}
 	});
 	return out;
 };

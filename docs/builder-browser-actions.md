@@ -121,3 +121,23 @@ Acceptance used a disposable replica set on loopback **17123**, configured in
 ignored `remix/.env`. No production data was copied. As of 2026-09-23, Funnel
 could not be checked: the local `tailscale` wrapper targets an absent
 `/Applications/Tailscale.app` executable. No public mapping was changed.
+
+## JSON inputs
+
+Actions can declare `type: "json"` for structured programs, objects, arrays or
+scalar JSON values. The guided builder parses a JSON default; the inspector
+provides a JSON editor. Typed JSON form fields decode once before transport.
+API callers pass the actual JSON value in `inputs`; strings such as `"null"` or
+`"$input.other"` remain literal strings, including across nested Actions.
+Explicit null, false, zero and empty strings survive. Omitting an input selects
+its declared default or triggers the required-input refusal.
+
+Each JSON value is limited to 64 KiB of UTF-8 JSON, 4,000 nodes and depth 64.
+Only JSON data is accepted. Resolved defaults and child invocations also obey
+the Action's total input byte budget. Cycles, executable objects, getters and
+sparse arrays are refused. The server independently validates every input.
+
+This addition requires `api.things` 1.32.0 for creation, `api.things-update`
+1.9.0 for updates, and `api.actions-run` 1.11.0 for preparation/execution.
+The browser execution grammar remains 1.9.0; JSON data adds no executable node.
+The Web standards draft-saving suite uses `api.webpages-suites-install` 1.3.0.

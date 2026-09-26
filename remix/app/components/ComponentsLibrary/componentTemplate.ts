@@ -267,8 +267,8 @@ const actionReference = (node: Record<string, unknown>, raw: string): string => 
 // Bound nested action-result data without interpreting it as template syntax.
 // In particular, ttArg and ttFormat must not reopen the expansion bypass that
 // was fixed for scalar arguments in the component library.
-const resolveScopeValue = (value: unknown, budget: ResolveBudget, depth = 0, ancestors = new Set<object>()): unknown => {
-	if (budget.left <= 0 || budget.chars <= 0 || depth > 48) return undefined;
+const resolveScopeValue = (value: unknown, budget: ResolveBudget, depth = 0, ancestors = new Set<object>(), opaque = false): unknown => {
+	if (budget.left <= 0 || budget.chars <= 0 || depth > 48) { if (opaque) budget.left = 0; return undefined; }
 	budget.left -= 1;
 	if (typeof value === 'string') {
 		if (budget.preserveUnboundTokens && value.length > budget.chars) {
@@ -281,24 +281,41 @@ const resolveScopeValue = (value: unknown, budget: ResolveBudget, depth = 0, anc
 		return text;
 	}
 	if (value === null || typeof value === 'number' || typeof value === 'boolean' || value === undefined) return value;
-	if (typeof value !== 'object' || ancestors.has(value)) return undefined;
+	if (typeof value !== 'object' || ancestors.has(value)) { if (opaque) budget.left = 0; return undefined; }
 	ancestors.add(value);
 	const out: unknown[] | Record<string, unknown> = Array.isArray(value) ? [] : {};
 	for (const key of Object.keys(value)) {
 		if (budget.left <= 0 || budget.chars <= 0) break;
-		if (BANNED_SEGMENTS.has(key)) continue;
+		if (!opaque && BANNED_SEGMENTS.has(key)) continue;
 		if (!Array.isArray(out)) {
-			if (key.length > budget.chars) break;
+			if (key.length > budget.chars) { if (opaque) budget.left = 0; break; }
 			budget.chars -= key.length;
 		}
-		const child = resolveScopeValue((value as Record<string, unknown>)[key], budget, depth + 1, ancestors);
+		const child = resolveScopeValue((value as Record<string, unknown>)[key], budget, depth + 1, ancestors, opaque);
 		if (child !== undefined) {
 			if (Array.isArray(out)) out.push(child);
-			else out[key] = child;
+			else Object.defineProperty(out, key, { value: child, enumerable: true, configurable: true, writable: true });
 		}
 	}
 	ancestors.delete(value);
 	return out;
+};
+
+// A complete Web Platform program is data for the isolated runtime. Its nested
+// arrays, {tokens} and ttArg-shaped literals are never component templates.
+// Only an explicit top-level binding selects a program from the current scope.
+const resolvePlatformProgram = (raw: unknown, scope: ComponentScope, budget: ResolveBudget): unknown => {
+	let value = raw;
+	if (isPlainObject(raw) && raw.version === undefined && 'ttArg' in raw) {
+		value = argValue(scope, String(raw.ttArg));
+		if (value === undefined && typeof raw.fallback === 'string') value = argValue(scope, raw.fallback);
+	}
+	if (value === undefined) return undefined;
+	const bounded = { ...budget, preserveUnboundTokens: true };
+	const result = resolveScopeValue(value, bounded, 0, new Set<object>(), true);
+	budget.left = bounded.left;
+	budget.chars = bounded.chars;
+	return budget.left <= 0 || budget.chars <= 0 ? undefined : result;
 };
 
 const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBudget): unknown => {
@@ -440,7 +457,20 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 		// ttAction/ttActionInputs are interactive-intent markers, folded into
 		// allowlisted data-* props below — never copied through as node keys
 		if (key === 'ttAction' || key === 'ttActionInputs' || key === 'ttActionRefs' || key === 'ttMediaRefs') continue;
-		const resolved = resolveNode(value, scope, budget);
+		let resolved: unknown;
+		if (key === 'props' && typeof template.tag === 'string' && template.tag.toLowerCase() === 'tt-web-platform' && isPlainObject(value)) {
+			// Charge the props container and each key on the same shared budget.
+			// Stop before allocating further entries when a program exhausts it.
+			budget.left -= 1;
+			const props: Record<string, unknown> = {};
+			for (const [prop, entry] of Object.entries(value)) {
+				if (budget.left <= 0 || budget.chars <= prop.length) { budget.left = 0; break; }
+				budget.chars -= prop.length;
+				const child = prop === 'program' ? resolvePlatformProgram(entry, scope, budget) : resolveNode(entry, scope, budget);
+				if (child !== undefined) Object.defineProperty(props, prop, { value: child, enumerable: true, configurable: true, writable: true });
+			}
+			resolved = props;
+		} else resolved = resolveNode(value, scope, budget);
 		if (resolved === undefined) continue;
 		// A node KEY is tree text exactly like a string value, and nothing else
 		// bounds it: the render gate screens keys for dots/$/prototype names but

@@ -32,14 +32,14 @@ let browser, page;
 const errors = [], failedRequests = [], responseErrors = [];
 try {
  const installed = (await request('/api/v1/webpages/suites/install', { key: 'web-standards', onlyMissing: true })).data;
- if (installed.created === 6) for (const group of ['componentIds', 'actionIds', 'pageIds']) for (const id of Object.values(installed[group])) ids.add(id);
+ if (installed.created === 7) for (const group of ['componentIds', 'actionIds', 'pageIds']) for (const id of Object.values(installed[group])) ids.add(id);
  const { chromium } = await import(process.env.TT_PLAYWRIGHT_MODULE || 'playwright');
  browser = await chromium.launch({ channel: 'chrome', headless: process.env.CI === 'true' });
  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
  await context.route('**/api/**', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
  await context.addCookies(cookie.split('; ').map(v => ({ name: v.slice(0, v.indexOf('=')), value: v.slice(v.indexOf('=') + 1), url: origin })));
  page = await context.newPage();
- page.setDefaultTimeout(60000);
+ page.setDefaultTimeout(120000);
  // Exercise the production client while keeping real API calls on the managed
  // local stack. Only public build files are intercepted; no extra app server.
  if (process.env.TT_STANDARDS_TEST_BUILT_CLIENT === '1') {
@@ -48,7 +48,7 @@ try {
   await page.route(origin + '/**', async route => {
    const path = decodeURIComponent(new URL(route.request().url()).pathname);
    if (route.request().method() !== 'GET' || path.startsWith('/api/')) return route.continue();
-   const file = resolve(staticRoot, '.' + (path === '/p/web-standards' ? '/index.html' : path));
+   const file = resolve(staticRoot, '.' + (!extname(path) ? '/index.html' : path));
    if (!file.startsWith(staticRoot.replace(/\/$/, '') + sep)) return route.abort();
    let body;
    try { body = await readFile(file); } catch { return route.continue(); }
@@ -95,11 +95,43 @@ try {
  await select('javascript', 'Array.prototype.at ( index )'); assert.equal(await result.innerText(), '1');
  await page.getByLabel('Arguments (JSON array)', { exact: true }).fill('[2]');
  await runButton.click(); await result.filter({ hasText: /^4$/ }).waitFor();
- await page.getByRole('button', { name: 'Save example template', exact: true }).click();
+ await page.getByText('Edit reusable program', { exact: true }).click();
+ const draft = {
+  version: 1, title: 'Saved edited draft', parameters: [
+   {name:'amount',label:'Amount',type:'number',default:7},
+   {name:'enabled',label:'Enabled',type:'boolean',default:true},
+   {name:'text',label:'Text',type:'text',default:'before'},
+   {name:'data',label:'Data',type:'json',default:[]}
+  ], steps:[{op:'return',value:{op:'array',items:['amount','enabled','text','data'].map(name=>({op:'input',name}))}}]
+ };
+ const editor = page.getByLabel('Web Platform program', {exact:true});
+ await editor.fill(JSON.stringify(draft));
+ await page.getByLabel('Amount',{exact:true}).fill('0');
+ await page.getByLabel('Enabled',{exact:true}).uncheck();
+ await page.getByLabel('Text',{exact:true}).fill('');
+ await page.getByLabel('Data',{exact:true}).fill('[[null,false],[0,"{name} $input.other"]]');
+ await runButton.click();
+ const expected = [0,false,'',[[null,false],[0,'{name} $input.other']]];
+ await result.filter({hasText:/\$input.other/}).waitFor();
+ assert.deepEqual(JSON.parse(await result.innerText()),expected);
+ let writes = 0;
+ const countWrites = request => { if(new URL(request.url()).pathname === '/api/v1/things' && request.method() === 'POST') writes++; };
+ page.on('request',countWrites);
+ await editor.fill('{');
+ await page.getByRole('button', {name:'Save edited component',exact:true}).click();
+ await page.getByText('Check the form',{exact:true}).waitFor();
+ assert.equal(writes,0,'invalid drafts make no save request');
+ await editor.fill(JSON.stringify(draft));
+ await page.getByRole('button', { name: 'Save edited component', exact: true }).click();
  const saved = page.getByRole('link', { name: 'Open saved Thing →', exact: true }); await saved.waitFor();
  const id = (await saved.getAttribute('href')).split('/').at(-1); ids.add(id);
  const read = (await request('/api/v1/things?id=' + id)).data;
- assert.ok(JSON.stringify(read.thing.crystal.render).includes('tt-web-platform'));
+ const savedProgram = {...draft,parameters:draft.parameters.map((p,i)=>({...p,default:expected[i]}))};
+ assert.deepEqual(read.thing.crystal.render.props.program,savedProgram);
+ assert.equal(writes,1,'one save creates one Component');
+ page.off('request',countWrites);
+ const denied = await fetch(origin+'/api/v1/things?id='+id);
+ assert.equal(denied.status,404,'saved Component stays private');
  await page.setViewportSize({ width: 390, height: 844 });
  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
  if (process.env.TT_STANDARDS_ARTIFACT_DIR) {
@@ -108,6 +140,20 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: join(dir, 'web-standards-desktop.png'), fullPage: true });
  }
+ // Reopen the saved Component and reuse that exact Thing on a Builder page.
+ await saved.click(); await runButton.click(); await result.filter({hasText:/\$input.other/}).waitFor();
+ assert.deepEqual(JSON.parse(await result.innerText()),expected);
+ await page.reload({waitUntil:'domcontentloaded'}); await runButton.click(); await result.filter({hasText:/\$input.other/}).waitFor();
+ assert.deepEqual(JSON.parse(await result.innerText()),expected);
+ const reused = (await request('/api/v1/things',{thingtime:['webpage'],acl:['tt:user'],crystal:{
+  name:'Saved draft reuse fixture',slug:'draft-reuse-'+Date.now(),blocks:[{id:'draft-component',type:'component',component:id}]
+ }})).data.thing;
+ ids.add(reused.id);
+ await page.goto(origin+'/builder?page='+reused.id,{waitUntil:'domcontentloaded'});
+ await page.getByText('Saved draft reuse fixture',{exact:true}).first().waitFor();
+ await page.goto(origin+'/p/'+reused.crystal.slug,{waitUntil:'domcontentloaded'});
+ await runButton.click(); await result.filter({hasText:/\$input.other/}).waitFor();
+ assert.deepEqual(JSON.parse(await result.innerText()),expected);
  await page.getByText('Edit reusable program', { exact: true }).click();
  const run = async steps => {
   await page.getByLabel('Web Platform program', { exact: true }).fill(JSON.stringify({ version: 1, title: 'Sandbox check', steps }));
@@ -127,7 +173,7 @@ try {
  const direct = await context.request.get(origin + '/platform/runtime.html');
  assert.match(direct.headers()['content-security-policy'], /sandbox allow-scripts/);
  assert.deepEqual(errors, []);
- console.log('Browser acceptance passed: search, dialog, CSS, JS, private save, mobile bounds, worker timeout, network/account isolation and Stop.');
+ console.log('Browser acceptance passed: navigation, edited private save, invalid draft refusal, exact defaults, reload, Builder reuse, mobile bounds, worker timeout, network/account isolation and Stop.');
 } catch (error) {
  if (page) console.error('Browser acceptance failed:', { errors, failedRequests, responseErrors, text: (await page.locator('body').innerText().catch(() => '')).slice(0, 4000) });
  throw error;

@@ -185,3 +185,15 @@ test('legacy unbound and malformed source caches cannot seed a new record', () =
 		assert.equal(store.get(key), 'invalid json', 'oversized cache is not stored');
 	});
 });
+
+test('typed JSON form fields decode once and reject invalid drafts before an Action can run', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const form = (value: string) => ({ querySelectorAll: () => [{
+		tagName: 'INPUT', type: 'hidden', value, matches: () => false,
+		getAttribute: (key: string) => key === 'name' ? 'program' : key === 'data-tt-input-type' ? 'json' : null
+	}] } as unknown as HTMLElement);
+	for (const value of [{ nested: [[0, false], [null, '{name}']], ttArg: 'literal' }, '', 'null', '123', '$input.keep', null]) {
+		assert.deepEqual(gatherFormFields(form(JSON.stringify(value))), { program: value });
+	}
+	for (const value of ['', '{', 'x'.repeat(65537)]) assert.throws(() => gatherFormFields(form(value)), /Check the JSON/);
+});

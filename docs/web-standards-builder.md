@@ -1,6 +1,6 @@
 # Web standards Builder app
 
-The `web-standards` suite installs three editable Component Things, two Action
+The `web-standards` suite installs three editable Component Things, three Action
 Things and one private Webpage Thing through the ordinary suite API. Navigation,
 search, filters, pagination, the workbench and save controls are component render
 trees. The page contains no native app block. `/p/web-standards` resolves the
@@ -176,3 +176,22 @@ The parameter example covers default/rest rather than destructuring. The meta
 property example covers `new.target`; modules/imports and `import.meta` still
 need dedicated authoring support. Interactive category counts do not imply that
 every grammar alternative inside a clause has been demonstrated.
+
+## Saving edited programs
+
+The workbench's **Save edited component** control runs the authored `save-draft`
+Action. It saves the complete current program and current parameter values as
+its defaults through the ordinary Things API. The reusable `tt-web-platform`
+primitive exposes that validated draft through an optional named JSON form field;
+it contains no save API call. Run and Save consume the same snapshot. Invalid
+JSON, invalid definitions or invalid inputs prevent saving an older draft.
+
+A saved `props.program` is opaque program data: nested arrays, nulls, `{tokens}`,
+and objects resembling Component wrappers retain their exact meaning. Only a
+top-level `ttArg` selects a complete program from scope. Program copying shares
+the Component resolver's work and text budgets and refuses a truncated program.
+The original `save-component` Action remains available to older installed pages.
+
+Existing installations can add the new Action with `onlyMissing: true`. Updating
+the owned workbench requires an explicit version-checked definition edit; the
+installer does not overwrite an owner's customized Components.

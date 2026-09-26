@@ -120,3 +120,10 @@ against a local or HTTPS preview runtime, without creating account data.
 functions, generators and control flow. `interfaceProbe.ts` inspects browser
 descriptors without executing getters. `workerLifecycle.ts` separately bounds startup and execution, with
 controlled-clock regressions for timeouts, cancellation and duplicate readiness.
+
+`webPlatform/draft.ts` supplies the shared Run/Save snapshot. The authored
+`save-draft` Action stores a complete private Component, and `componentTemplate.ts`
+keeps its program data opaque. `schemas/actionJsonInput.ts` and
+`api/utils/actions/actionInputs.ts` validate reusable JSON inputs; the generic
+form boundary decodes JSON text before transport. Regression coverage lives in
+`webPlatform/draft.test.ts`, `actions/actionInputs.test.ts` and the form tests.
