@@ -2,7 +2,7 @@
 // only change bounded scalar presentation state in this component instance.
 // They cannot overwrite the page runtime, resolve a path, or execute code.
 export const LOCAL_UI_ACTION = '$ui';
-const RESERVED = new Set(['__proto__', 'constructor', 'prototype', 'result', 'last', 'viewer', 'query', 'state', 'error', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction']);
+const RESERVED = new Set(['__proto__', 'constructor', 'prototype', 'result', 'last', 'viewer', 'query', 'state', 'error', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction', 'page']);
 const scalar = (value: unknown): value is string | number | boolean =>
 	typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && value.length <= 2000);
 const validKey = (key: string) => /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(key) && !RESERVED.has(key);

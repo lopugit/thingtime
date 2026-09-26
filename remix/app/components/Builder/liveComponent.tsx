@@ -272,7 +272,7 @@ export const LiveTemplate = ({
 	const lopu = useLopu();
 	const baseScope = Object.fromEntries(
 		Object.entries(scope).filter(
-			([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction'].includes(key)
+			([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource', 'pending', 'pendingAction', 'page'].includes(key)
 		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
@@ -321,7 +321,7 @@ export const LiveTemplate = ({
 		onResult: (outcome) => setLocal((previous) => ({ ...(previous.identity === identity ? previous : { identity, values: {} }), outcome }))
 	});
 	const pendingAction = pending.identity === identity ? pending.action : null;
-	const liveScope = { ...scope, ...active.values, pending: pendingAction !== null, pendingAction };
+	const liveScope = { ...scope, ...active.values, page: { id: runtime.pageId }, pending: pendingAction !== null, pendingAction };
 	const scopeKey = JSON.stringify(liveScope);
 	const resolved = React.useMemo(
 		() => (render ? (alreadyResolved ? render : resolveTemplate(render, liveScope)) : null),

@@ -8611,6 +8611,10 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Authored form pending state and dialog close content (2026-09-27)
 
+- [ ] Bind a control to page.id on a live page and in Builder; after copying
+  the page, the copied control must identify its new page. No page operation
+  may bypass API ownership/ACL checks.
+
 - [ ] During a saved Action, bind tt-form disabled and its save label to pending.
   Fields pause and show the authored saving label, then re-enable on success,
   failure, or cancelled confirmation. Preserve failed drafts and existing
