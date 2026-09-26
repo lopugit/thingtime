@@ -190,7 +190,10 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 				</Button>
 			</Flex>
 
-			<Button size="sm" mb={4} onClick={() => setFullProgram(true)}>Edit full program · requests, expressions and flows</Button>
+			<Button size="sm" mb={4} onClick={() => {
+				try { buildCrystal(); setFullProgram(true); }
+				catch (error) { lopuRef.current({ title: 'Check the input defaults', description: error instanceof Error ? error.message : 'Enter valid defaults', status: 'error' }); }
+			}}>Edit full program · requests, expressions and flows</Button>
 			<Stack spacing={4}>
 				<Flex gap={3} wrap="wrap">
 					<Box flex="1" minW="220px">

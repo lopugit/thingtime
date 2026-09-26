@@ -1,4 +1,5 @@
 import React from 'react';
+import { parseActionJson } from '~/schemas/actionJsonInput';
 import { ThingDefinitionEditor } from '../Builder/DefinitionEditor/ThingDefinitionEditor';
 import {
 	Box,
@@ -95,6 +96,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 		for (const descriptor of descriptors) {
 			const name = String(descriptor.name);
 			if (descriptor.type === 'boolean') initial[name] = descriptor.default === true;
+			else if (descriptor.type === 'json') initial[name] = descriptor.default === undefined ? '' : JSON.stringify(descriptor.default, null, 2);
 			else initial[name] = descriptor.default === undefined || descriptor.default === null ? '' : String(descriptor.default);
 		}
 		return initial;
@@ -112,7 +114,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 				const name = String(descriptor.name);
 				const value = values[name];
 				if (value === '' || value === undefined) continue;
-				inputs[name] = descriptor.type === 'number' ? Number(value) : value;
+				inputs[name] = descriptor.type === 'number' ? Number(value) : descriptor.type === 'json' ? parseActionJson(value) : value;
 			}
 			const response = (await apiRef.current.v1.actions.run({ action: action.id, inputs })) as RunResponse;
 			setLastRun(response);
@@ -172,7 +174,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 											</option>
 										))}
 									</Select>
-								) : type === 'text' ? (
+								) : type === 'text' || type === 'json' ? (
 									<Textarea
 										onChange={(event) => setValues((prior) => ({ ...prior, [name]: event.target.value }))}
 										rows={3}
