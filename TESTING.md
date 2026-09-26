@@ -8651,3 +8651,24 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Save edited requestSubmit/reset programs through the canonical API and the
   workbench, reopen/reload and reuse on a Builder page. Context, event bindings,
   element arguments and defaults persist exactly; anonymous reads return 404.
+
+### Web Platform ECMAScript receivers (2026-09-27)
+
+- Run the receiver/prototype programs in the served opaque browser runtime.
+  DataView edited endianness changes the actual backing bytes; a BigInt above
+  Number precision round-trips exactly, and invalid byte offsets return errors.
+- Iterator map/filter callbacks remain lazy until consumption; find/every/some
+  stop early. Compare the remaining original iterator. Empty reduce uses its
+  initial value; negative take/drop limits return native errors.
+- WeakMap keys retain identity after editing their fields; an equal-looking
+  second object is absent. getOrInsertComputed runs its callback only for a
+  missing key. WeakRef/FinalizationRegistry examples must never assert GC timing.
+- Promise finally preserves fulfillment/rejection unless cleanup throws. Bound
+  functions preserve their receiver despite a subsequent call receiver override.
+- Edit a prototype's inherited label and an error's instance name. Only fresh
+  per-run objects change; native prototype relationships and defaults remain.
+  Async/generator constructor examples invoke the corresponding function family.
+- Save edited DataView, iterator, Promise and prototype Components, read them
+  back through the canonical API and reopen/reload their previews. Programs,
+  edited defaults and behavior survive; anonymous reads remain denied. Missing
+  native members and SharedArrayBuffer report unsupported in their actual context.

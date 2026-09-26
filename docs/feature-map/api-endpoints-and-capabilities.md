@@ -120,3 +120,8 @@ existing catalogue Action emits complete saved program data; `liveDOM.ts`
 provides generic native method/event backing. The explicit `allowFormEvents`
 context is confined by the runtime CSP and never enables form navigation. See
 [Web standards runtime and tests](../web-standards-builder.md).
+
+ECMAScript built-in receiver recipes add `api.actions-run` 1.16.0, negotiated by
+the same manifests and client. Complete Component program data implements the
+examples through existing language nodes; no additional runtime permissions or
+new execution endpoint is required. See [coverage and native behavior](../web-standards-builder.md#ecmascript-built-in-receivers).
