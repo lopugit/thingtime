@@ -8467,6 +8467,22 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Web standards Builder app (2026-09-24)
 
+- [ ] Run TypedArray intrinsic recipes across numeric widths and BigInt types.
+  Check byte windows, signed wrapping, clamping, exact decimal strings,
+  callback thisArg/visit order, native bounds errors, mutation, and shared
+  subarray versus copied slice storage. Unavailable constructors stay explicit.
+- [ ] Drive native generator next/return/throw with caught and uncaught errors,
+  including a yield during finally: cleanup suspends before final return.
+  Helper return closes its source; a wrapper with no return must not invent
+  source closure. Hidden async-from-sync and for-in examples show the actual
+  language protocol trace, not a simulated public receiver. Missing-throw
+  cleanup reports whether the current engine matches ECMA-262 2026.
+- [ ] Edit generator cleanup and return values, save through the catalogue
+  workbench, reopen/reload/run the private Component and retain both values.
+  Verify collection deduplication, Unicode iteration and UTF-16 containment
+  against actual browser output. Run javascriptIntrinsics.test.ts on Node 22
+  and the current runtime so engine differences remain visible.
+
 - [ ] Run HTML form recipes with boolean false, fractional meter values, edited
   text-selection offsets/direction, replacement text, radio values and validity
   messages (including empty to clear). Verify native outputs and control state;

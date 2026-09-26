@@ -125,3 +125,9 @@ ECMAScript built-in receiver recipes add `api.actions-run` 1.16.0, negotiated by
 the same manifests and client. Complete Component program data implements the
 examples through existing language nodes; no additional runtime permissions or
 new execution endpoint is required. See [coverage and native behavior](../web-standards-builder.md#ecmascript-built-in-receivers).
+
+TypedArray, iterator and generator intrinsic recipes add `api.actions-run`
+1.17.0. They extend the same catalogue with saved data programs using existing
+language nodes; `javascriptIntrinsics.test.ts` checks native byte conversion,
+protocol cleanup, engine differences and edited draft round trips. See
+[intrinsic receiver coverage](../web-standards-builder.md#ecmascript-intrinsic-receivers).
