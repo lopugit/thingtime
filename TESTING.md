@@ -8439,6 +8439,20 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Web standards Builder app (2026-09-24)
 
+- [ ] Run detached DOM recipes with edited text, selectors, attribute names,
+  token values and text offsets. Confirm native results and projected changes:
+  append/insert/replace/remove, sibling reordering, text splitting, class-token
+  changes, attribute writes, queries, node/attribute collections and fragments.
+  Document factories do not count as constructor coverage. Save an edited DOM
+  program as a private Component, reopen/reload/run it and reuse it in Builder.
+- [ ] DOM runs refuse previous-run handles, window/defaultView/constructor
+  access, script/resource elements, event/URL attribute writes and markup
+  setters. Repeated detached subtree cloning must hit the allocation budget;
+  repeated requests cannot extend the worker deadline. An invalid selector's
+  native SyntaxError is catchable. Repeated handles preserve identity, native
+  void results remain undefined, and missing registered browser members report
+  unsupported. The rendered projection is not a live browsing-context receiver.
+
 - [ ] Change class initial/increment/setter values and observe private state,
   static fields and brand checks; change `this`/`super` receivers and generator
   values. Compare postfix/prefix returns, logical assignment with null/false,
