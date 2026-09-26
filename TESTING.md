@@ -8404,12 +8404,22 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Shared discussion acceptance and service galleries
 
+- Media forms: render two new `tt-form` instances using one save Action. Bind
+  completion to its receipt and return each form's operation id. A successful
+  save resets only the matching form and gives it a fresh id; rejection,
+  unrelated receipts and source refresh preserve typed fields and retry ids.
+  Saved-record forms never reset from this receipt. Attachment helper text and
+  linked-URL controls follow their configured values; upload readiness disables
+  submit while empty, pending, failed or committed, and clears after reset.
+
 - Saved Components: embed `tt-discussion` for an authorized Thing. At desktop
   and 390px, post a comment and nested reply, react, search, and refresh; keep
   the canonical discussion controls and refresh page sources only after an
   accepted write. Builder previews stay inert, malformed targets never mount
   a loader, and another account cannot see a private target's discussion.
-  Authored post projections, children and callbacks must be ignored.
+  Authored post projections, children and callbacks must be ignored. Wrap the
+  discussion in authored Action markup: comment controls must not invoke the
+  ancestor Action from the template's capture handler.
 
 - Post a plain or rich comment/reply on a workspace Thing, including a nested
   reply. Refresh the media gallery only after server acceptance; rejected writes

@@ -327,7 +327,7 @@ export const LiveTemplate = ({
 							onClickCapture={
 								interactive
 									? (event) => {
-											if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
+											if (!(event.target as Element).closest?.('[data-tt-native-upload], [data-tt-discussion]')) onTtAction(event);
 									  }
 									: undefined
 							}

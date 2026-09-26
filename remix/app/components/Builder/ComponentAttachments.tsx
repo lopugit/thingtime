@@ -4,6 +4,7 @@ import { PostAttachments } from '../Attachments/PostAttachments';
 import { normalizePublicAttachment } from '../Attachments/attachmentUiCore';
 import type { AttachmentComposerSnapshot } from '../Attachments/attachmentTypes';
 import { ComponentUploadEnabled } from './ComponentUpload';
+import { ComponentLocalControl } from './NativeComponentControls';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
 const empty: AttachmentComposerSnapshot = { attachmentIds: [], attachments: [], blocking: false, hasSelection: false };
@@ -14,6 +15,9 @@ type Props = {
 	maxFiles?: unknown;
 	imageOnly?: unknown;
 	title?: unknown;
+	helperText?: unknown;
+	allowLinkedUrls?: unknown;
+	readyStateKey?: unknown;
 	committedTargetId?: unknown;
 	committedIds?: unknown;
 	disabled?: unknown;
@@ -34,6 +38,9 @@ function AttachmentField({
 	maxFiles,
 	imageOnly,
 	title,
+	helperText,
+	allowLinkedUrls,
+	readyStateKey,
 	committedTargetId,
 	committedIds,
 	disabled
@@ -41,6 +48,13 @@ function AttachmentField({
 	const composer = React.useRef<AttachmentComposerHandle>(null);
 	const [snapshot, setSnapshot] = React.useState(empty);
 	const [committed, setCommitted] = React.useState(false);
+	const local = React.useContext(ComponentLocalControl);
+	const localRef = React.useRef(local);
+	localRef.current = local;
+	const ready = disabled !== true && !committed && !snapshot.blocking && snapshot.attachmentIds.length > 0;
+	React.useEffect(() => {
+		if (typeof readyStateKey === 'string') localRef.current?.({ op: 'set', key: readyStateKey, value: ready });
+	}, [readyStateKey, ready]);
 	const field = typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(name) ? name : 'attachmentIds';
 	const ids = JSON.stringify(snapshot.attachmentIds);
 	const saved = JSON.stringify(Array.isArray(committedIds) ? committedIds : []);
@@ -68,8 +82,8 @@ function AttachmentField({
 				disabled={disabled === true || committed}
 				onChange={setSnapshot}
 				ariaLabel={typeof title === 'string' ? title.slice(0, 120) : 'Add attachments'}
-				allowLinkedUrls
-				helperText="Choose files, then use the form’s save action."
+				allowLinkedUrls={allowLinkedUrls !== false}
+				helperText={typeof helperText === 'string' ? helperText.slice(0, 2000) : 'Choose files, then use the form’s save action.'}
 			/>
 			<input type="hidden" name={field} value={snapshot.attachmentIds.join(',')} disabled={disabled === true} />
 			{committed ? <p role="status">Attachments saved. Start another entry to add more.</p> : null}
