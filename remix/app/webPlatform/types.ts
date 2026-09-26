@@ -20,6 +20,15 @@ export type Feature = {
 };
 export type PlatformNode = string | { tag: string; attributes?: Record<string, string | number | boolean>; children?: PlatformNode[] };
 export type PlatformExpression = { op: string; [key: string]: unknown };
+/** Native destructuring authoring. A string is a binding identifier; expression
+ * references are accepted only in assignment patterns. Rest is a separate last
+ * target, and null array entries represent elisions. */
+export type PlatformPattern =
+	| string
+	| { op: 'array-pattern'; items: (PlatformPattern | null)[]; rest?: PlatformPattern }
+	| { op: 'object-pattern'; entries: { key: unknown; computed?: boolean; target: PlatformPattern }[]; rest?: PlatformPattern }
+	| { op: 'default-pattern'; target: PlatformPattern; value: unknown }
+	| PlatformExpression;
 export type PlatformProgram = {
 	version: 1;
 	title: string;
