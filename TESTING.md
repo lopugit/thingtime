@@ -8620,7 +8620,8 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   check again; flags clear. Change length parameters and repeat.
 - Refuse missing/out-of-surface element arguments, unregistered methods,
   malformed observation bindings and immediate method errors without a later
-  success overwriting the error. Register observers before immediate calls.
+  success overwriting the error, including programs that also contain worker
+  steps. Register observers before immediate calls.
   After more than ten observations only ten receipts remain; repeated event
   dispatch reaches the 200-event limit without recursive runaway.
 - Confirm form context is opt-in on the Component iframe and that Vite, built

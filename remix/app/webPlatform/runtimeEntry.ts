@@ -8,6 +8,7 @@ import type { PlatformNode } from './types';
 // Form controls may shadow instance methods while their parent is being built.
 const appendNode = Node.prototype.appendChild;
 const listen = EventTarget.prototype.addEventListener;
+const closestElement = Element.prototype.closest;
 let started = false;
 addEventListener('message', (event) => {
 	if (event.source !== parent || started || event.data?.type !== 'tt-platform-start') return;
@@ -63,12 +64,12 @@ addEventListener('message', (event) => {
 		// real validation/submit events, whose receipts show cancellation.
 		listen.call(document, 'submit', (event) => event.preventDefault(), true);
 		listen.call(document, 'click', (event) => {
-			const a = (event.target as Element)?.closest?.('a');
+			const a = event.target instanceof Element ? closestElement.call(event.target, 'a') : null;
 			if (a && !a.getAttribute('href')?.startsWith('#')) event.preventDefault();
 		});
 		const events = { used: 0 };
 		const observed: ReturnType<typeof platformEventReceipt>[] = [];
-		const immediate: (() => void)[] = [];
+		const immediate: (() => boolean)[] = [];
 		let lastDOMResult: { ok: boolean; value: unknown } | undefined;
 		const reportDOM = (ok: boolean, value: unknown) => { lastDOMResult = { ok, value }; send(ok, value); };
 		for (const operation of program.dom || []) {
@@ -83,7 +84,7 @@ addEventListener('message', (event) => {
 						observed.push(receipt);
 						if (observed.length > 10) observed.shift();
 						reportDOM(true, { event: receipt });
-						return;
+						return true;
 					}
 					const args = (operation.args || []).map((value) => {
 						if (value && typeof value === 'object' && !Array.isArray(value) && (value as { op?: unknown }).op === 'element') {
@@ -102,8 +103,10 @@ addEventListener('message', (event) => {
 					const outcome = { method: operation.method, result: typeof result === 'object' ? String(result) : result ?? null,
 						...(observed.length ? { events: [...observed] } : {}) };
 					reportDOM(true, outcome);
+					return true;
 				} catch (e) {
 					reportDOM(false, e instanceof Error ? e.message : 'DOM operation failed');
+					return false;
 				}
 			};
 			if (operation.event) {
@@ -114,7 +117,7 @@ addEventListener('message', (event) => {
 			} else immediate.push(execute);
 		}
 		// Observers are ready even when declared after an immediate operation.
-		for (const execute of immediate) execute();
+		for (const execute of immediate) if (!execute()) return;
 		let probe: unknown;
 		if (program.probe) {
 			const p = program.probe;
