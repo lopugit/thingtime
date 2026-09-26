@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-26 — **Codex (AI)**: Web standards adds 158 editable detached-DOM
+  examples through reusable program operations: native document/element/text
+  receivers, node collections, attributes and class tokens. Run-local handles,
+  native member policies and shared execution/allocation limits preserve the
+  isolated runtime. Private API round trips and browser mutation/refusal checks
+  cover the new path. Full platform demo coverage remains unfinished; these
+  examples do not provide a live window/layout context.
+
 - 2026-09-26 — **Codex (AI)**: Web standards edited draft saving. The authored
   save Action keeps the full program and current input defaults in a private
   reusable Component. Added bounded JSON Action inputs and preserved literal

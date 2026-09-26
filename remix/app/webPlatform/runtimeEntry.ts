@@ -2,6 +2,7 @@ import { compilePlatformProgram, validatePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
 import { runPlatformWorker } from './workerLifecycle';
 import { inspectPlatformInterface } from './interfaceProbe';
+import { createPlatformDOMBridge } from './domBridge';
 import type { PlatformNode } from './types';
 let started = false;
 addEventListener('message', (event) => {
@@ -139,7 +140,17 @@ addEventListener('message', (event) => {
 		const source = compilePlatformWorker(program);
 		const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
 		const worker = new Worker(url);
-		const stop = runPlatformWorker(worker, input, send, () => URL.revokeObjectURL(url));
+		let bridge: ReturnType<typeof createPlatformDOMBridge> | undefined;
+		const stop = runPlatformWorker(
+			worker,
+			input,
+			send,
+			() => {
+				bridge?.stop();
+				URL.revokeObjectURL(url);
+			},
+			(request) => (bridge ??= createPlatformDOMBridge(root)).request(request)
+		);
 		addEventListener('pagehide', stop, { once: true });
 	} catch (e) {
 		send(false, e instanceof Error ? e.message : 'Invalid platform program');
