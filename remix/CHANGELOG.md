@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Reusable live form programs add native reset,
+  requestSubmit/submitter and user-edited validity examples. Shared DOM bindings
+  resolve native methods despite named form controls, preserve immediate errors,
+  and expose bounded event receipts. Form events explicitly opt in while runtime
+  CSP keeps the origin opaque and denies submission navigation. Catalogue and
+  client capability contract advance to `api.actions-run` 1.15.0. Details:
+  [PR #919](../PRs/919-codex-web-standards-live-form-actions-add-reusable-live-form-events-and-validation-contexts.md).
+
 - 2026-09-27 — **Codex (AI)**: Editable media forms can reset automatically
   after a successful receipt matches their generated operation id. Failed and
   sibling saves preserve drafts and retry identities. Attachment controls add

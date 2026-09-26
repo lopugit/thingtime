@@ -6,6 +6,7 @@ import { javascriptRecipe } from './javascriptRecipes';
 import { workerApiRecipe } from './webApiFixtures';
 import { domApiRecipe } from './domFixtures';
 import { htmlFormRecipe } from './htmlFormFixtures';
+import { liveFormRecipe } from './liveFormFixtures';
 import type { Feature, PlatformNode, Recipe } from './types';
 const node = (tag: string, children: PlatformNode[] = [], attributes: Record<string, string | number | boolean> = {}): PlatformNode => ({
 	tag,
@@ -210,6 +211,7 @@ function htmlRecipe(f: Feature): Recipe {
 				'Document, embedding and script capabilities are isolated from your account.'
 			);
 		p.document = special[tag] || [node(tag, ['[[text]]'], { id: 'sample' })];
+		if (tag === 'form') p.allowFormEvents = true;
 		if (['caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col'].includes(tag)) {
 			p.document = [
 				node('table', [
@@ -400,7 +402,7 @@ function cssRecipe(f: Feature): Recipe {
 }
 
 function webApiRecipe(f: Feature): Recipe {
-	const worked = htmlFormRecipe(f) || domApiRecipe(f) || eventApiRecipe(f) || streamApiRecipe(f) || controllerApiRecipe(f) || workerApiRecipe(f);
+	const worked = liveFormRecipe(f) || htmlFormRecipe(f) || domApiRecipe(f) || eventApiRecipe(f) || streamApiRecipe(f) || controllerApiRecipe(f) || workerApiRecipe(f);
 	if (worked) return worked;
 	const p = base(f),
 		name = f.interface || f.name;
