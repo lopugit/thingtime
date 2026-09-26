@@ -1,17 +1,26 @@
 export type ComponentStyleRule = { selector: string; declarations: Record<string, string>; maxWidth?: number };
 
-// Only a comma outside `()` and `[]` separates the selector list, so the comma
-// in `:is(.a, .b)` stays with its own compound instead of being prefixed twice.
-// An unbalanced delimiter is rejected rather than emitted: the CSS parser
-// consumes `(` and `[` as blocks, so `.a(` would swallow this rule's body and
-// every later rule in the same instance stylesheet the way `/*` would.
+// Only a comma outside `()`, `[]` and a quoted string separates the selector
+// list, so the comma in `:is(.a, .b)` or `[title="a,b"]` stays with its own
+// compound instead of being prefixed twice. An unbalanced delimiter is rejected
+// rather than emitted: the CSS parser consumes `(` and `[` as blocks and runs a
+// string to the end of the line, so `.a(` or `.a"` would swallow this rule's
+// body and every later rule in the same instance stylesheet the way `/*` would.
+// A quoted `]` is only data, so tracking the quote keeps `[title="]"]` legal
+// while still rejecting the unterminated `[title="]`. No escape handling is
+// needed because `\` is outside the selector character class checked below, so
+// any selector carrying one is rejected whichever part it lands in.
 function topLevelSelectors(selector: string): string[] | null {
 	const closers: string[] = [];
 	const parts: string[] = [];
+	let quote = '';
 	let start = 0;
 	for (let index = 0; index < selector.length; index++) {
 		const char = selector[index];
-		if (char === '(' || char === '[') closers.push(char === '(' ? ')' : ']');
+		if (quote) {
+			if (char === quote) quote = '';
+		} else if (char === '"' || char === "'") quote = char;
+		else if (char === '(' || char === '[') closers.push(char === '(' ? ')' : ']');
 		else if (char === ')' || char === ']') {
 			if (closers.pop() !== char) return null;
 		} else if (char === ',' && !closers.length) {
@@ -19,7 +28,7 @@ function topLevelSelectors(selector: string): string[] | null {
 			start = index + 1;
 		}
 	}
-	return closers.length ? null : [...parts, selector.slice(start).trim()];
+	return quote || closers.length ? null : [...parts, selector.slice(start).trim()];
 }
 
 // Each selector is prefixed independently. Authored styles cannot select the

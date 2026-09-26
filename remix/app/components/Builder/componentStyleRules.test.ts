@@ -43,6 +43,19 @@ test('style rules reject scope escape, resource loads, injection and viewport po
 		componentStyleRules([{ selector: '.a(', declarations: { color: 'red' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
 		'\n:where([data-tt-style="safe"]) .b{color:green}'
 	);
+	// An unterminated string swallows the stylesheet exactly like an unbalanced
+	// bracket: the CSS parser runs the string to the end of the line, taking this
+	// rule's body with it, so the prelude then consumes the next rule's block.
+	for (const selector of ['.a"', ".a'", '[a="]', "[a=']", '[a="b]', '.a" , .b'])
+		assert.equal(componentStyleRules(rule(selector, { color: 'red' }), 'safe'), '');
+	assert.equal(
+		componentStyleRules([{ selector: '.a"', declarations: { color: 'red' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// A delimiter inside a terminated string is data rather than structure, so it
+	// neither opens a block nor unbalances the selector around it.
+	assert.equal(componentStyleRules(rule('[title="]"]', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) [title="]"]{color:red}');
+	assert.equal(componentStyleRules(rule('[title="("]', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) [title="("]{color:red}');
 	// Only a top-level comma separates the selector list, so a nested argument
 	// list keeps one namespace prefix on its own compound.
 	assert.equal(componentStyleRules(rule(':is(.a, .b) .c', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) :is(.a, .b) .c{color:red}');
