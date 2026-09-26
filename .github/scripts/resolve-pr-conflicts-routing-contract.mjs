@@ -1807,7 +1807,17 @@ function assertAdminLoader(block, label) {
   assert.ok(block.includes("[a-z0-9][a-z0-9.:-]{0,63}"), `${label}: closed composed-id charset`);
   assert.ok(block.includes("none|minimal|low|medium|high|xhigh|max|ultra"), `${label}: closed effort segments`);
   assert.ok(block.includes("^claude-[a-z0-9-]{1,48}$"), `${label}: closed Claude base pattern`);
-  assert.ok(block.includes('. + ["default"]'), `${label}: default hard fallback`);
+  // Both loaders deliberately fail closed rather than inventing an attempt:
+  // "Use only the configured model order; never invent a default attempt." An
+  // unavailable, malformed or unmappable waterfall must run no model at all.
+  // This used to assert the opposite — that the removed `. + ["default"]` hard
+  // fallback was still present — so it threw on every run and aborted the rest
+  // of `assertWorkflowSource`, silently skipping every later assertion.
+  assert.match(block, /no model will run/u, `${label}: fails closed with no invented default`);
+  assert.ok(
+    !block.includes('. + ["default"]'),
+    `${label}: never appends an unconfigured default attempt`,
+  );
   assert.match(block, /--effort \$claude_effort/, `${label}: session effort in model args`);
   assert.match(block, /model_args=.*GITHUB_OUTPUT/, `${label}: full waterfall output`);
   assert.match(block, /primary_model=.*GITHUB_OUTPUT/, `${label}: primary model output`);
