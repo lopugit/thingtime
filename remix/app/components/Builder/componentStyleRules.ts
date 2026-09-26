@@ -8,7 +8,16 @@ export function componentStyleRules(value: unknown, scope: string): string {
 		.map((rule) => {
 			if (!rule || typeof rule !== 'object' || typeof rule.selector !== 'string' || rule.selector.length > 800) return '';
 			const selectors = rule.selector.split(',').map((part: string) => part.trim());
-			if (selectors.some((selector: string) => !selector || /[^a-zA-Z0-9_.#\s>*:+\-[\]="'()]/.test(selector) || /:has\s*\(/i.test(selector)))
+			// A leading sibling combinator would bind to the instance wrapper itself
+			// rather than its subtree, so `+ .chrome` would style the app element
+			// next to this instance. `>` stays legal because it still selects a
+			// child of the wrapper. `~` is already outside the character class.
+			if (
+				selectors.some(
+					(selector: string) =>
+						!selector || /^\+/.test(selector) || /[^a-zA-Z0-9_.#\s>*:+\-[\]="'()]/.test(selector) || /:has\s*\(/i.test(selector)
+				)
+			)
 				return '';
 			const declarations = rule.declarations;
 			if (!declarations || typeof declarations !== 'object' || Array.isArray(declarations) || Object.keys(declarations).length > 40) return '';
