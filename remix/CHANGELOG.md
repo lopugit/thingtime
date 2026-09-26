@@ -73,7 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   documents and surface receivers keep bounded local resources; native probes
   report ignored bounding-box options as unsupported. Actions-run advances to
   1.24.0; private save/reload, browser boundaries and deployment checks recorded
-  with this SVG delivery.
+  in [PR #938](../PRs/938-codex-web-standards-svg-add-reusable-native-svg-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Added 145 reusable Canvas programs with native
   surface receivers, drawing, fonts, pixels, paths and typed settings. Fixed

@@ -159,7 +159,7 @@ const elementTags: Record<string, string> = {
 	SVGMetadataElement: 'metadata',
 	SVGSwitchElement: 'switch'
 };
-function drawing(tag: string): PlatformNode[] {
+function drawing(tag: string, useReference = false): PlatformNode[] {
 	if (tag === 'rect' || tag === 'svg') return [rect()];
 	if (tag === 'path') return [path()];
 	if (tag === 'text') return [text()];
@@ -192,9 +192,12 @@ function drawing(tag: string): PlatformNode[] {
 	if (tag === 'pattern')
 		return [
 			n('defs', {}, [
-				n('pattern', { id: 'sample', x: 0, y: 0, width: 16, height: 16, patternUnits: 'userSpaceOnUse', viewBox: '0 0 16 16' }, [
-					n('circle', { cx: 8, cy: 8, r: 6, fill: '[[color]]' })
-				])
+				n(
+					'pattern',
+					{ id: useReference ? 'base-paint' : 'sample', x: 0, y: 0, width: 16, height: 16, patternUnits: 'userSpaceOnUse', viewBox: '0 0 16 16' },
+					[n('circle', { cx: 8, cy: 8, r: 6, fill: '[[color]]' })]
+				),
+				...(useReference ? [n('pattern', { id: 'sample', href: '#base-paint' })] : [])
 			]),
 			n('rect', { x: 16, y: 16, width: '[[width]]', height: 96, fill: 'url(#sample)' })
 		];
@@ -205,7 +208,8 @@ function drawing(tag: string): PlatformNode[] {
 	if (tag === 'stop') first.attributes!.id = 'sample';
 	return [
 		n('defs', tag === 'defs' ? { id: 'sample' } : {}, [
-			n(gradient, { id: tag === 'stop' || tag === 'defs' ? 'paint' : 'sample', ...gradientAttrs }, [first, stop2()])
+			n(gradient, { id: useReference ? 'base-paint' : tag === 'stop' || tag === 'defs' ? 'paint' : 'sample', ...gradientAttrs }, [first, stop2()]),
+			...(useReference ? [n(gradient, { id: 'sample', href: '#base-paint' })] : [])
 		]),
 		n('rect', { x: 16, y: 16, width: '[[width]]', height: 96, fill: tag === 'stop' || tag === 'defs' ? 'url(#paint)' : 'url(#sample)' })
 	];
@@ -449,7 +453,7 @@ export function svgRecipe(f: Feature): Recipe | null {
 					'clip-path': 'url(#bbox-clip)'
 				})
 		  ]
-		: drawing(tag);
+		: drawing(tag, key === 'href');
 	if (dictionary)
 		content.push(
 			n('polygon', {
