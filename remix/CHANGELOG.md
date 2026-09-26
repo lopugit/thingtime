@@ -70,6 +70,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-27 — **Codex (AI)**: Saved collection sources load cursor pages through viewer-authorized Actions, with older-result search, deduplication, retry and bounded accumulation. Copies preserve the source Action dependency; existing collection styling and editable row templates are retained. Details: [PR #929](../PRs/929-codex-builder-paged-collections-load-editable-collections-from-paged-action-sources.md).
 
+- 2026-09-27 — **Codex (AI)**: Added 67 reusable TypedArray, iterator and
+  generator intrinsic examples, taking worked coverage to 2,859 entries.
+  Native byte conversions, callback traces, cleanup and protocol errors remain
+  editable Component program data. Missing-throw behavior reports differences
+  from ECMA-262 2026 without replacing native results. The catalogue contract
+  is `api.actions-run` 1.17.0; runtime permissions remain unchanged. Details:
+  [PR #928](../PRs/928-codex-web-standards-intrinsic-receivers-reusable-typed-array-and-iterator-examples.md).
+
 - 2026-09-27: Added editable `tt-menu` controls with bounded native popovers, keyboard navigation and scoped dialog hosting. See [PR note](../PRs/925-codex-builder-menu-controls-editable-native-menus.md).
 - 2026-09-27 — **Codex (AI)**: Reusable ECMAScript receiver and prototype
   programs fill 136 missing built-in examples and improve 22 existing ones.
