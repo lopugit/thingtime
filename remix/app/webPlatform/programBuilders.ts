@@ -49,3 +49,7 @@ export const objectPattern = (entries: { key: unknown; target: unknown; computed
 	...(rest === undefined ? {} : { rest })
 });
 export const defaultPattern = (target: unknown, value: unknown) => ({ op: 'default-pattern', target, value });
+
+export const domConstruct = (key: string, args: unknown[] = []) => awaited({ op: 'dom', action: 'construct', key, args });
+
+export const domSurface = () => awaited({ op: 'dom', action: 'surface' });

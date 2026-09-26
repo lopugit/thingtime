@@ -1,3 +1,4 @@
+import { canvasRecipe } from './canvasFixtures';
 import { eventApiRecipe } from './eventFixtures';
 import { streamApiRecipe } from './streamFixtures';
 import { controllerApiRecipe } from './controllerFixtures';
@@ -106,7 +107,7 @@ const cssDefaults: Record<string, string> = {
 	'shape-margin': '12px'
 };
 function htmlRecipe(f: Feature): Recipe {
-	const live = mediaRecipe(f) || liveEventRecipe(f);
+	const live = canvasRecipe(f) || mediaRecipe(f) || liveEventRecipe(f);
 	if (live) return live;
 	const p = base(f);
 	if (f.kind === 'element') {
@@ -409,6 +410,7 @@ function cssRecipe(f: Feature): Recipe {
 
 function webApiRecipe(f: Feature): Recipe {
 	const worked =
+		canvasRecipe(f) ||
 		mediaRecipe(f) ||
 		liveEventRecipe(f) ||
 		webIdlRecipe(f) ||

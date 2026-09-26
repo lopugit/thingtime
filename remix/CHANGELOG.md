@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Added 145 reusable Canvas programs with native
+  surface receivers, drawing, fonts, pixels, paths and typed settings. Fixed
+  detached-context font no-ops by using the actual isolated surface. Bounded
+  bitmap/path work and blocked runtime-document access; actions-run is 1.23.0.
+  Details: [PR #936](../PRs/936-codex-web-standards-canvas-add-reusable-native-canvas-programs.md).
+
+
 - 2026-09-27 — **Codex (AI)**: Web Standards Builder adds 95 reusable native media
   programs (89 newly interactive entries), local audio/video clips, editable
   playback settings, native media events and property/range/error results.
