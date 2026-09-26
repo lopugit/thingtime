@@ -4,7 +4,8 @@ import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentC
 import { sourceFailure } from './sourceFailure';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
+import { componentPageHref, hasComponentBackEntry } from './componentNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { LOCAL_UI_ACTION, reduceLocalUi, localQueryHref } from '../Actions/localUiAction';
@@ -267,6 +268,7 @@ export const LiveTemplate = ({
 	const runtime = useWebpageRuntime();
 	const user = useCurrentUser();
 	const navigate = useNavigate();
+	const location = useLocation();
 	const lopu = useLopu();
 	const baseScope = Object.fromEntries(
 		Object.entries(scope).filter(
@@ -278,9 +280,13 @@ export const LiveTemplate = ({
 	const [local, setLocal] = React.useState<{ identity: string; values: Record<string, unknown>; outcome?: ControlResult }>({ identity, values: {} });
 	const active = local.identity === identity ? local : { identity, values: {} };
 	const onLocal = (input: Record<string, unknown>) => {
-		if (input.op === 'query') {
+		if (input.op === 'query' || input.op === 'back') {
+			if (input.op === 'back' && hasComponentBackEntry(runtime.pageId, location, location.state)) {
+				navigate(-1);
+				return;
+			}
 			const href = localQueryHref(runtime.pageId, input.params);
-			if (href) navigate(href);
+			if (href) navigate(componentPageHref(runtime.pageId, location, href));
 			return;
 		}
 		if (input.op === 'copy' && typeof input.value === 'string' && input.value.length <= 5000) {

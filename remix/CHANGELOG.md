@@ -68,6 +68,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Saved Component links keep their page and view
+  mode inside Builder. Local Back controls can return through nested links
+  within the same app, with an explicit fallback for direct entry.
+
 - 2026-09-27 — **Codex (AI)**: Editable media forms can reset automatically
   after a successful receipt matches their generated operation id. Failed and
   sibling saves preserve drafts and retry identities. Attachment controls add
