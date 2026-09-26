@@ -6603,6 +6603,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+### Saved collection source pagination (2026-09-27)
+
+- [ ] Bind an HTML/Chakra collection to a saved Action returning cursor pages. Next and infinite scrolling append older rows; duplicate IDs replace in place and empty intermediate pages continue.
+- [ ] Search for a match beyond the first page; refresh while filtered and confirm the match returns without discarding visible rows during the request.
+- [ ] Fail a subsequent page, verify earlier rows remain, then retry successfully. Repeated cursors, invalid row keys and bounded-source overflows stop with a visible error.
+- [ ] Change the query target/account while a request is delayed; old rows/completions must not appear in the new target. Inert Builder previews make no collection requests. Shared reads retain stored-graph authorization.
+- [ ] Export/copy a Component with a source inside a nested collection template; its literal Action is included/remapped, its input data stays unchanged, and runtime row values grant no dependency authority.
+
 - [ ] Floating page controls: dock Lopu in split mode on all four edges and
       resize it live. The bar, inspector, mode menu and viewport popover stay in
       the remaining page pane, including a shallow top/bottom split. Repeat with

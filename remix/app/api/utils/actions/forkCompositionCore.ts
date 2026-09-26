@@ -33,6 +33,7 @@ export const rewriteComposition = (
 		if (typeof node.ttAction === 'string' && !/[{}$]/.test(node.ttAction)) field(node, 'ttAction', 'action');
 		if (node.tag === 'tt-dialog' || node.chakra === 'Dialog') field(node.props, 'closeOnAction', 'action');
 		if (node.tag === 'tt-collection' || node.chakra === 'Collection') {
+			field(node.props?.source, 'action', 'action');
 			const row = node.props?.itemTemplate;
 			render(row && typeof row === 'object' && 'ttTemplate' in row ? row.ttTemplate : row, depth + 1);
 		}
