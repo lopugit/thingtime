@@ -12746,14 +12746,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.23.0',
-    contractVersion: '1.23.0',
+    featureVersion: '1.24.0',
+    contractVersion: '1.24.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
       'Live DOM programs may observe bounded native events and pass local element arguments. Explicit allowFormEvents enables validation/submit events in an opaque frame with form-action navigation denied. Prototype method dispatch resists named controls, and event receipts expose submitter and user-edited validity. ' +
+      'SVG programs author namespace-aware bounded document trees and reuse native surface receivers for shape measurements, unit conversion, animated values, transforms and typed lists. Registered primitive IDL constants can be read without exposing constructors. Local references, SVG list sizes and viewport writes are validated; program data and edited inputs persist through the existing private Component save Action. ' +
       'Canvas programs use explicit surface receivers for native 2D drawing, typed settings, paths, gradients, patterns and pixels. The existing worker DOM bridge exposes bounded surface/construct operations; it refuses foreign nodes, unrelated surface mutations, unregistered contexts and excessive resource sizes. Saved Component programs retain all drawing operations and edited inputs. ' +
       'Web standards catalogue expressions return editable DOM receiver programs for detached document trees, including typed HTML form state, validation, text selection and live option/radio collections. Collection length writes enforce allocation limits before invoking native setters and detached collection mutations retain their owning tree budget. The dom expression requests document/get/set/call operations through a bounded isolated worker bridge; real native receivers remain local to the run and mutations are projected into the preview. Saved programs preserve the complete operation data. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +

@@ -53,3 +53,6 @@ export const defaultPattern = (target: unknown, value: unknown) => ({ op: 'defau
 export const domConstruct = (key: string, args: unknown[] = []) => awaited({ op: 'dom', action: 'construct', key, args });
 
 export const domSurface = () => awaited({ op: 'dom', action: 'surface' });
+
+/** Read a registered primitive Web IDL constant without exposing a constructor. */
+export const domConstant = (interfaceName: string, key: string) => awaited({ op: 'dom', action: 'constant', target: interfaceName, key });

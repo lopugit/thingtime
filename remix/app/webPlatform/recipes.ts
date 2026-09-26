@@ -1,3 +1,4 @@
+import { svgRecipe } from './svgFixtures';
 import { canvasRecipe } from './canvasFixtures';
 import { eventApiRecipe } from './eventFixtures';
 import { streamApiRecipe } from './streamFixtures';
@@ -410,6 +411,7 @@ function cssRecipe(f: Feature): Recipe {
 
 function webApiRecipe(f: Feature): Recipe {
 	const worked =
+		svgRecipe(f) ||
 		canvasRecipe(f) ||
 		mediaRecipe(f) ||
 		liveEventRecipe(f) ||

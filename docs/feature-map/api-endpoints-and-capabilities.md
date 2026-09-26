@@ -174,3 +174,11 @@ transport now accepts bounded surface roots and Path2D/ImageData construction;
 `canvasFixtures.ts` owns editable program data. Surface access never exposes the
 runtime Document or permits unrelated tree mutation. See the Web standards
 Canvas checklist for native pixels/fonts, private save/reload and scope refusal.
+
+SVG catalogue programs negotiate `api.actions-run` 1.24.0. `svgFixtures.ts`
+authors 311 complete namespace-aware Component programs; `svgPolicy.ts` and
+`svgSupport.ts` register bounded surface receivers and local resources. The DOM
+transport adds primitive IDL constants without constructor handles. Native bbox
+option probes distinguish ignored options from implemented behavior. Both
+manifests and the client advance together; storage, endpoints and CSP remain
+unchanged. See the SVG section of the Web standards guide and native checklist.

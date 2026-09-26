@@ -12,6 +12,7 @@ import {
 	domGet,
 	domSurface,
 	domConstruct,
+	domConstant,
 	fn,
 	get,
 	global,
@@ -134,4 +135,13 @@ test('surface and bounded native constructors use the same worker transport', as
 		]
 	);
 	assert.equal(result.results[0].ok, true);
+});
+
+test('primitive IDL constants cross the worker boundary without exposing a constructor', async () => {
+	const result = await run(returns(domConstant('SVGUnitTypes', 'SVG_UNIT_TYPE_USERSPACEONUSE')), () => ({ value: 1 }));
+	assert.deepEqual(
+		result.requests.map(({ action, target, key, args }) => ({ action, target, key, args })),
+		[{ action: 'constant', target: 'SVGUnitTypes', key: 'SVG_UNIT_TYPE_USERSPACEONUSE', args: [] }]
+	);
+	assert.deepEqual(result.results, [{ ok: true, result: 1 }]);
 });

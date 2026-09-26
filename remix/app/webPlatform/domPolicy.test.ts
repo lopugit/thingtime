@@ -33,7 +33,7 @@ test('every catalogue DOM request names a member the receiver policy registers',
 			assert.ok(['Path2D', 'ImageData'].includes(key));
 			continue;
 		}
-		const registry = action === 'get' ? reads : action === 'set' ? writes : calls;
+		const registry = ['get', 'constant'].includes(action) ? reads : action === 'set' ? writes : calls;
 		assert.ok(registry.has(key), `${id}: DOM ${action} of ${key} is not registered in DOM_RECEIVER_POLICY`);
 	}
 	// Writable members must also be readable, or an example cannot show its effect.
