@@ -8404,6 +8404,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Shared discussion acceptance and service galleries
 
+- Component navigation: follow two nested query links on a saved page, then
+  return twice with a `$ui` Back control. Reload the deepest page and verify
+  Back still returns within that app. A direct deep link uses its declared
+  fallback. In Builder View mode, query links and fallback navigation retain
+  the selected page and mode; unrelated pages and external links stay intact.
+
 - Media forms: render two new `tt-form` instances using one save Action. Bind
   completion to its receipt and return each form's operation id. A successful
   save resets only the matching form and gives it a fresh id; rejection,

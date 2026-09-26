@@ -3,7 +3,9 @@ import { ComponentSelect } from '../Builder/ComponentSelect';
 import { ComponentStyle } from '../Builder/ComponentStyle';
 import { ComponentCollection } from '../Builder/ComponentCollection';
 import { ComponentDragSource, ComponentDropTarget } from '../Builder/ComponentDrag';
-import { Link, useInRouterContext } from 'react-router';
+import { Link, useInRouterContext, useLocation } from 'react-router';
+import { useWebpageRuntime } from '../Builder/webpageRuntime';
+import { componentPageHref, componentNavigationState } from '../Builder/componentNavigation';
 import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
 import { ComponentDiscussion } from '../Builder/ComponentDiscussion';
 import { ComponentMap } from '../Builder/ComponentMap';
@@ -253,16 +255,19 @@ type RenderState = { count: number; mediaUrl: (url: string) => string };
 function ComponentLink({ href, children, ...props }: Record<string, any>) {
 	const inRouter = useInRouterContext();
 	if (inRouter && typeof href === 'string' && /^(?:\/(?!\/)|[?#])/.test(href) && !href.startsWith('/api/') && !props.download)
-		return (
-			<Link {...props} to={href}>
-				{children}
-			</Link>
-		);
+		return <RoutedComponentLink {...props} href={href}>{children}</RoutedComponentLink>;
 	return (
 		<a {...props} href={href}>
 			{children}
 		</a>
 	);
+}
+
+function RoutedComponentLink({ href, children, ...props }: Record<string, any>) {
+	const location = useLocation();
+	const { pageId } = useWebpageRuntime();
+	const to = componentPageHref(pageId, location, href);
+	return <Link {...props} to={to} state={componentNavigationState(pageId, location, to)}>{children}</Link>;
 }
 
 const renderNode = (node: HtmlThingNode, key: number, depth: number, state: RenderState): React.ReactNode => {
