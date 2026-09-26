@@ -8778,3 +8778,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Run the real local API round-trip separately from the opt-in test skip.
 - Check both capability manifests for actions-run 1.20.0 and verify exact hosted
   source, runtime artifact and isolated CSP before production delivery.
+
+
+### Web Standards live event bindings (2026-09-27)
+
+- Run `npm --prefix remix run test:web-platform` and `test:api-capabilities`.
+  Compile all 107 live event examples and preserve edited boolean input references
+  through the actual Component API/save-draft path; anonymous reads must be 404.
+- In the live opaque frame, verify capture -> selected handler -> later listener
+  -> ancestor bubble ordering; stopPropagation retains the sibling listener and
+  stopImmediatePropagation removes it. `once` runs once; passive cancellation has
+  no effect. Native IDL replacement removes the old handler.
+- Return false from a native on-handler with real pointer input and verify
+  `defaultPreventedAfterDispatch` becomes true. Microtasks can run before native
+  return-value processing, so do not treat an in-handler receipt as final.
+- Verify real typing/selection, required-form invalid/submit/reset, dialog
+  requestClose cancellation, popover state, scroll, drag/drop, command invokers,
+  local image load/error and CSS animation/transition lifecycle receipts.
+- Exhaust the event budget with repeated native clicks and multiple listeners. Expect one terminal
+  error, no outer method result replacing it, and no surviving program listeners.
+  Partial setup failure/unsupported operations also stop their prior bindings.
+- Save an edited event program as a private Component, reopen/reload/run it,
+  compare owner-visible program data, and verify anonymous API access is 404.
+- Check desktop/mobile preview layout and confirm both capability manifests show
+  actions-run 1.21.0 plus the exact runtime asset hash before and after promotion.

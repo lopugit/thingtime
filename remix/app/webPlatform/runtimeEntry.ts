@@ -3,7 +3,7 @@ import { compilePlatformWorker } from './workerSource';
 import { runPlatformWorker } from './workerLifecycle';
 import { inspectPlatformInterface } from './interfaceProbe';
 import { createPlatformDOMBridge } from './domBridge';
-import { nativeDOMMethod, platformEventReceipt } from './liveDOM';
+import { bindLiveDOMEvent, nativeDOMMethod, platformEventReceipt, UnsupportedDOMFeature } from './liveDOM';
 import type { PlatformNode } from './types';
 // Form controls may shadow instance methods while their parent is being built.
 const appendNode = Node.prototype.appendChild;
@@ -17,6 +17,13 @@ addEventListener('message', (event) => {
 	started = true;
 	const send = (ok: boolean, result: unknown) =>
 		parent.postMessage({ type: 'tt-platform-result', runId, ok, text: JSON.stringify(result, null, 2).slice(0, 65536) }, '*');
+	const domState = { active: true };
+	const unbind: (() => void)[] = [];
+	const stopDOM = () => {
+		domState.active = false;
+		for (const stop of unbind.splice(0)) stop();
+	};
+	addEventListener('pagehide', stopDOM, { once: true });
 	try {
 		const program = validatePlatformProgram(raw);
 		compilePlatformProgram(program);
@@ -68,22 +75,47 @@ addEventListener('message', (event) => {
 			if (a && !a.getAttribute('href')?.startsWith('#')) event.preventDefault();
 		});
 		const events = { used: 0 };
-		const observed: ReturnType<typeof platformEventReceipt>[] = [];
+		const observed: (ReturnType<typeof platformEventReceipt> & { label?: string; defaultPreventedAfterDispatch?: boolean })[] = [];
 		const immediate: (() => boolean)[] = [];
 		let lastDOMResult: { ok: boolean; value: unknown } | undefined;
-		const reportDOM = (ok: boolean, value: unknown) => { lastDOMResult = { ok, value }; send(ok, value); };
+		const reportDOM = (ok: boolean, value: unknown) => {
+			lastDOMResult = { ok, value };
+			send(ok, value);
+		};
+		let eventReportQueued = false;
+		const pendingReceipts: { event: Event; receipt: (typeof observed)[number] }[] = [];
+		const afterDispatch = (event: Event, receipt: (typeof observed)[number]) => {
+			pendingReceipts.push({ event, receipt });
+			if (pendingReceipts.length > 20) pendingReceipts.shift();
+			if (eventReportQueued) return;
+			eventReportQueued = true;
+			// A microtask checkpoint can precede the native handler's return-false
+			// processing. A new task observes cancellation after dispatch completes.
+			setTimeout(() => {
+				eventReportQueued = false;
+				for (const pending of pendingReceipts.splice(0)) pending.receipt.defaultPreventedAfterDispatch = pending.event.defaultPrevented;
+				if (!domState.active || !lastDOMResult?.ok) return;
+				const value = lastDOMResult.value;
+				reportDOM(true, { ...(value && typeof value === 'object' ? value : {}), events: [...observed] });
+			}, 0);
+		};
 		for (const operation of program.dom || []) {
 			const element = root.querySelector(operation.target);
 			if (!element) throw new Error(`No element matches ${operation.target}`);
 			const execute = (event?: Event) => {
+				if (!domState.active) return false;
 				try {
-					if (++events.used > 200) throw new Error('Reset the demo to replenish its event budget');
+					if (++events.used > 200) {
+						stopDOM();
+						throw new Error('Reset the demo to replenish its event budget');
+					}
 					if (!operation.method) {
 						if (!event) throw new Error('Event observation requires a dispatched event');
-						const receipt = platformEventReceipt(event);
+						const receipt = { ...platformEventReceipt(event), ...(operation.label ? { label: substitute(operation.label).slice(0, 100) } : {}) };
 						observed.push(receipt);
-						if (observed.length > 10) observed.shift();
+						if (observed.length > 20) observed.shift();
 						reportDOM(true, { event: receipt });
+						afterDispatch(event, receipt);
 						return true;
 					}
 					const args = (operation.args || []).map((value) => {
@@ -100,12 +132,19 @@ addEventListener('message', (event) => {
 					if (operation.method === 'setAttribute' && /^(on|src|href|srcdoc|action|formaction|is|nonce|pattern)/i.test(String(args[0])))
 						throw new Error('Attribute is not writable by this control');
 					const result = nativeDOMMethod(element, operation.method)(...args);
-					const outcome = { method: operation.method, result: typeof result === 'object' ? String(result) : result ?? null,
-						...(observed.length ? { events: [...observed] } : {}) };
+					if (!domState.active) return false;
+					const outcome = {
+						method: operation.method,
+						result: typeof result === 'object' ? String(result) : result ?? null,
+						...(observed.length ? { events: [...observed] } : {})
+					};
 					reportDOM(true, outcome);
 					return true;
 				} catch (e) {
-					reportDOM(false, e instanceof Error ? e.message : 'DOM operation failed');
+					if (e instanceof UnsupportedDOMFeature) {
+						stopDOM();
+						reportDOM(true, { status: 'unsupported', message: e.message });
+					} else reportDOM(false, e instanceof Error ? e.message : 'DOM operation failed');
 					return false;
 				}
 			};
@@ -113,7 +152,7 @@ addEventListener('message', (event) => {
 				const [selector, eventName] = operation.event.split('|');
 				const trigger = root.querySelector(selector);
 				if (!trigger) throw new Error('Invalid event binding');
-				listen.call(trigger, eventName, execute);
+				unbind.push(bindLiveDOMEvent(trigger, eventName, operation, input, execute));
 			} else immediate.push(execute);
 		}
 		// Observers are ready even when declared after an immediate operation.
@@ -155,7 +194,10 @@ addEventListener('message', (event) => {
 		const stop = runPlatformWorker(
 			worker,
 			input,
-			send,
+			(ok, value) => {
+				lastDOMResult = undefined;
+				send(ok, value);
+			},
 			() => {
 				bridge?.stop();
 				URL.revokeObjectURL(url);
@@ -164,7 +206,9 @@ addEventListener('message', (event) => {
 		);
 		addEventListener('pagehide', stop, { once: true });
 	} catch (e) {
-		send(false, e instanceof Error ? e.message : 'Invalid platform program');
+		stopDOM();
+		if (e instanceof UnsupportedDOMFeature) send(true, { status: 'unsupported', message: e.message });
+		else send(false, e instanceof Error ? e.message : 'Invalid platform program');
 	}
 });
 parent.postMessage({ type: 'tt-platform-ready' }, '*');

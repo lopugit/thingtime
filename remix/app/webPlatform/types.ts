@@ -20,6 +20,21 @@ export type Feature = {
 };
 export type PlatformNode = string | { tag: string; attributes?: Record<string, string | number | boolean>; children?: PlatformNode[] };
 export type PlatformExpression = { op: string; [key: string]: unknown };
+export type PlatformBooleanInput = boolean | { op: 'input'; name: string };
+export type PlatformDOMBinding = {
+	target: string;
+	event?: string;
+	method?: string;
+	args?: unknown[];
+	label?: string;
+	/** IDL handler properties have native replacement and return-false semantics. */
+	binding?: 'listener' | 'handler';
+	options?: { capture?: PlatformBooleanInput; once?: PlatformBooleanInput; passive?: PlatformBooleanInput };
+	preventDefault?: PlatformBooleanInput;
+	stopPropagation?: PlatformBooleanInput;
+	stopImmediatePropagation?: PlatformBooleanInput;
+	returnFalse?: PlatformBooleanInput;
+};
 /** Native destructuring authoring. A string is a binding identifier; expression
  * references are accepted only in assignment patterns. Rest is a separate last
  * target, and null array entries represent elisions. */
@@ -46,7 +61,7 @@ export type PlatformProgram = {
 	// to an isolated, terminable worker; it never executes in the account origin.
 	/** Omit method to observe a real event. A top-level {op: 'element', selector}
 	 * argument references an element inside this program's rendered surface. */
-	dom?: { target: string; event?: string; method?: string; args?: unknown[] }[];
+	dom?: PlatformDOMBinding[];
 	probe?: { kind: 'element' | 'attribute' | 'css' | 'selector' | 'interface'; name: string; value?: string; target?: string };
 };
 export type Recipe = { program: PlatformProgram; coverage: 'interactive' | 'inspection' | 'requires-context'; note: string };

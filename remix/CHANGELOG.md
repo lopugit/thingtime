@@ -68,6 +68,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-27 — Reusable live HTML event programs
+
+- Add 107 editable HTML/GlobalEventHandlers examples with native listener options,
+  IDL handler properties, propagation/cancellation controls and bounded event traces.
+  Interactive coverage reaches 3,184 entries; the full catalogue remains incomplete.
+- Report cancellation after native dispatch, clean up failed/exhausted bindings,
+  and preserve ordinary private Component save/reopen behavior. Existing sandbox
+  restrictions remain unchanged. Catalogue/client contract: 1.21.0.
+
+
 - 2026-09-27 — **Codex (AI)**: Added 132 reusable Web IDL dictionary, field,
   enum and callback programs for events, files, fetch metadata, decoding,
   geometry and stream lifecycles. Interactive coverage reaches 3,077 entries.
