@@ -8652,6 +8652,23 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   workbench, reopen/reload and reuse on a Builder page. Context, event bindings,
   element arguments and defaults persist exactly; anonymous reads return 404.
 
+### Authored native menus (2026-09-27)
+
+- Open a saved tt-menu at desktop and 390px near a viewport edge. Its popup
+  must stay inside the viewport without resizing the surrounding card/grid.
+  Edit its trigger SVG and item styles; scoped colors and spacing still apply.
+- Arrow keys, Home/End and typing move among enabled items; Space/Enter activate.
+  Escape restores trigger focus. Clicking outside or opening another menu closes
+  the old menu. A disabled/inert trigger cannot open or dispatch an Action.
+- Choose a saved Action and an app link; they keep the same Component runtime,
+  form boundary and page identity. Open a tt-dialog from a menu: the menu closes,
+  the modal stays visible, its Action still works, and dismissal restores focus.
+  Test nested menu dialogs again after rerender/navigation and in Builder view.
+- Bind closeDisabled to pending in a menu dialog. During a delayed save, Close
+  and Escape cannot dismiss it; success still closes it. With two closed sibling
+  dialogs sharing that Action, only the open dialog may restore trigger focus.
+
+- Type text and spaces in a dialog opened from a menu: menu keyboard handling must not intercept modal input or move its focus.
 ### Web Platform ECMAScript receivers (2026-09-27)
 
 - Run the receiver/prototype programs in the served opaque browser runtime.
