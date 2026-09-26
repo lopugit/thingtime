@@ -18,7 +18,9 @@ export type Feature = {
 	returns?: string;
 	arguments?: { name: string; type: string; optional: boolean; variadic: boolean }[];
 };
-export type PlatformNode = string | { tag: string; attributes?: Record<string, string | number | boolean>; children?: PlatformNode[] };
+export type PlatformNode =
+	| string
+	| { tag: string; namespace?: 'svg'; attributes?: Record<string, string | number | boolean>; children?: PlatformNode[] };
 export type PlatformExpression = { op: string; [key: string]: unknown };
 export type PlatformBooleanInput = boolean | { op: 'input'; name: string };
 export type PlatformDOMBinding = {

@@ -4,6 +4,7 @@ import { runPlatformWorker } from './workerLifecycle';
 import { inspectPlatformInterface } from './interfaceProbe';
 import { createPlatformDOMBridge } from './domBridge';
 import { canvasArgument, CANVAS_LIMITS } from './canvasSupport';
+import { SVG_NAMESPACE, SVG_LIMITS, svgTag, svgAttribute } from './svgSupport';
 import { bindLiveDOMEvent, nativeDOMMethod, platformEventReceipt, UnsupportedDOMFeature } from './liveDOM';
 import { localPlatformResource } from './mediaPolicy';
 import { readMediaProperty, writeMediaProperty, mediaReceipt, mediaMethodResult } from './liveMedia';
@@ -42,6 +43,7 @@ addEventListener('message', (event) => {
 		let nodes = 0;
 		let mediaNodes = 0;
 		let canvasNodes = 0;
+		let svgNodes = 0;
 		const substitute = (value: unknown) =>
 			typeof value === 'string'
 				? value.replace(/\[\[([A-Za-z_][A-Za-z0-9_]*)\]\]/g, (_, name) =>
@@ -49,18 +51,25 @@ addEventListener('message', (event) => {
 				  )
 				: String(value);
 		const blocked = new Set(['script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'base', 'link', 'meta', 'style']);
-		const render = (node: PlatformNode, depth = 0): Node => {
+		const render = (node: PlatformNode, depth = 0, inheritedSVG = false): Node => {
 			if (++nodes > 300 || depth > 20) throw new Error('Document exceeds its rendering budget');
 			if (typeof node === 'string') return document.createTextNode(substitute(node));
-			if (!node || typeof node !== 'object' || typeof node.tag !== 'string' || !/^[a-z][a-z0-9-]{0,40}$/.test(node.tag) || blocked.has(node.tag))
+			if (!node || typeof node !== 'object' || typeof node.tag !== 'string') throw new Error('Invalid document element');
+			if (node.namespace !== undefined && node.namespace !== 'svg') throw new Error('Unregistered document namespace');
+			const svg = inheritedSVG || node.namespace === 'svg' || node.tag === 'svg';
+			if (svg) {
+				svgTag(node.tag);
+				if (++svgNodes > SVG_LIMITS.nodes) throw new Error('Document exceeds its SVG budget');
+			} else if (!/^[a-z][a-z0-9-]{0,40}$/.test(node.tag) || blocked.has(node.tag))
 				throw new Error('This document element needs a dedicated browsing context');
 			if (['audio', 'video'].includes(node.tag) && ++mediaNodes > 8) throw new Error('Document exceeds its media budget');
 			if (node.tag === 'canvas' && ++canvasNodes > CANVAS_LIMITS.canvases) throw new Error('Document exceeds its Canvas budget');
-			const el = document.createElement(node.tag);
+			const el = svg ? document.createElementNS(SVG_NAMESPACE, node.tag) : document.createElement(node.tag);
 			for (const [key, value] of Object.entries(node.attributes || {})) {
 				if (/^on/i.test(key) || ['srcdoc', 'is', 'nonce', 'action', 'formaction', 'ping', 'autofocus', 'pattern'].includes(key.toLowerCase()))
 					throw new Error('Use declarative events and local document attributes');
 				const val = substitute(value);
+				if (svg) svgAttribute(node.tag, key, val);
 				if (node.tag === 'canvas' && ['width', 'height'].includes(key.toLowerCase()))
 					canvasArgument(Number(val), 'canvas-size', () => {
 						throw new Error('No handle');
@@ -70,7 +79,7 @@ addEventListener('message', (event) => {
 				if (value === false) continue;
 				el.setAttribute(key, value === true ? '' : val);
 			}
-			for (const child of node.children || []) appendNode.call(el, render(child, depth + 1));
+			for (const child of node.children || []) appendNode.call(el, render(child, depth + 1, svg));
 			return el;
 		};
 		for (const node of program.document || []) root.appendChild(render(node));
@@ -159,6 +168,8 @@ addEventListener('message', (event) => {
 						}
 						return typeof value === 'string' ? substitute(value) : value;
 					});
+					if (operation.method === 'setAttribute' && element.namespaceURI === SVG_NAMESPACE)
+						svgAttribute(element.localName, String(args[0]), String(args[1]));
 					if (operation.method === 'setAttribute' && element instanceof HTMLCanvasElement && /^(width|height)$/i.test(String(args[0])))
 						canvasArgument(Number(args[1]), 'canvas-size', () => {
 							throw new Error('No handle');
