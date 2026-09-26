@@ -68,6 +68,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-26 — **Codex (AI)**: Web standards adds 158 editable detached-DOM
+  examples through reusable program operations: native document/element/text
+  receivers, node collections, attributes and class tokens. Run-local handles,
+  native member policies and shared execution/allocation limits preserve the
+  isolated runtime. Private API round trips and browser mutation/refusal checks
+  cover the new path. Full platform demo coverage remains unfinished; these
+  examples do not provide a live window/layout context. Details:
+  [PR #909](../PRs/909-codex-web-standards-dom-receivers-add-reusable-dom-receivers-to-web-standards-programs.md).
+
+- 2026-09-26 — **Codex (AI)**: Web standards edited draft saving. The authored
+  save Action keeps the full program and current input defaults in a private
+  reusable Component. Added bounded JSON Action inputs and preserved literal
+  program data across Component rendering. Invalid drafts cannot save an older
+  snapshot; resolved defaults and nested calls obey input byte limits. Details:
+  [PR #908](../PRs/908-codex-web-standards-save-drafts-save-edited-web-standards-examples-as-reusable-components.md).
+
 - 2026-09-24 — **Codex (AI)**: Web standards language programs. Added reusable
   class/function/generator, template and control-flow nodes with 28 authored
   recipes (25 additional interactive entries). Interface inspection now reads
@@ -84,6 +100,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   cancellation and closure. Browser support remains independently reported;
   no runtime permission or account access is added. See the
   [PR #902 validation note](../PRs/902-codex-web-standards-events-streams-add-reusable-event-and-stream-lifecycle-demos.md).
+
+- 2026-09-23 — **Codex (AI)**: Complete saved planner date, filter and move bindings with reusable change/drag controls. Split the planner controls and days into editable Components, group daily visits once, preserve the original page-size choices and cancel delayed field changes when their binding changes. Local fixture requests now time out and negotiate Action protocol 1.11. See [PR #899 implementation and validation notes](../PRs/899-codex-builder-portable-app-programs-compose-editable-planner-and-themed-collections.md).
+
+- 2026-09-23 — **Codex (AI)**: Add inherited Component theme tokens, instance-scoped CSS rules, deferred editable collection rows and configurable dialog/selection behavior. Builder app authoring uses the original HQ styles and saved relationship calculations. Copying preserves row Actions, media and dialog completion references. Index/group expressions negotiate Action protocol 1.11; production HQ data migration remains a separate reviewed operation.
+
+- 2026-09-23 — **Codex (AI)**: Normalize Builder app record titles once and use shared field descriptors so each saved Action fits the existing signed mutation preview. Preserve reference permissions, archived labels, zero values, and empty text.
 
 - 2026-09-23 — **Codex (AI)**: Add 248 reusable Web API member demos for URLs,
   collections, blobs/files, fetch objects and bodies, encoding, exceptions and

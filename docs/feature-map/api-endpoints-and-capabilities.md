@@ -107,3 +107,9 @@ HTTP catch-all checks `expectedActor.ts` before endpoint execution. Browser
 transport/interpreter live in `components/Actions/browserActionHost.ts` and
 `browserActionRuntime.ts`; no endpoint-specific UI behavior lives there.
 See [authoring and verification](../builder-browser-actions.md).
+
+JSON Action inputs and Web standards draft saving add `api.things` 1.33.0,
+`api.things-update` 1.10.0, `api.actions-run` 1.12.0 and
+`api.webpages-suites-install` 1.3.0. Both manifests and client negotiation cover
+these versions. Input validation includes resolved defaults and child calls;
+see the JSON input section in the browser Action contract above.

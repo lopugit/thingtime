@@ -174,8 +174,9 @@ export const coerceValueText = (raw: string): unknown => {
 // '42' (or 'true') stays text. Incongruent leftovers (e.g. 'abc' on a number
 // input) pass through as text so the save fails with the grammar's message
 // instead of silently mislabeling.
-export const coerceInputDefault = (raw: string, type: string): string | number | boolean => {
+export const coerceInputDefault = (raw: string, type: string): unknown => {
 	const text = raw.trim();
+	if (type === 'json') return JSON.parse(text);
 	if (type === 'number') {
 		const coerced = coerceValueText(text);
 		return typeof coerced === 'number' ? coerced : text;

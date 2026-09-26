@@ -959,7 +959,7 @@ export function useApi() {
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => {
-          await requireThingtimeCapability('api.things', '1.27.0');
+          await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.31.0' : '1.27.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
         },
@@ -995,7 +995,9 @@ export function useApi() {
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
           if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
-          if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
+          if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things-update', '1.10.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
+          else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           return asyncFetcher.submit(
             {
@@ -1068,7 +1070,9 @@ export function useApi() {
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
           if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
-          if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
+          if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things', '1.33.0');
+          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
+          else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
           if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
@@ -1449,7 +1453,7 @@ export function useApi() {
       // path in every browser while the API-level battery stayed green.
       run: useCallback(async (args) => {
         const actor = actionActor.current;
-        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        await requireThingtimeCapability('api.actions-run', '1.13.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor });
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');

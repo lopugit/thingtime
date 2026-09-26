@@ -65,3 +65,58 @@ test('success, browser errors and cancellation release the worker exactly once',
 		assert.deepEqual(f.cleanup(), [1, 1]);
 	}
 });
+
+test('DOM requests share the execution deadline and cannot resume a stopped worker', (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	const calls: unknown[] = [],
+		messages: unknown[] = [],
+		results: unknown[] = [];
+	let cleaned = 0;
+	const worker: any = { onmessage: null, onerror: null, terminate: () => {}, postMessage: (data: unknown) => messages.push(data) };
+	const stop = runPlatformWorker(
+		worker,
+		{},
+		(ok, result) => results.push({ ok, result }),
+		() => cleaned++,
+		(request) => {
+			calls.push(request);
+			return { value: 42 };
+		}
+	);
+	const request = { type: 'tt-platform-dom', id: 1 };
+	worker.onmessage({ data: request });
+	assert.equal(calls.length, 0);
+	worker.onmessage({ data: { type: 'tt-platform-worker-ready' } });
+	t.mock.timers.tick(1999);
+	worker.onmessage({ data: request });
+	assert.deepEqual(messages[1], { type: 'tt-platform-dom-result', id: 1, ok: true, result: { value: 42 } });
+	assert.deepEqual(results, []);
+	t.mock.timers.tick(1);
+	worker.onmessage({ data: request });
+	assert.equal(calls.length, 1);
+	assert.equal(results.length, 1);
+	stop();
+	assert.equal(cleaned, 1);
+});
+
+test('DOM policy failures end execution and release resources once', () => {
+	let cleaned = 0;
+	const messages: unknown[] = [],
+		results: unknown[] = [];
+	const worker: any = { onmessage: null, onerror: null, terminate: () => {}, postMessage: (data: unknown) => messages.push(data) };
+	runPlatformWorker(
+		worker,
+		{},
+		(ok, result) => results.push({ ok, result }),
+		() => cleaned++,
+		() => {
+			throw new Error('Stale DOM handle');
+		}
+	);
+	worker.onmessage({ data: { type: 'tt-platform-worker-ready' } });
+	worker.onmessage({ data: { type: 'tt-platform-dom', id: 1 } });
+	worker.onmessage({ data: { ok: true, result: 'late' } });
+	assert.deepEqual(results, [{ ok: false, result: 'Stale DOM handle' }]);
+	assert.equal(messages.length, 1);
+	assert.equal(cleaned, 1);
+});

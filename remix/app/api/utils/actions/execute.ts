@@ -1,3 +1,4 @@
+import { validateRunInputs } from './actionInputs';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import { capabilitySatisfies } from '../capabilities/capabilityContract';
 import type { PreparedBrowserAction } from '~/schemas/browserActions';
@@ -243,64 +244,6 @@ const resolveActionProgram = async (
 
 // ── input validation ────────────────────────────────────────────────────────
 
-const validateRunInputs = (
-	descriptors: Record<string, unknown>[],
-	provided: unknown
-): Fail | { ok: true; inputs: Record<string, unknown> } => {
-	if (provided !== undefined && provided !== null && (typeof provided !== 'object' || Array.isArray(provided))) {
-		return fail(400, 'inputs must be an object of input values');
-	}
-	const raw = (provided || {}) as Record<string, unknown>;
-	const inputs: Record<string, unknown> = {};
-	for (const descriptor of descriptors) {
-		const name = String(descriptor.name);
-		const type = String(descriptor.type);
-		// Own-property gate, same posture as resolvePath above. Input NAMES are
-		// only pattern-checked (COMPONENT_ARG_NAME_PATTERN), so an action may
-		// declare one that collides with an Object.prototype member. A bare
-		// `raw[name]` then reads through the prototype chain of the caller's JSON
-		// object: an omitted `constructor` arrives as the native Object function
-		// rather than undefined, so the descriptor's default never applies, the
-		// "is required" refusal never fires (the type check rejects it first with
-		// a misleading message), and `$input.<name>` hands a native function to a
-		// step value. $step paths are already gated both ways (banned segments in
-		// parseActionRef + hasOwnProperty in resolvePath); $input is now too.
-		let value = Object.prototype.hasOwnProperty.call(raw, name) ? raw[name] : undefined;
-		if (value === '' && descriptor.required === true) return fail(400, `Input ${name} is required`);
-		if (value === undefined || value === null || (value === '' && type !== 'string' && type !== 'text')) {
-			if (descriptor.default !== undefined) value = descriptor.default;
-			else if (descriptor.required === true) return fail(400, `Input ${name} is required`);
-			else continue;
-		}
-		if (type === 'number') {
-			const num = typeof value === 'number' ? value : Number(value);
-			if (!Number.isFinite(num)) return fail(400, `Input ${name} must be a number`);
-			if (typeof descriptor.min === 'number' && num < descriptor.min) return fail(400, `Input ${name} min is ${descriptor.min}`);
-			if (typeof descriptor.max === 'number' && num > descriptor.max) return fail(400, `Input ${name} max is ${descriptor.max}`);
-			inputs[name] = num;
-		} else if (type === 'boolean') {
-			inputs[name] = value === true || value === 'true' || value === 'on' || value === 1 || value === '1';
-		} else if (type === 'enum') {
-			const values = Array.isArray(descriptor.values) ? descriptor.values.map(String) : [];
-			const candidate = String(value);
-			if (!values.includes(candidate)) return fail(400, `Input ${name} must be one of ${values.join(', ')}`);
-			inputs[name] = candidate;
-		} else {
-			// text inputs accept scalars from form controls (a number input's
-			// value arrives as text anyway; a boolean is coerced to its word)
-			const text = typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : null;
-			if (text === null) return fail(400, `Input ${name} must be text`);
-			const maxLength = typeof descriptor.maxLength === 'number' ? descriptor.maxLength : 2000;
-			if (text.length > maxLength) return fail(400, `Input ${name} caps at ${maxLength} characters`);
-			inputs[name] = text;
-		}
-	}
-	const declared = new Set(descriptors.map((descriptor) => String(descriptor.name)));
-	const unknown = Object.keys(raw).find((key) => !declared.has(key));
-	if (unknown) return fail(400, `Unknown input "${unknown.slice(0, 40)}"`);
-	return { ok: true, inputs };
-};
-
 // ── reference resolution ────────────────────────────────────────────────────
 
 type StepScope = {
@@ -528,8 +471,12 @@ const executeProgram = async (
 				if (isFail(resolved)) runError(`Step ${label} invoke failed: ${resolved.error}`);
 				child = resolved as ActionProgram;
 			}
+			const declaredInputCap = (child.crystal.limits as Record<string, unknown> | undefined)?.maxInputBytes;
+			const childInputCap = Math.min(budget.maxInputBytes, typeof declaredInputCap === 'number' && Number.isFinite(declaredInputCap) ? declaredInputCap : ACTION_LIMIT_DEFAULTS.maxInputBytes);
+			if (jsonBytes(rawInputs ?? {}) > childInputCap) runError(`Step ${label} invoke inputs exceed the ${childInputCap}-byte cap`);
 			const childInputs = validateRunInputs(child.inputs, rawInputs);
 			if (isFail(childInputs)) runError(`Step ${label} invoke inputs invalid: ${childInputs.error}`);
+			if (childInputs.ok && jsonBytes(childInputs.inputs) > childInputCap) runError(`Step ${label} resolved inputs exceed the ${childInputCap}-byte cap`);
 			const result = await executeProgram(viewer, child, (childInputs as { ok: true; inputs: Record<string, unknown> }).inputs, budget, label);
 			return { program: child, result };
 		};
@@ -952,6 +899,7 @@ export const runAction = async (
 	}
 	const validated = validateRunInputs(program.inputs, request.inputs);
 	if (isFail(validated)) return validated;
+	if (jsonBytes(validated.inputs) > limits.maxInputBytes) return fail(413, `Resolved inputs exceed this action's ${limits.maxInputBytes}-byte cap`);
 	if (program.crystal.runtime === 'browser') {
 		if (shared || program.ownerId !== viewer.id || viewer.pat || context?.firstPartyActorId !== viewer.id) return fail(403, 'Browser flows require your own Action and a first-party session');
 		if (request.execution !== 'browser') return fail(409, 'This Action runs in the browser. Use a client supporting api.actions-run 1.7.0');

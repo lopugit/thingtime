@@ -4,6 +4,7 @@ import { controllerApiRecipe } from './controllerFixtures';
 import { parameter, base, recipe } from './programBuilders';
 import { javascriptRecipe } from './javascriptRecipes';
 import { workerApiRecipe } from './webApiFixtures';
+import { domApiRecipe } from './domFixtures';
 import type { Feature, PlatformNode, Recipe } from './types';
 const node = (tag: string, children: PlatformNode[] = [], attributes: Record<string, string | number | boolean> = {}): PlatformNode => ({
 	tag,
@@ -398,7 +399,7 @@ function cssRecipe(f: Feature): Recipe {
 }
 
 function webApiRecipe(f: Feature): Recipe {
-	const worked = eventApiRecipe(f) || streamApiRecipe(f) || controllerApiRecipe(f) || workerApiRecipe(f);
+	const worked = domApiRecipe(f) || eventApiRecipe(f) || streamApiRecipe(f) || controllerApiRecipe(f) || workerApiRecipe(f);
 	if (worked) return worked;
 	const p = base(f),
 		name = f.interface || f.name;

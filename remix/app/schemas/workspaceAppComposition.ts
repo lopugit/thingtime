@@ -3,7 +3,8 @@
 // independently editable, copyable JSON. Legacy endpoint names are compatibility
 // details; they do not create a new application kind.
 import { deriveRequiredCapabilities } from '../components/Actions/actionInspect';
-import { SERVICE_FIELDS, SERVICE_KINDS, SERVICE_LABELS } from './serviceWorkspace';
+import { styledApp, icon } from './workspaceAppAppearance';
+import { SERVICE_FIELDS, SERVICE_KINDS, SERVICE_LABELS, SERVICE_SINGULAR } from './serviceWorkspace';
 
 type Json = any;
 const e = (tag: string, children: Json[] = [], props: Json = {}): Json => ({ tag, props, children });
@@ -21,12 +22,15 @@ const grid = { display: 'grid', gap: '12px', minWidth: 0 };
 const row = { display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' };
 const inputStyle = { width: '100%', minWidth: 0, padding: '10px', border: '1px solid #cbd5cd', borderRadius: '8px', boxSizing: 'border-box' };
 const cardStyle = { ...grid, padding: '18px', border: '1px solid #dce5df', borderRadius: '14px', background: '#fff', overflowWrap: 'anywhere' };
-const link = (label: string, href: string): Json =>
-	e('a', [label], { href, style: { color: '#24583d', textDecoration: 'underline', padding: '5px 0' } });
+const link = (label: string, href: string, className?: string): Json =>
+	e('a', [label], {
+		href: /view=(new-|edit)/.test(href) ? href + '&returnView={result.screenView}&returnId={result.record.id}' : href,
+		...(className ? { className } : {})
+	});
 const button = (label: string, action: string, inputs: Json = {}): Json => ({
 	...e('button', [label], {
 		type: 'button',
-		style: { padding: '10px 14px', border: '1px solid #bacdbf', borderRadius: '8px', background: '#eff6f0' }
+		className: ''
 	}),
 	ttAction: action,
 	ttActionInputs: inputs
@@ -69,7 +73,23 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 	const source = {
 		action: key('read'),
 		inputs: Object.fromEntries(
-			['view', 'id', 'page', 'q', 'date', 'status', 'employee', 'period', 'mediaCursor', 'related', 'relatedPage', 'parentId', 'copyId', 'threadId']
+			[
+				'view',
+				'id',
+				'page',
+				'q',
+				'date',
+				'status',
+				'employee',
+				'period',
+				'mediaCursor',
+				'related',
+				'relatedPage',
+				'parentId',
+				'copyId',
+				'threadId',
+				'returnView'
+			]
 				.map((name) => [name, `{query.${name}}`])
 				.concat([['rootId', '{rootId}']])
 		),
@@ -82,51 +102,168 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				name,
 				actionKey: key(name),
 				runtime: 'browser',
-				...(['read', 'set-field'].includes(name) ? { expressionLimits: { nodes: 1000000, listItems: 5000 } } : {}),
+				...(['read', 'snapshot', 'set-field', 'reorder'].includes(name) ? { expressionLimits: { nodes: 1000000, listItems: 5000 } } : {}),
 				inputs,
 				capabilities: deriveRequiredCapabilities(steps),
 				limits: { timeoutMs: 30000, maxOperations: 100, maxChildActions: 20, maxResultBytes: 4194304 },
 				steps
 			}
 		});
-	const component = (name: string, label: string, children: Json[], view?: string) =>
+	const component = (name: string, label: string, children: Json[], view?: string) => {
+		const body = e('div', children, {
+			...(name === 'planner-board' ? { style: { paddingTop: 0 } } : {}),
+			className: name === 'navigation' || name === 'footer' || name.startsWith('form-') ? '' : 'sw-main'
+		});
 		definitions.push({
 			thingtime: ['component'],
 			crystal: {
 				name: label,
 				componentKey: key(name),
-				description: 'Editable Builder composition. Layout, labels, fields and Action bindings are saved in this Component.',
+				description: 'Editable Builder composition. Layout, styles, fields and Action bindings are saved in this Component.',
 				args: [s('rootId', { default: rootId }), s('pagePath', { default: '' })],
 				source,
-				render: e('section', view ? [equal('result.view', view, e('div', children, { style: grid }))] : children, {
-					style: { ...grid, color: '#203e2c', fontFamily: 'system-ui, sans-serif' }
-				})
+				render: styledApp(e('section', view ? [equal('result.screenView', view, body)] : [body], { className: 'service-workspace' }))
 			}
 		});
-	const editable = test('result.canEdit', link('Edit', '{pagePath}?view=edit&id={item.id}'));
+	};
+	const buttonLink = (label: string, href: string, primary = false) => link(label, href, 'sw-link-button' + (primary ? ' sw-primary' : ''));
+	const heading = (label: string, add?: Json) =>
+		e(
+			'div',
+			[e('div', [e('p', ['{result.dateLabel}'], { className: 'sw-eyebrow' }), e('h2', [label])]), ...(add ? [test('result.canEdit', add)] : [])],
+			{ className: 'sw-page-heading' }
+		);
+	const createLink = (label: string, kind: string) => ({
+		...buttonLink(label, `{pagePath}?view=new-${kind}`, true),
+		children: [icon('plus', 16), label]
+	});
+	const recordMenu = test(
+		'result.canEdit',
+		test(
+			'item.values.workspaceOwner',
+			'',
+			e(
+				'details',
+				[
+					e('summary', ['•••'], { 'aria-label': 'Options for {item.title}' }),
+					e('nav', [
+						link('Edit', '{pagePath}?view=edit&id={item.id}'),
+						equal('item.kind', 'member', '', link('Duplicate', '{pagePath}?view=new-{item.kind}&copyId={item.id}')),
+						e(
+							'tt-dialog',
+							[
+								e('p', ['Move this record to Trash? Related history is preserved.']),
+								button('Delete', key('archive'), { rootId: '{rootId}', id: '{item.id}', expectedUpdatedAt: '{item.updatedAt}' })
+							],
+							{ name: 'Delete', title: 'Move to Trash', closeOnAction: key('archive') }
+						)
+					])
+				],
+				{ className: 'sw-record-menu' }
+			)
+		)
+	);
+	const recordContext = e(
+		'span',
+		[
+			each(
+				'item.context',
+				e(
+					'span',
+					[
+						{ ttMap: { arg: 'item.icon', values: Object.fromEntries(['address', 'customer', 'member'].map((kind) => [kind, icon(kind, 14)])) } },
+						e('span', ['{item.text}'])
+					],
+					{ className: 'sw-context-row' }
+				),
+				''
+			)
+		],
+		{ className: 'sw-job-context' }
+	);
 	const recordCard = e(
 		'article',
 		[
-			test(
-				'item.values.thumbnailId',
-				e('img', [], {
-					src: '/api/v1/attachments/content?id={item.values.thumbnailId}',
-					alt: '',
-					loading: 'lazy',
-					style: { width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px' }
-				})
+			e(
+				'a',
+				[
+					test(
+						'item.avatar',
+						e(
+							'span',
+							[
+								test(
+									'item.values.thumbnailId',
+									e('img', [], { src: '/api/v1/attachments/content?id={item.values.thumbnailId}', alt: '', loading: 'lazy' }),
+									'{item.initials}'
+								)
+							],
+							{ className: 'sw-avatar sw-avatar-{item.kind}' }
+						)
+					),
+					e('span', [e('strong', ['{item.title}']), e('small', ['{item.subtitle}']), recordContext])
+				],
+				{ href: '{pagePath}?view=detail&id={item.id}&returnView={result.screenView}', className: 'sw-record-main' }
 			),
-			e('strong', ['{item.title}']),
-			e('span', ['{item.values.date} {item.values.time} · {item.values.status}']),
-			e('p', ['{item.values.description}']),
-			e('div', [link('Open', '{pagePath}?view=detail&id={item.id}'), editable], { style: row })
+			recordMenu
 		],
-		{ style: cardStyle }
+		{ className: 'sw-record' }
 	);
-	const mapRecords = (list: Json) => x('map', list, x('merge', '$item', { title: title('$item') }));
-	const activeKind = (kind: string) => x('filter', '$step.1.records', x('and', x('eq', '$item.kind', kind), x('not', '$item.values.archived')));
-	const related = (kind: string, predicate: Json) => x('filter', `$step.6.${kind}`, predicate);
-	const matchesRecord = (field: string) => x('eq', `$item.values.${field}`, '$step.2.id');
+	const collection = (path: string, label: string, empty: string, compact = false) =>
+		e('tt-collection', [], {
+			itemsPath: path,
+			label,
+			empty,
+			className: compact ? 'sw-record-list' : 'sw-record-grid',
+			itemTemplate: { ttTemplate: recordCard },
+			filters: [
+				{ path: 'values.status', label: 'Status' },
+				{ path: 'values.category', label: 'Category' },
+				{ path: 'values.role', label: 'Role' },
+				{ path: 'employeeName', label: 'Employee' }
+			]
+		});
+	const visitPanel = (label: string, path: string, count: string) =>
+		e(
+			'section',
+			[
+				e('div', [e('h2', [label, e('span', [`{result.${count}}`], { className: 'sw-count' })])], { className: 'sw-section-heading' }),
+				collection(path, label, `No ${label.toLowerCase()} yet.`, true)
+			],
+			{ className: 'sw-panel' }
+		);
+	const mapRecords = (list: Json) =>
+		x(
+			'map',
+			list,
+			x('merge', '$item', {
+				title: title('$item'),
+				avatar: x('includes', ['customer', 'address', 'equipment'], '$item.kind'),
+				initials: x('upper', x('slice', title('$item'), 0, 2)),
+				subtitle: x(
+					'get',
+					{
+						customer: x(
+							'join',
+							x('filter', ['$item.values.contact', x('coalesce', '$item.values.email', '$item.values.phone')], x('not', x('isEmpty', '$item'))),
+							' · '
+						),
+						address: '$item.values.address',
+						job: x('if', '$item.values.estimatedMinutes', x('concat', '$item.values.estimatedMinutes', ' min estimated'), 'Job template'),
+						visit: x('join', x('filter', ['$item.values.date', '$item.values.time', '$item.values.status'], x('not', x('isEmpty', '$item'))), ' · '),
+						equipment: x('join', x('filter', ['$item.values.category', '$item.values.serialNumber'], x('not', x('isEmpty', '$item'))), ' · '),
+						member: '$item.values.role',
+						time: x('concat', '$item.values.minutes', ' minutes'),
+						subjob: '$item.values.description'
+					},
+					'$item.kind',
+					''
+				)
+			})
+		);
+	const activeKind = (kind: string) => x('filter', '$step.2.records', x('and', x('eq', '$item.kind', kind), x('not', '$item.values.archived')));
+	const related = (kind: string, predicate: Json) => x('filter', `$step.7.${kind}`, predicate);
+	const matchesRecord = (field: string) => x('eq', `$item.values.${field}`, '$step.3.id');
 	const linkedIds = (field: string, idField: string) => x('map', related('link', matchesRecord(field)), `$item.values.${idField}`);
 	// Resolve joins once per selected record. Every candidate comes from the
 	// server's role-filtered snapshot; no reference can fetch hidden records.
@@ -136,7 +273,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			key: 'properties',
 			label: 'Properties',
 			kind: 'address',
-			match: x('includes', '$step.12.addressIds', '$item.id'),
+			match: x('includes', '$step.13.addressIds', '$item.id'),
 			create: 'link',
 			createLabel: 'Link property'
 		},
@@ -146,12 +283,12 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			key: 'customers',
 			label: 'Customers',
 			kind: 'customer',
-			match: x('includes', '$step.12.customerIds', '$item.id'),
+			match: x('includes', '$step.13.customerIds', '$item.id'),
 			create: 'link',
 			createLabel: 'Link customer'
 		},
 		{ owner: 'address', key: 'jobs', label: 'Jobs', kind: 'job', match: matchesRecord('addressId'), create: 'job', createLabel: 'Create job' },
-		{ owner: 'address', key: 'visits', label: 'Visit history', kind: 'visit', match: x('includes', '$step.12.jobIds', '$item.values.jobId') },
+		{ owner: 'address', key: 'visits', label: 'Visit history', kind: 'visit', match: x('includes', '$step.13.jobIds', '$item.values.jobId') },
 		{ owner: 'address', key: 'links', label: 'Customer address links', kind: 'link', match: matchesRecord('addressId') },
 		{
 			owner: 'job',
@@ -178,35 +315,175 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			key: 'usage',
 			label: 'Usage history',
 			kind: 'usage',
-			match: x('includes', ['$item.values.equipmentId', '$item.values.batteryId', '$item.values.vehicleId'], '$step.2.id')
+			match: x('includes', ['$item.values.equipmentId', '$item.values.batteryId', '$item.values.vehicleId'], '$step.3.id')
 		}
 	];
-	const view = x('coalesce', '$input.view', 'overview');
+	const view = '$step.2.view';
+	const screenView = '$step.2.screenView';
+	const requestedView = x('coalesce', '$input.view', 'overview');
 	const periodDays = x('if', x('eq', '$input.period', 'day'), 1, 7);
+	const todayDate = x('concat', '$step.8.year', '-', x('padStart', '$step.8.month', 2, '0'), '-', x('padStart', '$step.8.day', 2, '0'));
+	const selectedDate = x('coalesce', '$input.date', todayDate);
+	const fieldDescriptors = Object.fromEntries(
+		SERVICE_KINDS.map((kind) => [kind, SERVICE_FIELDS[kind].map(({ key, label, ref }) => ({ key, label, ...(ref ? { ref } : {}) }))])
+	);
+	// Store field descriptors once, then resolve references from the authorized
+	// snapshot. Reusing the normalized title avoids repeating a full join three
+	// times per field in the saved Action and its signed review preview.
+	const fieldValue = x('get', '$step.3.values', '$item.key');
+	const fieldTarget = x('get', '$step.2.recordsById', fieldValue);
 	const recordFields = x(
-		'get',
-		Object.fromEntries(
-			SERVICE_KINDS.map((kind) => [
-				kind,
+		'map',
+		x('map', x('get', '$step.2.fieldDescriptors', '$step.3.kind', []), {
+			label: '$item.label',
+			ref: '$item.ref',
+			value: fieldValue,
+			target: x('if', '$item.ref', fieldTarget, null)
+		}),
+		{
+			label: '$item.label',
+			value: x(
+				'if',
+				'$item.ref',
 				x(
 					'if',
-					x('eq', '$step.2.kind', kind),
-					SERVICE_FIELDS[kind].map((field) => {
-						const value = `$step.2.values.${field.key}`;
-						const target = field.ref ? x('find', '$step.1.records', x('and', x('eq', '$item.id', value), x('eq', '$item.kind', field.ref))) : null;
-						return {
-							label: field.label,
-							value: field.ref
-								? x('if', target, x('first', x('map', [target], title('$item'))), x('if', x('isEmpty', value), '', 'Unavailable record'))
-								: value,
-							id: field.ref ? x('get', target, 'id') : null
-						};
-					}),
-					[]
+					x('and', '$item.target', x('eq', '$item.target.kind', '$item.ref')),
+					'$item.target.title',
+					x('if', x('isEmpty', '$item.value'), '', 'Unavailable record')
+				),
+				'$item.value'
+			),
+			id: x('if', x('and', '$item.target', x('eq', '$item.target.kind', '$item.ref')), '$item.target.id', null)
+		}
+	);
+	// Saved general-purpose lookup/group calculations replace the original
+	// native relationship helper. Only already-authorized snapshot rows are used.
+	const lookup = (id: Json) => x('get', '$step.3.records', id);
+	const property = x('get', '$step.3.records', '$item.contextJob.values.addressId');
+	action(
+		'snapshot',
+		[s('rootId', { required: true })],
+		[
+			req(),
+			calc(mapRecords('$step.1.records')),
+			calc({ records: x('indexBy', '$step.2', '$item.id'), team: x('indexBy', x('coalesce', '$step.1.team', []), '$item.id') }),
+			calc({
+				links: x(
+					'groupBy',
+					x(
+						'filter',
+						'$step.2',
+						x(
+							'and',
+							x('eq', '$item.kind', 'link'),
+							x('not', '$item.values.archived'),
+							'$item.values.addressId',
+							x('eq', x('get', lookup('$item.values.customerId'), 'kind'), 'customer'),
+							x('not', x('get', x('get', lookup('$item.values.customerId'), 'values'), 'archived'))
+						)
+					),
+					'$item.values.addressId'
+				),
+				visits: x(
+					'groupBy',
+					x(
+						'filter',
+						'$step.2',
+						x(
+							'and',
+							x('eq', '$item.kind', 'visit'),
+							x('not', '$item.values.archived'),
+							'$item.values.jobId',
+							'$item.values.employeeId',
+							x('ne', '$item.values.status', 'Cancelled')
+						)
+					),
+					'$item.values.jobId'
 				)
-			])
-		),
-		'$step.2.kind'
+			}),
+			calc(
+				x(
+					'map',
+					'$step.2',
+					x('merge', '$item', {
+						employeeName: x('get', x('get', '$step.3.team', '$item.values.employeeId'), 'name', ''),
+						contextJob: x('if', x('eq', '$item.kind', 'job'), '$item', lookup('$item.values.jobId'))
+					})
+				)
+			),
+			calc(
+				x(
+					'map',
+					'$step.5',
+					x('merge', x('omit', '$item', ['contextJob']), {
+						context: x(
+							'if',
+							x('includes', ['job', 'visit'], '$item.kind'),
+							{
+								property: x(
+									'if',
+									x('and', x('eq', '$item.contextJob.kind', 'job'), x('eq', x('get', property, 'kind'), 'address')),
+									x('join', x('uniq', x('filter', [x('get', property, 'title'), x('get', x('get', property, 'values'), 'address')], '$item')), ' · '),
+									'Property unavailable'
+								),
+								customers: x(
+									'join',
+									x(
+										'uniq',
+										x('map', x('get', '$step.4.links', '$item.contextJob.values.addressId', []), x('get', lookup('$item.values.customerId'), 'title'))
+									),
+									', '
+								),
+								crew: x(
+									'join',
+									x(
+										'filter',
+										x(
+											'map',
+											x(
+												'if',
+												x('eq', '$item.kind', 'visit'),
+												['$item.values.employeeId'],
+												x('uniq', x('pluck', x('map', x('get', '$step.4.visits', '$item.id', []), '$item.values'), 'employeeId'))
+											),
+											x('get', x('get', '$step.3.team', '$item'), 'name')
+										),
+										'$item'
+									),
+									', '
+								)
+							},
+							null
+						)
+					})
+				)
+			),
+			ret(
+				x('merge', '$step.1', {
+					fieldDescriptors,
+					records: x(
+						'map',
+						'$step.6',
+						x('merge', '$item', {
+							context: x(
+								'if',
+								'$item.context',
+								x(
+									'filter',
+									[
+										{ icon: 'address', text: '$item.context.property' },
+										x('if', '$item.context.customers', { icon: 'customer', text: x('concat', 'Customers: ', '$item.context.customers') }, null),
+										{ icon: 'member', text: x('concat', 'Assigned crew: ', x('coalesce', '$item.context.crew', 'Unassigned')) }
+									],
+									'$item'
+								),
+								[]
+							)
+						})
+					)
+				})
+			)
+		]
 	);
 	action(
 		'read',
@@ -226,105 +503,147 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				'relatedPage',
 				'parentId',
 				'copyId',
-				'threadId'
+				'threadId',
+				'returnView'
 			].map((name) => s(name))
 		],
 		[
-			req(),
-			calc(x('find', '$step.1.records', x('eq', '$item.id', '$input.id'))),
+			{ op: 'actions.invoke', action: key('snapshot'), inputs: { rootId: '$input.rootId' } },
+			calc(
+				x('merge', '$step.1', {
+					recordsById: x('indexBy', '$step.1.records', '$item.id'),
+					view: requestedView,
+					screenView: x(
+						'if',
+						x('or', x('startsWith', requestedView, 'new-'), x('eq', requestedView, 'edit')),
+						x('coalesce', '$input.returnView', 'overview'),
+						requestedView
+					)
+				})
+			),
+			calc(x('find', '$step.2.records', x('eq', '$item.id', '$input.id'))),
 			calc(
 				x(
 					'filter',
-					'$step.1.records',
+					'$step.2.records',
 					x(
 						'and',
 						x(
 							'if',
-							x('eq', view, 'trash'),
+							x('eq', screenView, 'trash'),
 							'$item.values.archived',
 							x(
 								'and',
 								x('not', '$item.values.archived'),
-								x('eq', '$item.kind', x('if', x('eq', view, 'planner'), 'visit', x('if', x('eq', view, 'maps'), 'address', view)))
+								x('eq', '$item.kind', x('if', x('eq', screenView, 'planner'), 'visit', x('if', x('eq', screenView, 'maps'), 'address', screenView)))
 							)
 						),
-						x('includes', x('lower', x('join', x('values', '$item.values'), ' ')), x('lower', x('coalesce', '$input.q', ''))),
+						x(
+							'includes',
+							x(
+								'lower',
+								x(
+									'concat',
+									'$item.title',
+									' ',
+									'$item.subtitle',
+									' ',
+									x('join', x('values', '$item.values'), ' '),
+									' ',
+									x('join', x('pluck', '$item.context', 'text'), ' ')
+								)
+							),
+							x('lower', x('coalesce', '$input.q', ''))
+						),
 						x('or', x('isEmpty', '$input.status'), x('eq', '$item.values.status', '$input.status')),
-						x('or', x('isEmpty', '$input.employee'), x('eq', '$item.values.employeeId', '$input.employee'))
+						x('or', x('isEmpty', '$input.employee'), x('eq', x('coalesce', '$item.values.employeeId', '__unassigned__'), '$input.employee'))
 					)
 				)
 			),
-			calc(mapRecords(x('sortBy', '$step.3', x('coalesce', '$item.values.date', title('$item'))))),
-			calc(x('max', 1, x('min', x('coalesce', x('toNumber', '$input.page'), 1), x('ceil', x('div', x('length', '$step.4'), 12))))),
+			calc(x('sortBy', '$step.4', x('coalesce', '$item.values.date', '$item.title'))),
+			calc(x('max', 1, x('min', x('coalesce', x('toNumber', '$input.page'), 1), x('ceil', x('div', x('length', '$step.5'), 12))))),
 			calc({
-				...Object.fromEntries(SERVICE_KINDS.map((kind) => [kind, mapRecords(activeKind(kind))])),
-				member: x('map', x('coalesce', '$step.1.team', []), { id: '$item.id', title: x('concat', '$item.name', ' · ', '$item.role') }),
-				battery: mapRecords(x('filter', activeKind('equipment'), x('eq', '$item.values.category', 'Battery'))),
-				vehicle: mapRecords(x('filter', activeKind('equipment'), x('eq', '$item.values.category', 'Vehicle')))
+				...Object.fromEntries(SERVICE_KINDS.map((kind) => [kind, activeKind(kind)])),
+				member: x('map', x('coalesce', '$step.2.team', []), { id: '$item.id', title: x('concat', '$item.name', ' · ', '$item.role') }),
+				battery: x('filter', activeKind('equipment'), x('eq', '$item.values.category', 'Battery')),
+				vehicle: x('filter', activeKind('equipment'), x('eq', '$item.values.category', 'Vehicle'))
 			}),
-			calc(x('dateParts', '$now', '$step.1.timeZone')),
-			calc(
-				x(
-					'coalesce',
-					'$input.date',
-					x('concat', '$step.7.year', '-', x('padStart', '$step.7.month', 2, '0'), '-', x('padStart', '$step.7.day', 2, '0'))
+			calc(x('dateParts', '$now', '$step.2.timeZone')),
+			calc({
+				date: selectedDate,
+				today: todayDate,
+				visitsByDate: x('groupBy', x('filter', '$step.5', '$item.values.date'), '$item.values.date'),
+				start: x(
+					'if',
+					x('eq', '$input.period', 'day'),
+					selectedDate,
+					x('isoDate', x('dateAdd', selectedDate, x('mul', -1, x('mod', x('add', x('get', x('dateParts', selectedDate), 'weekday'), 6), 7)), 'day'))
 				)
-			),
+			}),
 			calc({
 				view,
+				screenView,
+				dateLabel: x(
+					'concat',
+					x('formatDate', '$now', 'weekday', '$step.2.timeZone'),
+					' ',
+					'$step.8.day',
+					' ',
+					x(
+						'get',
+						['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+						x('sub', '$step.8.month', 1)
+					)
+				),
+				allRecords: '$step.5',
 				rootId: '$input.rootId',
-				name: '$step.1.name',
-				role: '$step.1.role',
-				timeZone: '$step.1.timeZone',
-				owner: '$step.1.owner',
+				name: '$step.2.name',
+				role: '$step.2.role',
+				timeZone: '$step.2.timeZone',
+				owner: '$step.2.owner',
 				canEdit: x(
 					'and',
-					x('includes', ['Admin', 'Employee', 'Lopu'], '$step.1.role'),
-					x('not', '$step.2.values.archived'),
-					x('or', x('eq', '$step.1.role', 'Admin'), x('and', x('ne', view, 'member'), x('ne', view, 'new-member'), x('ne', '$step.2.kind', 'member')))
+					x('includes', ['Admin', 'Employee', 'Lopu'], '$step.2.role'),
+					x('not', '$step.3.values.archived'),
+					x('or', x('eq', '$step.2.role', 'Admin'), x('and', x('ne', view, 'member'), x('ne', view, 'new-member'), x('ne', '$step.3.kind', 'member')))
 				),
-				record: '$step.2',
-				recordTitle: title('$step.2'),
+				record: '$step.3',
+				recordTitle: '$step.3.title',
 				recordFields,
-				records: x('slice', '$step.4', x('mul', x('sub', '$step.5', 1), 12), x('mul', '$step.5', 12)),
-				total: x('length', '$step.4'),
-				page: '$step.5',
-				previous: x('max', 1, x('sub', '$step.5', 1)),
-				next: x('add', '$step.5', 1),
-				hasNext: x('gt', x('length', '$step.4'), x('mul', '$step.5', 12)),
-				options: '$step.6',
-				counts: Object.fromEntries(SERVICE_KINDS.map((kind) => [kind, x('length', `$step.6.${kind}`)])),
-				mapsConfigured: '$step.1.mapsConfigured',
-				mapsEnvironmentId: '$step.1.mapsEnvironmentId',
-				mapsEnvironments: '$step.1.mapsEnvironments',
-				mapsBrowserKey: '$step.1.mapsBrowserKey',
-				team: '$step.1.team',
-				date: '$step.8',
+				records: x('slice', '$step.5', x('mul', x('sub', '$step.6', 1), 12), x('mul', '$step.6', 12)),
+				total: x('length', '$step.5'),
+				page: '$step.6',
+				previous: x('max', 1, x('sub', '$step.6', 1)),
+				next: x('add', '$step.6', 1),
+				hasNext: x('gt', x('length', '$step.5'), x('mul', '$step.6', 12)),
+				options: '$step.7',
+				counts: Object.fromEntries(SERVICE_KINDS.map((kind) => [kind, x('length', `$step.7.${kind}`)])),
+				mapsConfigured: '$step.2.mapsConfigured',
+				mapsEnvironmentId: '$step.2.mapsEnvironmentId',
+				mapsEnvironments: '$step.2.mapsEnvironments',
+				mapsBrowserKey: '$step.2.mapsBrowserKey',
+				team: '$step.2.team',
+				date: '$step.9.date',
+				today: '$step.9.today',
+				startLabel: x('formatDate', '$step.9.start', 'date'),
 				period: x('if', x('eq', '$input.period', 'day'), 'day', 'week'),
-				previousDate: x('isoDate', x('dateAdd', '$step.8', x('mul', -1, periodDays), 'day')),
-				nextDate: x('isoDate', x('dateAdd', '$step.8', periodDays, 'day')),
-				days: x(
-					'slice',
-					Array.from({ length: 7 }, (_, i) => {
-						const date = x('isoDate', x('dateAdd', '$step.8', i, 'day'));
-						return {
-							date,
-							label: x('formatDate', date, 'weekday'),
-							records: x('slice', x('filter', '$step.4', x('eq', '$item.values.date', date)), 0, 12),
-							total: x('count', '$step.4', x('eq', '$item.values.date', date))
-						};
-					}),
-					0,
-					periodDays
-				)
+				previousDate: x('isoDate', x('dateAdd', '$step.9.date', x('mul', -1, periodDays), 'day')),
+				nextDate: x('isoDate', x('dateAdd', '$step.9.date', periodDays, 'day')),
+				days: x('map', x('map', x('range', periodDays), x('isoDate', x('dateAdd', '$step.9.start', '$item', 'day'))), {
+					date: '$item',
+					label: x('concat', x('formatDate', '$item', 'weekday'), ' ', x('get', x('dateParts', '$item'), 'day')),
+					records: x('sortBy', x('get', '$step.9.visitsByDate', '$item', []), x('coalesce', '$item.values.order', 0)),
+					today: x('eq', '$item', '$step.9.today'),
+					total: x('length', x('get', '$step.9.visitsByDate', '$item', []))
+				})
 			}),
 			{
 				op: 'each',
 				action: key('place'),
-				list: x('filter', '$step.9.records', '$item.values.placeId'),
+				list: x('filter', '$step.10.records', '$item.values.placeId'),
 				inputs: { rootId: '$input.rootId', recordId: '$item.id', title: '$item.title' },
 				max: 12,
-				when: x('and', x('eq', view, 'maps'), '$step.1.mapsConfigured')
+				when: x('and', x('eq', view, 'maps'), '$step.2.mapsConfigured')
 			},
 			{
 				op: 'http.request',
@@ -336,13 +655,13 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				when: x('and', x('eq', view, 'detail'), x('not', x('isEmpty', '$input.id')))
 			},
 			calc({
-				addressIds: x('if', x('eq', '$step.2.kind', 'customer'), linkedIds('customerId', 'addressId'), []),
-				customerIds: x('if', x('eq', '$step.2.kind', 'address'), linkedIds('addressId', 'customerId'), []),
-				jobIds: x('if', x('eq', '$step.2.kind', 'address'), x('map', related('job', matchesRecord('addressId')), '$item.id'), []),
-				parent: x('find', '$step.1.records', x('and', x('eq', '$item.id', '$input.parentId'), x('not', '$item.values.archived'))),
+				addressIds: x('if', x('eq', '$step.3.kind', 'customer'), linkedIds('customerId', 'addressId'), []),
+				customerIds: x('if', x('eq', '$step.3.kind', 'address'), linkedIds('addressId', 'customerId'), []),
+				jobIds: x('if', x('eq', '$step.3.kind', 'address'), x('map', related('job', matchesRecord('addressId')), '$item.id'), []),
+				parent: x('find', '$step.2.records', x('and', x('eq', '$item.id', '$input.parentId'), x('not', '$item.values.archived'))),
 				copy: x(
 					'find',
-					'$step.1.records',
+					'$step.2.records',
 					x('and', x('eq', '$item.id', '$input.copyId'), x('eq', view, x('concat', 'new-', '$item.kind')), x('ne', '$item.kind', 'member'))
 				)
 			}),
@@ -352,7 +671,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 					relationGroups.map((group) =>
 						x(
 							'if',
-							x('eq', '$step.2.kind', group.owner),
+							x('eq', '$step.3.kind', group.owner),
 							{
 								key: group.key,
 								label: group.label,
@@ -369,7 +688,7 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			calc(
 				x(
 					'map',
-					'$step.13',
+					'$step.14',
 					x('merge', x('omit', '$item', ['records']), {
 						total: x('length', '$item.records'),
 						page: x(
@@ -387,30 +706,30 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			),
 			calc({
 				editing: x('eq', view, 'edit'),
-				formId: x('if', x('eq', view, 'edit'), '$step.2.id', ''),
-				formRevision: x('if', x('eq', view, 'edit'), '$step.2.updatedAt', ''),
+				formId: x('if', x('eq', view, 'edit'), '$step.3.id', ''),
+				formRevision: x('if', x('eq', view, 'edit'), '$step.3.updatedAt', ''),
 				formValues: x(
 					'if',
 					x('eq', view, 'edit'),
-					'$step.2.values',
+					'$step.3.values',
 					x(
 						'if',
-						'$step.12.copy',
+						'$step.13.copy',
 						x(
 							'merge',
-							x('omit', '$step.12.copy.values', ['thumbnailId', 'bannerId', 'archived', 'userId', 'order']),
-							x('if', '$step.12.copy.values.title', { title: x('concat', '$step.12.copy.values.title', ' (copy)') }, {})
+							x('omit', '$step.13.copy.values', ['thumbnailId', 'bannerId', 'archived', 'userId', 'order']),
+							x('if', '$step.13.copy.values.title', { title: x('concat', '$step.13.copy.values.title', ' (copy)') }, {})
 						),
 						x(
 							'merge',
-							{ date: '$step.8', status: 'Scheduled' },
-							x('if', x('eq', '$step.12.parent.kind', 'customer'), { customerId: '$step.12.parent.id' }, {}),
-							x('if', x('eq', '$step.12.parent.kind', 'address'), { addressId: '$step.12.parent.id' }, {}),
-							x('if', x('eq', '$step.12.parent.kind', 'job'), { jobId: '$step.12.parent.id', title: '$step.12.parent.values.title' }, {}),
+							{ date: '$step.9.date', status: 'Scheduled' },
+							x('if', x('eq', '$step.13.parent.kind', 'customer'), { customerId: '$step.13.parent.id' }, {}),
+							x('if', x('eq', '$step.13.parent.kind', 'address'), { addressId: '$step.13.parent.id' }, {}),
+							x('if', x('eq', '$step.13.parent.kind', 'job'), { jobId: '$step.13.parent.id', title: '$step.13.parent.values.title' }, {}),
 							x(
 								'if',
-								x('eq', '$step.12.parent.kind', 'visit'),
-								{ visitId: '$step.12.parent.id', title: '$step.12.parent.values.title', employeeId: '$step.12.parent.values.employeeId' },
+								x('eq', '$step.13.parent.kind', 'visit'),
+								{ visitId: '$step.13.parent.id', title: '$step.13.parent.values.title', employeeId: '$step.13.parent.values.employeeId' },
 								{}
 							)
 						)
@@ -418,13 +737,13 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				),
 				loggedMinutes: x(
 					'if',
-					x('eq', '$step.2.kind', 'visit'),
+					x('eq', '$step.3.kind', 'visit'),
 					x('sum', related('time', matchesRecord('visitId')), x('toNumber', '$item.values.minutes')),
 					0
 				),
 				relatedGroups: x(
 					'map',
-					'$step.14',
+					'$step.15',
 					x('merge', x('omit', '$item', ['all']), {
 						items: x('slice', '$item.all', x('mul', x('sub', '$item.page', 1), 6), x('mul', '$item.page', 6)),
 						previous: x('max', 1, x('sub', '$item.page', 1)),
@@ -432,34 +751,31 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 						hasNext: x('gt', '$item.total', x('mul', '$item.page', 6))
 					})
 				),
-				todayVisits: x('slice', x('filter', '$step.6.visit', x('eq', '$item.values.date', '$step.8')), 0, 12),
+				todayVisits: x('filter', '$step.7.visit', x('eq', '$item.values.date', '$step.9.date')),
 				upcomingVisits: x(
-					'slice',
+					'sortBy',
 					x(
-						'sortBy',
-						x(
-							'filter',
-							'$step.6.visit',
-							x('and', x('gt', '$item.values.date', '$step.8'), x('not', x('includes', ['Completed', 'Cancelled'], '$item.values.status')))
-						),
-						'$item.values.date'
+						'filter',
+						'$step.7.visit',
+						x('and', x('gt', '$item.values.date', '$step.9.date'), x('not', x('includes', ['Completed', 'Cancelled'], '$item.values.status')))
 					),
-					0,
-					12
+					'$item.values.date'
 				)
 			}),
 			ret(
-				x('merge', '$step.9', '$step.15', {
-					mapPoints: '$step.10',
-					media: '$step.11.things',
+				x('merge', '$step.10', '$step.16', {
+					todayCount: x('length', '$step.16.todayVisits'),
+					upcomingCount: x('length', '$step.16.upcomingVisits'),
+					mapPoints: '$step.11',
+					media: '$step.12.things',
 					commentTarget: x('coalesce', '$input.threadId', '$input.id'),
-					showMedia: x('and', '$step.2', x('isEmpty', '$input.threadId')),
-					mediaCursor: '$step.11.nextCursor',
+					showMedia: x('and', '$step.3', x('isEmpty', '$input.threadId')),
+					mediaCursor: '$step.12.nextCursor',
 					mediaGroups: ['Before', 'After', 'Gallery'].map((stage) => ({
 						title: stage,
 						items: x(
 							'filter',
-							x('filter', x('coalesce', '$step.11.things', []), x('not', x('isEmpty', '$item.attachments'))),
+							x('filter', x('coalesce', '$step.12.things', []), x('not', x('isEmpty', '$item.attachments'))),
 							stage === 'Gallery'
 								? x('and', x('not', x('startsWith', '$item.crystal.text', '[Before]')), x('not', x('startsWith', '$item.crystal.text', '[After]')))
 								: x('startsWith', '$item.crystal.text', `[${stage}]`)
@@ -473,54 +789,82 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 		e(
 			'header',
 			[
-				e('h1', [test('result.name', '{result.name}', 'Open this app')], { style: { fontSize: '28px', fontWeight: 750 } }),
-				e('p', ['{result.timeZone}']),
-				e(
-					'tt-dialog',
-					[
-						e(
-							'nav',
-							[
-								['overview', 'Overview'],
-								['planner', 'Planner'],
-								...SERVICE_KINDS.map((kind) => [kind, SERVICE_LABELS[kind]]),
-								['maps', 'Map'],
-								['setup', 'Setup'],
-								['trash', 'Trash']
-							].map(([view, label]) => link(label, `{pagePath}?view=${view}`)).concat([button('Refresh records', '$refresh')]),
-							{ style: grid, 'aria-label': 'App navigation' }
-						)
-					],
-					{ name: 'Menu', title: 'Navigate', type: 'drawer' }
-				)
+				e('div', [icon('leaf', 24)], { className: 'sw-brand-mark' }),
+				e('div', [e('p', ['FRANCHISE WORKSPACE']), e('h1', [test('result.name', '{result.name}', 'Jim’s Mowing')])]),
+				e('span', ['{result.role}'], { className: 'sw-role' }),
+				{ ...button('', '$refresh'), props: { type: 'button', 'aria-label': 'Refresh workspace' }, children: [icon('refresh')] }
 			],
-			{ style: grid }
+			{ className: 'sw-brand' }
 		),
-		equal('state', 'error', e('p', ['{error}'], { role: 'alert' })),
+		e(
+			'nav',
+			[
+				['overview', 'Overview'],
+				['planner', 'Planner'],
+				['customer', 'Customers'],
+				['address', 'Properties'],
+				['job', 'Jobs'],
+				['equipment', 'Equipment'],
+				['maps', 'Map'],
+				['member', 'Team'],
+				['setup', 'Setup'],
+				['trash', 'Trash']
+			].map(([view, label]) => {
+				const tab = e('a', [icon(view), e('span', [label])], {
+					href: `{pagePath}?view=${view}`,
+					'aria-current': equal('result.screenView', view, 'page', false)
+				});
+				return view === 'member' ? equal('result.role', 'Admin', tab) : view === 'trash' ? test('result.canEdit', tab) : tab;
+			}),
+			{ className: 'sw-nav', 'aria-label': 'Franchise navigation' }
+		),
+		equal('state', 'error', e('p', ['{error}'], { role: 'alert', className: 'sw-error' })),
 		equal('state', 'signed-out', link('Sign in', '/login')),
-		equal('state', 'not-installed', e('p', ['Copy this app to your account to use its Actions.'])),
-		test('installAvailable', e('div', [button('Make an editable copy', '$install')], { style: grid })),
-		equal('state', 'loading', e('p', ['Opening app…'], { role: 'status' }))
+		equal(
+			'state',
+			'not-installed',
+			e(
+				'div',
+				[
+					e('p', ['Make your editable copy to use this app. Your team access still controls which records you can read and change.']),
+					test('installAvailable', button('Make an editable copy', '$install'))
+				],
+				{ className: 'sw-warning' }
+			)
+		)
 	]);
 	component(
 		'overview',
 		'Overview',
 		[
-			e('h2', ['Overview']),
-			e('h3', ['Today']),
-			each('result.todayVisits', recordCard, 'No visits scheduled for today.'),
-			e('h3', ['Upcoming visits']),
-			each('result.upcomingVisits', recordCard, 'No upcoming visits.'),
-			link('Browse all visits', '{pagePath}?view=visit'),
+			heading('Overview'),
+			e(
+				'section',
+				[
+					e('div', [
+						e('span', ['A GOOD DAY STARTS HERE'], { className: 'sw-eyebrow' }),
+						e('h3', ['Ready for the next lawn.']),
+						e('p', ['Your customers, properties and crew, all in one place.'])
+					]),
+					test('result.canEdit', createLink('Schedule a visit', 'visit'))
+				],
+				{ className: 'sw-welcome' }
+			),
 			e(
 				'div',
-				SERVICE_KINDS.map((kind) =>
-					e('article', [e('h3', [SERVICE_LABELS[kind]]), e('strong', [`{result.counts.${kind}}`]), link('Open', `{pagePath}?view=${kind}`)], {
-						style: cardStyle
-					})
-				),
-				{ style: { ...grid, gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))' } }
-			)
+				[
+					['Today’s visits', 'todayCount', 'planner'],
+					['Customers', 'counts.customer', 'customer'],
+					['Properties', 'counts.address', 'address'],
+					['Equipment', 'counts.equipment', 'equipment']
+				].map(([label, path, view]) => ({
+					...buttonLink(label, `{pagePath}?view=${view}`),
+					children: [e('span', [label]), e('strong', [`{result.${path}}`])]
+				})),
+				{ className: 'sw-stats' }
+			),
+			visitPanel('Today’s visits', 'result.todayVisits', 'todayCount'),
+			visitPanel('Upcoming visits', 'result.upcomingVisits', 'upcomingCount')
 		],
 		'overview'
 	);
@@ -613,35 +957,9 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			`list-${kind}`,
 			SERVICE_LABELS[kind],
 			[
-				e('h2', [SERVICE_LABELS[kind]]),
-				test('result.canEdit', link('Add record', `{pagePath}?view=new-${kind}`)),
-				e(
-					'div',
-					[
-						local(
-							'filter',
-							e('input', [], {
-								type: 'search',
-								'aria-label': 'Search records',
-								placeholder: 'Search records',
-								value: draft('filter', 'query.q'),
-								style: inputStyle
-							})
-						),
-						button('Search', '$ui', { op: 'query', params: { view: kind, q: '{filter}' } })
-					],
-					{ style: row }
-				),
-				e('p', ['{result.total} records · page {result.page}']),
-				each('result.records', recordCard),
-				e(
-					'div',
-					[
-						button('Previous', '$ui', { op: 'query', params: { view: kind, page: '{result.previous}', q: '{query.q}' } }),
-						test('result.hasNext', button('Next', '$ui', { op: 'query', params: { view: kind, page: '{result.next}', q: '{query.q}' } }))
-					],
-					{ style: row }
-				)
+				heading(SERVICE_LABELS[kind], createLink(`Add ${SERVICE_SINGULAR[kind]}`, kind)),
+				e('div', [buttonLink('Trash', `{pagePath}?view=trash&kind=${kind}`)], { className: 'sw-buttons' }),
+				collection('result.allRecords', SERVICE_LABELS[kind], `Add your first ${SERVICE_SINGULAR[kind]} to get started.`)
 			],
 			kind
 		);
@@ -649,7 +967,12 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			const props: Json = {
 				name: field.key,
 				required: !!field.required,
-				value: field.key === 'address' ? draft('addressDraft', 'result.formValues.address') : arg(`result.formValues.${field.key}`),
+				value:
+					field.key === 'address'
+						? draft('addressDraft', 'result.formValues.address')
+						: kind === 'visit' && field.key === 'title'
+						? draft('titleDraft', 'result.formValues.title')
+						: arg(`result.formValues.${field.key}`),
 				style: inputStyle,
 				...(field.key === 'username' ? { readOnly: arg('result.editing') } : {})
 			};
@@ -657,6 +980,10 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				? e('tt-select', [], {
 						...props,
 						title: field.label,
+						compact: true,
+						...(kind === 'visit' && field.key === 'jobId'
+							? { fills: [{ key: 'titleDraft', path: 'title', current: draft('titleDraft', 'result.formValues.title'), whenEmpty: true }] }
+							: {}),
 						optionsPath: `result.options.${field.key === 'batteryId' ? 'battery' : field.key === 'vehicleId' ? 'vehicle' : field.ref}`
 				  })
 				: field.options
@@ -682,9 +1009,13 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 				'label',
 				[
 					field.label + (field.required ? ' *' : ''),
-					field.key === 'address' ? { ...child, ttAction: '$ui', ttActionInputs: { op: 'set', key: 'addressDraft', clear: ['placeDraft'] } } : child
+					field.key === 'address'
+						? { ...child, ttAction: '$ui', ttActionInputs: { op: 'set', key: 'addressDraft', clear: ['placeDraft'] } }
+						: kind === 'visit' && field.key === 'title'
+						? local('titleDraft', child)
+						: child
 				],
-				{ style: grid }
+				{ className: field.type === 'textarea' ? 'sw-wide' : '' }
 			);
 		});
 		const form = test(
@@ -696,8 +1027,21 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 					...mediaFields.map((name) =>
 						hidden(name, name === 'placeId' ? draft('placeDraft', 'result.formValues.placeId') : `{result.formValues.${name}}`)
 					),
-					...fieldNodes,
-					button('Save', key(`save-${kind}`)),
+					e(
+						'div',
+						[
+							...fieldNodes,
+							e(
+								'div',
+								[
+									{ ...button('Save', key(`save-${kind}`)), props: { type: 'button', className: 'sw-primary' } },
+									button('Cancel', '$ui', { op: 'query', params: { view: '{result.screenView}', id: '{query.returnId}' } })
+								],
+								{ className: 'sw-buttons sw-wide' }
+							)
+						],
+						{ className: 'sw-form sw-form-grid' }
+					),
 					equal('last.result.operation', `save-${kind}`, test('last.ok', link('Open saved record', '{pagePath}?view=detail&id={last.result.id}')))
 				],
 				{
@@ -710,29 +1054,19 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			),
 			e('p', ['Your role can view these records. Editing is available to authorized team members.'])
 		);
+		const modal = e('tt-dialog', [...(kind === 'address' ? [addressSearch] : []), form], {
+			title: `${SERVICE_SINGULAR[kind]}`,
+			autoOpen: true,
+			className: 'service-workspace sw-modal',
+			closeQuery: { view: '{result.screenView}', id: '{query.returnId}' },
+			closeOnAction: key(`save-${kind}`)
+		});
 		component(`form-${kind}`, `${SERVICE_LABELS[kind]} form`, [
-			equal(
-				'result.view',
-				`new-${kind}`,
-				e(
-					'div',
-					[
-						e('h2', [`Add ${kind}`]),
-						...(kind === 'address' ? [addressSearch] : []),
-						form,
-						test('result.canEdit', button('Start another', '$ui', { op: 'increment', key: 'formVersion', clear: ['addressDraft', 'placeDraft'] }))
-					],
-					{ style: cardStyle }
-				)
-			),
+			equal('result.view', `new-${kind}`, { ...modal, props: { ...modal.props, title: `Add ${SERVICE_SINGULAR[kind]}` } }),
 			equal(
 				'result.view',
 				'edit',
-				equal(
-					'result.record.kind',
-					kind,
-					e('div', [e('h2', ['Edit {result.recordTitle}']), ...(kind === 'address' ? [addressSearch] : []), form], { style: cardStyle })
-				)
+				equal('result.record.kind', kind, { ...modal, props: { ...modal.props, title: `Edit ${SERVICE_SINGULAR[kind]}` } })
 			)
 		]);
 	}
@@ -985,115 +1319,329 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			ret({ message: 'Visit moved' })
 		]
 	);
+
+	action(
+		'reorder',
+		[
+			s('rootId', { required: true }),
+			s('id', { required: true }),
+			s('expectedUpdatedAt', { required: true }),
+			s('date', { required: true }),
+			s('beforeId')
+		],
+		[
+			{ ...ret({ silent: true }), when: x('eq', '$input.id', '$input.beforeId') },
+			req(),
+			calc(
+				x('find', '$step.2.records', x('and', x('eq', '$item.id', '$input.id'), x('eq', '$item.kind', 'visit'), x('not', '$item.values.archived')))
+			),
+			calc(
+				x(
+					'sortBy',
+					x(
+						'filter',
+						'$step.2.records',
+						x(
+							'and',
+							x('eq', '$item.kind', 'visit'),
+							x('eq', '$item.values.date', '$input.date'),
+							x('ne', '$item.id', '$input.id'),
+							x('not', '$item.values.archived')
+						)
+					),
+					x('coalesce', '$item.values.order', 0)
+				)
+			),
+			calc(x('if', '$input.beforeId', x('findIndex', '$step.4', x('eq', '$item.id', '$input.beforeId')), x('length', '$step.4'))),
+			{ op: 'fail', message: 'This visit changed. Refresh the planner before moving it.', when: x('or', x('not', '$step.3'), x('lt', '$step.5', 0)) },
+			calc({
+				previous: x(
+					'if',
+					x('gt', '$step.5', 0),
+					x('coalesce', x('get', x('get', x('get', '$step.4', x('sub', '$step.5', 1)), 'values'), 'order'), 0),
+					null
+				),
+				next: x(
+					'if',
+					x('lt', '$step.5', x('length', '$step.4')),
+					x('coalesce', x('get', x('get', x('get', '$step.4', '$step.5'), 'values'), 'order'), 0),
+					null
+				)
+			}),
+			req({
+				operation: 'move',
+				rootId: '$input.rootId',
+				id: '$input.id',
+				expectedUpdatedAt: '$input.expectedUpdatedAt',
+				date: '$input.date',
+				time: '$step.3.values.time',
+				order: x(
+					'if',
+					x('isEmpty', '$step.7.previous'),
+					x('sub', x('coalesce', '$step.7.next', 1024), 1024),
+					x('if', x('isEmpty', '$step.7.next'), x('add', '$step.7.previous', 1024), x('div', x('add', '$step.7.previous', '$step.7.next'), 2))
+				)
+			}),
+			ret({ silent: true, message: 'Visit moved' })
+		]
+	);
+	const plannerParams = {
+		view: 'planner',
+		date: '{result.date}',
+		period: '{result.period}',
+		q: '{query.q}',
+		status: '{query.status}',
+		employee: '{query.employee}',
+		size: '{query.size}'
+	};
+	const plannerQuery = (label: string, params: Json, props: Json = {}) => ({
+		...button(label, '$ui', { op: 'query', params: { ...plannerParams, ...params } }),
+		props: { type: 'button', ...props }
+	});
+	const change = (control: Json, actionKey: string, inputs: Json, inputPath: string, props: Json = {}) => ({
+		...e('tt-change', [control], { inputPath, ...props }),
+		ttAction: actionKey,
+		ttActionInputs: inputs
+	});
+	const plannerFilter = (name: string, control: Json, props: Json = {}) =>
+		change(control, '$ui', { op: 'query', params: plannerParams }, 'params.' + name, props);
+	const moveInputs = { rootId: '{rootId}', id: '{item.id}', expectedUpdatedAt: '{item.updatedAt}', date: '{item.values.date}' };
+	const plannerVisit = {
+		...e(
+			'tt-drop',
+			[
+				e(
+					'tt-drag',
+					[
+						e(
+							'a',
+							[
+								e('strong', ['{item.title}']),
+								e('span', ['{item.values.time} · {item.values.status}'], { className: 'sw-visit-time' }),
+								recordContext
+							],
+							{ href: '{pagePath}?view=detail&id={item.id}&returnView=planner', className: 'sw-card-open' }
+						),
+						recordMenu,
+						test(
+							'result.canEdit',
+							e(
+								'div',
+								[
+									{
+										...button('↑', key('reorder'), { ...moveInputs, beforeId: '{collection.previous.id}' }),
+										props: { type: 'button', 'aria-label': 'Move {item.title} up', disabled: test('collection.previous', false, true) }
+									},
+									{
+										...button('↓', key('reorder'), { ...moveInputs, beforeId: '{collection.afterNext.id}' }),
+										props: { type: 'button', 'aria-label': 'Move {item.title} down', disabled: test('collection.next', false, true) }
+									},
+									e('label', [
+										'Move to',
+										change(
+											e('input', [], { type: 'date', value: '{item.values.date}', 'aria-label': 'Move {item.title} to date' }),
+											key('reorder'),
+											{ ...moveInputs, beforeId: '' },
+											'date',
+											{ allowEmpty: false }
+										)
+									])
+								],
+								{ className: 'sw-move-controls' }
+							)
+						)
+					],
+					{
+						group: key('planner'),
+						inputs: { id: '{item.id}', expectedUpdatedAt: '{item.updatedAt}' },
+						disabled: test('result.canEdit', false, true),
+						className: 'sw-visit'
+					}
+				)
+			],
+			{ group: key('planner'), sourceInputs: ['id', 'expectedUpdatedAt'], disabled: test('result.canEdit', false, true) }
+		),
+		ttAction: key('reorder'),
+		ttActionInputs: { rootId: '{rootId}', date: '{item.values.date}', beforeId: '{item.id}' }
+	};
 	component(
 		'planner',
 		'Planner',
 		[
-			e('h2', ['Planner']),
-			e('p', ['{result.timeZone} · {result.period} view']),
+			heading('Planner', createLink('Schedule a visit', 'visit')),
 			e(
-				'div',
+				'section',
 				[
-					button('Previous', '$ui', {
-						op: 'query',
-						params: {
-							view: 'planner',
-							date: '{result.previousDate}',
-							period: '{result.period}',
-							q: '{query.q}',
-							status: '{query.status}',
-							employee: '{query.employee}'
-						}
-					}),
-					local(
-						'plannerDate',
-						e('input', [], { type: 'date', value: draft('plannerDate', 'result.date'), 'aria-label': 'Planner date', style: inputStyle })
+					e(
+						'div',
+						[
+							e(
+								'div',
+								[
+									plannerQuery('←', { date: '{result.previousDate}' }, { 'aria-label': 'Previous period' }),
+									plannerQuery('Today', { date: '{result.today}' }),
+									plannerQuery('→', { date: '{result.nextDate}' }, { 'aria-label': 'Next period' })
+								],
+								{ className: 'sw-buttons' }
+							),
+							e('h2', ['{result.startLabel}']),
+							e(
+								'div',
+								[
+									...['day', 'week'].map((period) =>
+										plannerQuery(period === 'day' ? 'Day' : 'Week', { period }, { 'aria-pressed': equal('result.period', period, true, false) })
+									),
+									e(
+										'label',
+										['Planner date', plannerFilter('date', e('input', [], { type: 'date', value: '{result.date}' }), { allowEmpty: false })],
+										{ className: 'sw-sr' }
+									)
+								],
+								{ className: 'sw-buttons' }
+							)
+						],
+						{ className: 'sw-toolbar' }
 					),
-					button('Go', '$ui', {
-						op: 'query',
-						params: {
-							view: 'planner',
-							date: draft('plannerDate', 'result.date'),
-							period: '{result.period}',
-							q: '{query.q}',
-							status: '{query.status}',
-							employee: '{query.employee}'
-						}
-					}),
-					button('Next', '$ui', {
-						op: 'query',
-						params: {
-							view: 'planner',
-							date: '{result.nextDate}',
-							period: '{result.period}',
-							q: '{query.q}',
-							status: '{query.status}',
-							employee: '{query.employee}'
-						}
-					}),
-					...['day', 'week'].map((period) =>
-						button(period === 'day' ? 'Day' : 'Week', '$ui', {
-							op: 'query',
-							params: { view: 'planner', date: '{result.date}', period, q: '{query.q}', status: '{query.status}', employee: '{query.employee}' }
-						})
+					e(
+						'p',
+						[
+							'{result.timeZone} · ',
+							test('result.canEdit', 'Drag visits between days or use the move controls. Open a visit to set its time.', 'Your upcoming visits.')
+						],
+						{ className: 'sw-muted' }
 					),
-					test('result.canEdit', link('Schedule a visit', '{pagePath}?view=new-visit'))
-				],
-				{ style: row }
-			),
-			e(
-				'div',
-				[
-					local('filter', e('input', [], { type: 'search', placeholder: 'Search visits', value: draft('filter', 'query.q'), style: inputStyle })),
-					local(
-						'plannerStatus',
-						e(
-							'select',
-							[
-								e('option', ['All statuses'], { value: '' }),
-								...SERVICE_FIELDS.visit.find((f) => f.key === 'status')!.options!.map((status) => e('option', [status], { value: status }))
-							],
-							{ 'aria-label': 'Visit status', value: draft('plannerStatus', 'query.status'), style: inputStyle }
-						)
-					),
-					e('tt-select', [], {
-						title: 'Assigned employee',
-						optionsPath: 'result.options.member',
-						value: draft('plannerEmployee', 'query.employee'),
-						stateKey: 'plannerEmployee'
-					}),
-					button('Filter', '$ui', {
-						op: 'query',
-						params: {
-							view: 'planner',
-							q: draft('filter', 'query.q'),
-							date: '{result.date}',
-							period: '{result.period}',
-							status: draft('plannerStatus', 'query.status'),
-							employee: draft('plannerEmployee', 'query.employee')
-						}
-					})
-				],
-				{ style: row }
-			),
-			e(
-				'div',
-				[
-					each(
-						'result.days',
-						e(
-							'section',
-							[
-								e('h3', ['{item.label}']),
-								e('p', ['{item.date} · {item.total} visits']),
-								each('item.records', recordCard, 'No matching visits.'),
-								e('p', ['Use Visits to browse every matching record.'])
-							],
-							{ style: cardStyle }
-						)
+					e(
+						'div',
+						[
+							e(
+								'div',
+								[
+									e(
+										'label',
+										[
+											plannerFilter(
+												'q',
+												e('input', [], {
+													type: 'search',
+													'aria-label': 'Search planner',
+													placeholder: 'Search jobs, addresses, customers or crew…',
+													value: draft('plannerSearch', 'query.q')
+												}),
+												{ stateKey: 'plannerSearch', debounceMs: 350 }
+											)
+										],
+										{ className: 'tt-collection-search' }
+									),
+									e(
+										'label',
+										[
+											'Status',
+											plannerFilter(
+												'status',
+												e(
+													'select',
+													[
+														e('option', ['All'], { value: '' }),
+														...SERVICE_FIELDS.visit.find((f) => f.key === 'status')!.options!.map((value) => e('option', [value], { value }))
+													],
+													{ 'aria-label': 'Planner status', value: '{query.status}' }
+												)
+											)
+										],
+										{ className: 'tt-collection-field' }
+									),
+									e(
+										'label',
+										[
+											'Employee',
+											plannerFilter(
+												'employee',
+												e(
+													'select',
+													[
+														e('option', ['All'], { value: '' }),
+														e('option', ['Unassigned'], { value: '__unassigned__' }),
+														each('result.team', e('option', ['{item.name}'], { value: '{item.id}' }), '')
+													],
+													{ 'aria-label': 'Planner employee', value: '{query.employee}' }
+												)
+											)
+										],
+										{ className: 'tt-collection-field' }
+									),
+									e(
+										'label',
+										[
+											'Show',
+											plannerFilter(
+												'size',
+												e(
+													'select',
+													[5, 10, 15, 20, 'infinite'].map((value) =>
+														e('option', [value === 'infinite' ? 'Infinite scrolling' : String(value)], { value })
+													),
+													{ 'aria-label': 'Show visits per day', value: test('query.size', '{query.size}', '10') }
+												)
+											)
+										],
+										{ className: 'tt-collection-field' }
+									),
+									test(
+										'query.q',
+										plannerQuery('Clear planner filters', { q: '', status: '', employee: '' }),
+										test(
+											'query.status',
+											plannerQuery('Clear planner filters', { q: '', status: '', employee: '' }),
+											test('query.employee', plannerQuery('Clear planner filters', { q: '', status: '', employee: '' }))
+										)
+									)
+								],
+								{ className: 'tt-collection-controls' }
+							)
+						],
+						{ className: 'tt-collection' }
 					)
 				],
-				{ style: { ...grid, gridTemplateColumns: 'repeat(auto-fit, minmax(min(250px, 100%), 1fr))' } }
+				{ 'aria-label': 'Job planner' }
+			)
+		],
+		'planner'
+	);
+	component(
+		'planner-board',
+		'Planner days',
+		[
+			e(
+				'div',
+				[
+					each('result.days', {
+						...e(
+							'tt-drop',
+							[
+								e('header', [e('h3', ['{item.label}']), e('span', ['{item.total}'])]),
+								e('tt-collection', [], {
+									itemsPath: 'result.days.{index}.records',
+									itemTemplate: { ttTemplate: plannerVisit },
+									label: 'Visits on {item.date}',
+									empty: 'No matching visits',
+									hideSearch: true,
+									hideSize: true,
+									size: '{query.size}'
+								}),
+								test('result.canEdit', { ...link('+ Schedule visit', '{pagePath}?view=new-visit&date={item.date}', 'sw-add-day sw-link-button') })
+							],
+							{
+								className: test('item.today', 'sw-day sw-day-today', 'sw-day'),
+								group: key('planner'),
+								sourceInputs: ['id', 'expectedUpdatedAt'],
+								disabled: test('result.canEdit', false, true)
+							}
+						),
+						ttAction: key('reorder'),
+						ttActionInputs: { rootId: '{rootId}', date: '{item.date}', beforeId: '' }
+					})
+				],
+				{ className: 'sw-planner sw-planner-{result.period}' }
 			)
 		],
 		'planner'
@@ -1469,6 +2017,23 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 		],
 		'detail'
 	);
+	component('footer', 'App footer', [
+		e(
+			'footer',
+			[
+				icon('leaf', 14),
+				'{result.name}',
+				e('span', ['{result.timeZone}']),
+				link('Privacy', '/legal/privacy-policy'),
+				link('Terms', '/legal/terms-of-service')
+			],
+			{ className: 'sw-footer' }
+		),
+		test(
+			'installAvailable',
+			e('details', [e('summary', ['Builder']), button('Make an editable copy', '$install')], { style: { padding: '12px 28px' } })
+		)
+	]);
 	const componentKeys = definitions.filter((d) => d.thingtime[0] === 'component').map((d) => d.crystal.componentKey);
 	const blocks = [
 		{
@@ -1476,9 +2041,22 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			type: 'container',
 			direction: 'column',
 			align: 'center',
-			maxWidth: 1100,
+			maxWidth: 1400,
 			gap: 0,
-			css: { padding: '24px 16px', width: '100%', 'box-sizing': 'border-box' },
+			css: {
+				padding: '0',
+				width: '100%',
+				'box-sizing': 'border-box',
+				border: '1px solid #dce5de',
+				'border-radius': '18px',
+				overflow: 'clip',
+				background: '#f6f8f3',
+				'--app-ink': '#18392d',
+				'--app-muted': '#6b7870',
+				'--app-green': '#176340',
+				'--app-line': '#dce5de',
+				'--app-bg': '#f6f8f3'
+			},
 			children: componentKeys.map((component, index) => ({
 				id: key(`screen-${index}`),
 				type: 'component',

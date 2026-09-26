@@ -1,6 +1,6 @@
 # Web standards Builder app
 
-The `web-standards` suite installs three editable Component Things, two Action
+The `web-standards` suite installs three editable Component Things, three Action
 Things and one private Webpage Thing through the ordinary suite API. Navigation,
 search, filters, pagination, the workbench and save controls are component render
 trees. The page contains no native app block. `/p/web-standards` resolves the
@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,279 have interactive recipes (227 HTML, 1,059 CSS, 601
-JavaScript and 392 Web API entries); the rest are
+editable program. 2,437 have interactive recipes (227 HTML, 1,059 CSS, 601
+JavaScript and 550 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -52,9 +52,8 @@ The `tt-web-platform` component primitive takes a `program` object, version 1:
 
 The primitive has no catalogue ID dispatch. Users can copy a saved Component,
 edit its `render` program in Thingtime's Fields/Source editor and place it on any
-Builder page. The live program editor runs an unsaved draft; **Save example
-template** saves the catalogue template. To retain a draft, update the program
-on the saved Component Thing. Inputs and running workers clear across account
+Builder page. The live program editor runs an unsaved draft; **Save edited component** saves
+the current program and inputs as a private reusable Component. Inputs and running workers clear across account
 and component boundaries.
 
 The runtime document has an opaque origin in an `allow-scripts` iframe, with a
@@ -176,3 +175,70 @@ The parameter example covers default/rest rather than destructuring. The meta
 property example covers `new.target`; modules/imports and `import.meta` still
 need dedicated authoring support. Interactive category counts do not imply that
 every grammar alternative inside a clause has been demonstrated.
+
+## Saving edited programs
+
+The workbench's **Save edited component** control runs the authored `save-draft`
+Action. It saves the complete current program and current parameter values as
+its defaults through the ordinary Things API. The reusable `tt-web-platform`
+primitive exposes that validated draft through an optional named JSON form field;
+it contains no save API call. Run and Save consume the same snapshot. Invalid
+JSON, invalid definitions or invalid inputs prevent saving an older draft.
+
+A saved `props.program` is opaque program data: nested arrays, nulls, `{tokens}`,
+and objects resembling Component wrappers retain their exact meaning. Only a
+top-level `ttArg` selects a complete program from scope. Program copying shares
+the Component resolver's work and text budgets and refuses a truncated program.
+The original `save-component` Action remains available to older installed pages.
+
+Existing installations can add the new Action with `onlyMissing: true`. Updating
+the owned workbench requires an explicit version-checked definition edit; the
+installer does not overwrite an owner's customized Components.
+
+## Detached DOM receivers
+
+`domFixtures.ts` authors 158 examples for document trees, elements, text,
+comments, attributes, node collections, class tokens and the applicable DOM
+mixins. These programs exercise native methods and getters from the
+[DOM Living Standard](https://dom.spec.whatwg.org/), checked 26 September 2026
+against the standard last updated 24 September. Constructor entries are not
+counted when a fixture creates an instance through a Document factory instead.
+Layout, window, custom-element and shadow-root contexts remain separate gaps.
+
+A `steps` expression `{op: "dom", action, target, key, args}` returns a Promise.
+Use the ordinary `await` expression to compose it with JavaScript:
+
+- `action: "document"` needs no target/key/args and obtains the run's detached
+  HTML Document, seeded from the authored `document` tree.
+- `get` reads a registered native member from a `target` handle.
+- `set` writes a registered native property with one argument.
+- `call` invokes a registered native method with bounded argument values.
+
+`programBuilders.ts` has data constructors for these operations. Handles keep
+identity within a run; they cannot be stored and replayed into another run.
+Real DOM exceptions can be caught with ordinary program `try`/`catch`; missing
+registered browser members report `unsupported`. Native undefined results remain
+undefined in the worker and use the normal `[undefined]` output representation.
+
+`domBridge.ts` invokes captured native prototype methods/accessors against a
+private detached document, then projects its body into the visible surface.
+The preview is a projection: browsing-context state, layout and interactions in
+that projection are not state in the detached document. Existing `dom` event
+bindings belong to the visible document and are a separate context. Programs
+that need coordinated live events require a live-document implementation.
+There is no page/account document handle or arbitrary member traversal.
+
+Each run allows 256 requests, 32 pending worker requests, 800 handles, 600
+allocated nodes (including detached clones), depth 40, 500-character selectors,
+4,096-character text arguments and 65,536 characters of cumulative argument
+work. Native calls accept at most eight arguments. Tree/result text is bounded
+at 32,768 characters. Requests share the worker's two-second execution deadline;
+cancellation and completion clear handles. Script/resource elements, event
+attributes, URL writes, raw markup setters and unregistered members are refused.
+The existing iframe CSP and account/network restrictions remain in force.
+
+`domProtocol.test.ts` and `workerLifecycle.test.ts` cover transport identity,
+catchable exceptions, unavailable members, undefined values, late replies and
+cancellation/deadline behavior. The opt-in real API test now round-trips a DOM
+program through the catalogue Action and private Component update/read paths.
+The browser checklist covers actual tree mutation and refusal behavior.

@@ -257,16 +257,16 @@ const detail: SuiteComponentDef = {
 							background: '#f4f4f5',
 							borderRadius: '8px'
 						}),
-						{ tag: 'tt-web-platform', props: { program: { ttArg: 'result.selected.program' } } },
+						{ tag: 'tt-web-platform', props: { program: { ttArg: 'result.selected.program' }, name: 'program' } },
 						text(
 							'div',
 							[
-								button('Save example template', refs.actionKey('save-component'), { feature: '{result.selected.id}' }, true),
+								button('Save edited component', refs.actionKey('save-draft'), {}, true),
 								iff('last.result.id', link('Open saved Thing →', '/thing/{last.result.id}', { fontSize: '13px', textDecoration: 'underline' }))
 							],
 							{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', paddingTop: '20px', borderTop: '1px solid #e4e4e7' }
 						),
-						text('p', ['Saving creates a private Component Thing. Open its definition to change the program, then add it to any builder page.'], {
+						text('p', ['Save your edited program and current inputs as a private Component Thing, then add it to any builder page.'], {
 							fontSize: '12px',
 							color: '#71717a'
 						}),
@@ -306,7 +306,7 @@ export const webStandardsSuite: BehaviourSuite = {
 	schemas: [],
 	components: [nav, explorer, detail],
 	data: [],
-	actions: [
+		actions: [
 		{
 			key: 'catalogue',
 			name: 'Browse web standards',
@@ -362,6 +362,36 @@ export const webStandardsSuite: BehaviourSuite = {
 				{ op: 'return', value: { id: '$step.2.thing.id', name: '$step.2.thing.crystal.name', silent: true } }
 			],
 			capabilities: () => [{ capability: 'http.request', endpoints: ['POST /api/v1/actions/run', 'POST /api/v1/things'] }]
+		},
+		{
+			key: 'save-draft',
+			name: 'Save edited web component',
+			description: 'Save the complete authored Web Platform program, with current inputs as defaults, as a private reusable Component.',
+			category: 'Web standards',
+			runtime: 'browser',
+			inputs: [{ name: 'program', type: 'json', label: 'Web Platform program', required: true }],
+			limits: { maxInputBytes: 65536 },
+			steps: () => [
+				{
+					op: 'http.request',
+					method: 'POST',
+					path: '/api/v1/things',
+					feature: 'api.things',
+					minimumVersion: '1.33.0',
+					query: {},
+					body: {
+						thingtime: ['component'], acl: ['tt:user'],
+						crystal: {
+							name: { ttExpr: ['slice', { ttExpr: ['coalesce', { ttExpr: ['get', '$input.program', 'title'] }, 'Web Platform program'] }, 0, 60] },
+							description: 'An editable Web Platform program with saved input defaults.',
+							category: 'Web standards', args: [],
+							render: { tag: 'tt-web-platform', props: { program: '$input.program' } }
+						}
+					}
+				},
+				{ op: 'return', value: { id: '$step.1.thing.id', name: '$step.1.thing.crystal.name', silent: true } }
+			],
+			capabilities: () => [{ capability: 'http.request', endpoints: ['POST /api/v1/things'] }]
 		}
 	],
 	pages: [

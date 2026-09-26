@@ -5941,8 +5941,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.11.0',
-		featureVersion: '1.11.0',
+		contractVersion: '1.12.0',
+		featureVersion: '1.12.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
@@ -5958,7 +5958,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'An independently readable foreign component establishes its own freshly checked audience for its same-author authored media and bound children. The outer root remains required. Cross-author page argument overrides never inherit either author private media authority. ' +
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
 			'Conditional media properties and conditional props/style records include their stored output alternatives. Condition operands, lookup keys, action inputs and non-rendering metadata are not media grants. ' +
-			'Stored component defaults, savedArgs and containing page-block argument overrides are resolved in media rendering positions using the canonical bounded template resolver, in that precedence order. Block references use the freshly authorized composition lookup; only same-author templates inherit root media authority. Unused argument metadata, unresolved runtime tokens and truncated values are not media grants. ' +
+			'Stored media in deferred tt-collection/Collection row templates is included; runtime row values and arbitrary metadata never grant attachment access. Stored component defaults, savedArgs and containing page-block argument overrides are resolved in media rendering positions using the canonical bounded template resolver, in that precedence order. Block references use the freshly authorized composition lookup; only same-author templates inherit root media authority. Unused argument metadata, unresolved runtime tokens and truncated values are not media grants. ' +
 			'Optional sharedRoot authorizes post-purpose media attached to the root or a contained same-author Thing, or explicitly embedded by a stored component/schema/native media block. Authored rich/raw HTML media attributes and inline styles are discovered with the renderer tag, depth and node policy; dropped containers, text and metadata are not grants. Literal CSS url/image-set references (including escaped function identifiers) in render styles, responsive/pseudo styles, block CSS and page backgrounds are included. Same-author references inherit the freshly checked root audience; foreign media still needs independent access. Unrelated ids, external URLs, drafts, message/profile/emoji objects and revoked groups do not gain access through this mode. Ready state, moderation, exact object version and home-storage guards remain enforced before every redirect, byte read or cache receipt. ' +
 			'Hidden post/page audiences accept canonical URLs and legacy root key parameters; custom audiences without tt:hidden require current eligible membership. Every content or cache-validation request rechecks the root. Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
@@ -9146,13 +9146,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.31.0',
-    contractVersion: '1.31.0',
+    featureVersion: '1.33.0',
+    contractVersion: '1.33.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
+      'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
       'Component source bindings use the same validation as page bindings and survive create/update. Browser Actions may declare expressionLimits {nodes,listItems} up to 1000000/10000 (defaults 20000/1000), with shared parent/child budgets and deadline checks inside evaluation. Browser each steps also require executionVersion 1.9.0. Each prepares every allowlisted child as the current viewer, shares all parent budgets, and rejects an oversized batch before its first request; authors explicitly slice batches when desired. Programs using expressionLimits require executionVersion 1.9.0. The Builder runtime includes stable-identity, revision-pinned tt-form controls and encoded local query navigation. ' +
       'GET http.request steps optionally declare pagination {cursorParam,cursorPath,itemsPath,itemKey?,maxPages?,maxItems?}. The client merges pages without truncation, spends the shared operation/time/result budgets on every page, and rejects repeated cursors or mismatched response fields. Browser-only limits may optionally reach timeoutMs 120000 and maxResultBytes 8388608; server limits and defaults are unchanged. Pagination or expanded browser limits require executionVersion: 1.8.0 or a compatible 1.x client; older clients receive 409 before execution. ' +
@@ -11126,13 +11128,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-update',
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.10.0',
+    contractVersion: '1.10.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
+      'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
       'Component source bindings use the same validation as page bindings and survive create/update. Browser Actions may declare expressionLimits {nodes,listItems} up to 1000000/10000 (defaults 20000/1000), with shared parent/child budgets and deadline checks inside evaluation. Browser each steps also require executionVersion 1.9.0. Each prepares every allowlisted child as the current viewer, shares all parent budgets, and rejects an oversized batch before its first request; authors explicitly slice batches when desired. Programs using expressionLimits require executionVersion 1.9.0. The Builder runtime includes stable-identity, revision-pinned tt-form controls and encoded local query navigation. ' +
       'GET http.request steps optionally declare pagination {cursorParam,cursorPath,itemsPath,itemKey?,maxPages?,maxItems?}. The client merges pages without truncation, spends the shared operation/time/result budgets on every page, and rejects repeated cursors or mismatched response fields. Browser-only limits may optionally reach timeoutMs 120000 and maxResultBytes 8388608; server limits and defaults are unchanged. Pagination or expanded browser limits require executionVersion: 1.8.0 or a compatible 1.x client; older clients receive 409 before execution. ' +
@@ -12726,14 +12730,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-fork',
     // 1.4.0: root render media bindings preserve split-fragment template behavior.
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
     summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Linked gallery entries become new private quota-accounted records with the same validated external URL and annotations; external bytes are never fetched, stored or redirected by the content endpoint. Flagged linked media cannot be re-minted as unflagged. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
     detail: 'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
-      'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
+      'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Deferred tt-collection/Collection itemTemplate controls participate in stored dependency discovery and copying; row runtime values never grant authority. Dialog closeOnAction references follow copied actions without independently granting access. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
     methods: ['POST'],
     steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Stored first-party media referenced by pages/components is copied to new caller-owned uploads through quota, exact-version authorization and normal moderation. HTML/CSS, saved URL arguments and exact attachment IDs in persisted argument values/defaults are retargeted, including nested lists and page-instance overrides. Matching ttMap keys and ttIf comparison values follow copied IDs so branch selection is preserved. URL template strings, argument labels and unrelated prose are preserved. External URLs are unchanged. Split-fragment file IDs retain their argument program and use root render ttMediaRefs pairs after interpolation. At most 512 valid first-match ID pairs map only first-party unkeyed media props and parsed CSS; the marker is stripped from output, generated text shares the render budget, and unused pairs never grant access. Re-forks compose targets onto their newly copied files.', 'Post and comment galleries preserve order, use their original attachment purpose, and supply inspected media to post validation. Copied comments inherit the new private parent; source community/flair placement is removed. Reactions and votes are not copied. Files bind transactionally to a copied Thing, with at most 25 files per target. The operation shares a 120-second copy deadline and revalidates the source composition before and after writes. Failure cleans only new Things/uploads; deferred cleanup remains billed and is reported. filesCopied counts newly owned attachments, separately from copied Things.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
@@ -12742,13 +12746,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.10.0',
-    contractVersion: '1.10.0',
+    featureVersion: '1.13.0',
+    contractVersion: '1.13.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Web standards catalogue expressions return editable DOM receiver programs for detached document trees. The dom expression requests document/get/set/call operations through a bounded isolated worker bridge; real native receivers remain local to the run and mutations are projected into the preview. Saved programs preserve the complete operation data. ' +
+      'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
+      'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
       'Component source bindings use the same validation as page bindings and survive create/update. Browser Actions may declare expressionLimits {nodes,listItems} up to 1000000/10000 (defaults 20000/1000), with shared parent/child budgets and deadline checks inside evaluation. Browser each steps also require executionVersion 1.9.0. Each prepares every allowlisted child as the current viewer, shares all parent budgets, and rejects an oversized batch before its first request; authors explicitly slice batches when desired. Programs using expressionLimits require executionVersion 1.9.0. The Builder runtime includes stable-identity, revision-pinned tt-form controls and encoded local query navigation. ' +
       'GET http.request steps optionally declare pagination {cursorParam,cursorPath,itemsPath,itemKey?,maxPages?,maxItems?}. The client merges pages without truncation, spends the shared operation/time/result budgets on every page, and rejects repeated cursors or mismatched response fields. Browser-only limits may optionally reach timeoutMs 120000 and maxResultBytes 8388608; server limits and defaults are unchanged. Pagination or expanded browser limits require executionVersion: 1.8.0 or a compatible 1.x client; older clients receive 409 before execution. ' +
@@ -13140,13 +13147,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-suites-install',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     group: 'webpages',
     title: 'Install a behaviour suite or app suite',
     endpoint: '/api/v1/webpages/suites/install',
     summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
     detail:
+      'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
       'Version 1.1 adds site-forms and catalog-records suites, native form fields, and versioned interactive controls. ' +
       'Site forms and catalog records create private Things; external effects require a configured integration Action. ' +

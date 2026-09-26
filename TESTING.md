@@ -2,6 +2,29 @@
 
 ## Editable record app primitives
 
+- [ ] Planner controls: switch day/week, dates, filters and 5/10/15/20/infinite
+  page sizes. Move a visit with arrow buttons, its date field and drag/drop;
+  verify persisted order/date after reload and stale-revision refusal. Different
+  drag groups and account changes must not carry a record into another target.
+  Start a debounced search, then change its bound record or disable the view:
+  the old pending change must not run against the new binding.
+- [ ] Render two copies of one styled Component under different parent CSS
+  variables. Each inherits its own theme; an outside element with the same
+  class stays unchanged. Check desktop and 390px responsive rules, focus,
+  dialogs and the full page through the footer.
+- [ ] Copy a Component with deferred collection rows. Row Action bindings,
+  dialog completion and stored media resolve to the new copies; runtime item
+  fields and unused metadata grant no extra access. Test nested collections
+  with small pages and visible budget failures for oversized data.
+- [ ] In Add visit, choosing a job fills an empty title, preserves a typed
+  title and retains drafts after a failed save. Save/Cancel/Escape return to
+  the original screen. Reopen a dialog after a successful save and verify the
+  old success does not close it again.
+- [ ] Confirm visit/job cards include their authorized property, customers
+  and crew. Duplicate links do not duplicate labels; archived customers and
+  cancelled job assignments are excluded. Missing references show unavailable
+  text instead of the final unrelated record's title.
+
 - [ ] As a team member, open an ordinary shared page and choose its saved
   `$install` control. Cancel the copy dialog, then copy and open it on desktop
   and mobile. The page, Components and Actions are private and owned by the
@@ -8432,8 +8455,23 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 - Builder record navigation: throttle the source request, follow a related record link, and verify old edit/archive controls disappear before the new result arrives. Reopening the same binding may paint its cached data; another record, viewer, page or sharing context must not inherit it.
 
+- Builder app portability: preview each generated Component and Action through the signed mutation workflow before migration. A valid app must fit without raising review limits; confirm record labels, zero values, empty text, archived references, missing references, and every planner day match the original app after title normalization.
 
 ## Web standards Builder app (2026-09-24)
+
+- [ ] Run detached DOM recipes with edited text, selectors, attribute names,
+  token values and text offsets. Confirm native results and projected changes:
+  append/insert/replace/remove, sibling reordering, text splitting, class-token
+  changes, attribute writes, queries, node/attribute collections and fragments.
+  Document factories do not count as constructor coverage. Save an edited DOM
+  program as a private Component, reopen/reload/run it and reuse it in Builder.
+- [ ] DOM runs refuse previous-run handles, window/defaultView/constructor
+  access, script/resource elements, event/URL attribute writes and markup
+  setters. Repeated detached subtree cloning must hit the allocation budget;
+  repeated requests cannot extend the worker deadline. An invalid selector's
+  native SyntaxError is catchable. Repeated handles preserve identity, native
+  void results remain undefined, and missing registered browser members report
+  unsupported. The rendered projection is not a live browsing-context receiver.
 
 - [ ] Change class initial/increment/setter values and observe private state,
   static fields and brand checks; change `this`/`super` receivers and generator
@@ -8529,3 +8567,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Web Platform suites; build client/server and verify Vercel runtime assets/CSP.
   Exercise the bundled server API too: JSON inventory initialization must not
   silently vanish from Nitro's lazy module initialization.
+
+### Edited Web Platform drafts and JSON Action inputs (2026-09-24)
+
+- Change a workbench definition and its inputs, including false, zero, empty
+  text, null, nested arrays and literal `{name}` / `$input.name` text. Run it,
+  save the edited Component, read the exact Thing, reload its Component preview
+  and reuse it in Builder. Definition, defaults and results must match.
+- Enter invalid program/input JSON and click Save: show a form error and make
+  no save request. Correct it and save once; one private Component is created.
+- Edit parameter defaults/types and remove a parameter: stale form overrides
+  must not reappear or replace the new defaults. Check desktop and 390px widths.
+- Create a JSON-input Action in the guided editor and inspect/run it. JSON
+  strings are literal at the API; form JSON is decoded exactly once. Verify
+  omitted defaults, explicit null and nested Action calls. Oversized resolved
+  defaults/child inputs refuse before executing; anonymous reads stay denied.

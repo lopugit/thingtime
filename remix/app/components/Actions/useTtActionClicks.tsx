@@ -185,7 +185,11 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			}
 			const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
 			if (invalid) { invalid.reportValidity(); return; }
-			inputs = { ...inputs, ...gatherFormFields(group) };
+			try { inputs = { ...inputs, ...gatherFormFields(group) }; }
+			catch (error) {
+				lopuRef.current({ title: 'Check the form', description: messageOf(error), status: 'error' });
+				return;
+			}
 			busyRef.current = true;
 			const identity = identityRef.current;
 			const runRuntime = runtimeRef.current;

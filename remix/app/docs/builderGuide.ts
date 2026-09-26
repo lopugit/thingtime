@@ -108,6 +108,34 @@ export const builderGuideSections = [
 		example: builderLookupExample
 	},
 	{
+		id: 'change-and-drag',
+		title: 'Field changes and moving items',
+		paragraphs: [
+			'Wrap an input, select or textarea in tt-change (Chakra Change). Its ttAction uses the same permission and confirmation path as a button. inputPath identifies the field to replace in ttActionInputs, for example params.date. Checkbox changes supply a boolean, number fields supply a number, and other fields supply text. allowEmpty: false skips cleared values. Optional stateKey keeps a local draft and debounceMs delays dispatch by at most 2000ms; changing the Action binding or disabling the view cancels a pending change.',
+			'Wrap a movable item in tt-drag (Chakra Drag), with a group and scalar inputs. A tt-drop (Chakra Drop) in the same page and group combines its own ttActionInputs with the explicitly named sourceInputs, then runs its saved ttAction. Inputs remain inside the app; external drags cannot provide record data. Account and page changes clear the drag. Supply buttons or date fields for keyboard and touch access to the same Action.',
+			'Collection rows expose collection.previous, collection.next and collection.afterNext from the source list, including adjacent pages. Use these references for ordering controls and pass the displayed record revision to the Action so concurrent edits are refused.'
+		]
+	},
+	{
+		id: 'style-cascade',
+		title: 'Inherited themes and scoped styles',
+		paragraphs: [
+			'Put shared theme values in CSS custom properties on a page container, such as --app-ink, --app-green and --app-line. Descendant Components inherit these values. Use var(--app-ink, #18392d) in saved rules to provide a fallback while keeping each page or nested container free to override its theme.',
+			'Wrap reusable markup in tt-style (Chakra Style) with rules: [{ selector, declarations, maxWidth? }]. Every selector receives an instance namespace through :where([data-tt-style]), which adds no specificity. Ordinary CSS specificity and source order still apply. Rules can style descendants inside that instance, including nested controls, without selecting siblings or the surrounding app. Inherited properties such as colour and font flow down; layout properties such as padding need their own rules.',
+			'A maxWidth rule provides a viewport breakpoint from 200 to 4000px. Prefer scoped rules and inherited tokens over inline styles when a parent theme should remain editable. The renderer accepts up to 220 rules with 40 declarations each and refuses resource-loading CSS, declaration injection, viewport positioning and z-index overrides. Use the dialog primitive for browser-managed overlays.'
+		],
+		example: {
+			tag: 'tt-style',
+			props: {
+				rules: [
+					{ selector: '.card', declarations: { color: 'var(--app-ink, #18392d)', padding: '16px' } },
+					{ selector: '.card', declarations: { padding: '8px' }, maxWidth: 650 }
+				]
+			},
+			children: [{ tag: 'section', props: { className: 'card' }, children: ['A reusable themed card'] }]
+		}
+	},
+	{
 		id: 'browser-flows',
 		title: 'Compose browser requests',
 		paragraphs: [
@@ -115,6 +143,7 @@ export const builderGuideSections = [
 			'GET requests may declare pagination: { cursorParam, cursorPath, itemsPath, itemKey?, maxPages, maxItems }. Every page spends the same time, operation and result budgets. Repeated cursors and incomplete or oversized lists fail visibly. Pagination and expanded timeout/result limits require execution protocol 1.8 or newer.',
 			'Use actions.invoke for one child, or each: { action, list, inputs, max } to call an allowlisted browser Action once per item. Child inputs may read $item and $index. Browser each requires protocol 1.9 and refuses a list larger than max before making requests; use slice to author an explicit batch. Every child is prepared as the current account, and parent budgets include all children.',
 			'Browser expressionLimits may configure nodes up to 1,000,000 and listItems up to 10,000 (defaults 20,000 and 1,000). The inspector shows effective limits. Children cannot raise a parent limit. Larger expression budgets also require protocol 1.9; they do not remove page, input, output, timeout or account boundaries. Compute and return use the shared expression grammar without eval or raw JavaScript.',
+			'Use indexBy(list, keyLambda) for a lookup and groupBy(list, keyLambda) for related lists. Keys must be non-empty strings or finite numbers; prototype keys are refused. indexBy keeps the last duplicate; groupBy preserves row order. Both spend the shared expression budget, and browser programs using them negotiate protocol 1.11. Index authorized source records once, then get the related row instead of rescanning every record for every card.',
 			'Browser execution returns a local result and trace. It does not create a server action-run record. HTTP and lookup source results are not persisted to the source cache. Shared read-only Action execution cannot run browser programs.'
 		]
 	},
@@ -123,6 +152,9 @@ export const builderGuideSections = [
 		title: 'Reusable record controls',
 		paragraphs: [
 			'A Component can save its own source: { action, inputs?, refresh?, intervalMs? }; a page block can override it. Source bindings use the same validation on create and update. Lists, forms, navigation and planner layouts remain ordinary editable templates; domain requests belong in Actions.',
+			'Use tt-collection (Chakra Collection) with itemsPath, label, empty, className and itemTemplate: { ttTemplate: rowMarkup }. The wrapper defers row bindings until the collection supplies item and index. Search, Show and paging operate on the authorized source array; filters use {path,label,options?}. hideSearch and hideSize hide those controls. Sources over 10,000 rows fail visibly. Nested collections share a 1,000-row rendering allowance across visible branches and allow up to 32 levels; choose smaller pages for larger nested layouts. Literal stored row Actions and media copy with the Component; runtime row values never grant access.',
+			'tt-select uses a compact native picker for up to 160 choices, with searchable pages for larger arrays. Optional filterPath/filterValue restrict choices, clear resets related draft keys, and fills entries {key,path,current?,whenEmpty?} copy scalar fields from the selected authorized row into local drafts. Use whenEmpty to preserve a title someone has already typed.',
+			'tt-dialog (Chakra Dialog) can autoOpen on a route, return through closeQuery on Escape or Close, and close after a successful closeOnAction. Copying rewrites that Action reference along with the executable form. Failed saves keep the dialog open. className lets an enclosing style namespace supply the dialog appearance.',
 			'Use tt-form (Chakra Form) as a fieldset with identityName, identity, revisionName, revision and resetKey. New forms generate one UUID; existing forms use identity. The revision is captured when the form opens. Refetches and failures preserve both, so retrying an ambiguous create can use the same id and a stale edit cannot silently adopt a newer revision. Only an explicit resetKey change or a different identity starts another draft. The Action and API must enforce idempotency and concurrency.',
 			"For large reference lists use tt-select (Chakra SelectRecords) with name, optionsPath, valuePath, labelPath, value, title and required. optionsPath names an array in the component scope, for example result.customers; valuePath and labelPath default to id/title. Search and twenty-choice pages avoid truncating to the template repetition limit. Selection stays stable while the source refreshes. Optional stateKey connects the selected value to that component's local $ui state; bind value with a draft fallback for filters or dependent controls. Sources over 10,000 choices must be filtered or paged.",
 			'tt-map (Chakra Map) draws supplied points [{lat,lng,title,href?}] with a browser apiKey, optional latitude/longitude/zoom/height/mapId/fitBounds, and a title. It has no record or lookup API logic. Saved Actions supply coordinates; same-origin marker links navigate on a click, including query-only and fragment links that remain on a copied page. It displays up to 1,000 points and refuses larger input. Keys need Google Maps JavaScript API billing and website restrictions; keep server-only provider credentials in Vault.',

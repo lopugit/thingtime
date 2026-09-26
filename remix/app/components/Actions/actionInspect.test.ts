@@ -190,6 +190,9 @@ test('coerceInputDefault coerces toward the declared type only', () => {
 	assert.equal(coerceInputDefault('true', 'text'), 'true');
 	assert.equal(coerceInputDefault('sent', 'enum'), 'sent');
 	assert.equal(coerceInputDefault('0412345678', 'string'), '0412345678');
+	assert.deepEqual(coerceInputDefault('{"items":[0,false,null]}', 'json'), { items: [0, false, null] });
+	assert.equal(coerceInputDefault('null', 'json'), null);
+	assert.throws(() => coerceInputDefault('{', 'json'));
 });
 
 // Duplicate actionKeys must resolve identically in the inspector and the
