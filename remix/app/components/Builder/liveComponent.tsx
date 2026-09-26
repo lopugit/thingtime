@@ -5,7 +5,7 @@ import { sourceFailure } from './sourceFailure';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { componentPageHref, hasComponentBackEntry } from './componentNavigation';
+import { componentPageHref, componentNavigationState, hasComponentBackEntry } from './componentNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { LOCAL_UI_ACTION, reduceLocalUi, localQueryHref } from '../Actions/localUiAction';
@@ -286,7 +286,10 @@ export const LiveTemplate = ({
 				return;
 			}
 			const href = localQueryHref(runtime.pageId, input.params);
-			if (href) navigate(componentPageHref(runtime.pageId, location, href));
+			if (href) {
+				const to = componentPageHref(runtime.pageId, location, href);
+				navigate(to, { state: input.op === 'query' ? componentNavigationState(runtime.pageId, location, to) : undefined });
+			}
 			return;
 		}
 		if (input.op === 'copy' && typeof input.value === 'string' && input.value.length <= 5000) {
