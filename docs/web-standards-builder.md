@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 3,077 have interactive recipes (227 HTML, 1,059 CSS, 890
-JavaScript and 901 Web API entries); the rest are
+editable program. 3,184 have interactive recipes (279 HTML, 1,059 CSS, 890
+JavaScript and 956 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -426,7 +426,7 @@ runtime artifact, not an older cached compiler.
 for dictionary, field, enum, typedef and callback entries. Dictionaries are
 passed to real APIs; they are not callable globals. Every example is editable
 saved Component data using the existing language compiler and isolated worker.
-The additive catalogue contract is `api.actions-run` 1.20.0. No runtime
+The additive catalogue contract is `api.actions-run` 1.21.0. No runtime
 permission, source-string execution or additional endpoint is introduced.
 
 Programs cover event initialization and callback objects; once, capture,
@@ -461,3 +461,38 @@ non-null RequestInit.window, and invalid UnderlyingSource.type can throw
 RangeError where Node throws TypeError. Transformer.cancel reports unsupported
 when the engine omits its callback. Node File.lastModified can retain fractions
 where the browser converts to an integer. These outcomes are not simulated.
+
+
+### Active-document events and native on-handler properties
+
+107 additional examples use ordinary saved DOM bindings: pointer and keyboard
+interaction, editing/selection, forms, dialog cancellation/closure, popovers,
+scrolling, drag/drop, local resource load/error, custom commands, CSS animation
+and transition lifecycles. HTML `on…` examples bind native IDL properties through
+`binding: "handler"`; inline JavaScript attributes remain rejected.
+
+Event bindings accept `options: { capture, once, passive }` for listeners, and
+`returnFalse` for IDL handlers. Both modes accept `preventDefault`,
+`stopPropagation`, and `stopImmediatePropagation`. Each flag is a boolean or
+`{ op: "input", name: "parameterName" }` resolving to an own boolean input;
+strings and implicit truthiness are rejected. Rebinding the same native `on…`
+property replaces its previous handler. Optional labels identify callbacks in
+the trace. These fields survive Component edits, saving and reopening.
+
+The trace keeps the most recent 20 observations, including dispatch-time phase,
+target/currentTarget, native event-specific scalar details, and cancellation
+observed in a later task after dispatch (including an IDL handler returning
+false). Text fields are capped at 256 characters. It does not traverse arbitrary
+event objects or read dropped files/clipboard data. A shared 200-operation budget
+unbinds program listeners when exhausted; partial setup failures and missing
+native handlers also clean up. Expected browser feature absence is reported as
+unsupported. The opaque sandbox, no-eval policy, local resource restrictions and
+form-navigation cancellation remain in force.
+
+Use real pointer/keyboard interaction for input, drag, wheel and editing events;
+method controls do not fabricate trusted events. Non-bubbling events omit the
+ancestor bubble callback. Passive listeners cannot cancel a default action.
+The element `onerror` example does not claim the distinct Window error callback
+convention. Window lifecycle, media playback and permission-dependent events
+remain outside this batch. Browser availability is separate from having an
+editable recipe, and the full standards catalogue remains incomplete.

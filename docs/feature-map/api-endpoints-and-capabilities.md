@@ -151,3 +151,11 @@ no new endpoint, runtime grant or storage shape is needed. Both manifest
 assertions and client negotiation advance together. `webIdlFixtures.test.ts`
 checks native semantics and edited saved data; browser checks cover geometry
 and platform-specific behavior.
+
+
+Native live-event bindings add `api.actions-run` 1.21.0. The existing catalogue
+Action returns 107 more complete editable Component programs for HTML event
+surfaces and GlobalEventHandlers attributes. Listener options, propagation and
+cancellation flags, IDL replacement/return-false behavior and bounded native
+receipts are saved data shared by the renderer, compiler and existing Thing
+write/save/reopen flow. No endpoints or permission expansion are added.
