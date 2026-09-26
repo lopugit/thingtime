@@ -85,3 +85,21 @@ test('authored form identity and revision fields render once inside an inert bou
  assert.match(markup,/name="id" value="record-1"/);
  assert.match(markup,/name="expectedUpdatedAt" value="original-stamp"/);
 });
+
+test('authored discussions remain inert and ignore forged post projections in previews', () => {
+ const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: {
+  tag: 'tt-discussion', props: { thingId: 'private-target', initialPost: { text: 'forged content' }, description: 'private description' },
+  children: [{ tag: 'button', children: ['Forged action'] }]
+ } }));
+ assert.match(markup, /Discussion is available on the interactive page/);
+ assert.doesNotMatch(markup, /private-target|private description|forged content|Forged action|data-tt-discussion/);
+});
+
+test('interactive discussions reject malformed or unbounded targets before mounting a loader', () => {
+ for (const thingId of [undefined, {}, '', '/api/private', 'https://other.example/thing', 'a'.repeat(161)]) {
+  const markup = renderToStaticMarkup(React.createElement(NativeControlsEnabled.Provider, { value: true },
+   React.createElement(HtmlThingRenderer, { node: { tag: 'tt-discussion', props: { thingId } } })));
+  assert.match(markup, /Choose a Thing to display its discussion/);
+  assert.doesNotMatch(markup, /data-tt-discussion|Refresh comments/);
+ }
+});

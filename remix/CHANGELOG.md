@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Saved Builder Components can embed the standard
+  Thing discussion with `tt-discussion`, retaining rich comments, replies,
+  reactions, media and collection controls. Previews stay inert; target reads
+  and writes keep the current viewer's permissions. Accepted comments refresh
+  source-bound page blocks for related galleries and record revisions.
+
 - 2026-09-27 — **Codex (AI)**: DOM receiver inspection and projection now use
   captured browser accessors, so named form controls cannot hide descendants
   from allocation/depth limits. Added reusable browser regressions and rejected

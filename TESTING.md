@@ -8404,6 +8404,13 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Shared discussion acceptance and service galleries
 
+- Saved Components: embed `tt-discussion` for an authorized Thing. At desktop
+  and 390px, post a comment and nested reply, react, search, and refresh; keep
+  the canonical discussion controls and refresh page sources only after an
+  accepted write. Builder previews stay inert, malformed targets never mount
+  a loader, and another account cannot see a private target's discussion.
+  Authored post projections, children and callbacks must be ignored.
+
 - Post a plain or rich comment/reply on a workspace Thing, including a nested
   reply. Refresh the media gallery only after server acceptance; rejected writes
   must not trigger refresh. A failed gallery refresh must leave the accepted
