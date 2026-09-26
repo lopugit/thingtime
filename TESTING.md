@@ -8750,3 +8750,31 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   persisted inputs. Owner read succeeds; anonymous read remains 404. Confirm
   both capability manifests advertise actions-run 1.19.0 and the served runtime
   hash matches the current compiler while retaining the sandbox CSP.
+
+
+### Web IDL option dictionaries and callbacks
+
+- Edit EventInit/CustomEventInit defaults and verify native boolean conversion,
+  cancelable dispatch and arbitrary detail. Callback objects receive their own
+  this; once, passive, capture-matched removal and AbortSignal lifetime affect
+  actual delivery. Retain native engine differences.
+- Construct Blob/File values with MIME, line endings and lastModified options;
+  inspect real bytes and timestamp values. Construct Request/Response metadata
+  with normalized headers/body, native enum/method/status errors and a following
+  AbortSignal. Record engines that ignore window or differ in error types. These examples must never send a network request.
+- Split multi-byte decoding across calls; compare stream, fatal and ignoreBOM.
+  Exercise every geometry dictionary field in a browser, omitted defaults,
+  inconsistent matrix aliases/is2D and negative rectangle dimensions.
+- Observe native queue desiredSize and size callbacks, pipe preventClose,
+  preventAbort/preventCancel and signals; verify locks release after settlement.
+  Compare default/BYOB readers, detached supplied views and min validation.
+- Exercise source/sink/transformer callbacks, auto-allocation, ordered writes,
+  backpressure, flush and cancellation. Missing Transformer.cancel must report
+  unsupported. Reserved stream types must expose their native rejection.
+- Numeric strings must not bypass the 4096-byte allocation limit. Reject numeric
+  or array-like byte lengths and overlong chunk lists before allocating/looping.
+- Edit a stream options Component, save/reopen/reload/run, verify its inputs and
+  full saved callbacks remain intact, and confirm anonymous read remains 404.
+  Run the real local API round-trip separately from the opt-in test skip.
+- Check both capability manifests for actions-run 1.20.0 and verify exact hosted
+  source, runtime artifact and isolated CSP before production delivery.
