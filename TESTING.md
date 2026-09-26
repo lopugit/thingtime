@@ -8467,6 +8467,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Web standards Builder app (2026-09-24)
 
+- [ ] Constructor examples compare calling with using new. Confirm boxed false
+  is truthy, exact BigInts retain decimal strings, a single numeric Array
+  argument creates holes, and typed-array copies stay independent while buffer
+  views observe source writes. Test native alignment/bounds failures and the
+  separately labelled 4096-element/byte demo allocation limit.
+- [ ] Promise construction records a synchronous executor, asynchronous thenable
+  assimilation/reactions and first-settlement behavior. Proxy reads obey fixed
+  property invariants and refused writes preserve target values. RegExp calling
+  versus construction preserves/copies identity correctly. Save an edited
+  Promise or typed-array program, reopen/reload/run it, and check private owner
+  access plus anonymous refusal. Weak/finalization examples make no GC promise.
+
 - [ ] Run TypedArray intrinsic recipes across numeric widths and BigInt types.
   Check byte windows, signed wrapping, clamping, exact decimal strings,
   callback thisArg/visit order, native bounds errors, mutation, and shared
@@ -8705,3 +8717,5 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   back through the canonical API and reopen/reload their previews. Programs,
   edited defaults and behavior survive; anonymous reads remain denied. Missing
   native members and SharedArrayBuffer report unsupported in their actual context.
+
+- Constructor allocation limits: numeric, numeric-string and array-like DataView backing inputs above 4096 reject with an explicit demo-limit error; small numeric buffers still zero-initialize. Oversized iterator materialization also rejects before iteration.

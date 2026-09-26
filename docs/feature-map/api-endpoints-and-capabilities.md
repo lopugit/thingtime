@@ -131,3 +131,9 @@ TypedArray, iterator and generator intrinsic recipes add `api.actions-run`
 language nodes; `javascriptIntrinsics.test.ts` checks native byte conversion,
 protocol cleanup, engine differences and edited draft round trips. See
 [intrinsic receiver coverage](../web-standards-builder.md#ecmascript-intrinsic-receivers).
+
+Native constructor signature programs require `api.actions-run` 1.18.0. Both
+manifests and client negotiation cover the additive catalogue contract.
+`javascriptConstructors.test.ts` verifies native invocation requirements,
+overloads, mutation/identity, callbacks, errors and saved edited defaults through
+the existing data compiler. No new execution endpoint or permission is added.

@@ -22,7 +22,7 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,859 have interactive recipes (227 HTML, 1,059 CSS, 804
+editable program. 2,925 have interactive recipes (227 HTML, 1,059 CSS, 870
 JavaScript and 769 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
@@ -343,3 +343,31 @@ escape. The catalogue contract is `api.actions-run` 1.17.0 in both manifests and
 client negotiation. JavaScript coverage is now 638 built-in, 77 language and 89
 specification entries; 208 language and 850 specification entries still lack
 worked recipes. This does not imply exhaustive standards coverage.
+
+## Native constructor signatures
+
+`javascriptConstructorFixtures.ts` adds 66 complete programs for the published
+constructor signatures, including global constructor properties and their
+specific algorithm clauses. These entries retain their distinct source links;
+they do not represent 66 distinct APIs. Native invocation uses the existing
+Reflect call/construct operations, with an editable new toggle. TypedArray and
+NativeError are explicitly identified as specification family placeholders and
+select actual native constructors. Iterator runs an actual data-defined subclass
+or demonstrates its native abstract-construction rejection.
+
+Examples expose primitive wrappers and truthiness, sparse array holes, typed
+array copying and buffer sharing, zero initialization, DataView windows, Date
+invalid states, error cause descriptors, collection identity, Promise executor
+and job order, Proxy invariants, and RegExp identity/lastIndex. Allocation inputs
+are capped at 4096 elements or bytes in the authored program. These demonstration
+limits are distinct from the native standard's allocation limits. Native errors
+remain visible; SharedArrayBuffer requires a context that exposes it. Weak
+references and finalization examples retain their targets and make no garbage
+collection or cleanup-timing promise.
+
+The same catalogue/save/Component contracts carry all program nodes and edited
+defaults. `api.actions-run` 1.18.0 is negotiated on both manifests and the client.
+There are no compiler or runtime permission changes. JavaScript coverage is now
+638 built-in, 77 language and 155 specification entries; 208 language and 784
+specification entries remain without worked recipes. Tests distinguish source
+entry coverage, native unavailability, and actual behavior.
