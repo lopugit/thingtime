@@ -2,7 +2,10 @@
 
 Branch: `codex/web-standards-form-receivers`
 PR: https://github.com/lopugit/thingtime/pull/914
-Base: `main` at `e887f769a66ba8da6203eede2c0bfcde94212467`.
+Initial base: `main` at `e887f769a66ba8da6203eede2c0bfcde94212467`.
+Updated with `main` at `c14bf053e20f699858df546da2e9e495ef66209c` after
+PR #915 added the independent discussion control. Both changelog entries were
+preserved; the graph was refreshed as one atomic snapshot after integration.
 
 ## Behavior
 
