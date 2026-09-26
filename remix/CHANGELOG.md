@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Editable media forms can reset automatically
+  after a successful receipt matches their generated operation id. Failed and
+  sibling saves preserve drafts and retry identities. Attachment controls add
+  configurable helper text, linked-URL visibility and local upload readiness.
+  Nested discussions also isolate clicks from authored ancestor Actions.
+
 - 2026-09-27 — **Codex (AI)**: Web standards adds 212 reusable HTML form
   examples with typed control state, text selection, validity and live
   option/radio collections. Native overload dispatch and detached collection
