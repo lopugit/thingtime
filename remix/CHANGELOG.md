@@ -76,6 +76,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Report cancellation after native dispatch, clean up failed/exhausted bindings,
   and preserve ordinary private Component save/reopen behavior. Existing sandbox
   restrictions remain unchanged. Catalogue/client contract: 1.21.0.
+  Details: [PR #934](../PRs/934-codex-web-standards-html-events-add-reusable-live-html-event-programs-and-native-handler-bindings.md).
 
 
 - 2026-09-27 — **Codex (AI)**: Added 132 reusable Web IDL dictionary, field,
