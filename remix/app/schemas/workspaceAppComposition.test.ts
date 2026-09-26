@@ -4,6 +4,7 @@ import { workspaceAppComposition } from './workspaceAppComposition';
 import { validateThingtimeCrystal } from './registry';
 import { executeBrowserAction, type BrowserActionHost } from '../components/Actions/browserActionRuntime';
 import type { PreparedBrowserAction } from './browserActions';
+import { normalizeLimitlessMutationOperations, buildLimitlessMutationPreview } from '../api/utils/chatgpt/pluginLimitlessCore';
 import { resolveTemplate } from '../components/ComponentsLibrary/componentTemplate';
 const app = workspaceAppComposition({ namespace: 'qa-builder', rootId: 'existing-root', pagePath: '/p/existing-page' });
 function prepare(key: string, inputs: Record<string, unknown>): PreparedBrowserAction {
@@ -68,6 +69,43 @@ test('map composition requests coordinates only for the visible address page', a
 	assert.equal(result.mapPoints.length, 12);
 	assert.equal(requests.filter((r) => r.body?.operation === 'place').length, 12);
 	assert.equal(result.mapPoints[0].href, '?view=detail&id=address-12');
+});
+
+test('visit and job cards retain authorized property, customer and crew context without missing-reference fallback', async () => {
+	const rows = [
+		{ id: 'address', kind: 'address', values: { title: 'Garden', address: '24 Example St' } },
+		{ id: 'customer', kind: 'customer', values: { firstName: 'Alex', lastName: 'Green' } },
+		{ id: 'archived', kind: 'customer', values: { firstName: 'Archived', archived: true } },
+		{ id: 'link', kind: 'link', values: { customerId: 'customer', addressId: 'address' } },
+		{ id: 'duplicate-link', kind: 'link', values: { customerId: 'customer', addressId: 'address' } },
+		{ id: 'archived-link', kind: 'link', values: { customerId: 'archived', addressId: 'address' } },
+		{ id: 'job', kind: 'job', values: { title: 'Hedges', addressId: 'address' } },
+		{ id: 'visit', kind: 'visit', values: { title: 'Trim', jobId: 'job', employeeId: 'crew', status: 'Scheduled' } },
+		{ id: 'cancelled', kind: 'visit', values: { jobId: 'job', employeeId: 'other', status: 'Cancelled' } },
+		{ id: 'missing', kind: 'visit', values: { jobId: 'unavailable', employeeId: 'unknown' } }
+	];
+	const gateway = host(rows);
+	const request = gateway.request;
+	gateway.request = async (...args) => ({
+		...((await request(...args)) as Record<string, unknown>),
+		team: [
+			{ id: 'crew', name: 'Sam' },
+			{ id: 'other', name: 'Cancelled crew' }
+		]
+	});
+	const result: any = await executeBrowserAction(prepare('qa-builder-snapshot', { rootId: app.rootId }), gateway);
+	const expected = ['Garden · 24 Example St', 'Customers: Alex Green', 'Assigned crew: Sam'];
+	for (const id of ['job', 'visit'])
+		assert.deepEqual(
+			result.records.find((row: any) => row.id === id).context.map((row: any) => row.text),
+			expected
+		);
+	assert.equal(result.records.find((row: any) => row.id === 'visit').employeeName, 'Sam');
+	assert.deepEqual(
+		result.records.find((row: any) => row.id === 'missing').context.map((row: any) => row.text),
+		['Property unavailable', 'Assigned crew: Unassigned']
+	);
+	assert.ok(result.records.every((row: any) => !('contextJob' in row)));
 });
 
 test('media reads remain scoped to the selected record and carry the requested cursor', async () => {
@@ -215,7 +253,7 @@ test('ungrouped map credentials retain the existing null environment contract', 
 	assert.equal(requests[0].body.environmentId, null);
 	const setup = app.definitions.find((d) => d.crystal.componentKey === 'qa-builder-setup')!;
 	const rendered: any = resolveTemplate(setup.crystal.render, {
-		result: { view: 'setup', owner: true, mapsEnvironmentId: null, mapsEnvironments: [] }
+		result: { view: 'setup', screenView: 'setup', owner: true, mapsEnvironmentId: null, mapsEnvironments: [] }
 	});
 	const encoded = JSON.stringify(rendered);
 	assert.ok(encoded.includes('Ungrouped'));
@@ -403,4 +441,97 @@ test('quick updates can find a record beyond the default expression list limit',
 		host(records, requests)
 	);
 	assert.equal(requests.at(-1).body.id, 'v');
+});
+
+test('every saved definition fits a signed mutation preview at maximum app identifier lengths', () => {
+	const portable = workspaceAppComposition({ namespace: 'x'.repeat(36), rootId: 'r'.repeat(160), pagePath: '/p/' + 'p'.repeat(120) });
+	for (const definition of portable.definitions) {
+		const id = definition.crystal.actionKey || definition.crystal.componentKey;
+		const operations = normalizeLimitlessMutationOperations([
+			{
+				action: 'create',
+				thing: {
+					...definition,
+					shareId: id,
+					acl: ['tt:user', 'tt:custom', 'tt:service-workspace'],
+					extended: { serviceWorkspaceId: portable.rootId }
+				}
+			}
+		]);
+		assert.ok(operations.ok);
+		if (!operations.ok) continue;
+		const preview = buildLimitlessMutationPreview({ accountId: 'a'.repeat(36), operations: operations.value, beforeById: new Map() });
+		assert.equal(preview.ok, true, `${id}: ${preview.ok === false ? preview.error : ''}`);
+	}
+});
+
+test('record field projection preserves values and refuses missing or wrong-kind reference labels', async () => {
+	const rows = [
+		{ id: 'property', kind: 'address', values: { address: 'Archived property', archived: true } },
+		{ id: 'job', kind: 'job', values: { title: 'Work', addressId: 'property', estimatedMinutes: 0, description: '' } }
+	];
+	const read = async (records: any[]) =>
+		executeBrowserAction(prepare('qa-builder-read', { rootId: app.rootId, view: 'detail', id: 'job' }), host(records)) as Promise<any>;
+	const result = await read(rows);
+	assert.equal(result.recordTitle, 'Work');
+	assert.deepEqual(
+		result.recordFields.find((f: any) => f.label === 'Address'),
+		{ label: 'Address', value: 'Archived property', id: 'property' }
+	);
+	assert.equal(result.recordFields.find((f: any) => f.label === 'Estimated total minutes').value, 0);
+	assert.equal(result.recordFields.find((f: any) => f.label === 'Description').value, '');
+	for (const references of [[], [{ ...rows[0], kind: 'customer' }], [{ ...rows[0], id: 'unrelated-property' }]]) {
+		const missing = await read([rows[1], ...references]);
+		assert.deepEqual(
+			missing.recordFields.find((f: any) => f.label === 'Address'),
+			{ label: 'Address', value: 'Unavailable record', id: null }
+		);
+	}
+});
+
+test('planner weeks start on Monday including Sunday and retain every daily visit', async () => {
+	const rows = Array.from({ length: 30 }, (_, index) => ({
+		id: `visit-${index}`,
+		kind: 'visit',
+		values: { title: `Visit ${index}`, date: '2026-09-27', order: 30 - index }
+	}));
+	const result: any = await executeBrowserAction(prepare('qa-builder-read', { rootId: app.rootId, view: 'planner', date: '2026-09-27' }), host(rows));
+	assert.equal(result.days[0].date, '2026-09-21');
+	assert.equal(result.days[6].records.length, 30);
+	assert.equal(result.days[6].records[0].id, 'visit-29');
+});
+
+test('planner reorder calculates insertion positions and preserves the displayed concurrency revision', async () => {
+	const rows = [
+		{ id: 'moved', kind: 'visit', updatedAt: 'fresh-but-not-displayed', values: { date: '2026-09-21', time: '10:30', order: 0 } },
+		{ id: 'first', kind: 'visit', values: { date: '2026-09-22', order: 1024 } },
+		{ id: 'last', kind: 'visit', values: { date: '2026-09-22', order: 3072 } }
+	];
+	const inputs = { rootId: app.rootId, id: 'moved', expectedUpdatedAt: 'displayed-revision', date: '2026-09-22' };
+	for (const [beforeId, expectedOrder] of [
+		['first', 0],
+		['last', 2048],
+		['', 4096]
+	] as const) {
+		const requests: any[] = [];
+		await executeBrowserAction(prepare('qa-builder-reorder', { ...inputs, beforeId }), host(rows, requests));
+		const body = requests.find((step) => step.method === 'POST').body;
+		assert.deepEqual(body, {
+			operation: 'move',
+			rootId: app.rootId,
+			id: 'moved',
+			expectedUpdatedAt: 'displayed-revision',
+			date: '2026-09-22',
+			time: '10:30',
+			order: expectedOrder
+		});
+	}
+	const requests: any[] = [];
+	await executeBrowserAction(prepare('qa-builder-reorder', { ...inputs, beforeId: 'moved' }), host(rows, requests));
+	assert.equal(requests.length, 0);
+	await assert.rejects(
+		executeBrowserAction(prepare('qa-builder-reorder', { ...inputs, beforeId: 'missing' }), host(rows, requests)),
+		/Refresh the planner/
+	);
+	assert.equal(requests.filter((step) => step.method === 'POST').length, 0);
 });

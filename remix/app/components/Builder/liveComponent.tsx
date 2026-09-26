@@ -1,5 +1,6 @@
 import { ComponentDataScope } from './ComponentSelect';
-import { NativeControlsEnabled } from './NativeComponentControls';
+import { ComponentDragBoundary } from './ComponentDrag';
+import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { sourceFailure } from './sourceFailure';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
@@ -268,7 +269,9 @@ export const LiveTemplate = ({
 	const navigate = useNavigate();
 	const lopu = useLopu();
 	const baseScope = Object.fromEntries(
-		Object.entries(scope).filter(([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource'].includes(key))
+		Object.entries(scope).filter(
+			([key]) => !['result', 'state', 'error', 'last', 'viewer', 'query', 'installing', 'installAvailable', 'hasSource'].includes(key)
+		)
 	);
 	// Explicit navigation starts a new component draft; source refreshes do not.
 	const identity = JSON.stringify([user?.id, runtime.pageId, runtime.query, render, baseScope]);
@@ -316,76 +319,80 @@ export const LiveTemplate = ({
 	if (!resolved) return null;
 	return (
 		<NativeControlsEnabled.Provider key={identity} value={interactive}>
-			<ComponentDataScope.Provider value={liveScope}>
-				<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
-					<Box
-						onClickCapture={
-							interactive
-								? (event) => {
-										if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
-								  }
-								: undefined
-						}
-						onChangeCapture={
-							interactive
-								? (event) => {
-										const field = event.target as HTMLInputElement;
-										if (field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;
-										try {
-											const input = JSON.parse(field.getAttribute('data-tt-action-inputs') || '{}');
-											onLocal({
-												...input,
-												op: 'set',
-												value:
-													field.type === 'checkbox'
-														? field.checked
-														: field.type === 'number' || field.type === 'range'
-														? Number(field.value)
-														: field.value
-											});
-										} catch {}
-								  }
-								: undefined
-						}
-						onKeyDownCapture={
-							interactive
-								? (event) => {
-										const field = event.target as HTMLInputElement;
-										if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
-										if (
-											event.key !== 'Enter' ||
-											event.nativeEvent.isComposing ||
-											field.tagName !== 'INPUT' ||
-											['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
-										)
-											return;
-										const group = field.closest('fieldset') || event.currentTarget;
-										const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
-										if (submit) {
-											const action = submit.getAttribute('data-tt-action');
-											const inputs = submit.getAttribute('data-tt-action-inputs') || '';
-											if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
-												event.preventDefault();
-												submit.click();
+			<ComponentDragBoundary>
+			<ComponentLocalControl.Provider value={interactive ? onLocal : null}>
+				<ComponentDataScope.Provider value={liveScope}>
+					<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
+						<Box
+							onClickCapture={
+								interactive
+									? (event) => {
+											if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
+									  }
+									: undefined
+							}
+							onChangeCapture={
+								interactive
+									? (event) => {
+											const field = event.target as HTMLInputElement;
+											if (field.getAttribute('data-tt-action') !== LOCAL_UI_ACTION) return;
+											try {
+												const input = JSON.parse(field.getAttribute('data-tt-action-inputs') || '{}');
+												onLocal({
+													...input,
+													op: 'set',
+													value:
+														field.type === 'checkbox'
+															? field.checked
+															: field.type === 'number' || field.type === 'range'
+															? Number(field.value)
+															: field.value
+												});
+											} catch {}
+									  }
+									: undefined
+							}
+							onKeyDownCapture={
+								interactive
+									? (event) => {
+											const field = event.target as HTMLInputElement;
+											if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
+											if (
+												event.key !== 'Enter' ||
+												event.nativeEvent.isComposing ||
+												field.tagName !== 'INPUT' ||
+												['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
+											)
+												return;
+											const group = field.closest('fieldset') || event.currentTarget;
+											const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
+											if (submit) {
+												const action = submit.getAttribute('data-tt-action');
+												const inputs = submit.getAttribute('data-tt-action-inputs') || '';
+												if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
+													event.preventDefault();
+													submit.click();
+												}
 											}
-										}
-								  }
-								: undefined
-						}
-						onDoubleClickCapture={onDoubleClickCapture}
-						width="100%"
-						data-live={interactive ? 'true' : 'false'}
-					>
-						{isChakraThingNode(resolved) ? (
-							<ChakraThingRenderer node={resolved as ChakraThingNode} />
-						) : (
-							<HtmlThingRenderer node={resolved as HtmlThingNode} />
-						)}
-						{interactive && active.outcome ? <ActionResult outcome={active.outcome} /> : null}
-						{children}
-					</Box>
-				</ComponentUploadEnabled.Provider>
-			</ComponentDataScope.Provider>
+									  }
+									: undefined
+							}
+							onDoubleClickCapture={onDoubleClickCapture}
+							width="100%"
+							data-live={interactive ? 'true' : 'false'}
+						>
+							{isChakraThingNode(resolved) ? (
+								<ChakraThingRenderer node={resolved as ChakraThingNode} />
+							) : (
+								<HtmlThingRenderer node={resolved as HtmlThingNode} />
+							)}
+							{interactive && active.outcome ? <ActionResult outcome={active.outcome} /> : null}
+							{children}
+						</Box>
+					</ComponentUploadEnabled.Provider>
+				</ComponentDataScope.Provider>
+			</ComponentLocalControl.Provider>
+			</ComponentDragBoundary>
 		</NativeControlsEnabled.Provider>
 	);
 };

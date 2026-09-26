@@ -22,11 +22,15 @@ async function main() {
 	if (!actor || typeof qa.cookie !== 'string') throw new Error('Invalid QA session');
 	const call = async (path: string, body?: any) => {
 		const response = await fetch(origin + path, {
+			signal: AbortSignal.timeout(path === '/api/v1/things/fork' ? 120000 : 30000),
 			method: body ? 'POST' : 'GET',
 			headers: { cookie: qa.cookie, 'content-type': 'application/json', origin },
 			...(body ? { body: JSON.stringify(body) } : {})
 		});
-		const value: any = await response.json();
+		const bodyText = await response.text();
+		let value: any;
+		try { value = JSON.parse(bodyText); }
+		catch { throw new Error(`${path.split('?')[0]}: ${response.status} returned ${bodyText ? 'non-JSON' : 'empty'} content`); }
 		if (!response.ok || value.ok === false) throw new Error(`${path}: ${response.status} ${value.error}`);
 		return value;
 	};
@@ -106,7 +110,7 @@ async function main() {
 		/409/
 	);
 	const prepare = async (action: string, inputs: any) =>
-		call('/api/v1/actions/run', { action, inputs, source: 'component', execution: 'browser', executionVersion: '1.9.0' });
+		call('/api/v1/actions/run', { action, inputs, source: 'component', execution: 'browser', executionVersion: '1.11.0' });
 	const host = {
 		assertIdentity: (id: string) => {
 			if (id !== actor) throw new Error('Wrong actor');
