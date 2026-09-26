@@ -4,6 +4,18 @@ import { rewriteComposition } from './forkCompositionCore';
 import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
 import { compositionReferences, storedComponentScope } from './sharedCompositionCore';
 
+test('collection source Actions are exported and remapped in nested row templates for HTML and Chakra', () => {
+	for (const tag of [{ tag: 'tt-collection' }, { chakra: 'Collection' }]) {
+		const original = { render: { ...tag, props: { source: { action: 'outer', inputs: { value: 'outer' } }, itemTemplate: { ttTemplate: { ...tag, props: { source: { action: 'inner', inputs: { id: '{item.id}' } } } } } } } };
+		assert.deepEqual(compositionReferences(['component'], original).map((ref) => ref.ref), ['outer', 'inner']);
+		const copy = rewriteComposition(['component'], original, (_kind, ref) => `copy-${ref}`);
+		assert.deepEqual(compositionReferences(['component'], copy).map((ref) => ref.ref), ['copy-outer', 'copy-inner']);
+		assert.equal(copy.render.props.source.inputs.value, 'outer');
+		assert.equal(copy.render.props.itemTemplate.ttTemplate.props.source.inputs.id, '{item.id}');
+		assert.deepEqual(compositionReferences(['component'], { render: { ...tag, props: { source: { action: '{item.id}' }, metadata: { source: { action: 'fake' } } } } }), []);
+	}
+});
+
 test('forks preserve argument programs while rebinding each saved instance and fork-of-fork', () => {
 	const original = {
 		savedArgs: { action: 'default', label: 'draw-default' },
