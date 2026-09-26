@@ -18,7 +18,9 @@ The definitions use the existing `tt-web-platform` program grammar and save
 Action. No feature-ID dispatch, native app block or new persistence model is
 added. Native booleans, bounded integers, fractional values and nullable-node
 setters preserve their types. Native selection offsets and control state are
-returned explicitly because serialized HTML does not capture dirty state.
+returned explicitly because serialized HTML does not capture dirty state. The
+snapshot includes native validity flags/messages, so setCustomValidity changes
+remain observable even on controls barred from constraint validation.
 
 The bridge resolves registered members from the most specific captured native
 prototype, preserving both select removal overloads. Returned collections keep

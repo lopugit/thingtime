@@ -154,7 +154,9 @@ export function htmlFormRecipe(f: Feature): Recipe | undefined {
 	}
 	if (tag === 'textarea') children = ['[[text]]'];
 	if (tag === 'button') {
-		attrs.type = 'button';
+		attrs.type = ['checkValidity', 'reportValidity', 'setCustomValidity', 'validity', 'validationMessage', 'willValidate'].includes(member)
+			? 'submit'
+			: 'button';
 		children = ['[[text]]'];
 	}
 	if (['select', 'optgroup', 'datalist'].includes(tag))
@@ -278,7 +280,19 @@ export function htmlFormRecipe(f: Feature): Recipe | undefined {
 	if (f.kind === 'attribute') expression = domGet(receiver, member);
 	if (f.kind === 'operation') expression = domCall(receiver, member, args[member] || []);
 	const snapshot =
-		name === 'ValidityState' ? project(receiver, validityMembers) : collection ? describe(receiver) : project(sample, profiles[name] || ['nodeName']);
+		name === 'ValidityState'
+			? project(receiver, validityMembers)
+			: collection
+			? describe(receiver)
+			: object({
+					...Object.fromEntries((profiles[name] || ['nodeName']).map((key) => [key, domGet(sample, key)])),
+					...(policy.reads.split(' ').includes('validity')
+						? {
+								validity: project(domGet(sample, 'validity'), validityMembers),
+								validationMessage: domGet(sample, 'validationMessage')
+						  }
+						: {})
+			  });
 	const steps = [
 		declare('doc', domDocument()),
 		declare('form', domCall(doc, 'getElementById', [tag === 'form' ? 'sample' : 'demo'])),
