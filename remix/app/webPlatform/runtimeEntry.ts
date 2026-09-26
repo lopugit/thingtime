@@ -3,6 +3,7 @@ import { compilePlatformWorker } from './workerSource';
 import { runPlatformWorker } from './workerLifecycle';
 import { inspectPlatformInterface } from './interfaceProbe';
 import { createPlatformDOMBridge } from './domBridge';
+import { canvasArgument, CANVAS_LIMITS } from './canvasSupport';
 import { bindLiveDOMEvent, nativeDOMMethod, platformEventReceipt, UnsupportedDOMFeature } from './liveDOM';
 import { localPlatformResource } from './mediaPolicy';
 import { readMediaProperty, writeMediaProperty, mediaReceipt, mediaMethodResult } from './liveMedia';
@@ -40,6 +41,7 @@ addEventListener('message', (event) => {
 		const root = document.getElementById('surface')!;
 		let nodes = 0;
 		let mediaNodes = 0;
+		let canvasNodes = 0;
 		const substitute = (value: unknown) =>
 			typeof value === 'string'
 				? value.replace(/\[\[([A-Za-z_][A-Za-z0-9_]*)\]\]/g, (_, name) =>
@@ -53,11 +55,16 @@ addEventListener('message', (event) => {
 			if (!node || typeof node !== 'object' || typeof node.tag !== 'string' || !/^[a-z][a-z0-9-]{0,40}$/.test(node.tag) || blocked.has(node.tag))
 				throw new Error('This document element needs a dedicated browsing context');
 			if (['audio', 'video'].includes(node.tag) && ++mediaNodes > 8) throw new Error('Document exceeds its media budget');
+			if (node.tag === 'canvas' && ++canvasNodes > CANVAS_LIMITS.canvases) throw new Error('Document exceeds its Canvas budget');
 			const el = document.createElement(node.tag);
 			for (const [key, value] of Object.entries(node.attributes || {})) {
 				if (/^on/i.test(key) || ['srcdoc', 'is', 'nonce', 'action', 'formaction', 'ping', 'autofocus', 'pattern'].includes(key.toLowerCase()))
 					throw new Error('Use declarative events and local document attributes');
 				const val = substitute(value);
+				if (node.tag === 'canvas' && ['width', 'height'].includes(key.toLowerCase()))
+					canvasArgument(Number(val), 'canvas-size', () => {
+						throw new Error('No handle');
+					});
 				if (['src', 'href', 'poster', 'data'].includes(key.toLowerCase()) && !localPlatformResource(val, node.tag, key.toLowerCase()))
 					throw new Error('Use local demo resources');
 				if (value === false) continue;
@@ -152,6 +159,10 @@ addEventListener('message', (event) => {
 						}
 						return typeof value === 'string' ? substitute(value) : value;
 					});
+					if (operation.method === 'setAttribute' && element instanceof HTMLCanvasElement && /^(width|height)$/i.test(String(args[0])))
+						canvasArgument(Number(args[1]), 'canvas-size', () => {
+							throw new Error('No handle');
+						});
 					if (operation.method === 'setAttribute' && /^(on|src|href|srcdoc|action|formaction|is|nonce|pattern)/i.test(String(args[0])))
 						throw new Error('Attribute is not writable by this control');
 					const result = operation.property

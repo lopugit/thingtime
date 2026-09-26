@@ -167,3 +167,10 @@ existing DOM binding interpreter provide the reusable property/method/event
 backing. Both manifests and client negotiation advance together. No endpoint,
 external media source or device grant is added. Save/reopen uses the unchanged
 opaque program and private Component write boundary.
+
+Canvas catalogue programs negotiate `api.actions-run` 1.23.0. Existing DOM worker
+transport now accepts bounded surface roots and Path2D/ImageData construction;
+`canvasPolicy.ts`/`canvasSupport.ts` own native receiver/resource limits and
+`canvasFixtures.ts` owns editable program data. Surface access never exposes the
+runtime Document or permits unrelated tree mutation. See the Web standards
+Canvas checklist for native pixels/fonts, private save/reload and scope refusal.

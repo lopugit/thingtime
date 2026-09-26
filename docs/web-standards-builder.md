@@ -535,3 +535,43 @@ and reload. Permission-sensitive playback, remote devices, MediaStreams, DRM,
 text tracks and video-frame callbacks remain separately unfinished coverage.
 The additive API contract is `api.actions-run` 1.22.0 on both manifests and the
 client requirement map. Runtime CSP remains isolated and denies external media.
+
+## Native Canvas programs
+
+145 new editable Canvas programs bring interactive coverage to 3,418/18,798:
+HTML 302, CSS 1,059, JavaScript 890 and Web APIs 1,167. They cover native 2D
+state, compositing, transforms, paths, text and metrics, gradients, patterns,
+image smoothing, local bitmap copies, pixels, context dictionaries and relevant
+enums. The reference is the [HTML Canvas standard](https://html.spec.whatwg.org/multipage/canvas.html),
+checked 27 September 2026 against its 25 September publication.
+
+Programs use the existing DOM worker bridge with `action: "surface"` to obtain
+the rendered program root. `document` and `surface` contexts are mutually
+exclusive within one run. Surface tree reads are bounded to owned nodes;
+connected nodes outside that root and the runtime Document are refused.
+Only registered Canvas state/methods may mutate surface receivers. General tree
+mutations continue to use detached `document` programs. This distinction matters:
+fonts on a detached Document did not honor writes in the tested browser. Canvas
+recipes therefore use the actual rendered surface and native pixel/text output.
+
+`action: "construct"` accepts only Path2D and ImageData, using the same run-local
+handle codec, request numbering and native error transport. Gradients, patterns,
+text metrics and matrices are native receiver handles. Pixel arrays are bounded
+value projections. Saved programs contain their complete document tree, typed
+inputs and operations; no catalogue IDs or source-code escape exists in native
+runtime backing. A hidden authored tile canvas supplies local bitmap examples.
+
+Limits: four canvases, each edge at most 512 pixels; pixel windows at most 32 per
+edge and 4,096 numeric pixel values; 32 dash entries and four corner radii;
+4,096 path units per path and 16,384 cumulative path work (including addPath and
+copies); font setters use absolute pixel sizes up to 128; filters reject URLs
+and bound blur. Existing 256-request, handle, input-work and worker deadlines
+remain. Native range/type exceptions stay observable. Engine-added output keys
+are projected separately from strict input dictionaries. Unsupported text
+metric getters are reported rather than simulated.
+
+Drawings remain visible after a completed worker is released; removing the
+opaque iframe releases its resources. Canvas dimensions retain native bitmap
+and state reset behavior. The API contract is actions-run 1.23.0 in both
+manifests and the client requirement map. Capture, asynchronous blob callbacks,
+OffscreenCanvas, focus-ring contexts, WebGL and WebGPU remain unfinished work.
