@@ -103,3 +103,24 @@ test('interactive discussions reject malformed or unbounded targets before mount
   assert.doesNotMatch(markup, /data-tt-discussion|Refresh comments/);
  }
 });
+
+
+test('pending authored forms disable fields without changing saved identity or revision', () => {
+ for (const disabled of [false, true]) {
+  const markup = renderToStaticMarkup(React.createElement(NativeControlsEnabled.Provider, { value: true },
+   React.createElement(HtmlThingRenderer, { node: { tag: 'tt-form', props: { disabled, identityName: 'id', identity: 'record-1', revisionName: 'revision', revision: 'stamp-1' }, children: [{ tag: 'input', props: { name: 'title', value: 'Draft' } }] } })));
+  assert.equal(markup.includes('<fieldset disabled=""'), disabled);
+  assert.match(markup, /name="id" value="record-1"/);
+  assert.match(markup, /name="revision" value="stamp-1"/);
+  assert.match(markup, /value="Draft"/);
+ }
+});
+
+test('custom dialog close content uses the same sanitizing renderer', () => {
+ const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: {
+  tag: 'tt-dialog', props: { title: 'Custom dialog', closeLabel: 'Dismiss', closeContent: { tag: 'svg', props: { viewBox: '0 0 24 24', onLoad: 'alert(1)' }, children: [{ tag: 'path', props: { d: 'M1 1L23 23' } }] } }
+ } }));
+ assert.match(markup, /aria-label="Dismiss"/);
+ assert.match(markup, /<svg viewBox="0 0 24 24"><path d="M1 1L23 23"><\/path><\/svg>/);
+ assert.doesNotMatch(markup, /onLoad|onload|alert\(1\)/);
+});
