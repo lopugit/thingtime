@@ -5,6 +5,7 @@ import { ComponentCollection } from '../Builder/ComponentCollection';
 import { ComponentDragSource, ComponentDropTarget } from '../Builder/ComponentDrag';
 import { Link, useInRouterContext } from 'react-router';
 import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
+import { ComponentDiscussion } from '../Builder/ComponentDiscussion';
 import { ComponentMap } from '../Builder/ComponentMap';
 import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
@@ -287,6 +288,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		);
 	}
 	if (tag === 'tt-attachments') return <ComponentAttachments key={key} {...node.props} />;
+	if (tag === 'tt-discussion') return <ComponentDiscussion key={key} {...node.props} />;
 	if (tag === 'tt-collection') return <ComponentCollection key={key} {...node.props} />;
 	if (tag === 'tt-change') return <ComponentChange key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentChange>;
 	if (tag === 'tt-drag') return <ComponentDragSource key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDragSource>;

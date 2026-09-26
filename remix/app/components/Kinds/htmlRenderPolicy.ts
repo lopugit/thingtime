@@ -13,6 +13,7 @@ export const HTML_ALLOWED_TAGS = new Set([
 	'tt-map',
 	'tt-media',
 	'tt-attachments',
+	'tt-discussion',
 	'dl',
 	'dt',
 	'dd',
