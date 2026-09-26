@@ -8417,6 +8417,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Saved-record forms never reset from this receipt. Attachment helper text and
   linked-URL controls follow their configured values; upload readiness disables
   submit while empty, pending, failed or committed, and clears after reset.
+  With attachments selected, bind `committedTargetId`/`committedIds` from the
+  same receipt and confirm the completion reset keeps every saved file: after
+  the form clears, the saved record still resolves its attachments and no
+  `POST /api/v1/attachments/delete` fires for them. Unbinding those two props
+  must be the only way to observe that delete.
 
 - Saved Components: embed `tt-discussion` for an authorized Thing. At desktop
   and 390px, post a comment and nested reply, react, search, and refresh; keep
@@ -8461,6 +8466,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Builder app portability: preview each generated Component and Action through the signed mutation workflow before migration. A valid app must fit without raising review limits; confirm record labels, zero values, empty text, archived references, missing references, and every planner day match the original app after title normalization.
 
 ## Web standards Builder app (2026-09-24)
+
+- [ ] Run HTML form recipes with boolean false, fractional meter values, edited
+  text-selection offsets/direction, replacement text, radio values and validity
+  messages (including empty to clear). Verify native outputs and control state;
+  serialization alone does not prove current value/checked/selection state.
+  Save/reopen/reload/reuse a form program as a private Component.
+- [ ] Run `HTML_FORM_BOUNDARY_FIXTURES` in the actual opaque runtime. Both
+  select remove overloads and option-node insertion must work. Growing a
+  detached options collection repeatedly must spend the cumulative node budget,
+  and length 301 must fail before allocation. Retained ValidityState remains
+  live. Detached form reset must be refused and remain requires-context in the
+  catalogue; a no-op native call must never count as a completed reset demo.
 
 - [ ] Run detached DOM recipes with edited text, selectors, attribute names,
   token values and text offsets. Confirm native results and projected changes:

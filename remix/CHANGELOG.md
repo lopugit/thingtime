@@ -78,6 +78,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   configurable helper text, linked-URL visibility and local upload readiness.
   Nested discussions also isolate clicks from authored ancestor Actions.
 
+- 2026-09-27 — **Codex (AI)**: Web standards adds 212 reusable HTML form
+  examples with typed control state, text selection, validity and live
+  option/radio collections. Native overload dispatch and detached collection
+  allocation limits are covered by real-browser regressions. Reset remains
+  requires-context after a native detached-document no-op was reproduced.
+  The catalogue Action contract advances to 1.14.0. Validation includes private
+  API round trips, browser execution and a full Vercel build. Details:
+  [PR #914](../PRs/914-codex-web-standards-form-receivers-add-reusable-html-form-state-and-selection-examples.md).
+
 - 2026-09-27 — **Codex (AI)**: Saved Builder Components can embed the standard
   Thing discussion with `tt-discussion`, retaining rich comments, replies,
   reactions, media and collection controls. Previews stay inert; target reads

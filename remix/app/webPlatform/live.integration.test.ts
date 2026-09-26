@@ -58,17 +58,19 @@ test('real API installs reusable standards Things idempotently and preserves pri
 				.status,
 			200
 		);
-		const domFeature = WEB_FEATURES.find((f) => f.language === 'webapi' && f.name === 'Node.appendChild')!;
-		const domRun = await request('/api/v1/actions/run', 'POST', {
-			action: action.id, inputs: { feature: domFeature.id, q: 'Node.appendChild', language: 'webapi' }
-		});
-		assert.equal(domRun.data.status, 'ok', domRun.data.error);
-		const domComponent = domRun.data.result.selected.component;
-		assert.ok(JSON.stringify(domComponent.render).includes('"op":"dom"'));
-		assert.equal((await request('/api/v1/things', 'PATCH', { id: saved.data.thing.id, crystal: domComponent })).response.status, 200);
-		const domRead = await request(`/api/v1/things?id=${saved.data.thing.id}`);
-		assert.deepEqual(domRead.data.thing.crystal.render, domComponent.render, 'Saved DOM programs preserve every operation and input');
-		assert.equal((await request(`/api/v1/things?id=${saved.data.thing.id}`, 'GET', undefined, false)).response.status, 404);
+		for (const name of ['Node.appendChild', 'HTMLInputElement.setSelectionRange', 'RadioNodeList.value']) {
+			const receiverFeature = WEB_FEATURES.find((f) => f.name === name)!;
+			const receiverRun = await request('/api/v1/actions/run', 'POST', {
+				action: action.id, inputs: { feature: receiverFeature.id, q: name, language: receiverFeature.language }
+			});
+			assert.equal(receiverRun.data.status, 'ok', receiverRun.data.error);
+			const receiverComponent = receiverRun.data.result.selected.component;
+			assert.ok(JSON.stringify(receiverComponent.render).includes('"op":"dom"'));
+			assert.equal((await request('/api/v1/things', 'PATCH', { id: saved.data.thing.id, crystal: receiverComponent })).response.status, 200);
+			const receiverRead = await request(`/api/v1/things?id=${saved.data.thing.id}`);
+			assert.deepEqual(receiverRead.data.thing.crystal.render, receiverComponent.render, `${name} preserves every saved operation and input`);
+			assert.equal((await request(`/api/v1/things?id=${saved.data.thing.id}`, 'GET', undefined, false)).response.status, 404);
+		}
 		const program = {
 			version: 1, title: 'Exact saved draft', parameters: [{ name: 'data', label: 'Data', type: 'json', default: [[0, false], [null, '{name}']] }],
 			steps: [{ op: 'return', value: { op: 'input', name: 'data' } }]
