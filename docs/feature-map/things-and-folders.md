@@ -127,3 +127,9 @@ keeps its program data opaque. `schemas/actionJsonInput.ts` and
 `api/utils/actions/actionInputs.ts` validate reusable JSON inputs; the generic
 form boundary decodes JSON text before transport. Regression coverage lives in
 `webPlatform/draft.test.ts`, `actions/actionInputs.test.ts` and the form tests.
+
+`domFixtures.ts` adds detached DOM receiver examples. `domBridge.ts` implements
+bounded native member calls through worker messages; `domProtocol.test.ts` and
+`workerLifecycle.test.ts` cover that transport and lifecycle. Programs remain
+ordinary saved Component data. See the detached-context limits and browser
+acceptance checklist in the runtime documentation and `TESTING.md`.

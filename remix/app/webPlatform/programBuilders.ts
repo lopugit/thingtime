@@ -35,3 +35,8 @@ export const declare = (name: string, value: unknown): PlatformExpression => ({ 
 export const perform = (value: unknown): PlatformExpression => ({ op: 'expression', value });
 export const project = (target: unknown, names: string[]) => object(Object.fromEntries(names.map((name) => [name, get(target, name)])));
 export const setProperty = (target: unknown, key: string, value: unknown) => method(global('Reflect'), 'set', [target, key, value]);
+/** Async native DOM operations on run-local handles, composed with ordinary JS. */
+export const domDocument = () => awaited({ op: 'dom', action: 'document' });
+export const domGet = (target: unknown, key: string) => awaited({ op: 'dom', action: 'get', target, key });
+export const domSet = (target: unknown, key: string, value: unknown) => awaited({ op: 'dom', action: 'set', target, key, args: [value] });
+export const domCall = (target: unknown, key: string, args: unknown[] = []) => awaited({ op: 'dom', action: 'call', target, key, args });

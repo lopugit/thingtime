@@ -3,7 +3,7 @@ const identifier = (value: unknown) => {
 	if (
 		typeof value !== 'string' ||
 		!/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(value) ||
-		['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'importScripts', 'self', 'globalThis', 'postMessage', 'close'].includes(value)
+		['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'importScripts', 'self', 'globalThis', 'postMessage', 'close', '__ttDom'].includes(value)
 	)
 		throw new Error('Use a supported identifier');
 	return value;
@@ -162,6 +162,11 @@ export function compilePlatformProgram(raw: unknown): string {
 				return n.map(e).join(',');
 			};
 		switch (node.op) {
+			case 'dom':
+				if (!['document', 'get', 'set', 'call'].includes(node.action)) throw new Error('Unsupported DOM action');
+				if (node.action !== 'document' && (typeof node.key !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(node.key)))
+					throw new Error('Expected a DOM member name');
+				return `__ttDom(${quoted(node.action)},${node.action === 'document' ? 'null' : e(node.target)},${quoted(node.key || '')},[${args(node.args || [])}])`;
 			case 'this':
 				return 'this';
 			case 'new-target':
