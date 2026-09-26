@@ -4,6 +4,8 @@ import { CollectionList } from '../Collections/CollectionList';
 import { componentScopeValue, createTemplateResolver } from '../ComponentsLibrary/componentTemplate';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import { ComponentDataScope } from './ComponentSelect';
+import { useCollectionSource } from './useCollectionSource';
+import { ComponentLocalControl, NativeControlsEnabled } from './NativeComponentControls';
 
 // Stack collections using a shared branch allowance rather than limiting apps
 // to two levels. Visible siblings split their parent's allowance; pagination
@@ -31,13 +33,27 @@ export function ComponentCollection({
 	filters,
 	hideSearch,
 	hideSize,
-	size
+	size,
+	source,
+	filterPath,
+	filterValue,
+	countStateKey
 }: Record<string, unknown>) {
 	const scope = React.useContext(ComponentDataScope),
 		budget = React.useContext(Nesting);
-	const data = typeof itemsPath === 'string' ? componentScopeValue(scope, itemsPath) : undefined;
+	const paged = useCollectionSource(source);
+	const data = paged.bound ? paged.items : typeof itemsPath === 'string' ? componentScopeValue(scope, itemsPath) : undefined;
+	const enabled = React.useContext(NativeControlsEnabled);
+	const local = React.useContext(ComponentLocalControl);
+	const localRef = React.useRef(local);
+	localRef.current = local;
+	const count = Array.isArray(data) ? data.length : 0;
+	React.useEffect(() => {
+		if (enabled && typeof countStateKey === 'string') localRef.current?.({ op: 'set', key: countStateKey, value: count });
+	}, [enabled, countStateKey, count]);
 	if (Array.isArray(data) && data.length > 10000) return <p role="alert">Filter or page the source to at most 10,000 records.</p>;
-	const items: Record<string, any>[] = Array.isArray(data) ? data.filter((item) => item && typeof item === 'object' && !Array.isArray(item)) : [];
+	const items: Record<string, any>[] = Array.isArray(data) ? data.filter((item) => item && typeof item === 'object' && !Array.isArray(item) &&
+		(typeof filterPath !== 'string' || String(componentScopeValue(item, filterPath) ?? '') === String(filterValue ?? ''))) : [];
 	const positions = new Map(items.map((item, index) => [item, index]));
 	if (budget.depth >= 32) return <p role="alert">This collection exceeds the nested rendering budget.</p>;
 	const specs = Array.isArray(filters)
@@ -47,7 +63,13 @@ export function ComponentCollection({
 		: [];
 	return (
 		<>
+			{paged.error && <p role="alert">{paged.error}</p>}
 			<CollectionList<Record<string, any>>
+				hasMore={paged.hasMore}
+				loadMore={paged.loadMore}
+				loading={paged.loading}
+				error={paged.error}
+				resetKey={JSON.stringify([paged.resetKey, filterPath, filterValue])}
 				label={typeof label === 'string' ? label : 'Records'}
 				items={items}
 				searchText={searchTextForRow}
