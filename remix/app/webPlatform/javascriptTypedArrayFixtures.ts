@@ -7,7 +7,8 @@ const proto = (value: unknown) => method(global('Object'), 'getPrototypeOf', [va
 const from = (value: unknown) => method(global('Array'), 'from', [value]);
 const fn = (params: string[], body: unknown[]) => ({ op: 'function-expression', params, body });
 const apply = (target: unknown, receiver: unknown, args: unknown) => method(global('Reflect'), 'apply', [target, receiver, args]);
-const constructors = ['Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array', 'Float16Array', 'Float32Array', 'Float64Array', 'BigInt64Array', 'BigUint64Array'];
+export const TYPED_ARRAY_CONSTRUCTORS = ['Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array', 'Int32Array', 'Uint32Array', 'Float16Array', 'Float32Array', 'Float64Array', 'BigInt64Array', 'BigUint64Array'];
+const constructors = TYPED_ARRAY_CONSTRUCTORS;
 
 /** TypedArray intrinsics are invoked with real concrete receivers. Every choice,
  * callback and observation is saved as ordinary reusable program data. */
