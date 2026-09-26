@@ -4,7 +4,9 @@ const identifier = (value: unknown) => {
 	if (
 		typeof value !== 'string' ||
 		!/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(value) ||
-		['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'importScripts', 'self', 'globalThis', 'postMessage', 'close', '__ttDom'].includes(value)
+		['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'importScripts', 'self', 'globalThis', 'postMessage', 'close', '__ttDom'].includes(
+			value
+		)
 	)
 		throw new Error('Use a supported identifier');
 	return value;
@@ -94,6 +96,55 @@ export function compilePlatformProgram(raw: unknown): string {
 	const checkpoint = (depth: number) => {
 		if (--budget < 0 || depth > 28) throw new Error('Expression exceeds its complexity budget');
 	};
+	const has = (node: any, key: string) => Object.prototype.hasOwnProperty.call(node, key);
+	const isPattern = (node: any) => node && ['array-pattern', 'object-pattern'].includes(node.op);
+	/** Patterns emit native syntax so defaults, iterator closing, property order
+	 * and lexical binding semantics stay with the engine. They share the same
+	 * expression budget and never accept source fragments. */
+	const pattern = (node: any, depth: number, assignment = false, defaults = false): string => {
+		checkpoint(depth);
+		if (typeof node === 'string') return identifier(node);
+		if (!node || typeof node !== 'object' || Array.isArray(node)) throw new Error('Expected a binding pattern');
+		if (node.op === 'default-pattern') {
+			if (!defaults) throw new Error('A default is only allowed on a pattern element');
+			return `${pattern(node.target, depth + 1, assignment)}=${expr(node.value, depth + 1)}`;
+		}
+		if (node.op === 'array-pattern') {
+			if (!Array.isArray(node.items) || node.items.length > 100) throw new Error('Expected bounded array pattern items');
+			let items = node.items.map((item: any) => (item === null ? '' : pattern(item, depth + 1, assignment, true))).join(',');
+			// A final elision needs its own comma: [x,] does not skip an item.
+			if (has(node, 'rest')) items += `${node.items.length ? ',' : ''}...${pattern(node.rest, depth + 1, assignment)}`;
+			else if (node.items.at(-1) === null) items += ',';
+			return `[${items}]`;
+		}
+		if (node.op === 'object-pattern') {
+			if (!Array.isArray(node.entries) || node.entries.length > 100) throw new Error('Expected bounded object pattern entries');
+			const entries = node.entries.map((entry: any) => {
+				checkpoint(depth + 1);
+				if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('Expected an object pattern entry');
+				if (entry.computed !== undefined && typeof entry.computed !== 'boolean') throw new Error('Expected a computed-key flag');
+				if (
+					entry.computed !== true &&
+					!((typeof entry.key === 'string' && entry.key.length <= 200) || (typeof entry.key === 'number' && Number.isFinite(entry.key)))
+				)
+					throw new Error('Expected a bounded property key');
+				if (['constructor', '__proto__', 'eval'].includes(entry.key)) throw new Error('Dynamic code constructors are unavailable');
+				const key = entry.computed === true ? expr(entry.key, depth + 1) : quoted(String(entry.key));
+				return `[${key}]:${pattern(entry.target, depth + 1, assignment, true)}`;
+			});
+			if (has(node, 'rest')) {
+				if (isPattern(node.rest) || node.rest?.op === 'default-pattern') throw new Error('Object rest requires a simple target');
+				entries.push(`...${pattern(node.rest, depth + 1, assignment)}`);
+			}
+			return `{${entries.join(',')}}`;
+		}
+		if (assignment && ['variable', 'get', 'private-get', 'super-get'].includes(node.op) && !node.optional) return expr(node, depth + 1);
+		throw new Error('Expected a binding pattern or assignment target');
+	};
+	const binding = (node: any, depth: number, assignment = false): string => {
+		if (has(node, 'pattern') && has(node, 'name')) throw new Error('Choose a name or a pattern');
+		return has(node, 'pattern') ? pattern(node.pattern, depth + 1, assignment) : identifier(node.name);
+	};
 	const parameters = (list: any[], depth: number): string => {
 		if (!Array.isArray(list) || list.length > 16) throw new Error('Expected bounded parameters');
 		return list
@@ -101,7 +152,7 @@ export function compilePlatformProgram(raw: unknown): string {
 				checkpoint(depth);
 				if (typeof p === 'string') return identifier(p);
 				if (!p || typeof p !== 'object') throw new Error('Expected a parameter');
-				const name = identifier(p.name);
+				const name = binding(p, depth + 1);
 				if (p.rest === true) {
 					if (index !== list.length - 1 || Object.prototype.hasOwnProperty.call(p, 'default'))
 						throw new Error('Rest parameters must be last and have no default');
@@ -169,7 +220,9 @@ export function compilePlatformProgram(raw: unknown): string {
 				if (!['document', 'get', 'set', 'call'].includes(node.action)) throw new Error('Unsupported DOM action');
 				if (node.action !== 'document' && (typeof node.key !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(node.key)))
 					throw new Error('Expected a DOM member name');
-				return `__ttDom(${quoted(node.action)},${node.action === 'document' ? 'null' : e(node.target)},${quoted(node.key || '')},[${args(node.args || [])}])`;
+				return `__ttDom(${quoted(node.action)},${node.action === 'document' ? 'null' : e(node.target)},${quoted(node.key || '')},[${args(
+					node.args || []
+				)}])`;
 			case 'this':
 				return 'this';
 			case 'new-target':
@@ -192,6 +245,10 @@ export function compilePlatformProgram(raw: unknown): string {
 				return `(yield${node.delegate === true ? '*' : ''} ${e(node.value)})`;
 			case 'assign-expression': {
 				const target = node.target;
+				if (isPattern(target)) {
+					if ((node.operator || '=') !== '=') throw new Error('Destructuring requires plain assignment');
+					return `(${pattern(target, depth + 1, true)}=${e(node.value)})`;
+				}
 				if (!target || !['variable', 'get', 'private-get', 'super-get'].includes(target.op) || target.optional)
 					throw new Error('Expected an assignable reference');
 				if (!['=', '+=', '-=', '*=', '/=', '%=', '**=', '<<=', '>>=', '>>>=', '&=', '|=', '^=', '&&=', '||=', '??='].includes(node.operator || '='))
@@ -335,31 +392,37 @@ export function compilePlatformProgram(raw: unknown): string {
 					}
 					case 'for-in':
 					case 'for-await-of':
-						return `for${n.op === 'for-await-of' ? ' await' : ''}(const ${identifier(n.name)} ${n.op === 'for-in' ? 'in' : 'of'} ${expr(
-							n.value,
-							depth + 1
-						)}){${steps(n.body || [], depth + 1)}}`;
+					case 'for-of': {
+						const declaration = n.declaration === undefined ? 'const' : n.declaration;
+						if (!['const', 'let', 'var', 'assign'].includes(declaration)) throw new Error('Unsupported loop declaration');
+						return `for${n.op === 'for-await-of' ? ' await' : ''}(${declaration === 'assign' ? '' : declaration + ' '}${binding(
+							n,
+							depth + 1,
+							declaration === 'assign'
+						)} ${n.op === 'for-in' ? 'in' : 'of'} ${expr(n.value, depth + 1)}){${steps(n.body || [], depth + 1)}}`;
+					}
 					case 'let':
 					case 'const':
 					case 'var':
-						return `${n.op} ${identifier(n.name)}=${expr(n.value, depth + 1)};`;
+						return `${n.op} ${binding(n, depth + 1)}=${expr(n.value, depth + 1)};`;
 					case 'assign':
-						return `${identifier(n.name)}=${expr(n.value, depth + 1)};`;
+						return `(${binding(n, depth + 1, true)}=${expr(n.value, depth + 1)});`;
 					case 'return':
 						return `return ${expr(n.value, depth + 1)};`;
 					case 'expression':
 						return `${expr(n.value, depth + 1)};`;
 					case 'if':
 						return `if(${expr(n.test, depth + 1)}){${steps(n.then || [], depth + 1)}}else{${steps(n.else || [], depth + 1)}}`;
-					case 'for-of':
-						return `for(const ${identifier(n.name)} of ${expr(n.value, depth + 1)}){${steps(n.body || [], depth + 1)}}`;
 					case 'while':
 						return `while(${expr(n.test, depth + 1)}){${steps(n.body || [], depth + 1)}}`;
-					case 'try':
-						return `try{${steps(n.body || [], depth + 1)}}catch(${identifier(n.error || 'error')}){${steps(n.catch || [], depth + 1)}}finally{${steps(
+					case 'try': {
+						if (has(n, 'errorPattern') && has(n, 'error')) throw new Error('Choose a catch name or a catch pattern');
+						const target = has(n, 'errorPattern') ? pattern(n.errorPattern, depth + 1) : identifier(n.error || 'error');
+						return `try{${steps(n.body || [], depth + 1)}}catch(${target}){${steps(n.catch || [], depth + 1)}}finally{${steps(
 							n.finally || [],
 							depth + 1
 						)}}`;
+					}
 					case 'throw':
 						return `throw ${expr(n.value, depth + 1)};`;
 					case 'break':

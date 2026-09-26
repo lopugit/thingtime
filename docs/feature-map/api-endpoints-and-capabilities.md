@@ -137,3 +137,9 @@ manifests and client negotiation cover the additive catalogue contract.
 `javascriptConstructors.test.ts` verifies native invocation requirements,
 overloads, mutation/identity, callbacks, errors and saved edited defaults through
 the existing data compiler. No new execution endpoint or permission is added.
+
+Reusable binding and assignment patterns add `api.actions-run` 1.19.0. The
+existing catalogue and Component runtime accept bounded pattern nodes in
+declarations, assignments, parameters, catches and loops. Both manifests and
+client negotiation advance together; no new execution endpoint or permission
+is introduced. See the native-pattern section in the Web standards guide.

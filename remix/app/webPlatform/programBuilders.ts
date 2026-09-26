@@ -40,3 +40,12 @@ export const domDocument = () => awaited({ op: 'dom', action: 'document' });
 export const domGet = (target: unknown, key: string) => awaited({ op: 'dom', action: 'get', target, key });
 export const domSet = (target: unknown, key: string, value: unknown) => awaited({ op: 'dom', action: 'set', target, key, args: [value] });
 export const domCall = (target: unknown, key: string, args: unknown[] = []) => awaited({ op: 'dom', action: 'call', target, key, args });
+
+/** Native binding and assignment patterns, shared by all program authors. */
+export const arrayPattern = (items: unknown[], rest?: unknown) => ({ op: 'array-pattern', items, ...(rest === undefined ? {} : { rest }) });
+export const objectPattern = (entries: { key: unknown; target: unknown; computed?: boolean }[], rest?: unknown) => ({
+	op: 'object-pattern',
+	entries,
+	...(rest === undefined ? {} : { rest })
+});
+export const defaultPattern = (target: unknown, value: unknown) => ({ op: 'default-pattern', target, value });

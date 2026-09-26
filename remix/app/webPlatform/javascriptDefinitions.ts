@@ -14,7 +14,10 @@ import {
 	call,
 	awaited as wait,
 	declare as decl,
-	perform as act
+	perform as act,
+	arrayPattern,
+	objectPattern,
+	defaultPattern
 } from './programBuilders';
 
 const self = { op: 'this' };
@@ -72,19 +75,21 @@ export function javascriptDefinitionsRecipe(f: Feature): Recipe | null {
 			name: 'describe',
 			params: [
 				{ name: 'label', default: 'default label' },
-				{ name: 'items', rest: true }
+				{ pattern: objectPattern([{ key: 'enabled', target: defaultPattern('enabled', true) }]), default: obj({}) },
+				{ pattern: arrayPattern(['first'], 'tail'), rest: true }
 			],
-			body: returns(obj({ label: v('label'), items: v('items') }))
+			body: returns(obj({ label: v('label'), enabled: v('enabled'), first: v('first'), tail: v('tail') }))
 		});
 		return done(
 			obj({
 				omitted: call(v('describe')),
 				supplied: call(v('describe'), [
 					param('label', 'Label', 'Thingtime', 'text'),
+					param('settings', 'Destructured options', { enabled: false }, 'json'),
 					{ op: 'spread', value: param('items', 'Rest values', [1, 2, 3]) }
 				])
 			}),
-			'Observe a default parameter and a rest parameter. Destructuring parameters need their own pattern nodes and are not represented by this example.'
+			'Compare omitted arguments with a supplied default parameter, an object binding pattern and a destructured rest array. Undefined triggers defaults; null remains a value or causes a native destructuring error.'
 		);
 	}
 	if (f.name === 'The this Keyword') {

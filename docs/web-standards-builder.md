@@ -22,7 +22,7 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 2,925 have interactive recipes (227 HTML, 1,059 CSS, 870
+editable program. 2,945 have interactive recipes (227 HTML, 1,059 CSS, 890
 JavaScript and 769 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
@@ -371,3 +371,50 @@ There are no compiler or runtime permission changes. JavaScript coverage is now
 638 built-in, 77 language and 155 specification entries; 208 language and 784
 specification entries remain without worked recipes. Tests distinguish source
 entry coverage, native unavailability, and actual behavior.
+
+
+## Native binding and assignment patterns
+
+Array and object destructuring are reusable program nodes, supported by the
+same compiler as ordinary expressions. The catalogue adds 20 examples for
+binding and assignment semantics, per-iteration environments and six native
+function forms. The existing Parameter Lists example now includes an object
+parameter and a destructured rest array. Coverage is 2,945 of 18,798 entries;
+JavaScript has 638 built-in, 97 language and 155 specification examples.
+
+A pattern leaf is an identifier string. `array-pattern` has `items`, where null
+means an elision, and an optional final `rest` target. `object-pattern` has
+`entries` containing a key, target and optional `computed: true`, plus an
+optional final `rest` target. `default-pattern` has a target and initializer
+expression; it is valid on an element, never on a rest target. Nested patterns
+retain native iterator, property, default and binding behavior.
+
+Declarations and assignments use `pattern` instead of `name`. Function, arrow,
+generator and class parameters use `{ pattern, default? }` or a final
+`{ pattern, rest: true }`. A try statement can use `errorPattern` instead of
+`error`. For-in, for-of and for-await-of accept a pattern and optional
+`declaration`: const (default), let, var or assign. Assignment expressions
+accept array/object pattern targets only with plain equals; their leaf targets
+can be ordinary variable/property/private/super references. Binding patterns
+require identifiers. Object rest requires a simple target; array rest can bind
+a nested pattern. Existing programs remain compatible.
+
+The bounded compiler emits native syntax with no source-string escape.
+Identifiers, keys, rest placement and binding/assignment contexts are validated
+under the existing size, depth and node budgets. Default evaluation is lazy and
+undefined-only, trailing elisions consume iterator values, rest retains symbol
+keys, and abrupt/partial assignments keep native cleanup and partial writes.
+
+Object-rest examples report actual getter reads against the standard's expected
+single read. Node 22 can read an excluded getter again; the native trace is
+preserved and the mismatch is reported, never rewritten. Tests compare with an
+independent native oracle. Numbered-loop demos require safe integer bounds and
+at most 16 iterations; optional input copying is capped at 4096 values. These
+are explicit demo constraints, not changes to JavaScript semantics.
+
+`api.actions-run` 1.19.0 negotiates the additive catalogue and pattern grammar.
+The runtime artifact hash changes with the compiler; CSP and opaque-worker
+permissions remain unchanged. `bindingPatterns.test.ts` covers native semantics
+and malformed data; `javascriptBindings.test.ts` covers recipes and saved edited
+defaults. Hosted runtime and real saved-Component acceptance must use the new
+runtime artifact, not an older cached compiler.

@@ -8727,3 +8727,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   native members and SharedArrayBuffer report unsupported in their actual context.
 
 - Constructor allocation limits: numeric, numeric-string and array-like DataView backing inputs above 4096 reject with an explicit demo-limit error; small numeric buffers still zero-initialize and null preserves native conversion. Oversized iterator materialization also rejects before iteration.
+
+
+### Web standards binding and assignment patterns
+
+- Edit object and nested-array destructuring demos: defaults run only for
+  undefined, null stays null, elisions skip values, nested defaults and rest
+  preserve native results. Object/array assignment retains RHS identity.
+- Verify computed keys, renamed bindings, own enumerable symbol rest keys,
+  getter order, inherited/hidden exclusions and partial assignment on failure.
+  Older engines may read an excluded getter twice; preserve and flag that
+  native discrepancy instead of substituting a passing result.
+- Test pattern declarations, ordinary/arrow/async/generator parameters,
+  destructured rest parameters, class methods, catches and all loop kinds.
+  Compare let/const closures with shared var and assignment loop targets.
+- A trailing array-pattern elision must consume its position; empty and partial
+  patterns must perform native iterator cleanup, including initializer errors.
+- Reject malformed/defaulted rest targets, assignment references in binding
+  contexts, optional targets, compound destructuring assignment, code-fragment
+  identifiers and patterns exceeding shared depth/size/node budgets.
+- Save an edited pattern Component, reopen and reload it, and run with the
+  persisted inputs. Owner read succeeds; anonymous read remains 404. Confirm
+  both capability manifests advertise actions-run 1.19.0 and the served runtime
+  hash matches the current compiler while retaining the sandbox CSP.
