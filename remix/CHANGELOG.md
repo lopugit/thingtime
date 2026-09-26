@@ -72,7 +72,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   across declarations, assignments, parameters, catches and loops. Twenty new
   examples bring coverage to 2,945; Parameter Lists now demonstrates patterns.
   Getter-order differences remain visible. API/client negotiation advances to
-  `api.actions-run` 1.19.0; runtime sandbox permissions are unchanged.
+  `api.actions-run` 1.19.0; runtime sandbox permissions are unchanged. Details:
+  [PR #932](../PRs/932-codex-web-standards-binding-patterns--add-reusable-binding-patterns-and-javascript-examples.md).
 
 - 2026-09-27 — **Codex (AI)**: Added 66 reusable constructor-signature
   programs, taking interactive coverage to 2,925 entries. Editable native
