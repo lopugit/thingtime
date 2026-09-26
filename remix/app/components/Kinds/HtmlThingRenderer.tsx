@@ -1,4 +1,5 @@
 import { ComponentChange } from '../Builder/ComponentChange';
+import { ComponentMenu } from '../Builder/ComponentMenu';
 import { ComponentSelect } from '../Builder/ComponentSelect';
 import { ComponentStyle } from '../Builder/ComponentStyle';
 import { ComponentCollection } from '../Builder/ComponentCollection';
@@ -296,6 +297,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (tag === 'tt-discussion') return <ComponentDiscussion key={key} {...node.props} />;
 	if (tag === 'tt-collection') return <ComponentCollection key={key} {...node.props} />;
 	if (tag === 'tt-change') return <ComponentChange key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentChange>;
+	if (tag === 'tt-menu') return <ComponentMenu key={key} {...node.props} triggerContent={node.props?.triggerContent === undefined ? undefined : renderChildren(node.props.triggerContent, depth + 1, state)}>{renderChildren(node.children, depth + 1, state)}</ComponentMenu>;
 	if (tag === 'tt-drag') return <ComponentDragSource key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDragSource>;
 	if (tag === 'tt-drop') return <ComponentDropTarget key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDropTarget>;
 	if (tag === 'tt-style')
