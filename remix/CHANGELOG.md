@@ -74,7 +74,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   native member policies and shared execution/allocation limits preserve the
   isolated runtime. Private API round trips and browser mutation/refusal checks
   cover the new path. Full platform demo coverage remains unfinished; these
-  examples do not provide a live window/layout context.
+  examples do not provide a live window/layout context. Details:
+  [PR #909](../PRs/909-codex-web-standards-dom-receivers-add-reusable-dom-receivers-to-web-standards-programs.md).
 
 - 2026-09-26 — **Codex (AI)**: Web standards edited draft saving. The authored
   save Action keeps the full program and current input defaults in a private
