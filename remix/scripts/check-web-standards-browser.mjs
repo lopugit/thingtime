@@ -146,12 +146,14 @@ try {
  await page.reload({waitUntil:'domcontentloaded'}); await runButton.click(); await result.filter({hasText:/\$input.other/}).waitFor();
  assert.deepEqual(JSON.parse(await result.innerText()),expected);
  const reused = (await request('/api/v1/things',{thingtime:['webpage'],acl:['tt:user'],crystal:{
-  name:'Saved draft reuse fixture',slug:'draft-reuse-'+Date.now(),blocks:[{id:'draft-component',type:'component',component:id}]
+  name:'Saved draft reuse fixture',blocks:[{id:'draft-component',type:'component',component:id}]
  }})).data.thing;
  ids.add(reused.id);
  await page.goto(origin+'/builder?page='+reused.id,{waitUntil:'domcontentloaded'});
- await page.getByText('Saved draft reuse fixture',{exact:true}).first().waitFor();
- await page.goto(origin+'/p/'+reused.crystal.slug,{waitUntil:'domcontentloaded'});
+ await page.getByRole('checkbox',{name:'View',exact:true}).check();
+ await runButton.click(); await result.filter({hasText:/\$input.other/}).waitFor();
+ assert.deepEqual(JSON.parse(await result.innerText()),expected);
+ await page.goto(origin+'/p/'+reused.id,{waitUntil:'domcontentloaded'});
  await runButton.click(); await result.filter({hasText:/\$input.other/}).waitFor();
  assert.deepEqual(JSON.parse(await result.innerText()),expected);
  await page.getByText('Edit reusable program', { exact: true }).click();
