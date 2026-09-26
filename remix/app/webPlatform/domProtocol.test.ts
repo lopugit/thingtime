@@ -4,6 +4,11 @@ import vm from 'node:vm';
 import { compilePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
 import { array, awaited, declare, domCall, domDocument, domGet, fn, get, global, method, returns, variable } from './programBuilders';
+import { DOM_BOUNDARY_FIXTURES } from './domBoundaryFixtures';
+
+test('real-browser DOM boundary fixtures remain valid reusable programs', () => {
+	for (const fixture of DOM_BOUNDARY_FIXTURES) assert.doesNotThrow(() => compilePlatformWorker(fixture.program), fixture.name);
+});
 
 async function run(steps: unknown[], reply: (request: any) => unknown, input = {}) {
 	const requests: any[] = [],
@@ -62,10 +67,14 @@ test('DOM syntax never interpolates member source and reserves its backing helpe
 
 test('repeated handles retain receiver identity and undefined native returns stay undefined', async () => {
 	const handle = { $dom: 'run:1', type: 'Document' };
-	const result = await run([
-		declare('a', domDocument()), declare('b', domDocument()),
-		...returns({ op: 'binary', operator: '===', left: variable('a'), right: variable('b') })
-	], () => ({ value: handle }));
+	const result = await run(
+		[
+			declare('a', domDocument()),
+			declare('b', domDocument()),
+			...returns({ op: 'binary', operator: '===', left: variable('a'), right: variable('b') })
+		],
+		() => ({ value: handle })
+	);
 	assert.deepEqual(result.results, [{ ok: true, result: true }]);
 	const voidResult = await run(returns(domDocument()), () => ({ value: undefined }));
 	assert.deepEqual(voidResult.results, [{ ok: true, result: '[undefined]' }]);

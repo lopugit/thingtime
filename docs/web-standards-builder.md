@@ -236,6 +236,11 @@ at 32,768 characters. Requests share the worker's two-second execution deadline;
 cancellation and completion clear handles. Script/resource elements, event
 attributes, URL writes, raw markup setters and unregistered members are refused.
 The existing iframe CSP and account/network restrictions remain in force.
+Internal tree inspection and projection use captured native accessors/methods:
+form controls named `childNodes`, `attributes` or `getRootNode` cannot shadow
+the policy checks. A cloned Document cannot become a second receiver document.
+`domBoundaryFixtures.ts` provides reusable program data for real-browser
+allocation, depth, named-control and document-ownership regressions.
 
 `domProtocol.test.ts` and `workerLifecycle.test.ts` cover transport identity,
 catchable exceptions, unavailable members, undefined values, late replies and

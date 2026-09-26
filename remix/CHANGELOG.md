@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: DOM receiver inspection and projection now use
+  captured browser accessors, so named form controls cannot hide descendants
+  from allocation/depth limits. Added reusable browser regressions and rejected
+  shallow clones that would create a second receiver Document. Details:
+  [PR #909](../PRs/909-codex-web-standards-dom-receivers-add-reusable-dom-receivers-to-web-standards-programs.md).
+
 - 2026-09-26 — **Codex (AI)**: Web standards adds 158 editable detached-DOM
   examples through reusable program operations: native document/element/text
   receivers, node collections, attributes and class tokens. Run-local handles,
