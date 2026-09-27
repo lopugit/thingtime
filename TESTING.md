@@ -2,6 +2,23 @@
 
 ## Unified Timeline
 
+- [ ] Merge named page branches with independent component changes, overlapping
+  definitions, absent legacy captures, captured unavailable refs, removed/added
+  refs and folder-only ancestry. Independent definitions combine; overlaps need
+  an explicit choice; missing history never becomes today's definition. Page
+  conflicts are reviewed before component choices. The result retains exact
+  canonical capture links and never rewrites the published page or components.
+- [ ] Compare Current branch, This version and Merge result on desktop/390px.
+  Preview Actions send no execution request. Long version names wrap clear of
+  Close preview. Save after review with Timeline requests blocked, reload, open
+  the pending version's page preview, reconnect and verify exactly one branch
+  advance with the selected captures. Sign-out hides all private previews.
+- [ ] Run `test:timeline:component-merge` on the guarded replica set and
+  `test:timeline`. Check malformed/foreign/substituted capture links, explicit
+  missing versus unavailable definitions, stale choices, grouped payload byte
+  preflight, 128-record read batches and aggregate structural/byte bounds.
+  Old clients must refuse retained dependencies instead of dropping them.
+
 - [ ] Save a page with own/author-key, shared and inaccessible component refs
   through the API. Change the definitions and revoke sharing. History → Preview
   page and a branch at the original revision must still show the recorded
