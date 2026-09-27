@@ -70,6 +70,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - **2026-09-27 · Codex (AI):** Added 41 reusable native traversal programs and bounded synchronous callback definitions saved as Component data. Verified 116 native cases, edited-filter save/reload/reuse, private API round-trips, responsive layout and production output; Actions contract is 1.35.0. See [PR #962 details](../PRs/962-web-standards-traversal-reusable-native-traversal-and-editable-callback-programs.md).
 
+- 2026-09-27 — **Codex (AI)**: Private account autosave for post/comment, Thing,
+  definition and schema editors; shared draft/template picker, reusable post
+  templates with independent media, revision-safe recovery and scoped local
+  workspaces. Preserve original definition versions during recovery so stale
+  drafts cannot overwrite newer saved content; retain recovered text in History.
+  Preserve raw JSON schema input through account recovery and parse only for
+  validation/publication, including schemas copied from the platform catalog.
+  Verified full unit, production output, real API/media and browser recovery
+  flows against current main. See [PR #957 details](../PRs/957-codex-account-drafts-autosave-account-drafts-and-add-reusable-post-templates.md).
+
 - 2026-09-27 — **Codex (AI)**: Lopu Mac/browser dictation waits five seconds
   before sending the current message draft. Settings → Lopu → Voice transcription
   and the voice gear share a custom 1–120 second delay. Chat settings adds

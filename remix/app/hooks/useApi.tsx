@@ -1,3 +1,4 @@
+import { draftRequest } from '~/drafts/draftClient';
 import type { TimelineBranchCommand } from '../timeline/branches';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import type { TimelineEvent } from '~/timeline/contract';
@@ -92,6 +93,7 @@ export function useApi() {
   actionActor.current = actionUser?.id;
 
   const v1 = {
+    drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     timeline: {
       entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', '1.2.0');

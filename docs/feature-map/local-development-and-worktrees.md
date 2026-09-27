@@ -83,3 +83,8 @@ Mac voice input follows `electron/lib/speech-recognition.cjs` → the signed
 `remix/app/components/Lopu/desktopSpeechRecognition.ts` → the shared Lopu voice
 engine. Packaging and permission setup are in `electron/README.md`; the desktop
 mesh section of `TESTING.md` includes the installed-app acceptance checklist.
+
+## Account drafts and templates
+
+See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
+private draft API, editor recovery, account isolation and independent media copies.

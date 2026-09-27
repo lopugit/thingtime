@@ -53,3 +53,12 @@ Component renderer, Thing kind, storage endpoint or sandbox permission is added.
 
 Coverage remains incomplete: 4,914 interactive, 2,189 inspection, and 11,695
 requiring context, out of 18,798 entries. Browser support is separately reported.
+
+## Progress handoff
+
+Lopu requested a pause after this batch and a reusable progress page. The private
+[Builder progress page](https://thingtime.com/builder?page=adc3249d-0e34-469a-b798-641902c978a4)
+composes ordinary Component and read-only Action Things. Its live totals use
+`webstandards.browse`; plan statuses are editable Component arguments. Remaining
+feature lists link to the canonical catalogue rather than copying its inventory.
+The account-drafts release on main is integrated before final CI and deployment.
