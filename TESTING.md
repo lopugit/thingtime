@@ -26,8 +26,13 @@ persisted; every check is client-side.
       say "Saved on this device"; Reconnect & sync → they turn "Synced" while
       the button variation stays "Saved on this device".
 - [ ] Section 3: Send changes with a pending review opens the merge card;
-      choosing an option resolves it, adds a "Reviewed and combined" row, and
-      clears the "Needs review" pills.
+      choosing an option resolves it, adds exactly one "Reviewed and combined"
+      row, and clears the "Needs review" pills. Clicking the other two options
+      afterwards does nothing — one review has one resolution, and the card
+      keeps showing which option was kept.
+- [ ] Select "Matched the new tokens" on Primary button: the panel's ancestry
+      reads `v2 · from v1` and the Versions tab lists that v1 ("Created Primary
+      button") — every version the ancestry names is in the list.
 - [ ] Settings toggles and the retention segmented control respond; "Show
       messages in the timeline" off hides message bubbles in rows and the panel.
 - [ ] With `prefers-reduced-motion: reduce`, no animation runs and the sheet,
@@ -60,6 +65,7 @@ persisted; every check is client-side.
       version and the line grows; nothing disappears.
 - [ ] 390px: the strip scrolls horizontally inside the app frame with no page
       horizontal scroll; labels narrow; the detail and compare panels stack.
+
 ## Unified Timeline
 
 - [ ] Upgrade an earlier local Timeline cache with pending edits and a released

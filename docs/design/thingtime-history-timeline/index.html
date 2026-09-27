@@ -383,6 +383,10 @@
   @media (max-width:600px){ .merge .opts { grid-template-columns:1fr; } }
   .merge .opts button { border:1px solid var(--tt-border); background:#fff; border-radius:10px; padding:10px; text-align:left; cursor:pointer; font-size:13px; color:var(--tt-ink); }
   .merge .opts button:hover { border-color:var(--tt-ink); }
+  /* Retired after the review is resolved; the card keeps showing what was kept. */
+  .merge .opts button:disabled { cursor:default; }
+  .merge .opts button:disabled:hover { border-color:var(--tt-border); }
+  .merge .opts button.chosen:disabled:hover { border-color:var(--tt-rainbow-3); }
   .merge .opts button b { display:block; font-size:12.5px; margin-bottom:2px; }
   .merge .opts button span { font-family:var(--tt-mono); font-size:11px; color:var(--tt-muted); }
   .merge .opts button.chosen { border-color:var(--tt-rainbow-3); background:rgba(88,202,112,.1); }
@@ -694,6 +698,11 @@
   var TODAY = new Date(2026, 8, 27, 16, 20);
   function at(d, h, m){ return new Date(2026, 8, d, h, m); }
   var EVENTS = [
+    // Primary button's v1. Without it the detail panel's ancestry chip for v2
+    // read "from v1" while the Versions tab listed only v2 and v3, and v2's
+    // parent pointed at another Thing's event that merely happened to be v1.
+    { id:15, at:at(18,15,20), thing:'btn',  actor:'you',   verb:'created',  title:'Created Primary button', v:1, parent:null, sync:'synced', device:'Mac',
+      changes:[{k:'component', b:null, a:'Primary button'}] },
     { id:1,  at:at(19,10,4),  thing:'post', actor:'you',   verb:'created',  title:'Created Launch notes', v:1, parent:null, sync:'synced', device:'Mac',
       changes:[{k:'draft', b:null, a:'"The workshop page is live…"'}], titleThen:'Launch notes' },
     { id:2,  at:at(19,10,36), thing:'post', actor:'you',   verb:'shared',   title:'Shared Launch notes with Friends', v:2, parent:1, sync:'synced', device:'Mac',
@@ -705,7 +714,7 @@
       msg:{who:'lopu', text:'Added an equipment table and a checklist, as you asked in chat. Say "undo that" if you want the shorter page back.'}, titleThen:'Gear' },
     { id:5,  at:at(23,19,2),  thing:'rec',  actor:'you',   verb:'created',  title:'Created Equipment record', v:1, parent:null, sync:'synced', device:'iPhone',
       changes:[{k:'fields', b:null, a:'name, owner, location, serial'}] },
-    { id:6,  at:at(24,12,20), thing:'btn',  actor:'collab',verb:'edited',   title:'Matched the new tokens', v:2, parent:1, sync:'synced', device:'Mac',
+    { id:6,  at:at(24,12,20), thing:'btn',  actor:'collab',verb:'edited',   title:'Matched the new tokens', v:2, parent:15, sync:'synced', device:'Mac',
       changes:[{k:'radius', b:'10px', a:'12px'},{k:'font-weight', b:'600', a:'700'}], msg:{who:'collab', text:'Matching the new design tokens — let me know if the heavier weight is too much.'} },
     { id:7,  at:at(24,12,26), thing:'gear', actor:'sys',   verb:'synced',   title:'Got latest changes from Ana', v:2, parent:4, sync:'synced', device:'Mac',
       changes:[{k:'Primary button', b:'v1', a:'v2'}], msg:{who:'sys', text:'Get latest changes · 2 properties on Primary button, no conflicts'}, titleThen:'Gear' },
@@ -724,7 +733,7 @@
     { id:14, at:at(27,16,9),  thing:'btn',  actor:'collab',verb:'edited',   title:'Changed button colour', v:3, parent:6, sync:'review', device:'Mac',
       changes:[{k:'colour', b:'Sage green', a:'Forest green', sw:['#9bb89a','#2f6b2f']}], msg:{who:'collab', text:'Went a touch darker for contrast on the hero.'} }
   ];
-  var nextId = 15;
+  var nextId = 16;
   var state = { scope:'all', look:'list', q:'', filters:{kind:{}, actor:{}, verb:{}, sync:{}}, sel:12, day:null, offline:false, showMsgs:true, compare:false, tab:'changes', evoThing:'gear' };
   var cardsRowH=null, horizLayout=null;
 
@@ -1077,12 +1086,22 @@
       changes:[{k:'variation', b:null, a:'"try something" · from v'+ev.v}], msg:{who:'sys', text:'A private branch from v'+ev.v+'. Send changes when it is ready, or keep it as a named version.'} });
     toast('Variation started 🌱', 'Private until you send it. The shared version is untouched.');
   }
+  var reviewResolved=false;
   function resolveReview(pick){
+    // One review has one resolution. The resolved card deliberately keeps the
+    // three options visible so it still says what was kept, so re-clicking one
+    // must not append a second "Reviewed and combined" version with a rival
+    // message — settle the review once and retire the buttons.
+    if (reviewResolved) return;
+    reviewResolved=true;
     EVENTS.forEach(function(e){ if (e.sync==='review') e.sync='synced'; });
     var text = pick==='mine' ? 'Kept Deep green · Ana\'s Forest green stays in history' : pick==='theirs' ? 'Kept Forest green · your Deep green stays in history' : 'Kept both as named variations · pick one on the page later';
-    addEvent({ thing:'btn', actor:'you', verb:'synced', title:'Reviewed and combined', v:4, parent:14, sync:'synced', device:'Mac',
+    // Derive the new version from the Thing's current top version: "Try a
+    // variation" on Primary button may already have taken v4.
+    var latest=EVENTS.filter(function(e){return e.thing==='btn';}).sort(function(a,b){return b.v-a.v;})[0];
+    addEvent({ thing:'btn', actor:'you', verb:'synced', title:'Reviewed and combined', v:latest.v+1, parent:14, sync:'synced', device:'Mac',
       changes:[{k:'colour', b:'Sage green', a: pick==='theirs' ? 'Forest green' : pick==='mine' ? 'Deep green' : 'Deep green · Forest green', sw: pick==='theirs'?['#9bb89a','#2f6b2f']:['#9bb89a','#0f6b3f']}], msg:{who:'sys', text:text} });
-    var m=$('#merge'); m.classList.add('done'); $('#mergeNote').textContent='Resolved · '+text+'.'; $$('.opts button', m).forEach(function(b){ b.classList.toggle('chosen', b.getAttribute('data-pick')===pick); });
+    var m=$('#merge'); m.classList.add('done'); $('#mergeNote').textContent='Resolved · '+text+'.'; $$('.opts button', m).forEach(function(b){ b.classList.toggle('chosen', b.getAttribute('data-pick')===pick); b.disabled=true; });
     toast('Combined ✨', text);
   }
   function simulateEdit(){
