@@ -1,5 +1,6 @@
 import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
 import { looksLikeUnexecutedToolCall } from './toolTextParser';
+import { checkpointResultContext } from './checkpointResults';
 import type { LopuPromptSettings } from './promptSettingsCore';
 import { anthropicMediaContent, isLopuImage, openAiMediaContent, type LopuMedia } from './chatMedia';
 import { recordErrorLog } from '../errors/errorLogs';
@@ -158,6 +159,7 @@ export type LopuChatDependencies = {
 };
 
 export type LopuChatTurnInput = {
+  checkpointResults?: LopuProviderToolResult[];
   readReferences?: LopuReadReference[];
   readAccessMode?: LopuToolContext['readAccessMode'];
   resolveActionActor?: LopuToolContext['resolveActionActor'];
@@ -1174,7 +1176,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     });
 
   const restored = await restoreReadContext(input.readReferences, deps.runTool, makeContext());
-  const providerText = input.text + restored.text;
+  const providerText = input.text + restored.text + checkpointResultContext(input.checkpointResults);
   const newState = () => ({ ...newTurnState(), readReferences: normalizeReadReferences(restored.references) });
 
   let promptSettings: LopuPromptSettings | undefined;

@@ -7454,6 +7454,13 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       access, revoked Thing access and mixed revisions. Confirm raw JSON/grants
       never enter public history or private locator storage. Run the disposable
       Lopu Action QA for real protected-message persistence and readback.
+- [ ] Completed tool context: force a checkpoint immediately after an Action,
+      then continue and verify its exact result reaches the provider without a
+      second Action execution. Only the exact prior request in the current
+      account, chat and deployment can supply results. Revoked chat membership,
+      expired output, incomplete calls and pending confirmation restore nothing;
+      raw inputs/grants/messages never enter the continuation context. A 410
+      task result is fetched once per account/deployment; transient errors retry.
 - [ ] Tool-protocol recovery: split `json tt-tool` / `tt-tool json` fences at
       every character; run exactly one complete call. Ordinary JSON examples,
       result fences, malformed/truncated inputs and Stop must not execute tools.

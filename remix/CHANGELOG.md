@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Lopu continuations recover completed tool results
+  from their exact private background transcript, so a checkpoint after an
+  Action preserves its output without rerunning it. Account, chat, deployment,
+  retention and completion checks remain required. Expired task outputs stop
+  repeated polling. Reply capability 1.19.2.
+
 - 2026-09-27 — **Codex (AI)**: Things display-name edits for themes, algorithms,
   emoji and chat archives now appear in shared History. Strict title-only
   snapshots preserve protected payloads; content, quota and history commit
