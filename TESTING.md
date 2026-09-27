@@ -9007,3 +9007,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Run existing CSSOM/Typed OM/CSS/SVG/filter/Canvas/DOM/form regressions. Match
   preview/main source SHA, runtime digest, restrictive CSP and both actions-run
   1.29.0 manifests before production @lopu delivery.
+
+### Web standards: native observer programs (2026-09-27)
+
+- Run all 81 Mutation/Resize/Intersection Observer programs with default and
+  edited options. Verify actual native callback records, projected fields and
+  changed output. An unavailable IntersectionObserverEntry constructor or
+  callback field reports unsupported, never a fabricated successful result.
+- Run observerBoundaryFixtures: takeRecords drains five queued mutations before
+  callback delivery; disconnect clears the next queue; oldValue and receiver
+  identity match the native records. Resize/intersection unobserve/disconnect
+  must suppress later changes. Resize box selection responds to border changes.
+- Reject foreign targets/roots, unregistered callbacks, observer/callback
+  allocation overflow, invalid options, nested batches and async operations in
+  a synchronous batch. A rejected async command must not have been invoked.
+  Callback exceptions end the run; Stop/deadline disconnect resources, discard
+  late callbacks and keep the outer app responsive.
+- Round-trip edited programs through the catalogue Action and private Things
+  API. Save in the actual workbench, reopen, fully reload and run the saved
+  Component, then reference it from a second private page. Verify anonymous
+  404, Stop/fresh Run, and desktop/390px layout without horizontal overflow.
+- Run existing native DOM/form/Canvas/SVG/CSS/Typed OM/CSSOM/layout regressions,
+  compiler/protocol and capability tests. Both manifests and the client require
+  actions-run 1.30.0. Verify the built runtime hash and deployed commit before
+  claiming preview or production delivery.

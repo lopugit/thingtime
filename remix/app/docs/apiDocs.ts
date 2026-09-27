@@ -12746,9 +12746,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    // 1.29.0 adds scoped layout globals, native geometry, scroll promises and media-query listeners.
-    featureVersion: '1.29.0',
-    contractVersion: '1.29.0',
+    // 1.30.0 adds owned observers, authored asynchronous callbacks and bounded synchronous DOM batches.
+    featureVersion: '1.30.0',
+    contractVersion: '1.30.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',

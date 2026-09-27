@@ -331,7 +331,7 @@ addEventListener('message', (event) => {
 				bridge?.stop();
 				URL.revokeObjectURL(url);
 			},
-			(request) => (bridge ??= createPlatformDOMBridge(root)).request(request)
+			(request, callback) => (bridge ??= createPlatformDOMBridge(root, callback)).request(request)
 		);
 		addEventListener('pagehide', stop, { once: true });
 	} catch (e) {

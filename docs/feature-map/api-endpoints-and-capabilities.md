@@ -195,3 +195,11 @@ stylesheet/rule receivers, scoped adopted sheets and awaited replacement.
 contains reusable program data. Worker Stop/deadline handling fences late
 native Promise replies. The canonical catalogue and private Component save
 contracts are unchanged. See [CSSOM programs](../web-standards-builder.md#native-css-object-model-programs).
+
+Observer programs add `api.actions-run` 1.30.0. Saved `dom-callback` expressions
+carry authored functions through the existing worker transport; synchronous
+`dom` batches preserve native mutation queue semantics. Observer targets,
+options, receivers and callback delivery are bounded and run-owned. Completion
+and Stop disconnect native observers without extending the shared deadline.
+The catalogue, save Action and private Component contracts remain canonical.
+See [observer programs](../web-standards-builder.md#native-observer-programs).

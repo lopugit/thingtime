@@ -750,3 +750,42 @@ Both manifests and client negotiation advertise `api.actions-run` 1.28.0.
 Every program has default and edited native checks, and 20 boundary fixtures
 cover real CSS results, async replacement, ownership and resource limits.
 Programs persist through the canonical private Component and save Action path.
+
+## Native observer programs
+
+The 81 indexed MutationObserver, ResizeObserver and IntersectionObserver entries
+are ordinary editable Component programs. Their callbacks, record projections,
+DOM mutations and observation options are stored as program objects. Builders
+can change these objects, save a private Component, and reference it from another
+page. No observer-specific component renderer or parallel persistence path is
+introduced.
+
+`observerFixtures.ts` authors the data; `observerPolicy.ts` and
+`observerSupport.ts` register bounded native receivers in the existing bridge.
+A `dom-callback` expression registers an authored worker function, preserving
+native record and observer identity through run-owned handles. A `dom` operation
+with `action: "batch"` executes up to 16 registered get/set/call commands in one
+native task, so MutationObserver queue draining can happen before delivery.
+Commands use the normal ownership and argument checks. Async operations and
+nested batches are rejected before dispatch; an error stops subsequent commands
+without rolling back earlier writes.
+
+MutationObservers can use an owned detached document. Resize/intersection
+observers require the active opaque preview surface. Roots and targets must
+belong to the current run; the runtime document and parent page remain
+unavailable. Each run allows 16 observers, 32 targets per observer, 32 registered
+callbacks, 64 callback deliveries and 64 records per delivery. Observer options
+use closed dictionaries with bounded thresholds, margins and filters.
+
+Callbacks share the existing two-second program deadline. Completion, errors and
+Stop disconnect every observer and discard late deliveries. These examples
+capture observations during a run; they do not create persistent background
+subscriptions. Native unsupported fields and the not-yet-exposed
+IntersectionObserverEntry constructor report browser availability explicitly.
+
+Both capability manifests and the client negotiate `api.actions-run` 1.30.0.
+Default and edited programs, queue semantics, old values, callback identity,
+unobserve/disconnect, ownership and resource limits have dedicated checks.
+Primary sources are the [DOM Living Standard](https://dom.spec.whatwg.org/#interface-mutationobserver),
+[Resize Observer](https://www.w3.org/TR/resize-observer/) and
+[Intersection Observer](https://www.w3.org/TR/intersection-observer/).
