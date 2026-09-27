@@ -68,7 +68,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-27 — **Codex (AI)**: Add 149 reusable layout/Geometry programs with scoped browser metrics, hit tests, native scroll completion, quad/range measurements and removable media-query listeners. Preserve native mixin accessors and private Component save/reuse.
+- 2026-09-27 — **Codex (AI)**: Add 149 reusable layout/Geometry programs with scoped browser metrics, hit tests, native scroll completion, quad/range measurements and removable media-query listeners. Preserve native mixin accessors and private Component save/reuse. See [PR #944](../PRs/944-codex-web-standards-layout--add-reusable-layout-and-geometry-standards-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Add 102 reusable CSSOM programs, bounded native stylesheet/declaration receivers, scoped adoption and cancellable async replacement. Fix sample CSS masking adopted widths; verify private save/reload/reuse and native browser behavior. See [PR #943](../PRs/943-codex-web-standards-cssom--add-reusable-cssom-programs-and-native-stylesheet-editing.md).
 
