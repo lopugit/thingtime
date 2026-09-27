@@ -299,6 +299,7 @@ test('mintVaultProviderRealtimeSession refuses a credential that is (or contains
 test('createLopuVoiceRealtimeSession resolves the caller’s own connection, validates the tuning, and returns no key', async () => {
 	const calls: Array<{ ownerId: string; providerId: unknown }> = [];
 	const deps = {
+    getPromptSettings: async () => ({ basePrompt: 'Shared prompt', instructions: [{ id: 'on', text: 'Enabled preference', enabled: true }, { id: 'off', text: 'Disabled preference', enabled: false }] }),
 		getProvider: async (ownerId: string, providerId: unknown) => {
 			calls.push({ ownerId, providerId });
 			return provider('xai');
@@ -312,8 +313,12 @@ test('createLopuVoiceRealtimeSession resolves the caller’s own connection, val
 		})
 	};
 	const session = await createLopuVoiceRealtimeSession('user-1', { providerId: 'prov-1', effort: 'high', textResponse: true }, deps);
+  assert.match(session.instructions, /Shared prompt/);
+  assert.match(session.instructions, /Enabled preference/);
+  assert.doesNotMatch(session.instructions, /Disabled preference/);
 	assert.deepEqual(calls, [{ ownerId: 'user-1', providerId: 'prov-1' }]);
 	assert.deepEqual(session, {
+    instructions: session.instructions,
 		provider: 'xai',
 		model: 'grok-voice-latest',
 		token: 'ephemeral-secret',

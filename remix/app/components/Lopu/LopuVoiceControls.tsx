@@ -677,7 +677,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		}
 		const model = resolveDirectVoiceModel(provider, current.directVoiceModel ?? null);
 		setBusy('thinking');
-		let session: { token?: unknown; webSocketUrl?: unknown; effort?: unknown; textResponse?: unknown } | null = null;
+		let session: { instructions?: unknown; token?: unknown; webSocketUrl?: unknown; effort?: unknown; textResponse?: unknown } | null = null;
 		let history: VoiceHistoryItem[] = [];
 		try {
 			const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
@@ -745,7 +745,9 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		setDirect(true);
 		setActive(true);
 		try {
+			if (typeof session.instructions !== 'string' || !session.instructions) throw new Error('Lopu prompt settings are unavailable. Refresh and try again.');
 			await realtime.start({
+        instructions: session.instructions,
 				token: session.token as string,
 				webSocketUrl: session.webSocketUrl as string,
 				effort: typeof session.effort === 'string' ? session.effort : 'none',
