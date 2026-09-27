@@ -8886,6 +8886,7 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Refuse excessive blur, radius, octaves, convolution order/list values, regions,
   filter/node counts, relative unit mutation and external/non-PNG image data.
   Detached native number insertion cannot bypass its destination filter limit.
+  Malformed repeated numeric input must reject without regex backtracking.
 - Run existing SVG/Canvas/DOM/form fixtures. Filter ownership checks must not call
   Element accessors on Document, text or other non-element receivers.
 - Edit colour and X/Y blur, save a private Component through the authored Action,

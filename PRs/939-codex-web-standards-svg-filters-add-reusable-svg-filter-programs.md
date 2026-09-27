@@ -35,8 +35,8 @@ This incremental update does not claim complete standards coverage.
 
 - 126 platform tests pass, one opt-in integration skip; 83 capability tests pass.
   Typecheck retains the existing 89-error baseline; targeted lint is clean.
-- 590 local opaque-runtime browser checks: 578 pass, 12 explicit unsupported,
-  zero failures. Includes 23 filter native/boundary fixtures plus prior SVG,
+- 591 local opaque-runtime browser checks: 579 pass, 12 explicit unsupported,
+  zero failures. Includes 24 filter native/boundary fixtures plus prior SVG,
   Canvas, DOM and form regressions. Six new unavailable entries: Gaussian
   edgeMode/four constants and feImage.crossOrigin; prior six SVG limitations
   remain unchanged.
@@ -51,3 +51,8 @@ This incremental update does not claim complete standards coverage.
 
 Full build, saved-Component reload, graph refresh and exact hosted deployment
 receipts are completed in the PR body before delivery. The full goal remains active.
+
+CodeQL caught an exponential-backtracking risk in the repeated-number parser.
+Tokenizing first and validating each scalar with disjoint alternatives removes
+that pattern; malformed repeated-number regressions cover unit and native-frame
+paths. The final hosted checks and runtime digest are recorded in the PR body.

@@ -109,3 +109,7 @@ check(
 		nodes(p).find((n) => n.tag === 'feConvolveMatrix')!.attributes!.preserveAlpha = true;
 	}
 );
+
+check('Filter refuses malformed repeated number input', 'SVGFEGaussianBlurElement', [], undefined, 'work budget', (p) => {
+	nodes(p).find((n) => n.tag === 'feGaussianBlur')!.attributes!.stdDeviation = '.0\t' + '00\t'.repeat(250) + '.';
+});

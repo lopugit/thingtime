@@ -42,6 +42,9 @@ test('Filter work and local image budgets reject oversized or active input', () 
 		assert.throws(() => svgAttribute(tag, key, value));
 	assert.equal(svgAttribute('feGaussianBlur', 'stdDeviation', '3 4'), '3 4');
 	assert.deepEqual(svgFilterNumbers('pointsAtX', 100), [100]);
+	assert.deepEqual(svgFilterNumbers('stdDeviation', '1e-2 2e+0'), [0.01, 2]);
+	assert.throws(() => svgFilterNumbers('kernelMatrix', '.0\t' + '00\t'.repeat(250) + '.'));
+	assert.throws(() => svgFilterNumbers('stdDeviation', '.0\t00\t.'));
 	assert.throws(() => svgArgument('bad', 'svg-filter-image', () => ({})));
 });
 

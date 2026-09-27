@@ -21,16 +21,13 @@ const enums: Record<string, string[]> = {
 };
 export function svgFilterNumbers(property: string, value: unknown): number[] {
 	const text = typeof value === 'number' ? String(value) : value;
-	if (
-		typeof text !== 'string' ||
-		text.length > 1024 ||
-		!/^\s*[+-]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][+-]?\d+)?(?:[\s,]+[+-]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][+-]?\d+)?)*\s*$/.test(text)
-	)
-		throw new Error('Expected bounded SVG filter numbers');
-	const values = text
-		.trim()
-		.split(/[\s,]+/)
-		.map(Number);
+	if (typeof text !== 'string' || text.length > 1024) throw new Error('Expected bounded SVG filter numbers');
+	// Split first, then validate disjoint scalar tokens. A repeated-number regular
+	// expression can backtrack exponentially before rejecting malformed input.
+	const tokens = text.trim().split(/[\s,]+/);
+	if (tokens.length > SVG_FILTER_LIMITS.list) throw new Error('SVG filter parameter exceeds its work budget');
+	if (tokens.some((token) => !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(token))) throw new Error('Expected bounded SVG filter numbers');
+	const values = tokens.map(Number);
 	const key = property.replace(/^(stdDeviation|radius|order|baseFrequency|kernelUnitLength)[XY]$/, '$1');
 	const max =
 		key === 'stdDeviation'
