@@ -343,7 +343,10 @@
   .arr { color:var(--tt-faint); font-size:22px; text-align:center; }
   .sim { margin-top:16px; background:var(--tt-card); border:1px solid var(--tt-border); border-radius:16px; padding:16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .sim .lab { font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--tt-muted); width:100%; }
-  .toggle { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--tt-ink); cursor:pointer; user-select:none; }
+  /* These switches are <button>s, so the UA's own border/background would draw
+     a grey bevelled box around the pill unless it is reset here. */
+  .toggle { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--tt-ink); cursor:pointer; user-select:none;
+    background:none; border:0; padding:0; }
   .toggle .sw { width:38px; height:22px; border-radius:999px; background:#d9d9de; position:relative; transition:background .16s ease; }
   .toggle .sw::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .16s ease; }
   .toggle[aria-checked="true"] .sw { background:var(--tt-rainbow-3); }
@@ -671,6 +674,12 @@
   var $ = function(s, r){ return (r||document).querySelector(s); };
   var $$ = function(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  // An explicit `behavior` on scrollIntoView wins over the CSS `scroll-behavior`
+  // the reduced-motion block sets, so asking for `smooth` there would animate
+  // anyway. Read the preference here instead, live, so the toggle takes effect
+  // without a reload and every jump on the page honours it.
+  var REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
+  function jumpTo(el){ if (el) el.scrollIntoView({ behavior: REDUCE_MOTION.matches ? 'auto' : 'smooth', block:'start' }); }
   var DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function dayKey(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
@@ -699,7 +708,10 @@
     if (anyOn(f.verb) && !f.verb[ev.verb]) return false;
     if (anyOn(f.sync) && !f.sync[ev.sync]) return false;
     if (state.q){
-      var hay=(ev.title+' '+thingTitleAt(ev)+' '+(ev.msg?ev.msg.text:'')+' '+ev.changes.map(function(c){return c.k+' '+c.b+' '+c.a;}).join(' ')).toLowerCase();
+      // An added property has no before and a removed one has no after; keep
+      // those out of the haystack so searching "null" cannot match them.
+      var term=function(x){ return x==null?'':x; };
+      var hay=(ev.title+' '+thingTitleAt(ev)+' '+(ev.msg?ev.msg.text:'')+' '+ev.changes.map(function(c){return c.k+' '+term(c.b)+' '+term(c.a);}).join(' ')).toLowerCase();
       if (hay.indexOf(state.q.toLowerCase())<0) return false;
     }
     return true;
@@ -713,7 +725,9 @@
   }
   function chip(c){
     var cls='chg'+(c.b==null?' add':'')+(c.a==null?' del':'');
-    var sw=function(i){ return c.sw?'<span class="sw" style="background:'+c.sw[i]+'"></span>':''; };
+    // A restore only knows the colour it is restoring to, so the "before" half
+    // of its pair is null; skip that side rather than drawing an empty swatch.
+    var sw=function(i){ return c.sw&&c.sw[i]?'<span class="sw" style="background:'+c.sw[i]+'"></span>':''; };
     var body;
     if (c.b==null) body='<span class="a">'+sw(1)+esc(c.a)+'</span>';
     else if (c.a==null) body='<span class="b">'+sw(0)+esc(c.b)+'</span>';
@@ -763,7 +777,7 @@
     var list=visible(), tl=$('#timeline');
     if (state.view==='evolution'){ renderEvolution(); return; }
     if (state.view==='versions'){ tl.innerHTML='<div class="empty">Versions view is drawn in section 3 below — same events, as lanes. <br/><button type="button" class="btn small" style="margin-top:10px" id="jumpVersions">Jump to versions ↓</button></div>';
-      $('#jumpVersions').addEventListener('click', function(){ $('#versions').scrollIntoView({behavior:'smooth', block:'start'}); }); return; }
+      $('#jumpVersions').addEventListener('click', function(){ jumpTo($('#versions')); }); return; }
     if (!list.length){ tl.innerHTML='<div class="empty">Nothing recorded matches these filters. <br/><span style="font-size:12.5px">History never deletes on its own — try clearing a chip.</span></div>'; return; }
     var html='', lastKey=null;
     list.forEach(function(ev){
@@ -840,10 +854,13 @@
     var local=EVENTS.filter(function(e){return e.sync==='local';}).length, review=EVENTS.filter(function(e){return e.sync==='review';}).length;
     var queued=EVENTS.filter(function(e){return e.sync==='local' && !e.lane;}).length, privateVars=local-queued;
     var pill=$('#syncpill'); pill.className='syncpill'+(state.offline?' local':(review?' review':''));
-    var t = state.offline ? 'Offline · '+local+' waiting to sync' : (review ? review+' change'+(review===1?' needs':'s need')+' review' : 'Synced'+(local?' · '+local+' saved on this device':''));
+    // Only the queue actually syncs: a private variation is "saved on this
+    // device" but never "waiting to sync", so counting it as queued would
+    // promise a drain that reconnecting deliberately does not perform.
+    var t = state.offline ? 'Offline · '+queued+' waiting to sync' : (review ? review+' change'+(review===1?' needs':'s need')+' review' : 'Synced'+(local?' · '+local+' saved on this device':''));
     $('#synctext').textContent=t;
     var stat;
-    if (state.offline) stat='Offline · '+local+' change'+(local===1?'':'s')+' queued locally';
+    if (state.offline) stat='Offline · '+queued+' change'+(queued===1?'':'s')+' queued locally'+(privateVars?' · '+privateVars+' variation'+(privateVars===1?'':'s')+' private until sent':'');
     else if (queued) stat='Online · '+queued+' saved on this device · sync pending';
     else if (privateVars) stat='Online · sync queue empty · '+privateVars+' variation'+(privateVars===1?'':'s')+' private until sent';
     else stat='Online · sync queue empty';
@@ -932,9 +949,18 @@
     toast(state.offline?'Saved on this device 💾':'Saved and synced ☁️', state.offline?'No connection — it is safe here and queued to sync.':'Written locally first, then to your account.');
   }
   function reconnect(){
+    // The same button is "Sync now" while already online, so do not claim the
+    // connection came back when it never went away.
+    var wasOffline=state.offline;
     state.offline=false; $('#offline').setAttribute('aria-checked','false');
-    var n=0; EVENTS.forEach(function(e){ if (e.sync==='local' && e.thing==='gear'){ e.sync='synced'; n++; } });
-    renderAll(); toast('Back online ☁️', n+' change'+(n===1?'':'s')+' synced to your account. The button variation stays private until you send it.');
+    // Everything queued syncs, whatever Thing it is on; only variations (lanes)
+    // stay private until they are sent, so the queue can always actually drain.
+    var n=0; EVENTS.forEach(function(e){ if (e.sync==='local' && !e.lane){ e.sync='synced'; n++; } });
+    // Variations may already have been sent, so only mention the ones still private.
+    var priv=EVENTS.filter(function(e){ return e.lane && e.sync==='local'; }).length;
+    renderAll();
+    toast(wasOffline?'Back online ☁️':'Synced ☁️',
+      n+' change'+(n===1?'':'s')+' synced to your account.'+(priv?' '+(priv===1?'The variation stays':priv+' variations stay')+' private until you send '+(priv===1?'it':'them')+'.':''));
   }
 
   // ---------- events ----------
@@ -950,7 +976,7 @@
   $('#bars').addEventListener('click', function(e){
     var b=e.target.closest('button'); if (!b) return; var key=b.getAttribute('data-day');
     state.day = state.day===key ? null : key; renderBars(); renderTimeline();
-    var g=$('.day[data-day="'+key+'"]'); if (g){ g.scrollIntoView({behavior:'smooth', block:'start'}); $('#scrubhint').textContent='Jumped to '+b.getAttribute('data-tip'); }
+    var g=$('.day[data-day="'+key+'"]'); if (g){ jumpTo(g); $('#scrubhint').textContent='Jumped to '+b.getAttribute('data-tip'); }
     else $('#scrubhint').textContent='No recorded changes on '+b.getAttribute('data-tip').split(' · ')[0];
   });
   $('#timeline').addEventListener('click', function(e){
@@ -964,7 +990,14 @@
     }
     openDetail(id);
   });
-  $('#timeline').addEventListener('keydown', function(e){ if (e.key==='Enter' || e.key===' '){ var row=e.target.closest('.ev'); if (row){ e.preventDefault(); openDetail(parseInt(row.getAttribute('data-id'),10)); } } });
+  $('#timeline').addEventListener('keydown', function(e){
+    if (e.key!=='Enter' && e.key!==' ') return;
+    // The row is a role="button" that CONTAINS real buttons (Preview/Compare/
+    // Restore). Cancelling the key here would swallow their native activation,
+    // so a keyboard user could never reach the row actions — let them through.
+    if (e.target.closest('[data-act]')) return;
+    var row=e.target.closest('.ev'); if (row){ e.preventDefault(); openDetail(parseInt(row.getAttribute('data-id'),10)); }
+  });
   $('#detail').addEventListener('click', function(e){
     if (e.target.closest('#closeDetail')) return closeDetail();
     var tab=e.target.closest('[data-tab]'); if (tab){ state.tab=tab.getAttribute('data-tab'); renderDetail(); return; }
@@ -973,7 +1006,7 @@
     else if (a==='undo') undo(ev);
     else if (a==='variation') variation(ev);
     else if (a==='compare'){ state.compare=!state.compare; renderDetail(); }
-    else if (a==='review'){ $('#merge').classList.add('open'); $('#versions').scrollIntoView({behavior:'smooth', block:'start'}); }
+    else if (a==='review'){ $('#merge').classList.add('open'); jumpTo($('#versions')); }
     else if (a==='preview') toast('Previewing Ana\'s version', 'Read-only · your variation is untouched.');
     else if (a==='note'){ var ta=$('#detail textarea'); var txt=ta&&ta.value.trim(); if (txt){ ev.msg={who:'you', text:txt}; renderAll(); toast('Note saved', 'It travels with the change, on every device.'); } else toast('Write a note first', 'A sentence is plenty.'); }
     else if (a==='askLopu'){ ev.msg={who:'lopu', text:'This changed '+ev.changes.map(function(c){return c.k;}).join(', ')+' on '+thingTitleAt(ev)+'. Say "undo that" if you want it back.'}; renderAll(); toast('Lopu explained it 🦄', 'Explanations are saved as the change\'s message.'); }
@@ -982,9 +1015,9 @@
   });
   $('#backdrop').addEventListener('click', closeDetail);
   document.addEventListener('keydown', function(e){ if (e.key==='Escape') closeDetail(); });
-  $('#openFromEditor').addEventListener('click', function(){ state.scope='gear'; $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-scope')==='gear'?'true':'false'); }); renderAll(); openDetail(13); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); });
-  $('#openFromPost').addEventListener('click', function(){ state.scope='all'; state.filters.kind={post:true}; $$('[data-f="kind"]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-v')==='post'?'true':'false'); }); renderAll(); openDetail(2); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); });
-  $$('.graph .node').forEach(function(n){ n.addEventListener('click', function(){ openDetail(parseInt(n.getAttribute('data-ev'),10)); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); }); });
+  $('#openFromEditor').addEventListener('click', function(){ state.scope='gear'; $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-scope')==='gear'?'true':'false'); }); renderAll(); openDetail(13); jumpTo($('#browser')); });
+  $('#openFromPost').addEventListener('click', function(){ state.scope='all'; state.filters.kind={post:true}; $$('[data-f="kind"]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-v')==='post'?'true':'false'); }); renderAll(); openDetail(2); jumpTo($('#browser')); });
+  $$('.graph .node').forEach(function(n){ n.addEventListener('click', function(){ openDetail(parseInt(n.getAttribute('data-ev'),10)); jumpTo($('#browser')); }); });
   $('#btnReview').addEventListener('click', function(){ $('#merge').classList.add('open'); });
   $('#btnVariation').addEventListener('click', function(){ variation(findEv(13)); });
   $('#btnPull').addEventListener('click', function(){ toast('You are up to date', 'Nothing new from Ana since 4:09 pm — that one still needs review.'); });
