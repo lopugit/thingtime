@@ -1,5 +1,6 @@
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
 import { draftRequest } from '~/drafts/draftClient';
+import type { BranchMergeRequest } from '../timeline/branchMerge';
 import type { TimelineBranchCommand } from '../timeline/branches';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import type { TimelineEvent } from '~/timeline/contract';
@@ -103,6 +104,10 @@ export function useApi() {
   const v1 = {
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     timeline: {
+      branchMerge: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchMergeRequest, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.7.0');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
       entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
         return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId })}`, options);

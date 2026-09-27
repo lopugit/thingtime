@@ -17,6 +17,7 @@ export const timelineBranchHeadId = (branchId: string, thingId: string) => `${br
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(value);
 const uuid = (value: unknown): boolean => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value);
 const branchId = (value: unknown): boolean => typeof value === 'string' && value.startsWith('branch-') && uuid(value.slice(7));
+export const isTimelineBranchId = branchId;
 const date = (value: unknown): boolean => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 const name = (value: unknown): boolean => typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= 80 && !/[\u0000-\u001f\u007f]/.test(value);
 function record(input: unknown, keys: string[]): Record<string, any> {

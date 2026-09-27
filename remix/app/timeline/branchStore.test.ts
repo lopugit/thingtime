@@ -8,6 +8,7 @@ import { TimelineSync, TimelineBranchCommandRefusal } from './sync.ts';
 import { parseTimelineBranchCommand, parseTimelineBranchEntry, timelineBranchHeadId } from './branches.ts';
 import { parseTimelineEvent } from './contract.ts';
 import { entryFixture, eventFixture } from './testFixtures.ts';
+import { createBranchMergeProposal } from './branchMerge.ts';
 
 const scope = { ownerId: 'user-1', apiOrigin: 'https://thingtime.com', dataPlane: 'home' };
 const branchId = 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5';
@@ -16,6 +17,44 @@ const command = parseTimelineBranchCommand({ command: 'create-branch', operation
 const member = (thingId = 'page', revision = 1) => parseTimelineBranchEntry({
 	branch: { formatVersion: 1, id: branchId, ownerId: scope.ownerId, name: 'Experiment', createdAt: '2026-09-27T05:00:00.000Z' },
 	head: { formatVersion: 1, id: timelineBranchHeadId(branchId, thingId), ownerId: scope.ownerId, branchId, thingId, eventId: revision === 1 ? 'base' : `version-${revision}`, revision, createdAt: '2026-09-27T05:00:00.000Z', updatedAt: '2026-09-27T05:01:00.000Z' }
+});
+
+test('a reviewed merge survives offline reload and a lost branch reply with identical canonical records and one command', async () => {
+	const factory = new IDBFactory(); const backend = new IndexedDbTimelineBackend(factory);
+	const snapshot = { adapter: 'thing-content', version: 1, value: { crystal: { title: 'Merged' }, extended: {}, tags: [], geo: null, acl: null, folderId: null } };
+	const proposal = createBranchMergeProposal({ ...member(), incomingEventId: 'incoming', baseEventId: 'ancestor', current: snapshot, incoming: snapshot, result: snapshot, conflicts: [] }, 'browser-merge');
+	await new TimelineLocalStore(scope, backend).enqueue(proposal.event);
+	await new TimelineBranchStore(scope, backend).enqueue(proposal.command);
+	await backend.close();
+	const reopened = new IndexedDbTimelineBackend(factory); const store = new TimelineLocalStore(scope, reopened); const branches = new TimelineBranchStore(scope, reopened);
+	assert.deepEqual(await store.pending(), [proposal.event]); assert.deepEqual(await branches.pending(), [proposal.command]);
+	const result = { ...member(), head: { ...member().head, eventId: proposal.event.id, revision: 2 } };
+	const receipt = entryFixture(eventFixture(`branch-op-${proposal.command.operationId}`, { thingId: 'page', branchId, source: 'api', clientId: null, mode: 'effect', operation: 'effect', after: { adapter: 'timeline-branch', version: 1, value: result } }), 2);
+	const requests: string[] = []; let lost = true; let uploads = 0;
+	const sync = new TimelineSync(store, {
+		page: async () => { throw new Error('unused'); },
+		push: async event => { assert.deepEqual(event, proposal.event); uploads++; return entryFixture(event); },
+		branch: async value => { assert.equal(uploads, 1); requests.push(JSON.stringify(value)); if (lost) { lost = false; throw new Error('Lost merge acknowledgment'); } return { ok: true, ...result, entry: receipt }; }
+	}, branches);
+	await assert.rejects(sync.pushPending(), /Lost merge acknowledgment/);
+	assert.deepEqual(await store.pending(), []); assert.deepEqual(await branches.pending(), [proposal.command]);
+	await sync.pushPending(); assert.equal(requests[0], requests[1]); assert.equal(uploads, 1);
+	assert.deepEqual((await branches.forThing('page'))[0], result); assert.deepEqual(await branches.queued(), []);
+	assert.deepEqual((await store.forThing('page')).find(row => row.event.id === proposal.event.id)?.event, proposal.event);
+	await reopened.close();
+});
+
+test('a stale merged-branch push retains the accepted merged version after its command is dismissed', async () => {
+	const backend = new IndexedDbTimelineBackend(new IDBFactory()); const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend);
+	const snapshot = { adapter: 'thing-content', version: 1, value: { crystal: {}, extended: {}, tags: [], geo: null, acl: null, folderId: null } };
+	const proposal = createBranchMergeProposal({ ...member(), incomingEventId: 'incoming', baseEventId: 'ancestor', current: snapshot, incoming: snapshot, result: snapshot, conflicts: [] }, 'browser');
+	await store.enqueue(proposal.event); await branches.enqueue(proposal.command);
+	const sync = new TimelineSync(store, { page: async () => { throw new Error('unused'); }, push: async event => entryFixture(event), branch: async () => { throw { status: 409, error: 'Branch changed' }; } }, branches);
+	await assert.rejects(sync.pushPending(), TimelineBranchCommandRefusal);
+	assert.equal((await branches.queued())[0].failure?.status, 409);
+	await branches.dismissRejected(proposal.command.operationId);
+	assert.equal((await store.forThing('page'))[0].event.id, proposal.event.id); assert.deepEqual(await branches.queued(), []);
+	await backend.close();
 });
 
 test('branch commands survive reload and concurrent tabs without changing immutable request identities', async () => {
