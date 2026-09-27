@@ -68,7 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-27 — **Codex (AI)**: Add 81 reusable observer programs with database-authored callbacks, native records, scoped targets and synchronous mutation batches. Disconnect on completion/Stop, preserve unsupported results in callbacks, and negotiate actions-run 1.30.0. Validation details will be linked in the observer PR note.
+- 2026-09-27 — **Codex (AI)**: Add 81 reusable observer programs with database-authored callbacks, native records, scoped targets and synchronous mutation batches. Disconnect on completion/Stop, preserve unsupported results in callbacks, and negotiate actions-run 1.30.0. See [PR #949](../PRs/949-codex-web-standards-observers--add-reusable-observer-programs-and-database-authored-callbacks.md).
+- 2026-09-27 — **Codex (AI)**: Recover from the Mac speech recognizer's observed
+  empty-input retry during silence. Keep listening without a false service
+  error, while preserving errors from failed captures that contain speech and
+  from unrelated service failures.
+- 2026-09-27 — **Codex (AI)**: Clear stale microphone/recognition errors when
+  retrying Lopu voice input. Capture errors no longer linger as conversation
+  history after permission is granted and a voice message sends successfully.
 
 - 2026-09-27 — **Codex (AI)**: Add 149 reusable layout/Geometry programs with scoped browser metrics, hit tests, native scroll completion, quad/range measurements and removable media-query listeners. Preserve native mixin accessors and private Component save/reuse. See [PR #944](../PRs/944-codex-web-standards-layout--add-reusable-layout-and-geometry-standards-programs.md).
 

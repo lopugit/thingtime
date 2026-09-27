@@ -928,6 +928,17 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] On Mac, listen silently across at least two native no-input retry cycles
+      (15 seconds), then speak: silence must not show a red service error or
+      send a message, and the spoken phrase must send exactly once. Stop ends
+      capture/retries. An interrupted helper still reports a real error, and
+      retry clears it without removing conversation messages.
+- [ ] After a microphone permission or recognition failure, retry voice input:
+      the previous recognition error disappears immediately, a successful
+      transcript sends normally, and existing messages/turn failures remain.
+      Repeat a failed retry and switch chats; errors must not accumulate or
+      leak into another conversation. On Mac, interrupt a disposable native
+      capture to exercise recovery without resetting OS permissions.
 - [ ] With iOS build 29 and private uploads approved, finish a voice segment:
       `/things` contains one playable owner-private M4A recording and Files
       retains the original CAF/TXT. Open the saved notice at desktop and 390px;
