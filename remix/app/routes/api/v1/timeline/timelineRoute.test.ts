@@ -12,6 +12,7 @@ function setup() {
 		user: async () => state.owner ? ({ id: state.owner } as any) : null,
 		limit: async (...args: any[]) => { calls.push(['rate', ...args.slice(1)]); return { allowed: !state.limited, retryAfterSeconds: 5 } as any; },
 		discovery: ownerId => ({ ownerId, dataPlane: state.plane, folderId: 'timeline-folder' }),
+		componentBindings: async (ownerId, eventId) => { calls.push(['components', ownerId, eventId]); return eventId === 'saved' ? { eventId, entries: [] } : null; },
 		page: async (ownerId, request) => { calls.push(['page', ownerId, request]); return { entries: [], nextBefore: null, nextAfter: null }; },
 		entry: async (ownerId, eventId) => { calls.push(['entry', ownerId, eventId]); return eventId === 'saved' ? entryFixture(eventFixture('saved')) : null; },
 		push: async (ownerId, event) => { calls.push(['push', ownerId, event]); return entryFixture(event); },
@@ -196,4 +197,19 @@ test('direct named branch lookup is private, exact, and refuses ambiguous select
  h.state.owner = ''; assert.equal((await h.handlers.loader({ request: request('GET', query) })).status, 401);
  assert.equal(h.calls.filter(call => call[0] === 'branchHead').length, reads);
  assert.equal(h.calls.filter(call => ['branches', 'page', 'entry', 'branch', 'push'].includes(call[0])).length, 0);
+});
+
+
+test('recorded component batch requires one exact owner/source/event and refuses ambiguous or paging selectors', async () => {
+ const h = setup(); const query = 'ownerId=user-1&dataPlane=home&eventId=saved&components=1';
+ const read = (suffix = '') => h.handlers.loader({ request: request('GET', query + suffix) });
+ const response = await read(); assert.equal(response.status, 200);
+ assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+ assert.deepEqual(await response.json(), { ok: true, eventId: 'saved', entries: [] });
+ for (const suffix of ['&thingId=page-1', '&eventId=other', '&components=1', '&ownerId=user-1', '&dataPlane=home', '&branchId=branch-x', '&history=1', '&before=1', '&limit=40', '&unknown=1']) assert.equal((await read(suffix)).status, 400);
+ assert.equal((await h.handlers.loader({ request: request('GET', query.replace('eventId=saved', 'eventId=missing')) })).status, 404);
+ h.state.plane = 'custom'; assert.equal((await read()).status, 409);
+ h.state.plane = 'home'; h.state.owner = 'other'; assert.equal((await read()).status, 409);
+ h.state.owner = ''; assert.equal((await read()).status, 401);
+ assert.equal(h.calls.filter(item => item[0] === 'components').length, 2);
 });
