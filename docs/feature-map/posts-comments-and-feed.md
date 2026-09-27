@@ -52,6 +52,12 @@ request-local viewer so workspace membership lookups can be shared safely.
 `test:things` includes `postLinkedThings.test.ts`; `test:feed` covers attachment
 registration. Reader revocation must remove linked content on the next read.
 
+Builder Components can render the same discussion through `tt-discussion`
+(`app/components/Builder/ComponentDiscussion.tsx`). It accepts a Thing id,
+description and collection-controls preference, stays inert in previews, and
+refreshes page sources after a comment. It never accepts an authored post
+projection or changes target permissions.
+
 ## Tests
 
 - `npm --prefix remix run test:feed` (card change contracts, hidden-link

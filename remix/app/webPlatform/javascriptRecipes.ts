@@ -5,6 +5,12 @@ import { javascriptSymbolRecipe } from './javascriptSymbols';
 import { javascriptSyntaxRecipe } from './javascriptSyntax';
 import { javascriptDefinitionsRecipe } from './javascriptDefinitions';
 import { javascriptControlRecipe } from './javascriptControl';
+import { javascriptReceiverRecipe } from './javascriptReceiverFixtures';
+import { javascriptPrototypeRecipe } from './javascriptPrototypeFixtures';
+import { javascriptTypedArrayRecipe } from './javascriptTypedArrayFixtures';
+import { javascriptIteratorRecipe } from './javascriptIteratorFixtures';
+import { javascriptBindingRecipe } from './javascriptBindingFixtures';
+import { javascriptConstructorRecipe } from './javascriptConstructorFixtures';
 export function javascriptRecipe(f: Feature): Recipe {
 	const p = base(f),
 		name = f.name
@@ -13,6 +19,12 @@ export function javascriptRecipe(f: Feature): Recipe {
 			.trim();
 	const parts = name.split('.');
 	const specialized =
+		javascriptBindingRecipe(f) ||
+		javascriptConstructorRecipe(f) ||
+		javascriptTypedArrayRecipe(f) ||
+		javascriptIteratorRecipe(f) ||
+		javascriptPrototypeRecipe(f) ||
+		javascriptReceiverRecipe(f) ||
 		javascriptDefinitionsRecipe(f) ||
 		javascriptControlRecipe(f) ||
 		javascriptSyntaxRecipe(f) ||

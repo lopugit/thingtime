@@ -1,10 +1,14 @@
 import { ComponentChange } from '../Builder/ComponentChange';
+import { ComponentMenu } from '../Builder/ComponentMenu';
 import { ComponentSelect } from '../Builder/ComponentSelect';
 import { ComponentStyle } from '../Builder/ComponentStyle';
 import { ComponentCollection } from '../Builder/ComponentCollection';
 import { ComponentDragSource, ComponentDropTarget } from '../Builder/ComponentDrag';
-import { Link, useInRouterContext } from 'react-router';
+import { Link, useInRouterContext, useLocation } from 'react-router';
+import { useWebpageRuntime } from '../Builder/webpageRuntime';
+import { componentPageHref, componentNavigationState } from '../Builder/componentNavigation';
 import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
+import { ComponentDiscussion } from '../Builder/ComponentDiscussion';
 import { ComponentMap } from '../Builder/ComponentMap';
 import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
@@ -252,16 +256,19 @@ type RenderState = { count: number; mediaUrl: (url: string) => string };
 function ComponentLink({ href, children, ...props }: Record<string, any>) {
 	const inRouter = useInRouterContext();
 	if (inRouter && typeof href === 'string' && /^(?:\/(?!\/)|[?#])/.test(href) && !href.startsWith('/api/') && !props.download)
-		return (
-			<Link {...props} to={href}>
-				{children}
-			</Link>
-		);
+		return <RoutedComponentLink {...props} href={href}>{children}</RoutedComponentLink>;
 	return (
 		<a {...props} href={href}>
 			{children}
 		</a>
 	);
+}
+
+function RoutedComponentLink({ href, children, ...props }: Record<string, any>) {
+	const location = useLocation();
+	const { pageId } = useWebpageRuntime();
+	const to = componentPageHref(pageId, location, href);
+	return <Link {...props} to={to} state={componentNavigationState(pageId, location, to)}>{children}</Link>;
 }
 
 const renderNode = (node: HtmlThingNode, key: number, depth: number, state: RenderState): React.ReactNode => {
@@ -287,8 +294,10 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		);
 	}
 	if (tag === 'tt-attachments') return <ComponentAttachments key={key} {...node.props} />;
+	if (tag === 'tt-discussion') return <ComponentDiscussion key={key} {...node.props} />;
 	if (tag === 'tt-collection') return <ComponentCollection key={key} {...node.props} />;
 	if (tag === 'tt-change') return <ComponentChange key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentChange>;
+	if (tag === 'tt-menu') return <ComponentMenu key={key} {...node.props} triggerContent={node.props?.triggerContent === undefined ? undefined : renderChildren(node.props.triggerContent, depth + 1, state)}>{renderChildren(node.children, depth + 1, state)}</ComponentMenu>;
 	if (tag === 'tt-drag') return <ComponentDragSource key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDragSource>;
 	if (tag === 'tt-drop') return <ComponentDropTarget key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDropTarget>;
 	if (tag === 'tt-style')
@@ -309,6 +318,9 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 				revisionName={node.props?.revisionName}
 				revision={node.props?.revision}
 				resetKey={node.props?.resetKey}
+				completion={node.props?.completion}
+				completionState={node.props?.completionState}
+				disabled={node.props?.disabled}
 			>
 				{renderChildren(node.children, depth + 1, state)}
 			</ComponentForm>
@@ -316,7 +328,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (tag === 'tt-countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
 	if (tag === 'tt-dialog')
 		return (
-			<ComponentDialog key={key} {...node.props}>
+			<ComponentDialog key={key} {...node.props} triggerContent={node.props?.triggerContent === undefined ? undefined : renderChildren(node.props.triggerContent, depth + 1, state)} closeContent={node.props?.closeContent === undefined ? undefined : renderChildren(node.props.closeContent, depth + 1, state)}>
 				{renderChildren(node.children, depth + 1, state)}
 			</ComponentDialog>
 		);

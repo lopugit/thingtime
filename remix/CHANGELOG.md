@@ -68,6 +68,134 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Reusable CSS function comparisons cover 180
+  catalogue entries (137 newly interactive), including maths, colour, transforms,
+  shapes, grids, easing, counters and anchors. Scoped CSS probes distinguish
+  syntax acceptance from native computed results and compare a control sample.
+  Edited programs retain the existing private Component/Action save path;
+  actions-run 1.26.0 advertises the additive contract. Details:
+  [PR #940](../PRs/940-codex-web-standards-css-functions--add-reusable-css-function-comparisons.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 192 reusable SVG filter programs with visible
+  original/filtered drawings, typed native values and private Component saving.
+  Shared filter/PNG budgets preserve the existing isolated runtime; literal SVG
+  booleans and non-element DOM ownership stay correct. Actions-run is 1.25.0.
+  Validation and deployment: [PR #939](../PRs/939-codex-web-standards-svg-filters-add-reusable-svg-filter-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 311 reusable SVG programs with native geometry,
+  units, text, transforms, typed lists and primitive IDL constants. Namespaced
+  documents and surface receivers keep bounded local resources; native probes
+  report ignored bounding-box options as unsupported. Actions-run advances to
+  1.24.0; private save/reload, browser boundaries and deployment checks recorded
+  in [PR #938](../PRs/938-codex-web-standards-svg-add-reusable-native-svg-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 145 reusable Canvas programs with native
+  surface receivers, drawing, fonts, pixels, paths and typed settings. Fixed
+  detached-context font no-ops by using the actual isolated surface. Bounded
+  bitmap/path work and blocked runtime-document access; actions-run is 1.23.0.
+  Details: [PR #936](../PRs/936-codex-web-standards-canvas-add-reusable-native-canvas-programs.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Web Standards Builder adds 95 reusable native media
+  programs (89 newly interactive entries), local audio/video clips, editable
+  playback settings, native media events and property/range/error results.
+  Playback promises retain rejection and fence stale completions; initial mute
+  uses the native setter. Both manifests/client require actions-run 1.22.0.
+  Local validation includes restarting a crashed Nitro worker through the
+  checkout's PM2 lifecycle command while preserving the disposable API scope.
+  Details: [PR #935](../PRs/935-codex-web-standards-media-add-reusable-native-audio-and-video-programs.md).
+
+
+### 2026-09-27 — Reusable live HTML event programs
+
+- Add 107 editable HTML/GlobalEventHandlers examples with native listener options,
+  IDL handler properties, propagation/cancellation controls and bounded event traces.
+  Interactive coverage reaches 3,184 entries; the full catalogue remains incomplete.
+- Report cancellation after native dispatch, clean up failed/exhausted bindings,
+  and preserve ordinary private Component save/reopen behavior. Existing sandbox
+  restrictions remain unchanged. Catalogue/client contract: 1.21.0.
+  Details: [PR #934](../PRs/934-codex-web-standards-html-events-add-reusable-live-html-event-programs-and-native-handler-bindings.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Added 132 reusable Web IDL dictionary, field,
+  enum and callback programs for events, files, fetch metadata, decoding,
+  geometry and stream lifecycles. Interactive coverage reaches 3,077 entries.
+  Saved callbacks and inputs use the existing isolated runtime; native errors
+  and unsupported features stay visible. Catalogue/client contract: 1.20.0.
+  Details: [PR #933](../PRs/933-codex-web-standards-webidl-options-add-reusable-web-idl-options-and-callback-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Added reusable native destructuring patterns
+  across declarations, assignments, parameters, catches and loops. Twenty new
+  examples bring coverage to 2,945; Parameter Lists now demonstrates patterns.
+  Getter-order differences remain visible. API/client negotiation advances to
+  `api.actions-run` 1.19.0; runtime sandbox permissions are unchanged. Details:
+  [PR #932](../PRs/932-codex-web-standards-binding-patterns--add-reusable-binding-patterns-and-javascript-examples.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 66 reusable constructor-signature
+  programs, taking interactive coverage to 2,925 entries. Editable native
+  call/new behavior, typed-array overloads, Promise order, Proxy invariants and
+  saved defaults use existing Component language nodes. The catalogue contract
+  is `api.actions-run` 1.18.0; runtime permissions are unchanged. Details:
+  [PR #931](../PRs/931-codex-web-standards-constructor-programs-add-reusable-javascript-constructor-signature-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Saved collection sources load cursor pages through viewer-authorized Actions, with older-result search, deduplication, retry and bounded accumulation. Copies preserve the source Action dependency; existing collection styling and editable row templates are retained. Details: [PR #929](../PRs/929-codex-builder-paged-collections-load-editable-collections-from-paged-action-sources.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 67 reusable TypedArray, iterator and
+  generator intrinsic examples, taking worked coverage to 2,859 entries.
+  Native byte conversions, callback traces, cleanup and protocol errors remain
+  editable Component program data. Missing-throw behavior reports differences
+  from ECMA-262 2026 without replacing native results. The catalogue contract
+  is `api.actions-run` 1.17.0; runtime permissions remain unchanged. Details:
+  [PR #928](../PRs/928-codex-web-standards-intrinsic-receivers-reusable-typed-array-and-iterator-examples.md).
+
+- 2026-09-27: Added editable `tt-menu` controls with bounded native popovers, keyboard navigation and scoped dialog hosting. See [PR note](../PRs/925-codex-builder-menu-controls-editable-native-menus.md).
+- 2026-09-27 — **Codex (AI)**: Reusable ECMAScript receiver and prototype
+  programs fill 136 missing built-in examples and improve 22 existing ones.
+  Editable binary data, iterator consumption, weak identity, promises, function
+  receivers and local prototype extensions use existing Thingtime language
+  nodes. The catalogue reaches 2,792 interactive entries; API/client catalogue
+  negotiation advances to `api.actions-run` 1.16.0. Details:
+  [PR #924](../PRs/924-codex-web-standards-js-receivers-add-reusable-ecmascript-receiver-and-prototype-examples.md).
+
+- 2026-09-27 — **Codex (AI)**: Live Components expose scoped pending Action
+  state for authored saving labels and disabled forms, plus current page identity
+  for reusable page controls. Dialog close content
+  and its accessible label can use the same sanitized, editable markup as
+  the rest of the app.
+
+- 2026-09-27 — **Codex (AI)**: Saved Component links keep their page and view
+  mode inside Builder. Local Back controls can return through nested links
+  within the same app, with an explicit fallback for direct entry.
+
+- 2026-09-27 — **Codex (AI)**: Reusable live form programs add native reset,
+  requestSubmit/submitter and user-edited validity examples. Shared DOM bindings
+  resolve native methods despite named form controls, preserve immediate errors,
+  and expose bounded event receipts. Form events explicitly opt in while runtime
+  CSP keeps the origin opaque and denies submission navigation. Catalogue and
+  client capability contract advance to `api.actions-run` 1.15.0. Details:
+  [PR #919](../PRs/919-codex-web-standards-live-form-actions-add-reusable-live-form-events-and-validation-contexts.md).
+
+- 2026-09-27 — **Codex (AI)**: Editable media forms can reset automatically
+  after a successful receipt matches their generated operation id. Failed and
+  sibling saves preserve drafts and retry identities. Attachment controls add
+  configurable helper text, linked-URL visibility and local upload readiness.
+  Nested discussions also isolate clicks from authored ancestor Actions.
+
+- 2026-09-27 — **Codex (AI)**: Web standards adds 212 reusable HTML form
+  examples with typed control state, text selection, validity and live
+  option/radio collections. Native overload dispatch and detached collection
+  allocation limits are covered by real-browser regressions. Reset remains
+  requires-context after a native detached-document no-op was reproduced.
+  The catalogue Action contract advances to 1.14.0. Validation includes private
+  API round trips, browser execution and a full Vercel build. Details:
+  [PR #914](../PRs/914-codex-web-standards-form-receivers-add-reusable-html-form-state-and-selection-examples.md).
+
+- 2026-09-27 — **Codex (AI)**: Saved Builder Components can embed the standard
+  Thing discussion with `tt-discussion`, retaining rich comments, replies,
+  reactions, media and collection controls. Previews stay inert; target reads
+  and writes keep the current viewer's permissions. Accepted comments refresh
+  source-bound page blocks for related galleries and record revisions.
+
 - 2026-09-27 — **Codex (AI)**: DOM receiver inspection and projection now use
   captured browser accessors, so named form controls cannot hide descendants
   from allocation/depth limits. Added reusable browser regressions and rejected

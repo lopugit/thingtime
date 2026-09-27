@@ -1,10 +1,61 @@
+import { SVG_FILTER_TAGS, svgFilterValue, svgFilterNumbers } from './svgFilterSupport';
 /** Real DOM receivers for data programs. Only this module runs DOM operations
  * on the frame thread; authored JavaScript remains in the terminable worker.
- * A detached document owns every receiver. The visible surface is a projection,
- * never a source of handles, so navigation cannot reach the runtime document. */
-type Arg = 'text' | 'selector' | 'tag' | 'attribute' | 'number' | 'boolean' | 'node' | 'nullable-node' | 'node-or-text';
-type Method = { args: Arg[]; min?: number; rest?: boolean; mutates?: boolean; iterable?: boolean };
-type Policy = { reads: string; writes?: string; calls?: Record<string, Method> };
+ * Programs choose a detached document or their rendered surface. Surface
+ * receivers permit Canvas writes and bounded tree reads, never a handle to the
+ * runtime document or to connected nodes outside the program root. */
+import { SVG_RECEIVER_POLICY, SVG_LIST_TYPES } from './svgPolicy';
+import { SVG_NAMESPACE, SVG_LIMITS, svgTag, svgAttribute, svgArgument } from './svgSupport';
+import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
+import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
+import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
+export type Arg =
+	| 'svg-matrix'
+	| 'svg-number'
+	| 'svg-text'
+	| 'svg-filter-image'
+	| 'svg-unit'
+	| 'svg-fragment'
+	| 'svg-point'
+	| 'svg-box-options'
+	| 'svg-length'
+	| 'svg-angle'
+	| 'svg-number-value'
+	| 'svg-point-value'
+	| 'svg-transform'
+	| 'svg-rect'
+	| 'svg-element'
+	| 'svg-nullable-element'
+	| 'canvas-size'
+	| 'pixel-size'
+	| 'canvas-blur'
+	| 'canvas-context'
+	| 'canvas-settings'
+	| 'pixel-settings'
+	| 'canvas-style'
+	| 'canvas-filter'
+	| 'canvas-font'
+	| 'canvas-matrix'
+	| 'canvas-dash'
+	| 'canvas-radii'
+	| 'canvas-source'
+	| 'canvas-path'
+	| 'canvas-image-data'
+	| 'canvas-fill'
+	| 'text'
+	| 'selector'
+	| 'tag'
+	| 'attribute'
+	| 'number'
+	| 'finite'
+	| 'allocation-length'
+	| 'boolean'
+	| 'node'
+	| 'nullable-node'
+	| 'node-or-text'
+	| 'node-or-index';
+type Method = { args: Arg[]; overloads?: Arg[][]; min?: number; rest?: boolean; mutates?: boolean; iterable?: boolean };
+export type Policy = { reads: string; writes?: string; writeArgs?: Record<string, Arg>; calls?: Record<string, Method> };
 const call = (args: Arg[] = [], options: Omit<Method, 'args'> = {}): Method => ({ args, ...options });
 const mutate = (args: Arg[] = [], options: Omit<Method, 'args'> = {}) => call(args, { ...options, mutates: true });
 const parentCalls = {
@@ -25,6 +76,9 @@ const parentReads = 'children firstElementChild lastElementChild childElementCou
 const childReads = 'previousElementSibling nextElementSibling';
 const iteration = { keys: call([], { iterable: true }), values: call([], { iterable: true }), entries: call([], { iterable: true }) };
 export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
+	...HTML_FORM_RECEIVER_POLICY,
+	...CANVAS_RECEIVER_POLICY,
+	...SVG_RECEIVER_POLICY,
 	Node: {
 		reads:
 			'nodeType nodeName baseURI isConnected ownerDocument parentNode parentElement childNodes firstChild lastChild previousSibling nextSibling nodeValue textContent ELEMENT_NODE ATTRIBUTE_NODE TEXT_NODE CDATA_SECTION_NODE ENTITY_REFERENCE_NODE ENTITY_NODE PROCESSING_INSTRUCTION_NODE COMMENT_NODE DOCUMENT_NODE DOCUMENT_TYPE_NODE DOCUMENT_FRAGMENT_NODE NOTATION_NODE DOCUMENT_POSITION_DISCONNECTED DOCUMENT_POSITION_PRECEDING DOCUMENT_POSITION_FOLLOWING DOCUMENT_POSITION_CONTAINS DOCUMENT_POSITION_CONTAINED_BY DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC',
@@ -149,10 +203,22 @@ export function createPlatformDOMBridge(surface: Element) {
 	const surfaceDocument = surface.ownerDocument;
 	const realm = surfaceDocument.defaultView! as unknown as Record<string, { prototype: object }>;
 	const doc = surfaceDocument.implementation.createHTMLDocument('Thingtime DOM program');
+	let context: 'detached' | 'surface' | undefined;
 	const scope = surfaceDocument.defaultView!.crypto.randomUUID();
 	const objects = new Map<string, Entry>();
 	const ids = new WeakMap<object, string>();
+	const owners = new WeakMap<object, Node>();
+	const valueKeys = new WeakMap<object, string>();
 	const allocated = new WeakSet<object>();
+	const canvases = new Set<HTMLCanvasElement>();
+	const pathCosts = new WeakMap<object, number>();
+	let pathWork = 0;
+	const reservePath = (target: object, added: number) => {
+		const cost = (pathCosts.get(target) || 0) + added;
+		pathWork += added;
+		if (cost > 4096 || pathWork > 16384) throw new Error('Canvas path complexity budget exceeded');
+		pathCosts.set(target, cost);
+	};
 	let allocationCount = 0,
 		requestCount = 0,
 		work = 0,
@@ -187,6 +253,13 @@ export function createPlatformDOMBridge(surface: Element) {
 		const proto = captured.get(name)?.prototype;
 		return !!proto && Object.prototype.isPrototypeOf.call(proto, value);
 	};
+	// Resolve overrides such as HTMLSelectElement.remove before Element.remove.
+	const prototypeDepth = (value: object): number => {
+		let depth = 0;
+		for (let proto = Object.getPrototypeOf(value); proto; proto = Object.getPrototypeOf(proto)) depth++;
+		return depth;
+	};
+	const resolutionOrder = [...captured].sort(([, a], [, b]) => prototypeDepth(b.prototype) - prototypeDepth(a.prototype));
 	// HTMLFormElement named controls override built-ins (including childNodes).
 	// Policy checks must read the actual tree through captured accessors, just
 	// like authored member requests, never through instance property lookups.
@@ -202,9 +275,12 @@ export function createPlatformDOMBridge(surface: Element) {
 	};
 	const ownerDocument = reader<Document | null>('Node', 'ownerDocument');
 	const nodeType = reader<number>('Node', 'nodeType');
+	const connected = reader<boolean>('Node', 'isConnected');
+	const contains = method<boolean>('Node', 'contains');
 	const childNodes = reader<NodeListOf<ChildNode>>('Node', 'childNodes');
 	const textContent = reader<string | null>('Node', 'textContent');
 	const localName = reader<string>('Element', 'localName');
+	const namespace = reader<string>('Element', 'namespaceURI');
 	const attributes = reader<NamedNodeMap>('Element', 'attributes');
 	const attrName = reader<string>('Attr', 'name');
 	const attrValue = reader<string>('Attr', 'value');
@@ -219,13 +295,40 @@ export function createPlatformDOMBridge(surface: Element) {
 			allocated.add(node);
 			if (++allocationCount > 600) throw new Error('DOM node allocation budget exceeded');
 		}
-		if (node !== doc && ownerDocument(node) !== doc) throw new Error('DOM receiver belongs to another document');
+		if (context === 'surface') {
+			if (node === surfaceDocument || ownerDocument(node) !== surfaceDocument || (connected(node) && !contains(surface, node)))
+				throw new Error('DOM receiver is outside this program surface');
+		} else if (node !== doc && ownerDocument(node) !== doc) throw new Error('DOM receiver belongs to another document');
+		if (belongs(node, 'HTMLCanvasElement')) {
+			const canvas = node as HTMLCanvasElement;
+			canvasArgument(reader<number>('HTMLCanvasElement', 'width')(canvas), 'canvas-size', () => {
+				throw new Error('No handle');
+			});
+			canvasArgument(reader<number>('HTMLCanvasElement', 'height')(canvas), 'canvas-size', () => {
+				throw new Error('No handle');
+			});
+			canvases.add(canvas);
+			if (canvases.size > CANVAS_LIMITS.canvases) throw new Error('Canvas allocation budget exceeded');
+		}
+		if (belongs(node, 'SVGSVGElement'))
+			for (const key of ['width', 'height']) {
+				const animated = reader<object>('SVGSVGElement', key)(node);
+				const length = reader<object>('SVGAnimatedLength', 'baseVal')(animated);
+				const value = reader<number>('SVGLength', 'value')(length);
+				if (!Number.isFinite(value) || value < 0 || value > SVG_LIMITS.edge) throw new Error('SVG viewport exceeds its dimension limit');
+			}
+
 		if (nodeType(node) === 1) {
-			tag(localName(node));
+			const svg = namespace(node) === SVG_NAMESPACE;
+			if (svg) {
+				if (context !== 'surface') throw new Error('SVG receivers require the active surface context');
+				svgTag(localName(node));
+			} else tag(localName(node));
 			// Initial authored documents use the existing renderer policy. Receiver
 			// writes use the narrower attribute policy above; verify every projection.
 			for (const attr of Array.from(attributes(node))) {
 				const name = attrName(attr).toLowerCase();
+				if (svg) svgAttribute(localName(node), attrName(attr), attrValue(attr), true);
 				if (/^on/.test(name) || ['srcdoc', 'is', 'nonce', 'action', 'formaction', 'ping', 'pattern', 'autofocus'].includes(name))
 					throw new Error('Executable DOM attributes are unavailable');
 				if (['src', 'href', 'poster', 'data'].includes(name) && !/^#|^data:image\/(png|jpeg|gif|webp);base64,/.test(attrValue(attr)))
@@ -236,11 +339,11 @@ export function createPlatformDOMBridge(surface: Element) {
 		if (text && text.length > 32768) throw new Error('DOM text budget exceeded');
 		for (const child of Array.from(childNodes(node))) inspectTree(child, depth + 1);
 	};
-	for (const child of Array.from(childNodes(surface))) appendChild(body(doc)!, importNode(doc, child, true));
-	inspectTree(doc);
+
 	const publish = () => {
 		inspectTree(doc);
-		// Keep scripts, styles and runtime scaffolding outside the projected tree.
+		// Active-surface programs draw directly; detached programs retain their
+		// inert tree projection and never acquire an active document handle.
 		const documentBody = body(doc);
 		replaceChildren(surface, ...Array.from(documentBody ? childNodes(documentBody) : []).map((node) => importNode(surfaceDocument, node, true)));
 	};
@@ -252,6 +355,12 @@ export function createPlatformDOMBridge(surface: Element) {
 			if (value.length > 32768) throw new Error('DOM result exceeds its text budget');
 			return value;
 		}
+		if (ArrayBuffer.isView(value)) {
+			if (!(value instanceof Uint8ClampedArray) && value.constructor.name !== 'Float16Array') throw new Error('Unregistered pixel array');
+			const pixels = value as unknown as ArrayLike<number>;
+			if (pixels.length > CANVAS_LIMITS.pixelValues) throw new Error('Pixel result budget exceeded');
+			return Array.from(pixels);
+		}
 		if (Array.isArray(value)) {
 			if (value.length > 600) throw new Error('DOM result exceeds its item budget');
 			return value.map((item) => encode(item, depth + 1));
@@ -260,6 +369,9 @@ export function createPlatformDOMBridge(surface: Element) {
 		let type: string | undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(HTML_FORM_RECEIVER_POLICY),
+			...Object.keys(CANVAS_RECEIVER_POLICY),
+			...Object.keys(SVG_RECEIVER_POLICY),
 			'Document',
 			'Element',
 			'DocumentFragment',
@@ -276,7 +388,7 @@ export function createPlatformDOMBridge(surface: Element) {
 				type = name;
 				break;
 			}
-		if (!type) throw new Error('This DOM receiver type is not exposed');
+		if (!type) throw new Error('This DOM receiver type is not exposed: ' + Object.prototype.toString.call(value));
 		if (belongs(value, 'Node')) inspectTree(value as Node);
 		let id = ids.get(value);
 		if (!id) {
@@ -295,16 +407,29 @@ export function createPlatformDOMBridge(surface: Element) {
 		if (!entry || handle.type !== entry.type) throw new Error('DOM handle is stale or belongs to another run');
 		return entry;
 	};
+	const receiverType = (value: unknown, types: string): object => {
+		const target = receiver(value).value;
+		if (!types.split('|').some((type) => belongs(target, type))) throw new Error('Wrong Canvas receiver type');
+		return target;
+	};
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule.startsWith('svg-')) return svgArgument(value, rule, receiverType);
+		if (rule.startsWith('canvas-') || rule.startsWith('pixel-')) return canvasArgument(value, rule, receiverType);
 		if (rule === 'nullable-node' && value === null) return null;
+		if (rule === 'node-or-index') {
+			if (value === null) return null;
+			rule = typeof value === 'number' ? 'number' : 'node';
+		}
 		if (['node', 'nullable-node', 'node-or-text'].includes(rule) && typeof value !== 'string') {
 			const node = receiver(value).value;
 			if (!belongs(node, 'Node')) throw new Error('Expected a node handle');
 			if (belongs(node, 'Attr')) attribute(attrName(node));
 			return node;
 		}
-		if (rule === 'number') {
-			if (typeof value !== 'number' || !Number.isSafeInteger(value) || Math.abs(value) > 32768) throw new Error('Use a bounded integer DOM argument');
+		if (rule === 'number' || rule === 'finite' || rule === 'allocation-length') {
+			if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 32768 || (rule !== 'finite' && !Number.isSafeInteger(value)))
+				throw new Error('Use a bounded numeric DOM argument');
+			if (rule === 'allocation-length' && (value < 0 || value > 300)) throw new Error('DOM collection length exceeds its allocation limit');
 			return value;
 		}
 		if (rule === 'boolean') {
@@ -321,6 +446,8 @@ export function createPlatformDOMBridge(surface: Element) {
 		stop: () => {
 			stopped = true;
 			objects.clear();
+			if (context !== 'surface') for (const canvas of canvases) canvas.width = 0;
+			canvases.clear();
 		},
 		request: (raw: unknown): { value?: unknown; error?: { name: string; message: string } } => {
 			if (stopped) throw new Error('DOM run has ended');
@@ -331,22 +458,89 @@ export function createPlatformDOMBridge(surface: Element) {
 				request.type !== 'tt-platform-dom' ||
 				!Number.isSafeInteger(request.id) ||
 				request.id !== requestCount ||
-				!['document', 'get', 'set', 'call'].includes(request.action) ||
+				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant'].includes(request.action) ||
 				typeof request.key !== 'string' ||
 				request.key.length > 60 ||
 				!Array.isArray(request.args) ||
-				request.args.length > 8
+				request.args.length > 9
 			)
 				throw new Error('Invalid DOM request envelope');
-			if (request.action === 'document') {
+			if (request.action === 'document' || request.action === 'surface') {
 				if (request.target !== null || request.key || request.args.length) throw new Error('Invalid document request');
-				return { value: encode(doc) };
+				const selected = request.action === 'surface' ? 'surface' : 'detached';
+				if (context && context !== selected) throw new Error('Choose one DOM document context per run');
+				if (!context) {
+					context = selected;
+					if (context === 'detached') for (const child of Array.from(childNodes(surface))) appendChild(body(doc)!, importNode(doc, child, true));
+				}
+				return { value: encode(context === 'surface' ? surface : doc) };
+			}
+			if (request.action === 'constant') {
+				const name = request.target;
+				if (
+					typeof name !== 'string' ||
+					request.args.length ||
+					!/^[A-Z][A-Z0-9_]{0,59}$/.test(request.key) ||
+					!Object.prototype.hasOwnProperty.call(DOM_RECEIVER_POLICY, name) ||
+					!DOM_RECEIVER_POLICY[name].reads.split(' ').includes(request.key)
+				)
+					throw new Error('Unregistered DOM constant');
+				const descriptor = captured.get(name)?.reads.get(request.key);
+				if (!descriptor) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose ${name}.${request.key}` } };
+				if (!('value' in descriptor) || !['string', 'number', 'boolean'].includes(typeof descriptor.value))
+					throw new Error('Expected a primitive DOM constant');
+				return { value: encode(descriptor.value) };
+			}
+			if (request.action === 'construct') {
+				if (request.target !== null || !['Path2D', 'ImageData'].includes(request.key)) throw new Error('Unregistered DOM constructor');
+				const args = request.args.slice();
+				if (request.key === 'Path2D') {
+					if (args.length > 1) throw new Error('Invalid Path2D arguments');
+					if (args.length) args[0] = typeof args[0] === 'string' ? argument(args[0], 'text') : receiverType(args[0], 'Path2D');
+				} else {
+					const pixels = Array.isArray(args[0]);
+					if (args.length < 2 || args.length > (pixels ? 4 : 3)) throw new Error('Invalid ImageData arguments');
+					const offset = pixels ? 1 : 0;
+					args[offset] = argument(args[offset], 'pixel-size');
+					if (!pixels || args.length >= 3) args[offset + 1] = argument(args[offset + 1], 'pixel-size');
+					if (args.length > offset + 2) args[offset + 2] = argument(args[offset + 2], 'pixel-settings');
+					if (Number(args[offset]) < 0 || (args[offset + 1] !== undefined && Number(args[offset + 1]) < 0))
+						throw new Error('ImageData dimensions must be nonnegative');
+					if (pixels) {
+						const data = args[0] as unknown[];
+						if (data.length > CANVAS_LIMITS.pixelValues || data.some((v) => typeof v !== 'number' || !Number.isFinite(v)))
+							throw new Error('Pixel input budget exceeded');
+						if (args.length === 2 && Number(args[1]) > 0 && data.length / 4 / Number(args[1]) > CANVAS_LIMITS.pixelEdge)
+							throw new Error('Inferred ImageData height exceeds its limit');
+						const settings = args[3] as { pixelFormat?: string } | undefined;
+						const ArrayType = (surfaceDocument.defaultView! as any)[settings?.pixelFormat === 'rgba-float16' ? 'Float16Array' : 'Uint8ClampedArray'];
+						if (!ArrayType) return { error: { name: 'UnsupportedDOMMember', message: 'This browser does not expose the requested pixel array' } };
+						args[0] = new ArrayType(data);
+					}
+				}
+				work += JSON.stringify(request.args).length;
+				if (work > 65536) throw new Error('DOM input work budget exceeded');
+				const Constructor = realm[request.key];
+				if (typeof Constructor !== 'function')
+					return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose ${request.key}` } };
+				const pathCost =
+					request.key === 'Path2D' ? (typeof args[0] === 'string' ? args[0].length : args[0] ? pathCosts.get(args[0] as object) || 0 : 0) : 0;
+				if (pathCost > 4096 || pathWork + pathCost > 16384) throw new Error('Canvas path complexity budget exceeded');
+				try {
+					const value = Reflect.construct(Constructor, args) as object;
+					if (request.key === 'Path2D') reservePath(value, pathCost);
+					return { value: encode(value) };
+				} catch (error) {
+					return { error: { name: (error as Error).name, message: String((error as Error).message).slice(0, 500) } };
+				}
 			}
 			const target = receiver(request.target).value;
 			let descriptor: PropertyDescriptor | undefined,
 				policy: Method | undefined,
-				registered = false;
-			for (const [name, candidate] of captured) {
+				writeRule: Arg = 'text',
+				registered = false,
+				resolvedInterface = '';
+			for (const [name, candidate] of resolutionOrder) {
 				if (!Object.prototype.isPrototypeOf.call(candidate.prototype, target)) continue;
 				const registeredPolicy = DOM_RECEIVER_POLICY[name];
 				registered ||=
@@ -357,24 +551,119 @@ export function createPlatformDOMBridge(surface: Element) {
 					const method = candidate.calls.get(request.key);
 					if (method) {
 						({ descriptor, policy } = method);
+						resolvedInterface = name;
 						break;
 					}
 				} else {
 					descriptor = (request.action === 'get' ? candidate.reads : candidate.writes).get(request.key);
-					if (descriptor) break;
+					if (descriptor) {
+						writeRule = registeredPolicy.writeArgs?.[request.key] || 'text';
+						resolvedInterface = name;
+						break;
+					}
 				}
 			}
 			if (!descriptor) {
 				if (registered) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose DOM member ${request.key}` } };
 				throw new Error(`DOM member ${request.key} is not registered for this receiver`);
 			}
-			const rules = policy?.args || (request.action === 'set' ? (['text'] as Arg[]) : []);
-			const min = policy?.min ?? rules.length;
-			if (request.args.length < min || (!policy?.rest && request.args.length > rules.length)) throw new Error('Invalid DOM argument count');
-			const args = request.args.map((value, index) => argument(value, rules[Math.min(index, rules.length - 1)]));
+			if (
+				context === 'surface' &&
+				(policy?.mutates || request.action === 'set') &&
+				!Object.prototype.hasOwnProperty.call(CANVAS_RECEIVER_POLICY, resolvedInterface) &&
+				!Object.prototype.hasOwnProperty.call(SVG_RECEIVER_POLICY, resolvedInterface)
+			)
+				throw new Error('Surface tree mutation is not registered; use authored document nodes');
+			if (resolvedInterface === 'HTMLCanvasElement' && request.key === 'getContext' && context !== 'surface')
+				throw new Error('Canvas drawing requires the active surface context');
+			if (belongs(target, 'SVGAnimatedString')) {
+				const owner = owners.get(target),
+					property = valueKeys.get(target);
+				if (
+					property === 'className' ||
+					(owner && SVG_FILTER_TAGS.has(localName(owner)) && ['in1', 'in2', 'result', 'crossOrigin', 'href'].includes(property || ''))
+				)
+					writeRule = property === 'href' && owner && localName(owner) === 'feImage' ? 'svg-filter-image' : 'svg-text';
+			}
+			const rules = policy?.args || (request.action === 'set' ? [writeRule] : []);
+			let args: unknown[] | undefined;
+			if (policy?.overloads) {
+				for (const shape of policy.overloads) {
+					if (shape.length !== request.args.length) continue;
+					try {
+						args = request.args.map((value, index) => argument(value, shape[index]));
+						break;
+					} catch {
+						/* Try the next registered overload. */
+					}
+				}
+				if (!args) throw new Error('Invalid or unbounded Canvas overload arguments');
+			} else {
+				const min = policy?.min ?? rules.length;
+				if (request.args.length < min || (!policy?.rest && request.args.length > rules.length)) throw new Error('Invalid DOM argument count');
+				args = request.args.map((value, index) => argument(value, rules[Math.min(index, rules.length - 1)]));
+			}
+
+			const svgOwner = owners.get(target);
+			const filterOwner = belongs(target, 'Node') ? (target as Node) : svgOwner;
+			if (
+				filterOwner &&
+				belongs(filterOwner, 'SVGElement') &&
+				SVG_FILTER_TAGS.has(localName(filterOwner)) &&
+				(request.action === 'set' || policy?.mutates)
+			) {
+				const property = valueKeys.get(target) || request.key;
+				if (request.action === 'set') svgFilterValue(localName(filterOwner), property, args[0]);
+				if (request.key === 'setStdDeviation') for (const value of args) svgFilterNumbers('stdDeviation', value);
+				if (belongs(target, 'SVGNumberList') && ['initialize', 'insertItemBefore', 'replaceItem', 'appendItem'].includes(request.key))
+					svgFilterNumbers(property, reader<number>('SVGNumber', 'value')(args[0] as object));
+				if (belongs(target, 'SVGLength')) {
+					if (['newValueSpecifiedUnits', 'convertToSpecifiedUnits'].includes(request.key) && ![1, 5].includes(Number(args[0])))
+						throw new Error('Use user units for filter region writes');
+					if (request.key === 'valueInSpecifiedUnits' && ![1, 5].includes(reader<number>('SVGLength', 'unitType')(target)))
+						throw new Error('Use user units for filter region writes');
+					if (request.key === 'valueAsString') svgFilterNumbers(property, String(args[0]).replace(/px$/, ''));
+					if (request.key === 'newValueSpecifiedUnits') svgFilterNumbers(property, args[1]);
+				}
+			}
+			if (
+				belongs(target, 'SVGLength') &&
+				svgOwner &&
+				belongs(svgOwner, 'SVGSVGElement') &&
+				['width', 'height'].includes(valueKeys.get(target) || '') &&
+				(request.action === 'set' || policy?.mutates)
+			) {
+				let value: unknown;
+				if (request.key === 'value') value = args[0];
+				else if (request.key === 'valueAsString') {
+					if (typeof args[0] !== 'string' || !/^\d+(?:\.\d+)?(?:px)?$/.test(args[0])) throw new Error('Use pixel values for SVG viewport writes');
+					value = parseFloat(args[0]);
+				} else if (request.key === 'valueInSpecifiedUnits') {
+					if (![1, 5].includes(reader<number>('SVGLength', 'unitType')(target))) throw new Error('Use pixel values for SVG viewport writes');
+					value = args[0];
+				} else if (request.key === 'newValueSpecifiedUnits') {
+					if (![1, 5].includes(Number(args[0]))) throw new Error('Use pixel values for SVG viewport writes');
+					value = args[1];
+				}
+				if (value !== undefined && (typeof value !== 'number' || value < 0 || value > SVG_LIMITS.edge))
+					throw new Error('SVG viewport exceeds its dimension limit');
+			}
 			if (request.action === 'set' && belongs(target, 'Attr')) attribute(attrName(target));
-			work += args.reduce<number>((sum, value) => sum + (typeof value === 'string' ? value.length : 1), 0);
+			work += JSON.stringify(request.args).length;
 			if (work > 65536) throw new Error('DOM input work budget exceeded');
+			if (request.action === 'call' && (belongs(target, 'Path2D') || belongs(target, 'CanvasRenderingContext2D'))) {
+				if (request.key === 'beginPath' || request.key === 'reset') pathCosts.set(target, 0);
+				if (request.key === 'addPath') reservePath(target, pathCosts.get(args[0] as object) || 0);
+				else if (
+					['closePath', 'moveTo', 'lineTo', 'quadraticCurveTo', 'bezierCurveTo', 'arcTo', 'rect', 'arc', 'ellipse', 'roundRect'].includes(request.key)
+				)
+					reservePath(target, 1);
+			}
+			if (request.action === 'call' && ['appendItem', 'insertItemBefore'].includes(request.key)) {
+				for (const type of SVG_LIST_TYPES)
+					if (belongs(target, type) && reader<number>(type, 'numberOfItems')(target) >= SVG_LIMITS.list)
+						throw new Error('SVG list item budget exceeded');
+			}
 			let result: unknown;
 			try {
 				if (request.action === 'get') result = descriptor.get ? descriptor.get.call(target) : descriptor.value;
@@ -390,10 +679,18 @@ export function createPlatformDOMBridge(surface: Element) {
 				};
 			}
 			if (policy?.iterable) result = Array.from(result as Iterable<unknown>);
-			const value = encode(result);
+			const owner = belongs(target, 'Node') ? (target as Node) : owners.get(target);
+			if (result && typeof result === 'object' && !Array.isArray(result) && owner) {
+				owners.set(result, owner);
+				valueKeys.set(result, belongs(target, 'Node') ? request.key : valueKeys.get(target) || request.key);
+			}
+			const value =
+				request.key === 'getContextAttributes' && belongs(target, 'CanvasRenderingContext2D') ? canvasContextAttributes(result) : encode(result);
 			if (policy?.mutates || request.action === 'set') {
-				if (belongs(target, 'Node')) inspectTree(rootNode(target));
-				publish();
+				// Collections retain their originating node, even after that subtree
+				// is detached. Indirect option allocations still spend the node budget.
+				if (owner) inspectTree(context === 'surface' ? owner : rootNode(owner));
+				if (context !== 'surface') publish();
 			}
 			return { value };
 		}

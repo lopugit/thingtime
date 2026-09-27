@@ -113,3 +113,72 @@ JSON Action inputs and Web standards draft saving add `api.things` 1.33.0,
 `api.webpages-suites-install` 1.3.0. Both manifests and client negotiation cover
 these versions. Input validation includes resolved defaults and child calls;
 see the JSON input section in the browser Action contract above.
+
+
+Live Web Platform form-event programs require `api.actions-run` 1.15.0. The
+existing catalogue Action emits complete saved program data; `liveDOM.ts`
+provides generic native method/event backing. The explicit `allowFormEvents`
+context is confined by the runtime CSP and never enables form navigation. See
+[Web standards runtime and tests](../web-standards-builder.md).
+
+ECMAScript built-in receiver recipes add `api.actions-run` 1.16.0, negotiated by
+the same manifests and client. Complete Component program data implements the
+examples through existing language nodes; no additional runtime permissions or
+new execution endpoint is required. See [coverage and native behavior](../web-standards-builder.md#ecmascript-built-in-receivers).
+
+TypedArray, iterator and generator intrinsic recipes add `api.actions-run`
+1.17.0. They extend the same catalogue with saved data programs using existing
+language nodes; `javascriptIntrinsics.test.ts` checks native byte conversion,
+protocol cleanup, engine differences and edited draft round trips. See
+[intrinsic receiver coverage](../web-standards-builder.md#ecmascript-intrinsic-receivers).
+
+Native constructor signature programs require `api.actions-run` 1.18.0. Both
+manifests and client negotiation cover the additive catalogue contract.
+`javascriptConstructors.test.ts` verifies native invocation requirements,
+overloads, mutation/identity, callbacks, errors and saved edited defaults through
+the existing data compiler. No new execution endpoint or permission is added.
+
+Reusable binding and assignment patterns add `api.actions-run` 1.19.0. The
+existing catalogue and Component runtime accept bounded pattern nodes in
+declarations, assignments, parameters, catches and loops. Both manifests and
+client negotiation advance together; no new execution endpoint or permission
+is introduced. See the native-pattern section in the Web standards guide.
+
+
+Web IDL option and callback programs add `api.actions-run` 1.20.0. The existing
+catalogue Action emits complete dictionary/event/fetch/geometry/stream programs;
+no new endpoint, runtime grant or storage shape is needed. Both manifest
+assertions and client negotiation advance together. `webIdlFixtures.test.ts`
+checks native semantics and edited saved data; browser checks cover geometry
+and platform-specific behavior.
+
+
+Native live-event bindings add `api.actions-run` 1.21.0. The existing catalogue
+Action returns 107 more complete editable Component programs for HTML event
+surfaces and GlobalEventHandlers attributes. Listener options, propagation and
+cancellation flags, IDL replacement/return-false behavior and bounded native
+receipts are saved data shared by the renderer, compiler and existing Thing
+write/save/reopen flow. No endpoints or permission expansion are added.
+
+
+Native media Component programs add `api.actions-run` 1.22.0. `mediaFixtures.ts`
+authors 95 complete media examples; `mediaPolicy.ts`, `liveMedia.ts` and the
+existing DOM binding interpreter provide the reusable property/method/event
+backing. Both manifests and client negotiation advance together. No endpoint,
+external media source or device grant is added. Save/reopen uses the unchanged
+opaque program and private Component write boundary.
+
+Canvas catalogue programs negotiate `api.actions-run` 1.23.0. Existing DOM worker
+transport now accepts bounded surface roots and Path2D/ImageData construction;
+`canvasPolicy.ts`/`canvasSupport.ts` own native receiver/resource limits and
+`canvasFixtures.ts` owns editable program data. Surface access never exposes the
+runtime Document or permits unrelated tree mutation. See the Web standards
+Canvas checklist for native pixels/fonts, private save/reload and scope refusal.
+
+SVG catalogue programs negotiate `api.actions-run` 1.24.0. `svgFixtures.ts`
+authors 311 complete namespace-aware Component programs; `svgPolicy.ts` and
+`svgSupport.ts` register bounded surface receivers and local resources. The DOM
+transport adds primitive IDL constants without constructor handles. Native bbox
+option probes distinguish ignored options from implemented behavior. Both
+manifests and the client advance together; storage, endpoints and CSP remain
+unchanged. See the SVG section of the Web standards guide and native checklist.

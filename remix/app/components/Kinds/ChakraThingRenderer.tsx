@@ -1,4 +1,5 @@
 import { ComponentChange } from '../Builder/ComponentChange';
+import { ComponentMenu } from '../Builder/ComponentMenu';
 import { ComponentStyle } from '../Builder/ComponentStyle';
 import { ComponentCollection } from '../Builder/ComponentCollection';
 import { ComponentDragSource, ComponentDropTarget } from '../Builder/ComponentDrag';
@@ -264,6 +265,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 			</React.Suspense>
 		);
 	if (name === 'Collection') return <ComponentCollection key={key} {...node.props} />;
+	if (name === 'Menu') return <ComponentMenu key={key} {...node.props} triggerContent={node.props?.triggerContent === undefined ? undefined : renderChildren(node.props.triggerContent, depth + 1, state)}>{renderChildren(node.children, depth + 1, state)}</ComponentMenu>;
 	if (name === 'Change') return <ComponentChange key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentChange>;
 	if (name === 'DragSource') return <ComponentDragSource key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDragSource>;
 	if (name === 'DropTarget') return <ComponentDropTarget key={key} {...node.props}>{renderChildren(node.children, depth + 1, state)}</ComponentDropTarget>;
@@ -278,12 +280,12 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	if (name === 'Attachments') return <ComponentAttachments key={key} {...node.props} />;
 	if (name === 'Media') return <ComponentMedia key={key} {...node.props} />;
 	if (name === 'Countdown') return <ComponentCountdown key={key} value={node.props?.value} />;
-	if (name === 'Form' || name === 'Dialog') {
-		const Native = name === 'Form' ? ComponentForm : ComponentDialog;
+	if (name === 'Dialog') return <ComponentDialog key={key} {...node.props} triggerContent={node.props?.triggerContent === undefined ? undefined : renderChildren(node.props.triggerContent, depth + 1, state)} closeContent={node.props?.closeContent === undefined ? undefined : renderChildren(node.props.closeContent, depth + 1, state)}>{renderChildren(node.children, depth + 1, state)}</ComponentDialog>;
+	if (name === 'Form') {
 		return (
-			<Native key={key} {...node.props}>
+			<ComponentForm key={key} {...node.props}>
 				{renderChildren(node.children, depth + 1, state)}
-			</Native>
+			</ComponentForm>
 		);
 	}
 	if (name === 'Upload')

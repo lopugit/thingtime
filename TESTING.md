@@ -6603,6 +6603,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+### Saved collection source pagination (2026-09-27)
+
+- [ ] Bind an HTML/Chakra collection to a saved Action returning cursor pages. Next and infinite scrolling append older rows; duplicate IDs replace in place and empty intermediate pages continue.
+- [ ] Search for a match beyond the first page; refresh while filtered and confirm the match returns without discarding visible rows during the request.
+- [ ] Fail a subsequent page, verify earlier rows remain, then retry successfully. Repeated cursors, invalid row keys and bounded-source overflows stop with a visible error.
+- [ ] Change the query target/account while a request is delayed; old rows/completions must not appear in the new target. Inert Builder previews make no collection requests. Shared reads retain stored-graph authorization.
+- [ ] Export/copy a Component with a source inside a nested collection template; its literal Action is included/remapped, its input data stays unchanged, and runtime row values grant no dependency authority.
+
 - [ ] Floating page controls: dock Lopu in split mode on all four edges and
       resize it live. The bar, inspector, mode menu and viewport popover stay in
       the remaining page pane, including a shallow top/bottom split. Repeat with
@@ -8424,6 +8432,34 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Shared discussion acceptance and service galleries
 
+- Component navigation: follow two nested query links on a saved page, then
+  return twice with a `$ui` Back control. Reload the deepest page and verify
+  Back still returns within that app. A direct deep link uses its declared
+  fallback. In Builder View mode, query links and fallback navigation retain
+  the selected page and mode; unrelated pages and external links stay intact.
+
+- Media forms: render two new `tt-form` instances using one save Action. Bind
+  completion to its receipt and return each form's operation id. A successful
+  save resets only the matching form and gives it a fresh id; rejection,
+  unrelated receipts and source refresh preserve typed fields and retry ids.
+  Saved-record forms never reset from this receipt. Attachment helper text and
+  linked-URL controls follow their configured values; upload readiness disables
+  submit while empty, pending, failed or committed, and clears after reset.
+  With attachments selected, bind `committedTargetId`/`committedIds` from the
+  same receipt and confirm the completion reset keeps every saved file: after
+  the form clears, the saved record still resolves its attachments and no
+  `POST /api/v1/attachments/delete` fires for them. Unbinding those two props
+  must be the only way to observe that delete.
+
+- Saved Components: embed `tt-discussion` for an authorized Thing. At desktop
+  and 390px, post a comment and nested reply, react, search, and refresh; keep
+  the canonical discussion controls and refresh page sources only after an
+  accepted write. Builder previews stay inert, malformed targets never mount
+  a loader, and another account cannot see a private target's discussion.
+  Authored post projections, children and callbacks must be ignored. Wrap the
+  discussion in authored Action markup: comment controls must not invoke the
+  ancestor Action from the template's capture handler.
+
 - Post a plain or rich comment/reply on a workspace Thing, including a nested
   reply. Refresh the media gallery only after server acceptance; rejected writes
   must not trigger refresh. A failed gallery refresh must leave the accepted
@@ -8458,6 +8494,46 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Builder app portability: preview each generated Component and Action through the signed mutation workflow before migration. A valid app must fit without raising review limits; confirm record labels, zero values, empty text, archived references, missing references, and every planner day match the original app after title normalization.
 
 ## Web standards Builder app (2026-09-24)
+
+- [ ] Constructor examples compare calling with using new. Confirm boxed false
+  is truthy, exact BigInts retain decimal strings, a single numeric Array
+  argument creates holes, and typed-array copies stay independent while buffer
+  views observe source writes. Test native alignment/bounds failures and the
+  separately labelled 4096-element/byte demo allocation limit.
+- [ ] Promise construction records a synchronous executor, asynchronous thenable
+  assimilation/reactions and first-settlement behavior. Proxy reads obey fixed
+  property invariants and refused writes preserve target values. RegExp calling
+  versus construction preserves/copies identity correctly. Save an edited
+  Promise or typed-array program, reopen/reload/run it, and check private owner
+  access plus anonymous refusal. Weak/finalization examples make no GC promise.
+
+- [ ] Run TypedArray intrinsic recipes across numeric widths and BigInt types.
+  Check byte windows, signed wrapping, clamping, exact decimal strings,
+  callback thisArg/visit order, native bounds errors, mutation, and shared
+  subarray versus copied slice storage. Unavailable constructors stay explicit.
+- [ ] Drive native generator next/return/throw with caught and uncaught errors,
+  including a yield during finally: cleanup suspends before final return.
+  Helper return closes its source; a wrapper with no return must not invent
+  source closure. Hidden async-from-sync and for-in examples show the actual
+  language protocol trace, not a simulated public receiver. Missing-throw
+  cleanup reports whether the current engine matches ECMA-262 2026.
+- [ ] Edit generator cleanup and return values, save through the catalogue
+  workbench, reopen/reload/run the private Component and retain both values.
+  Verify collection deduplication, Unicode iteration and UTF-16 containment
+  against actual browser output. Run javascriptIntrinsics.test.ts on Node 22
+  and the current runtime so engine differences remain visible.
+
+- [ ] Run HTML form recipes with boolean false, fractional meter values, edited
+  text-selection offsets/direction, replacement text, radio values and validity
+  messages (including empty to clear). Verify native outputs and control state;
+  serialization alone does not prove current value/checked/selection state.
+  Save/reopen/reload/reuse a form program as a private Component.
+- [ ] Run `HTML_FORM_BOUNDARY_FIXTURES` in the actual opaque runtime. Both
+  select remove overloads and option-node insertion must work. Growing a
+  detached options collection repeatedly must spend the cumulative node budget,
+  and length 301 must fail before allocation. Retained ValidityState remains
+  live. Detached form reset must be refused and remain requires-context in the
+  catalogue; a no-op native call must never count as a completed reset demo.
 
 - [ ] Run detached DOM recipes with edited text, selectors, attribute names,
   token values and text offsets. Confirm native results and projected changes:
@@ -8587,3 +8663,277 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   strings are literal at the API; form JSON is decoded exactly once. Verify
   omitted defaults, explicit null and nested Action calls. Oversized resolved
   defaults/child inputs refuse before executing; anonymous reads stay denied.
+
+
+### Authored form pending state and dialog close content (2026-09-27)
+
+- [ ] Bind a control to page.id on a live page and in Builder; after copying
+  the page, the copied control must identify its new page. No page operation
+  may bypass API ownership/ACL checks.
+
+- [ ] During a saved Action, bind tt-form disabled and its save label to pending.
+  Fields pause and show the authored saving label, then re-enable on success,
+  failure, or cancelled confirmation. Preserve failed drafts and existing
+  identity/revision. Navigate while pending; completion must not mark the new
+  screen busy or clear its pending state. A sibling Component remains usable.
+- [ ] Render a custom close SVG and accessible label in tt-dialog. Verify mouse
+  dismissal and Escape at desktop/390px; unsafe SVG/HTML event props stay inert.
+
+### Live Web Platform form contexts (2026-09-27)
+
+- Run `liveFormFixtures.ts` programs in the real served opaque runtime. Edit all
+  four reset controls, click the button named `reset`, and confirm authored
+  defaults return. Also use named controls `addEventListener` and `id`: native
+  binding and event target identity must survive property shadowing.
+- Request submission with the required input empty: observe `invalid` and
+  `valueMissing`, with no submit event. Type a value and request again: the real
+  canceled submit event names the referenced `send` button. Clicking the second
+  submit button instead reports `publish`. Check/reportValidity return false
+  before valid editing and true afterward; the document never navigates.
+- Type a partial number (`-`) for `badInput`, a short string for `tooShort`, and
+  type a long string before applying a smaller maxlength for `tooLong`. Inspect
+  the actual input/invalid event's native validity flags. Correct each input and
+  check again; flags clear. Change length parameters and repeat.
+- Refuse missing/out-of-surface element arguments, unregistered methods,
+  malformed observation bindings and immediate method errors without a later
+  success overwriting the error, including programs that also contain worker
+  steps. Register observers before immediate calls.
+  After more than ten observations only ten receipts remain; repeated event
+  dispatch reaches the 200-event limit without recursive runaway.
+- Confirm form context is opt-in on the Component iframe and that Vite, built
+  Vercel output and hosted runtime CSP retain an opaque origin, network refusal
+  and `form-action 'none'`. No same-origin, popup or top-navigation grant. An
+  ordinary document program without form context retains `allow-scripts` only.
+- Save edited requestSubmit/reset programs through the canonical API and the
+  workbench, reopen/reload and reuse on a Builder page. Context, event bindings,
+  element arguments and defaults persist exactly; anonymous reads return 404.
+
+### Authored native menus (2026-09-27)
+
+- Open a saved tt-menu at desktop and 390px near a viewport edge. Its popup
+  must stay inside the viewport without resizing the surrounding card/grid.
+  Edit its trigger SVG and item styles; scoped colors and spacing still apply.
+- Arrow keys, Home/End and typing move among enabled items; Space/Enter activate.
+  Escape restores trigger focus. Clicking outside or opening another menu closes
+  the old menu. A disabled/inert trigger cannot open or dispatch an Action.
+- Choose a saved Action and an app link; they keep the same Component runtime,
+  form boundary and page identity. Open a tt-dialog from a menu: the menu closes,
+  the modal stays visible, its Action still works, and dismissal restores focus.
+  Test nested menu dialogs again after rerender/navigation and in Builder view.
+- Bind closeDisabled to pending in a menu dialog. During a delayed save, Close
+  and Escape cannot dismiss it; success still closes it. With two closed sibling
+  dialogs sharing that Action, only the open dialog may restore trigger focus.
+
+- Type text and spaces in a dialog opened from a menu: menu keyboard handling must not intercept modal input or move its focus.
+### Web Platform ECMAScript receivers (2026-09-27)
+
+- Run the receiver/prototype programs in the served opaque browser runtime.
+  DataView edited endianness changes the actual backing bytes; a BigInt above
+  Number precision round-trips exactly, and invalid byte offsets return errors.
+- Iterator map/filter callbacks remain lazy until consumption; find/every/some
+  stop early. Compare the remaining original iterator. Empty reduce uses its
+  initial value; negative take/drop limits return native errors.
+- WeakMap keys retain identity after editing their fields; an equal-looking
+  second object is absent. getOrInsertComputed runs its callback only for a
+  missing key. WeakRef/FinalizationRegistry examples must never assert GC timing.
+- Promise finally preserves fulfillment/rejection unless cleanup throws. Bound
+  functions preserve their receiver despite a subsequent call receiver override.
+- Edit a prototype's inherited label and an error's instance name. Only fresh
+  per-run objects change; native prototype relationships and defaults remain.
+  Async/generator constructor examples invoke the corresponding function family.
+- Save edited DataView, iterator, Promise and prototype Components, read them
+  back through the canonical API and reopen/reload their previews. Programs,
+  edited defaults and behavior survive; anonymous reads remain denied. Missing
+  native members and SharedArrayBuffer report unsupported in their actual context.
+
+- Constructor allocation limits: numeric, numeric-string and array-like DataView backing inputs above 4096 reject with an explicit demo-limit error; small numeric buffers still zero-initialize and null preserves native conversion. Oversized iterator materialization also rejects before iteration.
+
+
+### Web standards binding and assignment patterns
+
+- Edit object and nested-array destructuring demos: defaults run only for
+  undefined, null stays null, elisions skip values, nested defaults and rest
+  preserve native results. Object/array assignment retains RHS identity.
+- Verify computed keys, renamed bindings, own enumerable symbol rest keys,
+  getter order, inherited/hidden exclusions and partial assignment on failure.
+  Older engines may read an excluded getter twice; preserve and flag that
+  native discrepancy instead of substituting a passing result.
+- Test pattern declarations, ordinary/arrow/async/generator parameters,
+  destructured rest parameters, class methods, catches and all loop kinds.
+  Compare let/const closures with shared var and assignment loop targets.
+- A trailing array-pattern elision must consume its position; empty and partial
+  patterns must perform native iterator cleanup, including initializer errors.
+- Reject malformed/defaulted rest targets, assignment references in binding
+  contexts, optional targets, compound destructuring assignment, code-fragment
+  identifiers and patterns exceeding shared depth/size/node budgets.
+- Save an edited pattern Component, reopen and reload it, and run with the
+  persisted inputs. Owner read succeeds; anonymous read remains 404. Confirm
+  both capability manifests advertise actions-run 1.19.0 and the served runtime
+  hash matches the current compiler while retaining the sandbox CSP.
+
+
+### Web IDL option dictionaries and callbacks
+
+- Edit EventInit/CustomEventInit defaults and verify native boolean conversion,
+  cancelable dispatch and arbitrary detail. Callback objects receive their own
+  this; once, passive, capture-matched removal and AbortSignal lifetime affect
+  actual delivery. Retain native engine differences.
+- Construct Blob/File values with MIME, line endings and lastModified options;
+  inspect real bytes and timestamp values. Construct Request/Response metadata
+  with normalized headers/body, native enum/method/status errors and a following
+  AbortSignal. Record engines that ignore window or differ in error types. These examples must never send a network request.
+- Split multi-byte decoding across calls; compare stream, fatal and ignoreBOM.
+  Exercise every geometry dictionary field in a browser, omitted defaults,
+  inconsistent matrix aliases/is2D and negative rectangle dimensions.
+- Observe native queue desiredSize and size callbacks, pipe preventClose,
+  preventAbort/preventCancel and signals; verify locks release after settlement.
+  Compare default/BYOB readers, detached supplied views and min validation.
+- Exercise source/sink/transformer callbacks, auto-allocation, ordered writes,
+  backpressure, flush and cancellation. Missing Transformer.cancel must report
+  unsupported. Reserved stream types must expose their native rejection.
+- Numeric strings must not bypass the 4096-byte allocation limit. Reject numeric
+  or array-like byte lengths and overlong chunk lists before allocating/looping.
+- Edit a stream options Component, save/reopen/reload/run, verify its inputs and
+  full saved callbacks remain intact, and confirm anonymous read remains 404.
+  Run the real local API round-trip separately from the opt-in test skip.
+- Check both capability manifests for actions-run 1.20.0 and verify exact hosted
+  source, runtime artifact and isolated CSP before production delivery.
+
+
+### Web Standards live event bindings (2026-09-27)
+
+- Run `npm --prefix remix run test:web-platform` and `test:api-capabilities`.
+  Compile all 107 live event examples and preserve edited boolean input references
+  through the actual Component API/save-draft path; anonymous reads must be 404.
+- In the live opaque frame, verify capture -> selected handler -> later listener
+  -> ancestor bubble ordering; stopPropagation retains the sibling listener and
+  stopImmediatePropagation removes it. `once` runs once; passive cancellation has
+  no effect. Native IDL replacement removes the old handler.
+- Return false from a native on-handler with real pointer input and verify
+  `defaultPreventedAfterDispatch` becomes true. Microtasks can run before native
+  return-value processing, so do not treat an in-handler receipt as final.
+- Verify real typing/selection, required-form invalid/submit/reset, dialog
+  requestClose cancellation, popover state, scroll, drag/drop, command invokers,
+  local image load/error and CSS animation/transition lifecycle receipts.
+- Exhaust the event budget with repeated native clicks and multiple listeners. Expect one terminal
+  error, no outer method result replacing it, and no surviving program listeners.
+  Partial setup failure/unsupported operations also stop their prior bindings.
+- Save an edited event program as a private Component, reopen/reload/run it,
+  compare owner-visible program data, and verify anonymous API access is 404.
+- Check desktop/mobile preview layout and confirm both capability manifests show
+  actions-run 1.21.0 plus the exact runtime asset hash before and after promotion.
+
+
+### Web Standards native media programs (2026-09-27)
+
+- Compile all media programs with `test:web-platform`, run both capability
+  manifests, and roundtrip edited numeric/boolean controls and clip bytes through
+  the real catalogue/Component API and authored save-draft Action. Verify private
+  owner readback and anonymous 404, then remove only exact disposable local IDs.
+- Run the real opaque runtime: audio/video/source load metadata, native IDL
+  lifecycle handlers, play/playing/ended/pause, seek events, speed/volume changes,
+  reload/emptied and current properties. Decode both clips; inspect video quality,
+  codec support, buffered/played/seekable ranges and invalid-media error state.
+- Dynamic `muted` content attributes do not prove current mute state. Verify the
+  explicit saved setter produces `muted: true` before playback and preserves
+  false after editing. Zero volume and native out-of-range rejection both work.
+- Observe actual play promise fulfillment and rejection. A later media event must
+  retain the rejection, and a later pause or refused attribute write must fence
+  the older promise's result.
+  Reset, pagehide, unsupported setup and exhausted event budget stop old bindings
+  and playback. Missing methods/properties report unsupported, never success.
+- Refuse object-valued or inherited input references, wrong scalar types,
+  arbitrary/readonly properties, mixed property/method grammar, external media
+  sources, non-media receivers, and more than eight media nodes.
+- In Builder save edited seek/speed/mute inputs, reopen/reload/run the private
+  Component and verify real playback state. Check desktop and narrow mobile
+  controls stay within the frame. Match source SHA, both 1.22.0 manifests,
+  runtime hash and restrictive CSP on preview and production.
+
+### Canvas program receivers (2026-09-27)
+
+- Run all Canvas recipes in the real opaque runtime. Assert actual pixels,
+  matrix values, save/restore state, width-reset transparency and native radius
+  exceptions. Explicitly verify a 24px font reads back as 24px and paints/measures
+  text; a detached Document's ignored font write is not successful coverage.
+- Verify Path2D self-addition and copies cannot grow exponentially past the
+  path budget; negative/oversized ImageData dimensions, inferred tall pixel
+  arrays, five canvases, oversized bitmap edges, filters with URLs, relative or
+  oversized fonts and foreign handles are refused before expensive work.
+- Surface handles must refuse parent/runtime-document access and root removal;
+  surface and detached contexts cannot mix. Run existing DOM/form boundary
+  fixtures to preserve detached ownership, clobber defenses and node budgets.
+- Native context outputs may contain extra browser fields; project the published
+  settings while still rejecting unknown author inputs. Missing text metrics
+  remain explicitly unsupported. No account, network or iframe permission grows.
+- Edit gradient colours/stop, save through the authored Action, reopen, reload
+  and run the private Component; verify the native pixel and preserved inputs.
+  Repeat on production @lopu after matching source, runtime hash and both
+  actions-run 1.23.0 manifests. Anonymous reads must return 404.
+- Inspect desktop/mobile drawings and controls for overflow. Confirm completed
+  drawings remain visible, Stop clears the frame, and repeated Run starts fresh.
+
+### SVG program receivers (2026-09-27)
+
+- Run all SVG recipes in the opaque browser runtime; assert native namespaces,
+  geometry, text metrics, unit conversion, readonly animated-value exceptions,
+  transform matrices, native factories and primitive IDL constants.
+- Bbox option support must change native measurements on fixed filled, stroked,
+  marked and clipped geometry. Silently ignored dictionary fields are unsupported,
+  even when getBBox returns successfully. Input edits cannot alter the support probe.
+- Refuse external references/paint, executable attributes, foreignObject, surface
+  escape/removal, 129 SVG nodes, 33 list items and oversized initial/live/nested
+  viewport writes. Compact signed coordinates and newline-separated language
+  lists must not bypass the initial list limit. Unit conversion retains physical
+  viewport dimensions; tolerate native float precision when checking conversions.
+- Primitive constants must cross the normal worker transport without exposing
+  constructors or invoking accessors. Run the existing Canvas and DOM/form
+  boundary fixtures to retain context and ownership restrictions.
+- Edit colour, shape width and rotation, save through the authored Action, reopen,
+  reload and run the private Component. Compare preserved inputs and native angle/
+  matrix output. Anonymous reads return 404. Check desktop and 390px layout,
+  retained completed drawings, Stop cleanup and fresh repeated Run.
+- Verify exact preview/main deployment source, runtime hash, unchanged restrictive
+  CSP and both actions-run 1.24.0 manifests before production @lopu save/reload.
+
+### SVG filter programs (2026-09-27)
+
+- Run every filter recipe and svgFilterBoundaryFixtures through the opaque runtime.
+  Compare original/filtered output for each primitive, including PNG image/tiling,
+  alpha transfer, convolution, lighting and turbulence. Native paired blur,
+  Boolean, integer, string, region and list mutations must return real values.
+  Literal SVG Boolean attributes serialize true/false, unlike HTML presence flags.
+- Refuse excessive blur, radius, octaves, convolution order/list values, regions,
+  filter/node counts, relative unit mutation and external/non-PNG image data.
+  Detached native number insertion cannot bypass its destination filter limit.
+  Malformed repeated numeric input must reject without regex backtracking.
+- Run existing SVG/Canvas/DOM/form fixtures. Filter ownership checks must not call
+  Element accessors on Document, text or other non-element receivers.
+- Edit colour and X/Y blur, save a private Component through the authored Action,
+  reopen/reload/run and verify persisted defaults plus native output. Anonymous
+  reads return 404. Check desktop/390px, retained drawing, Stop and fresh Run.
+- Verify preview/main deployment source, runtime digest, unchanged restrictive CSP
+  and both actions-run 1.25.0 manifests. Missing browser members report unsupported.
+
+### CSS function comparisons (2026-09-27)
+
+- Run every function and published-value recipe with default and edited inputs.
+  Supported edits must change native computed output. Compare visible controls,
+  3D perspective, grid tracks, shape clipping, paused easing progress, anchor
+  geometry and nested generated counters. Unsupported syntax must retain an
+  honest native fallback rather than a manufactured result.
+- Run cssProbeBoundaryFixtures: arithmetic, parameterized property/target,
+  accepted missing-variable syntax, rejected declarations, pseudo-element reads,
+  scoped comparison, missing targets, closed pseudo-element vocabulary and
+  field limits before/after substitution. Named form controls cannot shadow the
+  native geometry method. Legacy syntax-only programs without #sample retain
+  their null computed result. CSS.supports(true) is not visual proof.
+- Published-value aliases retain interactive coverage. The paged-media element()
+  must not accidentally receive the same-name image function's implementation.
+- Round-trip edited programs through catalogue, private Thing storage and the
+  authored save-draft Action. Save/reopen/reload/run an edited width expression,
+  verify its native pixel result, and confirm anonymous reads return 404.
+- Check desktop/390px controls, page overflow, retained completed output, Stop
+  frame removal and fresh Run. Run prior SVG/filter/Canvas/DOM/form regressions.
+- Match exact preview/production source, runtime digest, restrictive CSP and both
+  actions-run 1.26.0 manifests before production @lopu verification.
