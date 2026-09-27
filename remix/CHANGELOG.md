@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Lopu continuations recover completed tool results
+  from their exact private background transcript, so a checkpoint after an
+  Action preserves its output without rerunning it. Account, chat, deployment,
+  retention and completion checks remain required. Expired task outputs stop
+  repeated polling. Reply capability 1.19.2.
+  [PR #969 details](../PRs/969-lopu-checkpoint-tool-results-preserve-completed-tool-results-when-lopu-resumes.md).
+
 - 2026-09-27 — **Codex (AI)**: Timeline quota acceptance uses synthetic accounts
   and the normal admin API on a guarded disposable replica. At the exact limit,
   reads, folder organization and deletion retain history; refused edits/restores
