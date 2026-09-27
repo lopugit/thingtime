@@ -68,6 +68,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Clear stale microphone/recognition errors when
+  retrying Lopu voice input. Capture errors no longer linger as conversation
+  history after permission is granted and a voice message sends successfully.
+
 - 2026-09-27: Fix Mac Lopu voice input reporting `Microphone unavailable (network)`
   by routing standard desktop transcription through a signed Apple Speech helper.
   Preserve the existing chat/model flow, stop capture at lifecycle boundaries,
