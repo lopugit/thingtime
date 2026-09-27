@@ -1,3 +1,4 @@
+import { typedCSSRecipe } from './typedCSSFixtures';
 import { cssFunctionRecipe } from './cssFunctionFixtures';
 import { svgFilterRecipe } from './svgFilterFixtures';
 import { svgRecipe } from './svgFixtures';
@@ -406,6 +407,8 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const typed = typedCSSRecipe(feature);
+	if (typed) return typed;
 	if (feature.language === 'html') return htmlRecipe(feature);
 	if (feature.language === 'css') return cssRecipe(feature);
 	if (feature.language === 'javascript') return javascriptRecipe(feature);

@@ -680,3 +680,41 @@ Examples follow the indexed definitions and preserve their source status.
 [Easing 2](https://www.w3.org/TR/css-easing-2/) are separate modules, with mixed
 publication maturity and browser implementation. A worked, editable unsupported
 example does not establish browser support or W3C Recommendation status.
+
+## Native CSS Typed OM programs
+
+The `CSS Typed OM Level 1` family has editable programs for all 249 indexed
+entries: unit factories and conversion, numeric operations and dimensional
+records, math values, transforms and matrices, keywords and custom-property
+fallbacks, inline/computed/rule style maps, and the draft colour object APIs.
+These are ordinary Component program data. Browser support is checked through
+native operations; absent colour constructors remain explicitly unsupported.
+The latest published specification is <https://www.w3.org/TR/css-typed-om-1/>;
+individual catalogue entries retain their source and publication-status labels.
+
+`dom` expressions add a `static` operation for registered CSS factories and
+parsers. `construct`, `get`, `set` and `call` use the existing run-owned receiver
+bridge. `typedCSSPolicy.ts` defines the native member and argument contracts;
+`typedCSSFixtures.ts` composes saved editable programs, including their output
+serialization. The runtime has no catalogue IDs or example-specific dispatch.
+For example, a program can construct a CSSUnitValue, set its `value`, and pass
+that same handle to an element's `attributeStyleMap.set` before reading the
+native `computedStyleMap` result. Transform examples apply their authored values
+to the displayed sample, and map examples show before/after values.
+
+Handles remain scoped to one opaque frame run. CSS input text is limited to
+2,048 characters, input lists to 32 entries, and numbers to finite magnitudes
+of at most 32,768. Expression composition has per-value and per-run budgets to
+reject repeated multiplication before native expansion. Existing request,
+handle, input-work and result budgets remain in force. Native CSSNumericType
+results use a fixed field projection. Constructed stylesheets expose bounded
+style rules and rule maps without attaching to a document; at-rules and escapes
+are rejected. No runtime document, stylesheet adoption, network access or CSP
+permission is added. Computed maps retain their native read-only contract.
+
+`api.actions-run` 1.27.0 advertises these additive operations in both manifests
+and client negotiation. `typedCSSTestCases.ts` supplies a second input set for
+all 249 programs; `typedCSSBoundaryFixtures.ts` covers native conversions,
+map writes, read-only refusals, handle isolation and resource limits. Run these
+in a rendered browser: unit compilation alone cannot prove native support or
+that edited inputs change the observed result.
