@@ -149,7 +149,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   repairs printed tool requests with bounded corrective hops, and restores
   lossless read pages across checkpoints with fresh access/revision checks.
   Private message metadata stores only read locators; Action failure recovery
-  details now reach the next model hop. Reply capability is 1.19.1.
+  details now reach the next model hop. Reply capability is 1.19.1. See
+  [PR #967 validation](../PRs/967-lopu-stall-recovery-fix-tool-call-stalls-and-preserve-read-context.md).
 
 
 
