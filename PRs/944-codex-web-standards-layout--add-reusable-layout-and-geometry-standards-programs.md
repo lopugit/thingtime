@@ -19,3 +19,5 @@ Validation on 2026-09-27:
 Primary references: https://drafts.csswg.org/cssom-view/ and https://www.w3.org/TR/geometry-1/. Screen values and iframe move/resize behavior remain browser-controlled; absent APIs are explicitly unsupported.
 
 Preview/production delivery receipts will be added to the PR after verification.
+
+Synchronized with main after PR #945 landed. Preserved its voice-input source and both changelog/testing entries; resolved generated graph conflicts by selecting one complete snapshot set and regenerating the structural graph for the combined tree.

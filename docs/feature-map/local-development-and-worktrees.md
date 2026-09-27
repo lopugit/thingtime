@@ -77,3 +77,9 @@ The Web Platform runner is built by `build:platform` into `dist/platform`. Its
 HTML references the exact JavaScript digest, and Vite/Vercel serve both assets
 with no-store. Keep these outputs together when copying a runtime for testing;
 `verify:vercel-output` checks the digest, isolated CSP and cache-header order.
+
+Mac voice input follows `electron/lib/speech-recognition.cjs` → the signed
+`macos/ThingtimeNode/Sources/ThingtimeSpeech` helper →
+`remix/app/components/Lopu/desktopSpeechRecognition.ts` → the shared Lopu voice
+engine. Packaging and permission setup are in `electron/README.md`; the desktop
+mesh section of `TESTING.md` includes the installed-app acceptance checklist.

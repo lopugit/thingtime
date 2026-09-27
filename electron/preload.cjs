@@ -1,6 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
+	speechRecognitionVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	startSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-start', request),
+	stopSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-stop', request),
+	onSpeechRecognition: (callback) => {
+		const listener = (_event, payload) => callback(payload);
+		ipcRenderer.on('thingtime-desktop:speech-event', listener);
+		return () => ipcRenderer.removeListener('thingtime-desktop:speech-event', listener);
+	},
 	discoverAiSources: () => ipcRenderer.invoke('thingtime-desktop:ai-discover'),
 	beginAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-begin-sync', request),
 	readAiSyncBatch: (request) => ipcRenderer.invoke('thingtime-desktop:ai-read-batch', request),
