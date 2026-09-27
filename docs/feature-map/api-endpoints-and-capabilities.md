@@ -182,3 +182,8 @@ transport adds primitive IDL constants without constructor handles. Native bbox
 option probes distinguish ignored options from implemented behavior. Both
 manifests and the client advance together; storage, endpoints and CSP remain
 unchanged. See the SVG section of the Web standards guide and native checklist.
+
+CSS Typed OM programs add `api.actions-run` 1.27.0 for registered native CSS
+factories/parsers, constructors, arithmetic, transforms and scoped style maps.
+The existing opaque receiver bridge and catalogue/save Action contracts remain
+canonical. See [native CSS Typed OM programs](../web-standards-builder.md#native-css-typed-om-programs).

@@ -8917,3 +8917,22 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   frame removal and fresh Run. Run prior SVG/filter/Canvas/DOM/form regressions.
 - Match exact preview/production source, runtime digest, restrictive CSP and both
   actions-run 1.26.0 manifests before production @lopu verification.
+
+### Web standards: CSS Typed OM
+
+- Run all 249 Typed OM programs with their default and edited input sets; verify
+  the native value/selected member changes where supported. Missing colour APIs
+  must report unsupported rather than a fabricated result. Exercise real unit
+  conversion, dimensional records, matrix output and visible transforms.
+- Run `typedCSSBoundaryFixtures.ts`: one-inch conversion yields 96px, scoped
+  map writes affect the sample, constructed rule maps remain editable, computed
+  maps refuse writes, and foreign handles, static namespace escapes, invalid
+  input types, stylesheet imports and excessive expression composition fail.
+- Native style-map iteration must fit the existing request budget; declared-map
+  iteration demonstrates its real entries without traversing every computed
+  property. Re-run CSS/function, SVG/filter, Canvas, DOM and form regressions.
+- Save an edited transform through Builder, open its private Component, fully
+  reload and run it. Verify the authored amount survives and the computed
+  transform matches it. Check anonymous API denial, Stop/fresh Run, desktop and
+  narrow preview rendering. Keep the program editable and reusable on another
+  Builder page through normal Component references.

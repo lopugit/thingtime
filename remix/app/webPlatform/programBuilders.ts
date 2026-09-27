@@ -56,3 +56,7 @@ export const domSurface = () => awaited({ op: 'dom', action: 'surface' });
 
 /** Read a registered primitive Web IDL constant without exposing a constructor. */
 export const domConstant = (interfaceName: string, key: string) => awaited({ op: 'dom', action: 'constant', target: interfaceName, key });
+
+/** Invoke a registered native CSS factory or parser without exposing a global object. */
+export const domStatic = (namespace: string, key: string, args: unknown[] = []) =>
+	awaited({ op: 'dom', action: 'static', target: namespace, key, args });
