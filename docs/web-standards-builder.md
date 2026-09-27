@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 4,409 have interactive recipes (302 HTML, 1,196 CSS, 890
-JavaScript and 2,021 Web API entries); the rest are
+editable program. 4,873 have interactive recipes (302 HTML, 1,196 CSS, 890
+JavaScript and 2,485 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -908,3 +908,42 @@ silently rewritten.
 
 Sources: [ARIA IDL interfaces](https://w3c.github.io/aria/#idl-interface) and
 [HTML attribute reflection](https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflecting-content-attributes-in-idl-attributes).
+
+## Native XPath object programs
+
+Thirty XPath catalogue entries now produce editable saved programs for
+`XPathEvaluator`, `XPathEvaluatorBase`, `XPathExpression`, `XPathResult` and
+`XPathNSResolver`. The authored tree, expression, context selector, namespace
+map, native result type, iteration/snapshot projection and mutation are ordinary
+Component program data. `Document.evaluate` and a constructed evaluator share
+the same policy; compiled expressions can be evaluated repeatedly with an
+optional owned result argument. The bridge preserves actual native return values,
+errors, node identity, snapshot retention and iterator invalidation.
+
+Queries require the owned detached document. Even scalar queries are refused
+in surface mode: checking returned Nodes alone cannot prevent a scalar query
+from reading ancestors outside the program. Native Node namespace resolvers
+retain identity (`createNSResolver(node)` returns that node). Alternatively,
+a saved map of at most 16 prefixes to URI strings supplies a bounded synchronous
+callback interface. Ordinary worker callbacks remain asynchronous and are not
+accepted as synchronous resolvers. Nullable Node namespace lookup inputs are
+preserved. Live native handles are run-local; the complete program that creates
+and composes them is what persists in the database.
+
+Main-thread XPath cannot be interrupted by the worker deadline. Before calling
+the native parser/evaluator, the runtime bounds expressions to 512 characters
+and 64 tokens, parentheses to depth 8, and refuses nested predicates and path
+traversal inside predicates. Evaluation counts the whole owned document plus
+any disconnected context tree, at most 128 nodes/attributes and 1,024 text and
+attribute characters. A conservative syntax/tree/text work estimate caps each
+evaluation at 16 million units and a run at 64 million; compiled expressions
+spend that same budget every time. These are implementation limits, not XPath
+standard limits. Existing native DOM and two-second execution budgets also apply.
+
+Actions negotiate `api.actions-run` 1.34.0. No dedicated XPath Component renderer,
+new storage endpoint or external configuration is required. The
+[DOM Living Standard XPath interfaces](https://dom.spec.whatwg.org/#xpath) were
+checked on 27 September 2026 (standard last updated 24 September). DOM's XPath
+algorithms remain incompletely specified; browser behavior is exposed rather
+than emulated. For example, the tested Chromium maps an unknown unsigned-short
+result type to its ANY_TYPE behavior.

@@ -9214,3 +9214,24 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] In Ask before running mode, saving a chat attachment and extending a Schema show a real Confirm card before writing. Full access permits the same tools; scheduled read-only work still refuses them.
 - [ ] Retry a private file save as the first request finishes: retain the completed independent file. Reject mismatched retry metadata without deleting that file; cleanup claims must not cross pending-to-ready finalization.
 - [ ] Verify all current registry kinds, including Timeline definitions, appear in the public Schema projection and pass the ordinary Schema validator.
+### Web standards: reusable native XPath objects (2026-09-27)
+
+- Run all 30 XPath entries with default and edited programs; assert actual scalar,
+  ordered node, iterator and snapshot results, not just successful execution.
+- Verify Document, constructed evaluator and compiled expression paths, optional
+  arguments/result reuse, namespace maps, Node resolver identity and nullable
+  prefix lookup. Keep wrong-type, malformed-expression and unresolved-prefix
+  exceptions native; compare unknown numeric result types with the same browser.
+- Remove a snapshot node and verify its retained identity/length. Mutate an
+  iterator's tree and verify invalidIteratorState and native InvalidStateError.
+- Reject surface/scalar escapes, foreign/fabricated contexts, wrong result
+  handles and asynchronous resolver impersonation before native evaluation.
+- Exercise nested predicate, traversal, actual whole-tree/text and accumulated
+  compiled-query work limits. String literals containing brackets/slashes must
+  not be treated as XPath traversal syntax.
+- Round-trip edited Action-produced programs through private Component writes,
+  assert anonymous 404s and idempotent installation, then save/reload/run in the
+  Builder and reuse the same Component on another private page. Verify Stop and
+  fresh Run, desktop and 390px layout, and unchanged opaque runtime CSP.
+- Check both 1.34.0 manifests and exact runtime/deployment identity in preview
+  and production before claiming that the new objects are live.
