@@ -77,7 +77,7 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 				{timeline.nextBefore !== null ? <Button flexShrink={0} variant="outline" onClick={() => void timeline.older()}>Load older changes</Button> : null}
 			</Flex>
 			{selected ? <Box flex="1" minW={0} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="xl" p={4}>
-				<Flex justify="space-between" align="center" gap={2} mb={3}><Heading size="sm">{selected.label}</Heading><Button size="xs" variant="ghost" onClick={() => setSelected(null)}>Close preview</Button></Flex>
+				<Flex justify="space-between" align="center" gap={2} mb={3} flexWrap="wrap"><Heading size="sm" minW={0} overflowWrap="anywhere">{selected.label}</Heading><Button size="xs" flexShrink={0} variant="ghost" onClick={() => setSelected(null)}>Close preview</Button></Flex>
 				<Text fontSize="xs" color="var(--tt-muted)" mb={4}>{selected.branchId} · {date(selected.occurredAt)}</Text>
 				{largeVersion ? <Text fontSize="sm" mb={3}>The complete data for this large version is retained in your account. Full preview is not available here yet.</Text> : null}
 				<TimelinePagePreview key={`page-preview:${timeline.identity}:${selected.id}`} event={selected} />

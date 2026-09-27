@@ -55,17 +55,10 @@ export function versionMergeBase(graph: Map<string, TimelineGraphNode>, left: st
  return graph.get(bases[0])!;
 }
 
-/** Resolve only the nearest full version and latest replacement of each
- * compact field. This preserves folder moves through draft ancestry without
- * loading every draft payload or borrowing content from the live Thing. */
-export function createVersionContentReader(
- graph: Map<string, TimelineGraphNode>,
- read: (ids: string[]) => Promise<TimelineEntry[]>,
- snapshot: (entry: TimelineEntry) => Promise<TimelineSnapshot | null>
-) {
- const cached = new Map<string, TimelineEntry>();
- return async (entry: TimelineEntry) => {
-  cached.set(entry.event.id, entry);
+/** Select the nearest full version and latest replacement of each compact
+ * field. Folder moves inherit the preceding crystal and its dependency links;
+ * no payload is borrowed from the live Thing. */
+export function versionContentSources(graph: Map<string, TimelineGraphNode>, entry: TimelineEntry) {
   const selected: string[] = []; const fields = new Set<string>(); const seen = new Set<string>();
   let id = entry.event.id;
   while (true) {
@@ -79,6 +72,19 @@ export function createVersionContentReader(
    if (!fields.has(field)) { fields.add(field); selected.push(id); }
    id = node.parentIds[0];
   }
+  const crystalId = selected.find(key => (graph.get(key)?.afterAdapter ?? (key === entry.event.id ? entry.event.after?.adapter : null)) !== 'folder-placement')!;
+  return { selected, crystalId };
+}
+
+export function createVersionContentReader(
+ graph: Map<string, TimelineGraphNode>,
+ read: (ids: string[]) => Promise<TimelineEntry[]>,
+ snapshot: (entry: TimelineEntry) => Promise<TimelineSnapshot | null>
+) {
+ const cached = new Map<string, TimelineEntry>();
+ return async (entry: TimelineEntry) => {
+  cached.set(entry.event.id, entry);
+  const { selected } = versionContentSources(graph, entry);
   const missing = selected.filter(key => !cached.has(key));
   if (missing.length) {
    const found = await read(missing);
