@@ -2,6 +2,29 @@
 
 ## Unified Timeline
 
+- [ ] Save a page with own/author-key, shared and inaccessible component refs
+  through the API. Change the definitions and revoke sharing. History → Preview
+  page and a branch at the original revision must still show the recorded
+  readable definitions; an originally inaccessible ref stays unavailable.
+  Current components appear only after the explicit comparison choice. Version
+  refresh leaves exactly one preview control; toggling back restores the original.
+- [ ] Preview at desktop and 390px, with the inspector open and closed. The
+  component-choice button must remain reachable beside the inspector; History
+  must wrap without horizontal overflow. Action probes produce no Actions/run
+  requests. Media/theme variation is stated in the preview.
+- [ ] Edit and save the historical branch without upgrading components. Read
+  its exact dependencies back and verify original definitions, then reload with
+  Timeline/Things/component requests blocked. Edit/save offline, reload, and
+  reconnect: the queued branch advances once with its definitions intact. Check
+  an older version without dependencies: show missing history, never label
+  today's definitions as recorded. Switch owner/source or sign out and hide the
+  private preview immediately.
+- [ ] Run `test:timeline:components`, `test:timeline`, `test:webpages` and both
+  capability-manifest tests. Oversized or damaged dependency byte metadata must
+  refuse before payload decoding; cross-account, duplicated selectors and stale
+  sources cannot read the batch. Acknowledged dependency cache eviction is
+  recoverable from the remote; pending drafts and uploads retain their identities.
+
 - [ ] Open a named page branch in Builder on desktop and at 390px. Edit text,
   component args and page metadata; Save twice without reopening. Each save
   advances one branch revision. Click Save directly from the first inline text

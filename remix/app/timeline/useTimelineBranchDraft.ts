@@ -1,3 +1,4 @@
+import type { ComponentBindings } from './componentBindings';
 import React from 'react';
 import { useApi } from '../hooks/useApi';
 import { branchCheckoutRequest, branchEditableSnapshot, parseBranchCheckout } from './branchCheckout';
@@ -61,14 +62,14 @@ export function useTimelineBranchDraft(target: TimelineBranchEntry, connection: 
 			const waiting = commands.find((row) => row.command.branchId === target.branch.id && row.command.thingId === target.head.thingId);
 			const queuedDraft = waiting && rows.find((row) => row.event.id === waiting.command.eventId);
 			if (!copy.current && queuedDraft?.event.after?.adapter === 'thing-content') {
-				copy.current = new TimelineBranchWorkingCopy(connection, target, queuedDraft.event.after, false);
+				copy.current = new TimelineBranchWorkingCopy(connection, target, queuedDraft.event.after, false, queuedDraft.event);
 				redraw();
 			}
 			const local = rows.find((row) => row.event.id === target.head.eventId);
 			if (local?.draftKey) await connection.store.releaseDraft(local.event.id);
 			if (active() && !copy.current && local?.event.after?.adapter === 'thing-content') {
 				try {
-					copy.current = new TimelineBranchWorkingCopy(connection, target, local.event.after);
+					copy.current = new TimelineBranchWorkingCopy(connection, target, local.event.after, true, local.event);
 					redraw();
 				} catch {
 					/* Load a supported full projection below. */
@@ -81,7 +82,7 @@ export function useTimelineBranchDraft(target: TimelineBranchEntry, connection: 
 			if (!active()) return;
 			await connection.store.accept([checked.entry]);
 			if (active() && !copy.current) {
-				copy.current = new TimelineBranchWorkingCopy(connection, target, checked.snapshot);
+				copy.current = new TimelineBranchWorkingCopy(connection, target, checked.snapshot, true, checked.entry.event);
 				redraw();
 			}
 		} catch (failure) {
@@ -121,10 +122,10 @@ export function useTimelineBranchDraft(target: TimelineBranchEntry, connection: 
 		// Exact identity remounts the owning editor.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
-	const change = (next: TimelineSnapshot) => {
+	const change = (next: TimelineSnapshot, components?: ComponentBindings) => {
 		if (!copy.current || pendingElsewhere.current) return;
 		try {
-			const pending = copy.current.change(next);
+			const pending = copy.current.change(next, undefined, components);
 			setWriting(true);
 			setError('');
 			redraw();
@@ -212,6 +213,7 @@ export function useTimelineBranchDraft(target: TimelineBranchEntry, connection: 
 		canRefresh: () => !pendingElsewhere.current && !copy.current?.edited && !copy.current?.locked,
 		getSnapshot: () => copy.current?.snapshot ?? null,
 		snapshot: copy.current?.snapshot ?? null,
+		event: copy.current?.event ?? null,
 		target: copy.current?.target ?? target,
 		edited: copy.current?.edited ?? false,
 		locked: pendingElsewhere.current || !!copy.current?.locked,

@@ -1,3 +1,4 @@
+import { recordPageComponentBindings } from './componentBindings';
 import { TIMELINE_SNAPSHOT_MAX_BYTES } from '../../../timeline/snapshotParts.ts';
 import { splitLargeThingSnapshot, storeTimelineSnapshotParts } from './snapshotParts.ts';
 import { randomUUID } from 'node:crypto';
@@ -88,7 +89,8 @@ export function thingMutationEvent(before: any, after: any, capture: ThingMutati
 export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
 	const prepared = prepareThingMutation(before, after, capture);
 	if (!prepared) return null;
-	const { event, parts } = prepared;
+	const { parts } = prepared;
+	const event = await recordPageComponentBindings(things, session, before, after, prepared.event);
 	// An untrusted legacy byte stamp must not prevent deletion. The old payload
 	// moves into a fully stamped history record; the existing delete path and
 	// this append fence the ledger for exact reconciliation, never guess a delta.

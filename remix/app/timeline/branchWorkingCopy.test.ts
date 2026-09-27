@@ -173,3 +173,22 @@ test('recovery checks branch identity, and discarding keeps events while releasi
 	await assert.rejects(unknown.discard(), /Reconnect/);
 	await h.backend.close();
 });
+
+test('branch edits preserve captured bindings through field changes, save, reload and discard', async () => {
+ const h = await setup();
+ const components = { card: { id: 'card-component', crystal: { render: { tag: 'p', children: 'Original definition' } } } };
+ await h.copy.change(snapshot('First'), undefined, components);
+ const firstEvent = h.copy.event!; assert.equal(firstEvent.dependencies.length, 1);
+ assert.equal(await h.copy.save(), 'saved');
+ const second = new TimelineBranchWorkingCopy(h.connection, h.copy.target, h.copy.snapshot, true, firstEvent);
+ await second.change(second.snapshot);
+ assert.equal(second.edited, false, 'Opening unchanged fields must not create a dirty branch');
+ await second.change(snapshot('Second')); // Field editor keeps the exact dependencies.
+ assert.deepEqual(second.event!.dependencies, firstEvent.dependencies);
+ await second.change(snapshot('Third'), undefined, { card: { ...components.card, crystal: { render: { tag: 'p', children: 'Different definition' } } } });
+ assert.notDeepEqual(second.event!.dependencies, firstEvent.dependencies);
+ await second.discard();
+ assert.deepEqual(second.event!.dependencies, firstEvent.dependencies);
+ assert.equal(second.edited, false);
+ assert.equal((await h.store.entries(firstEvent.dependencies.map(item => item.eventId)))[0].event.after?.adapter, 'component-binding');
+});

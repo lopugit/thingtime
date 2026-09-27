@@ -223,3 +223,13 @@ Visual branch checkout uses `Builder/BranchWebpage.tsx`,
 `LiveWebpageView` accepts either adapter; a branch never mounts the published
 writer or AI save bridge. Draft/cache/outbox schemas are unchanged. See
 [visual named-branch editing](../unified-timeline.md#visual-named-branch-editing--2026-09-28).
+
+
+Recorded component definitions use `timeline/componentBindings.ts`,
+`useCapturedComponents.ts` and `components/Timeline/TimelinePagePreview.tsx`.
+`api/utils/timeline/componentBindings.ts` captures direct page dependencies in the
+content transaction; `service.ts` batches their private reads after a byte-budget
+preflight. Device drafts use the same event/link records and outbox. The visual
+branch adapter defaults to recorded definitions, with an explicit current preview.
+Run `test:timeline:components` on the guarded local replica set; see the recorded
+component section in [Unified Timeline](../unified-timeline.md).

@@ -65,3 +65,13 @@ blocks never supply an inherited root audience. Resolution is batched under
 the actual viewer in the selected data plane; guessed private components
 return missing refs. Branch audience edits are version content, not a live
 sharing operation. See the visual branch checks in `TESTING.md`.
+
+
+Timeline page versions retain readable component definitions as owner-private
+`component-binding` events. Capture uses the same batched page resolver and
+inherited audience rules, then projects only id/crystal. It never borrows another
+owner's private Timeline, credentials, grants or hidden-link keys. A retained
+readable definition is a private point-in-time copy after source revocation;
+subsequent captures reevaluate access. `test:timeline:components` checks both
+retention and refused guessed private refs. Historical previews do not execute
+Actions or live data; they do not grant access to linked media or nested sources.
