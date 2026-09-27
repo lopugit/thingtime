@@ -71,7 +71,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-27: Fix Mac Lopu voice input reporting `Microphone unavailable (network)`
   by routing standard desktop transcription through a signed Apple Speech helper.
   Preserve the existing chat/model flow, stop capture at lifecycle boundaries,
-  and show actionable microphone/speech permission errors.
+  and show actionable microphone/speech permission errors. See [PR #945 notes](../PRs/945-codex-mac-voice-input--fix-mac-lopu-voice-input-with-native-speech-recognition.md).
 
 
 - 2026-09-27 — **Codex (AI)**: Add 102 reusable CSSOM programs, bounded native stylesheet/declaration receivers, scoped adoption and cancellable async replacement. Fix sample CSS masking adopted widths; verify private save/reload/reuse and native browser behavior. See [PR #943](../PRs/943-codex-web-standards-cssom--add-reusable-cssom-programs-and-native-stylesheet-editing.md).
