@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runPlatformWorker } from './workerLifecycle';
+import type { DOMCallback } from './workerLifecycle';
 
 function fixture() {
 	let terminated = 0,
@@ -155,4 +156,29 @@ test('asynchronous native DOM results are fenced by stop, timeout and rejection'
 		stop();
 		assert.equal(cleanups, 1);
 	}
+});
+
+test('native callback receivers cross the worker boundary and stop fences later delivery', () => {
+	const messages: unknown[] = [];
+	let deliver!: DOMCallback;
+	const worker: any = { onmessage: null, onerror: null, terminate() {}, postMessage: (value: unknown) => messages.push(value) };
+	const stop = runPlatformWorker(
+		worker,
+		{},
+		() => {},
+		() => {},
+		(_request, callback) => {
+			deliver = callback;
+			return { value: null };
+		}
+	);
+	worker.onmessage({ data: { type: 'tt-platform-worker-ready' } });
+	worker.onmessage({ data: { type: 'tt-platform-dom', id: 1 } });
+	const receiver = { $dom: 'animation', type: 'Animation' };
+	deliver(1, ['event'], undefined, receiver);
+	assert.deepEqual(messages.at(-1), { type: 'tt-platform-dom-callback', id: 1, args: ['event'], thisArg: receiver });
+	const count = messages.length;
+	stop();
+	deliver(1, ['late'], undefined, receiver);
+	assert.equal(messages.length, count);
 });
