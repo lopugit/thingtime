@@ -68,6 +68,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Things display-name edits for themes, algorithms,
+  emoji and chat archives now appear in shared History. Strict title-only
+  snapshots preserve protected payloads; content, quota and history commit
+  together. Stale/refused writes and unchanged titles add no successful event.
+  The Thing permalink updates immediately after Rename, and optimistic views
+  preserve protected source names. Temporary refresh failures keep the matching
+  cached Thing with a retry control; access refusals clear it.
+  Timeline 1.4.0 / Things 1.33.2. Dedicated
+  content writers and protected restoration remain in progress.
+
 - **2026-09-27 · Codex (AI):** Added 41 reusable native traversal programs and bounded synchronous callback definitions saved as Component data. Verified 116 native cases, edited-filter save/reload/reuse, private API round-trips, responsive layout and production output; Actions contract is 1.35.0. See [PR #962 details](../PRs/962-web-standards-traversal-reusable-native-traversal-and-editable-callback-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Folder deletion records each child move before
