@@ -12,6 +12,10 @@ import { useThingTimeline } from '../../timeline/useThingTimeline';
 import type { TimelineEvent, TimelineSnapshot } from '../../timeline/contract';
 import { timelineChanges, timelineChangeLabel, timelineValueLabel } from '../../timeline/changes';
 import { TimelineVersionActions } from './TimelineVersionActions';
+import { useApi } from '../../hooks/useApi';
+import { useDataPlane } from '../../hooks/useDataPlane';
+import { thingHistoryHref } from '../../utils/dataPlane';
+import { apiErrorMessage } from '../../hooks/apiFailure';
 
 const OPEN_HISTORY = 'thingtime:open-history';
 export function openThingHistory(thingId: string, thingtime?: readonly string[]) {
@@ -34,10 +38,11 @@ const thingTitle = (event: TimelineEvent) => {
 
 function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId?: string }) {
 	const timeline = useThingTimeline(thingId);
-	const session = useTimelineSession(); const selectedSession = useSelectedTimelineSession();
+	const session = useTimelineSession(); const dataPlane = useDataPlane(); const api = useApi();
 	const homeHistory = session.connection?.scope.dataPlane === 'home';
-	const differentSource = homeHistory && selectedSession.connection?.scope.dataPlane !== 'home';
+	const differentSource = homeHistory && dataPlane !== 'home';
 	const navigate = useNavigate();
+	const [opening, setOpening] = React.useState(false); const [openError, setOpenError] = React.useState('');
 	const [selection, setSelection] = React.useState<{ identity: string; event: TimelineEvent } | null>(null);
 	const selected = selection?.identity === timeline.identity ? selection.event : null;
 	const setSelected = (event: TimelineEvent | null) => setSelection(event ? { identity: timeline.identity, event } : null);
@@ -80,8 +85,17 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 				</Box>)}
 				<Button size="sm" variant="ghost" mb={3} onClick={() => setShowData(value => !value)} aria-expanded={showData}>{showData ? 'Hide data' : 'View data'}</Button>
 				{showData ? (['before', 'after'] as const).map(side => <Box key={side} mb={4}><Text fontWeight="600" fontSize="sm" mb={2}>{side === 'before' ? 'Before' : 'After'}</Text><Box as="pre" fontSize="xs" whiteSpace="pre-wrap" overflowWrap="anywhere" maxH="280px" overflow="auto" p={3} borderRadius="md" bg="var(--tt-surface)">{preview(selected[side])}</Box></Box>) : null}
-				<Button size="sm" variant="outline" isDisabled={differentSource} onClick={() => navigate(`/thing/${encodeURIComponent(selected.thingId)}`)}>Open Thing</Button>
-				{differentSource ? <Text fontSize="xs" color="var(--tt-muted)" mt={2}>Switch to your home database to open this Thing. You can browse and compare its history here.</Text> : null}
+				<Button size="sm" variant="outline" isLoading={opening} isDisabled={!session.connection} onClick={async () => {
+					const scope = session.connection?.scope; if (!scope) return;
+					setOpening(true); setOpenError('');
+					try {
+						if (differentSource) await api.v1.mongodb.endpoint.set({ reset: true });
+						navigate(thingHistoryHref(selected.thingId, scope.dataPlane, scope.ownerId));
+					} catch (error) { setOpenError(apiErrorMessage(error, 'Could not open this Thing. Your history is still here.')); }
+					finally { setOpening(false); }
+				}}>{differentSource ? 'Open Thing in home' : 'Open Thing'}</Button>
+				{differentSource ? <Text fontSize="xs" color="var(--tt-muted)" mt={2}>Opening this Thing switches your selected database to your home account.</Text> : null}
+				{openError ? <Text role="status" fontSize="sm" mt={2}>{openError}</Text> : null}
 				<TimelineVersionActions key={`${timeline.identity}:${selected.id}`} event={selected} onApplied={() => void timeline.refresh()} />
 			</Box> : null}
 		</Flex>

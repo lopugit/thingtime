@@ -1,18 +1,10 @@
-import { createHash } from 'node:crypto';
 import { parseTimelineEvent, type TimelineEvent } from '../../../timeline/contract.ts';
 import type { TimelinePageRequest } from '../../../timeline/sync.ts';
 import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
-import { getActiveMongoEndpoint, dbNameFromMongoUrl, isCustomMongoEndpointActive } from '../mongodb/endpoint';
-import { sanitiseMongoHost } from '../mongodb/config';
+import { mongoDataPlane } from '../mongodb/dataPlane';
 import { appendTimelineEvent, readTimelinePage, readTimelineEntries, timelineFolderId } from './repository.ts';
 
-export function timelineDataPlane(): string {
-	const selection = getActiveMongoEndpoint();
-	if (!selection || !isCustomMongoEndpointActive()) return 'home';
-	// Do not export a hash of credentials that could become a password oracle.
-	const identity = [sanitiseMongoHost(selection.url), dbNameFromMongoUrl(selection.url)];
-	return `custom-${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}`;
-}
+export const timelineDataPlane = mongoDataPlane;
 
 export const timelineDiscovery = (ownerId: string) => ({ ownerId, dataPlane: timelineDataPlane(), folderId: timelineFolderId(ownerId) });
 

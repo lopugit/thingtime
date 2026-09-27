@@ -78,5 +78,36 @@ await Promise.all(Array.from({ length: 12 }, async (_, i) => {
 	assert.equal(result.data.entry.event.label, i % 2 ? 'Home-only draft' : 'Custom-only draft');
 }));
 assert.equal((await call('/api/v1/mongodb/status', undefined, true)).data.custom, true);
+// The public root identity and the dispatcher use the exact Timeline key.
+const customRoot = await call('/api/root-data', undefined, true);
+assert.equal(customRoot.data.dataPlane, customPlane);
+assert.equal((await call('/api/root-data')).data.dataPlane, 'home');
+async function fenced(path: string, plane: string, custom: boolean, method = 'GET', body?: unknown) {
+	const response = await fetch(base + path, { method, headers: { Origin: base!, Cookie: cookie, 'Content-Type': 'application/json',
+		'X-Thingtime-Expected-Data-Plane': plane, ...(custom ? { 'x-tt-mongo-url': customUrl } : {}) },
+		...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+	return { response, data: await response.json() };
+}
+const sameThing = await fenced('/api/v1/things', customPlane, true, 'PUT', { id: thingId, thingtime: ['data'], crystal: { name: 'Custom scoped Thing', value: 'custom-original' }, visibility: 'private' });
+assert.equal(sameThing.data.ok, true, sameThing.data.error);
+assert.equal((await fenced(`/api/v1/things?id=${thingId}`, 'home', false)).data.thing.crystal.name, 'Home scoped Thing');
+assert.equal((await fenced(`/api/v1/things?id=${thingId}`, customPlane, true)).data.thing.crystal.name, 'Custom scoped Thing');
+const customBefore = await page(customQuery), homeBefore = await page(homeQuery);
+for (const method of ['GET', 'PATCH', 'DELETE']) {
+	const refused = await fenced(method === 'GET' ? `/api/v1/things?id=${thingId}` : '/api/v1/things', 'home', true, method,
+		method === 'GET' ? undefined : { id: thingId, crystal: { name: 'Wrong database', value: 'must-not-write' } });
+	assert.equal(refused.response.status, 409); assert.equal(refused.data.code, 'DATA_PLANE_CHANGED');
+}
+assert.equal((await fenced(`/api/v1/things?id=${thingId}`, 'invalid-location', true)).response.status, 400);
+assert.deepEqual(await page(customQuery), customBefore); assert.deepEqual(await page(homeQuery), homeBefore);
+assert.equal((await fenced(`/api/v1/things?id=${thingId}`, customPlane, true)).data.thing.crystal.value, 'custom-original');
+// Explicit home history still fences the browser selection before routing home.
+assert.equal((await fenced(`/api/v1/timeline?${homeQuery}&thingId=${thingId}`, customPlane, true)).data.ok, true);
+assert.equal((await fenced(`/api/v1/timeline?${homeQuery}&thingId=${thingId}`, 'home', true)).response.status, 409);
+const customEdit = await fenced('/api/v1/things', customPlane, true, 'PATCH', { id: thingId, crystal: { name: 'Custom scoped Thing', value: 'custom-updated' } });
+assert.equal(customEdit.data.ok, true, customEdit.data.error);
+assert.equal((await fenced(`/api/v1/things?id=${thingId}`, customPlane, true)).data.thing.crystal.value, 'custom-updated');
+assert.deepEqual(await page(homeQuery), homeBefore);
+assert.equal((await page(customQuery)).length, customBefore.length + 1);
 await writeFile('/tmp/thingtime-timeline-home-scope-fixture.json', JSON.stringify({ base, username, password, cookie, ownerId, thingId, themeId: theme.data.theme.id, folderId: homeDiscovery.data.folderId, customUrl, customPlane }), { mode: 0o600 });
-console.log(JSON.stringify({ ok: true, checks: ['explicit-home-discovery', 'same-home-uri-normalization', 'same-event-id-distinct-databases', 'theme-home-history', 'home-branch-and-restore', 'account-plane-refusals', 'concurrent-context-isolation'] }));
+console.log(JSON.stringify({ ok: true, checks: ['explicit-home-discovery', 'same-home-uri-normalization', 'same-event-id-distinct-databases', 'theme-home-history', 'home-branch-and-restore', 'account-plane-refusals', 'concurrent-context-isolation', 'root-data-plane', 'same-id-live-things', 'stale-read-write-fence', 'selected-plane-before-home-routing'] }));

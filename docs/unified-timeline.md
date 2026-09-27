@@ -433,9 +433,9 @@ home history from their known kind; ordinary Things and Builder use the selected
 scope. The complete History panel, including branches and version actions, uses
 one session. Open Timeline retains that location and closes the modal. The folder
 view offers Home account and Selected database without changing the browser's
-database selection. Cross-source Open Thing navigation stays disabled rather
-than opening a different database's same-id Thing; direct home Thing navigation
-and remaining managed-family coverage still need further work.
+database selection. Cross-source Open Thing was initially disabled; the next
+increment below provides an explicit home handoff. Remaining managed-family
+coverage still needs further work.
 
 The guarded HTTP acceptance uses ordinary synthetic accounts and two databases
 on the disposable replica. It verifies identical event ids with different
@@ -457,3 +457,40 @@ Validation: 74 Timeline tests, 92 capability tests, 4,218 passing full unit test
 typecheck retains the existing 91 diagnostics, with none in the changed/new
 modules. These checks establish this increment, not the remaining universal
 operation and version-control coverage listed above.
+
+## History-to-Thing database identity — 2026-09-28
+
+**Open Thing in home** explains that it changes the selected database, uses the
+existing endpoint reset, and navigates to a link pinned to the event's account
+and database. All ordinary History links carry those same public identities.
+A mismatched link shows an account/database recovery action before mounting the
+Thing view. Custom Thing pages explain the existing home-only comments limit.
+
+The canonical database key is shared with Timeline without changing any event,
+link, branch, outbox or IndexedDB scope format. Root data exposes that key;
+Thing caches include it and never seed from ambiguous legacy cache entries.
+Endpoint changes reuse root identity invalidation across tabs, and selected
+Timeline discovery caches must match the root database identity. This increment
+does not claim that every unrelated application cache is database-qualified.
+
+`api.mongodb-endpoint` 1.1.0 negotiates the optional expected-data-plane header.
+Shared fetcher mutations, Thing reads and Timeline discovery capture the source
+before awaiting capability discovery. The dispatcher refuses a stale source
+before reading or writing a same-id Thing. Explicit home Timeline routing still
+checks the browser's selected source first. Endpoint reset remains available
+for recovery. Legacy clients can omit the header; it grants no authorization
+and never changes routing. Scoped requests cannot use the fallback proxy.
+
+The two-database HTTP suite now creates matching live Thing ids, verifies stale
+GET/PATCH/DELETE refusal and unchanged history, and confirms accepted edits stay
+in the selected database. Browser acceptance covered two tabs, blocked reads,
+each database's cached view, explicit home handoff, pinned-source and pinned-
+account guards, and a home rename with independent API confirmation that custom
+content/history stayed unchanged. Desktop and 390px views had no horizontal
+overflow. The test's network/viewport overrides were removed and home restored.
+
+Validation: complete production build; 4,224 passing unit tests (8 skips);
+final 74 Timeline and 35 root-data tests; 315 Things, 60 collection and 92
+capability tests; changed-source and integration-script lint with zero errors.
+Raw typecheck still reports 91 existing diagnostics, none in changed/new
+modules. The complete universal-history and version-control ledger remains open.

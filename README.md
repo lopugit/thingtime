@@ -57,8 +57,20 @@ rename/move/edit ancestry, privacy and retained deletion. The quota suite below
 also checks atomic theme-save refusal and retained deletion at the ceiling.
 `test:timeline:home-scope` creates a second database on that guarded replica and
 checks concurrent history isolation, exact versions, branches and home restore
-under a custom selection. Its private fixture file contains only synthetic local
+under a custom selection, matching live Thing ids and stale read/write refusal.
+Its private fixture file contains only synthetic local
 credentials; remove it after browser acceptance.
+
+History's **Open Thing in home** explicitly switches the selected database, then
+opens an account- and database-qualified Thing link. Thing-page caches include
+that same database identity, so switching sources cannot reuse another source's
+same-id content. `api.mongodb-endpoint` 1.1.0 exposes the public `dataPlane` key
+in root data and supports `X-Thingtime-Expected-Data-Plane` as an optional request
+precondition. It refuses stale selections with 409 and invalid keys with 400;
+it never selects a database or grants access. Updated clients negotiate this
+capability before scoped reads/writes. Such requests require this origin's
+configured account environment and do not proxy to a fallback origin. No new
+secret or environment variable is required; use the existing MongoDB setup.
 
 For quota acceptance, use that same disposable replica and a dedicated local
 dev-server process. Run the following once with a new private fixture path:

@@ -9,9 +9,21 @@
   and Thing ids match. Test desktop and 390px, reload with Timeline requests
   blocked, and recover without losing each scope's cached history. Switching
   accounts or an authorization refusal must hide private cached content.
-  Ordinary Open Thing navigation is disabled for cross-source home history;
-  it must never open a same-id Thing from the wrong database. Run the guarded
+  Open Thing in home explains the selection change and opens the correct home
+  Thing with an account/database-qualified link. Run the guarded
   `test:timeline:home-scope` for real branch/restore and concurrency isolation.
+- [ ] Create home/custom Things with the same id and different content. Cache
+  each permalink, then block Thing reads and switch databases in another tab.
+  Only the matching database's cached content can appear; an uncached source
+  offers retry without borrowing the prior view. Unblock and recover. A pinned
+  History link must show a recovery action when its database/account differs,
+  never render the other Thing. Open in home account and rename it: only home
+  content and home history change. Repeat at desktop and 390px with no overflow.
+  The guarded HTTP suite checks stale GET/PATCH/DELETE refusals, unchanged
+  content/history, malformed source keys and selected-source preconditions on
+  explicit-home Timeline requests. Endpoint changes invalidate root identity
+  across tabs; deleting a saved endpoint does too, while merely saving one does
+  not. API clients omitting the optional precondition retain their old behavior.
 - [ ] Create a saved theme, rename/move it in Things, then edit tokens and
   visibility through its dedicated theme API. Shared History preserves every
   exact parent and approved before/after token value; identical saves add no

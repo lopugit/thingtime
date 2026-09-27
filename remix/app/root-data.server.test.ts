@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { randomUUID } from 'node:crypto';
 
 import { rootDataResponse } from './root-data.server';
+import { mongoDataPlane } from './api/utils/mongodb/dataPlane';
 
 const TEST_ENV_KEYS = [
   'NODE_ENV',
@@ -121,4 +123,16 @@ test('root data is private and non-cacheable', async () => {
     assert.equal(response.headers.get('Pragma'), 'no-cache');
     assert.match(response.headers.get('Vary') || '', /(?:^|,\s*)Cookie(?:,|$)/i);
   });
+});
+
+test('root data identifies the request database without disclosing its URL or credentials', async () => {
+	const password = randomUUID();
+	const url = `mongodb://${randomUUID()}:${password}@scope.test:27017/example`;
+	const response = await rootDataResponse(new Request('https://thingtime.test/api/root-data', { headers: { 'x-tt-mongo-url': url } }));
+	const body = await response.json();
+	assert.equal(body.dataPlane, mongoDataPlane({ url, savedId: null }));
+	assert.match(body.dataPlane, /^custom-[a-f0-9]{64}$/);
+	assert.equal(JSON.stringify(body).includes(password), false);
+	assert.equal(JSON.stringify(body).includes('scope.test'), false);
+	assert.match(response.headers.get('Vary')!, /x-tt-mongo-url/);
 });
