@@ -299,6 +299,7 @@ function GenericThingPage() {
 	);
 	const [loadState, setLoadState] = React.useState<ThingLoadState>(() => seedState(requestKey));
 	const [historyRefresh, setHistoryRefresh] = React.useState(0);
+	const refreshThing = React.useCallback(() => setHistoryRefresh(value => value + 1), []);
 	React.useEffect(() => {
 		const applied = (event: Event) => {
 			if ((event as CustomEvent).detail?.thingId === id) setHistoryRefresh(value => value + 1);
@@ -844,7 +845,7 @@ function GenericThingPage() {
 						{thing && <ThingTransferControls id={thing.id} linkKey={linkKey} />}
 					</Box>
 					{thing && !diagnosticRoute ? <PersistedThingMenu id={thing.id} initialThing={{ id: thing.id, thingtime: kinds,
-						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} onChanged={() => setHistoryRefresh(value => value + 1)}
+						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} onChanged={refreshThing}
 						onRenamed={title => setLoadState(current => {
 							if (current.key !== requestKey || current.data?.kind !== 'thing' || current.data.thing.id !== id) return current;
 							const previous = current.data.thing;
@@ -878,7 +879,7 @@ function GenericThingPage() {
 						<Text mt={2} color={MUTED} fontSize="sm">
 							{error}
 						</Text>
-						<Button mt={3} size="sm" variant="outline" onClick={() => setHistoryRefresh(value => value + 1)}>Try again</Button>
+						<Button mt={3} size="sm" variant="outline" onClick={refreshThing}>Try again</Button>
 					</Box>
 				) : null}
 
