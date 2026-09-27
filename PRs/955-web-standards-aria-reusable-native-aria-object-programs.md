@@ -28,8 +28,9 @@ so wrapped tile labels fit; previously saved definitions are not silently change
 
 ## Validation
 
-- The initial focused native browser audit passed 119 cases with two explicit
-  unsupported results for default/edited ariaOwnsElements and no failures.
+- Full native regression: 2,453 pass, 202 explicit unsupported cases, zero
+  failures across 2,655 cases. Focused local and hosted preview audits each passed
+  119 cases with two unsupported ariaOwnsElements variants and zero failures.
 - Platform tests: 154 pass, one opt-in integration skip. Capabilities: 88 pass.
   Schemas: 236 pass. Actions: 156 pass, one skip. Components: 46 pass.
   Pages: 138 pass, three skips. Focused lint passed.
@@ -37,13 +38,25 @@ so wrapped tile labels fit; previously saved definitions are not silently change
 - Nine edited programs round-tripped through canonical catalogue Actions and the
   real Component API, including private anonymous 404 checks. Reinstall was
   idempotent. Disposable fixture IDs and cleanup receipts stay outside git.
-- Production build and Vercel output verification passed. The existing local worktree's
-  managed stack recovered after the build. A pending PM2 status lookup was
-  cancelled before a restart; the loopback database and both runtime manifests
-  were freshly verified before continuing local mutations.
-- Full native regression, UI save/full-reload/reuse, desktop/mobile screenshots,
-  exact preview/production manifests and runtime hashes are delivery gates.
-  Their final receipts and deployment/merge identity are recorded in the PR body.
+- In a disposable account, the Builder saved an edited relationship to #second.
+  A full reload retained that input and native frozen-list result. A second
+  private page reused the same Component; Stop removed the frame and a fresh Run
+  restored the edited result. Anonymous reads of both saved Things returned 404.
+- Desktop and 390px browser checks cover inputs, results and both animation tiles.
+  Resize screenshots wait for layout; the mobile document remains 390px wide.
+  A fresh animation run produced the expected 0.625 opacity / 60px translation.
+- Production build and Vercel output verification passed. Required CI passed at
+  the initial reviewed head. The preview at pr-955.previews.dev.thingtime.com
+  served both 1.33.0 manifests, the expected runtime hash and opaque CSP.
+- IAB and native Chrome control timed out during local validation, so the
+  workspace-authorized standalone Playwright fallback used a fresh isolated
+  Chrome profile. The PM2-managed local stack briefly became unavailable, then
+  recovered; the loopback database was reverified before further mutations.
+  One interactive animation run hit the unchanged two-second deadline during
+  local load; its fresh rerun and full native regression passed.
+- Final-head CI, exact preview/deployment identity, production verification and
+  cleanup receipts are recorded in the PR body. Native browser support and
+  deployment status are not inferred from catalogue coverage.
 
 The overall Web Standards goal remains incomplete: 4,843 interactive entries,
 2,189 inspection entries and 11,766 entries requiring additional context, out of

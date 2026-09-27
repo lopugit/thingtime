@@ -516,14 +516,16 @@ export function useApi() {
         // providerId = one of the viewer's Secure Vault providers (v1.ai.models()
         // → vaultProviders[].id); null clears it back to the catalog model
         create: useCallback(
-          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; management?: 'client' | 'server' }) => {
+          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server' }) => {
+            if (args?.accessMode) await requireThingtimeCapability('api.lopu-chats', '1.6.0');
             if (args?.management) await requireThingtimeCapability('api.lopu-chats', '1.5.0');
             return asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' });
           },
           [asyncFetcher]
         ),
         update: useCallback(
-          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; management?: 'client' | 'server'; archived?: boolean }) => {
+          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server'; archived?: boolean }) => {
+            if (args.accessMode) await requireThingtimeCapability('api.lopu-chats-update', '1.5.0');
             if (args.management) {
               await requireThingtimeCapability('api.lopu-chats', '1.5.0');
               await requireThingtimeCapability('api.lopu-chats-update', '1.4.0');

@@ -70,6 +70,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-27 — **Codex (AI)**: Add 53 reusable ARIA object programs with native nullable reflection, owned element relationships and frozen-list identity; negotiate Actions 1.33.0. Make animation stages grow to keep both tiles visible. Validate production output and retain the managed loopback dev stack; see [PR #955 details](../PRs/955-web-standards-aria-reusable-native-aria-object-programs.md).
 
+- 2026-09-27 — **Codex (AI)**: Lopu can execute saved browser and server Actions
+  from chat. Per-chat **Ask before running** and **Full access** controls gate
+  mutations, persist safely across chat/account changes, and retain existing
+  Action, account and storage boundaries. The internal host shares canonical
+  data routes with Nitro and works in durable workflows. See
+  [execution contract](../docs/lopu-action-access.md) and
+  [PR #953 validation](../PRs/953-codex-lopu-workspace-actions--allow-lopu-actions-with-per-chat-access.md).
+
 - 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
   message field. Stop keeps partial words, recording again appends, and explicit
   Send uses the ordinary composer with late-result and rejected-send protection.

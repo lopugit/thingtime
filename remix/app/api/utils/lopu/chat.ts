@@ -154,6 +154,8 @@ export type LopuChatDependencies = {
 };
 
 export type LopuChatTurnInput = {
+  readAccessMode?: LopuToolContext['readAccessMode'];
+  resolveActionActor?: LopuToolContext['resolveActionActor'];
   readNotes?: () => Promise<string[]>;
   readOnly?: boolean;
   viewer: LopuToolViewer;
@@ -1137,6 +1139,9 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     createLopuToolContext(input.viewer, input.context, () => {}, {
       requestScope: `${input.chatId}:${input.requestId}`,
       readOnly: input.readOnly,
+      resolveActionActor: input.resolveActionActor,
+      readAccessMode: input.readAccessMode,
+      signal: input.signal,
       chatId: input.chatId,
       approved,
       mint: (action) => deps.mintConfirmation({ userId: input.viewer.id, chatId: input.chatId, action })
@@ -1183,7 +1188,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
 
     const ctx = makeContext();
     const toolProtocol: LopuToolProtocol = config.transport === 'anthropic' ? 'native' : config.toolProtocol;
-    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved });
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode() });
     const options = vaultClientOptions(config);
     const provider =
       config.transport === 'anthropic'
@@ -1262,7 +1267,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     const state = newTurnState();
     const toolMode = lopuOpenAiToolMode();
     const toolProtocol: LopuToolProtocol = attempt.provider === 'openai' && toolMode === 'text' ? 'text' : 'native';
-    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved });
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode() });
     const provider =
       attempt.provider === 'claude'
         ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, media: input.media, signal: input.signal })
