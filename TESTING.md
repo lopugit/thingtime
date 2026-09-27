@@ -7301,6 +7301,18 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] Chat Action access: new/legacy chats start in Ask. Confirming runs exactly
+      the proposed Action/tool; Full runs without cards and persists on reload
+      only for that chat. Check desktop and 390px composer/settings, switch
+      chats/accounts, rapid toggles, failed saves and a pending save followed by
+      Send. Background refresh must preserve an unsent chat's selected mode.
+- [ ] Run the opt-in disposable [Lopu Action QA](docs/lopu-action-access.md):
+      nested browser Action saves/reads Equipment without a page button; a
+      server Action returns its result; stable-ID retry leaves one record.
+      Full-to-Ask pauses the next call, logout rejects execution, scoped/foreign
+      sessions cannot change access, and an Action cannot update chat permissions.
+      Stale existing-chat reply bodies must not re-grant Full access.
+
 - [ ] `test:api-capabilities` must run both the API-docs and origin-scoped
       manifest suites; when merging independently versioned features, verify
       every asserted version against the combined registry rather than leaving

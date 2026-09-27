@@ -219,3 +219,15 @@ together. See [native animation programs](../web-standards-builder.md#native-web
 
 See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
 private draft API, editor recovery, account isolation and independent media copies.
+
+
+## Lopu Action access
+
+`api.lopu-chats` 1.6.0, `api.lopu-chats-update` 1.5.0 and
+`api.lopu-chats-reply` 1.15.0 carry per-chat Ask/Full mode and browser/server
+Action execution. `chatTools.ts` gates every mutation and Action; the
+first-party host reuses `browserActionRuntime.ts` and the canonical
+`server/utils/actionDataRoutes.ts` import map, which Nitro's `routeModules`
+also spreads. Register a new delegable data route in that shared map; other
+routes stay in the catch-all. Both still need the API docs registry entry.
+See [authorization and validation](../lopu-action-access.md).

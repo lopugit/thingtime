@@ -91,6 +91,7 @@ export type ActionRunTraceEntry = {
 };
 
 type ActionBudget = {
+	assertAuthorized?: () => Promise<void>;
 	usedLookup?: boolean;
 	deadline: number;
 	opsRemaining: number;
@@ -482,6 +483,7 @@ const executeProgram = async (
 		};
 
 		for (let index = 0; index < program.steps.length; index += 1) {
+			await budget.assertAuthorized?.();
 			const step = program.steps[index];
 			const label = stepPrefix ? `${stepPrefix}.${index + 1}` : String(index + 1);
 			const startedAt = Date.now();
@@ -867,7 +869,7 @@ export const runAction = async (
 	viewer: Viewer,
 	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
 	shared?: SharedComposition,
-	context?: { firstPartyActorId?: string }
+	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void> }
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
 	// account authority. Only stored composition reads are added below.
@@ -900,6 +902,7 @@ export const runAction = async (
 	const validated = validateRunInputs(program.inputs, request.inputs);
 	if (isFail(validated)) return validated;
 	if (jsonBytes(validated.inputs) > limits.maxInputBytes) return fail(413, `Resolved inputs exceed this action's ${limits.maxInputBytes}-byte cap`);
+	if (context?.browserOnly && program.crystal.runtime !== 'browser') return fail(409, 'Use a browser Action when composing browser flows');
 	if (program.crystal.runtime === 'browser') {
 		if (shared || program.ownerId !== viewer.id || viewer.pat || context?.firstPartyActorId !== viewer.id) return fail(403, 'Browser flows require your own Action and a first-party session');
 		if (request.execution !== 'browser') return fail(409, 'This Action runs in the browser. Use a client supporting api.actions-run 1.7.0');
@@ -911,6 +914,7 @@ export const runAction = async (
 
 	const startedAt = new Date();
 	const budget: ActionBudget = {
+		assertAuthorized: context?.assertAuthorized,
 		deadline: Date.now() + limits.timeoutMs,
 		opsRemaining: limits.maxOperations,
 		maxDepth: limits.maxDepth,

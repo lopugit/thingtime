@@ -4239,3 +4239,28 @@ Fixture JSON contains test credentials and stays ignored. The verifier exercises
 only the real local API. Existing device Thing data/preferences are retained and
 copied once to the first opening account; later accounts use separate device
 workspaces and draft caches. Hydration alone does not upload that legacy data.
+
+
+### Lopu Action access QA
+
+Lopu's per-chat Ask/Full modes require no new deployment secret. Existing
+first-party sessions, Mongo transactions and the Lopu provider setup still
+apply. For an isolated verification without model billing:
+
+1. Start a disposable loopback Mongo replica at port `22563`, replica set
+   `lopuActions`, with a new empty dbpath. Do not point this check at shared data.
+2. Use the canonical PM2 app definition with an isolated process name and
+   `TT_WEB_PORT=22560`, `TT_HMR_PORT=22561`, `TT_API_PORT=22562`.
+   Set `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:22563/?replicaSet=lopuActions`
+   and a fresh local-only `JWT_SECRET` on both the app and script; unset
+   `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` for this disposable stack. No production
+   credentials or provider keys are required.
+3. From `remix/`, run `TT_LOPU_ACTIONS_LOCAL=1 node --import tsx
+   scripts/verify-lopu-actions.mts` with the same Mongo/JWT environment.
+   The script refuses any other Mongo URI, creates synthetic accounts and data,
+   and revokes its login at completion. Stop the named QA PM2 processes afterward.
+4. Open `/scripts/lopu-actions.browser.html` on the QA Vite origin for the
+   production composer's isolated desktop/phone fixture.
+
+This checks runtime and storage behavior, not live provider reasoning or
+production gear migration. See [Lopu Action access](docs/lopu-action-access.md).

@@ -74,6 +74,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   workspaces. Added real local API/transaction/media verification and setup
   guidance. See [PR #957 details](../PRs/957-codex-account-drafts-autosave-account-drafts-and-add-reusable-post-templates.md).
 
+- 2026-09-27 — **Codex (AI)**: Lopu can execute saved browser and server Actions
+  from chat. Per-chat **Ask before running** and **Full access** controls gate
+  mutations, persist safely across chat/account changes, and retain existing
+  Action, account and storage boundaries. The internal host shares canonical
+  data routes with Nitro and works in durable workflows. See
+  [execution contract](../docs/lopu-action-access.md) and
+  [PR #953 validation](../PRs/953-codex-lopu-workspace-actions--allow-lopu-actions-with-per-chat-access.md).
+
 - 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
   message field. Stop keeps partial words, recording again appends, and explicit
   Send uses the ordinary composer with late-result and rejected-send protection.
