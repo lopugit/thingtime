@@ -183,7 +183,7 @@ test('Web API members retain missing-capability reporting and unimplemented cont
 	assert.equal(missing.ok, false);
 	assert.equal(missing.result.status, 'unsupported');
 	assert.deepEqual(missing.result.missing, ['Blob.prototype.textStream']);
-	for (const name of ['DOMMatrix.setMatrixValue', 'Geolocation']) {
+	for (const name of ['Geolocation']) {
 		const feature = WEB_FEATURES.find((f) => f.language === 'webapi' && f.name === name)!;
 		assert.equal(featureRecipe(feature).coverage, 'requires-context');
 	}

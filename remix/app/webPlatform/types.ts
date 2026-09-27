@@ -33,7 +33,9 @@ export type PlatformDOMBinding = {
 	args?: unknown[];
 	label?: string;
 	/** IDL handler properties have native replacement and return-false semantics. */
-	binding?: 'listener' | 'handler';
+	binding?: 'listener' | 'handler' | 'legacy';
+	/** A surface event removes this exact listener; Stop also removes it. */
+	removeOn?: string;
 	options?: { capture?: PlatformBooleanInput; once?: PlatformBooleanInput; passive?: PlatformBooleanInput };
 	preventDefault?: PlatformBooleanInput;
 	stopPropagation?: PlatformBooleanInput;
