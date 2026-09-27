@@ -32,6 +32,23 @@ persisted; every check is client-side.
       messages in the timeline" off hides message bubbles in rows and the panel.
 - [ ] With `prefers-reduced-motion: reduce`, no animation runs and the sheet,
       toast and rows still appear.
+- [ ] View → Evolution inside the browser: a Thing picker row, then one line with
+      nodes (hollow, verb-coloured), labels alternating above and below, day
+      ticks, a "now" marker, and for Primary button a dashed variation lane;
+      clicking a node selects that event in the detail panel; "Open the full
+      Evolution concept" links to the sibling entry.
+- [ ] `/docs/design?entry=thingtime-history-evolution` and the bundle URL
+      `/docs/design-bundles/thingtime-history-evolution/index.html` render with
+      no console errors; the Thing picker switches the line; Look → Frames shows
+      as-of cards with change chips and elapsed time on the connectors.
+- [ ] Spacing → Real time keeps true positions (crowded same-day edits spread
+      just enough to read) with day ticks; Even spaces versions uniformly.
+- [ ] Scrubber and ←/→ move the selection and scroll it into view; Play steps
+      through versions and stops at the last; Compare marks A and B (across the
+      variation lane too) and lists differing properties; Restore appends a
+      version and the line grows; nothing disappears.
+- [ ] 390px: the strip scrolls horizontally inside the app frame with no page
+      horizontal scroll; labels narrow; the detail and compare panels stack.
 
 ## Editable record app primitives
 

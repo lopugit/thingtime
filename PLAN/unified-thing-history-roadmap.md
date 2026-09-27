@@ -8,7 +8,7 @@
 
 **Execution epic:** [TODO 50 — Unified Thing history and the timeline browser](../TODO/claude-todo/50-unified-thing-history-and-timeline-browser.md)
 
-**Design concept:** [`docs/design/thingtime-history-timeline/`](../docs/design/thingtime-history-timeline/index.html)
+**Design concepts:** [`docs/design/thingtime-history-timeline/`](../docs/design/thingtime-history-timeline/index.html) · [`docs/design/thingtime-history-evolution/`](../docs/design/thingtime-history-evolution/index.html)
 
 ## Outcome
 
@@ -71,11 +71,11 @@ changes**, **Review and combine**, **Send changes** — over real ancestry.
 
 | # | Milestone | Gate to pass | Status |
 | --- | --- | --- | --- |
-| M0 | **Design concept** — global timeline, contextual panel, versions/merge review, local-first states, settings; registered on `/docs/design`. | Owner reviews the concept; vocabulary and anatomy confirmed or corrected. | Delivered 2026-09-27 (this branch) |
+| M0 | **Design concepts** — global timeline, contextual panel, versions/merge review, local-first states, settings, and the left-to-right Evolution view; both registered on `/docs/design`. | Owner reviews the concept; vocabulary and anatomy confirmed or corrected. | Delivered 2026-09-27 (this branch) |
 | M1 | **Durable editor journal** — persist `EditorHistory` events to a local IndexedDB log keyed by account, origin and Thing; reload restores the journal; page-hide flush reuses `latestRevisionAutosave` discipline. | Reload, crash and account switch tests keep every branch; no cross-account leakage; storage bounded. | Planned |
 | M2 | **Contextual History panel** — `history` joins `THING_ACTIONS`; `PersistedThingMenu`, the editor Changes control and PostCard "Edited" chips open one panel scoped to the Thing, with preview, restore-as-new-version and undo-one-change. | Desktop and 390px browser checks; restore never removes a row; conflicts reported, not overwritten. | Planned |
 | M3 | **Account sync** — `history-event` protected Things (`targetId`, owner-private, bounded), batched idempotent record endpoint, cursor list endpoint, semantic capability versions on both manifests, sync queue with "saved on this device" → "synced" transitions. | Real-API tests on a disposable replica set; offline → reconnect converges without duplicates; export and delete flows include history. | Planned |
-| M4 | **Timeline browser `/history`** — scope, URL filters, day grouping, density scrubber, cache-first paint, messages (owner notes, Lopu, apps, system). | `TESTING.md` checklist; no loading flash with cached rows; screen-reader operation of rows and panel. | Planned |
+| M4 | **Timeline browser `/history`** — scope, URL filters, day grouping, density scrubber, cache-first paint, messages (owner notes, Lopu, apps, system), and the **Evolution** view (one Thing left to right: line look with true-time spacing, frames look with as-of renders, scrub/play/compare). | `TESTING.md` checklist; no loading flash with cached rows; screen-reader operation of rows and panel. | Planned |
 | M5 | **Versions** — named/pinned versions, variations (private branches), Get latest changes, Send changes, Review and combine (property-level three-way merge). | Merge keeps both branches; dependent Component versions restore with the page or the UI says they cannot. | Planned |
 | M6 | **Expansion** — non-editor writers (bulk, share, Lopu tools, apps) record events; retention and storage settings; collaboration hand-off. | Every generic writer emits or explicitly opts out; quota degradation tested. | Planned |
 

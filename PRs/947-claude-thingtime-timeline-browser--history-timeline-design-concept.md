@@ -1,4 +1,4 @@
-# PR #947 — History timeline / events browser design concept
+# PR #947 — History timeline / events browser + Evolution view design concepts
 
 Date: 2026-09-27. Branch: `claude/thingtime-timeline-browser-5173ff`. Base: `develop`.
 Owner request: "design a visual timeline/events browser with things cards/changes
@@ -53,3 +53,36 @@ authorize a merge.
 ## Log
 
 - 2026-09-27 — concept, docs and verification landed; PR opened.
+
+## Evolution view follow-up — 2026-09-27
+
+Owner asked for a left-to-right, scrollable view of one Thing's evolution as an
+alternative history browser view, with its own docs design entry, referencing a
+classic horizontal timeline (uicookies: nodes on one line, labels alternating
+above and below, a quiet date axis).
+
+- New entry `docs/design/thingtime-history-evolution/index.html` (registered in
+  `designEntries.ts` second, and in `docs/design/README.md`): **Line** look
+  (hollow verb-coloured nodes on one line that brightens toward *now*, labels
+  alternating above/below, day ticks, small moment dots, a dashed variation
+  lane with an elbow from its starting version, the branch-source label kept
+  above the line) and **Frames** look (as-of renders: page structure, the
+  Component's actual button, record fields, post text/audience; change chips
+  and elapsed time on the connectors). Real-time spacing keeps true positions
+  and spreads only colliding nodes (piecewise time→x mapping, min gaps); Even
+  spacing is uniform. Thing picker, scrub slider, ←/→, Play, Compare A/B (also
+  across the variation), restore/variation/review-and-combine append versions.
+- The timeline concept's browser gained the same **Evolution** view in place
+  (View → Evolution: Thing picker + line; node click opens the shared detail
+  panel; link to the full concept).
+- TODO 50, PLAN M0/M4, the NOTES ledger and `TESTING.md` describe the view.
+
+Verification: owner's Chrome at 1440px (line + frames, Gear tracking and
+Primary button with the variation lane, compare v1→v4 = 4 properties, restore
+appends a node, even/real spacing positions) and the in-app pane at 375px
+(no page horizontal scroll, strip scrolls inside the frame, labels 124px,
+panels stack, frames 78vw); the timeline concept's in-place Evolution view at
+desktop and 375px. Fixed during review: a `.below` panel class colliding with
+the below labels (renamed `.panels`), filmstrip `.moment` styles leaking into
+line-mode moments (scoped to `.lane`), lane labels overlapping the first
+label, and the variation elbow crossing the branch-source label.

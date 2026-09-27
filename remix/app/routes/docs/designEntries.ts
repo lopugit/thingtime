@@ -26,7 +26,14 @@ export const designEntries: DesignEntry[] = [
     title: 'History timeline — /history and the contextual History panel',
     kind: 'App',
     summary: 'Design concept: one timeline of every change with the Thing card as it was, property diffs, and the message that explains why.',
-    notes: 'Interactive: scope and filter chips, a 30-day scrubber, a detail panel (bottom sheet on phones), restore/undo/variation that only append, an offline → synced simulation, review-and-combine merge review, and History settings. Fictional data.'
+    notes: 'Interactive: scope and filter chips, a 30-day scrubber, a detail panel (bottom sheet on phones), restore/undo/variation that only append, an offline → synced simulation, review-and-combine merge review, History settings, and an Evolution view (one Thing left to right) that links to its sibling concept. Fictional data.'
+  },
+  {
+    slug: 'thingtime-history-evolution',
+    title: 'Evolution view — one Thing, left to right',
+    kind: 'App',
+    summary: 'Design concept: the alternative history browser view — a classic horizontal timeline of one Thing\'s versions you can scrub, play and compare, plus a Frames look that renders the Thing as it was.',
+    notes: 'Line look (hollow nodes on one line, labels alternating above and below, quiet day axis, dashed variation lane) and Frames look (as-of renders with change chips on the connectors); real-time vs even spacing; keyboard ←/→; compare any two versions. Fictional data.'
   },
   {
     slug: 'thingtime-algorithm-growth',

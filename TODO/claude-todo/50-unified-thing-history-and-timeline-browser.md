@@ -10,10 +10,11 @@
 **Roadmap:**
 [Unified Thing history roadmap](../../PLAN/unified-thing-history-roadmap.md)
 
-**Design concept:**
+**Design concepts:**
 [`docs/design/thingtime-history-timeline/index.html`](../../docs/design/thingtime-history-timeline/index.html)
-— interactive, fictional data, listed on `/docs/design` (bundle URL
-`/docs/design-bundles/thingtime-history-timeline/index.html`).
+and [`docs/design/thingtime-history-evolution/index.html`](../../docs/design/thingtime-history-evolution/index.html)
+— interactive, fictional data, listed on `/docs/design` (bundle URLs
+`/docs/design-bundles/<slug>/index.html`).
 
 ## Goal
 
@@ -65,6 +66,26 @@ and it only ever grows: restore, undo, variations and merges append versions.
   now**; rows that need review offer **Review and combine** instead.
 - Optimistic rendering: paint the cached first page per viewer + scope, then
   reconcile; never flash empty.
+
+### Evolution view — one Thing, left to right
+
+- A third view beside Timeline and Versions: the selected Thing's versions on
+  one horizontal line, oldest on the left, newest at **now**. Hollow nodes
+  coloured by verb; labels alternate above and below (version · time, the
+  change label, actor and sync state); minor moments (a sync, an attachment)
+  are small dots; a variation runs on a dashed lane below its starting version;
+  a quiet day axis sits under the line, which brightens toward now.
+- **Real time** spacing keeps true positions and spreads only the nodes that
+  would collide; **Even** spacing puts every version a step apart.
+- **Frames** look: each version becomes a card that renders the Thing as it
+  was (page heading/folder/blocks/attachments, a Component's actual button, a
+  record's fields, a post's text and audience) with change chips and elapsed
+  time on the connectors.
+- Scrub with a slider or ←/→, **Play** through versions, select a node to see
+  before/after renders and the diff in the shared panel, and **Compare** any
+  two versions (even across a variation) read-only.
+- Concept: [`docs/design/thingtime-history-evolution/index.html`](../../docs/design/thingtime-history-evolution/index.html);
+  the timeline concept's browser also carries the line view in place.
 
 ### Contextual entry points
 
@@ -141,6 +162,8 @@ and it only ever grows: restore, undo, variations and merges append versions.
   instead of overwriting later edits.
 - `/history` filters live in the URL, paint from cache, page with a cursor, and
   work with keyboard and screen reader at desktop and 390px.
+- The Evolution view renders every version of a Thing as of that version,
+  keeps true time positions readable, and its compare is read-only.
 - Two-device offline edits to one property produce "needs review" rows and a
   merge that keeps both branches.
 - History joins export, per-entry/by-date/clear-all deletion, and storage

@@ -9,7 +9,8 @@ sync implementation is authorized by this document
 
 **Execution epic:** [TODO 50 — Unified Thing history and the timeline browser](../TODO/claude-todo/50-unified-thing-history-and-timeline-browser.md)
 
-**Design concept:** [`docs/design/thingtime-history-timeline/`](../docs/design/thingtime-history-timeline/index.html)
+**Design concepts:** [`docs/design/thingtime-history-timeline/`](../docs/design/thingtime-history-timeline/index.html) and
+[`docs/design/thingtime-history-evolution/`](../docs/design/thingtime-history-evolution/index.html)
 (interactive, fictional data; listed on `/docs/design`)
 
 ## Why preserve this note
@@ -47,6 +48,7 @@ current Thing envelope stores.
 | Adjacent epics already claim neighbouring territory. | [TODO 20](../TODO/claude-todo/20-versioned-experience-history.md) owns replayable experience snapshots (feed/search state), [TODO 29](../TODO/claude-todo/29-content-provenance-and-correction-integrity.md) owns provenance and correction semantics of the artifact, [TODO 23](../TODO/claude-todo/23-data-portability-and-exit.md) owns export/deletion, [TODO 34](../TODO/claude-todo/34-collaboration-agency-and-shared-stewardship.md) owns roles and exact-version contributions. | High for the current backlog. The roadmap defines boundaries rather than a second implementation. |
 | The investigation reproduced a draft-loss bug adjacent to history. | The shared thread reports that large drafts and chat continuations can omit their blocks, that the server interprets the omission as an empty page, and that targeting the same page by ID reuses the empty draft. It was not verified against the owner's private page. | Medium; not reproduced in this repository session. Reproduce on a disposable fixture before treating it as a history requirement. |
 | The design concept exists and is registered. | `docs/design/thingtime-history-timeline/index.html` (self-contained, Prism tokens) is listed in `remix/app/routes/docs/designEntries.ts` and `docs/design/README.md`; it shows the global browser, the contextual panel, versions and merge review, local-first states and settings, with fictional data only. | High for this branch. Refresh when the concept or gallery registration changes. |
+| The Evolution view (one Thing, left to right) is a second registered concept. | `docs/design/thingtime-history-evolution/index.html` follows the owner's horizontal-timeline reference (2026-09-27, uicookies-style: nodes on one line, labels alternating above and below, a quiet axis): a Line look with true-time positions that spreads only colliding nodes, a Frames look with as-of renders, scrub/play/compare, and a dashed variation lane. The timeline concept's browser carries the same line view in place. | High for this branch. As-of rendering assumes property diffs can be folded forward from the first version; block-tree edits need a block-aware fold before implementation. |
 | Owner language for versions is fixed. | The investigation and the owner's reply settle the everyday vocabulary: **Try a variation**, **Get latest changes**, **Review and combine**, **Send changes**, with ancestry preserved underneath for merging from a shared starting version. | High as product direction; wording may still be tuned in the UI. |
 
 ## What the concept commits to
