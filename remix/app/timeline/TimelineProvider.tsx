@@ -7,7 +7,7 @@ import { TimelineBranchStore } from './branchStore';
 import { TimelineSync, TimelineBranchCommandRefusal } from './sync';
 import { timelineScopeKey, type TimelineScope } from './contract';
 import { listenTimelineScopeChange, TIMELINE_CHANGED_EVENT } from './clientEvents';
-import { TimelineConnectionPool, type TimelineConnection } from './connectionPool';
+import { TimelineConnectionPool, timelineConnectionForViewer, type TimelineConnection } from './connectionPool';
 import type { TimelineStorage } from './storageScope';
 import { useDataPlane } from '../hooks/useDataPlane';
 
@@ -101,7 +101,7 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 		const timer = setInterval(refresh, 15_000); void connect(true);
 		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearInterval(timer); unlisten(); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); window.removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
 	}, [user?.id, pool, storage, onDenied, expectedPlane]);
-	const scoped = connection?.scope.ownerId === user?.id && (!expectedPlane || connection.scope.dataPlane === expectedPlane) ? connection : null;
+	const scoped = timelineConnectionForViewer(connection, user?.id, expectedPlane);
 	return { storage, identity: JSON.stringify([user?.id ?? null, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };
 }
 

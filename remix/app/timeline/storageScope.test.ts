@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
-import { TimelineConnectionPool } from './connectionPool.ts';
+import { TimelineConnectionPool, timelineConnectionForViewer } from './connectionPool.ts';
 import { IndexedDbTimelineBackend } from './indexedDb.ts';
 import { TimelineLocalStore } from './localStore.ts';
 import { TimelineBranchStore } from './branchStore.ts';
@@ -10,6 +10,17 @@ import { entryFixture, eventFixture } from './testFixtures.ts';
 import { historyStorageForThing, timelineFolderHref, timelineRequestScope } from './storageScope.ts';
 
 const home = { ownerId: 'user-1', apiOrigin: 'https://thingtime.test', dataPlane: 'home' };
+
+test('signed-out and reconnecting renders expose no history connection and cannot dereference a missing one', () => {
+	const connection = { scope: home };
+	for (const owner of [undefined, null, 'user-1']) for (const plane of [undefined, null, 'home', 'custom-one']) {
+		assert.equal(timelineConnectionForViewer(null, owner, plane), null);
+	}
+	for (const owner of [undefined, null, '', 'other']) assert.equal(timelineConnectionForViewer(connection, owner, 'home'), null);
+	assert.equal(timelineConnectionForViewer(connection, 'user-1', 'custom-one'), null);
+	assert.equal(timelineConnectionForViewer(connection, 'user-1', 'home'), connection);
+	assert.equal(timelineConnectionForViewer(connection, 'user-1', null), connection, 'Same-viewer cached connection remains usable during discovery');
+});
 
 test('home routing is explicit without changing canonical scope, and managed history keeps its folder location', () => {
 	assert.deepEqual(timelineRequestScope(home), { ownerId: 'user-1', dataPlane: 'home', storage: 'home' });

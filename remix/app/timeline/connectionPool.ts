@@ -5,6 +5,13 @@ import type { TimelineSync } from './sync.ts';
 
 export type TimelineConnection = { scope: TimelineScope; folderId: string; store: TimelineLocalStore; branches: TimelineBranchStore; sync: TimelineSync };
 
+/** A signed-out render has neither a viewer nor a connection. Check both
+ * before comparing identities: undefined === undefined is not an account. */
+export function timelineConnectionForViewer<T extends Pick<TimelineConnection, 'scope'>>(connection: T | null, ownerId: string | null | undefined, dataPlane: string | null | undefined): T | null {
+	if (!connection || !ownerId || connection.scope.ownerId !== ownerId || (dataPlane && connection.scope.dataPlane !== dataPlane)) return null;
+	return connection;
+}
+
 /** Home and selected discovery may resolve to the same database. Share their
  * queue and in-flight requests, stopping only after both sessions release it. */
 export class TimelineConnectionPool {

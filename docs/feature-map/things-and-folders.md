@@ -189,3 +189,9 @@ suite Actions and can be referenced by another page. See [native ARIA programs](
 ## Public built-in Schema Things
 
 `registry.ts` projects every built-in definition, including root and physical-collection shapes, through the same Schema grammar used for user definitions. The existing fenced storage-accounting migration seeds public `schema-<id>` Things owned by `system`; reserved IDs prevent user squatting. `schemaCopies.ts` preserves fields, bounded JSON objects and render templates while adding `forkOf`. Schema browse/detail views copy any visible definition into an independent owned Schema; Lopu uses `get_schema` and `create_schema` with `extends` through the same validation. Copies do not authorize protected-kind writes or expose any record contents. `test:schemas`, `test:migrations` and `test:lopu` cover projection completeness, native write restrictions and extension limits.
+
+
+`timelineConnectionForViewer` in `app/timeline/connectionPool.ts` guards both
+missing viewer and missing connection before checking the cached account/data
+plane. Signed-out pages and sign-out transitions return no Timeline connection;
+`storageScope.test.ts` covers this alongside the existing scope isolation tests.
