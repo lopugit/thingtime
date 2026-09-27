@@ -1,4 +1,6 @@
+import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
 import { copyActionJson } from './actionJsonInput.ts';
+import { TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND } from '../timeline/contract.ts';
 import { parseBrowserExpressionLimits } from './browserActions';
 import { BROWSER_ACTION_EXPANDED_LIMITS } from './browserActions';
 import { parseActionRequestPagination } from './actionRequestPagination';
@@ -4181,6 +4183,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND,
   'post-discovery',
   ...CHAT_ARCHIVE_THINGTIME,
 
@@ -4381,6 +4384,21 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+	{ id: TIMELINE_BRANCH_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline branch',
+		summary: 'A named private branch with relational Thing memberships.', detail: 'The shared branch record lives in secure BinData. Each contained Thing has a separate timeline-branch-head record; neither revisions nor heads accumulate in this document. Dedicated Timeline commands own the lifecycle and record branch changes in History.',
+		createdVia: 'Timeline branch command', fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Branch display name.' }], example: { name: 'Design experiment' } },
+	{ id: TIMELINE_BRANCH_HEAD_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline branch version',
+		summary: 'One current version for one branch and Thing.', detail: 'A protected atomic relationship with scalar branchId, thingId, eventId and optimistic revision. targetId names its Thing and parentId its branch. A push requires the current revision and preserves ancestry; divergence requires a merge. The canonical head record is identical locally and remotely.',
+		createdVia: 'Timeline branch command', fields: [], example: {} },
+	{ id: TIMELINE_LINK_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline relationship',
+		summary: 'One immutable private link between an event and a version, Thing, branch or operation.',
+		detail: 'Each relationship is its own protected Thing in Timeline. The identical local/server link record lives in secure BinData; targetId points to its event Thing. Hashed crystal.targetId and crystal.linkKind support reverse lookup through the existing shared index. Links commit with the event, never accumulate in document arrays, and cannot be edited through generic Things APIs.',
+		createdVia: 'Canonical Timeline transaction', fields: [], example: {} },
+	{ id: TIMELINE_EVENT_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline event',
+		summary: 'An immutable private change and its server acceptance receipt.',
+		detail: 'An atomic Thing under the owner’s Timeline folder. targetId names the affected Thing, including deleted Things. The shared versioned event and receipt live in secure BinData, excluded from generic reads/search. V3 stores the canonical relational event record; parent, dependency, Thing, branch and operation links are separate atomic timeline-link Things. Logical storage accounting meters retained customer snapshot content. Dedicated Timeline reads authenticate the owner; ordinary content sharing never shares its history.',
+		createdVia: 'Canonical mutation transactions and the Timeline sync API',
+		fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Value-free display label.' }], example: { name: 'Change' } },
 	{ id: 'lopu-background-task', version: 1, kind: 'crystal', collection: null, title: 'Background AI task',
     summary: 'Protected owner-private execution and reconnect state.',
     detail: 'Home control Thing with origin/data-source scope, immutable request digest and bounded secure BinData output. Seven-day output access; lazy byte removal; retained operation marker prevents replay. Chat output additionally requires current conversation access. Optional management and workflowStatus track a durable chain. The root workflowInput is protected BinData containing the initial request and a revocable session grant; it is never indexed or projected and is removed at terminal completion. Child parts link by protected rootTaskId. Protected activeWorkerRequestId, workerStarted, workerFinishedAt, workflowFinalStatus and workflowFinalizedAt fence admission and preserve the conversation claim until all executors acknowledge their final saved output; lease expiry alone never releases that claim.',

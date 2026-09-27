@@ -104,6 +104,10 @@ const parseContext = (raw: unknown): { ok: true; context: LopuChatContext | null
   if (raw.page !== undefined && raw.page !== null) {
     if (!isRecord(raw.page)) return { ok: false, error: 'context.page must be an object' };
     const page: NonNullable<LopuChatContext['page']> = {};
+    for (const field of ['dirty', 'ready'] as const) {
+      if (raw.page[field] !== undefined && typeof raw.page[field] !== 'boolean') return { ok: false, error: `context.page.${field} must be a boolean` };
+      if (typeof raw.page[field] === 'boolean') page[field] = raw.page[field];
+    }
     if (raw.page.id !== undefined && raw.page.id !== null) {
       const id = optionalToken(raw.page.id, MAX_CONTEXT_ID_CHARS);
       if (!id) return { ok: false, error: 'context.page.id must be a webpage id' };

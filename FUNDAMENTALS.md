@@ -202,6 +202,33 @@ How (see `api/utils/things/things.ts`):
 
 ### Account storage is one exact, transactional ledger
 
+Timeline uses protected relational `timeline-event` Things in the owner's
+private managed **Timeline** folder, with `targetId` pointing to the affected
+Thing. `timeline-link` Things store each event-to-Thing, branch, operation,
+parent and dependency-version relationship as its own atomic record. Many-to-many
+relationships never accumulate in an embedded history/membership list. Event and
+link secure envelopes contain the exact canonical JSON records stored locally
+by the browser; bounded API aggregates join them on read. Root `timelineHeadId` is the live Thing's
+server-maintained version fence; event `timelineNode`, `timelineEntryBytes` and `timelineLinkBytes`
+are bounded derived read headers, and folder `timelinePosition` serializes the
+server cursor. These fields cannot be written through ordinary Thing APIs.
+No additional physical collection or accumulating embedded event list is used.
+Link `targetId` identifies its event Thing; hashed `crystal.targetId` and
+`crystal.linkKind` provide reverse lookup through existing shared indexes.
+Event/link writes commit together. Link Things are bounded platform metadata
+with protected `storageClass: 'control'`; arbitrary user content stays in the
+metered event snapshot. Stored event counts are immutable completeness checks,
+not arrays of relationships.
+
+Named `timeline-branch` Things carry one immutable branch record. Each
+`timeline-branch-head` Thing joins that branch to one Thing and its current
+event id, guarded by a scalar revision. A branch can contain many Things and a
+Thing can belong to many branches without either collecting membership arrays.
+IndexedDB uses the same branch/head JSON; pending commands occupy separate local
+records. A transaction appends the branch-operation event and moves its head
+together. Branch creation/push never silently changes the live Thing. Protected
+branch kinds cannot be read or edited through generic Thing routes.
+
 Every billable Thing has a server-owned `storageClass: "content"`, a versioned
 `storageAccountingVersion`, and `sizeBytes` equal to the UTF-8 byte length of
 exactly `JSON.stringify({ crystal, extended, tags })` after the API has
@@ -209,6 +236,18 @@ normalized those three stored payload fields. This is the stable logical
 customer-content measure. It deliberately excludes platform envelope fields,
 Mongo indexes, compression, replication, and other physical database overhead
 that cannot be deterministically assigned to one account.
+
+Timeline envelope v2/v3 meters retained ordinary revision content with the same
+`{ crystal, extended, tags }` projection, once for each present before/after
+snapshot. Authored client drafts and nonstandard adapters meter their entire
+snapshot payload. Event ids, receipts and managed labels are platform overhead;
+arbitrary client fields cannot opt data out of accounting. Legacy v1 envelopes
+retain their original exact binary-byte definition. Deletion moves the removed
+payload into history at the same logical size, so cleanup stays possible at or
+above quota; it does not free retained history. Unknown pre-delete ledgers stay
+fenced for reconciliation. This special retention credit is only used after the
+canonical delete refund in the same transaction, with an equality assertion
+against the removed payload size. See [Unified Timeline](docs/unified-timeline.md).
 
 Protected `attachment` Things extend that same canonical measure by their
 server-verified root `objectSizeBytes`. Pending, finalizing, ready, and deleting

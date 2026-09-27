@@ -68,6 +68,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: one local/API
+  event/link records, durable draft recovery, private relational event/link Things and transactional
+  ordinary Thing history. Shared History now previews restores and three-way
+  merges with explicit conflict choices and idempotent, version-fenced commits.
+  Named branches now use separate branch/Thing head records, durable local
+  commands, private exact-version reads, and transactional forward-only pushes.
+  Concurrent/deferred pushes preserve versions and show per-branch outcomes.
+  IndexedDB upgrades pending work to atomic relationship records; server ancestry
+  uses exact parent links and existing shared indexes. Lopu preserves missing/dirty page context instead of treating it as an empty
+  page. Disposable replica-set and browser evidence, limits and outstanding
+  delivery gates: [implementation contract](../docs/unified-timeline.md).
+
 - 2026-09-27: Fix Mac Lopu voice input reporting `Microphone unavailable (network)`
   by routing standard desktop transcription through a signed Apple Speech helper.
   Preserve the existing chat/model flow, stop capture at lifecycle boundaries,
