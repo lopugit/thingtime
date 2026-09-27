@@ -495,31 +495,53 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           # Keep Graphify's generated knowledge graph out of the extraction
-          # corpus. The ordering barrier above removes the *contention* between
-          # the two matrix legs, but it cannot shorten the slow leg itself, and
-          # the aggregate deadline is wall-clock from the PR event -- so once
-          # `javascript-typescript` alone exceeds the budget, holding the fast
-          # leg no longer helps. Measured on #832 @ `1fb48424`: `Analyze` took
-          # 9m19s and the aggregate check closed `timed_out` 3 seconds past the
-          # 600s budget, with both SARIFs otherwise clean.
+          # corpus. This is a small, safe saving and NOT the fix for the
+          # aggregate `CodeQL` check's `timed_out` failures. The numbers below
+          # are measured from the run logs so the next session aims its lever
+          # at the right thing rather than at repository bytes.
           #
-          # `graphify-out/` is the dominant extractable input and is entirely
-          # generated: 68.9 MB across 2135 tracked files, of which one
-          # `snapshots/v1/**/graph.json` is 61.3 MB. Repository-wide there is
-          # 75.3 MB of tracked JSON, so this one directory is ~91% of it. The
-          # JS/TS extractor parses `.json`, so that bulk is paid on every PR.
+          # Where the time actually goes. On #832 @ `1fb48424` the js-ts leg
+          # ran 10m14s: ~41s setup, 2m20s extraction (3045 files), 58s
+          # `database finalize`, and **6m05s running queries**, then 10s
+          # upload. Query evaluation, not extraction, is the dominant cost, so
+          # shrinking the corpus can only ever move the smaller half.
           #
-          # This costs no security coverage: the tree holds only json/md/html
-          # plus a marker file -- zero `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`
-          # files -- so no analyzable source is being excluded. AI_ALL.md
-          # ("graphify") defines the tracked snapshot trees as generated output.
+          # What actually triggered that overrun: `init` selected overlay mode
+          # (`overlay with caching`), then logged "Reverting overlay database
+          # mode to none because the PR diff ranges could not be computed"
+          # after the compare API answered "Sorry, this diff is taking too long
+          # to generate" for `develop...codex/thingtime-world-domination-todos-
+          # 20260916-2104`. Losing overlay forces a full extract plus a
+          # full-corpus query run. When overlay holds, the same leg extracts 73
+          # files and finishes in ~1m37s -- measured on this branch @
+          # `8bd9559c`, whose aggregate check went green 2m12s after run
+          # creation. The aggregate deadline is therefore won or lost on
+          # whether overlay survives, and the standing risk is that compare
+          # call on long-lived divergent branches.
           #
-          # Both tracked directories are named explicitly rather than with a
-          # single leading-`**` glob: the 61.3 MB `graph.json` lives in the
-          # ROOT `graphify-out/`, and whether a leading `**/` also matches zero
-          # path segments is exactly the ambiguity that would silently keep the
-          # largest file in the corpus. The trailing glob is future-proofing for
-          # a third directory and is additive only.
+          # What this exclusion is worth, precisely: `graphify-out` contributed
+          # 5 extracted files and 12.2s of extractor CPU on #832, 10.7s of it
+          # `remix/graphify-out/graph.html`. The 61.3 MB
+          # `snapshots/v1/**/graph.json` was never extracted at all -- the
+          # JS/TS extractor does not blanket-parse `.json`, only names it
+          # recognizes (`package.json`, `tsconfig.json`, `.eslintrc.json`,
+          # `manifest.json`), which is why just 33 of ~2234 tracked JSON files
+          # were extracted. Worth keeping; not worth overselling.
+          #
+          # No security coverage is lost: these trees hold json/md/html plus a
+          # marker file, with zero `.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs` at
+          # any head checked, and AI_ALL.md ("graphify") defines the tracked
+          # snapshot trees as generated output. `remix/graphify-out` is absent
+          # on `github-actions` -- CodeQL logs a harmless "Skipping path ...,
+          # which does not exist" -- but present on develop-based heads, so all
+          # three entries stay. Both real directories are named explicitly
+          # rather than relying on one leading-`**` glob matching zero path
+          # segments; the trailing glob is additive future-proofing.
+          #
+          # If extraction ever does need trimming, the real hot spots are the
+          # `docs/design/*/ds/{react,thingtime-bundle}.js` bundles at ~4s each
+          # across a dozen directories -- but those are genuine JS and
+          # excluding them would cost real coverage.
           config: |
             paths-ignore:
               - graphify-out
