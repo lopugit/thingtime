@@ -121,6 +121,18 @@
   its exact version after the event cache has been evicted. Push a descendant;
   published content stays unchanged. Attach another Thing through the API and
   verify each membership has an independent head and shares branch metadata.
+- [ ] Select a version and use **Merge selected version…** on a named branch.
+  Review independent changes and explicit overlap choices on desktop and mobile.
+  Opening, cancelling and reopening the review must not reuse an aborted request.
+  Lose connectivity after review: save locally, reload, then retry sync. There is
+  one merged event and one branch advance, and the published Thing is unchanged.
+  Race a newer branch head after preview; the refused push retains the merged
+  version. A full command queue must preserve the already-captured event and
+  offer a retry without changing its identity. Switching the selected row must
+  not change the concrete version named in an existing review.
+- [ ] Restore/merge a compact draft whose ancestry includes a folder move.
+  It inherits the historical folder and latest draft content, not the live Thing
+  or the older full snapshot's folder. Missing or ambiguous ancestry refuses.
 - [ ] Queue a branch while another edit upload is in flight. Its selected
   local version must upload first; deferred work must say waiting to sync.
   Lose a push response and retry with the same identity. Race two pushes:

@@ -64,6 +64,12 @@ assert.equal((await call('/api/v1/things', { id: child.id, crystal: { value: 'At
 assert.equal((await call('/api/v1/things', { id: child.id, folderId: destination.id }, 'PATCH')).data.ok, true);
 const placement = (await history(child.id))[0].event;
 assert.equal(placement.after.adapter, 'folder-placement');
+const draftAfterMove = { ...placement, id: randomUUID(), operationId: randomUUID(), source: 'client', clientId: 'folder-draft-integration', mode: 'draft', branchId: 'draft-after-move', parentIds: [placement.id], occurredAt: new Date().toISOString(), label: 'Draft after folder move', before: placement.after, after: { adapter: 'definition-source', version: 1, value: { source: JSON.stringify({ name: 'Moved draft', value: 'Draft content' }) } }, dependencies: [] };
+assert.equal((await version(draftAfterMove)).data.ok, true);
+const draftPreview = await version({ command: 'preview-version', mode: 'restore', eventId: draftAfterMove.id });
+assert.equal(draftPreview.data.ok, true, draftPreview.data.error);
+assert.equal(draftPreview.data.preview.result.value.crystal.value, 'Draft content');
+assert.equal(draftPreview.data.preview.result.value.folderId, destination.id, 'Draft reconstruction must retain its intervening folder move');
 assert.equal((await call('/api/v1/things', { id: child.id, crystal: { value: 'Later edit' } }, 'PATCH')).data.ok, true);
 const preview = await version({ command: 'preview-version', mode: 'restore', eventId: placement.id });
 assert.equal(preview.data.ok, true, preview.data.error);
@@ -83,6 +89,8 @@ const theme = await call('/api/v1/themes', { name: 'Private placement theme', th
 assert.equal(theme.data.ok, true, theme.data.error);
 const themeId = theme.data.theme.id;
 assert.ok(themeId);
+const themeCreateHistory = await history(themeId);
+assert.equal(themeCreateHistory[0].event.after.adapter, 'theme-content');
 const managedFolder = await create('folder');
 const managedMove = await call('/api/v1/things/bulk', { op: 'move', ids: [themeId], folderId: managedFolder.id });
 assert.equal(managedMove.data.succeeded, 1, JSON.stringify(managedMove.data));
@@ -92,7 +100,7 @@ assert.deepEqual(managedEvent.before.value, { folderId: null });
 assert.deepEqual(managedEvent.after.value, { folderId: managedFolder.id });
 await remove(managedFolder.id);
 assert.equal((await read(themeId)).folderId, null);
-assert.equal((await history(themeId)).length, 2);
+assert.equal((await history(themeId)).length, themeCreateHistory.length + 2);
 assert.equal((await version({ command: 'preview-version', mode: 'restore', eventId: managedEvent.id })).response.status, 404);
 
 let committedCreates = 0, refusedCreates = 0;

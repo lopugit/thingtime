@@ -22,7 +22,13 @@ In per-Thing History, **Branches** creates a named alternative from the selected
 version, pulls branch updates, and pushes another selected version. Each
 branch/Thing head is its own document. Pending commands survive reload and retry
 with the original identity; a conflicting push preserves both versions.
-Direct branch editing and merging into a named branch remain in progress.
+**Merge selected version…** compares with a named branch, asks you to choose
+any overlapping fields, then saves the reviewed two-parent version locally and
+queues its branch push. A stale push keeps that version in History. Published
+content stays unchanged; direct branch checkout/editing remains in progress.
+Named-branch comparison requires `api.timeline` 1.7.0 and a connection. Once
+reviewed, the local event and push survive reload/offline in the same existing
+stores, with no schema migration or additional setup.
 
 Forks need the existing transaction-capable Mongo replica set and completed
 storage-accounting migrations. Timeline uses the normal `getThingsCollection()`
@@ -58,7 +64,11 @@ also checks atomic theme-save refusal and retained deletion at the ceiling.
 `test:timeline:home-scope` creates a second database on that guarded replica and
 checks concurrent history isolation, exact versions, branches and home restore
 under a custom selection, matching live Thing ids and stale read/write refusal.
-Its private fixture file contains only synthetic local
+`test:timeline:branch-merge` uses the same guard for named-branch comparisons,
+canonical merged-event uploads, explicit conflicts, exact retries and stale-push
+retention. Set `TIMELINE_TEST_FIXTURE_PATH` to a private temporary file only when
+browser acceptance needs its synthetic login, and remove it afterward.
+The home-scope suite's private fixture file contains only synthetic local
 credentials; remove it after browser acceptance.
 
 History's **Open Thing in home** explicitly switches the selected database, then

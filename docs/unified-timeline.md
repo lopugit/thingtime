@@ -221,8 +221,9 @@ branch CRUD refusal and foreign-account refusal. The client suite covers
 concurrent IndexedDB tabs, reload, cache eviction, stale acknowledgments,
 uncertain replies, rejected-command resolution and in-flight event ordering.
 Per-Thing History exposes named alternatives through **Branches**, with pull,
-view, and push controls. Branch checkout/edit mode, named-branch merge targets,
-and historical dependency rendering are still required.
+view, and push controls. The named-branch merge increment below extends these
+controls. Branch checkout/edit mode and historical dependency rendering are
+still required.
 
 Browser checks created and pushed a named branch, reloaded it, retried and
 retained a refused backward push, then cancelled only that refused command and
@@ -521,3 +522,55 @@ reload, with working forms on desktop and a 390px viewport (375px content width,
 375px scroll width). Screenshots: [desktop login](../PRs/assets/timeline-signed-out-guard/login-desktop.png),
 [mobile login](../PRs/assets/timeline-signed-out-guard/login-mobile.png),
 [private History](../PRs/assets/timeline-signed-out-guard/history-desktop.png).
+
+
+## Named-branch merge review — 2026-09-28
+
+**Merge selected version…** compares the selected History version with one
+exact named branch head and their unique shared ancestor. Independent edits
+combine automatically; overlaps reuse the same field choices and comparison
+component as ordinary Thing restore/merge. The review names its target and
+selected version, remains bound to that account/database/head, and never
+publishes the live Thing. Cancel/reopen and development effect replay create a
+fresh request lifetime instead of reusing an aborted signal.
+
+`api.timeline` 1.7.0 adds only a read-only `preview-branch-merge` command. Applying
+uses existing schemas: first persist a canonical client draft `merge` event
+with two independent parent links, then persist an ordinary `advance-branch`
+command. Existing synchronization uploads the event first, retries immutable
+identities, and commits the branch compare-and-swap plus its effect receipt.
+Local and remote event, link, branch and head records are unchanged. No new
+collection, index, setting or IndexedDB migration is required.
+
+A failed local command enqueue leaves the captured version in History and
+allows retry with the same proposal. Offline/reload preserves both queued
+records. A lost server reply retries the same command; a stale branch revision
+refuses its push and keeps the merged event. The account's full history remains
+remote, with bounded local caching and the existing private Timeline folder.
+
+The shared materializer also fixes compact draft ancestry: a folder move before
+a definition/page draft must survive reconstruction. It loads only the latest
+replacement of each compact field plus the nearest full snapshot, in a bounded
+batch, rather than every obsolete draft payload. Missing, foreign, cyclic or
+ambiguous ancestry fails explicitly. The folder integration test now counts
+managed placement events in addition to the already-recorded theme creation.
+
+Validation includes canonical schema/link round trips, fenced comparison and
+conflict choices, IndexedDB reload/lost-reply/stale-push retention, response size
+limits, and real disposable replica-set HTTP integration. Browser acceptance
+reviewed a colour conflict, saved with Timeline requests blocked, reloaded the
+pending merge, reconnected and synced once. API readback found one merge and
+branch revision 2 while published colour/layout remained Original. Mobile at
+390px measured 375px client/scroll width; both conflict choices and the existing
+live restore review remained usable. Temporary network/viewport overrides were
+removed. These are local acceptance results until this increment is deployed.
+
+Still open: named-branch checkout/editing, exact historical dependency rendering,
+protected-family restore adapters, remaining mutation/outcome coverage, rich-text
+and unsaved Thing drafts, deleted-Thing recovery, large streamed version
+operations, retention/cache controls and the broader acceptance ledger above.
+
+
+Screenshots: [desktop conflict review](../PRs/assets/timeline-branch-merge/conflict-desktop.png),
+[mobile conflict review](../PRs/assets/timeline-branch-merge/conflict-mobile.png),
+[pending merge after offline reload](../PRs/assets/timeline-branch-merge/offline-reload-mobile.png).
