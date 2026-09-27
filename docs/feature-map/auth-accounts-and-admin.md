@@ -64,3 +64,7 @@ Only `actions/internalActionRequest.ts` installs it, for canonical data routes;
 control-plane and reveal APIs are excluded. `test:lopu` includes host isolation,
 revocation and first-party-only permission-route tests. See
 [Lopu chat access](../lopu-action-access.md).
+
+## Lopu prompt settings
+
+`GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `promptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` bounds inputs and composes enabled preferences. Revision comparisons reject stale writes. `LopuPromptSettings.tsx` serves Settings → Lopu and Settings → Admin; account-keyed mounting and private in-memory caching prevent cross-account drafts. Prompt text never grants server tool authority. Routes, concurrent save conflicts, disabled entries and private response handling are covered by `test:lopu` and `test:settings`.

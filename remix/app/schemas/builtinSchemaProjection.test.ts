@@ -18,6 +18,11 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
 // a new registry field should appear (except a reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
+  "timeline-snapshot-part": [],
+  "timeline-branch": ["name"],
+  "timeline-branch-head": [],
+  "timeline-link": [],
+  "timeline-event": ["name"],
   "lopu-background-task": [],
   "lopu-recording-settings": [],
   "lopu-recording-job": [],

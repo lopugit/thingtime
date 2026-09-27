@@ -9208,3 +9208,9 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
       Custom instructions cannot replace server permissions or Confirm cards.
 - [ ] Generate the Xcode project and build the iOS simulator target. Web and
       native direct voice require voice-session 1.2.0 and use its instructions.
+
+### PR #954 integration regressions
+
+- [ ] In Ask before running mode, saving a chat attachment and extending a Schema show a real Confirm card before writing. Full access permits the same tools; scheduled read-only work still refuses them.
+- [ ] Retry a private file save as the first request finishes: retain the completed independent file. Reject mismatched retry metadata without deleting that file; cleanup claims must not cross pending-to-ready finalization.
+- [ ] Verify all current registry kinds, including Timeline definitions, appear in the public Schema projection and pass the ordinary Schema validator.

@@ -10,7 +10,7 @@ type CopyDependencies = {
 	read: (viewer: AttachmentAccessViewer, id: unknown) => Promise<AttachmentResult<{ doc: AttachmentDoc }>>;
 	start: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ upload: Record<string, unknown> }>>;
 	complete: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ attachment: Record<string, unknown> }>>;
-	remove: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>>;
+	remove: (ownerId: string, input: unknown, options?: { pendingOnly: boolean }) => Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>>;
 	store: Pick<AttachmentStore, 'getOwned' | 'markPartsIssued' | 'insertLinkedReady'>;
 	readyDraftTtlMs: number;
 	getS3: () => AttachmentS3;
@@ -80,15 +80,15 @@ export const copyStoredAttachment = async (
 			await stillReadable();
 			return { ok: true, id: cleanupId, attachment: { ...crystal, id: cleanupId } };
 		}
-		cleanupId = requestId || deps.uuid();
-		const started = await deps.start(viewer.id, { requestId: cleanupId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose });
+		const copyRequestId = requestId || deps.uuid();
+		const started = await deps.start(viewer.id, { requestId: copyRequestId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose });
 		if (!started.ok) throw started;
 		if (typeof started.upload.id !== 'string') throw new Error('Copy upload is unavailable');
 		cleanupId = started.upload.id;
 		const destination = await deps.store.getOwned(viewer.id, cleanupId);
 		// The upload service checks the exact owner/request metadata before
 		// returning ready. A lost tool receipt can safely return that same file.
-		if (privateFileCopy && started.upload.state === 'ready' && destination?.ownerId === viewer.id &&
+		if (privateFileCopy && destination?.ownerId === viewer.id &&
 			destination.attachmentPurpose === 'file' && destination.attachmentState === 'ready' && !destination.targetId) {
 			cleanupId = undefined; // an existing durable file is never rollback data
 			await stillReadable();
@@ -119,13 +119,17 @@ export const copyStoredAttachment = async (
 		await stillReadable();
 		const completed = await deps.complete(viewer.id, { uploadId: cleanupId });
 		if (!completed.ok) throw completed;
-		await stillReadable();
+		// Finalization commits an independent owner-private file. Its source was
+		// authorized immediately before that boundary; later source deletion
+		// cannot revoke it or make a concurrent retry roll it back. Public drafts
+		// still recheck the source before exposing a shareable copy.
+		if (!privateFileCopy) await stillReadable();
 		return { ok: true, id: cleanupId, attachment: completed.attachment };
 	} catch {
 		abort.abort();
 		let cleanupPending = false;
 		if (cleanupId) {
-			try { const removed = await deps.remove(viewer.id, { id: cleanupId }); cleanupPending = !removed.ok || removed.deferred; }
+			try { const removed = await deps.remove(viewer.id, { id: cleanupId }, { pendingOnly: purpose === 'file' }); cleanupPending = !removed.ok || removed.deferred; }
 			catch { cleanupPending = true; }
 		}
 		// Do not surface S3 errors, keys, versions or arbitrary upstream prose.

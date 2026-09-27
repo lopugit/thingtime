@@ -55,14 +55,20 @@ async function main() {
   };
   await json('/api/v1/admin/lopu/credits', { userId: viewer.id, credits: 5, reason: 'Isolated local acceptance test' });
   const original = await upload('message');
-  const reply = await fetchApi('/api/v1/lopu/chats/reply', { requestId: randomUUID(), text: 'Describe this photo.', attachmentIds: [original.id], managementMode: 'local' });
+  const reply = await fetchApi('/api/v1/lopu/chats/reply', { requestId: randomUUID(), text: 'Describe this photo.', attachmentIds: [original.id], managementMode: 'local', accessMode: 'full' });
   assert.ok(reply.ok, await reply.clone().text());
   const events = (await reply.text()).trim().split('\n').map(line => JSON.parse(line));
   const chatId = events.find(event => event.type === 'meta')?.chatId;
   assert.ok(chatId, JSON.stringify(events));
   assert.ok(!events.some(event => event.type === 'error'), JSON.stringify(events));
   const { createLopuToolContext, runLopuTool } = await import('../app/api/utils/lopu/chatTools');
-  const context = createLopuToolContext(viewer, {}, () => {}, { chatId, requestScope: `file-acceptance-${randomUUID()}` });
+  const { getLopuChat } = await import('../app/api/utils/messenger/lopuChats');
+  const { lopuAccessMode } = await import('../app/api/utils/lopu/accessMode');
+  const context = createLopuToolContext(viewer, {}, () => {}, { chatId, requestScope: `file-acceptance-${randomUUID()}`, readAccessMode: async () => {
+    const current = await getLopuChat(viewer.id, chatId);
+    assert.ok(current.ok, 'Acceptance chat must remain available while tools run');
+    return lopuAccessMode(current.settings.accessMode);
+  } });
   const tool = async (name: any, input: any): Promise<any> => {
     const result = await runLopuTool({ id: randomUUID(), name, input }, context);
     if (result.ok === false) throw new Error(`${name}: ${result.error} ${JSON.stringify(result.data || {})}`); return result.data;
@@ -78,8 +84,8 @@ async function main() {
   const product = await tool('create_data', { schema: schemaId, values: { type: 'text', title: 'Photo product', text: 'A product with a saved chat photo.', images: [saved.url], brand: 'Local test' } });
   const created = await json(`/api/v1/things?id=${product.thing.id}`);
   assert.equal(created.thing.crystal.schemaId, schemaId); assert.equal(created.thing.crystal.images[0], saved.url);
-  await json('/api/v1/lopu/chats/delete', { chatId });
-  const originalGone = await fetchApi(`/api/v1/attachments/content?id=${original.id}`); assert.ok(!originalGone.ok);
+
+
   const file = await fetchApi(saved.url); assert.ok(file.ok);
   assert.deepEqual(Buffer.from(await file.arrayBuffer()), bytes);
   const anon = await fetch(new URL(saved.url, base)); assert.ok(!anon.ok);
@@ -88,6 +94,10 @@ async function main() {
   const actionId = action.thing.id;
   const component = await tool('create_component', { name: 'Photo upload acceptance', componentKey: `photo-upload-${Date.now()}`, args: [], render: { tag: 'fieldset', props: { style: { padding: 24, display: 'flex', flexDirection: 'column', gap: 16 } }, children: [{ tag: 'h2', children: ['Upload a product photo'] }, { tag: 'tt-upload', props: { name: 'photo', imageOnly: true, title: 'Product photo' } }, { tag: 'button', ttAction: actionId, children: ['Save product'] }] } });
   const page = await tool('create_page', { name: 'Schema and file acceptance', blocks: [{ id: 'photo-form', type: 'component', component: component.thing.id }], open: false });
+  await json('/api/v1/lopu/chats/delete', { chatId });
+  const originalGone = await fetchApi(`/api/v1/attachments/content?id=${original.id}`); assert.ok(!originalGone.ok);
+  const survivingFile = await fetchApi(saved.url); assert.ok(survivingFile.ok);
+  assert.deepEqual(Buffer.from(await survivingFile.arrayBuffer()), bytes);
   const result = { schemaId, productId: product.thing.id, savedFileId: saved.id, componentId: component.thing.id, pageId: page.pageId, actionId };
   writeFileSync(fixturePath.replace(/\.json$/, '-acceptance.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));

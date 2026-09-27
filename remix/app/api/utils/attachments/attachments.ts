@@ -1203,7 +1203,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const remove = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>> => {
+	const remove = async (ownerId: string, input: unknown, options?: { pendingOnly: boolean }): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>> => {
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment deletion request');
 			const raw = input as Record<string, unknown>;
@@ -1214,6 +1214,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing) return { ok: true, deferred: false };
+			// Internal copy rollback may only discard unfinished uploads. The
+			// cleanup claim below CAS-fences the observed state, so a concurrent
+			// finalization cannot turn this retry into deletion of a durable file.
+			if (options?.pendingOnly && !['pending', 'deleting'].includes(existing.attachmentState)) return { ok: true, deferred: false };
 			// A client may miss a successful post-create response and then try to
 			// clean up its former draft ids. Once bound, only post cascade deletion
 			// may remove the object; this check makes that ambiguous success safe.

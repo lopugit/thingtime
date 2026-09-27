@@ -37,7 +37,8 @@ export const LopuPromptSettings = ({ userId, admin = false }: { userId?: string;
         : { ...result, personal: previous.personal });
       writeLocalCache(baseCacheKey, result.base);
       if (userId) personalCache.set(userId, result.personal);
-      if (!dirty.current) { setBasePrompt(result.base.basePrompt); setInstructions(result.personal.instructions); }
+      if (!admin || !dirty.current) setBasePrompt(result.base.basePrompt);
+      if (!dirty.current) setInstructions(result.personal.instructions);
       setLoaded(true);
       setError('');
     }).catch((cause: any) => {
