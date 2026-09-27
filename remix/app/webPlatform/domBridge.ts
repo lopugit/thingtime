@@ -1,3 +1,4 @@
+import { SVG_FILTER_TAGS, svgFilterValue, svgFilterNumbers } from './svgFilterSupport';
 /** Real DOM receivers for data programs. Only this module runs DOM operations
  * on the frame thread; authored JavaScript remains in the terminable worker.
  * Programs choose a detached document or their rendered surface. Surface
@@ -12,6 +13,7 @@ export type Arg =
 	| 'svg-matrix'
 	| 'svg-number'
 	| 'svg-text'
+	| 'svg-filter-image'
 	| 'svg-unit'
 	| 'svg-fragment'
 	| 'svg-point'
@@ -574,7 +576,15 @@ export function createPlatformDOMBridge(surface: Element) {
 				throw new Error('Surface tree mutation is not registered; use authored document nodes');
 			if (resolvedInterface === 'HTMLCanvasElement' && request.key === 'getContext' && context !== 'surface')
 				throw new Error('Canvas drawing requires the active surface context');
-			if (belongs(target, 'SVGAnimatedString') && valueKeys.get(target) === 'className') writeRule = 'svg-text';
+			if (belongs(target, 'SVGAnimatedString')) {
+				const owner = owners.get(target),
+					property = valueKeys.get(target);
+				if (
+					property === 'className' ||
+					(owner && SVG_FILTER_TAGS.has(localName(owner)) && ['in1', 'in2', 'result', 'crossOrigin', 'href'].includes(property || ''))
+				)
+					writeRule = property === 'href' && owner && localName(owner) === 'feImage' ? 'svg-filter-image' : 'svg-text';
+			}
 			const rules = policy?.args || (request.action === 'set' ? [writeRule] : []);
 			let args: unknown[] | undefined;
 			if (policy?.overloads) {
@@ -595,6 +605,27 @@ export function createPlatformDOMBridge(surface: Element) {
 			}
 
 			const svgOwner = owners.get(target);
+			const filterOwner = belongs(target, 'Node') ? (target as Node) : svgOwner;
+			if (
+				filterOwner &&
+				belongs(filterOwner, 'SVGElement') &&
+				SVG_FILTER_TAGS.has(localName(filterOwner)) &&
+				(request.action === 'set' || policy?.mutates)
+			) {
+				const property = valueKeys.get(target) || request.key;
+				if (request.action === 'set') svgFilterValue(localName(filterOwner), property, args[0]);
+				if (request.key === 'setStdDeviation') for (const value of args) svgFilterNumbers('stdDeviation', value);
+				if (belongs(target, 'SVGNumberList') && ['initialize', 'insertItemBefore', 'replaceItem', 'appendItem'].includes(request.key))
+					svgFilterNumbers(property, reader<number>('SVGNumber', 'value')(args[0] as object));
+				if (belongs(target, 'SVGLength')) {
+					if (['newValueSpecifiedUnits', 'convertToSpecifiedUnits'].includes(request.key) && ![1, 5].includes(Number(args[0])))
+						throw new Error('Use user units for filter region writes');
+					if (request.key === 'valueInSpecifiedUnits' && ![1, 5].includes(reader<number>('SVGLength', 'unitType')(target)))
+						throw new Error('Use user units for filter region writes');
+					if (request.key === 'valueAsString') svgFilterNumbers(property, String(args[0]).replace(/px$/, ''));
+					if (request.key === 'newValueSpecifiedUnits') svgFilterNumbers(property, args[1]);
+				}
+			}
 			if (
 				belongs(target, 'SVGLength') &&
 				svgOwner &&

@@ -56,7 +56,7 @@ const listItemTypes: Record<string, string> = {
 	SVGTransformList: 'SVGTransform',
 	SVGStringList: 'DOMString'
 };
-function describe(value: unknown, type: string): unknown {
+export function describeSVGValue(value: unknown, type: string): unknown {
 	if (type.startsWith('SVGAnimated') && type !== 'SVGAnimatedPoints') {
 		const suffix = type.slice('SVGAnimated'.length);
 		const inner =
@@ -66,7 +66,7 @@ function describe(value: unknown, type: string): unknown {
 					string
 				>
 			)[suffix] || 'SVG' + suffix;
-		return object({ base: describe(domGet(value, 'baseVal'), inner), animated: describe(domGet(value, 'animVal'), inner) });
+		return object({ base: describeSVGValue(domGet(value, 'baseVal'), inner), animated: describeSVGValue(domGet(value, 'animVal'), inner) });
 	}
 	const fields: Record<string, string> = {
 		SVGNumber: 'value',
@@ -82,14 +82,14 @@ function describe(value: unknown, type: string): unknown {
 	};
 	if (fields[type]) return projection(value, fields[type]);
 	if (type === 'SVGTransform')
-		return object({ type: domGet(value, 'type'), angle: domGet(value, 'angle'), matrix: describe(domGet(value, 'matrix'), 'SVGMatrix') });
+		return object({ type: domGet(value, 'type'), angle: domGet(value, 'angle'), matrix: describeSVGValue(domGet(value, 'matrix'), 'SVGMatrix') });
 	if (listItemTypes[type])
 		return object({
 			length: domGet(value, 'numberOfItems'),
 			first: {
 				op: 'conditional',
 				test: domGet(value, 'numberOfItems'),
-				then: describe(domCall(value, 'getItem', [0]), listItemTypes[type]),
+				then: describeSVGValue(domCall(value, 'getItem', [0]), listItemTypes[type]),
 				else: null
 			}
 		});
@@ -504,8 +504,8 @@ export function svgRecipe(f: Feature): Recipe | null {
 				else: 'This browser ignores one or more selected bounding-box options; the native measurements are shown unchanged.'
 			},
 			optionSupport: v('support'),
-			baseline: describe(v('baseline'), 'SVGRect'),
-			probes: object(Object.fromEntries(Object.keys(defaults).map((k) => [k, describe(v(k + 'Probe'), 'SVGRect')])))
+			baseline: describeSVGValue(v('baseline'), 'SVGRect'),
+			probes: object(Object.fromEntries(Object.keys(defaults).map((k) => [k, describeSVGValue(v(k + 'Probe'), 'SVGRect')])))
 		};
 	}
 	// Text never overlaps the shapes; it also gives non-rendered definitions an
@@ -542,8 +542,8 @@ export function svgRecipe(f: Feature): Recipe | null {
 					object({
 						feature: f.name,
 						...dictionaryOutput,
-						value: { op: 'conditional', test: result, then: describe(result, returnType), else: result },
-						bounds: describe(call('getBBox', [], root), 'SVGRect')
+						value: { op: 'conditional', test: result, then: describeSVGValue(result, returnType), else: result },
+						bounds: describeSVGValue(call('getBBox', [], root), 'SVGRect')
 					})
 				)
 			]

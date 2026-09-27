@@ -12746,8 +12746,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.24.0',
-    contractVersion: '1.24.0',
+    // 1.25.0 adds reusable SVG filter graphs and bounded native filter receivers.
+    featureVersion: '1.25.0',
+    contractVersion: '1.25.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
