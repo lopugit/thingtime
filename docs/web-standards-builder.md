@@ -599,7 +599,8 @@ Limits are 128 SVG nodes, 512px viewport edges, 32 list entries, 4,096 attribute
 characters and bounded numeric/unit inputs. Initial and live attribute writes
 and nested viewport length setters enforce their limits before native work.
 References stay local fragments; executable elements, external resources,
-foreignObject, use, animation and filter contexts remain unimplemented. Surface
+foreignObject, use and animation contexts remain unimplemented. Filter contexts
+are described below. Surface
 ownership and tree-mutation restrictions remain in force; CSP is unchanged.
 
 Bounding-box option programs compare native fill/stroke/marker/clip measurements
@@ -614,3 +615,30 @@ measurements, unit conversion, readonly values, transforms, constants, ownership
 allocation and resource bounds. All recipes preserve edited programs through the
 canonical catalogue, private Thing storage and authored save-draft Action. The
 additive contract is `api.actions-run` 1.24.0 in both manifests and the client map.
+
+## Reusable SVG filter programs
+
+192 additional entries (186 Filter Effects DOM entries and six animated Boolean/
+Integer entries) bring interactive coverage to 3,921/18,798. Blur, shadow, blend,
+compositing, colour matrices, channel transfer, convolution, lighting, displacement,
+morphology, offset, merge, tile, turbulence and local images are authored graphs.
+Each program shows original/filtered geometry and reads actual native values.
+Inputs, filter nodes and DOM steps remain editable Component data. Transfer
+function examples select the mode that uses their demonstrated value.
+
+The backing surface permits four filters and 32 filter nodes per run, explicit
+user-space filter/primitive units, region coordinates up to 512, blur up to 16,
+radius up to eight, four turbulence octaves, convolution order up to five and
+32 list entries. These are program-input limits, not a guarantee of exact browser
+GPU allocation. Relative/object-box filter units require a future bounded context.
+Both authored values and nested native setters enforce limits before work; PNG
+images must be embedded, at most 128px per edge and 24,000 URI characters, with
+only basic non-animated PNG chunks. No network or CSP permission is added.
+
+All 192 examples persist through the normal catalogue, Thing and authored Action
+paths. The additive contract is actions-run 1.25.0. Missing native members remain
+explicitly unsupported; tested Chromium lacks Gaussian edgeMode and its four
+constants, plus feImage.crossOrigin. That does not turn them into fake results.
+The [published Filter Effects Level 1](https://www.w3.org/TR/filter-effects-1/)
+is a Working Draft dated 18 December 2018; the inventory retains its source status.
+These examples do not imply complete Web API coverage or Recommendation status.

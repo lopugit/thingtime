@@ -1,3 +1,4 @@
+import { SVG_FILTER_TAGS, svgFilterAttribute, svgFilterImage } from './svgFilterSupport';
 import { canvasArgument } from './canvasSupport';
 /** SVG authoring and argument boundaries, shared by every program. */
 export const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -8,16 +9,18 @@ export const SVG_TAGS = new Set(
 );
 export const SVG_LIMITS = { nodes: 128, list: 32, text: 4096, edge: 512 } as const;
 const svgAttributes = new Set(
-	'id class role tabindex aria-label aria-labelledby aria-describedby width height x y x1 y1 x2 y2 cx cy r rx ry dx dy d points pathLength transform viewBox preserveAspectRatio fill fill-rule fill-opacity stroke stroke-width stroke-linecap stroke-linejoin stroke-dasharray stroke-dashoffset stroke-opacity opacity color display visibility font-family font-size font-weight text-anchor dominant-baseline textLength lengthAdjust rotate gradientUnits gradientTransform spreadMethod offset stop-color stop-opacity fx fy fr patternUnits patternContentUnits patternTransform clipPathUnits clip-path maskUnits maskContentUnits mask markerUnits markerWidth markerHeight refX refY orient marker-start marker-mid marker-end requiredExtensions systemLanguage href'.split(
+	'filter id class role tabindex aria-label aria-labelledby aria-describedby width height x y x1 y1 x2 y2 cx cy r rx ry dx dy d points pathLength transform viewBox preserveAspectRatio fill fill-rule fill-opacity stroke stroke-width stroke-linecap stroke-linejoin stroke-dasharray stroke-dashoffset stroke-opacity opacity color display visibility font-family font-size font-weight text-anchor dominant-baseline textLength lengthAdjust rotate gradientUnits gradientTransform spreadMethod offset stop-color stop-opacity fx fy fr patternUnits patternContentUnits patternTransform clipPathUnits clip-path maskUnits maskContentUnits mask markerUnits markerWidth markerHeight refX refY orient marker-start marker-mid marker-end requiredExtensions systemLanguage href'.split(
 		' '
 	)
 );
 export function svgTag(value: unknown): string {
-	if (typeof value !== 'string' || !SVG_TAGS.has(value)) throw new Error('Unregistered SVG element');
+	if (typeof value !== 'string' || (!SVG_TAGS.has(value) && !SVG_FILTER_TAGS.has(value))) throw new Error('Unregistered SVG element');
 	return value;
 }
 export function svgAttribute(tag: string, key: string, value: string, reflected = false): string {
+	if (svgFilterAttribute(tag, key, value)) return value;
 	if (!svgAttributes.has(key) || value.length > SVG_LIMITS.text) throw new Error('Unregistered or oversized SVG attribute');
+	if (key === 'filter' && !/^(?:none|url\(#[A-Za-z][\w-]{0,80}\))$/.test(value)) throw new Error('SVG filters require a local fragment');
 	if (key === 'href' && !/^#[A-Za-z][\w-]{0,80}$/.test(value)) throw new Error('SVG references must be local fragments');
 	if (/url\s*\(/i.test(value) && !/^url\(#[A-Za-z][\w-]{0,80}\)$/.test(value)) throw new Error('SVG paint references must be local fragments');
 	if (!reflected && tag === 'svg' && ['width', 'height'].includes(key)) {
@@ -49,6 +52,10 @@ export function svgArgument(value: unknown, rule: string, handle: (value: unknow
 			? handle(value, 'SVGMatrix|DOMMatrix')
 			: canvasArgument(value, 'canvas-matrix', handle);
 	if (rule === 'svg-number') return scalar(value);
+	if (rule === 'svg-filter-image') {
+		if (typeof value !== 'string') throw new Error('Expected local image bytes');
+		return svgFilterImage(value);
+	}
 	if (rule === 'svg-text') {
 		if (typeof value !== 'string' || value.length > 256) throw new Error('Expected bounded SVG text');
 		return value;

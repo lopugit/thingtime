@@ -1,3 +1,4 @@
+import { SVG_FILTER_TAGS, SVG_FILTER_LIMITS } from './svgFilterSupport';
 import { compilePlatformProgram, validatePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
 import { runPlatformWorker } from './workerLifecycle';
@@ -43,7 +44,9 @@ addEventListener('message', (event) => {
 		let nodes = 0;
 		let mediaNodes = 0;
 		let canvasNodes = 0;
-		let svgNodes = 0;
+		let svgNodes = 0,
+			filterNodes = 0,
+			filters = 0;
 		const substitute = (value: unknown) =>
 			typeof value === 'string'
 				? value.replace(/\[\[([A-Za-z_][A-Za-z0-9_]*)\]\]/g, (_, name) =>
@@ -59,6 +62,8 @@ addEventListener('message', (event) => {
 			const svg = inheritedSVG || node.namespace === 'svg' || node.tag === 'svg';
 			if (svg) {
 				svgTag(node.tag);
+				if (SVG_FILTER_TAGS.has(node.tag) && ++filterNodes > SVG_FILTER_LIMITS.nodes) throw new Error('SVG filter node budget exceeded');
+				if (node.tag === 'filter' && ++filters > SVG_FILTER_LIMITS.filters) throw new Error('SVG filter count budget exceeded');
 				if (++svgNodes > SVG_LIMITS.nodes) throw new Error('Document exceeds its SVG budget');
 			} else if (!/^[a-z][a-z0-9-]{0,40}$/.test(node.tag) || blocked.has(node.tag))
 				throw new Error('This document element needs a dedicated browsing context');
@@ -76,9 +81,18 @@ addEventListener('message', (event) => {
 					});
 				if (['src', 'href', 'poster', 'data'].includes(key.toLowerCase()) && !localPlatformResource(val, node.tag, key.toLowerCase()))
 					throw new Error('Use local demo resources');
-				if (value === false) continue;
-				el.setAttribute(key, value === true ? '' : val);
+				if (value === false && !svg) continue;
+				el.setAttribute(key, !svg && value === true ? '' : val);
 			}
+			if (
+				svg &&
+				node.tag === 'filter' &&
+				(el.getAttribute('filterUnits') !== 'userSpaceOnUse' ||
+					el.getAttribute('primitiveUnits') !== 'userSpaceOnUse' ||
+					!el.hasAttribute('width') ||
+					!el.hasAttribute('height'))
+			)
+				throw new Error('Filters require explicit bounded user-space regions');
 			for (const child of node.children || []) appendNode.call(el, render(child, depth + 1, svg));
 			return el;
 		};

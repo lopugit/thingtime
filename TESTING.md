@@ -8875,3 +8875,21 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   retained completed drawings, Stop cleanup and fresh repeated Run.
 - Verify exact preview/main deployment source, runtime hash, unchanged restrictive
   CSP and both actions-run 1.24.0 manifests before production @lopu save/reload.
+
+### SVG filter programs (2026-09-27)
+
+- Run every filter recipe and svgFilterBoundaryFixtures through the opaque runtime.
+  Compare original/filtered output for each primitive, including PNG image/tiling,
+  alpha transfer, convolution, lighting and turbulence. Native paired blur,
+  Boolean, integer, string, region and list mutations must return real values.
+  Literal SVG Boolean attributes serialize true/false, unlike HTML presence flags.
+- Refuse excessive blur, radius, octaves, convolution order/list values, regions,
+  filter/node counts, relative unit mutation and external/non-PNG image data.
+  Detached native number insertion cannot bypass its destination filter limit.
+- Run existing SVG/Canvas/DOM/form fixtures. Filter ownership checks must not call
+  Element accessors on Document, text or other non-element receivers.
+- Edit colour and X/Y blur, save a private Component through the authored Action,
+  reopen/reload/run and verify persisted defaults plus native output. Anonymous
+  reads return 404. Check desktop/390px, retained drawing, Stop and fresh Run.
+- Verify preview/main deployment source, runtime digest, unchanged restrictive CSP
+  and both actions-run 1.25.0 manifests. Missing browser members report unsupported.
