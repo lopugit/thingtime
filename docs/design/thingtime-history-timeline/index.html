@@ -666,7 +666,10 @@
     if (anyOn(f.verb) && !f.verb[ev.verb]) return false;
     if (anyOn(f.sync) && !f.sync[ev.sync]) return false;
     if (state.q){
-      var hay=(ev.title+' '+thingTitleAt(ev)+' '+(ev.msg?ev.msg.text:'')+' '+ev.changes.map(function(c){return c.k+' '+c.b+' '+c.a;}).join(' ')).toLowerCase();
+      // An added property has no before and a removed one has no after; keep
+      // those out of the haystack so searching "null" cannot match them.
+      var term=function(x){ return x==null?'':x; };
+      var hay=(ev.title+' '+thingTitleAt(ev)+' '+(ev.msg?ev.msg.text:'')+' '+ev.changes.map(function(c){return c.k+' '+term(c.b)+' '+term(c.a);}).join(' ')).toLowerCase();
       if (hay.indexOf(state.q.toLowerCase())<0) return false;
     }
     return true;
