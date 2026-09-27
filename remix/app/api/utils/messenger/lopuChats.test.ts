@@ -372,3 +372,17 @@ test('chat access defaults to Ask, validates changes and preserves Full access a
   assert.equal(edited.ok && edited.settings.accessMode, 'full');
   assert.equal(normalizeLopuChatSettings({ accessMode: true }).ok, false);
 });
+
+test('private read locators are bounded and expired independently of public receipts', async () => {
+ const { Binary } = await import('mongodb');
+ const { decodeLopuReadReferences } = await import('./lopuChats');
+ const ref = { id: 'planner', path: '/render', offset: 4000, revision: 'a'.repeat(64) };
+ const secure = new Binary(Buffer.from(JSON.stringify({ lopuReadReferences: [{ ...ref, token: 'discard', result: 'never-persist' }] })));
+ const now = Date.now();
+ assert.deepEqual(decodeLopuReadReferences({ secure, createdAt: new Date(now) }, now), [ref]);
+ assert.deepEqual(decodeLopuReadReferences({ secure, createdAt: new Date(now - 86_400_001) }, now), []);
+ assert.deepEqual(decodeLopuReadReferences({ secure, createdAt: 'bad' }, now), []);
+ assert.deepEqual(decodeLopuReadReferences({ secure: new Binary(Buffer.alloc(20_001)), createdAt: new Date(now) }, now), []);
+ assert.deepEqual(decodeLopuReadReferences({ secure: new Binary(Buffer.from('invalid')), createdAt: new Date(now) }, now), []);
+ assert.equal((publicLopuMessageMeta({ role: 'assistant', readReferences: [ref] }) as any).readReferences, undefined);
+});
