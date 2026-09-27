@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Added 192 reusable SVG filter programs with visible
+  original/filtered drawings, typed native values and private Component saving.
+  Shared filter/PNG budgets preserve the existing isolated runtime; literal SVG
+  booleans and non-element DOM ownership stay correct. Actions-run is 1.25.0.
+  Validation and deployment: [PR #939](../PRs/939-codex-web-standards-svg-filters-add-reusable-svg-filter-programs.md).
+
 - 2026-09-27 — **Codex (AI)**: Added 311 reusable SVG programs with native geometry,
   units, text, transforms, typed lists and primitive IDL constants. Namespaced
   documents and surface receivers keep bounded local resources; native probes
