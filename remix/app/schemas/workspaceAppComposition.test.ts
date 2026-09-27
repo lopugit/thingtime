@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { validateRunInputs } from '../api/utils/actions/actionInputs';
+import { SERVICE_FIELDS, SERVICE_KINDS, validateServiceValues } from './serviceWorkspace';
 import { workspaceAppComposition } from './workspaceAppComposition';
 import { validateThingtimeCrystal } from './registry';
 import { executeBrowserAction, type BrowserActionHost } from '../components/Actions/browserActionRuntime';
@@ -534,4 +536,36 @@ test('planner reorder calculates insertion positions and preserves the displayed
 		/Refresh the planner/
 	);
 	assert.equal(requests.filter((step) => step.method === 'POST').length, 0);
+});
+
+
+test('workspace Actions expose canonical choices, number bounds and references before execution', () => {
+  for (const kind of SERVICE_KINDS) {
+    const raw = app.definitions.find(d => d.crystal.actionKey === `qa-builder-save-${kind}`)!;
+    const saved = validateThingtimeCrystal(['action'], raw.crystal);
+    assert.equal(saved.ok, true);
+    if (!saved.ok) continue;
+    const descriptors = saved.crystal.inputs as any[];
+    for (const field of SERVICE_FIELDS[kind]) {
+      const input = descriptors.find(input => input.name === field.key);
+      assert.equal(input.required === true, field.required === true);
+      if (field.options) assert.deepEqual(input.values, field.options);
+      if (field.type === 'number') {
+        assert.equal(input.type, 'number');
+        assert.equal(input.min, field.min ?? 0);
+        assert.equal(input.max, field.max ?? 100000);
+      }
+      if (field.ref) assert.match(input.description, new RegExp(`visible ${field.ref} record`));
+    }
+  }
+  const equipment = app.definitions.find(d => d.crystal.actionKey === 'qa-builder-save-equipment')!.crystal.inputs;
+  const base = { rootId: app.rootId, id: 'stable-id', title: 'Battery', serialNumber: '000123' };
+  const bad = validateRunInputs(equipment, { ...base, category: 'battery' });
+  assert.equal(bad.ok, false);
+  const valid = validateRunInputs(equipment, { ...base, category: 'Battery' });
+  assert.equal(valid.ok, true);
+  if (valid.ok) assert.equal(validateServiceValues('equipment', valid.inputs).serialNumber, '000123');
+  const empty = validateRunInputs(equipment, { ...base, category: '' });
+  assert.equal(empty.ok, true, 'optional empty form controls still clear fields');
+  if (empty.ok) assert.equal(validateServiceValues('equipment', empty.inputs).category, '');
 });

@@ -7390,6 +7390,14 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] Action discovery: inspect an owned server/browser Action in Ask mode;
+      no confirmation or run is created. Check enum choices, required fields,
+      numeric bounds, reference hints and oversized JSON defaults. Candidate
+      validation makes no writes; invalid inputs must fail before an Ask card.
+      Corrected input still needs approval. Revoke readability and inspect again.
+      Failed multi-step runs retain their run ID and require state readback
+      before replay; inspection never promises downstream success.
+
 - [ ] Large Lopu reads: inspect a component with a deeply nested form, more
       than 60 children and long text. Default `get_thing` explains omissions;
       `path` + `offset` reads every JSON page exactly. Verify escaped pointer

@@ -1,5 +1,6 @@
 import type { LopuAccessMode } from './accessMode';
 import type { ResolveActionActor } from '../actions/firstPartyActionHost';
+import { validateRunInputs } from '../actions/actionInputs';
 import { parseLopuNetworkRequest } from './networkCore';
 // Lopu's tools: the JSON-schema definitions the providers advertise plus the
 // executors that run them AS THE VIEWER through the ordinary api/utils
@@ -91,6 +92,7 @@ export const LOPU_TOOL_NAMES = [
   'get_demo',
   'create_action',
   'run_action',
+  'inspect_action',
   'list_actions',
   'install_suite',
   'create_schema',
@@ -365,7 +367,12 @@ export const LOPU_TOOL_DEFINITIONS: readonly LopuToolDefinition[] = [
       properties: { action: { type: 'string' }, inputs: { type: 'object', additionalProperties: true } }
     }
   },
-  { name: 'list_actions', description: 'List the viewer’s own actions (id, actionKey, name, inputs).', inputSchema: { type: 'object', properties: {} } },
+  {
+    name: 'inspect_action',
+    description: 'Read a saved Action by exact id or your actionKey without running it or asking for confirmation. Returns runtime, effects and declared input types, required fields, choices and defaults. Optionally check candidate inputs against that contract; this does not check downstream API state or authorize execution. Use before an unfamiliar Action instead of guessing inputs or reading a whole page.',
+    inputSchema: { type: 'object', properties: { action: { type: 'string' }, inputs: { type: 'object', additionalProperties: true } }, required: ['action'] }
+  },
+  { name: 'list_actions', description: 'List the viewer’s own actions (id, actionKey, name, inputs). Use search_things with kinds ["action"] for a named Action, then inspect_action for its contract.', inputSchema: { type: 'object', properties: {} } },
   {
     name: 'install_suite',
     description: 'Install a behaviour suite / app bundle (schemas + components + actions + pages + sample data) into the viewer’s things by suite key. Idempotent.',
@@ -778,12 +785,13 @@ export const validateLopuToolInput = (name: string, raw: unknown): LopuToolValid
       if (!crystal) return fail('crystal must be an action object with at least name and steps');
       return { ok: true, input: { crystal } };
     }
+    case 'inspect_action':
     case 'run_action': {
       const action = requiredString(input.action, 'action', 128);
       if (isError(action)) return fail(action.error);
       const inputs = optionalObject(input.inputs, 'inputs');
       if (isError(inputs)) return fail(inputs.error);
-      return { ok: true, input: { action, inputs: inputs || {} } };
+      return { ok: true, input: { action, ...(name === 'inspect_action' && inputs === undefined ? {} : { inputs: inputs || {} }) } };
     }
     case 'list_actions':
       return { ok: true, input: {} };
@@ -1475,7 +1483,14 @@ const runRunAction = async (deps: ServerDeps, ctx: LopuToolContext, callId: stri
     result.status === 'ok'
       ? `Ran ${input.action} in ${result.durationMs}ms (${result.opsUsed} op(s))`
       : `Action ${input.action} failed: ${result.error || 'unknown error'}`;
-  if (result.status !== 'ok') return { ok: false, error: summary };
+  if (result.status !== 'ok') return {
+    ok: false, error: summary,
+    data: {
+      ...('runId' in result ? { runId: result.runId } : {}),
+      status: result.status, opsUsed: result.opsUsed,
+      recovery: 'Earlier steps may have completed. Inspect the affected records and this run before retrying. Preserve the original record/operation IDs; do not repeat the whole Action blindly.'
+    }
+  };
   return {
     ok: true,
     summary,
@@ -1497,6 +1512,28 @@ const runListActions = async (deps: ServerDeps, ctx: LopuToolContext): Promise<L
     };
   });
   return { ok: true, summary: `${actions.length} action(s)`, data: { actions } };
+};
+
+const runInspectAction = async (deps: ServerDeps, ctx: LopuToolContext, input: { action: string; inputs?: Record<string, unknown> }): Promise<LopuToolResult> => {
+  const program = await deps.actions.inspectActionProgram(ctx.viewer, input.action);
+  if (program.ok === false) return { ok: false, error: failText(program) };
+  const validation = input.inputs === undefined ? undefined : validateRunInputs(program.inputs, input.inputs);
+  // Keep ordinary contracts intact. Large JSON defaults/enum lists are read
+  // losslessly through get_thing; never present a shortened contract as complete.
+  const complete = jsonLength(program.inputs) <= 6000;
+  return {
+    ok: true,
+    summary: `${program.name}: ${program.runtime} Action, ${program.inputs.length} input(s)${validation ? validation.ok === false ? `; ${validation.error}` : '; candidate inputs match the declared types' : ''}`,
+    data: {
+      id: program.id, actionKey: program.actionKey, name: program.name, runtime: program.runtime,
+      effects: boundToolData(program.effects, 2000),
+      inputs: complete ? program.inputs : program.inputs.map(({ name, type, required }) => ({ name, type, required })),
+      inputsComplete: complete,
+      ...(!complete ? { inspection: { tool: 'get_thing', id: program.id, path: '/inputs', offset: 0, reason: 'Read the complete descriptors, choices and defaults before running.' } } : {}),
+      ...(validation ? { validation: validation.ok === false ? { ok: false, error: validation.error } : { ok: true } } : {}),
+      scope: 'Declared inputs and direct effects only. Child Actions and downstream APIs enforce their own contracts at execution. Inspection does not execute, authorize or guarantee a successful run.'
+    }
+  };
 };
 
 const runInstallSuite = async (deps: ServerDeps, ctx: LopuToolContext, input: { key: string }): Promise<LopuToolResult> => {
@@ -1623,6 +1660,8 @@ const executeLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Promis
       if (call.name === 'run_action') {
         const program = await (await loadServerDeps()).actions.inspectActionProgram(ctx.viewer, input.action);
         if (program.ok === false) return { ok: false, error: failText(program) };
+        const checked = validateRunInputs(program.inputs, input.inputs);
+        if (checked.ok === false) return { ok: false, error: checked.error };
         action = actionConfirmation(input, program);
       }
       action ??= { key: `${call.name}:${stableInputHash(input)}`, tool: call.name as LopuToolName,
@@ -1740,6 +1779,8 @@ const executeLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Promis
         return await runCreateAction(deps, ctx, call.id, input);
       case 'run_action':
         return await runRunAction(deps, ctx, call.id, input, authorized);
+      case 'inspect_action':
+        return await runInspectAction(deps, ctx, input);
       case 'list_actions':
         return await runListActions(deps, ctx);
       case 'install_suite':
