@@ -180,7 +180,7 @@ const explainPositiveAdmissionFailure = async (ownerId: string, deltaBytes: numb
     throw new StorageMutationError(
       507,
       'quota_exceeded',
-      `This would exceed the account storage allowance (${usedBytes} of ${allowanceBytes} bytes used — delete content or change tier)`
+      `This change needs more account storage (${usedBytes} of ${allowanceBytes} bytes used). Saved history also uses storage; deleting a Thing keeps its recorded history.`
     );
   }
   throw new StorageMutationError(503, 'accounting_unavailable', 'Account storage accounting is unavailable — try again');

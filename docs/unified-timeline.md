@@ -162,8 +162,16 @@ event metadata; v1 records keep their prior accounting definition. A deletion
 moves the exact logical payload bytes into history in the same transaction,
 including when the account is already over its allowance. Unknown ledgers stay
 fenced for reconciliation. Retention therefore does not free space merely by
-deleting the live Thing. Size equality and ordinary HTTP deletion are covered;
-an explicit live quota-ceiling/downgrade test remains in acceptance.
+deleting the live Thing. The opt-in `test:timeline:quota` now verifies exact
+ceiling behavior through the real API on the disposable replica: growth,
+retained shrinking edits and restore application refuse atomically, while reads,
+previews, folder moves, folder deletion drains and Thing deletion still work.
+Deleted content's exact bytes remain charged and retry adds no event or charge.
+The ordinary subscription API refuses an allowance below current usage with
+409; this test verifies that refusal without changing its guard. The storage
+error explains retained history instead of advising deletion as a way to free
+its bytes. Above-limit legacy-ledger acceptance and retention controls remain
+open; no direct database seed or production mutation was used for this proof.
 
 Relational regression coverage includes shared dependency versions, forked
 ancestry, missing/foreign/substituted links, IndexedDB upgrade and atomic cache
