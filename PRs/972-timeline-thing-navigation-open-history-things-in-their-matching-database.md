@@ -19,7 +19,9 @@ credential format changes. `api.mongodb-endpoint` 1.1.0 negotiates the optional
 `X-Thingtime-Expected-Data-Plane` precondition. It refuses malformed keys with
 400 or a changed selection with 409 before the handler. It checks the actual
 selected source before explicit-home/admin routing, never grants access or
-selects a source, and cannot use the fallback proxy. Endpoint reset/deletion
+selects a source. Ordinary source-fenced requests use the same fallback as root
+data, forwarding their selection/header for upstream enforcement. Existing
+actor-fenced and vault requests retain their local-origin requirement. Endpoint reset/deletion
 remain available for recovery.
 
 Shared fetcher mutations, Thing reads and Timeline discovery capture source
@@ -32,8 +34,12 @@ on custom Thing pages.
 
 - Full production build and Vercel output verification passed.
 - Full unit suite: 4,224 pass, 8 skip, 0 fail. After final discovery/cache and
-  copy/layout adjustments: 74 Timeline and 35 root-data tests passed.
+  copy/layout and fallback adjustments: 74 Timeline and 36 root-data tests passed.
 - Focused suites: 315 Things, 60 collection and 92 capability tests passed.
+- Fallback regression invokes the real dispatcher/proxy with a mocked upstream.
+  Root identity, selection, cookie and GET/PATCH preconditions reach the same
+  upstream; matching requests succeed and stale requests retain 409 responses.
+  Actor-fenced requests remain 503 without reading or forwarding their body.
 - Changed-source and integration-script ESLint: zero errors/warnings beyond
   the existing Remix-config deprecation notice.
 - Raw TypeScript: 91 existing diagnostics, none in changed/new modules.

@@ -24,6 +24,11 @@
   explicit-home Timeline requests. Endpoint changes invalidate root identity
   across tabs; deleting a saved endpoint does too, while merely saving one does
   not. API clients omitting the optional precondition retain their old behavior.
+- [ ] In fallback mode, root identity and ordinary Thing reads/writes use the
+  same upstream with the database precondition, cookie and selection intact.
+  Matching requests work and stale ones retain the upstream 409 refusal.
+  Actor-fenced commands and vault verification still refuse fallback before
+  reading their bodies. Run `test:root-data` for the dispatcher/proxy regression.
 - [ ] Create a saved theme, rename/move it in Things, then edit tokens and
   visibility through its dedicated theme API. Shared History preserves every
   exact parent and approved before/after token value; identical saves add no

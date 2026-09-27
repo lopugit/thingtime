@@ -479,7 +479,9 @@ before awaiting capability discovery. The dispatcher refuses a stale source
 before reading or writing a same-id Thing. Explicit home Timeline routing still
 checks the browser's selected source first. Endpoint reset remains available
 for recovery. Legacy clients can omit the header; it grants no authorization
-and never changes routing. Scoped requests cannot use the fallback proxy.
+and never changes routing. Ordinary source-fenced requests use the same fallback
+as root identity, preserving the selection and header for upstream enforcement.
+The existing actor-fenced and vault fallback refusals remain in place.
 
 The two-database HTTP suite now creates matching live Thing ids, verifies stale
 GET/PATCH/DELETE refusal and unchanged history, and confirms accepted edits stay
@@ -490,7 +492,10 @@ content/history stayed unchanged. Desktop and 390px views had no horizontal
 overflow. The test's network/viewport overrides were removed and home restored.
 
 Validation: complete production build; 4,224 passing unit tests (8 skips);
-final 74 Timeline and 35 root-data tests; 315 Things, 60 collection and 92
+final 74 Timeline and 36 root-data tests; 315 Things, 60 collection and 92
 capability tests; changed-source and integration-script lint with zero errors.
 Raw typecheck still reports 91 existing diagnostics, none in changed/new
-modules. The complete universal-history and version-control ledger remains open.
+modules. The root-data suite also exercises the real dispatcher/proxy with a
+mocked upstream: forwarded root identity, cookies, selection, GET/PATCH bodies,
+matching success, stale-source refusal and unchanged actor/vault restrictions.
+The complete universal-history and version-control ledger remains open.

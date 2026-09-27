@@ -68,9 +68,12 @@ same-id content. `api.mongodb-endpoint` 1.1.0 exposes the public `dataPlane` key
 in root data and supports `X-Thingtime-Expected-Data-Plane` as an optional request
 precondition. It refuses stale selections with 409 and invalid keys with 400;
 it never selects a database or grants access. Updated clients negotiate this
-capability before scoped reads/writes. Such requests require this origin's
-configured account environment and do not proxy to a fallback origin. No new
-secret or environment variable is required; use the existing MongoDB setup.
+capability before scoped reads/writes. When this deployment uses its configured
+API fallback, root identity and ordinary source-fenced requests use that same
+fallback; the selection and precondition are forwarded for upstream enforcement.
+Existing actor-fenced commands and vault verification retain their local-origin
+requirements. No new secret or environment variable is required; use the
+existing MongoDB or fallback setup.
 
 For quota acceptance, use that same disposable replica and a dedicated local
 dev-server process. Run the following once with a new private fixture path:

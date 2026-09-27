@@ -6,7 +6,6 @@ import { recordErrorLog, withErrorLogRequest } from '../../../app/api/utils/erro
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
 import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
-import { EXPECTED_DATA_PLANE_HEADER } from '../../../app/utils/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
@@ -381,9 +380,11 @@ export default defineHandler(async (event) => {
   if (shouldProxyApiToFallback(event.req)) {
     // Fresh vault verification must stay on the selected deployment. Never
     // forward passwords/assertions to a fallback origin or reveal its keys.
-    if (event.req.headers.has('X-Thingtime-Expected-Actor') || event.req.headers.has(EXPECTED_DATA_PLANE_HEADER)) {
-      return jsonResponse({ ok: false, error: 'Scoped requests require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
+      return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     }
+    // Root data uses this same fallback. Forward its public database
+    // precondition and selection unchanged for the upstream to enforce.
     if (path === 'v1/vault/reveal') {
       return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
         status: 503,
