@@ -157,3 +157,7 @@ part/reference contract and `api/utils/timeline/snapshotParts.ts` for atomic
 storage and checked reconstruction. Each part is its own protected Thing; event
 headers stay bounded and carry no part-id arrays. The event accounts for original
 retained bytes; part envelopes are control storage.
+
+`ariaFixtures.ts` supplies 53 editable ARIA programs. Role/value inputs, selectors,
+relationships and projections persist in ordinary Components through the canonical
+suite Actions and can be referenced by another page. See [native ARIA programs](../web-standards-builder.md#native-aria-object-programs).

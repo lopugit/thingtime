@@ -81,6 +81,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   uses exact parent links and existing shared indexes. Lopu preserves missing/dirty page context instead of treating it as an empty
   page. Disposable replica-set and browser evidence, limits and outstanding
   delivery gates: [PR #956 notes](../PRs/956-unified-timeline-add-relational-timeline-history-and-durable-branch-synchronization.md) and [implementation contract](../docs/unified-timeline.md).
+
+- 2026-09-27 — **Codex (AI)**: Add 53 reusable ARIA object programs with native nullable reflection, owned element relationships and frozen-list identity; negotiate Actions 1.33.0. Make animation stages grow to keep both tiles visible. Validate production output and retain the managed loopback dev stack; see [PR #955 details](../PRs/955-web-standards-aria-reusable-native-aria-object-programs.md).
+
 - 2026-09-27 — **Codex (AI)**: Lopu can execute saved browser and server Actions
   from chat. Per-chat **Ask before running** and **Full access** controls gate
   mutations, persist safely across chat/account changes, and retain existing

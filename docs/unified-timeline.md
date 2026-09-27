@@ -231,8 +231,8 @@ PR. The acceptance ledger above stays open until these behaviors are verified.
 The complete Vite/Nitro/Vercel build and output verification passed after the
 branch queue and late-AI-save fixes. Lint across all 77 changed JavaScript and
 TypeScript files found no errors (28 warnings, including existing warnings in
-shared files). The typecheck ratchet remains non-green: 91 diagnostics against
-its configured baseline of 89; the baseline was not increased. Full unit-suite
+shared files). Raw TypeScript reports 91 diagnostics against its configured baseline of 89.
+The existing warning-only ratchet passes; the baseline was not increased. Full unit-suite
 validation is still being audited separately from the focused Timeline and
 real HTTP integration checks above.
 

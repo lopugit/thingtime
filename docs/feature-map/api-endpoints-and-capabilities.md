@@ -226,6 +226,11 @@ DOM bridge transports promises and authored callbacks and cancels native
 animations on completion/Stop. Both manifests and client negotiation advance
 together. See [native animation programs](../web-standards-builder.md#native-web-animation-programs).
 
+ARIA object programs add `api.actions-run` 1.33.0. `ariaPolicy.ts` adds bounded
+nullable Element reflection and owned relationships; the existing worker bridge
+preserves native frozen-list and element identity. Catalogue inputs/projections
+remain saved data. See [native ARIA programs](../web-standards-builder.md#native-aria-object-programs).
+
 
 ## Lopu Action access
 

@@ -108,3 +108,7 @@ Both changes had independently selected reply version 1.15.0, so the combined
 contract is 1.16.0; page-context clients require that version while ordinary
 Action-enabled chat requires 1.15.0. Registry and capability regression tests
 cover both changes. Graph conflicts use one complete snapshot before refresh.
+
+Main’s later ARIA checkpoint `ef55f548e` (PR #955) is also incorporated. Runtime
+code merged automatically; both appended testing/map/changelog entries were
+retained. Final combined validation is recorded in the PR body.
