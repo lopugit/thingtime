@@ -1,4 +1,5 @@
 import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
+import { LOPU_MAX_MESSAGE_CHARS } from './composerDictation';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
 import React from 'react';
 import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Text, Textarea } from '@chakra-ui/react';
@@ -18,7 +19,7 @@ import { LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuPopoverSx, lop
 // action on the rainbow: send, or stop while Lopu streams.
 
 const MAX_TEXTAREA_HEIGHT = 168;
-export const LOPU_MAX_MESSAGE_CHARS = 8000;
+export { LOPU_MAX_MESSAGE_CHARS } from './composerDictation';
 
 export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boolean; confirmDeletes: boolean };
 

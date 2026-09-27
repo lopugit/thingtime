@@ -1,4 +1,5 @@
 import { speechRecognitionCtor } from './desktopSpeechRecognition';
+import type { ComposerTranscript } from './composerDictation';
 import { aiTaskFetch } from './aiTasks.client';
 import React from 'react';
 import { Box, Button, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
@@ -33,10 +34,10 @@ import { newLopuVoiceId as newId } from './voiceIdentity';
 // feedback-loop guard — listening pauses for the whole turn and for Lopu's
 // speech so it never transcribes its own voice, then resumes.
 //
-// Unified mode: every final utterance is one normal chat turn through
-// `onFinalTranscript` (the surface routes it through useLopuChat().send — the
-// same brain, tools included, the chat's model/provider settings) and the
-// reply is read aloud when "Spoken replies" is on. Transcribe mode keeps the
+// Standard device speech updates the shared message draft through
+// `onDraftTranscript`; the user edits and sends with the ordinary composer.
+// Legacy consumers can still route final utterances through `onFinalTranscript`.
+// Transcribe mode keeps the
 // /api/v1/lopu/voice/reply path — each utterance becomes a private
 // transcript page whose quote renders as a Lopu bubble in the transcript
 // strip (no AI turn, nothing spoken).
@@ -82,6 +83,9 @@ export type UseLopuVoiceOptions = {
 	model?: string | null;
 	effort?: string | null;
 	speed?: string | null;
+	// Standard device dictation writes partial/final revisions into the composer.
+	// Dedicated private-page transcription and direct voice retain their flows.
+	onDraftTranscript?: (transcript: ComposerTranscript) => void;
 	// resolve one final utterance to Lopu's reply text (read aloud when
 	// `speak` is on); null/undefined = nothing to speak
 	onFinalTranscript: (text: string) => Promise<string | null | undefined | void> | string | null | undefined | void;
@@ -179,6 +183,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const recognitionRef = React.useRef<any>(null);
 	const restartTimerRef = React.useRef<number | null>(null);
 	const queueRef = React.useRef<Promise<void>>(Promise.resolve());
+	const finishSpeechRef = React.useRef<(() => void) | null>(null);
 	const startRecognitionRef = React.useRef<() => boolean>(() => false);
 	const runTurnRef = React.useRef<(text: string) => Promise<void>>(async () => {});
 
@@ -283,21 +288,30 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 					resolve();
 					return;
 				}
+				finishSpeechRef.current?.();
+				const finish = () => {
+					if (finishSpeechRef.current === finish) finishSpeechRef.current = null;
+					resolve();
+				};
+				finishSpeechRef.current = finish;
 				try {
 					window.speechSynthesis.cancel();
 					const utterance = new SpeechSynthesisUtterance(clean);
 					utterance.lang = speechLang();
-					utterance.onend = () => resolve();
-					utterance.onerror = () => resolve();
+					utterance.onend = finish;
+					utterance.onerror = finish;
 					window.speechSynthesis.speak(utterance);
 				} catch {
-					resolve();
+					finish();
 				}
 			}),
 		[]
 	);
 
 	const cancelSpeech = React.useCallback(() => {
+		// cancel() need not deliver an end/error event. Release the turn queue
+		// explicitly so editing during a spoken reply cannot stall the next Send.
+		finishSpeechRef.current?.();
 		if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
 			try {
 				window.speechSynthesis.cancel();
@@ -337,8 +351,18 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		recognition.lang = speechLang();
 		const recognitionOwner = getLopuStoreSnapshot().userId;
 		const recognitionChat = optionsRef.current.chatId ?? null;
+		const captureId = newId('dictation');
 		recognition.onresult = (event: any) => {
 			if (recognitionRef.current !== recognition || !activeRef.current || recognitionOwner !== getLopuStoreSnapshot().userId || recognitionChat !== (optionsRef.current.chatId ?? null)) return;
+			const current = optionsRef.current;
+			if (!current.transcribe && current.onDraftTranscript) {
+				// Browser results are cumulative; desktop emits a single revised
+				// result. Both describe the whole span belonging to this capture.
+				const text = Array.from(event.results as ArrayLike<{ 0?: { transcript?: string } }>)
+					.map(result => result[0]?.transcript?.trim() || '').filter(Boolean).join(' ');
+				current.onDraftTranscript({ captureId, text });
+				return;
+			}
 			let preview = '';
 			for (let index = event.resultIndex; index < event.results.length; index += 1) {
 				const text = event.results[index]?.[0]?.transcript || '';
@@ -810,9 +834,9 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	}, [cancelSpeech, stopRealtime, stopRecognition]);
 
 	const toggle = React.useCallback(() => {
-		if (activeRef.current) stop();
+		if (activeRef.current || busy === 'speaking') stop();
 		else start();
-	}, [start, stop]);
+	}, [busy, start, stop]);
 
 	const interrupt = React.useCallback(() => {
 		cancelSpeech();
@@ -1233,9 +1257,9 @@ export const LopuVoiceDeck = (props: {
 
 	return (
 		<Box className="lopuVoiceDeck" flexShrink={0} pt={compact ? 2 : 3} px={compact ? 2 : 0} pb={compact ? 2 : 0}>
-			<Text fontSize="13px" color={LOPU_UI.muted} fontStyle="italic" textAlign="center" minH="20px" noOfLines={2} px={2} aria-live="polite">
+			{voice.interim ? <Text fontSize="13px" color={LOPU_UI.muted} fontStyle="italic" textAlign="center" minH="20px" noOfLines={2} px={2} aria-live="polite">
 				{voice.interim}
-			</Text>
+			</Text> : null}
 			<Flex align="center" justify="center" gap={compact ? 3 : 5} py={compact ? 1 : 2}>
 				<LopuVoiceSettingsPopover compact={compact} providerValue={props.providerValue} onProviderChange={props.onProviderChange} provider={props.provider} />
 				<Flex direction="column" align="center" gap={compact ? 0 : 1.5}>
@@ -1320,10 +1344,10 @@ export type LopuVoiceSurfaceProps = {
 	onPhaseChange?: (phase: LopuVoicePhase) => void;
 };
 
-// The conversation column in voice mode: the shared LopuChatView (its text
-// composer dock folded away — the deck carries the typed path) with the
-// local transcript rows slotted into its list, and the deck. Each final utterance is a normal chat turn
-// with the chat's own model/provider settings.
+// The conversation column in voice mode: the shared LopuChatView with its
+// ordinary text composer, local transcript rows in its list, and the deck.
+// Standard device
+// speech fills the shared editable composer and waits for an explicit Send.
 export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpenFull, onPhaseChange, voiceMode = true }: LopuVoiceSurfaceProps) => {
     const widgetLocation = useLocation();
     const widgetNavigate = useNavigate();
@@ -1333,6 +1357,8 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 	const chat = useLopuChat({ chatId });
 	const { settings, setProviderId, setTranscribe } = useLopuSettings();
 	const sendRef = React.useRef<((text: string) => Promise<import('./lopuChatStore').SendLopuResult | undefined>) | null>(null);
+	const dictationRef = React.useRef<((transcript: ComposerTranscript) => void) | null>(null);
+	const onDraftTranscript = React.useCallback((transcript: ComposerTranscript) => dictationRef.current?.(transcript), []);
 	const setChatSettingsRef = React.useRef(chat.setSettings);
 	setChatSettingsRef.current = chat.setSettings;
 
@@ -1366,6 +1392,7 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 		effort: chat.settings.effort,
 		speed: chat.settings.speed,
 		onFinalTranscript,
+		onDraftTranscript,
 		speak: settings.spokenReplies,
 		transcribe: settings.transcribe,
 		providerId: chat.settings.providerId ?? settings.providerId,
@@ -1400,11 +1427,15 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 	React.useEffect(() => {
 		if (locked || !voiceMode) stopRef.current();
 	}, [locked, voiceMode]);
+	const composerDictation = !settings.transcribe && !voice.nativeReady && !voice.direct;
 
 	return (
 		<Flex className="lopuVoiceSurface" data-locked={locked ? 'true' : 'false'} direction="column" flex={1} minH={0} minW={0} width="100%">
 			<LopuChatView
 				externalSendRef={sendRef}
+				externalDictationRef={dictationRef}
+				onDraftInteraction={composerDictation ? voice.stop : undefined}
+				onSendDraft={voiceMode && composerDictation ? voice.submit : undefined}
 				chatId={chatId}
 				onChatChange={onChatChange}
 				compact={compact}
