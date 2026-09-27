@@ -62,6 +62,7 @@ import type * as ActionsModule from '../actions/execute';
 import type * as BrowseModule from '../components/browse';
 import type * as SearchModule from '../things/search';
 import type * as ThingsModule from '../things/things';
+import { inspectThingCrystal, parseThingInspection } from './thingInspection';
 import type * as SuitesModule from '../webpages/suites';
 import type * as WebpagesModule from '../webpages/webpages';
 
@@ -200,8 +201,8 @@ export const LOPU_TOOL_DEFINITIONS: readonly LopuToolDefinition[] = [
   },
   {
     name: 'get_thing',
-    description: 'Read one thing by id as the viewer (crystal bounded to 16KB; large render trees are summarised).',
-    inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } }
+    description: 'Read one Thing by its discovered id as the viewer. The default crystal is a bounded summary. For omitted, nested or truncated content, set path to a JSON Pointer inside the crystal ("/render", "/steps", or "" for all) and offset: 0. This returns lossless JSON text pages. Continue with the returned nextOffset and revision on the same path; never repeat the default summary to retrieve omitted content. Reads recheck access and reject changed revisions.',
+    inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, path: { type: 'string', maxLength: 512 }, offset: { type: 'integer', minimum: 0 }, revision: { type: 'string', description: 'Exact revision from the preceding JSON page; required with nonzero offset.' } } }
   },
   {
     name: 'get_schema',
@@ -479,7 +480,7 @@ const shrink = (value: unknown, depth: number, options: { maxString: number; max
     const out: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
       if (options.dropRender && key === 'render' && entry && typeof entry === 'object') {
-        out[key] = `[render tree omitted — ${countNodes(entry)} nodes; read the full thing with get_thing when you need it]`;
+        out[key] = `[render tree omitted — ${countNodes(entry)} nodes; use get_thing with path "/render" and offset 0 for lossless JSON pages]`;
         continue;
       }
       out[key] = shrink(entry, depth + 1, options);
@@ -666,7 +667,8 @@ export const validateLopuToolInput = (name: string, raw: unknown): LopuToolValid
     case 'get_thing': {
       const id = thingId(input.id);
       if (isError(id)) return fail(id.error);
-      return { ok: true, input: { id } };
+      try { return { ok: true, input: { id, ...parseThingInspection(input) } }; }
+      catch (error) { return fail((error as Error).message); }
     }
     case 'list_my_things': {
       const kind = typeof input.kind === 'string' ? input.kind.trim() : '';
@@ -1184,11 +1186,20 @@ const runSearchThings = async (deps: ServerDeps, ctx: LopuToolContext, input: { 
   };
 };
 
-const runGetThing = async (deps: ServerDeps, ctx: LopuToolContext, input: { id: string }): Promise<LopuToolResult> => {
+const runGetThing = async (deps: ServerDeps, ctx: LopuToolContext, input: { id: string; path?: string; offset?: number; revision?: string }): Promise<LopuToolResult> => {
   const result = await deps.things.getThing(ctx.viewer, input.id);
   if (result.ok === false) return { ok: false, error: failText(result) };
   const thing = result.thing as PublicThingLike;
-  return { ok: true, summary: `${kindOf(thing)} "${nameOf(thing) || thing.id}"`, data: { thing: boundThing(thing) } };
+  const inspection = parseThingInspection(input);
+  if (inspection) {
+    const crystalRead = inspectThingCrystal(thing.crystal, inspection);
+    return { ok: true, summary: `Read ${kindOf(thing)} "${nameOf(thing).slice(0, 200) || thing.id}" crystal ${inspection.path || '/'} at ${inspection.offset}/${crystalRead.totalChars} characters`,
+      data: { thing: { id: thing.id, kind: kindOf(thing) }, crystalRead } };
+  }
+  const bounded = boundThing(thing);
+  return { ok: true, summary: `${kindOf(thing)} "${nameOf(thing) || thing.id}"`, data: { thing: bounded,
+    ...(bounded.crystal !== thing.crystal ? { inspection: { tool: 'get_thing', id: thing.id, path: '', offset: 0,
+      note: 'This crystal summary omits content. Use path and offset for lossless JSON pages; follow nextOffset with its revision. Repeating the default read will return the same summary.' } } : {}) } };
 };
 
 const runListMyThings = async (deps: ServerDeps, ctx: LopuToolContext, input: { kind: ListMyThingsKind; limit: number }): Promise<LopuToolResult> => {

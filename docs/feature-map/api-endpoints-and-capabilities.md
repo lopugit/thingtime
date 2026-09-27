@@ -69,6 +69,12 @@ version preview/apply commands, exact version reads, and named branch create/pus
 `app/api/utils/timeline`. `test:timeline` and its opt-in replica-set integration
 cover the contract. See [Unified Timeline](../unified-timeline.md).
 
+Lopu reply 1.18.0 adds bounded, lossless crystal inspection to `get_thing`.
+`app/api/utils/lopu/thingInspection.ts` walks only the authorized public crystal;
+JSON Pointer, revision and offset select exact pages without relaxing ACLs.
+`test:lopu` covers the parser, output bounds and per-page authorization; the
+provider transport regression lives in `test:lopu-chat-streaming`.
+
 Lopu page contexts require `api.lopu-chats-reply` 1.16.0: dirty/ready flags and
 omitted blocks survive transport and continuation. Missing blocks are never an
 empty page; only known-clean saved pages may fetch their persisted tree.
