@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { ChakraProvider, Box, Button, Text } from '@chakra-ui/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ThingtimeContext } from '../app/Providers/ThingtimeProvider';
+import { getLopuStoreSnapshot } from '../app/components/Lopu/lopuChatStore';
+import { LopuDictationSettings } from '../app/components/Lopu/LopuDictationSettings';
 import { LopuVoiceSurface } from '../app/components/Lopu/LopuVoiceControls';
 
 Object.defineProperty(window, 'SharedWorker', { value: undefined });
@@ -24,7 +26,7 @@ window.fetch = async (input, init) => {
 			origin: location.origin,
 			features: {
 				'api.attachment-uploads': { version: '1.4.1' },
-				'api.lopu-chats-reply': { version: '1.14.2' },
+				'api.lopu-chats-reply': { version: '1.15.0' },
 				'api.lopu-background-tasks': { version: '1.3.0' }
 			}
 		});
@@ -125,6 +127,10 @@ const mic = () => document.querySelector<HTMLButtonElement>('.lopuMicButton')!;
 const current = () => Recognition.instances.at(-1)!;
 
 function App() {
+    const [preferences, setPreferences] = React.useState({ hearMeOut: false, dictationSilenceSeconds: 5 });
+    const [showSettings, setShowSettings] = React.useState(false);
+    const [lastSetting, setLastSetting] = React.useState('');
+    const setThingtime = React.useCallback((path: string, value: unknown) => { setLastSetting(`${path} = ${String(value)}`); setPreferences(previous => ({ ...previous, [path.split('.').at(-1)!]: value })); }, []);
     const [spokenReplies, setSpokenReplies] = React.useState(false);
     const [result, setResult] = React.useState('Ready');
     const [voiceMode, setVoiceMode] = React.useState(true);
@@ -132,6 +138,7 @@ function App() {
     const [narrow, setNarrow] = React.useState(false);
     const run = async () => {
         try {
+            setPreferences({ hearMeOut: true, dictationSilenceSeconds: 5 });
             setSpokenReplies(true);
             await until(() => !!field() && !field().disabled && !!mic());
             type('Typed prefix:'); await wait();
@@ -188,17 +195,85 @@ function App() {
             setSpokenReplies(false); await wait();
             accept()(); await until(() => !!send() && field().value === '');
             type('Ready for another voice message.');
-            setResult('PASS: live composer revisions; no popup or auto-send; stop/resume; mode switch; error/retry; manual edits; cumulative browser results; recognizer restart; late callbacks fenced; explicit Send; rejected draft restored; retry once; spoken reply and cancellation without stalling Send.');
+            setResult('PASS: live composer revisions; Hear me out does not auto-send; stop/resume; mode switch; error/retry; manual edits; cumulative browser results; recognizer restart; late callbacks fenced; explicit Send; rejected draft restored; retry once; spoken reply and cancellation without stalling Send.');
         } catch (error) { setResult('FAIL: ' + String(error)); } finally { setSpokenReplies(false); }
+    };
+    const runSilence = async () => {
+        try {
+            setResult('Running silence regression…');
+            setPreferences({ hearMeOut: false, dictationSilenceSeconds: 5 });
+            await until(() => !!field() && !field().disabled && !!mic());
+            type('Typed prefix:'); await wait();
+            mic().click(); await until(() => Recognition.instances.length > 0);
+            const first = current(); first.emit('five seconds');
+            await until(() => field().value === 'Typed prefix: five seconds');
+            await wait(2200); assert(sendCount === 0 && !first.aborted, 'Sent or stopped before five seconds');
+            first.emit('five seconds', true); // final repeats must not reset the window
+            stage = 'five-second auto-send'; await until(() => !!reply);
+            assert(first.aborted && sendCount === 1, 'Auto-send did not stop the mic exactly once');
+            assert(reply!.body.message === 'Typed prefix: five seconds' || reply!.body.text === 'Typed prefix: five seconds', 'Auto-send lost the typed prefix');
+            reply!.resolve(new Response('Synthetic rejection', { status: 503 })); reply = undefined;
+            stage = 'restore auto-send rejection'; await until(() => field().value === 'Typed prefix: five seconds');
+            setPreferences({ hearMeOut: false, dictationSilenceSeconds: 2 }); await wait();
+            mic().click(); await until(() => current() !== first); current().emit('custom delay');
+            await wait(1100); assert(sendCount === 1, 'Custom delay sent too soon');
+            const beforeStop = current(); mic().click(); await wait(2300);
+            assert(sendCount === 1 && beforeStop.aborted && field().value.endsWith('custom delay'), 'Stop sent or erased words');
+            mic().click(); await until(() => current() !== beforeStop); current().emit('send this too');
+            stage = 'custom auto-send'; await until(() => !!reply); assert(sendCount === 2, 'Custom silence did not send once');
+            const expected = 'Typed prefix: five seconds custom delay send this too';
+            assert(reply!.body.message === expected || reply!.body.text === expected, 'Resumed dictation sent the wrong draft');
+            reply!.resolve(new Response('Synthetic rejection', { status: 503 })); reply = undefined;
+            await until(() => field().value === expected);
+            setPreferences({ hearMeOut: true, dictationSilenceSeconds: 2 }); await wait();
+            const beforeHear = current(); mic().click(); await until(() => current() !== beforeHear);
+            current().emit('hear me out'); await wait(10200);
+            const prompt = () => { const el = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Send now?"]'); return el && getComputedStyle(el).visibility !== 'hidden' ? el : null; };
+            assert(!!prompt() && sendCount === 2 && !current().aborted, 'Hear me out sent or stopped instead of asking');
+            const keep = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Keep listening')!;
+            keep.click(); stage = 'dismiss reminder'; await until(() => !prompt());
+            await wait(10200); assert(!!prompt() && sendCount === 2, 'Reminder did not repeat');
+            current().emit('hear me out with more detail'); stage = 'speech dismisses reminder'; await until(() => !prompt());
+            await wait(10200); assert(!!prompt(), 'Prompt did not return after new silence');
+            const promptSend = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === 'Send now')!;
+            const manualExpected = field().value; promptSend.click();
+            stage = 'explicit prompt send'; await until(() => !!reply);
+            assert(sendCount === 3 && current().aborted, 'Prompt send duplicated or kept the mic open');
+            assert(reply!.body.message === manualExpected || reply!.body.text === manualExpected, 'Prompt sent an old draft');
+            reply!.resolve(new Response('Synthetic rejection', { status: 503 })); reply = undefined;
+            await until(() => field().value === manualExpected);
+            setPreferences({ hearMeOut: false, dictationSilenceSeconds: 1 }); await wait();
+            send().click(); stage = 'start a reply before dictating'; await until(() => !!reply);
+            const finishWorking = accept(); await until(() => field().value === '' && getLopuStoreSnapshot().activeChatId === 'synthetic-chat' && !!document.querySelector('[data-streaming="true"]'));
+            const beforeQueued = current(); mic().click(); await until(() => current() !== beforeQueued);
+            current().emit('Dictated while Lopu works');
+            stage = 'silence queues during a reply'; await until(() => current().aborted && field().value === '');
+            assert(sendCount === 4, 'Silence bypassed the active reply queue');
+            type('Fresh unsent draft'); await wait(); finishWorking();
+            stage = 'queued voice delivery'; await until(() => !!reply);
+            assert(sendCount === 5 && (reply!.body.message === 'Dictated while Lopu works' || reply!.body.text === 'Dictated while Lopu works'), 'Queued voice sent the wrong text');
+            assert(field().value === 'Fresh unsent draft', 'Queued voice erased a newer draft');
+            accept()();
+            setResult('PASS: queue while replying preserves a newer draft; default five-second send; repeated final does not extend delay; custom delay; manual Stop cancels and preserves; rejected sends restore full draft; Hear me out never auto-sends; 10-second repeated prompt; speaking dismisses; explicit prompt sends once.');
+        } catch (error) { setResult('FAIL: ' + String(error)); }
     };
     return <Box p={3}>
         <Button onClick={() => void run()}>Run dictation regression</Button>
+        <Button onClick={() => void runSilence()}>Run silence regression</Button>
+        <Button onClick={async () => {
+            setShowSettings(false); setVoiceMode(true); setPreferences({ hearMeOut: true, dictationSilenceSeconds: 5 });
+            setResult('Reminder preview — wait 10 seconds'); await wait();
+            if (mic().getAttribute('data-phase') !== 'idle') mic().click();
+            await wait(); mic().click(); await wait(); current().emit('Take your time. These words stay in the draft.');
+        }}>Preview silence prompt</Button>
+        <Button onClick={() => setShowSettings(value => !value)}>Toggle settings</Button>
         <Button onClick={() => setNarrow(value => !value)}>Toggle 390px width</Button>
         <Button onClick={() => setCompact(value => !value)}>Toggle page layout</Button>
         <Text role="status">{result}</Text>
-        <Box width={narrow ? '390px' : '100%'} maxW="100%" height="740px" display="flex" border="1px solid #ddd">
-            <ThingtimeContext.Provider value={{ Everything: { thingtime: { settings: { lopu: { spokenReplies } } }, loading: false } } as any}>
-                <LopuVoiceSurface compact={compact} voiceMode={voiceMode} />
+        <Text fontSize="xs">{lastSetting}</Text>
+        <Box width={narrow ? '390px' : '100%'} maxW="100%" height="calc(100dvh - 180px)" minH="400px" display="flex" border="1px solid #ddd">
+            <ThingtimeContext.Provider value={{ Everything: { thingtime: { settings: { lopu: { ...preferences, spokenReplies } } }, loading: false, setThingtime } } as any}>
+                {showSettings ? <Box p={3} width="100%"><Text fontWeight={600}>Voice transcription</Text><LopuDictationSettings renderRow={(label, control, hint) => <Box my={3}><Text>{label}</Text>{control}<Text fontSize="sm">{hint}</Text></Box>} /></Box> : <LopuVoiceSurface compact={compact} voiceMode={voiceMode} />}
             </ThingtimeContext.Provider>
         </Box>
     </Box>;

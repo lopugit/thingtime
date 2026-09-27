@@ -21,7 +21,7 @@ import { LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuPopoverSx, lop
 const MAX_TEXTAREA_HEIGHT = 168;
 export { LOPU_MAX_MESSAGE_CHARS } from './composerDictation';
 
-export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boolean; confirmDeletes: boolean };
+export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boolean; confirmDeletes: boolean; hearMeOut?: boolean };
 
 export type LopuComposerProps = {
 	attachments?: React.ReactNode;
@@ -66,6 +66,8 @@ export type LopuComposerProps = {
 	onPreferencesChange?: (patch: Partial<LopuComposerPreferences>) => void;
 	settingsContent?: React.ReactNode;
 	hideSettings?: boolean;
+	// Voice silence and confirmation use the same guarded Send/queue action.
+	submitRef?: React.MutableRefObject<(() => void) | null>;
 };
 
 // The primary action: a rainbow ring (send) or an ink ring (stop) around a
@@ -209,7 +211,8 @@ export const LopuComposer = ({
 	preferences,
 	onPreferencesChange,
 	settingsContent,
-	hideSettings = false
+	hideSettings = false,
+	submitRef
 }: LopuComposerProps) => {
 	const isMobile = useIsMobileViewport();
 	const viewport = useLopuVisualViewport();
@@ -244,6 +247,12 @@ export const LopuComposer = ({
 		const send = (streaming || queuePending) && onQueue ? onQueue : onSend;
 		send(text.slice(0, LOPU_MAX_MESSAGE_CHARS));
 	}, [value, fieldDisabled, sendDisabled, streaming, queuePending, onSend, onQueue]);
+
+    React.useLayoutEffect(() => {
+        if (!submitRef) return;
+        submitRef.current = submit;
+        return () => { if (submitRef.current === submit) submitRef.current = null; };
+    }, [submitRef, submit]);
 
 	const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if (event.key !== 'Enter') return;
@@ -384,6 +393,11 @@ export const LopuComposer = ({
 										</Text>
 										{preferences ? (
 											<>
+                                                <SettingsRow
+                                                    label="Hear me out"
+                                                    hint="Dictation waits for Send. After 10 seconds of silence, asks ‘Send now?’"
+                                                    control={<LopuToggle checked={!!preferences.hearMeOut} onChange={next => onPreferencesChange?.({ hearMeOut: next })} label="Hear me out" />}
+                                                />
 												<SettingsRow
 													label="Enter sends"
 													hint="Shift+Enter adds a line"
