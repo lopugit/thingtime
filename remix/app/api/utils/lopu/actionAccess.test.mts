@@ -40,3 +40,17 @@ test('scheduled read-only work stays read-only in Full access', async () => {
   const ctx = createLopuToolContext(viewer, {}, () => {}, { readOnly: true, readAccessMode: async () => 'full' });
   assert.equal((await runLopuTool({ id: 'x', name: 'create_thing', input: { title: 'Garden', type: 'folder' } }, ctx)).ok, false);
 });
+
+test('saving attachments and extending schemas require approval and are denied in scheduled work', async () => {
+  for (const call of [
+    { id: 'save', name: 'save_attachment', input: { id: 'photo' } },
+    { id: 'copy', name: 'create_schema', input: { name: 'Product', extends: 'post', fields: [] } }
+  ]) {
+    const events: any[] = [];
+    const ctx = createLopuToolContext(viewer, {}, event => events.push(event));
+    assert.equal((await runLopuTool(call, ctx)).needsConfirmation, true);
+    assert.equal(events.filter(event => event.type === 'confirm').length, 1);
+    const scheduled = createLopuToolContext(viewer, {}, () => {}, { readOnly: true, readAccessMode: async () => 'full' });
+    assert.equal((await runLopuTool(call, scheduled)).ok, false);
+  }
+});
