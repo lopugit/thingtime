@@ -1,3 +1,5 @@
+import { animationRecipe } from './animationFixtures';
+import { rangeRecipe } from './rangeFixtures';
 import { observerRecipe } from './observerFixtures';
 import { layoutRecipe } from './layoutFixtures';
 import { cssomRecipe } from './cssomFixtures';
@@ -410,6 +412,10 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const animation = animationRecipe(feature);
+	if (animation) return animation;
+	const range = rangeRecipe(feature);
+	if (range) return range;
 	const observer = observerRecipe(feature);
 	if (observer) return observer;
 	const layout = layoutRecipe(feature);

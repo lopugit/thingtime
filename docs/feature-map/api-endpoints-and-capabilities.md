@@ -204,6 +204,17 @@ and Stop disconnect native observers without extending the shared deadline.
 The catalogue, save Action and private Component contracts remain canonical.
 See [observer programs](../web-standards-builder.md#native-observer-programs).
 
+Range programs require `api.actions-run` 1.31.0. Forty additional saved programs
+use owned live/static ranges, native boundary/mutation methods and bounded
+contextual fragments through the existing DOM bridge. See
+[live and static ranges](../web-standards-builder.md#native-live-and-static-ranges).
+
+Animation programs add `api.actions-run` 1.32.0. `animationPolicy.ts` and
+`animationSupport.ts` bound native objects, keyframes and options; the existing
+DOM bridge transports promises and authored callbacks and cancels native
+animations on completion/Stop. Both manifests and client negotiation advance
+together. See [native animation programs](../web-standards-builder.md#native-web-animation-programs).
+
 
 ## Lopu Action access
 

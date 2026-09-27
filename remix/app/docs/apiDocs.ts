@@ -12749,9 +12749,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    // 1.30.0 adds owned observers, authored asynchronous callbacks and bounded synchronous DOM batches.
-    featureVersion: '1.30.0',
-    contractVersion: '1.30.0',
+    // 1.32.0 adds owned native animation objects, keyframes, playback promises and callbacks.
+    featureVersion: '1.32.0',
+    contractVersion: '1.32.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',

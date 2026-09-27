@@ -9043,3 +9043,49 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   compiler/protocol and capability tests. Both manifests and the client require
   actions-run 1.30.0. Verify the built runtime hash and deployed commit before
   claiming preview or production delivery.
+
+### Web standards: native range programs (2026-09-27)
+
+- Run all 40 added live/static range recipes with default and edited input.
+  Observe actual native text, cloned/extracted fragments, wrapper markup,
+  comparisons, boundary nodes and offsets. Static offsets stay fixed while
+  a live range follows inserted text. Preserve existing surface geometry demos.
+- Run rangeBoundaryFixtures: native IndexSizeError stays catchable; cloned
+  ranges remain independent; extraction moves text. Reject initial runtime
+  document access, selecting the surface root's parent, surface tree edits,
+  foreign handles and unknown StaticRangeInit fields. Concrete prototype-chain
+  getters must work when AbstractRange has no own boundary accessors.
+- Reject fragment scripts, resources, attributes, foreign content, malformed
+  tags and token/text overflow before native parsing. Escaped markup remains
+  inert text. Reuse the existing worker deadline, node/work/handle budgets.
+- Round-trip edited programs through the catalogue Action and private Things.
+  Save/reload/run in the actual workbench, reference the saved Component from
+  another private page, check anonymous 404, Stop/fresh Run and 390px overflow.
+- Run compiler, capability, schema, Action, Component and page tests; native
+  DOM/layout regressions; build/typecheck. Verify both actions-run 1.31.0
+  manifests, deployed source SHA and runtime digest before production delivery.
+
+### Web standards: native animation programs (2026-09-27)
+
+- Run all 111 animation programs with default and edited keyframes/timing. Check
+  real interpolation and computed styles, playback state, ready/finished
+  promises, changing targets/timelines, native keyframe copies and query results.
+- Run animationBoundaryFixtures. Check exact half-way interpolation, clone
+  timing independence, trusted finish/cancel/remove events, native handler `this`
+  identity and shadow queries.
+  Actual native keyframe errors remain catchable. Refuse foreign effect/target/
+  timeline handles, unsupported option fields, excess objects/keyframes/values,
+  forged callbacks and asynchronous reads in synchronous DOM batches.
+- Detect ignored getAnimations pseudoElement filters with a real pseudo-effect;
+  report unsupported instead of presenting an unfiltered result as a success.
+  Draft iterationComposite/startTime support must remain honestly reported.
+  Native Event.isTrusted own accessors must distinguish constructed from trusted
+  playback events. Pseudo-element samples must not invoke commitStyles.
+- Edit JSON inputs and save in Builder. Fully reload the private Component,
+  run its edited definition, reference it from a second private page and confirm
+  the same native result. Verify anonymous reads return 404, Stop removes its
+  frame, a fresh Run works, and 390px editing/results do not overflow the page.
+- Run platform/compiler, capability, schema, Action, Component and page tests;
+  the broader DOM/CSS/SVG/observer/range native audit; lint, build and typecheck.
+  Verify both 1.32.0 manifests, exact deployed source and runtime hash in preview
+  and production before claiming delivery. Clean up disposable local fixtures.
