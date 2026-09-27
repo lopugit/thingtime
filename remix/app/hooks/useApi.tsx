@@ -319,6 +319,11 @@ export function useApi() {
       }
     },
     settings: {
+      lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), []),
+      setLopuPrompt: useCallback(async (args: Record<string, unknown>) => {
+        await requireThingtimeCapability('api.settings-lopu-prompt', '1.0.0');
+        return asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-prompt', errorContext: 'save Lopu instructions' });
+      }, [asyncFetcher]),
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
 			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
@@ -588,8 +593,10 @@ export function useApi() {
       // providers (v1.ai.models() → vaultProviders[].realtimeModels); a
       // refusal throws the route's error shape (400 with the reason)
       voiceSession: useCallback(
-        async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) =>
-          asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal }),
+        async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) => {
+          await requireThingtimeCapability('api.lopu-voice-session', '1.2.0');
+          return asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal });
+        },
         [asyncFetcher]
       ),
       // the viewer's Lopu account (verified flag, credits, usage — design note

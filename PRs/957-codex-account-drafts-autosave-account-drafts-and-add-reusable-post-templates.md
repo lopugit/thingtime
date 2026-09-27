@@ -40,6 +40,20 @@ original timestamp, stale/unknown bases cannot publish, and selecting the latest
 saved version first preserves recovered text in History. Four regression tests
 cover restore, stale-save rejection, server conflicts and backup failure.
 
+Main's subsequent schema/upload release (`b96507b4e`, PR #954) is integrated too.
+Schema forms keep native kind-aware publication and private visibility while
+flushing account drafts first. Newly supported JSON fields store exact source
+text in versioned drafts rather than serializing invalid-input sentinels as null.
+Four additional tests cover unfinished/nested JSON, typed publication, legacy
+drafts and array removal. Browser/API checks confirm unfinished text survives
+reload, invalid JSON cannot publish, corrected JSON creates typed data and the
+working draft retires. The real draft/media verifier passes against the new
+attachment implementation, including independent copies after source deletion.
+
+The complete pre-PR-954 run passed 4,094 tests with eight expected skips, and its
+CI build/typecheck/unit and clean-database API jobs passed. The updated combined
+revision is tested again locally and in CI; see the PR checks for that exact head.
+
 - Full unit run after Timeline integration: 4,086 pass, eight expected skips,
   zero failures. The draft suite including the four new regression tests passes
   14/14. Initial missing `fake-indexeddb` was resolved through the existing

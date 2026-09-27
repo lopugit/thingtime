@@ -264,6 +264,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
   // interactive read/save; the public GET keys anonymous callers by IP and
   // the admin POST is enforced fail-closed at the route
+  'settings.lopu-prompt': { limit: 30, windowMs: 60_000, enabled: true },
   'settings.lopu-chat-defaults': { limit: 30, windowMs: 60_000, enabled: true },
   // Thingtime.LopuAccess singleton (GET public / POST admin) — the client
   // reads it to render the locked state; the admin POST fails closed

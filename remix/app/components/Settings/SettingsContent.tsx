@@ -1,3 +1,4 @@
+import { LopuPromptSettings } from './LopuPromptSettings';
 import { InvitePanel } from '~/components/Invites/InvitePanel';
 import { SavedAiWaterfallsSettings } from './SavedAiWaterfallsSettings';
 import { MediaCacheSettings } from './MediaCacheSettings';
@@ -874,6 +875,9 @@ export const SettingsContent = ({
 								</Flex>
 							</SettingsSection>
 						</Box>
+              <SettingsSection eyebrow="Lopu prompt" description="Shared guidance and your personal instructions.">
+                <LopuPromptSettings key={user?.id ?? 'anonymous'} userId={user?.accountKind !== 'service' ? user?.id : undefined} />
+              </SettingsSection>
 					</Flex>
 				)}
 				{tab === 'ai-waterfalls' && (

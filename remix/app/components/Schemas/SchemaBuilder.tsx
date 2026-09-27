@@ -29,6 +29,7 @@ export type BuilderPrefill = {
   description?: string;
   fields?: SchemaThingField[];
   forkOf?: string;
+  render?: Record<string, unknown>;
 };
 
 type SchemaBuilderProps = {
@@ -75,14 +76,10 @@ const blankField = (partial: Partial<DraftField> = {}): DraftField => ({
   ...partial
 });
 
-// Builtin cards prefill with registry-vocabulary fields: open 'record' bags
-// (theme tokens, algorithm weights, app-data values, the schema fields tree)
-// can't be expressed in the builder grammar, so they're DROPPED from fork
-// prefills rather than silently coerced to 'string' — a fork asserting
-// "theme is text" would publish a wrong grammar the builder used to block
-// back when these were childless objects.
+// Old raw registry prefills and current projected copies both retain their
+// open JSON fields. No template/program payload silently disappears on copy.
 export const draftableSchemaFields = (fields: SchemaThingField[]): SchemaThingField[] =>
-  fields.filter((field) => (field.type as string) !== 'record');
+  fields.map(field => (field.type as string) === 'record' ? { ...field, type: 'json' } : field);
 
 const fromSchemaField = (field: SchemaThingField): DraftField =>
   blankField({
@@ -451,7 +448,8 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
           name: name.trim(),
           description: description.trim(),
           fields: compiled.fields,
-          ...(prefill?.forkOf ? { forkOf: prefill.forkOf } : {})
+          ...(prefill?.forkOf ? { forkOf: prefill.forkOf } : {}),
+          ...(prefill?.render ? { render: prefill.render } : {})
         }
       });
       if (!resp?.ok) throw resp;

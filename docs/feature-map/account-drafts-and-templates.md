@@ -41,6 +41,11 @@ base) preserves its text and blocks publication. Selecting the latest saved
 version first retains the recovered source in Timeline, then retires the account
 draft. A failed Timeline backup leaves the account draft intact.
 
+Schema form snapshots use version 2 and retain JSON fields as raw text, including
+incomplete syntax and whitespace. Schema-aware conversion parses those fields
+only for validation/publication; legacy snapshots with parsed JSON are converted
+on restore. JSON values inside objects and array items retain their positions.
+
 Template creation and use both copy through the canonical attachment service,
 including upload approval, authorization, moderation, quota and cleanup. Only
 working drafts can donate media to published posts. Templates keep independent

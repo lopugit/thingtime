@@ -86,6 +86,8 @@ export type ThingtimeSchema = {
   // dedicated write path, for kinds the generic things CRUD refuses
   createdVia?: string;
   fields: ThingtimeSchemaField[];
+  // Ordinary editable preview copied with the public schema definition.
+  render?: Record<string, unknown>;
   example: Record<string, unknown>;
 };
 
@@ -938,6 +940,15 @@ const postSchema: ThingtimeSchema = {
   collection: null,
   title: 'Post',
   summary: 'A feed post — text, image, marketplace listing, or a thingtime thing.',
+  render: {
+    tag: 'article',
+    props: { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+    children: [
+      { tag: 'h3', children: '{title}' },
+      { tag: 'img', props: { src: '{images.0}', alt: '{title}', style: { maxWidth: '100%', maxHeight: '360px', objectFit: 'contain' } } },
+      { tag: 'p', props: { style: { whiteSpace: 'pre-wrap' } }, children: '{text}' }
+    ]
+  },
   detail:
     'The thing shows up in feeds and profile listings. Marketplace posts carry a listing; the ' +
     'listing category is folded into the root tags so feed filters can find it. Thingtime posts ' +
@@ -1239,7 +1250,9 @@ const dataSchema: ThingtimeSchema = {
 // builder. Field defs are bounded and whitelisted — never arbitrary JSON.
 export const MAX_SCHEMA_NAME_CHARS = 60;
 export const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
-export const MAX_SCHEMA_FIELDS = 40; // total field nodes, counting nested children/items
+// Accommodates the complete root Thing shape plus user extensions while
+// keeping schema trees bounded (nested children/items count toward this cap).
+export const MAX_SCHEMA_FIELDS = 80;
 export const MAX_SCHEMA_ENUM_VALUES = 30;
 export const MAX_SCHEMA_ENUM_VALUE_CHARS = 60;
 export const MAX_SCHEMA_UNIT_CHARS = 20;
@@ -1261,7 +1274,7 @@ export const MAX_SCHEMA_RENDER_BYTES = 48 * 1024;
 // 24-level DOM cap, which the RESOLVED tree still has to clear
 export const MAX_SCHEMA_RENDER_DEPTH = 48;
 export const MAX_SCHEMA_RENDER_NODES = 2000;
-export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array'] as const;
+export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array', 'json'] as const;
 export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
 
 // An array field types its entries with an unnamed field def.
@@ -1285,7 +1298,7 @@ export type SchemaThingField = {
 
 const schemaThingSchema: ThingtimeSchema = {
   id: 'schema',
-  version: 2,
+  version: 3,
   kind: 'crystal',
   collection: null,
   title: 'Schema',
@@ -5084,21 +5097,18 @@ export const SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES: ReadonlySet<string> = new Se
 // builtinSchemaProjection.test.ts pins that congruence so registry/grammar
 // drift fails a test instead of seeding an invalid thing.
 //
-// Deliberately dropped (each an open shape the closed grammar can't express,
-// or a name the grammar reserves):
-// - 'record' fields — documented open bags (data's '*', schema's fields tree,
-//   theme tokens, algorithm weights, app-data values)
+// Open 'record' and opaque 'object' fields become bounded 'json' fields so
+// copies retain crystals, program payloads, rich text and other open structures.
+// Deliberately dropped names:
 // - reserved top-level names ('schema'/'schemaid' — data's convention field IS
 //   the tagging namespace the reservation protects)
 // - names outside the field grammar (the '*' catch-all)
 // 'id' fields project as 'string' (ids are strings on the wire). Everything
 // else carries through: required, enum values, number min/max, string
-// maxLength / string[] maxItems (registry `max`), object children (recursed —
-// an object whose children ALL project away is dropped, since a childless
-// object can't validate).
+// maxLength / string[] maxItems (registry `max`), object children (recursed).
+// An object without projectable children remains available as bounded JSON.
 const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record<string, unknown> | null => {
-  const type = field.type === 'id' ? 'string' : field.type;
-  if (type === 'record') return null;
+  const type = field.type === 'id' ? 'string' : field.type === 'record' ? 'json' : field.type;
   if (!(SCHEMA_FIELD_TYPES as readonly string[]).includes(type)) return null;
   if (field.name.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(field.name)) return null;
   if (depth === 1 && SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES.has(field.name.toLowerCase())) return null;
@@ -5120,8 +5130,8 @@ const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record
     const children = (field.children || [])
       .map((child) => projectBuiltinField(child, depth + 1))
       .filter((child): child is Record<string, unknown> => child !== null);
-    if (!children.length) return null;
-    out.children = children;
+    if (children.length) out.children = children;
+    else out.type = 'json';
   }
   return out;
 };
@@ -5129,7 +5139,8 @@ const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record
 export const projectBuiltinSchemaCrystal = (schema: ThingtimeSchema): Record<string, unknown> => ({
   name: schema.title,
   description: schema.summary,
-  fields: schema.fields.map((field) => projectBuiltinField(field, 1)).filter((field): field is Record<string, unknown> => field !== null)
+  fields: schema.fields.map((field) => projectBuiltinField(field, 1)).filter((field): field is Record<string, unknown> => field !== null),
+  ...(schema.render ? { render: structuredClone(schema.render) } : {})
 });
 
 // whole-number constraint (maxLength/minItems/maxItems); fail-loudly on junk
@@ -5170,6 +5181,7 @@ const sanitizeSchemaField = (
     if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
       return fail(400, `Schema field names are letters/numbers/_/- — nest with children, not dots (got ${String(def.name).slice(0, 80)})`);
     }
+    if (['__proto__', 'prototype', 'constructor'].includes(fieldName.toLowerCase())) return fail(400, `Unsafe schema field name: ${fieldName}`);
     if (depth === 1 && SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES.has(fieldName.toLowerCase())) {
       return fail(400, `Field name ${fieldName} is reserved (it tags data things with their schema)`);
     }
@@ -6716,6 +6728,11 @@ const checkSchemaValue = (
           issues.push({ path: `${path}[${index}]`, message: `caps at ${field.maxLength} characters` });
         }
       });
+      return;
+    }
+    case 'json': {
+      const checked = sanitizeDataValue(value);
+      if (checked.ok === false) issues.push({ path, message: checked.error });
       return;
     }
     case 'object': {

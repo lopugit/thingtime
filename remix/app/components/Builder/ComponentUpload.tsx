@@ -4,6 +4,7 @@ import { AttachmentComposer, type AttachmentComposerHandle } from '../Attachment
 import type { AttachmentComposerSnapshot } from '../Attachments/attachmentTypes';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { componentUploadCommitId, componentUploadCommitInput } from './componentUploadCommit';
 
 export const ComponentUploadEnabled = React.createContext(false);
 const empty: AttachmentComposerSnapshot = { attachmentIds: [], attachments: [], blocking: false, hasSelection: false };
@@ -57,20 +58,14 @@ function OwnedUpload({
 	const save = async () => {
 		if (disabled === true || busyRef.current || snapshot.blocking || !snapshot.attachmentIds.length) return;
 		const ids = JSON.stringify(snapshot.attachmentIds);
-		if (operation.current?.ids !== ids) operation.current = { ids, shareId: `component-upload-${crypto.randomUUID()}` };
+		if (operation.current?.ids !== ids) operation.current = { ids, shareId: componentUploadCommitId() };
 		busyRef.current = true;
 		setBusy(true);
 		setError('');
 		try {
 			let result;
 			try {
-				result = await api.v1.things.create({
-					thingtime: ['post'],
-					crystal: { text: 'Component file', type: 'post' },
-					acl: ['tt:user'],
-					attachmentIds: snapshot.attachmentIds,
-					shareId: operation.current.shareId
-				});
+				result = await api.v1.things.create(componentUploadCommitInput(snapshot.attachmentIds, operation.current.shareId));
 			} catch (failure) {
 				const existing = await api.v1.things.get({ id: operation.current.shareId }).catch(() => null);
 				const saved = existing?.thing;
