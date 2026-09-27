@@ -10,8 +10,8 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.9.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.9.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.11.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.11.0');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');
 	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 });

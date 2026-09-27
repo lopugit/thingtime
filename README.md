@@ -29,9 +29,21 @@ content stays unchanged. **Edit branch** opens historical fields; **Open in Buil
 opens block-based pages in the usual visual editor. Branch text, props, layout
 and page metadata use the same device-first draft events and guarded branch
 pushes. Recover drafts after reload; queued or conflicting pushes stay in History.
-Preview currently uses visible current components with live Actions paused;
-exact historical dependencies and AI branch editing remain open. Visual checkout
-requires Timeline 1.9.0 and webpages-resolve 1.5.0, with no schema migration.
+New page revisions and visual drafts retain each resolved component binding in
+an individual canonical Timeline event. **Preview page** in History and branch
+Builder use those recorded definitions, including cached copies offline. Older
+versions without captures say so; **Preview current components** is an explicit
+comparison choice. Live data and Actions stay paused. Captures preserve only
+readable component definitions, not source-owner history, media bytes, runtime
+outputs or the full theme/Schema/Action dependency graph. Restoring or merging
+page content does not restore the referenced component Things. Dependency-aware
+published restore/merge and AI branch editing remain open. Named-branch merges
+now retain direct recorded components, combine independent changes, and ask
+which definition to keep for overlapping edits. Review Current branch, This
+version and Merge result before saving; missing history stays explicitly missing.
+Recorded preview requires Timeline 1.10.0; component-aware branch comparison
+requires Timeline 1.11.0; current preview uses webpages-resolve 1.5.0. No schema migration,
+additional collection, index, credential or configuration is needed.
 Named-branch comparison requires `api.timeline` 1.7.0 and a connection. Once
 reviewed, the local event and push survive reload/offline in the same existing
 stores, with no schema migration or additional setup.
@@ -78,6 +90,9 @@ it contains disposable sign-in credentials and must stay untracked.
 canonical merged-event uploads, explicit conflicts, exact retries and stale-push
 retention. Set `TIMELINE_TEST_FIXTURE_PATH` to a private temporary file only when
 browser acceptance needs its synthetic login, and remove it afterward.
+`test:timeline:component-merge` uses the same guard for retained definitions,
+explicit choices, canonical uploads/retries, stale heads and unchanged published
+Things. No new collection, schema migration or private configuration is needed.
 The home-scope suite's private fixture file contains only synthetic local
 credentials; remove it after browser acceptance.
 

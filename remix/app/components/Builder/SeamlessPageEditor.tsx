@@ -613,7 +613,7 @@ export default function SeamlessPageEditor({
 							audienceAcl={displayedAcl}
 							onAudienceAcl={changeAcl}
 							onUploadToBlock={builder.uploadToBlock}
-							helpText={draft.branch ? 'Edit this branch and save to your account. Published content stays unchanged. Preview uses current components with live actions paused.' : HELP[mode]}
+							helpText={draft.branch ? 'Edit this branch and save to your account. Published content stays unchanged. Recorded component definitions are used when available; live data and actions are paused.' : HELP[mode]}
 							footerSpace="var(--tt-builder-toolbar-clearance, 160px)"
 						/>
 					)}

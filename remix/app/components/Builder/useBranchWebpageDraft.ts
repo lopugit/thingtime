@@ -1,5 +1,6 @@
 import React from 'react';
-import { readStampedCache, writeStampedCache, pruneCacheNamespace } from '../../hooks/localCache';
+import { useCapturedComponents } from '../../timeline/useCapturedComponents';
+import { bindingsForBlocks } from '../../timeline/componentBindings';
 import { useApi } from '../../hooks/useApi';
 import { useTimelineBranchDraft } from '../../timeline/useTimelineBranchDraft';
 import type { useTimelineSession } from '../../timeline/TimelineProvider';
@@ -18,18 +19,8 @@ export function useBranchWebpageDraft(
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const cachePrefix = 'tt-branch-components-v1-';
-	const cacheKey =
-		cachePrefix +
-		JSON.stringify([connection.scope.ownerId, connection.scope.apiOrigin, connection.scope.dataPlane, target.branch.id, target.head.thingId]);
-	const [components, setComponents] = React.useState<ComponentsByRef>(() => {
-		try {
-			const cached = readStampedCache<any>(cacheKey);
-			return cached && new TextEncoder().encode(JSON.stringify(cached)).byteLength <= 256 * 1024 ? buildComponentsByRef(cached) : {};
-		} catch {
-			return {};
-		}
-	});
+	const [currentComponents, setCurrentComponents] = React.useState<ComponentsByRef>({});
+	const [useCurrentComponents, setUseCurrentComponents] = React.useState(false);
 	const [componentError, setComponentError] = React.useState('');
 	const [revision, refreshComponents] = React.useReducer((value) => value + 1, 0);
 	const alive = React.useRef(true);
@@ -46,8 +37,19 @@ export function useBranchWebpageDraft(
 	} catch (error: any) {
 		invalid = error.message;
 	}
+	const historical = useCapturedComponents(branch.event, crystal?.blocks || [], branch.unwritten);
+	const extras = React.useRef<ComponentsByRef>({});
+	const retained = React.useRef<ComponentsByRef>({});
+	const [, redraw] = React.useReducer((value) => value + 1, 0);
+	// The exact immutable records are the durable cache. Keep the rendered map
+	// mounted while a newer local event's links are being read asynchronously.
+	retained.current = { ...retained.current, ...historical.components };
+	const components = { ...retained.current, ...(useCurrentComponents ? currentComponents : {}), ...extras.current };
+	const componentsRef = React.useRef(components);
+	componentsRef.current = components;
 	const refsKey = JSON.stringify(branchComponentRefs(crystal?.blocks || []));
 	React.useEffect(() => {
+		if (!useCurrentComponents) return;
 		const refs: string[] = JSON.parse(refsKey);
 		if (!refs.length) return;
 		const controller = new AbortController();
@@ -57,25 +59,26 @@ export function useBranchWebpageDraft(
 			.then((result) => {
 				if (controller.signal.aborted || !alive.current) return;
 				if (!result?.ok) throw new Error(result?.error || 'Could not load components.');
-				setComponents(buildComponentsByRef(result));
+				setCurrentComponents(buildComponentsByRef(result));
 				setComponentError('');
-				// An optional bounded rendering cache, never a second history format. Store
-				// the same public response and retain at most four 256-KiB entries.
-				if (new TextEncoder().encode(JSON.stringify(result)).byteLength <= 256 * 1024) {
-					pruneCacheNamespace(cachePrefix, cacheKey, 4);
-					writeStampedCache(cacheKey, result);
-				}
 			})
 			.catch((error) => {
 				if (!controller.signal.aborted && alive.current) setComponentError(error?.error || error?.message || 'Could not refresh components.');
 			});
 		return () => controller.abort();
-	}, [refsKey, revision, connection, cacheKey]);
+	}, [useCurrentComponents, refsKey, revision, connection]);
+	const captured = (snapshot: Parameters<typeof branch.change>[0]) => {
+		const blocks = branchWebpageCrystal(snapshot).blocks;
+		const bindings = bindingsForBlocks(blocks, componentsRef.current);
+		return Object.keys(bindings).length === branchComponentRefs(blocks).length ? bindings : undefined;
+	};
+
 	const update = (patch: Parameters<typeof updateBranchWebpage>[1]) => {
 		const current = branch.getSnapshot();
 		if (!current || branch.locked) return;
 		try {
-			branch.change(updateBranchWebpage(current, patch));
+			const next = updateBranchWebpage(current, patch);
+			branch.change(next, captured(next));
 		} catch (error: any) {
 			setComponentError(error.message);
 		}
@@ -88,13 +91,30 @@ export function useBranchWebpageDraft(
 			locked: branch.locked,
 			notice: branch.notice,
 			canRefresh: branch.canRefresh,
-			updateMetadata: update
+			updateMetadata: update,
+			componentNotice: useCurrentComponents
+				? 'Previewing current components. Subsequent edits record these definitions.'
+				: historical.loading
+				? 'Loading recorded components…'
+				: historical.missing.length
+				? 'Some component definitions were not recorded for this version.'
+				: 'Using recorded component definitions.',
+			useCurrentComponents,
+			setUseCurrentComponents: (value: boolean) => {
+				setUseCurrentComponents(value);
+			},
+			retryComponents: historical.retry
 		},
 		history: {
-			error: invalid || branch.error || componentError,
+			error: invalid || branch.error || componentError || historical.error,
 			saving: branch.writing,
 			recoverable: branch.locked ? [] : branch.recoverable,
-			recover: branch.recover,
+			recover: async (event) => {
+				extras.current = {};
+				retained.current = {};
+				setUseCurrentComponents(false);
+				await branch.recover(event);
+			},
 			dismiss: branch.dismiss
 		},
 		loading: branch.loading,
@@ -117,10 +137,31 @@ export function useBranchWebpageDraft(
 		componentsByRef: components,
 		setBlocks: (blocks) => update({ blocks }),
 		addComponent: (ref, component) => {
-			if (alive.current) setComponents((current) => ({ ...current, [ref]: component }));
+			// A repeated reference shares this branch's recorded definition. Inserting
+			// another instance must not silently upgrade existing instances.
+			if (alive.current && !(Object.prototype.hasOwnProperty.call(componentsRef.current, ref) && componentsRef.current[ref])) {
+				extras.current = { ...extras.current, [ref]: component };
+				componentsRef.current = { ...componentsRef.current, [ref]: component };
+				redraw();
+			}
 		},
-		ensureComponent: async () => {
-			if (alive.current) refreshComponents();
+		ensureComponent: async (ref) => {
+			if (!alive.current || (Object.prototype.hasOwnProperty.call(componentsRef.current, ref) && componentsRef.current[ref])) return;
+			// Only an explicit insertion requests a new current definition. Missing
+			// historical bindings never enter this path as an automatic fallback.
+			try {
+				const result = await apiRef.current.v1.webpages.resolveComponents(connection.scope, [{ id: 'inserted', type: 'component', component: ref }]);
+				if (!alive.current) return;
+				if (!result?.ok) throw new Error(result?.error || 'Could not load the inserted component.');
+				const added = buildComponentsByRef(result);
+				extras.current = { ...extras.current, ...added };
+				componentsRef.current = { ...componentsRef.current, ...added };
+				redraw();
+				const current = branch.getSnapshot();
+				if (current) branch.change(current, captured(current));
+			} catch (error: any) {
+				if (alive.current) setComponentError(error?.error || error?.message || 'Could not load the inserted component.');
+			}
 		},
 		markSaved: () => {
 			/* A published save cannot acknowledge this branch. */
@@ -132,7 +173,10 @@ export function useBranchWebpageDraft(
 			const current = branch.getSnapshot();
 			if (!current) return { ok: false, error: 'Load the branch before saving.' };
 			try {
-				if (options && !branch.locked) branch.change(updateBranchWebpage(current, options));
+				if (!branch.locked) {
+					const next = options ? updateBranchWebpage(current, options) : current;
+					branch.change(next, captured(next));
+				}
 				const result = await branch.save();
 				return { ...result, id: target.head.thingId };
 			} catch (error: any) {
@@ -141,6 +185,9 @@ export function useBranchWebpageDraft(
 		},
 		resetToDefault: async () => ({ ok: false, error: 'A branch cannot delete the published page.' }),
 		discardDraft: () => {
+			extras.current = {};
+			retained.current = {};
+			setUseCurrentComponents(false);
 			void branch.discard();
 		},
 		refresh: () => {

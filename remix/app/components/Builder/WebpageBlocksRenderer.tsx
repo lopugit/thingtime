@@ -39,7 +39,7 @@ export type ComponentsByRef = Record<string, ComponentThingLike | null>;
 export const buildComponentsByRef = (payload: { components?: Array<ComponentThingLike>; refs?: Record<string, string | null> }): ComponentsByRef => {
 	const byId = new Map<string, ComponentThingLike>();
 	for (const component of payload.components || []) byId.set(component.id, component);
-	const out: ComponentsByRef = {};
+	const out: ComponentsByRef = Object.create(null);
 	for (const [ref, id] of Object.entries(payload.refs || {})) {
 		out[ref] = (id && byId.get(id)) || null;
 	}

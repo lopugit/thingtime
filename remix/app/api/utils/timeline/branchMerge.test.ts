@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { captureComponentBindings } from '../../../timeline/componentBindings.ts';
+import { mergeComponentVersions } from '../../../timeline/componentMerge.ts';
+import { timelineEventThingId } from './repository.ts';
 import { createBranchMergeService } from './branchMerge.ts';
 import { createVersionContentReader, loadVersionGraph } from './versions.ts';
 import { entryFixture, eventFixture } from '../../../timeline/testFixtures.ts';
@@ -17,7 +20,7 @@ function setup(current = { left: 1, right: 0 }, incoming = { left: 0, right: 2 }
  const entries = [entry('base', [], snapshot({ left: 0, right: 0 })), entry('current', ['base'], snapshot(current)), entry('incoming', ['base'], snapshot(incoming))];
  const target = { branch: { formatVersion: 1 as const, id: branchId, ownerId: 'user-1', name: 'Experiment', createdAt: date }, head: { formatVersion: 1 as const, id: timelineBranchHeadId(branchId, 'page'), branchId, ownerId: 'user-1', thingId: 'page', eventId: 'current', revision: 2, createdAt: date, updatedAt: date } };
  const reads: string[][] = [];
- const service = createBranchMergeService({ collection: async () => ({}) as any, branch: async () => target,
+ const service = createBranchMergeService({ collection: async () => ({ find: (query: any) => ({ toArray: async () => entries.filter(item => query.shareId.$in.includes(timelineEventThingId('user-1', item.event.id))).map(item => ({ timelineEntryBytes: new TextEncoder().encode(JSON.stringify(item)).byteLength })) }) }) as any, branch: async () => target,
   entries: async (_things, owner, ids) => { assert.equal(owner, 'user-1'); reads.push(ids); return entries.filter(item => ids.includes(item.event.id)); },
   nodes: async (_things, owner, ids) => { assert.equal(owner, 'user-1'); return entries.filter(item => ids.includes(item.event.id)).map(item => ({ id: item.event.id, thingId: item.event.thingId, parentIds: item.event.parentIds, afterAdapter: item.event.after?.adapter ?? null })); },
   snapshot: async (_things, owner, eventId) => { assert.equal(owner, 'user-1'); return entries.find(item => item.event.id === eventId)!.event.after; }
@@ -89,4 +92,40 @@ test('compact materialization refuses missing, duplicate, foreign, unsupported, 
  graph.get('draft')!.parentIds = ['draft']; await assert.rejects(resolve(async () => [base]), /cyclic/);
  graph.get('draft')!.parentIds = ['base', 'other']; await assert.rejects(resolve(async () => [base]), /unambiguous/);
  graph.get('draft')!.afterAdapter = 'theme-content'; await assert.rejects(resolve(async () => [base]), /unambiguous/);
+});
+
+
+test('component-aware branch preview retains definitions and folder-source links without rewriting any version', async () => {
+ const h = setup(); const page = { blocks: [{ id: 'card', type: 'component', component: 'card' }] };
+ const definitions = ['Old', 'Current', 'Incoming'];
+ for (let index = 0; index < 3; index++) {
+  const version = h.entries[index]; version.event.after = snapshot(page);
+  const captured = captureComponentBindings(version.event, { card: { id: 'card-id', crystal: { render: { tag: 'h2', children: definitions[index] } } } }, [], () => `capture-${index}`);
+  version.event.dependencies = captured.dependencies; h.entries.push(...captured.events.map(event => entryFixture(event)));
+ }
+ await assert.rejects(h.service('user-1', request), /Update this client/);
+ const optIn = { ...request, componentChoices: {} };
+ const first = parseBranchMergePreview((await h.service('user-1', optIn)).preview, 'user-1', optIn);
+ assert.equal(first.components!.entries.length, 3); assert.equal(mergeComponentVersions(first.components!, first.result).conflicts.length, 1);
+ assert.throws(() => createBranchMergeProposal(first, 'browser'), /resolve/);
+ const choice = { ...optIn, componentChoices: { '["card"]': 'incoming' as const } };
+ const chosen = parseBranchMergePreview((await h.service('user-1', choice)).preview, 'user-1', choice);
+ assert.deepEqual(createBranchMergeProposal(chosen, 'browser').event.dependencies, h.entries[2].event.dependencies);
+ await assert.rejects(h.service('user-1', { ...optIn, componentChoices: { '["unknown"]': 'current' } }), /choices/);
+ h.entries.push(entry('move', ['incoming'], { adapter: 'folder-placement', version: 1, value: { folderId: 'new-folder' } }));
+ const movedRequest = { ...choice, eventId: 'move' };
+ const moved = parseBranchMergePreview((await h.service('user-1', movedRequest)).preview, 'user-1', movedRequest);
+ assert.equal((moved.result.value as any).folderId, 'new-folder');
+ assert.deepEqual(createBranchMergeProposal(moved, 'browser').event.dependencies, h.entries[2].event.dependencies);
+ assert.equal(h.target.head.eventId, 'current');
+ assert.throws(() => parseBranchMergePreview(chosen, 'user-1', { ...choice, componentChoices: {} }), /choices/);
+});
+
+test('combined preview refuses dense versions before returning a response the client cannot decode', async () => {
+ const content = { left: 1, right: 0, rows: Array(70_000).fill(0) };
+ const h = setup(content, content);
+ for (const options of [request, { ...request, componentChoices: {} }]) {
+  await assert.rejects(h.service('user-1', options), (error: any) => error.status === 413 && /too large to preview/.test(error.message));
+ }
+ assert.equal(h.target.head.eventId, 'current');
 });

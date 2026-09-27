@@ -1,3 +1,4 @@
+import type { ComponentBindings } from './componentBindings.ts';
 import { branchEditableSnapshot, branchEditCommand } from './branchCheckout.ts';
 import { parseTimelineBranchEntry, type TimelineBranchEntry, type TimelineBranchCommand } from './branches.ts';
 import { TimelineDraftRecorder } from './draftRecorder.ts';
@@ -14,20 +15,24 @@ export class TimelineBranchWorkingCopy {
 	target: TimelineBranchEntry;
 	snapshot: TimelineSnapshot;
 	private basis: TimelineSnapshot;
+	private basisEvent: TimelineEvent | null;
 	private recorder: TimelineDraftRecorder;
 	private resumed: string | null = null;
 	private command: TimelineBranchCommand | null = null;
 	private busy = false;
 	private reconciling: Promise<BranchSaveState> | null = null;
 	edited = false;
-	constructor(readonly connection: BranchConnection, target: TimelineBranchEntry, snapshot: TimelineSnapshot, private knownBasis = true) {
+	constructor(readonly connection: BranchConnection, target: TimelineBranchEntry, snapshot: TimelineSnapshot, private knownBasis = true, public event: TimelineEvent | null = null) {
 		this.target = parseTimelineBranchEntry(target);
 		if (this.target.branch.ownerId !== connection.store.scope.ownerId) throw new Error('Branch account changed.');
 		this.snapshot = this.basis = branchEditableSnapshot(snapshot);
+		this.basisEvent = event;
 		this.recorder = this.newRecorder(target.head.eventId);
 	}
 	private newRecorder(parentId: string) {
-		return new TimelineDraftRecorder(this.connection.store, this.target.head.thingId, this.target.branch.id, crypto.randomUUID(), parentId);
+		const recorder = new TimelineDraftRecorder(this.connection.store, this.target.head.thingId, this.target.branch.id, crypto.randomUUID(), parentId);
+		recorder.dependencies = this.event?.dependencies ?? [];
+		return recorder;
 	}
 	get saving() {
 		return this.busy;
@@ -38,12 +43,13 @@ export class TimelineBranchWorkingCopy {
 	get hasUnwrittenChanges() {
 		return this.recorder.hasUnwrittenChanges;
 	}
-	change(value: TimelineSnapshot, label = `Edit ${this.target.branch.name}`) {
+	change(value: TimelineSnapshot, label = `Edit ${this.target.branch.name}`, components?: ComponentBindings) {
 		if (this.locked) throw new Error('Finish syncing this branch push before editing again.');
 		const next = branchEditableSnapshot(value);
-		const written = this.recorder.capture(this.snapshot, next, label);
-		this.edited ||= JSON.stringify(this.snapshot) !== JSON.stringify(next);
+		const written = this.recorder.capture(this.snapshot, next, label, components);
+		this.edited ||= JSON.stringify(this.snapshot) !== JSON.stringify(next) || (!!this.recorder.capturedEvent && this.recorder.capturedEvent.id !== this.event?.id);
 		this.snapshot = next;
+		this.event = this.recorder.capturedEvent ?? this.event;
 		return written;
 	}
 	resume(event: TimelineEvent) {
@@ -58,6 +64,7 @@ export class TimelineBranchWorkingCopy {
 			throw new Error('This draft belongs to another branch.');
 		this.snapshot = branchEditableSnapshot(event.after);
 		this.resumed = event.id;
+		this.event = event;
 		this.recorder = this.newRecorder(event.id);
 		this.edited = true;
 	}
@@ -101,6 +108,7 @@ export class TimelineBranchWorkingCopy {
 		this.target = acknowledged;
 		this.knownBasis = true;
 		this.basis = this.snapshot;
+		this.basisEvent = this.event;
 		this.recorder = this.newRecorder(acknowledged.head.eventId);
 		this.command = null;
 		this.resumed = null;
@@ -110,6 +118,7 @@ export class TimelineBranchWorkingCopy {
 	async discard() {
 		if (this.locked) throw new Error('Check the pending branch push before discarding.');
 		if (!this.knownBasis) throw new Error('Reconnect and reopen this branch to load the saved version before discarding.');
+		this.recorder.dependencies = this.basisEvent?.dependencies ?? [];
 		const written = this.change(this.basis, 'Discard branch edits');
 		this.busy = true;
 		try {

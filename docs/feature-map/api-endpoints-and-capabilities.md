@@ -317,3 +317,20 @@ existing registered resolve route. `webpages/componentPreview.ts` accepts only
 blocks plus exact account/source query scope, then reuses the viewer-only batch
 resolver without page/root grants. Both manifests, client negotiation, unit
 checks and guarded `test:timeline:visual-branch` cover it. GET is unchanged.
+
+
+Timeline 1.10.0 adds `components=1` with exact `eventId`/owner/dataPlane on the
+existing registered route. The private response is `{ok,eventId,entries}` using
+unchanged canonical events. Maximum 120 direct component dependencies; scalar
+byte metadata is checked before payload decoding, then the result is capped at
+4 MiB. Unknown/duplicate selectors, foreign accounts and stale sources refuse.
+`useApi.timeline.componentBindings` negotiates 1.10.0; both generated capability
+manifests derive it from the canonical docs entry. No new route or index.
+
+
+Timeline 1.11.0 extends `preview-branch-merge` with optional `componentChoices`.
+Opt-in responses include three bounded component-link maps and canonical capture
+entries; old clients refuse versions with retained dependencies. Metadata is
+preflighted before up to 360 unique captures are read in batches of 128, with
+aggregate 4 MiB/200,000-node response bounds. No new route, collection or schema;
+both manifests and conditional client negotiation use the canonical docs entry.

@@ -665,3 +665,97 @@ runtimes, native sections, suite installation and live Actions are disabled,
 including authored `mode=run` links. Publish/Visit/transfer controls are hidden
 or disabled in this editor. Exact historical dependencies, AI branch editing,
 and broader managed adapters remain in the open acceptance ledger.
+
+
+## Recorded component definitions — 2026-09-28
+
+Page mutation transactions now append a `component-binding` capture per distinct
+authored ref. Its approved snapshot is `{ref,component:{id,crystal}|null}`; each
+binding is an ordinary immutable Timeline event linked by the existing atomic
+relationship records. There is no growing refs/history array on the page and no
+new persistence format. Unchanged bindings from the preceding page version are
+reused. Server captures use the live page's existing batched component resolver,
+including author-local keys, with component reads inside the content transaction.
+The owner-private history retains only readable definitions, never a source
+owner's private event graph, ACL/grants, hidden keys or database envelope.
+Previously readable shared definitions remain a private point-in-time copy if
+the original changes or sharing is revoked. New captures reevaluate access.
+
+Builder device drafts capture the components actually rendered by the editor.
+Individual capture events enter the same durable outbox before the page event;
+uploads already order dependencies before their consumers. Branch working copies
+carry those exact links through saves, field edits, recovery and discard. The
+bounded canonical event cache replaces the earlier branch-only current-component
+render cache. It may evict acknowledged definitions; older/missing records load
+on demand. Pending events remain protected. Offline previews therefore depend
+on the relevant definitions still being cached, rather than downloading every
+component version to every device.
+
+`api.timeline` 1.10.0 adds `GET components=1&eventId=...` with owner/dataPlane and
+optional storage scope. It resolves only that event's direct component links in
+one bounded batch (maximum 120), preflights server byte metadata before decoding
+payloads, and caps the response at 4 MiB. The client validates every owner, event
+and linked target before caching. The same existing collection/index/ACL and
+quota rules apply. Run `test:timeline:components` against the guarded disposable
+local replica set for API-only capture, unchanged-definition reuse, source
+changes/revocation, private reference refusal and identity fences.
+
+History **Preview page** and visual branch checkout use recorded definitions by
+default. Current definitions require an explicit preview choice. Incomplete old
+versions never silently claim current definitions as historical. Preview Actions
+and live sources stay inert; media bytes and theme appearance may change
+independently. The branch banner leaves room for the inspector, and its History
+preview has a distinct React key so refresh cannot accumulate duplicate controls.
+
+This increment captures direct component definitions and instance args (the
+latter already belong to the page snapshot). Exact nested Schema/Action graphs,
+external runtime outputs, immutable media copies, theme selection, component-aware
+restore/merge and streaming over-limit previews remain open. A page-content
+restore/merge still goes through the ordinary live writer and records the
+components resolved at that new commit; it does not rewrite component Things.
+
+
+## Recorded components in named-branch merges — 2026-09-28
+
+Named-branch merge review now includes direct recorded component definitions.
+The shared `timeline/componentMerge.ts` compares definitions atomically by
+content, so equivalent captures with different event IDs agree. Independent
+changes combine; overlapping definitions require **Keep current** or **Use this
+version**. Missing capture history is distinct from a captured unavailable ref
+and is never treated as a deletion or replaced with current live definitions.
+Removed page refs drop their links; new refs take the version that references
+them. Folder-only revisions inherit the nearest content revision's captures.
+
+`api.timeline` 1.11.0 extends the existing `preview-branch-merge` command with
+optional `componentChoices`. Updated clients send an empty map to opt in.
+A legacy caller may compare versions without dependencies; retained dependencies
+return 409 requiring an updated client. Unknown dependency families refuse
+explicitly until their merge rules exist. The transient response carries bounded
+base/current/incoming maps and deduplicated canonical capture entries, never a
+new durable format or an embedded growing history list. The server validates
+owner/target identity, preflights retained byte metadata, and reads at most 360
+unique captures in batches of 128, within the aggregate 4 MiB/200,000-node
+preview budget. Current/incoming page contents and choices are checked again by
+the client before review.
+
+The review resolves page conflicts before component conflicts, then renders
+**Preview current branch**, **Preview this version**, and **Preview merge result**
+with the recorded definitions. Actions and live source runtimes remain inert.
+Saving caches selected canonical entries before enqueuing the existing two-parent
+merge event and revision-fenced branch command. IndexedDB and the remote retain
+identical event/link schemas in the private Timeline folder; cache eviction,
+retry identity and stale-push recovery use the existing synchronization path.
+The published page and referenced component Things are unchanged.
+
+Acceptance: the guarded real HTTP suite combines independent definitions,
+requires overlap choices, checks exact uploads/lost-reply retries and stale
+heads, and proves later live edits do not rewrite captured definitions. Browser
+checks cover current/incoming/result previews, no Action execution, offline save
+and reload with selected definitions, reconnect to exactly revision 2, unchanged
+published content, and sign-out. Mobile labels/controls wrap without overflow.
+Screenshots: [saved desktop preview](../PRs/assets/timeline-component-merge/saved-preview-desktop.png)
+and [offline mobile preview](../PRs/assets/timeline-component-merge/offline-preview-mobile.png).
+
+Still open: dependency-aware published restore/merge; nested Schema, Action,
+theme and media versions; generic folder-version preview inheritance; streamed
+comparisons above the current limits; and the remaining acceptance-ledger items.

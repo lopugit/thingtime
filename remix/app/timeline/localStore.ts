@@ -95,6 +95,14 @@ export class TimelineLocalStore {
 	private async read(selection?: TimelineLocalSelection) {
 		return (await this.backend.read(this.key, selection)).map(row => { const checked = validateTimelineRow(row, this.key); assertOwner(this.scope, checked.event); return checked; });
 	}
+	/** Exact bounded batch read for immutable dependency records. */
+	async entries(ids: string[]): Promise<LocalTimelineRow[]> {
+		if (ids.length > 128 || new Set(ids).size !== ids.length) throw new Error('Invalid Timeline dependency batch');
+		let found: LocalTimelineRow[] = [];
+		await this.change(ids, (_index, rows) => { found = rows; return { put: [], remove: [], touch: rows.map(row => ({ id: row.event.id, accessedAt: this.now() })) }; });
+		return found;
+	}
+
 	async pending(): Promise<TimelineEvent[]> {
 		const rows = await this.read({ status: 'pending' });
 		const pending = new Map(rows.map(row => [row.event.id, row.event]));
