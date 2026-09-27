@@ -1,3 +1,5 @@
+import { Link } from 'react-router';
+import { branchBuilderHref } from '../Builder/branchWebpageCore';
 import React from 'react';
 import { TimelineBranchEditor } from './TimelineBranchEditor';
 import { TimelineBranchMerge } from './TimelineBranchMerge';
@@ -81,6 +83,7 @@ export function TimelineBranches({ thingId, selected, onSelect }: { thingId: str
 			{branches.map(entry => <Flex key={entry.head.id} gap={2} align="center" wrap="wrap" mb={2} p={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
 				<Box flex={{ base: '1 0 100%', md: '1' }} minW={0}><Text fontWeight="600" overflowWrap="anywhere">{entry.branch.name}</Text><Text fontSize="xs" color="var(--tt-muted)">{queued.some(row => row.command.branchId === entry.branch.id && row.failure) ? 'Needs attention' : queued.some(row => row.command.branchId === entry.branch.id) ? 'Waiting to sync' : 'Saved to your account'}</Text></Box>
 				<Button size="sm" variant="outline" isDisabled={busy} onClick={() => void view(entry)}>View version</Button>
+				{connection ? <Button as={Link} reloadDocument size="sm" variant="outline" to={branchBuilderHref(entry.branch.id, thingId, connection.scope.ownerId, connection.scope.dataPlane)}>Open in Builder</Button> : null}
 				<Button size="sm" variant="outline" isDisabled={busy || !!editing || !!merge || queued.some(row => row.command.branchId === entry.branch.id)} onClick={() => setEditing(entry)}>Edit branch</Button>
 				<Button size="sm" variant="ghost" isDisabled={busy || !!editing || !candidate || candidate.id === entry.head.eventId || queued.some(row => row.command.branchId === entry.branch.id)} onClick={() => candidate && void queue({ command: 'advance-branch', operationId: crypto.randomUUID(), branchId: entry.branch.id, thingId, eventId: candidate.id, expectedRevision: entry.head.revision, name: null })}>Push selected version</Button>
 				<Button size="sm" variant="outline" isDisabled={busy || !!editing || !candidate || candidate.id === entry.head.eventId || queued.some(row => row.command.branchId === entry.branch.id)} onClick={() => candidate && setMerge({ target: entry, incoming: candidate })}>Merge selected version…</Button>

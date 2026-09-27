@@ -104,6 +104,12 @@ export function useApi() {
 
   const v1 = {
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
+    webpages: {
+      resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.webpages-resolve', '1.5.0');
+        return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
+      }, [asyncFetcher])
+    },
     timeline: {
       branchHead: useCallback(async (scope: { ownerId: string; dataPlane: string }, branchId: string, thingId: string, options?: { signal?: AbortSignal }) => {
         const lookup = parseTimelineBranchLookup({ branchId, thingId });

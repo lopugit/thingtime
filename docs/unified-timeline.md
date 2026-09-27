@@ -628,3 +628,40 @@ branch switcher or runtime behavior, persistent schema, collection, index,
 IndexedDB migration, configuration or environment variable. Named branch field
 editing continues through the existing History interface. The broader remaining
 scope above stays open.
+
+
+## Visual named-branch editing — 2026-09-28
+
+History → Branches → **Open in Builder** opens the exact named branch in the
+existing visual canvas, toolbar and inspector. Text, component-instance args,
+layout, name and audience changes adapt the same full content snapshot into
+`TimelineDraftRecorder`; no published Thing writer or AI save bridge is mounted.
+Toolbar and inspector saves finish inline editing before reading the snapshot;
+the first inline edit enables Save and pointer focus stays stable through its
+click. The shared `TimelineBranchWorkingCopy` also powers the field editor. Successful
+saves advance its parent/revision for the next edit. An uncertain push freezes
+its immutable command; stale pushes preserve the version and direct the user
+to History. Discard serializes with edits/saves and releases only its draft pin.
+
+Account/source-qualified links, cached heads and canonical events support warm
+loads and offline recovery. A cold server response may refresh an untouched
+cached checkout but cannot replace an edit or queued command. Reopening from
+History deliberately starts a fresh checkout. Queued pushes recovered after
+reload remain read-only until reviewed/synced in History and reopened. React
+StrictMode cleanup cancels only the old load and permits its replacement.
+
+`api.webpages-resolve` 1.5.0 adds a private read-only POST with exactly `{blocks}`
+and `ownerId`/`dataPlane` query fields. It sanitizes the normal bounded block
+format, resolves all referenced components with the authenticated viewer in
+one batch, and never accepts a stored page/root audience grant. Request bodies
+are capped at 192 KiB, sanitized blocks at their existing limits, and responses
+at 4 MiB. Anonymous, mismatched-scope and rate-limited requests refuse before
+resolution. Current component responses have an optional account/origin/source/
+branch/Thing cache, bounded to four entries of 256 KiB each. This rendering
+cache does not change canonical history schemas.
+
+The branch preview explicitly uses **current** visible components. Page source
+runtimes, native sections, suite installation and live Actions are disabled,
+including authored `mode=run` links. Publish/Visit/transfer controls are hidden
+or disabled in this editor. Exact historical dependencies, AI branch editing,
+and broader managed adapters remain in the open acceptance ledger.
