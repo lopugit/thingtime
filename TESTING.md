@@ -9343,3 +9343,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   fresh Run, desktop and 390px layout, and unchanged opaque runtime CSP.
 - Check both 1.34.0 manifests and exact runtime/deployment identity in preview
   and production before claiming that the new objects are live.
+
+### Web standards: native traversal and editable synchronous callbacks (2026-09-27)
+
+- Run all 41 entries with default and edited programs; check exact native node
+  order, getter values, method results, callback identity and pointer state.
+  Compare TreeWalker reject pruning with NodeIterator's skip-like rejection.
+- Exercise iterator reversal and removal on both sides of its reference pointer,
+  TreeWalker currentNode outside its original root but inside the owned document,
+  zero-mask callback suppression, null/function/object filters, native return
+  conversion and recursive-filter InvalidStateError followed by successful reuse.
+- Keep callable callbacks strict in the built classic IIFE: an omitted native
+  receiver must remain undefined, never become the runtime Window. Check object
+  callback this, callback-thrown falsy data, native errors and nested handle identity.
+- Refuse asynchronous tokens, foreign/wrong handles, prototype/global/async
+  escapes, large trees and callback work/collection/depth limits. Check literal
+  copies (including property-name text) and joins before allowing unbounded allocation, and catch/finally loops.
+- Edit the filter's program logic itself, not only selector inputs. Round-trip
+  Action-produced definitions through private Component writes, preserve all
+  callback nodes, assert anonymous 404 and idempotent suite installation. Save,
+  reload and Run in Builder, reuse the same saved Component on a second page,
+  verify Stop/fresh Run, and inspect desktop/mobile layout.
+- Run the broader native regression audit after changing the shared bridge and
+  worker error transport. Verify both 1.35.0 manifests, unchanged opaque sandbox
+  policy and exact runtime/deployment identity on preview and production.

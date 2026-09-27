@@ -41,6 +41,11 @@ test('every catalogue DOM request names a member the receiver policy registers',
 			assert.equal(key, '', `${id}: a document request carries no member name`);
 			continue;
 		}
+		if (action === 'callback') {
+			assert.equal(key, 'acceptNode');
+			continue;
+		}
+		if (action === 'call' && key === 'acceptNode') continue;
 		if (action === 'construct') {
 			assert.ok(
 				[

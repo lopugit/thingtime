@@ -1,3 +1,4 @@
+import { traversalRecipe } from './traversalFixtures';
 import { xpathRecipe } from './xpathFixtures';
 import { ariaRecipe } from './ariaFixtures';
 import { animationRecipe } from './animationFixtures';
@@ -414,6 +415,8 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const traversal = traversalRecipe(feature);
+	if (traversal) return traversal;
 	const xpath = xpathRecipe(feature);
 	if (xpath) return xpath;
 	const aria = ariaRecipe(feature);

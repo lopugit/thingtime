@@ -1,3 +1,11 @@
+import { TRAVERSAL_CALLS, TRAVERSAL_RECEIVER_POLICY, type TraversalArg } from './traversalPolicy';
+import {
+	createSynchronousCallback,
+	callbackData,
+	SynchronousCallbackThrown,
+	SYNC_CALLBACK_LIMITS,
+	type SynchronousCallback
+} from './synchronousCallback';
 import { XPATH_CALLS, XPATH_CONSTRUCTORS, XPATH_RECEIVER_POLICY, type XPathArg } from './xpathPolicy';
 import { xpathExpression, xpathResolver, xpathCost, XPATH_LIMITS } from './xpathSupport';
 import { ARIA_ELEMENT, ariaArgument, type ARIAArg } from './ariaPolicy';
@@ -33,6 +41,7 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| TraversalArg
 	| XPathArg
 	| ARIAArg
 	| AnimationArg
@@ -108,6 +117,7 @@ const parentReads = 'children firstElementChild lastElementChild childElementCou
 const childReads = 'previousElementSibling nextElementSibling';
 const iteration = { keys: call([], { iterable: true }), values: call([], { iterable: true }), entries: call([], { iterable: true }) };
 export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
+	...TRAVERSAL_RECEIVER_POLICY,
 	...XPATH_RECEIVER_POLICY,
 	...OBSERVER_RECEIVER_POLICY,
 	...HTML_FORM_RECEIVER_POLICY,
@@ -147,6 +157,7 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 	Document: {
 		reads: `URL documentURI compatMode characterSet charset inputEncoding contentType doctype documentElement body head styleSheets ${parentReads}`,
 		calls: {
+			...TRAVERSAL_CALLS,
 			...XPATH_CALLS,
 			...parentCalls,
 			getElementById: call(['text']),
@@ -266,6 +277,10 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		...RANGE_CONSTRUCTORS,
 		...ANIMATION_CONSTRUCTORS
 	};
+	const synchronousCallbacks = new WeakMap<object, { key: string; callback: SynchronousCallback; callable: boolean; fn: object }>();
+	let synchronousCount = 0,
+		synchronousSteps = 0,
+		synchronousDepth = 0;
 	const xpathExpressions = new WeakMap<object, ReturnType<typeof xpathExpression>>();
 	let xpathWork = 0;
 	const animations = new Set<object>();
@@ -328,8 +343,17 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		messageCount = 0,
 		work = 0,
 		stopped = false;
+	const constantDescriptors = new Map<string, PropertyDescriptor>();
+	const callbackError = (error: unknown) =>
+		error instanceof SynchronousCallbackThrown
+			? { name: 'AuthoredCallbackThrown', message: error.message, thrown: error.value }
+			: { name: error instanceof Error ? error.name : 'DOMException', message: String((error as Error)?.message || error).slice(0, 500) };
 	const captured = new Map<string, Captured>();
 	for (const [name, policy] of Object.entries(DOM_RECEIVER_POLICY)) {
+		for (const key of policy.reads.split(' ').filter((key) => /^[A-Z][A-Z0-9_]*$/.test(key))) {
+			const descriptor = Object.getOwnPropertyDescriptor(realm[name] || {}, key);
+			if (descriptor) constantDescriptors.set(name + '.' + key, descriptor);
+		}
 		const prototype = realm[name]?.prototype;
 		if (!prototype) continue;
 		const descriptors = (names: string) =>
@@ -541,10 +565,13 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 			return { $domArray: id, items };
 		}
 		if (typeof value === 'function' && callbackTokens.has(value)) return callbackTokens.get(value);
-		if (!value || typeof value !== 'object') throw new Error('This DOM result is not exposed');
-		let type: string | undefined;
+		const synchronous = !!value && (typeof value === 'object' || typeof value === 'function') && synchronousCallbacks.has(value as object);
+		if (!value || (typeof value !== 'object' && !synchronous)) throw new Error('This DOM result is not exposed');
+		const objectValue = value as object;
+		let type: string | undefined = synchronous ? 'AuthoredCallback' : undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(TRAVERSAL_RECEIVER_POLICY),
 			...Object.keys(XPATH_RECEIVER_POLICY),
 			...Object.keys(ANIMATION_RECEIVER_POLICY),
 			...Object.keys(RANGE_RECEIVER_POLICY),
@@ -567,19 +594,19 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 			'HTMLCollection',
 			'NamedNodeMap'
 		])
-			if (belongs(value, name)) {
+			if (belongs(objectValue, name)) {
 				type = name;
 				break;
 			}
 		if (!type) throw new Error('This DOM receiver type is not exposed: ' + Object.prototype.toString.call(value));
-		if (belongs(value, 'Node')) inspectTree(value as Node);
-		if (belongs(value, 'Animation') || belongs(value, 'AnimationEffect')) trackAnimation(value);
-		let id = ids.get(value);
+		if (belongs(objectValue, 'Node')) inspectTree(value as Node);
+		if (belongs(objectValue, 'Animation') || belongs(objectValue, 'AnimationEffect')) trackAnimation(objectValue);
+		let id = ids.get(objectValue);
 		if (!id) {
 			if (objects.size >= 800) throw new Error('DOM handle budget exceeded');
 			id = `${scope}:${objects.size + 1}`;
-			ids.set(value, id);
-			objects.set(id, { value, type });
+			ids.set(objectValue, id);
+			objects.set(id, { value: objectValue, type });
 		}
 		return { $dom: id, type };
 	};
@@ -624,7 +651,40 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		if (xpathWork > XPATH_LIMITS.totalWork) throw new Error('XPath total work budget exceeded');
 	};
 
+	const inspectTraversalNode = (node: Node) => {
+		if (context !== 'detached') throw new Error('Traversal requires the owned detached document');
+		inspectTree(node);
+		let nodes = 0;
+		const count = (root: Node) => {
+			if (++nodes > 128) throw new Error('Traversal tree budget exceeded');
+			for (const child of Array.from(childNodes(root))) count(child);
+		};
+		count(doc);
+		if (rootNode(node) !== doc) count(rootNode(node));
+	};
+	const inspectTraversal = (target: object) => {
+		const type = belongs(target, 'TreeWalker') ? 'TreeWalker' : 'NodeIterator';
+		inspectTraversalNode(reader<Node>(type, 'root')(target));
+		inspectTraversalNode(reader<Node>(type, type === 'TreeWalker' ? 'currentNode' : 'referenceNode')(target));
+	};
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule === 'traversal-node') {
+			const node = receiverType(value, 'Node') as Node;
+			inspectTraversalNode(node);
+			return node;
+		}
+		if (rule === 'traversal-mask') {
+			if (typeof value !== 'number' || !Number.isSafeInteger(value) || Math.abs(value) > 0xffffffff)
+				throw new Error('Expected a bounded unsigned-long traversal mask');
+			return value;
+		}
+		if (rule === 'traversal-filter') {
+			if (value === null) return null;
+			const target = receiver(value).value,
+				callback = synchronousCallbacks.get(target);
+			if (!callback || (!callback.callable && callback.key !== 'acceptNode')) throw new Error('Expected a synchronous acceptNode callback');
+			return target;
+		}
 		if (rule === 'nullable-text' && value === null) return null;
 		if (rule === 'xpath-expression') return xpathExpression(value).text;
 		if (rule === 'xpath-node') return ownedXPathNode(value);
@@ -636,7 +696,12 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		if (rule === 'xpath-resolver') {
 			if (context !== 'detached') throw new Error('XPath requires the owned detached document');
 			if (value === null) return null;
-			if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, '$dom')) return ownedXPathNode(value);
+			if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, '$dom')) {
+				const target = receiver(value).value,
+					callback = synchronousCallbacks.get(target);
+				if (callback && (callback.callable || callback.key === 'lookupNamespaceURI')) return target;
+				return ownedXPathNode(value);
+			}
 			return xpathResolver(value);
 		}
 		if (rule.startsWith('aria-'))
@@ -763,7 +828,9 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		request: function execute(
 			raw: unknown,
 			nested = false
-		): { value?: unknown; error?: { name: string; message: string } } | Promise<{ value?: unknown; error?: { name: string; message: string } }> {
+		):
+			| { value?: unknown; error?: { name: string; message: string; thrown?: unknown } }
+			| Promise<{ value?: unknown; error?: { name: string; message: string; thrown?: unknown } }> {
 			if (stopped) throw new Error('DOM run has ended');
 			if (++requestCount > 256) throw new Error('DOM request budget exceeded');
 			if (!nested) messageCount++;
@@ -773,13 +840,65 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 				request.type !== 'tt-platform-dom' ||
 				!Number.isSafeInteger(request.id) ||
 				request.id !== messageCount ||
-				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global', 'batch'].includes(request.action) ||
+				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global', 'batch', 'callback'].includes(request.action) ||
 				typeof request.key !== 'string' ||
 				request.key.length > 60 ||
 				!Array.isArray(request.args) ||
 				request.args.length > 9
 			)
 				throw new Error('Invalid DOM request envelope');
+			if (request.action === 'callback') {
+				if (
+					nested ||
+					request.target !== null ||
+					request.args.length !== 2 ||
+					!/^[A-Za-z_$][A-Za-z0-9_$]{0,59}$/.test(request.key) ||
+					['bindings', '__proto__', 'prototype', 'constructor'].includes(request.key)
+				)
+					throw new Error('Invalid synchronous callback registration');
+				if (++synchronousCount > SYNC_CALLBACK_LIMITS.definitions) throw new Error('Synchronous callback allocation budget exceeded');
+				const callback = createSynchronousCallback(request.args[0], request.args[1], {
+					charge: () => {
+						if (stopped || ++synchronousSteps > SYNC_CALLBACK_LIMITS.totalSteps) throw new Error('Synchronous callback total work budget exceeded');
+					},
+					dom: (command) => {
+						const result = execute({ ...command, type: 'tt-platform-dom', id: messageCount }, true);
+						if (result instanceof Promise) throw new Error('Callbacks require synchronous DOM operations');
+						if (result.error) {
+							if (Object.prototype.hasOwnProperty.call(result.error, 'thrown')) throw result.error.thrown;
+							const error = new Error(result.error.message);
+							error.name = result.error.name;
+							throw error;
+						}
+						return result.value;
+					}
+				});
+				const fn = function (this: unknown) {
+					'use strict';
+					// The classic IIFE bundle is not implicitly strict. Preserve the
+					// native callback's undefined this instead of substituting Window.
+					const args: unknown[] = Array.from(arguments);
+					if (++synchronousDepth > 8) {
+						synchronousDepth--;
+						throw new Error('Synchronous callback call depth exceeded');
+					}
+					try {
+						return callback.invoke(
+							args.map((v) => encode(v)),
+							this == null ? this : encode(this)
+						);
+					} catch (error) {
+						if (error instanceof Error) throw error;
+						throw new SynchronousCallbackThrown(callbackData(error));
+					} finally {
+						synchronousDepth--;
+					}
+				};
+				const value = request.key === 'function' ? fn : { [request.key]: fn };
+				synchronousCallbacks.set(value, { key: request.key, callback, callable: value === fn, fn });
+				synchronousCallbacks.set(fn, { key: request.key, callback, callable: true, fn });
+				return { value: encode(value) };
+			}
 			if (request.action === 'batch') {
 				if (
 					nested ||
@@ -828,7 +947,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 					!DOM_RECEIVER_POLICY[name].reads.split(' ').includes(request.key)
 				)
 					throw new Error('Unregistered DOM constant');
-				const descriptor = captured.get(name)?.reads.get(request.key);
+				const descriptor = captured.get(name)?.reads.get(request.key) || constantDescriptors.get(name + '.' + request.key);
 				if (!descriptor) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose ${name}.${request.key}` } };
 				if (!('value' in descriptor) || !['string', 'number', 'boolean'].includes(typeof descriptor.value))
 					throw new Error('Expected a primitive DOM constant');
@@ -1006,6 +1125,27 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 				}
 			}
 			const target = receiver(request.target).value;
+			const authored = synchronousCallbacks.get(target);
+			if (authored) {
+				if (request.key === 'bindings') {
+					if (request.action === 'set' && request.args.length === 1) authored.callback.setInputs(request.args[0]);
+					else if (request.action !== 'get' || request.args.length) throw new Error('Invalid callback bindings operation');
+					return { value: authored.callback.getInputs() };
+				}
+				if (request.action === 'get' && request.key === authored.key && !authored.callable && !request.args.length)
+					return { value: encode(authored.fn) };
+				if (request.action !== 'call' || request.key !== (authored.callable ? 'call' : authored.key))
+					throw new Error('Unregistered authored callback member');
+				const decode = (v: unknown) => (v && typeof v === 'object' && '$dom' in v ? receiver(v).value : v);
+				const args = request.args.map(decode),
+					thisValue = authored.callable ? args.shift() : target;
+				try {
+					return { value: Reflect.apply(authored.fn as (...args: unknown[]) => unknown, thisValue, args) };
+				} catch (error) {
+					return { error: callbackError(error) };
+				}
+			}
+			if (belongs(target, 'TreeWalker') || belongs(target, 'NodeIterator')) inspectTraversal(target);
 			if (belongs(target, 'Animation') || belongs(target, 'AnimationEffect')) inspectAnimation(target);
 			// A native new Range() initially points at the realm document. Permit
 			// an owned boundary initializer before reading or operating on it.
@@ -1254,7 +1394,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 			} catch (error) {
 				// Actual DOM errors remain catchable in authored worker programs.
 				return {
-					error: { name: error instanceof Error ? error.name : 'DOMException', message: String((error as Error)?.message || error).slice(0, 500) }
+					error: callbackError(error)
 				};
 			}
 			const complete = (result: unknown) => {

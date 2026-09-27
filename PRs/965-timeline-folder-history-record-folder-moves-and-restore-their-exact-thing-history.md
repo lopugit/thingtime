@@ -59,3 +59,11 @@ The full unit run preceded the small Thing-route refresh correction; that final
 correction was checked in the live browser, by route lint, typecheck comparison
 and the final production build. Required remote checks must pass for the final
 exact PR head before a normal merge commit.
+
+## Main integration
+
+Integrated main `c36d20782` after the native Web Standards traversal work
+(PR #962) landed. Its bounded synchronous callbacks and Actions 1.35.0 contract
+are preserved alongside Timeline 1.3.0 and Things 1.33.1. The folder mutation
+implementation is unchanged. Final required CI runs against this combined head;
+prior green checks do not satisfy that gate.
