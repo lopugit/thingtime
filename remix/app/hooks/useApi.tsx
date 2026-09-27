@@ -1,3 +1,4 @@
+import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
 import { draftRequest } from '~/drafts/draftClient';
 import type { TimelineBranchCommand } from '../timeline/branches';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
@@ -96,32 +97,32 @@ export function useApi() {
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     timeline: {
       entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.2.0');
-        return getJson(`/api/v1/timeline${toQuery({ ...scope, eventId })}`, options);
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId })}`, options);
       }, []),
       branches: useCallback(async (scope: { ownerId: string; dataPlane: string }, thingId: string, before?: number, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.2.0');
-        return getJson(`/api/v1/timeline${toQuery({ ...scope, thingId, branches: 1, before })}`, options);
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), thingId, branches: 1, before })}`, options);
       }, []),
       branch: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineBranchCommand, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.2.0');
-        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(scope)}`, expectedActor: scope.ownerId, signal: options?.signal });
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
-      discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.0.0');
-        return getJson(`/api/v1/timeline${toQuery({ ownerId })}`, options);
+      discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal; storage?: TimelineStorage }) => {
+        await requireThingtimeCapability('api.timeline', options?.storage === 'home' ? '1.6.0' : '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ownerId, ...(options?.storage === 'home' ? { storage: 'home' } : {}) })}`, options);
       }, []),
       page: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: TimelinePageRequest, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.0.0');
-        return getJson(`/api/v1/timeline${toQuery({ ...scope, ...request, ...(request.thingId === null ? { history: 1 } : {}) })}`, options);
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...request, ...(request.thingId === null ? { history: 1 } : {}) })}`, options);
       }, []),
       push: useCallback(async (scope: { ownerId: string; dataPlane: string }, event: TimelineEvent, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.0.0');
-        return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(scope)}`, expectedActor: scope.ownerId, signal: options?.signal });
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
+        return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: { command: 'preview-version' | 'apply-version'; mode: 'restore' | 'merge'; eventId: string; expectedHeadId?: string; operationId?: string; choices?: Record<string, 'current' | 'incoming'> }) => {
-        await requireThingtimeCapability('api.timeline', '1.1.0');
-        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(scope)}`, expectedActor: scope.ownerId });
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
       }, [asyncFetcher])
     },
     tiers: useCallback(async (options?: { signal?: AbortSignal }) => {

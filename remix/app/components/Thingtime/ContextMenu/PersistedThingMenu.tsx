@@ -79,7 +79,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
       switch (event.action.command) {
         case 'open': navigate(href); break;
         case 'inspect': navigate(inspectHref); break;
-        case 'history': openThingHistory(id); break;
+        case 'history': openThingHistory(id, thing?.thingtime); break;
         case 'copy-link': {
           const url = thingEntityLink(href, window.location.origin, thing, user?.id, sharedAccess.key);
           void navigator.clipboard.writeText(url.href).then(() => lopu({ title: 'Link copied',

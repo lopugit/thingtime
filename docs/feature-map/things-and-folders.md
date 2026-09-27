@@ -89,6 +89,10 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
   private history and custom-selection home accounting. `test:timeline:quota`
   uses normal synthetic admin assignments for exact-ceiling refusal, deletion
   and the below-usage downgrade guard; see README's disposable setup.
+- `test:timeline:home-scope` checks real two-database isolation, identical event
+  ids, scoped branch creation and home restore. `storageScope.ts`,
+  `connectionPool.ts` and `TimelineProvider.tsx` share canonical queues across
+  home/selected discovery while keeping different data planes separate.
 
 ## Remote and stored files
 

@@ -407,5 +407,53 @@ Dedicated theme restore/merge, active-theme selection and legacy-theme storage
 coverage remain open. Generic protected-content restore stays refused; the
 existing migration-only conversion and legacy/readiness fences are unchanged.
 These events do not imply coverage for every protected Thing family or external
-Action outcome. Home-history discovery while browsing a custom plane also needs
-its separate client scope acceptance before universal delivery is claimed.
+Action outcome. Home-history discovery is addressed by the scoped sessions below;
+this does not establish universal operation coverage.
+
+## Home and selected database history — 2026-09-28
+
+Timeline 1.6.0 adds explicit `storage=home`; omitted/selected storage follows the
+current data plane. Expected `ownerId` and `dataPlane` remain independent fences.
+The request-local home context spans authorization, exact reads, draft uploads,
+branch operations and version preview/apply. It restores the surrounding custom
+context, including concurrent async requests, without modifying the cookie.
+Selecting the actual home URI also identifies as home, matching collection routing.
+
+The account provider keeps home and selected sessions, sharing one pooled
+connection when their canonical origin/owner/data-plane keys match. Closing or
+switching one session releases its lease; the other continues draining pending
+edits. Each distinct database keeps its existing IndexedDB event/link/branch
+schema and queue. Discovery metadata is separate; no event is moved or translated.
+Full account refusal redacts both active sessions' downloaded caches while
+preserving authored pending data. Temporary network failure keeps the matching
+cached history visible, and cached sessions cannot push until verified.
+
+Saved themes expose History directly. Managed personal-library Things choose
+home history from their known kind; ordinary Things and Builder use the selected
+scope. The complete History panel, including branches and version actions, uses
+one session. Open Timeline retains that location and closes the modal. The folder
+view offers Home account and Selected database without changing the browser's
+database selection. Cross-source Open Thing navigation stays disabled rather
+than opening a different database's same-id Thing; direct home Thing navigation
+and remaining managed-family coverage still need further work.
+
+The guarded HTTP acceptance uses ordinary synthetic accounts and two databases
+on the disposable replica. It verifies identical event ids with different
+payloads, private home theme history, exact-version reads, home branch creation
+and restoration under a custom selection, stale/wrong-account refusals and
+concurrent request isolation. Connection tests exercise one shared in-flight
+upload, lease release, persistent queues and separate caches for matching ids.
+
+Local acceptance passed with the real two-database API script and desktop/390px
+browser checks. Home and selected cached pages survived blocked Timeline
+requests independently; simulated 403 responses cleared both visible caches,
+and removing the refusal restored server history. Theme History opened home
+under a custom selection and Open Timeline dismissed the modal. The new mobile
+button row and history views had no horizontal overflow. The test browser's
+selection and network/viewport overrides were restored after acceptance.
+
+Validation: 74 Timeline tests, 92 capability tests, 4,218 passing full unit tests
+(8 skips), complete production build and targeted lint with zero errors. Raw
+typecheck retains the existing 91 diagnostics, with none in the changed/new
+modules. These checks establish this increment, not the remaining universal
+operation and version-control coverage listed above.
