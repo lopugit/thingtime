@@ -156,6 +156,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   reference hints. Existing installed apps and their data are preserved. See
   [PR #964 validation](../PRs/964-lopu-action-guidance-inspect-action-contracts-and-recover-from-errors.md).
 
+- 2026-09-27 — **Codex (AI)**: Lopu now recognizes JSON-labelled tool fences,
+  repairs printed tool requests with bounded corrective hops, and restores
+  lossless read pages across checkpoints with fresh access/revision checks.
+  Private message metadata stores only read locators; Action failure recovery
+  details now reach the next model hop. Reply capability is 1.19.1. See
+  [PR #967 validation](../PRs/967-lopu-stall-recovery-fix-tool-call-stalls-and-preserve-read-context.md).
+
+
 
 - 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
   message field. Stop keeps partial words, recording again appends, and explicit

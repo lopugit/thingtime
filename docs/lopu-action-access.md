@@ -84,3 +84,20 @@ state readback before retrying with the original operation identity.
 After a lost or failed write receipt, inspect the destination before retrying.
 The integration example reuses a stable equipment ID, so repeating it updates
 one record. Full access does not make arbitrary authored writes idempotent.
+
+## Checkpoint read recovery
+
+Reply 1.19.1 stores only the last 16 successful JSON-page locators in protected
+assistant-message BinData. On the next turn, Lopu rereads those pages internally
+with the current viewer and the original revision, four at a time, then gives
+the provider exact JSON and continuation offsets. Changed or inaccessible
+resources discard their whole saved page group. Locators expire after 24 hours;
+large tasks should prefer narrower JSON pointers instead of loading whole Things.
+
+The disposable Action QA also checks seven-page persistence/reload, exact JSON
+restoration and foreign-viewer refusal using real APIs and protected writers.
+Provider transport tests cover the screenshot's `json tt-tool` fence, strict
+arguments, split delimiters, backticks within JSON strings, bounded correction
+of printed native calls, and confirmation/Stop boundaries. Repeated protocol
+failure remains an explicit recoverable error, subject to the existing five
+failed-continuation limit. No mutation is replayed by read restoration.

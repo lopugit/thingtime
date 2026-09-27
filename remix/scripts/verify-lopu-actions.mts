@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createLopuToolContext, runLopuTool } from '../app/api/utils/lopu/chatTools';
-import { createLopuChat, getLopuChat } from '../app/api/utils/messenger/lopuChats';
+import { createLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn } from '../app/api/utils/messenger/lopuChats';
 import { getCurrentUser } from '../app/api/utils/auth/getCurrentUser';
 import { verifyLopuConfirmation, mintLopuConfirmation } from '../app/api/utils/lopu/confirmations';
 assert.equal(process.env.TT_LOPU_ACTIONS_LOCAL, '1');
@@ -93,6 +93,37 @@ assert.equal((await runLopuTool(call, context()) as any).needsConfirmation, true
 await api('/api/v1/lopu/chats/update', { chatId, accessMode: 'full' });
 const staleReply = await fetch(base + '/api/v1/lopu/chats/reply', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie, Origin: base }, body: JSON.stringify({ chatId, text: 'hello', accessMode: 'full' }) });
 assert.equal(staleReply.status, 400, 'reply bodies cannot change existing chat permissions');
+// The same protected, quota-accounted message writer carries checkpoint read
+// locators. No raw JSON or permission material appears in public messages.
+const { rememberReadReference, restoreReadContext } = await import('../app/api/utils/lopu/readContext');
+const large = await saveAction({ name: 'Large checkpoint read', actionKey: `qa-context-${suffix}`, inputs: [], capabilities: [], steps: [{ op: 'return', value: { text: Array.from({ length: 16 }, () => 'x'.repeat(1500)) } }] });
+let references: any[] = [], offset: number | null = 0, revision: string | undefined;
+let expectedJson = '';
+while (offset !== null) {
+  const readCall = { id: `page-${offset}`, name: 'get_thing', input: { id: large, path: '/steps', offset, ...(revision ? { revision } : {}) } };
+  const result = await runLopuTool(readCall, context());
+  assert.equal(result.ok, true);
+  const page = (result.data as any).crystalRead;
+  expectedJson += page.json;
+  references = rememberReadReference(references, readCall, result);
+  const saved = await persistLopuAssistantTurn(viewer.id, { chatId, requestId: `qa-checkpoint-${suffix}-${offset}`, text: 'Progress saved.', readReferences: references, lopu: { stopReason: 'checkpoint', continuationSafe: true } });
+  assert.equal(saved.ok, true);
+  assert.doesNotMatch(JSON.stringify(saved), /lopuReadReferences|readReferences|"secure"/);
+  const loaded = await loadLopuHistory(viewer.id, chatId);
+  assert.equal(loaded.ok, true);
+  if (!loaded.ok) throw new Error(loaded.error);
+  assert.deepEqual(loaded.readReferences, references);
+  references = loaded.readReferences!;
+  offset = page.nextOffset;
+  revision = page.revision;
+}
+const restored = await restoreReadContext(references, runLopuTool, context());
+assert.equal(JSON.parse(restored.text.split('\n').at(-1)!).pages.map((entry: any) => entry.crystalRead.json).join(''), expectedJson);
+assert.equal((await loadLopuHistory(randomUUID(), chatId)).ok, false);
+const inaccessible = await restoreReadContext(references, runLopuTool, foreignContext);
+assert.equal(inaccessible.references.length, 0);
+assert.doesNotMatch(inaccessible.text, /xxxxxxxx/);
+console.log('PASS: seven lossless pages survive real protected message persistence/reload, restore exact JSON through authorized get_thing, and disclose neither locators nor private JSON to a foreign viewer.');
 await api('/api/v1/auth/logout', {});
 const revoked = await runLopuTool(call, context());
 assert.equal(revoked.ok, false);

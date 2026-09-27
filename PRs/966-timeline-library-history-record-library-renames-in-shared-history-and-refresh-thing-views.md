@@ -18,8 +18,11 @@ source names and attachment names, matching their dedicated writers.
 
 ## Validation
 
-- Main baseline is normal merge `f46b7400b1ba7023a6f5fad0bfd135af1eb3f908`
-  (folder-history PR #965). Timeline 1.4.0 and Things 1.33.2 preserve its contracts.
+- Main baseline is normal merge `c3f6374d1` (Lopu stall-recovery PR #967),
+  including folder-history PR #965. Timeline 1.4.0 and Things 1.33.2 preserve
+  both contracts. Required CI passed on `e22457d`; the refreshed merge is
+  validated again by protected CI. Local Timeline, Things, capabilities, Lopu
+  read-context/streaming and real HTTP library history checks pass after this merge.
 - Full unit suite: 4,185 passing checks, zero failures (8 existing skips).
   Focused Timeline 66, Things 295 + 18, and capability manifest 91 tests pass. They cover
   four library kinds, title-only projections, trusted provenance, history
