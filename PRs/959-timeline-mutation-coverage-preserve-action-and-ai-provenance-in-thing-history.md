@@ -28,6 +28,10 @@ retry token: external effects must never be replayed to repair missing history.
   isolation and browser preparation, alongside existing CRUD, draft, restore,
   merge, branch and large-version checks. It creates fixtures through the API.
 - Browser History showed API/Action labels and the exact nested field change.
+- The full remote unit run caught an additional Lopu UI assertion still pinned
+  to reply version 1.16.0. Its advertised-version expectation now matches 1.16.1;
+  all 221 Lopu UI tests and the changed-file lint pass. Final remote CI still
+  must validate the updated head.
 - The initial warning-only typecheck ratchet reported 91 existing diagnostics
   versus baseline 89, with none in changed files. This is not a clean typecheck
   claim. Required remote checks must pass on the final head before merge.
@@ -46,3 +50,8 @@ receipts, folder reparenting history and dedicated protected writers are not
 completed by this PR. Folder deletion still needs a bounded transactional drain,
 recorded child moves and a shared destination-folder write fence so concurrent
 creates/moves cannot leave children pointing at a deleted folder.
+
+An API-only reproduction in the disposable replica set confirmed both remaining
+folder gaps: a moved child's history stayed at one event, and three of 24
+concurrent creates retained a deleted folder id. These are pre-existing paths,
+not claimed fixed by this attribution increment.
