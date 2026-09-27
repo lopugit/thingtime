@@ -62,7 +62,9 @@ const identityActions = new Set([
 	'/api/v1/auth/sso-session',
 	'/api/v1/auth/passkeys/login'
 ]);
-export const changesRootIdentity = (action: string, payload: unknown): boolean => {
+export const changesRootIdentity = (action: string, payload: unknown, method = 'POST'): boolean => {
+	if (payload && typeof payload === 'object' && (payload as { ok?: unknown }).ok === true &&
+		(action === '/api/v1/mongodb/endpoint' || (action === '/api/v1/mongodb/endpoints' && method === 'DELETE'))) return true;
 	if (!identityActions.has(action) || !payload || typeof payload !== 'object') return false;
 	const result = payload as { requiresOtp?: unknown; user?: unknown; ok?: unknown };
 	// A password step that returns an OTP challenge has not changed accounts;

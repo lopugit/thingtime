@@ -9,6 +9,7 @@ import { timelineScopeKey, type TimelineScope } from './contract';
 import { listenTimelineScopeChange, TIMELINE_CHANGED_EVENT } from './clientEvents';
 import { TimelineConnectionPool, type TimelineConnection } from './connectionPool';
 import type { TimelineStorage } from './storageScope';
+import { useDataPlane } from '../hooks/useDataPlane';
 
 type Connection = TimelineConnection & { verified: boolean };
 type Session = { storage: TimelineStorage; identity: string; ownerId: string | null; connection: Connection | null; error: string; retry: () => Promise<void>; redact: (error: unknown) => Promise<void> };
@@ -23,6 +24,8 @@ export const timelineAccessFailure = (error: unknown): boolean => [401, 403].inc
 
 function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineStorage, onDenied: (failure: unknown) => Promise<void>): Session {
 	const user = useCurrentUser(); const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
+	const selectedPlane = useDataPlane();
+	const expectedPlane = storage === 'home' ? 'home' : selectedPlane;
 	const [connection, setConnection] = React.useState<Connection | null>(null);
 	const [error, setError] = React.useState('');
 	const [epoch, setEpoch] = React.useState(0);
@@ -52,7 +55,7 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 		// until discovery confirms the current account and data source again.
 		try {
 			const cached = JSON.parse(sessionStorage.getItem(key) || 'null');
-			if (cached?.scope?.ownerId === ownerId && cached.scope.apiOrigin === origin && (storage !== 'home' || cached.scope.dataPlane === 'home') && typeof cached.folderId === 'string') {
+			if (cached?.scope?.ownerId === ownerId && cached.scope.apiOrigin === origin && (!expectedPlane || cached.scope.dataPlane === expectedPlane) && typeof cached.folderId === 'string') {
 				timelineScopeKey(cached.scope); install(cached.scope, cached.folderId, false);
 			}
 		} catch { forget(); }
@@ -97,8 +100,8 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 		window.addEventListener('online', refresh); window.addEventListener('focus', refresh); window.addEventListener(TIMELINE_CHANGED_EVENT, edited);
 		const timer = setInterval(refresh, 15_000); void connect(true);
 		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearInterval(timer); unlisten(); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); window.removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
-	}, [user?.id, pool, storage, onDenied]);
-	const scoped = connection?.scope.ownerId === user?.id ? connection : null;
+	}, [user?.id, pool, storage, onDenied, expectedPlane]);
+	const scoped = connection?.scope.ownerId === user?.id && (!expectedPlane || connection.scope.dataPlane === expectedPlane) ? connection : null;
 	return { storage, identity: JSON.stringify([user?.id ?? null, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };
 }
 

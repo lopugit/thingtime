@@ -8,6 +8,9 @@ import { announceTimelineScopeChange } from '~/timeline/clientEvents';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
 import { useCallback, useRef } from 'react';
 import { useCurrentUser } from './useCurrentUser';
+import { useDataPlane } from './useDataPlane';
+import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
+import { rootIdentity } from '../utils/rootIdentity';
 import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
@@ -33,12 +36,13 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
+const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null }) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
-    response = await fetch(url, { credentials: 'include', signal: options?.signal });
+    response = await fetch(url, { credentials: 'include', signal: options?.signal,
+      ...(options?.expectedDataPlane ? { headers: { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } } : {}) });
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
     recordApiCall({
@@ -63,6 +67,7 @@ const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
   });
   const data = await readApiResponsePayload(response, { action: 'load Thingtime data', method: 'GET' });
   if (!response.ok) {
+    if (response.status === 409 && data?.code === 'DATA_PLANE_CHANGED') { rootIdentity.changed(); refreshRootData(); }
     throw createApiFailure({
       payload: data,
       status: response.status,
@@ -88,6 +93,8 @@ const toQuery = (args?: Record<string, unknown>) => {
 };
 
 export function useApi() {
+  const dataPlane = useDataPlane();
+  const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
   const actionUser = useCurrentUser();
   const actionActor = useRef(actionUser?.id);
@@ -109,8 +116,10 @@ export function useApi() {
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal; storage?: TimelineStorage }) => {
+        const expectedDataPlane = planeRef.current;
+        if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
         await requireThingtimeCapability('api.timeline', options?.storage === 'home' ? '1.6.0' : '1.0.0');
-        return getJson(`/api/v1/timeline${toQuery({ ownerId, ...(options?.storage === 'home' ? { storage: 'home' } : {}) })}`, options);
+        return getJson(`/api/v1/timeline${toQuery({ ownerId, ...(options?.storage === 'home' ? { storage: 'home' } : {}) })}`, { ...options, expectedDataPlane });
       }, []),
       page: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: TimelinePageRequest, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
@@ -632,7 +641,8 @@ export function useApi() {
         set: useCallback(
           async (args?: { url?: string; savedId?: string; reset?: boolean }) => {
             const body = args?.savedId ? { savedId: args.savedId } : args?.reset ? { reset: true } : { url: args?.url };
-            const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint' });
+            // Reset/selection is the recovery path for a stale data source.
+            const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint', expectedDataPlane: null });
             ret.then(announceTimelineScopeChange).catch(() => {});
             // the data plane just moved — cached feeds/lists are stale, so
             // refresh root data the same way login/logout do
@@ -652,7 +662,7 @@ export function useApi() {
         ),
         remove: useCallback(
           async (args?: { id?: string }) => {
-            const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE' });
+            const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE', expectedDataPlane: null });
             ret.then(announceTimelineScopeChange).catch(() => {});
             // removing the session's active endpoint clears the override
             ret.then(refreshRootData).catch(() => {});
@@ -1007,9 +1017,11 @@ export function useApi() {
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => {
+          const expectedDataPlane = planeRef.current;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.31.0' : '1.27.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
-          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
+          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
         },
 				[]
 			),

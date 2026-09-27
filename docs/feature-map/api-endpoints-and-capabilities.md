@@ -5,6 +5,15 @@ Timeline 1.6.0 accepts explicit `storage=home` on the existing route while
 context applies to discovery, paging, drafts, exact versions, branches and
 restoration without changing the surrounding request's database selection.
 
+`api.mongodb-endpoint` 1.1.0 publishes root-data `dataPlane` using the same
+canonical key as Timeline. `X-Thingtime-Expected-Data-Plane` is an optional
+precondition on dispatched API requests: malformed keys return 400; a changed
+selection returns 409 before the handler. It checks the selected source before
+any explicit home/admin routing and grants no access. Ordinary source-fenced
+requests preserve their header and selection through the same fallback as root
+data; the upstream enforces the precondition. `app/api/utils/mongodb/dataPlane.ts` owns the identity and guard;
+`app/utils/dataPlane.ts` owns the shared public validation/header/link helpers.
+
 Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
 `api.timeline` 1.5.0. The dedicated home writer records approved token versions
 and retained deletion in its content transaction; no new endpoint or collection

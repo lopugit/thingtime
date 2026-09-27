@@ -20,6 +20,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Transactional history recording, protected binary event Things and paging | `app/api/utils/timeline/` |
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
 | Shared History modal and managed Timeline folder | `app/components/Timeline/TimelineHost.tsx` |
+| Account/database-qualified History links and Thing caches | `app/utils/dataPlane.ts`, `app/hooks/useDataPlane.ts`, `app/routes/thing.tsx`; root identity invalidation also handles database selection across tabs |
 | Approved saved-theme content history, home transaction and retained deletion accounting | `app/timeline/themeContent.ts`, `app/api/utils/timeline/themeContent.ts`, dedicated `app/api/utils/themes/themes.ts` writer |
 
 ## Authorization helper
@@ -90,7 +91,9 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
   uses normal synthetic admin assignments for exact-ceiling refusal, deletion
   and the below-usage downgrade guard; see README's disposable setup.
 - `test:timeline:home-scope` checks real two-database isolation, identical event
-  ids, scoped branch creation and home restore. `storageScope.ts`,
+  and live Thing ids, scoped branch creation, home restore and stale-source
+  GET/PATCH/DELETE refusal. `thingDatabaseIdentity.test.ts` covers qualified links
+  and cache separation. `storageScope.ts`,
   `connectionPool.ts` and `TimelineProvider.tsx` share canonical queues across
   home/selected discovery while keeping different data planes separate.
 

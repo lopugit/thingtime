@@ -35,6 +35,8 @@ import { apiErrorMessage } from '~/hooks/apiFailure';
 import { clearLocalCache, pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { isDataPlane, scopedThingCacheKey } from '~/utils/dataPlane';
 import type * as InstallSuite from '~/components/Builder/installSuite';
 import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
@@ -257,7 +259,23 @@ const InertLabel = ({ kind, author, platform }: { kind: string; author: string |
 // ACL-aware Things API.
 export default function ThingPage() {
 	const [params] = useSearchParams();
-	return params.get('archive') === 'true' ? <ChatArchivePage /> : <GenericThingPage />;
+	const dataPlane = useDataPlane(); const user = useCurrentUser(); const api = useApi();
+	const [busy, setBusy] = React.useState(false); const [error, setError] = React.useState('');
+	const expected = params.get('dataPlane'); const expectedOwner = params.get('historyOwner');
+	const invalid = params.getAll('dataPlane').length > 1 || params.getAll('historyOwner').length > 1 || (expected !== null && !isDataPlane(expected));
+	const wrongOwner = expectedOwner !== null && expectedOwner !== user?.id;
+	if (invalid || wrongOwner || (expected !== null && expected !== dataPlane)) return <Flex width="100%" align="center" flexDir="column" px={4} pt="100px"><Box {...CARD_STYLES} p={6} width="100%" maxW="720px">
+		<Heading as="h1" size="md">Open the matching Thing</Heading>
+		<Text mt={3}>{invalid ? 'This history link has an invalid database location.' : wrongOwner ? 'This history link belongs to another account. Switch to that account to continue.' : expected === 'home' ? 'This Thing lives in your home account. Open it there to keep its content, components and edits together.' : 'This Thing belongs to a different database. Select the matching database to continue.'}</Text>
+		{!invalid && !wrongOwner && expected === 'home' ? <Button mt={4} isLoading={busy} onClick={async () => {
+			setBusy(true); setError('');
+			try { await api.v1.mongodb.endpoint.set({ reset: true }); }
+			catch (cause) { setError(apiErrorMessage(cause, 'Could not switch to your home database.')); }
+			finally { setBusy(false); }
+		}}>Open in home account</Button> : <Button as={Link} to={wrongOwner ? '/profile' : '/mongodb-status'} mt={4}>{wrongOwner ? 'Open account' : 'Choose database'}</Button>}
+		{error ? <Text role="status" mt={3}>{error}</Text> : null}
+	</Box></Flex>;
+	return params.get('archive') === 'true' ? <ChatArchivePage /> : <GenericThingPage key={dataPlane ?? 'unknown'} />;
 }
 
 function GenericThingPage() {
@@ -270,6 +288,7 @@ function GenericThingPage() {
 	apiRef.current = api;
 	const { v1 } = api;
 	const currentUser = useCurrentUser();
+	const dataPlane = useDataPlane();
 	const lopu = useLopu();
 	const lopuRef = React.useRef(lopu);
 	lopuRef.current = lopu;
@@ -277,7 +296,7 @@ function GenericThingPage() {
 	const loadThing = v1.things.get;
 	const { observeView } = useViewTracking();
 	const diagnosticRoute = DIAGNOSTIC_ID_PATTERN.test(id);
-	const requestKey = `${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}\u0000${linkKey}`;
+	const requestKey = `${dataPlane ?? 'unknown'}\u0000${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}\u0000${linkKey}`;
 	const back = REFERRERS[parseThingsReferrer(searchParams.get('from'))];
 
 	// Optimistic-render house rule: the last-known projection of this thing
@@ -286,7 +305,7 @@ function GenericThingPage() {
 	// cached: they are admin-only and short-lived.
 	// A bearer-key response must never become the optimistic no-key paint on a
 	// later visit. Hidden-link reads stay live-only and leave no local cache.
-	const cacheKey = linkKey ? null : `${THING_CACHE_PREFIX}${currentUser?.id || 'anon'}-${id}`;
+	const cacheKey = linkKey ? null : scopedThingCacheKey(currentUser?.id ?? null, dataPlane, id);
 	const seedState = React.useCallback(
 		(key: string): ThingLoadState => {
 			if (diagnosticRoute) return { key, loading: true, data: null, error: null };
@@ -1049,7 +1068,9 @@ function GenericThingPage() {
 						) : null}
 
 						{thing && isThingOwner && ['scheduled-task', 'reminder'].includes(thing.crystal?.type) ? <ScheduledTaskPanel key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} /> : null}
-						{thing && (!post || !sections.preview) ? <ThingComments collectionControls thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
+						{thing && (!post || !sections.preview) ? dataPlane?.startsWith('custom-')
+							? <Text color={MUTED} fontSize="sm">Comments are available in your home database.</Text>
+							: <ThingComments collectionControls thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
 
 						{diagnostic?.revealables.length ? (
 							<SensitiveThingReveal
