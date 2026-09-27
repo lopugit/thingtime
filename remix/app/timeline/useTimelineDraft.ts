@@ -1,3 +1,4 @@
+import type { ComponentBindings } from './componentBindings';
 import React from 'react';
 import { useTimelineSession } from './TimelineProvider';
 import { TimelineDraftRecorder } from './draftRecorder';
@@ -42,9 +43,9 @@ export function useTimelineDraft(thingId: string | null, adapter: string, baseHe
 		}).catch(error => { if (alive) setState({ identity, saving: false, error: error instanceof Error ? error.message : 'Draft recovery is unavailable.' }); });
 		return () => { alive = false; };
 	}, [identity, store, thingId, adapter, get]);
-	const record = (before: unknown, after: unknown, label: string) => {
+	const record = (before: unknown, after: unknown, label: string, components?: ComponentBindings) => {
 		let pending: Promise<string | null>;
-		try { pending = get().capture(snapshot(adapter, before), snapshot(adapter, after), label); }
+		try { pending = get().capture(snapshot(adapter, before), snapshot(adapter, after), label, components); }
 		catch (error) { pending = Promise.reject(error); }
 		setState({ identity, error: '', saving: true });
 		return pending.then(id => {

@@ -295,7 +295,13 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 				whiteSpace="normal"
 			>
 				<Box width="100%" minWidth={0} boxSizing="border-box" flex="1">
-					{draft.branch ? <Flex role="status" px={4} py={2} gap={2} wrap="wrap" bg="var(--tt-surface)"><Text fontWeight="600" overflowWrap="anywhere">Branch: {draft.branch.name}</Text><Text fontSize="sm">Preview uses current components. Live actions are paused.</Text></Flex> : null}
+					{draft.branch ? (
+						<Flex role="status" px={4} pr={editorMode ? { base: 4, md: '344px' } : 4} py={2} gap={2} wrap="wrap" bg="var(--tt-surface)">
+							<Text fontWeight="600" overflowWrap="anywhere">Branch: {draft.branch.name}</Text>
+							{draft.branch.setUseCurrentComponents ? <Button size="xs" variant="outline" aria-pressed={draft.branch.useCurrentComponents} onClick={() => draft.branch?.setUseCurrentComponents?.(!draft.branch.useCurrentComponents)}>{draft.branch.useCurrentComponents ? 'Use recorded components' : 'Preview current components'}</Button> : null}
+							<Text flexBasis="100%" fontSize="sm">{draft.branch.componentNotice} Live data and actions are paused.</Text>
+						</Flex>
+					) : null}
 					{draft.error && (
 						<Flex
 							role="alert"

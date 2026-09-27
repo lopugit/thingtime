@@ -1,3 +1,5 @@
+import { COMPONENT_BINDING_PREFIX } from '../../timeline/componentBindings';
+import { TimelinePagePreview } from './TimelinePagePreview';
 import { historyStorageForThing, timelineFolderHref, type TimelineStorage } from '../../timeline/storageScope';
 import { TimelineStorageProvider, useTimelineSession, useSelectedTimelineSession } from '../../timeline/TimelineProvider';
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../timeline/snapshotParts';
@@ -78,6 +80,7 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 				<Flex justify="space-between" align="center" gap={2} mb={3}><Heading size="sm">{selected.label}</Heading><Button size="xs" variant="ghost" onClick={() => setSelected(null)}>Close preview</Button></Flex>
 				<Text fontSize="xs" color="var(--tt-muted)" mb={4}>{selected.branchId} · {date(selected.occurredAt)}</Text>
 				{largeVersion ? <Text fontSize="sm" mb={3}>The complete data for this large version is retained in your account. Full preview is not available here yet.</Text> : null}
+				<TimelinePagePreview key={`page-preview:${timeline.identity}:${selected.id}`} event={selected} />
 				{changes.map((change, index) => <Box key={index} mb={3} p={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
 					<Text fontWeight="600" mb={2} overflowWrap="anywhere">{timelineChangeLabel(change.path)}</Text>
 					<Text fontSize="sm" color="var(--tt-muted)" noOfLines={4} overflowWrap="anywhere">Before: {timelineValueLabel(change.before, change.path)}</Text>
@@ -85,7 +88,7 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 				</Box>)}
 				<Button size="sm" variant="ghost" mb={3} onClick={() => setShowData(value => !value)} aria-expanded={showData}>{showData ? 'Hide data' : 'View data'}</Button>
 				{showData ? (['before', 'after'] as const).map(side => <Box key={side} mb={4}><Text fontWeight="600" fontSize="sm" mb={2}>{side === 'before' ? 'Before' : 'After'}</Text><Box as="pre" fontSize="xs" whiteSpace="pre-wrap" overflowWrap="anywhere" maxH="280px" overflow="auto" p={3} borderRadius="md" bg="var(--tt-surface)">{preview(selected[side])}</Box></Box>) : null}
-				<Button size="sm" variant="outline" isLoading={opening} isDisabled={!session.connection} onClick={async () => {
+				{!selected.thingId.startsWith(COMPONENT_BINDING_PREFIX) ? <Button size="sm" variant="outline" isLoading={opening} isDisabled={!session.connection} onClick={async () => {
 					const scope = session.connection?.scope; if (!scope) return;
 					setOpening(true); setOpenError('');
 					try {
@@ -93,8 +96,8 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 						navigate(thingHistoryHref(selected.thingId, scope.dataPlane, scope.ownerId));
 					} catch (error) { setOpenError(apiErrorMessage(error, 'Could not open this Thing. Your history is still here.')); }
 					finally { setOpening(false); }
-				}}>{differentSource ? 'Open Thing in home' : 'Open Thing'}</Button>
-				{differentSource ? <Text fontSize="xs" color="var(--tt-muted)" mt={2}>Opening this Thing switches your selected database to your home account.</Text> : null}
+				}}>{differentSource ? 'Open Thing in home' : 'Open Thing'}</Button> : null}
+				{differentSource && !selected.thingId.startsWith(COMPONENT_BINDING_PREFIX) ? <Text fontSize="xs" color="var(--tt-muted)" mt={2}>Opening this Thing switches your selected database to your home account.</Text> : null}
 				{openError ? <Text role="status" fontSize="sm" mt={2}>{openError}</Text> : null}
 				<TimelineVersionActions key={`${timeline.identity}:${selected.id}`} event={selected} onApplied={() => void timeline.refresh()} />
 			</Box> : null}

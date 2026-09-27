@@ -2,7 +2,7 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { StorageMutationError } from '~/api/utils/storage/storageCore';
-import { getTimelinePage, getTimelineEntry, pushClientTimelineEvent, timelineDiscovery, validateClientTimelineEvent } from '~/api/utils/timeline/service';
+import { getTimelinePage, getTimelineEntry, getTimelineComponentBindings, pushClientTimelineEvent, timelineDiscovery, validateClientTimelineEvent } from '~/api/utils/timeline/service';
 import { TIMELINE_EVENT_MAX_BYTES, TIMELINE_PAGE_SIZE } from '~/timeline/contract';
 import { handleVersionRequest, parseVersionRequest } from '~/api/utils/timeline/versions';
 import { handleBranchRequest, getTimelineBranches, getTimelineBranch } from '~/api/utils/timeline/branches';
@@ -15,7 +15,7 @@ import { previewBranchMerge } from '~/api/utils/timeline/branchMerge';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
-const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, entry: getTimelineEntry, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
+const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
 
 export function createTimelineHandlers(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
@@ -35,6 +35,21 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		const auth = await authorize(request);
 		if (auth instanceof Response) return auth;
 		const thingId = auth.url.searchParams.get('thingId');
+		if (auth.url.searchParams.has('components')) {
+			const params = auth.url.searchParams;
+			const allowed = ['ownerId', 'dataPlane', 'storage', 'eventId', 'components'];
+			const eventId = params.get('eventId') ?? '';
+			if (params.get('components') !== '1' || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(eventId) || ['ownerId', 'dataPlane', 'eventId', 'components'].some(key => params.getAll(key).length !== 1) || [...params.keys()].some(key => !allowed.includes(key))) return response({ ok: false, error: 'Invalid component history request' }, 400);
+			try {
+				const result = await deps.componentBindings(auth.user.id, eventId);
+				if (!result) return response({ ok: false, error: 'Version not found' }, 404);
+				if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'These recorded components are too large to preview together.' }, 413);
+				return response({ ok: true, ...result });
+			} catch (error) {
+				if (error instanceof StorageMutationError) return response({ ok: false, error: error.message, code: error.code }, error.status);
+				throw error;
+			}
+		}
 		if (auth.url.searchParams.has('branchId')) {
 			const params = auth.url.searchParams;
 			let lookup;

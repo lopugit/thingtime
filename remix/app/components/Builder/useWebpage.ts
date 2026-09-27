@@ -1,3 +1,4 @@
+import { bindingsForBlocks } from '../../timeline/componentBindings';
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
@@ -161,7 +162,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 };
 
 export type UseWebpageDraft = {
-	branch?: { id: string; name: string; locked: boolean; notice: string; canRefresh: () => boolean; updateMetadata: (patch: { name?: string; acl?: string[] }) => void };
+	branch?: { id: string; name: string; locked: boolean; notice: string; canRefresh: () => boolean; componentNotice?: string; useCurrentComponents?: boolean; setUseCurrentComponents?: (value: boolean) => void; retryComponents?: () => void; updateMetadata: (patch: { name?: string; acl?: string[] }) => void };
 	history?: { error: string; saving: boolean; recoverable: TimelineEvent[]; recover: (event: TimelineEvent) => Promise<void>; dismiss: (event: TimelineEvent) => Promise<void> };
 	loading: boolean;
 	error: boolean;
@@ -295,7 +296,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	const setBlocks = React.useCallback((next: WebpageBlock[]) => {
 		if (scopeRef.current !== scopeKey) return;
 		editRevisionRef.current++;
-		if (user?.id && resolvedRef.current?.page && historyEditable) void historyRef.current.record(draftSnapshot(blocksRef.current), draftSnapshot(next), 'Edit page').catch(() => {});
+		if (user?.id && resolvedRef.current?.page && historyEditable) void historyRef.current.record(draftSnapshot(blocksRef.current), draftSnapshot(next), 'Edit page', bindingsForBlocks(next, componentsRef.current)).catch(() => {});
 		blocksRef.current = next;
 		setBlocksState(next);
 		setDirty(true);
@@ -304,13 +305,16 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 		if (handleRef.current) focusWebpageDraft(handleRef.current);
 	}, [scopeKey, historyEditable]);
 
+	const componentsRef = React.useRef<ComponentsByRef>({});
 	const componentsByRef = React.useMemo(
 		() => ({ ...(resolved?.componentsByRef || {}), ...extraComponents }),
 		[resolved?.componentsByRef, extraComponents]
 	);
 
+	componentsRef.current = componentsByRef;
 	const addComponent = React.useCallback((ref: string, component: ComponentThingLike | null) => {
 		if (scopeRef.current !== scopeKey) return;
+		componentsRef.current = { ...componentsRef.current, [ref]: component };
 		setExtraComponents((prev) => ({ ...prev, [ref]: component }));
 	}, [scopeKey]);
 
@@ -326,6 +330,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 					if (generation !== generationRef.current) return;
 					const thing = resp?.thing || resp?.things?.[0];
 					if (thing?.crystal?.render) {
+						componentsRef.current = { ...componentsRef.current, [ref]: thing };
 						setExtraComponents((prev) => ({ ...prev, [ref]: thing }));
 						return;
 					}
