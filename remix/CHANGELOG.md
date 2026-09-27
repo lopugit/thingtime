@@ -73,7 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   mutations, persist safely across chat/account changes, and retain existing
   Action, account and storage boundaries. The internal host shares canonical
   data routes with Nitro and works in durable workflows. See
-  [execution and validation](../docs/lopu-action-access.md).
+  [execution contract](../docs/lopu-action-access.md) and
+  [PR #953 validation](../PRs/953-codex-lopu-workspace-actions--allow-lopu-actions-with-per-chat-access.md).
 
 - 2026-09-27 — **Codex (AI)**: Web Standards adds 111 editable native animation
   programs with saved keyframes/timing, playback promises and callbacks, scoped
