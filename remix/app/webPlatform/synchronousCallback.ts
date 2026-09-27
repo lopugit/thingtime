@@ -29,13 +29,16 @@ const key = (value: unknown): string => {
 export function callbackData(value: unknown, limit = 1024, charge: () => void = () => {}): any {
 	let nodes = 0,
 		text = 0;
+	const countText = (value: string) => {
+		text += value.length;
+		if (value.length > SYNC_CALLBACK_LIMITS.text || text > 65536) throw new Error('Synchronous callback text budget exceeded');
+	};
 	const copy = (raw: unknown, depth: number): any => {
 		charge();
 		if (++nodes > limit || depth > SYNC_CALLBACK_LIMITS.depth) throw new Error('Synchronous callback data budget exceeded');
 		if (raw === null || raw === undefined || typeof raw === 'boolean' || typeof raw === 'number') return raw;
 		if (typeof raw === 'string') {
-			text += raw.length;
-			if (raw.length > SYNC_CALLBACK_LIMITS.text || text > 65536) throw new Error('Synchronous callback text budget exceeded');
+			countText(raw);
 			return raw;
 		}
 		if (typeof raw !== 'object' || ![Object.prototype, null, Array.prototype].includes(Object.getPrototypeOf(raw)))
@@ -47,6 +50,7 @@ export function callbackData(value: unknown, limit = 1024, charge: () => void = 
 		const result: any = Array.isArray(raw) ? [] : Object.create(null);
 		for (const [name, descriptor] of Object.entries(descriptors)) {
 			if (Array.isArray(raw) && name === 'length') continue;
+			countText(name);
 			if (!('value' in descriptor) || ['__proto__', 'prototype', 'constructor'].includes(name))
 				throw new Error('Callback accessors and prototype names are unavailable');
 			if (Array.isArray(raw) && !/^(0|[1-9]\d?)$/.test(name)) throw new Error('Invalid callback array index');

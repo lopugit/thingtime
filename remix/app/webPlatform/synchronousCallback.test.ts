@@ -86,6 +86,8 @@ test('callback registration copies definitions and bindings without invoking acc
 		/accessors/
 	);
 	assert.equal(read, false);
+	assert.throws(() => callbackData({ ['k'.repeat(4097)]: 1 }), /text budget/);
+	assert.throws(() => callbackData(Object.fromEntries(Array.from({ length: 64 }, (_, i) => ['k'.repeat(1100) + i, 1]))), /text budget/);
 	for (const unsafe of [JSON.parse('{"__proto__":{}}'), new Date(), { v: () => 1 }, 'a'.repeat(4097), Array(65).fill(1)])
 		assert.throws(() => callbackData(unsafe));
 	assert.throws(() => create({ op: 'function', params: [], value: { op: 'global', name: 'fetch' } }), /Unsupported/);

@@ -68,7 +68,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- **2026-09-27 · Codex (AI):** Added 41 reusable native traversal programs and bounded synchronous callback definitions saved as Component data. Verified 115 native cases, edited-filter save/reload/reuse, private API round-trips, responsive layout and production output; Actions contract is 1.35.0. See [PR #962 details](../PRs/962-web-standards-traversal-reusable-native-traversal-and-editable-callback-programs.md).
+- **2026-09-27 · Codex (AI):** Added 41 reusable native traversal programs and bounded synchronous callback definitions saved as Component data. Verified 116 native cases, edited-filter save/reload/reuse, private API round-trips, responsive layout and production output; Actions contract is 1.35.0. See [PR #962 details](../PRs/962-web-standards-traversal-reusable-native-traversal-and-editable-callback-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Lopu Mac/browser dictation waits five seconds
   before sending the current message draft. Settings → Lopu → Voice transcription

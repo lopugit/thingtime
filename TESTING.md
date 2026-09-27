@@ -9276,7 +9276,7 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   callback this, callback-thrown falsy data, native errors and nested handle identity.
 - Refuse asynchronous tokens, foreign/wrong handles, prototype/global/async
   escapes, large trees and callback work/collection/depth limits. Check literal
-  copies and joins before allowing unbounded allocation, and catch/finally loops.
+  copies (including property-name text) and joins before allowing unbounded allocation, and catch/finally loops.
 - Edit the filter's program logic itself, not only selector inputs. Round-trip
   Action-produced definitions through private Component writes, preserve all
   callback nodes, assert anonymous 404 and idempotent suite installation. Save,

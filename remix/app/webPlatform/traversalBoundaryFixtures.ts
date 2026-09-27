@@ -44,6 +44,12 @@ const reentrant = {
 };
 export const TRAVERSAL_BOUNDARIES: Fixture[] = [
 	fixture(
+		'Synchronous callback data bounds property names',
+		[filter({ op: 'function', params: [], value: { op: 'literal', value: { ['k'.repeat(4097)]: 1 } } }), ...returns(true)],
+		undefined,
+		'text budget'
+	),
+	fixture(
 		'Changing the saved callback logic changes native selection',
 		[
 			...setup,

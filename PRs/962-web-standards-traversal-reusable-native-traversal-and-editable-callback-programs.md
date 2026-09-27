@@ -18,7 +18,7 @@ candidate-reference adjustment remains observable when filtering mutates a tree.
 The bounded interpreter uses the existing program vocabulary without source eval,
 global access or asynchronous substitutions. Existing owned receiver policy and
 request budgets apply recursively. Definitions, execution, copies, collections,
-strings, calls and tree size are bounded; cyclic/expanded returned data is refused
+strings (including property names), calls and tree size are bounded; cyclic/expanded returned data is refused
 before the worker decoder. Thrown falsy data and nested handle identity survive
 the existing protocol. NodeFilter constants use captured static descriptors.
 
@@ -29,8 +29,8 @@ Component renderer, Thing kind, storage endpoint or sandbox permission is added.
 
 ## Validation
 
-- Native focused audit: 115/115 passed, covering 82 default/edited recipe runs and
-  33 lifecycle, mutation, callback identity/receiver, thrown-data and boundary cases.
+- Native focused audit: 116/116 passed, covering 82 default/edited recipe runs and
+  34 lifecycle, mutation, callback identity/receiver, thrown-data and boundary cases.
 - Broad audit: 2,652 passed, 202 explicit unsupported cases and one oklab startup
   timeout during build activity. Its default and edited variants passed on retry.
   The final cyclic-return guard then passed the focused native and unit suites.

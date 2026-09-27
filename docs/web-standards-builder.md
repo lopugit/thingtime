@@ -987,7 +987,7 @@ Callbacks have 16 registrations per run, 256 definition nodes, depth 16,
 2,048 evaluation steps per invocation, 32,768 aggregate steps, 512 invocations
 per definition, call depth 8, strings of 4,096 characters and collections of
 64 items. Copying callback data spends bounded work and admits at most 1,024
-nodes / 65,536 text characters. Traversal inspects its owned detached tree
+nodes / 65,536 text characters, including property names. Traversal inspects its owned detached tree
 before native execution, with a 128-node limit. Existing DOM handle/request,
 mutation and ownership checks apply to callback DOM operations too. These are
 runtime limits, not limits in the standards.
