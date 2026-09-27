@@ -15,6 +15,7 @@ function setup() {
 		page: async (ownerId, request) => { calls.push(['page', ownerId, request]); return { entries: [], nextBefore: null, nextAfter: null }; },
 		entry: async (ownerId, eventId) => { calls.push(['entry', ownerId, eventId]); return eventId === 'saved' ? entryFixture(eventFixture('saved')) : null; },
 		push: async (ownerId, event) => { calls.push(['push', ownerId, event]); return entryFixture(event); },
+		branchHead: async (ownerId, branchId, thingId) => { calls.push(['branchHead', ownerId, branchId, thingId]); return thingId === 'page-1' ? ({ branch: { id: branchId, ownerId }, head: { thingId, eventId: 'saved', revision: 3 } } as any) : null; },
 		branches: async (ownerId, thingId, before, limit) => { calls.push(['branches', ownerId, thingId, before, limit]); return { branches: [], nextBefore: null }; },
 		branchCheckout: async (ownerId, command) => { calls.push(['branchCheckout', ownerId, command]); return { ok: true, checkout: {} } as any; },
 		branchMerge: async (ownerId, command) => { calls.push(['branchMerge', ownerId, command]); return { ok: true, preview: {} } as any; },
@@ -170,4 +171,29 @@ test('branch checkout uses private actor/source gates and never dispatches a mut
  assert.equal(h.calls.filter(call => call[0] === 'branchCheckout').length, 1);
  const oversized = createTimelineHandlers({ user: async () => ({ id: 'user-1' } as any), limit: async () => ({ allowed: true } as any), discovery: ownerId => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }), branchCheckout: async () => ({ ok: true, checkout: { content: 'x'.repeat(4 * 1024 * 1024) } } as any) });
  assert.equal((await oversized.action({ request: request('POST', query, command) })).status, 413);
+});
+
+
+test('direct named branch lookup is private, exact, and refuses ambiguous selectors before reading', async () => {
+ const h = setup();
+ const branchId = 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5';
+ const query = `ownerId=user-1&dataPlane=home&thingId=page-1&branchId=${branchId}`;
+ const result = await h.handlers.loader({ request: request('GET', query) });
+ assert.equal(result.status, 200); assert.equal(result.headers.get('Cache-Control'), 'private, no-store');
+ assert.equal((await result.json()).head.revision, 3);
+ assert.deepEqual(h.calls.filter(call => call[0] === 'branchHead'), [['branchHead', 'user-1', branchId, 'page-1']]);
+ assert.equal((await h.handlers.loader({ request: request('GET', query.replace('page-1', 'missing')) })).status, 404);
+ const reads = h.calls.filter(call => call[0] === 'branchHead').length;
+ for (const suffix of ['&branches=1', '&history=1', '&eventId=saved', '&before=1', '&after=1', '&limit=1', '&thingId=page-1', `&branchId=${branchId}`, '&ownerId=user-1', '&dataPlane=home', '&unknown=1', '&storage=home&storage=selected']) {
+  assert.equal((await h.handlers.loader({ request: request('GET', query + suffix) })).status, 400, suffix);
+ }
+ for (const invalid of [query.replace('&dataPlane=home', ''), query.replace('&thingId=page-1', ''), query.replace('page-1', ''), query.replace(branchId, 'main'), query.replace(branchId, ''), query.replace('page-1', 'x'.repeat(201))]) {
+  assert.equal((await h.handlers.loader({ request: request('GET', invalid) })).status, 400, invalid);
+ }
+ h.state.owner = 'other'; assert.equal((await h.handlers.loader({ request: request('GET', query) })).status, 409);
+ h.state.owner = 'user-1'; h.state.plane = 'custom'; assert.equal((await h.handlers.loader({ request: request('GET', query) })).status, 409);
+ h.state.plane = 'home'; h.state.limited = true; assert.equal((await h.handlers.loader({ request: request('GET', query) })).status, 429);
+ h.state.owner = ''; assert.equal((await h.handlers.loader({ request: request('GET', query) })).status, 401);
+ assert.equal(h.calls.filter(call => call[0] === 'branchHead').length, reads);
+ assert.equal(h.calls.filter(call => ['branches', 'page', 'entry', 'branch', 'push'].includes(call[0])).length, 0);
 });

@@ -1,7 +1,7 @@
 import { parseTimelineEntry, TIMELINE_PAGE_SIZE, type TimelineEntry, type TimelineEvent } from './contract.ts';
 import type { TimelineLocalStore } from './localStore.ts';
 import type { TimelineBranchStore } from './branchStore.ts';
-import { parseTimelineBranchEntry, type TimelineBranchCommand, type TimelineBranchResult, type TimelineBranchPage } from './branches.ts';
+import { parseTimelineBranchEntry, parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchEntry, type TimelineBranchCommand, type TimelineBranchResult, type TimelineBranchPage } from './branches.ts';
 
 export type TimelinePageRequest = { thingId: string | null; before: number | null; after: number | null; limit: number };
 export type TimelinePage = { entries: TimelineEntry[]; nextBefore: number | null; nextAfter: number | null };
@@ -13,6 +13,7 @@ export interface TimelineTransport {
 	page(request: TimelinePageRequest, signal: AbortSignal): Promise<TimelinePage>;
 	branch?(command: TimelineBranchCommand, signal: AbortSignal): Promise<TimelineBranchResult>;
 	branches?(thingId: string, before: number | undefined, signal: AbortSignal): Promise<TimelineBranchPage>;
+	branchHead?(branchId: string, thingId: string, signal: AbortSignal): Promise<TimelineBranchEntry>;
 	entry?(eventId: string, signal: AbortSignal): Promise<TimelineEntry>;
 }
 
@@ -25,6 +26,18 @@ export class TimelineSync {
 	private branchPages = new Map<string, Promise<TimelineBranchPage>>();
 	constructor(readonly store: TimelineLocalStore, private transport: TimelineTransport, readonly branchStore?: TimelineBranchStore) {}
 	stop() { this.controller.abort(); }
+	/** Fetch one pointer directly; the bounded cache is not a branch directory.
+	 * Accepting a read never acknowledges or replaces a queued push. */
+	async branchHead(branchId: string, thingId: string): Promise<TimelineBranchEntry> {
+		this.assertActive();
+		if (!this.branchStore || !this.transport.branchHead) throw new Error('Loading this branch is unavailable.');
+		const lookup = parseTimelineBranchLookup({ branchId, thingId });
+		const response = await this.transport.branchHead(lookup.branchId, lookup.thingId, this.controller.signal);
+		this.assertActive();
+		const entry = parseTimelineBranchLookupResult(response, this.store.scope.ownerId, lookup);
+		await this.branchStore.accept([entry]);
+		return entry;
+	}
 	private assertActive() {
 		if (this.controller.signal.aborted) throw new Error('Timeline synchronization stopped');
 	}

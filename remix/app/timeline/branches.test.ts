@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseTimelineBranch, parseTimelineBranchHead, parseTimelineBranchEntry, parseTimelineBranchCommand, timelineBranchHeadId } from './branches.ts';
+import { parseTimelineBranch, parseTimelineBranchHead, parseTimelineBranchEntry, parseTimelineBranchCommand, parseTimelineBranchLookup, parseTimelineBranchLookupResult, timelineBranchHeadId } from './branches.ts';
 const branchId = 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5';
 const branch = { formatVersion: 1, id: branchId, ownerId: 'owner', name: 'Design experiment', createdAt: '2026-09-27T05:00:00.000Z' };
 const head = (thingId: string) => ({ formatVersion: 1, id: timelineBranchHeadId(branchId, thingId), branchId, thingId, ownerId: 'owner', eventId: `version-${thingId}`, revision: 1, createdAt: branch.createdAt, updatedAt: branch.createdAt });
@@ -21,4 +21,16 @@ test('branch commands and records refuse ambiguous identity, ownership, counters
 	assert.throws(() => parseTimelineBranchHead({ ...head('page'), revision: Number.MAX_SAFE_INTEGER + 1 }));
 	assert.throws(() => parseTimelineBranchHead({ ...head('page'), id: head('component').id }));
 	assert.throws(() => parseTimelineBranchEntry({ branch: parseTimelineBranch(branch), head: parseTimelineBranchHead({ ...head('page'), ownerId: 'other' }) }), /match/);
+});
+
+
+test('branch lookups validate canonical pointers against the requested account, branch and Thing', () => {
+ const lookup = { branchId, thingId: 'page' };
+ const entry = parseTimelineBranchEntry({ branch: parseTimelineBranch(branch), head: parseTimelineBranchHead(head('page')) });
+ assert.deepEqual(parseTimelineBranchLookup(lookup), lookup);
+ assert.deepEqual(parseTimelineBranchLookupResult(entry, 'owner', lookup), entry);
+ for (const invalid of [{ ...lookup, branchId: 'main' }, { ...lookup, thingId: '' }, { ...lookup, thingId: 'x'.repeat(201) }, { ...lookup, ownerId: 'owner' }]) assert.throws(() => parseTimelineBranchLookup(invalid));
+ assert.throws(() => parseTimelineBranchLookupResult(entry, 'other', lookup), /another/);
+ assert.throws(() => parseTimelineBranchLookupResult(entry, 'owner', { ...lookup, thingId: 'component' }), /another/);
+ assert.throws(() => parseTimelineBranchLookupResult(entry, 'owner', { ...lookup, branchId: 'branch-277abf25-b322-4ac0-9707-a59c36e7bcd5' }), /another/);
 });
