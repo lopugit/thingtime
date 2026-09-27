@@ -22,7 +22,7 @@ test('SVG recipes compile and preserve complete edited program data', () => {
 		assert.equal(svgRecipe(WEB_FEATURES.find((f) => f.name === name)!), null, name);
 });
 test('SVG namespace and paint policy refuses active resources and unbounded inputs', () => {
-	for (const tag of ['script', 'foreignObject', 'iframe', 'use', 'animate', 'feImage']) assert.throws(() => svgTag(tag));
+	for (const tag of ['script', 'foreignObject', 'iframe', 'use', 'animate']) assert.throws(() => svgTag(tag));
 	assert.equal(svgTag('linearGradient'), 'linearGradient');
 	for (const [tag, key, value] of [
 		['svg', 'width', '513'],

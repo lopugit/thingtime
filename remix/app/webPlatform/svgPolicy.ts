@@ -1,3 +1,4 @@
+import { SVG_FILTER_RECEIVER_POLICY } from './svgFilterPolicy';
 import type { Arg, Policy } from './domBridge';
 const call = (args: Arg[] = [], min = args.length, mutates = false) => ({ args, min, mutates });
 const write = (reads: string, writes = reads, writeArgs: Record<string, Arg> = {}): Policy => ({
@@ -26,6 +27,7 @@ const lists: Record<string, Arg> = {
 	SVGStringList: 'svg-text'
 };
 export const SVG_RECEIVER_POLICY: Record<string, Policy> = {
+	...SVG_FILTER_RECEIVER_POLICY,
 	SVGUnitTypes: { reads: unitConstants },
 	SVGSVGElement: {
 		reads: 'x y width height currentScale currentTranslate viewBox preserveAspectRatio',
