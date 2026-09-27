@@ -231,7 +231,7 @@ export function compilePlatformProgram(raw: unknown): string {
 			case 'dom-callback':
 				return `__ttDomCallback(${e(node.value)})`;
 			case 'dom':
-				if (!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global', 'batch'].includes(node.action))
+				if (!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global', 'batch', 'callback'].includes(node.action))
 					throw new Error('Unsupported DOM action');
 				if (
 					!['document', 'surface', 'batch'].includes(node.action) &&
@@ -239,7 +239,7 @@ export function compilePlatformProgram(raw: unknown): string {
 				)
 					throw new Error('Expected a DOM member name');
 				return `__ttDom(${quoted(node.action)},${
-					['document', 'surface', 'construct', 'batch'].includes(node.action) ? 'null' : e(node.target)
+					['document', 'surface', 'construct', 'batch', 'callback'].includes(node.action) ? 'null' : e(node.target)
 				},${quoted(node.key || '')},[${args(node.args || [])}])`;
 			case 'this':
 				return 'this';
