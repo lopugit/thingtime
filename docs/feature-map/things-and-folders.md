@@ -152,6 +152,10 @@ callbacks and native operations are complete saved Component data; existing
 catalogue/save Actions and private Thing serialization remain canonical. See
 [native animation programs](../web-standards-builder.md#native-web-animation-programs).
 
+## Account drafts and templates
+
+See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
+private draft API, editor recovery, account isolation and independent media copies.
 
 Timeline large-version retention uses `timeline/snapshotParts.ts` as the shared
 part/reference contract and `api/utils/timeline/snapshotParts.ts` for atomic

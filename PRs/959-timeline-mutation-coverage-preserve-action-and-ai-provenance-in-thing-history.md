@@ -19,15 +19,18 @@ retry token: external effects must never be replayed to repair missing history.
 
 ## Validation
 
-The final integration includes main `22ccb0b5`: lossless Lopu Thing inspection,
+The final integration includes main `16bba9aa`: account draft recovery, lossless Lopu Thing inspection,
 voice silence settings, schema copies, attachment saves, personal prompt settings
 and XPath support are preserved. Actions advertises **1.34.1** and Lopu replies
 **1.18.1**. The trusted executor wrapper still surrounds the existing tool
 validation and permission checks.
 
-- Full Vite/Nitro/Vercel build and changed-file lint passed on the combined source
-  (lint has one existing no-script-url warning in the page-context test).
-- Latest combined suites: Timeline 62; Actions 156 with one existing skip;
+- Full Vite/Nitro/Vercel build, Timeline 62, account drafts 18, capability
+  manifests 90 and the disposable HTTP regression passed after integrating
+  account draft recovery. The preceding changed-file lint passed with one
+  existing no-script-url warning in the page-context test.
+- Additional suites on the preceding lossless-inspection integration: Timeline
+  62; Actions 156 with one existing skip;
   Lopu 179 + 153; Lopu UI 232; capability manifests 90; chat streaming 54;
   schemas 260. All passed.
 - The full unit suite passed on the preceding combined source (4,123 passing

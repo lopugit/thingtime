@@ -277,6 +277,8 @@ export { blocksToText };
 export type LongTextEditorProps = {
 	value: LongTextValue;
 	onValueChange?: (next: LongTextValue) => void;
+	/** Complete editor draft, including unfinished blocks omitted from publish output. */
+	onDraftValueChange?: (doc: EditorJsDoc) => void;
 	placeholder?: string;
 	minHeight?: string;
 	/** Inline pages inherit typography; fields reserve a stable history row. Tools stay identical. */
@@ -910,6 +912,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 	).join(',')}`;
 	activeConfigKeyRef.current = configKey;
 	const onValueChange = props.onValueChange;
+	const onDraftValueChange = props.onDraftValueChange;
 
 	const handleChange = React.useCallback(
 		(next: LongTextValue, source: EditorJsSourceRevision, sequence: number, doc: EditorJsDoc, label?: string) => {
@@ -946,8 +949,9 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			pending.push(signature);
 			if (pending.length > 32) pending.splice(0, pending.length - 32);
 			onValueChange?.(next);
+			onDraftValueChange?.(doc);
 		},
-		[onValueChange, history]
+		[onValueChange, onDraftValueChange, history]
 	);
 	const act = React.useCallback(
 		async (action: HistoryAction) => {

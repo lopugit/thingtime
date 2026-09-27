@@ -1,3 +1,6 @@
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useLopu } from '~/components/Lopu/useLopu';
+import { draftRequest } from '~/drafts/draftClient';
 import React from 'react';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
 import type { ThingContextSection } from '~/components/Thingtime/ContextMenu/contextMenuModel';
@@ -19,7 +22,22 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
     remove: () => void; moderate: (action: string, extra?: Record<string, unknown>) => void; flair: (id: string | null) => void;
     downloadArchive?: () => void; shareDownloadLink?: () => void };
 }) {
+  const user = useCurrentUser(), lopu = useLopu();
+  const [savingTemplate, setSavingTemplate] = React.useState(false);
+  const templateId = React.useRef<string | null>(null);
+  const saveTemplate = async () => {
+    if (!user || savingTemplate) return;
+    setSavingTemplate(true);
+    templateId.current ||= crypto.randomUUID();
+    try {
+      await draftRequest(user.id, { operation: 'from-post', postId: post.id, id: templateId.current });
+      lopu({ title: 'Saved as a reusable template 📋', description: 'Find it under Load drafts & templates when making a post.', status: 'success' });
+      templateId.current = null;
+    } catch (error) { lopu({ title: (error as Error).message, status: 'error' }); }
+    finally { setSavingTemplate(false); }
+  };
   const extensions: ThingContextSection[] = [];
+  if (user && !mediaThing && !post.thingtime.includes('comment')) extensions.push({ id: 'templates', actions: [{ id: 'save-template', command: 'save-template', label: savingTemplate ? 'Saving template…' : 'Save as template', icon: '📋', disabled: savingTemplate }] });
   const files = archive ? buildArchiveMenuSection({ fileCount: archive.fileCount, noun: archive.noun }) : null;
   if (files) extensions.push(files);
   const privacy: ThingContextSection = { id: 'privacy', label: 'Privacy', actions: (Object.keys(CIRCLE_META) as PostVisibility[]).map(value => ({
@@ -45,7 +63,8 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
       share: isOwner && !mediaThing ? { submenu: { title: 'Share / permissions', sections: [privacy] } } : false }}
     onAction={({ action }) => {
       const command = action.command;
-      if (command === 'edit') handlers.edit();
+      if (command === 'save-template') { void saveTemplate(); }
+      else if (command === 'edit') handlers.edit();
       else if (command === 'delete') handlers.delete();
       else if (command === ARCHIVE_DOWNLOAD_COMMAND) handlers.downloadArchive?.();
       else if (command === ARCHIVE_SHARE_COMMAND) handlers.shareDownloadLink?.();

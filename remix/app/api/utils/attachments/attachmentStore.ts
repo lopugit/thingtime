@@ -1,3 +1,4 @@
+import { ownedMediaDraftIds } from '../drafts/media';
 import { MAX_POST_ATTACHMENTS, attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { isDeepStrictEqual } from 'node:util';
 import { isDurableRecordingUpload, prepareRecordingImport } from './recordingImportCore';
@@ -837,6 +838,8 @@ export const bindReadyAttachmentsForPurpose = async (
 	const now = new Date();
 	const purposeFence =
 		purpose === 'post' ? { $or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }] } : { attachmentPurpose: purpose };
+  const sourceRows = await things.find({ shareId: { $in: ids }, ownerId, thingtime: ATTACHMENT_THINGTIME }, { session, projection: { targetId: 1 } }).toArray();
+  const sources = await ownedMediaDraftIds(ownerId, sourceRows.map(row => row.targetId).filter((id): id is string => typeof id === 'string' && id !== targetId), session);
 	const candidates = (await things
 		.find(
 			{
@@ -849,7 +852,7 @@ export const bindReadyAttachmentsForPurpose = async (
 					{ attachmentProfileSlot: { $exists: false } },
 					{
 				$or: [
-					{ targetId, attachmentExpiresAt: { $exists: false } },
+					{ targetId: { $in: [targetId, ...sources] }, attachmentExpiresAt: { $exists: false } },
 					{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
 				]
 					}
@@ -859,7 +862,7 @@ export const bindReadyAttachmentsForPurpose = async (
 		)
 		.toArray()) as Array<{ shareId: string; targetId?: string }>;
 
-	if (candidates.length !== ids.length || candidates.some((attachment) => attachment.targetId && attachment.targetId !== targetId)) {
+	if (candidates.length !== ids.length || candidates.some((attachment) => attachment.targetId && attachment.targetId !== targetId && !sources.includes(attachment.targetId))) {
 		throw new AttachmentBindingError(409, 'One or more attachments are unavailable or already attached');
 	}
 
@@ -878,7 +881,7 @@ export const bindReadyAttachmentsForPurpose = async (
 						{ attachmentProfileSlot: { $exists: false } },
 						{
 							$or: [
-								{ targetId, attachmentExpiresAt: { $exists: false } },
+								{ targetId: { $in: [targetId, ...sources] }, attachmentExpiresAt: { $exists: false } },
 								{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
 							]
 						}

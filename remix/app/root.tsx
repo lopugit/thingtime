@@ -1,3 +1,4 @@
+import { ThingDraftsProvider } from './drafts/ThingDrafts';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
 import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
 import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
@@ -131,9 +132,10 @@ export default function App() {
         html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
         html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
       `}</style>
-      <ThingtimeProvider key={rootData.user?.id || 'guest'}>
-        <TimelineProvider>
-        {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
+      <ThingtimeProvider key={rootData.user?.id || 'guest'} accountId={rootData.user?.id} storageKey={rootData.user?.id ? `thingtime:account:${rootData.user.id}` : 'thingtime'}>
+        <ThingDraftsProvider>
+         <TimelineProvider>
+         {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
         <VisualSettingsHost />
         <LopuPageTracker />
         <ThemeHost />
@@ -174,7 +176,8 @@ export default function App() {
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         {!isStandalonePage ? <ConfettiCanvas /> : null}
         {mounted && !isStandalonePage ? <EasterEggs /> : null}
-        </TimelineProvider>
+         </TimelineProvider>
+        </ThingDraftsProvider>
       </ThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}

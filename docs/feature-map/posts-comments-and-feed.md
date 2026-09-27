@@ -65,3 +65,8 @@ projection or changes target permissions.
   `test:hooks` (payload shaping).
 - `TESTING.md`: "Post interactions & inherit chains", "Post views", poll and
   up/down sections, "Post and comment attachments".
+
+## Account drafts and templates
+
+See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
+private draft API, editor recovery, account isolation and independent media copies.
