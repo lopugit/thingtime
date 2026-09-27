@@ -68,7 +68,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-27: Add reusable CSS Typed OM programs for 249 catalogue entries, with native unit/math/transform/style-map receivers, bounded CSS factories and actions-run 1.27.0 negotiation. Browser/API delivery verification is tracked in the associated PR.
+- 2026-09-27: Add reusable CSS Typed OM programs for 249 catalogue entries, with native unit/math/transform/style-map receivers, bounded CSS factories and actions-run 1.27.0 negotiation. See [PR #942](../PRs/942-codex-web-standards-typed-css--add-reusable-css-typed-om-programs-and-native-style-maps.md) for native/API validation and delivery evidence.
 
 
 - 2026-09-27 — **Codex (AI)**: Reusable CSS function comparisons cover 180

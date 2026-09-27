@@ -125,3 +125,9 @@ check(
 	undefined,
 	'CSS expression complexity budget'
 );
+
+check(
+	'CSS literal slash text retains native token semantics',
+	[declare('text', domConstruct('CSSUnparsedValue', [array('a/b/c/d/e/f/g/h/i/j/k')])), ...returns(domCall(v('text'), 'toString'))],
+	'a/b/c/d/e/f/g/h/i/j/k'
+);

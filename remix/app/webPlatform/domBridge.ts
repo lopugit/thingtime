@@ -222,7 +222,12 @@ export function createPlatformDOMBridge(surface: Element) {
 			const id = (value as { $dom?: string }).$dom;
 			if (id) return cssCosts.get(objects.get(id)?.value || {}) || 1;
 		}
-		if (typeof value === 'string') return Math.max(1, Math.ceil(value.length / 32), 2 ** (value.match(/[+*/]/g)?.length || 0));
+		if (typeof value === 'string') {
+			// Operators inside numeric CSS can expand on toSum(). Ordinary text,
+			// including local image URLs, must not be mistaken for arithmetic.
+			const numericText = /(?:calc|min|max|clamp)\(/i.test(value);
+			return Math.max(1, Math.ceil(value.length / 32), numericText ? 2 ** (value.match(/[+*/]/g)?.length || 0) : 1);
+		}
 		return 1;
 	};
 	const reserveCSS = (args: unknown[], target?: object, expands = false) => {
