@@ -30,8 +30,16 @@ changes**, **Review and combine**, **Send changes** — over real ancestry.
   owns what a revision *means* (authorship, sources, corrections). This
   roadmap supplies the revision evidence it needs and borrows none of its
   authority.
+- The [Unified Timeline](../docs/unified-timeline.md) is this roadmap's
+  **foundation, already merged on `develop` and `main`** — the durable client
+  event log and sync queue (`remix/app/timeline/`), server-side recording
+  (`remix/app/api/utils/timeline/`), relational branches and versions, the
+  cursor-paged `/api/v1/timeline` route, and the existing History panel behind
+  the `history` Thing verb. This roadmap owns the *browsing experience* on top
+  of it and must extend those modules rather than introduce a second event
+  store, sync queue, or history route.
 - [Local-first agency and accountable synchronization](./local-first-agency-and-accountable-synchronization-roadmap.md)
-  owns the general local-state charter. The history event log is its first
+  owns the general local-state charter. The Timeline event log is its
   append-only, idempotent instance and must follow its classification,
   fresh-authority and cleanup rules.
 - [Collaboration agency and shared stewardship](./collaboration-agency-and-shared-stewardship-roadmap.md)
@@ -72,9 +80,9 @@ changes**, **Review and combine**, **Send changes** — over real ancestry.
 | # | Milestone | Gate to pass | Status |
 | --- | --- | --- | --- |
 | M0 | **Design concepts** — global timeline, contextual panel, versions/merge review, local-first states, settings, and the left-to-right Evolution view; both registered on `/docs/design`. | Owner reviews the concept; vocabulary and anatomy confirmed or corrected. | Delivered 2026-09-27 (this branch) |
-| M1 | **Durable editor journal** — persist `EditorHistory` events to a local IndexedDB log keyed by account, origin and Thing; reload restores the journal; page-hide flush reuses `latestRevisionAutosave` discipline. | Reload, crash and account switch tests keep every branch; no cross-account leakage; storage bounded. | Planned |
-| M2 | **Contextual History panel** — `history` joins `THING_ACTIONS`; `PersistedThingMenu`, the editor Changes control and PostCard "Edited" chips open one panel scoped to the Thing, with preview, restore-as-new-version and undo-one-change. | Desktop and 390px browser checks; restore never removes a row; conflicts reported, not overwritten. | Planned |
-| M3 | **Account sync** — `history-event` protected Things (`targetId`, owner-private, bounded), batched idempotent record endpoint, cursor list endpoint, semantic capability versions on both manifests, sync queue with "saved on this device" → "synced" transitions. | Real-API tests on a disposable replica set; offline → reconnect converges without duplicates; export and delete flows include history. | Planned |
+| M1 | **Join the editor journal to the durable log** — the IndexedDB event log, account/origin/Thing scoping and sync queue already exist (`remix/app/timeline/indexedDb.ts`, `localStore.ts`, `sync.ts`); the remaining work is emitting `EditorHistory` events into it so the in-memory Changes journal survives reload, with a page-hide flush matching `latestRevisionAutosave` discipline. | Reload, crash and account switch tests keep every branch; no cross-account leakage; storage bounded. | Planned — builds on merged Timeline |
+| M2 | **Contextual History panel parity** — the `history` verb and a working panel already ship (`TimelineHost.tsx`, wired from `PersistedThingMenu`, `ThingsPage`, `SeamlessPageEditor`, `ThingDefinitionEditor`). Remaining: the editor Changes control and PostCard "Edited" chips open that same panel, and it gains as-of Thing cards, property-change chips and contextual messages instead of a JSON preview. | Desktop and 390px browser checks; restore never removes a row; conflicts reported, not overwritten. | Partly done on `develop`/`main` — extend, do not rebuild |
+| M3 | **Close the sync gaps** — protected event Things keyed by `targetId`, transactional server recording, cursor listing and the sync queue already exist (`api/utils/timeline/recordMutation.ts`, `/api/v1/timeline`, `app/timeline/sync.ts`). Remaining: confirm semantic capability versions on both manifests, the truthful "saved on this device" → "synced" → "needs review" pills the concept shows, and that export/delete flows include history. | Real-API tests on a disposable replica set; offline → reconnect converges without duplicates; export and delete flows include history. | Partly done on `develop`/`main` — audit first |
 | M4 | **Timeline browser `/history`** — scope, URL filters, day grouping, density scrubber, cache-first paint, messages (owner notes, Lopu, apps, system), and the **Evolution** view (one Thing left to right: line look with true-time spacing, frames look with as-of renders, scrub/play/compare). | `TESTING.md` checklist; no loading flash with cached rows; screen-reader operation of rows and panel. | Planned |
 | M5 | **Versions** — named/pinned versions, variations (private branches), Get latest changes, Send changes, Review and combine (property-level three-way merge). | Merge keeps both branches; dependent Component versions restore with the page or the UI says they cannot. | Planned |
 | M6 | **Expansion** — non-editor writers (bulk, share, Lopu tools, apps) record events; retention and storage settings; collaboration hand-off. | Every generic writer emits or explicitly opts out; quota degradation tested. | Planned |

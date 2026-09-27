@@ -26,16 +26,36 @@ and it only ever grows: restore, undo, variations and merges append versions.
 
 ## Problem
 
+> **What already exists (corrected during Lopu's review of PR #947).** The
+> [Unified Timeline](../../docs/unified-timeline.md) foundation is **merged into
+> both `develop` and `main`**: a durable client event log with a sync queue
+> (`remix/app/timeline/records.ts`, `indexedDb.ts`, `localStore.ts`, `sync.ts`),
+> server-side recording in the mutation transaction
+> (`remix/app/api/utils/timeline/recordMutation.ts`, `versions.ts`,
+> `branches.ts`), a cursor-paged `/api/v1/timeline` route (`history=1`,
+> `branches`, `before`/`after`/`limit`), a working History panel
+> (`remix/app/components/Timeline/TimelineHost.tsx`), and a wired `history`
+> verb in `THING_ACTIONS`. Merged PRs #956, #959, #965, #966, #970 extend it to
+> API/Action/AI provenance, folder moves, library renames and saved themes.
+> **This epic continues that work; it must not build a second event store, sync
+> queue, or history route.** Read `docs/unified-timeline.md` first.
+
+The gaps this epic actually closes:
+
 - The shared editor's Changes journal (`remix/app/components/Editor/editorHistory.ts`,
   PR #635) is branching and property-level but lives in memory for the mounted
-  session only.
-- Saved Things keep `createdAt`/`updatedAt` and the current crystal; a save
-  replaces the previous state with no retained revision.
-- Older Thingtime undo persists locally but does not cover every saved Thing or
-  API operation. No shared implementation of universal saved-Thing history or
-  branch/merge/push/pull exists.
-- There is no `history` verb in `THING_ACTIONS`, so cards and pages cannot
-  open a history panel, and there is no route that lists changes over time.
+  session only — it is not yet joined to the durable Timeline event log.
+- The Thing envelope still keeps only `createdAt`/`updatedAt` and the current
+  crystal. Revisions exist, but as separate protected Timeline Things — so
+  rendering a Thing **as of** a past version needs a fold that
+  `docs/unified-timeline.md` does not yet specify for block trees.
+- There is a History panel, but no **global** browser: no `/history` route, no
+  Scope (Everything · This Thing · Page + related) × Look (List · Cards · Line ·
+  Frames) dials, no kind/who/what filter chips, search, or day scrubber, and no
+  as-of Thing cards or contextual message bubbles in the list.
+- Friendly version vocabulary (**Try a variation · Get latest changes · Review
+  and combine · Send changes**) is not yet the user-facing language over the
+  existing relational branches, and merge review is not surfaced.
 
 ## Required experience (the concept, in words)
 
