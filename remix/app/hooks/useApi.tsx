@@ -1,4 +1,8 @@
+import type { TimelineBranchCommand } from '../timeline/branches';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
+import type { TimelineEvent } from '~/timeline/contract';
+import type { TimelinePageRequest } from '~/timeline/sync';
+import { announceTimelineScopeChange } from '~/timeline/clientEvents';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
 import { useCallback, useRef } from 'react';
 import { useCurrentUser } from './useCurrentUser';
@@ -88,6 +92,36 @@ export function useApi() {
   actionActor.current = actionUser?.id;
 
   const v1 = {
+    timeline: {
+      entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.2.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...scope, eventId })}`, options);
+      }, []),
+      branches: useCallback(async (scope: { ownerId: string; dataPlane: string }, thingId: string, before?: number, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.2.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...scope, thingId, branches: 1, before })}`, options);
+      }, []),
+      branch: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineBranchCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.2.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(scope)}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ownerId })}`, options);
+      }, []),
+      page: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: TimelinePageRequest, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...scope, ...request, ...(request.thingId === null ? { history: 1 } : {}) })}`, options);
+      }, []),
+      push: useCallback(async (scope: { ownerId: string; dataPlane: string }, event: TimelineEvent, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.0.0');
+        return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(scope)}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: { command: 'preview-version' | 'apply-version'; mode: 'restore' | 'merge'; eventId: string; expectedHeadId?: string; operationId?: string; choices?: Record<string, 'current' | 'incoming'> }) => {
+        await requireThingtimeCapability('api.timeline', '1.1.0');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(scope)}`, expectedActor: scope.ownerId });
+      }, [asyncFetcher])
+    },
     tiers: useCallback(async (options?: { signal?: AbortSignal }) => {
       await requireThingtimeCapability('api.tiers', '1.1.0');
       return getJson('/api/v1/tiers', options);
@@ -589,6 +623,7 @@ export function useApi() {
           async (args?: { url?: string; savedId?: string; reset?: boolean }) => {
             const body = args?.savedId ? { savedId: args.savedId } : args?.reset ? { reset: true } : { url: args?.url };
             const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint' });
+            ret.then(announceTimelineScopeChange).catch(() => {});
             // the data plane just moved — cached feeds/lists are stale, so
             // refresh root data the same way login/logout do
             ret.then(refreshRootData).catch(() => {});
@@ -608,6 +643,7 @@ export function useApi() {
         remove: useCallback(
           async (args?: { id?: string }) => {
             const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE' });
+            ret.then(announceTimelineScopeChange).catch(() => {});
             // removing the session's active endpoint clears the override
             ret.then(refreshRootData).catch(() => {});
             return ret;

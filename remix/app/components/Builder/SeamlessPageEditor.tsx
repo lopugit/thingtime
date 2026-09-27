@@ -36,6 +36,7 @@ import type { UseWebpageDraft } from './useWebpage';
 import { componentTextOverrides } from './componentTextOverrides';
 import { VIEWPORT_PRESETS, boundViewportDimension, type BuilderViewportSize } from './BuilderViewport';
 import { matchingTextArg, type SeamlessMode } from './seamlessMode';
+import { openThingHistory } from '~/components/Timeline/TimelineHost';
 
 const EDITOR_MODES = ['builder', 'edit', 'layout', 'view'] as const;
 const PAGE_POPUP_MODIFIERS = [{ name: 'preventOverflow', options: { altAxis: true, tether: false, padding: 12 } }];
@@ -93,6 +94,7 @@ export default function SeamlessPageEditor({
 	const [acl, setAcl] = React.useState<string[]>(() => initialPageAudience(draft.resolved?.source, draft.resolved?.page?.acl));
 	const [preset, setPreset] = React.useState('full');
 	const [running, setRunning] = React.useState(false);
+	const [historyError, setHistoryError] = React.useState('');
 	const [openControl, setOpenControl] = React.useState<'mode' | 'viewport' | null>(null);
 	React.useLayoutEffect(() => {
 		onChrome(chrome);
@@ -491,6 +493,8 @@ export default function SeamlessPageEditor({
 							justifyContent="center"
 						>
 							<Flex className="ttBuilderPageLinks" alignItems="center" justifyContent="center" flexWrap="wrap" maxWidth="100%" gap={1}>
+                                {draft.resolved?.page?.id ? <Button size="sm" variant="ghost" onClick={() => openThingHistory(draft.resolved!.page!.id)}>History</Button> : null}
+                                {draft.history?.recoverable.length ? <Popover placement="top" isLazy><PopoverTrigger><Button size="sm" variant="outline">Drafts ({draft.history.recoverable.length})</Button></PopoverTrigger><Portal containerRef={controlsLayer}><PopoverContent pointerEvents="auto" maxW="calc(100vw - 32px)" zIndex={DRAWER_POPUP_Z}><PopoverCloseButton /><PopoverBody pt={8} maxH="min(400px, 65dvh)" overflow="auto"><Text fontWeight="600" mb={2}>Unsaved drafts on this device</Text>{draft.history.recoverable.map(event => <Box key={event.id} mb={3}><Text fontSize="xs" mb={1}>{new Date(event.occurredAt).toLocaleString()}</Text><Flex gap={2}><Button size="xs" onClick={() => { setHistoryError(''); void draft.history!.recover(event).catch(error => setHistoryError(error.message)); }}>Recover draft</Button><Button size="xs" variant="ghost" onClick={() => void draft.history!.dismiss(event).catch(error => setHistoryError(error.message))}>Dismiss</Button></Flex></Box>)}</PopoverBody></PopoverContent></Portal></Popover> : null}
                                 {draft.resolved?.page?.id ? <BuilderThingMenu id={draft.resolved.page.id}
                                 disabledReason={draft.dirty || pageName !== draft.resolved.page.crystal?.name || JSON.stringify(acl) !== JSON.stringify(draft.resolved.page.acl) ? 'Save your page before changing settings or transferring its saved content.' : undefined}
                                 onChanged={draft.refresh} onMetadataChanged={thing => { setPageName(thing.crystal?.name || 'Untitled page'); setAcl(thing.acl); }} /> : null}
@@ -498,6 +502,7 @@ export default function SeamlessPageEditor({
 									← My pages
 								</Button>
 							</Flex>
+							{draft.history?.error || historyError ? <Text role="alert" flexBasis="100%" fontSize="xs" color="red.600" px={2} whiteSpace="normal" maxW="600px">{draft.history?.error || historyError}</Text> : draft.history?.saving ? <Text role="status" fontSize="xs" px={2}>Saving draft…</Text> : null}
 							{previewControls}
 							<Box
 								className="ttBuilderControlsDivider"
