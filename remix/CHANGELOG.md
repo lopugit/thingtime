@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: Named-branch merges preserve recorded component
+  definitions, combine independent changes and ask for overlapping choices.
+  Inert previews show current/incoming/result versions; offline save/reload
+  preserves selected captures and reconnect advances once. Added bounded private
+  Timeline 1.11.0 comparison and mobile long-title wrapping. Full unit/build,
+  focused HTTP/Timeline and desktop/mobile checks passed; TypeScript baseline
+  unchanged. [PR #979](../PRs/979-timeline-component-merge-preserve-recorded-components-when-merging-timeline-branches.md).
+
 - 2026-09-28 — **Codex (AI)**: Page versions capture readable component definitions
   as atomic linked Timeline records, using the same local/remote schema. History
   and visual branches preview recorded definitions, preserve offline drafts,
