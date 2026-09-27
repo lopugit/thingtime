@@ -124,3 +124,14 @@ test('a missing local relationship fails closed without deleting the recoverable
  assert.equal((await rawRows(db, 'events')).length, 1); assert.equal((await rawRows(db, 'eventIndex')).length, 1);
  db.close(); await backend.close();
 });
+
+
+test('a corrected bounded draft can save after a rejected oversized capture', async () => {
+ const saved: any[] = [];
+ const recorder = new TimelineDraftRecorder({ scope, enqueue: async (event: any) => { saved.push(event); } } as any, 'page-1', 'draft-fixed', 'client-1');
+ const snapshot = (value: unknown) => ({ adapter: 'definition-source', version: 1, value });
+ assert.throws(() => recorder.capture(snapshot({ source: '' }), snapshot('x'.repeat(4 * 1024 * 1024)), 'Too large'));
+ await assert.rejects(recorder.flush());
+ await recorder.capture(snapshot({ source: '' }), snapshot({ source: '{}' }), 'Corrected');
+ await recorder.flush(); assert.equal(saved.length, 1); assert.equal(saved[0].label, 'Corrected');
+});

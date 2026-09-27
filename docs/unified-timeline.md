@@ -574,3 +574,32 @@ operations, retention/cache controls and the broader acceptance ledger above.
 Screenshots: [desktop conflict review](../PRs/assets/timeline-branch-merge/conflict-desktop.png),
 [mobile conflict review](../PRs/assets/timeline-branch-merge/conflict-mobile.png),
 [pending merge after offline reload](../PRs/assets/timeline-branch-merge/offline-reload-mobile.png).
+
+
+### Named branch field checkout — 2026-09-28
+
+History → Branches → **Edit branch** opens that exact version in the shared
+Component/Action/Data field editor. Each field edit records an ordinary full
+`thing-content` client draft before the branch can be pushed. **Save to branch**
+enqueues the existing revision-fenced `advance-branch` command; published Thing
+content is untouched. Close and reopen to continue editing a saved branch.
+
+`api.timeline` 1.8.0 adds the read-only `checkout-branch` command. It requires the
+branch id, Thing id, exact head id and revision, and returns the original canonical
+entry alongside a transient materialized snapshot. It uses the same bounded
+historical content reader as restore/merge and preserves folder ancestry. No
+collection, index, persistent schema, IndexedDB version, setting or environment
+variable is added. Responses are private/no-store and limited to 4 MiB.
+
+Cached full heads appear immediately while checkout refreshes. A refresh never
+replaces edited fields. Field drafts use the existing relational event records
+and pin, survive reload, and can be resumed explicitly even offline. The complete
+remote Timeline remains authoritative; a stale or divergent push preserves the
+version and requires an explicit merge. Concurrent edits cannot silently advance
+over a different head. A corrected bounded edit can recover after an oversized
+capture; an uncorrected failed capture still refuses a successful flush.
+
+This increment provides field editing for supported `thing-content` versions.
+Visual Builder branch switching, rich-text source editing, exact historical
+component dependency rendering, managed/protected content adapters, deleted Thing
+recovery and versions above the current preview limit remain open.

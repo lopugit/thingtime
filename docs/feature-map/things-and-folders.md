@@ -203,3 +203,12 @@ canonical local event and branch queue upload in parent-first order. The
 read-only server preview and compact-version materializer live under
 `api/utils/timeline/`. `test:timeline:branch-merge` covers the real API and
 `timeline-folders.integration.mts` checks folder-move → draft reconstruction.
+
+
+`TimelineBranchEditor.tsx` checks out an exact named head and reuses
+`Builder/DefinitionEditor/DefinitionValueEditor.tsx` for fields. Changes use
+`TimelineDraftRecorder`, the canonical local event store and the existing branch
+queue. `timeline/branchCheckout.ts` owns the bounded transient checkout contract;
+`api/utils/timeline/branchCheckout.ts` reconstructs private historical content.
+`test:timeline:branch-merge` also checks real checkout, edit, retry and divergent
+push preservation. The visual Builder still edits the published Thing.

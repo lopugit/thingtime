@@ -9,11 +9,13 @@ import { handleBranchRequest, getTimelineBranches } from '~/api/utils/timeline/b
 import { parseTimelineBranchCommand } from '~/timeline/branches';
 import { runWithHomeMongoEndpoint } from '~/api/utils/mongodb/endpoint';
 import { parseBranchMergeRequest } from '~/timeline/branchMerge';
+import { parseBranchCheckoutRequest } from '~/timeline/branchCheckout';
+import { checkoutTimelineBranch } from '~/api/utils/timeline/branchCheckout';
 import { previewBranchMerge } from '~/api/utils/timeline/branchMerge';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
-const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, entry: getTimelineEntry, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branches: getTimelineBranches, branchMerge: previewBranchMerge };
+const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, entry: getTimelineEntry, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
 
 export function createTimelineHandlers(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
@@ -59,11 +61,12 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		const auth = await authorize(request);
 		if (auth instanceof Response) return auth;
 		if (!auth.url.searchParams.has('dataPlane')) return response({ ok: false, error: 'Timeline data source is required' }, 400);
-		let event; let version; let branch; let branchMerge;
+		let event; let version; let branch; let branchMerge; let branchCheckout;
 		try {
 			const input = await readJsonBody(request, TIMELINE_EVENT_MAX_BYTES);
 			if (input && typeof input === 'object' && Object.prototype.hasOwnProperty.call(input, 'command')) {
-				if ((input as any).command === 'preview-branch-merge') branchMerge = parseBranchMergeRequest(input);
+				if ((input as any).command === 'checkout-branch') branchCheckout = parseBranchCheckoutRequest(input);
+				else if ((input as any).command === 'preview-branch-merge') branchMerge = parseBranchMergeRequest(input);
 				else if (['create-branch', 'advance-branch'].includes((input as any).command)) branch = parseTimelineBranchCommand(input);
 				else version = parseVersionRequest(input);
 			}
@@ -74,6 +77,11 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 			return response({ ok: false, error: 'Invalid Timeline event, version or branch request' }, 400);
 		}
 		try {
+			if (branchCheckout) {
+				const result = await deps.branchCheckout(auth.user.id, branchCheckout);
+				if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This branch is too large to edit in one request.' }, 413);
+				return response(result);
+			}
 			if (branchMerge) {
 				const result = await deps.branchMerge(auth.user.id, branchMerge);
 				if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This branch comparison is too large to display in one request.' }, 413);
