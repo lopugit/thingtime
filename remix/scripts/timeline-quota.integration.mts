@@ -138,4 +138,25 @@ assert.equal((await request('/api/v1/things', { id: thing.id }, 'DELETE')).respo
 assert.deepEqual(await history(thing.id), deletedHistory, 'A repeated delete adds no event or accounting');
 assert.equal((await usage()).usedBytes, baseline);
 
-console.log(JSON.stringify({ ok: true, checks: ['normal-admin-entitlement-api', 'self-upgrade-refused', 'exact-ceiling-atomic-growth-refusal', 'retained-shrink-refusal', 'restore-preview-readable-at-ceiling', 'restore-refusal-atomic', 'below-usage-downgrade-refused-without-data-loss', 'at-ceiling-folder-move-and-drain', 'at-ceiling-delete-retains-exact-before', 'delete-retry-does-not-double-count'], baselineBytes: baseline }));
+// Dedicated protected theme writes use the same home ledger and timeline.
+await allowance(baseline + 1_000_000);
+const theme = await request('/api/v1/themes', { name: 'Quota theme', theme: { colors: { accent: '#123456' } }, visibility: 'private' });
+assert.equal(theme.data.ok, true, theme.data.error);
+const themeId = theme.data.theme.id;
+const themeBefore = await read(themeId), themeHistory = await history(themeId);
+assert.equal(themeHistory[0].event.after.adapter, 'theme-content');
+const themeBytes = (await usage()).usedBytes;
+await allowance(themeBytes);
+const themeDenied = await request('/api/v1/themes', { id: themeId, name: 'Changed theme', theme: { colors: { accent: '#654321' } } });
+assert.equal(themeDenied.response.status, 507);
+assert.deepEqual(await read(themeId), themeBefore); assert.deepEqual(await history(themeId), themeHistory);
+assert.equal((await usage()).usedBytes, themeBytes);
+assert.equal((await request('/api/v1/themes/delete', { id: themeId })).data.ok, true);
+const themeDeleted = await history(themeId);
+assert.equal(themeDeleted.length, themeHistory.length + 1);
+assert.deepEqual(themeDeleted[0].event.before.value.crystal, themeBefore.crystal);
+assert.equal((await usage()).usedBytes, themeBytes);
+assert.equal((await request('/api/v1/themes/delete', { id: themeId })).response.status, 404);
+assert.deepEqual(await history(themeId), themeDeleted); assert.equal((await usage()).usedBytes, themeBytes);
+
+console.log(JSON.stringify({ ok: true, checks: ['normal-admin-entitlement-api', 'self-upgrade-refused', 'exact-ceiling-atomic-growth-refusal', 'retained-shrink-refusal', 'restore-preview-readable-at-ceiling', 'restore-refusal-atomic', 'below-usage-downgrade-refused-without-data-loss', 'at-ceiling-folder-move-and-drain', 'at-ceiling-delete-retains-exact-before', 'delete-retry-does-not-double-count', 'theme-at-ceiling-atomic-save-refusal', 'theme-at-ceiling-delete-and-retry'], baselineBytes: baseline }));

@@ -20,6 +20,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Transactional history recording, protected binary event Things and paging | `app/api/utils/timeline/` |
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
 | Shared History modal and managed Timeline folder | `app/components/Timeline/TimelineHost.tsx` |
+| Approved saved-theme content history, home transaction and retained deletion accounting | `app/timeline/themeContent.ts`, `app/api/utils/timeline/themeContent.ts`, dedicated `app/api/utils/themes/themes.ts` writer |
 
 ## Authorization helper
 
@@ -84,6 +85,10 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
   recovery pointers, retries, byte-bounded paging, private envelopes, branch command reload/concurrency, event-before-command ordering, and route
   authority. `test:timeline:integration` uses HTTP-only fixtures on the explicitly
   disposable local replica set described in [Unified Timeline](../unified-timeline.md).
+- `test:timeline:themes` verifies dedicated theme events, rename/move ancestry,
+  private history and custom-selection home accounting. `test:timeline:quota`
+  uses normal synthetic admin assignments for exact-ceiling refusal, deletion
+  and the below-usage downgrade guard; see README's disposable setup.
 
 ## Remote and stored files
 

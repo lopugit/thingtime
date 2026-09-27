@@ -332,7 +332,7 @@ consecutive moves. Run `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port>
 npm --prefix remix run test:timeline:folders`; both scripts require the same
 strict disposable replica-set guard as the main integration suite. Fixtures are
 created through ordinary account APIs, including supported bulk-copy requests.
-Quota-ceiling/downgrade tests and further protected writer coverage remain open.
+Exact-ceiling coverage is described above; already-over-limit legacy-ledger cases and further protected writer coverage remain open.
 
 ## Protected library display names — 2026-09-27
 
@@ -369,3 +369,43 @@ dedicated writers instead of briefly inventing a change to protected identity.
 Temporary read failures after a mutation or cached reload preserve the matching
 Thing projection and expose Try again. Explicit authorization, identity and
 missing-record refusals still clear it; private diagnostics remain live-only.
+
+## Saved theme content — 2026-09-27
+
+`api.timeline` 1.5.0 and `api.themes` / `api.themes-delete` 1.1.0 add approved
+modern saved-theme create, update and delete revisions to the same relational
+Timeline folder. `theme-content` version 1 is shared by client and server. It
+whitelists name, optional display title, versioned theme tokens, tags, visibility
+and folder placement; private root/crystal extensions are not copied. Historical
+partial token documents stay partial: current defaults are never substituted.
+The strict decoder rejects extra fields, unsupported versions and invalid token
+types. Future theme fields require an explicit versioned history contract.
+
+The dedicated writer captures server provenance once outside transaction retries,
+then commits content, the history event/links and its saved head in the same home
+transaction. That head can follow an existing display-title or protected folder
+placement event. A no-op adds no content event; a failed append/accounting/head
+write rolls content back. The home accounting choice is explicit even while a
+custom endpoint is active. History remains private when a theme becomes public.
+
+Validated server snapshots meter the approved crystal/tags through the ordinary
+logical payload definition; bounded organization metadata remains overhead.
+Client drafts retain their full existing metering. Deletion transfers the
+approved retained payload after the live refund, without new growth admission.
+It cannot retain more customer bytes than the removed theme and leaves unknown
+ledgers fenced. For normal dedicated-writer rows, retained and deleted bytes are
+identical. Unsupported private extensions are intentionally not history content.
+
+The guarded HTTP scripts use normal synthetic account APIs on the disposable
+replica. `test:timeline:themes` covers creation with a custom selection, exact
+home accounting, normalized tokens, trusted provenance, identical saves,
+rename/move/content ancestry, visibility, refused saves, history privacy and
+exact deletion/retry. `test:timeline:quota` also exercises the dedicated writer
+at the exact allowance ceiling. No production fixture mutation is required.
+
+Dedicated theme restore/merge, active-theme selection and legacy-theme storage
+coverage remain open. Generic protected-content restore stays refused; the
+existing migration-only conversion and legacy/readiness fences are unchanged.
+These events do not imply coverage for every protected Thing family or external
+Action outcome. Home-history discovery while browsing a custom plane also needs
+its separate client scope acceptance before universal delivery is claimed.

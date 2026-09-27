@@ -8,10 +8,21 @@ import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtime
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.4.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.4.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.5.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.5.0');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');
 	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});
+
+test('dedicated theme writers advertise durable history on both capability manifests', () => {
+	const route = createApiCapabilitiesManifest().features;
+	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
+	for (const feature of ['api.themes', 'api.themes-delete']) {
+		assert.equal(route[feature], '1.1.0');
+		assert.equal(wellKnown[feature].version, '1.1.0');
+		assert.equal(capabilitySatisfies(route[feature], '1.1.0'), true);
+		for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
+	}
 });
 
 test('JSON Action inputs and draft-saving suites negotiate both origin manifests', () => {

@@ -130,7 +130,8 @@
     "test:timeline:integration": "node --import tsx scripts/timeline.integration.mts",
     "test:timeline:folders": "node --import tsx scripts/timeline-folders.integration.mts && node --import tsx scripts/timeline-folders-large.integration.mts",
     "test:timeline:library": "node --import tsx scripts/timeline-library.integration.mts",
-    "test:timeline:quota": "node --import tsx scripts/timeline-quota.integration.mts"
+    "test:timeline:quota": "node --import tsx scripts/timeline-quota.integration.mts",
+    "test:timeline:themes": "node --import tsx scripts/timeline-themes.integration.mts"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",

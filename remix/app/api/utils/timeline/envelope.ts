@@ -3,6 +3,7 @@ import { TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_EVENT_MAX_BYTES, pars
 import { joinTimelineEvent, parseTimelineEventRecord, parseTimelineLink, splitTimelineEvent, type TimelineLink } from '../../../timeline/records.ts';
 import { binaryBytes, fromBin, toBin } from '../auth/binary.ts';
 import { FOLDER_PLACEMENT_ADAPTER, MANAGED_FOLDER_PLACEMENT_ADAPTER, folderPlacementValue } from '../../../timeline/folderPlacement.ts';
+import { THEME_CONTENT_ADAPTER, themeContentStoragePayload } from '../../../timeline/themeContent.ts';
 
 export const TIMELINE_ENVELOPE_VERSION = 3;
 export const packTimelineEntry = (input: TimelineEntry) => {
@@ -52,6 +53,7 @@ export function timelinePayloadBytes(doc: Envelope): number | null {
 			// on a full Thing snapshot. Moving a file must not duplicate its payload
 			// or require new content allowance. Client drafts remain metered above.
 			if ([FOLDER_PLACEMENT_ADAPTER, MANAGED_FOLDER_PLACEMENT_ADAPTER].includes(snapshot.adapter)) { folderPlacementValue(snapshot); continue; }
+			if (snapshot.adapter === THEME_CONTENT_ADAPTER) { total += Buffer.byteLength(JSON.stringify(themeContentStoragePayload(snapshot))); continue; }
 			if (snapshot.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER && snapshot.version === 1) { total += parseTimelineSnapshotReference(snapshot.value).retainedBytes; continue; }
 			const value = snapshot.value as any;
 			const keys = ['thingtime', 'crystal', 'extended', 'tags', 'acl', 'folderId', 'targetId', 'geo'];

@@ -33,11 +33,22 @@ preserving the earlier relational event/link migration and pending drafts.
 Account, origin and custom Mongo data source each have separate local queues.
 History is private and available only to full account credentials.
 
+Saved theme creation, token/visibility edits and deletion also use this shared
+history (`api.timeline` 1.5.0, `api.themes` / `api.themes-delete` 1.1.0). The
+approved token snapshots remain private even for public themes and commit with
+the home-database writer/accounting when a custom data source is selected.
+They preserve historical token values rather than applying current defaults.
+No new runtime setup is needed. Dedicated theme restoration, active-theme
+selection history and legacy-theme migration coverage remain in progress.
+
 Run `npm --prefix remix run test:timeline` for the focused suite. The opt-in HTTP
 suite uses `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> npm --prefix
 remix run test:timeline:integration`. It refuses any database except the disposable
 local `timeline-rs` replica set at `127.0.0.1:20337`; it creates fixtures through
 the app API. Never use a shared or production database for these checks.
+`test:timeline:themes` uses the same guard for theme creation, unchanged saves,
+rename/move/edit ancestry, privacy and retained deletion. The quota suite below
+also checks atomic theme-save refusal and retained deletion at the ceiling.
 
 For quota acceptance, use that same disposable replica and a dedicated local
 dev-server process. Run the following once with a new private fixture path:
