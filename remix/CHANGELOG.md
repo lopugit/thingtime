@@ -108,6 +108,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [execution contract](../docs/lopu-action-access.md) and
   [PR #953 validation](../PRs/953-codex-lopu-workspace-actions--allow-lopu-actions-with-per-chat-access.md).
 
+- 2026-09-27 — **Codex (AI)**: Follow-up to the live Lopu Action run: large
+  Thing reads now offer lossless, authorized JSON Pointer pages instead of
+  repeating a truncated summary. Workspace select errors report their exact
+  allowed values, so Lopu can correct categories without trial writes. See
+  [PR #960 validation](../PRs/960-lopu-action-observation-lossless-inspection-and-actionable-category-errors.md).
+
 - 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
   message field. Stop keeps partial words, recording again appends, and explicit
   Send uses the ordinary composer with late-result and rejected-send protection.

@@ -23,7 +23,7 @@ before the worker decoder. Thrown falsy data and nested handle identity survive
 the existing protocol. NodeFilter constants use captured static descriptors.
 
 Both manifests and the Actions client negotiate 1.35.0. Current main's Schema,
-Lopu prompt and dictation changes are integrated without changing their contracts.
+Lopu prompt, dictation and lossless Thing inspection changes are integrated without changing their contracts. The follow-up merge preserves Lopu reply capability 1.18.0 alongside Actions 1.35.0.
 Runtime boundaries are documented separately from DOM/Web IDL semantics. No new
 Component renderer, Thing kind, storage endpoint or sandbox permission is added.
 
@@ -37,7 +37,7 @@ Component renderer, Thing kind, storage endpoint or sandbox permission is added.
 - Platform tests: 163 passed, one opt-in skip. Integrated capability tests: 91.
   Components: 48. Actions: 156 passed, one skip. Focused lint and production build
   including Vercel output checks pass. TypeScript is 91 baseline / 91 current,
-  with no introduced diagnostics against current main a857d3a44.
+  with no introduced diagnostics against integrated main a857d3a44 before the lossless inspection follow-up.
 - Nine edited programs round-trip through real catalogue Actions and private
   Component writes; anonymous reads are 404, suite installation is idempotent.
 - Local Builder: replace the filter AST with a nodeName-based span selector;

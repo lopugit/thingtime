@@ -594,6 +594,17 @@ test('hosting checkpoints occur after completed tools without forcing a wrap-up 
  assert.equal(events.some(event => event.type === 'error'), false);
 });
 
+test('lossless crystal pages arrive as complete JSON at the provider', async () => {
+ const { inspectThingCrystal } = await import('./thingInspection');
+ const crystalRead = inspectThingCrystal({ render: { text: '🍀漢\\\"'.repeat(2000) } }, { path: '/render', offset: 0 });
+ const data = { thing: { id: 'form', kind: 'component' }, crystalRead };
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'read', name: 'get_thing', inputChunks: ['{"id":"form","path":"/render","offset":0}'] }], stopReason: 'tool_use' },
+   { blocks: [{ type: 'text', text: 'Read the first page.' }], stopReason: 'end_turn' });
+ await collect(turn('read the form', 'claude-opus-5', { deps: { runTool: async () => ({ ok: true, summary: 'Read form crystal /render', data }) } }));
+ const delivered = JSON.parse(anthropicRequests[1].body.messages.at(-1).content[0].content);
+ assert.deepEqual(delivered.data, data);
+});
+
 test('a provider error after output keeps what streamed, emits a retryable error, and never retries another provider', async () => {
   anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'toolu_1', name: 'navigate', inputChunks: ['{"path":"/lopu"}'] }], stopReason: 'tool_use' }, { status: 400 });
   openAiPlans.push({ contentChunks: ['should not run'], finish: 'stop' });
