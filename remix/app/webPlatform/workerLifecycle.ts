@@ -1,4 +1,5 @@
 type WorkerPort = Pick<Worker, 'onmessage' | 'onerror' | 'postMessage' | 'terminate'>;
+export type DOMCallback = (id: number, args: unknown[], error?: string) => void;
 
 /** Browser process startup has its own bound; it is not program execution. */
 export function runPlatformWorker(
@@ -6,7 +7,7 @@ export function runPlatformWorker(
 	input: unknown,
 	send: (ok: boolean, result: unknown) => void,
 	release: () => void,
-	dom?: (request: unknown) => unknown
+	dom?: (request: unknown, callback: DOMCallback) => unknown
 ) {
 	let done = false;
 	let running = false;
@@ -35,7 +36,11 @@ export function runPlatformWorker(
 		} else if (running && event.data?.type === 'tt-platform-dom') {
 			try {
 				if (!dom) throw new Error('This execution context has no document');
-				const result = dom(event.data);
+				const result = dom(event.data, (id, args, error) => {
+					if (done) return;
+					if (error) finish(false, error);
+					else worker.postMessage({ type: 'tt-platform-dom-callback', id, args });
+				});
 				const reply = (value: unknown) => {
 					if (!done) worker.postMessage({ type: 'tt-platform-dom-result', id: event.data.id, ok: true, result: value });
 				};

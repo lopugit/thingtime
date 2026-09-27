@@ -1,3 +1,4 @@
+import { OBSERVER_CONSTRUCTORS } from './observerPolicy';
 import { LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS } from './layoutPolicy';
 import { CSSOM_CONSTRUCTORS, CSSOM_STATIC } from './cssomPolicy';
 import { TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC } from './typedCSSPolicy';
@@ -22,13 +23,18 @@ test('every catalogue DOM request names a member the receiver policy registers',
 		if (!value || typeof value !== 'object') return;
 		const node = value as { op?: unknown; action?: unknown; key?: unknown };
 		if (node.op === 'dom') requested.set(`${node.action}:${node.key || ''}`, id);
+		if (node.op === 'object' && Array.isArray((value as any).entries)) {
+			const command = Object.fromEntries((value as any).entries);
+			if (['get', 'set', 'call'].includes(command.action) && 'target' in command && 'args' in command)
+				requested.set(`${command.action}:${command.key}`, id);
+		}
 		for (const item of Object.values(value)) collect(item, id);
 	};
 	for (const f of WEB_FEATURES) collect(featureRecipe(f).program.steps, f.id);
 	assert.ok(requested.size > 40, `expected broad DOM coverage, saw ${requested.size} distinct operations`);
 	for (const [request, id] of requested) {
 		const [action, key] = request.split(':');
-		if (['document', 'surface'].includes(action)) {
+		if (['document', 'surface', 'batch'].includes(action)) {
 			assert.equal(key, '', `${id}: a document request carries no member name`);
 			continue;
 		}
@@ -39,7 +45,8 @@ test('every catalogue DOM request names a member the receiver policy registers',
 					'ImageData',
 					...Object.keys(TYPED_CSS_CONSTRUCTORS),
 					...Object.keys(CSSOM_CONSTRUCTORS),
-					...Object.keys(LAYOUT_CONSTRUCTORS)
+					...Object.keys(LAYOUT_CONSTRUCTORS),
+					...Object.keys(OBSERVER_CONSTRUCTORS)
 				].includes(key)
 			);
 			continue;

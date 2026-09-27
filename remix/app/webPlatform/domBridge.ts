@@ -1,3 +1,6 @@
+import { OBSERVER_CONSTRUCTORS, OBSERVER_RECEIVER_POLICY, type ObserverArg } from './observerPolicy';
+import { observerArgument, OBSERVER_LIMITS } from './observerSupport';
+import type { DOMCallback } from './workerLifecycle';
 import { LAYOUT_RECEIVER_POLICY, LAYOUT_ELEMENT, LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS, type LayoutArg } from './layoutPolicy';
 import { layoutArgument, layoutQuadJSON, layoutScrollResult } from './layoutSupport';
 import { CSSOM_RECEIVER_POLICY, CSSOM_CONSTRUCTORS, CSSOM_STATIC, CSSOM_PROPERTIES, type CSSOMArg } from './cssomPolicy';
@@ -16,6 +19,7 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| ObserverArg
 	| LayoutArg
 	| CSSOMArg
 	| TypedCSSArg
@@ -85,6 +89,7 @@ const parentReads = 'children firstElementChild lastElementChild childElementCou
 const childReads = 'previousElementSibling nextElementSibling';
 const iteration = { keys: call([], { iterable: true }), values: call([], { iterable: true }), entries: call([], { iterable: true }) };
 export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
+	...OBSERVER_RECEIVER_POLICY,
 	...HTML_FORM_RECEIVER_POLICY,
 	...CANVAS_RECEIVER_POLICY,
 	...SVG_RECEIVER_POLICY,
@@ -218,7 +223,7 @@ type Captured = {
 	writes: Map<string, PropertyDescriptor>;
 	calls: Map<string, { descriptor: PropertyDescriptor; policy: Method }>;
 };
-export function createPlatformDOMBridge(surface: Element) {
+export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMCallback) {
 	const surfaceDocument = surface.ownerDocument;
 	const realm = surfaceDocument.defaultView! as unknown as Record<string, { prototype: object }>;
 	const doc = surfaceDocument.implementation.createHTMLDocument('Thingtime DOM program');
@@ -226,7 +231,9 @@ export function createPlatformDOMBridge(surface: Element) {
 	const scope = surfaceDocument.defaultView!.crypto.randomUUID();
 	const objects = new Map<string, Entry>();
 	const shadowRoots = new Set<ShadowRoot>();
-	const constructors = { ...TYPED_CSS_CONSTRUCTORS, ...CSSOM_CONSTRUCTORS, ...LAYOUT_CONSTRUCTORS };
+	const constructors = { ...TYPED_CSS_CONSTRUCTORS, ...CSSOM_CONSTRUCTORS, ...LAYOUT_CONSTRUCTORS, ...OBSERVER_CONSTRUCTORS };
+	const observers = new Map<object, { type: string; targets: Set<object> }>();
+	let callbackCount = 0;
 	const statics = {
 		...TYPED_CSS_STATIC,
 		...CSSOM_STATIC,
@@ -274,6 +281,7 @@ export function createPlatformDOMBridge(surface: Element) {
 	};
 	let allocationCount = 0,
 		requestCount = 0,
+		messageCount = 0,
 		work = 0,
 		stopped = false;
 	const captured = new Map<string, Captured>();
@@ -450,6 +458,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		let type: string | undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(OBSERVER_RECEIVER_POLICY),
 			...Object.keys(LAYOUT_RECEIVER_POLICY),
 			...Object.keys(CSSOM_RECEIVER_POLICY),
 			...Object.keys(TYPED_CSS_RECEIVER_POLICY),
@@ -497,6 +506,37 @@ export function createPlatformDOMBridge(surface: Element) {
 		return target;
 	};
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule === 'observer-callback') {
+			const token = value as { $callback?: number };
+			if (
+				!deliverCallback ||
+				!value ||
+				typeof value !== 'object' ||
+				Array.isArray(value) ||
+				Object.keys(value).length !== 1 ||
+				!Object.prototype.hasOwnProperty.call(value, '$callback') ||
+				!Number.isSafeInteger(token.$callback) ||
+				token.$callback! < 1 ||
+				token.$callback! > 32
+			)
+				throw new Error('Expected a registered worker callback');
+			return (records: unknown[], observer: object) => {
+				if (stopped) return;
+				try {
+					if (++callbackCount > OBSERVER_LIMITS.callbacks || records.length > OBSERVER_LIMITS.records)
+						throw new Error('Observer callback budget exceeded');
+					deliverCallback(token.$callback!, encode([records, observer]) as unknown[]);
+				} catch (error) {
+					deliverCallback(token.$callback!, [], String((error as Error).message).slice(0, 500));
+				}
+			};
+		}
+		if (rule.startsWith('observer-'))
+			return observerArgument(value, rule, (raw, types) => {
+				const target = receiverType(raw, types);
+				inspectTree(target as Node);
+				return target;
+			});
 		if (rule.startsWith('layout-')) return layoutArgument(value, rule, receiverType);
 		if (rule.startsWith('cssom-')) return cssomArgument(value, rule, receiverType);
 		if (rule.startsWith('css-')) return typedCSSArgument(value, rule, receiverType);
@@ -529,31 +569,63 @@ export function createPlatformDOMBridge(surface: Element) {
 		if (rule === 'attribute') return attribute(value);
 		return value;
 	};
-	return {
+	const bridge = {
 		stop: () => {
 			stopped = true;
+			for (const [observer, { type }] of observers) method<void>(type, 'disconnect')(observer);
+			observers.clear();
 			objects.clear();
 			if (context !== 'surface') for (const canvas of canvases) canvas.width = 0;
 			canvases.clear();
 		},
-		request: (
-			raw: unknown
-		): { value?: unknown; error?: { name: string; message: string } } | Promise<{ value?: unknown; error?: { name: string; message: string } }> => {
+		request: function execute(
+			raw: unknown,
+			nested = false
+		): { value?: unknown; error?: { name: string; message: string } } | Promise<{ value?: unknown; error?: { name: string; message: string } }> {
 			if (stopped) throw new Error('DOM run has ended');
 			if (++requestCount > 256) throw new Error('DOM request budget exceeded');
+			if (!nested) messageCount++;
 			if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).length !== 6) throw new Error('Invalid DOM request');
 			const request = raw as { type: string; id: number; action: string; target: unknown; key: string; args: unknown[] };
 			if (
 				request.type !== 'tt-platform-dom' ||
 				!Number.isSafeInteger(request.id) ||
-				request.id !== requestCount ||
-				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global'].includes(request.action) ||
+				request.id !== messageCount ||
+				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global', 'batch'].includes(request.action) ||
 				typeof request.key !== 'string' ||
 				request.key.length > 60 ||
 				!Array.isArray(request.args) ||
 				request.args.length > 9
 			)
 				throw new Error('Invalid DOM request envelope');
+			if (request.action === 'batch') {
+				if (
+					nested ||
+					request.target !== null ||
+					request.key ||
+					request.args.length !== 1 ||
+					!Array.isArray(request.args[0]) ||
+					!request.args[0].length ||
+					request.args[0].length > 16
+				)
+					throw new Error('Expected a bounded synchronous DOM batch');
+				const values: unknown[] = [];
+				for (const command of request.args[0]) {
+					if (
+						!command ||
+						typeof command !== 'object' ||
+						Array.isArray(command) ||
+						Object.keys(command).sort().join(',') !== 'action,args,key,target' ||
+						!['get', 'set', 'call'].includes(command.action)
+					)
+						throw new Error('Only synchronous member operations are allowed in a DOM batch');
+					const result = execute({ ...command, type: 'tt-platform-dom', id: messageCount }, true);
+					if (result instanceof Promise) throw new Error('Asynchronous DOM operations cannot run in a synchronous batch');
+					if (result.error) return result;
+					values.push(result.value);
+				}
+				return { value: values };
+			}
 			if (request.action === 'document' || request.action === 'surface') {
 				if (request.target !== null || request.key || request.args.length) throw new Error('Invalid document request');
 				const selected = request.action === 'surface' ? 'surface' : 'detached';
@@ -625,6 +697,10 @@ export function createPlatformDOMBridge(surface: Element) {
 					? registry && Object.prototype.hasOwnProperty.call(registry, request.key) && registry[request.key]
 					: (constructors as Record<string, Method>)[request.key];
 				if (!shape || (!isStatic && request.target !== null)) throw new Error('Unregistered CSS native operation');
+				const observerConstructor = !isStatic && Object.prototype.hasOwnProperty.call(OBSERVER_CONSTRUCTORS, request.key);
+				if (observerConstructor && (!context || (request.key !== 'MutationObserver' && context !== 'surface')))
+					throw new Error('Observers require their owned document context');
+				if (observerConstructor && observers.size >= OBSERVER_LIMITS.observers) throw new Error('Observer allocation budget exceeded');
 				const args = typedCSSArguments(shape, request.args, argument);
 				if (isStatic && ['Document', 'Window'].includes(String(namespace)) && context !== 'surface')
 					throw new Error('Layout operations require the active surface');
@@ -651,6 +727,8 @@ export function createPlatformDOMBridge(surface: Element) {
 				if (work > 65536) throw new Error('DOM input work budget exceeded');
 				try {
 					let value = isStatic ? Reflect.apply(native, owner, args) : Reflect.construct(native, args);
+					if (observerConstructor && request.key !== 'IntersectionObserverEntry')
+						observers.set(value as object, { type: request.key, targets: new Set() });
 					if (namespace === 'Document') {
 						if (request.key === 'elementFromPoint' && value && !insideSurface(value as Node)) value = null;
 						if (request.key === 'elementsFromPoint') value = (value as Node[]).filter((node) => insideSurface(node));
@@ -672,6 +750,18 @@ export function createPlatformDOMBridge(surface: Element) {
 						);
 					return { value: encode(value) };
 				} catch (error) {
+					if (
+						observerConstructor &&
+						request.key === 'IntersectionObserverEntry' &&
+						(error as Error).name === 'TypeError' &&
+						/Illegal constructor/.test((error as Error).message)
+					)
+						return {
+							error: {
+								name: 'UnsupportedDOMMember',
+								message: 'This browser exposes IntersectionObserverEntry records but not their standard constructor.'
+							}
+						};
 					return { error: { name: (error as Error).name, message: String((error as Error).message).slice(0, 500) } };
 				}
 			}
@@ -765,6 +855,7 @@ export function createPlatformDOMBridge(surface: Element) {
 				if (registered) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose DOM member ${request.key}` } };
 				throw new Error(`DOM member ${request.key} is not registered for this receiver`);
 			}
+			if (nested && policy?.awaitResult) throw new Error('Asynchronous DOM operations cannot run in a synchronous batch');
 			if (
 				context === 'surface' &&
 				(policy?.mutates || request.action === 'set') &&
@@ -889,6 +980,14 @@ export function createPlatformDOMBridge(surface: Element) {
 				if (cssRuleCount(cssContainer) + added > CSSOM_LIMITS.rules) throw new Error('CSS rule budget exceeded');
 			}
 
+			const observerState = observers.get(target);
+			if (
+				observerState &&
+				request.key === 'observe' &&
+				!observerState.targets.has(args[0] as object) &&
+				observerState.targets.size >= OBSERVER_LIMITS.targets
+			)
+				throw new Error('Observer target budget exceeded');
 			let result: unknown;
 			try {
 				if (request.action === 'get') result = descriptor.get ? descriptor.get.call(target) : descriptor.value;
@@ -900,6 +999,11 @@ export function createPlatformDOMBridge(surface: Element) {
 					}
 					result = args[0];
 				} else result = descriptor.value.apply(target, args);
+				if (observerState) {
+					if (request.key === 'observe') observerState.targets.add(args[0] as object);
+					if (request.key === 'unobserve') observerState.targets.delete(args[0] as object);
+					if (request.key === 'disconnect') observerState.targets.clear();
+				}
 			} catch (error) {
 				// Actual DOM errors remain catchable in authored worker programs.
 				return {
@@ -955,4 +1059,5 @@ export function createPlatformDOMBridge(surface: Element) {
 			return complete(result);
 		}
 	};
+	return { stop: bridge.stop, request: (raw: unknown) => bridge.request(raw) };
 }
