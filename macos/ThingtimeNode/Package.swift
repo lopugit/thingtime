@@ -49,7 +49,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "ThingtimeSpeech",
+            dependencies: ["ThingtimeSpeechCore"],
             linkerSettings: [.linkedFramework("Speech"), .linkedFramework("AVFoundation")]
+        ),
+        .target(name: "ThingtimeSpeechCore"),
+        .testTarget(
+            name: "ThingtimeSpeechCoreTests",
+            dependencies: ["ThingtimeSpeechCore"]
         ),
         .testTarget(
             name: "ThingtimeNodeCoreTests",
