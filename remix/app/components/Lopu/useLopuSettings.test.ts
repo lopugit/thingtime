@@ -43,6 +43,15 @@ const phone = { width: 375, height: 667 };
 // ——— settings ————————————————————————————————————————————————————————————
 
 describe('normalizeLopuSettings', () => {
+    test('voice silence preferences restore safely from old and custom settings', () => {
+        assert.equal(normalizeLopuSettings({}).dictationSilenceSeconds, 5);
+        const custom = normalizeLopuSettings({ dictationSilenceSeconds: 8.5, hearMeOut: true });
+        assert.equal(custom.dictationSilenceSeconds, 8.5);
+        assert.equal(custom.hearMeOut, true);
+        const invalid = normalizeLopuSettings({ dictationSilenceSeconds: Infinity, hearMeOut: 'true' });
+        assert.equal(invalid.dictationSilenceSeconds, 5);
+        assert.equal(invalid.hearMeOut, false);
+    });
 	test('a missing or junk branch yields the documented defaults', () => {
 		assert.deepEqual(normalizeLopuSettings(undefined), LOPU_SETTINGS_DEFAULTS);
 		assert.deepEqual(normalizeLopuSettings(null), LOPU_SETTINGS_DEFAULTS);
@@ -87,6 +96,7 @@ describe('normalizeLopuSettings', () => {
 		});
 		assert.deepEqual(settings, {
 			management: 'server', dockMode: 'overlay', attachCurrentPage: true, minimised: false,
+			dictationSilenceSeconds: 5, hearMeOut: false,
 			launcher: false,
 			dock: 'right',
 			applyPatches: false,

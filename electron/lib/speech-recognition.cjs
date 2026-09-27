@@ -22,12 +22,13 @@ class DesktopSpeechRecognition {
 
 	start(request, send) {
 		if (typeof request?.sessionId !== 'string' || !SESSION_ID.test(request.sessionId) ||
-			typeof request?.lang !== 'string' || !LANGUAGE.test(request.lang)) {
+			typeof request?.lang !== 'string' || !LANGUAGE.test(request.lang) ||
+            (request.continuous !== undefined && typeof request.continuous !== 'boolean')) {
 			throw new Error('Invalid speech session.');
 		}
 		this.stop();
 		const { sessionId, lang } = request;
-		const child = this.spawnProcess(this.executable, [lang], { stdio: ['pipe', 'pipe', 'ignore'], env: {
+		const child = this.spawnProcess(this.executable, request.continuous ? [lang, 'continuous'] : [lang], { stdio: ['pipe', 'pipe', 'ignore'], env: {
 			PATH: '/usr/bin:/bin', HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, LANG: process.env.LANG
 		} });
 		const state = { child, sessionId, timer: null, buffer: '', terminal: false };

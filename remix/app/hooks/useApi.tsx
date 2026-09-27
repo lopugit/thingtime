@@ -1,7 +1,18 @@
+import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
+import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
+import { draftRequest } from '~/drafts/draftClient';
+import type { BranchMergeRequest } from '../timeline/branchMerge';
+import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
+import type { TimelineEvent } from '~/timeline/contract';
+import type { TimelinePageRequest } from '~/timeline/sync';
+import { announceTimelineScopeChange } from '~/timeline/clientEvents';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
 import { useCallback, useRef } from 'react';
 import { useCurrentUser } from './useCurrentUser';
+import { useDataPlane } from './useDataPlane';
+import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
+import { rootIdentity } from '../utils/rootIdentity';
 import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
@@ -27,12 +38,13 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
+const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null }) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
-    response = await fetch(url, { credentials: 'include', signal: options?.signal });
+    response = await fetch(url, { credentials: 'include', signal: options?.signal,
+      ...(options?.expectedDataPlane ? { headers: { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } } : {}) });
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
     recordApiCall({
@@ -57,6 +69,7 @@ const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
   });
   const data = await readApiResponsePayload(response, { action: 'load Thingtime data', method: 'GET' });
   if (!response.ok) {
+    if (response.status === 409 && data?.code === 'DATA_PLANE_CHANGED') { rootIdentity.changed(); refreshRootData(); }
     throw createApiFailure({
       payload: data,
       status: response.status,
@@ -82,12 +95,67 @@ const toQuery = (args?: Record<string, unknown>) => {
 };
 
 export function useApi() {
+  const dataPlane = useDataPlane();
+  const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
   const actionUser = useCurrentUser();
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;
 
   const v1 = {
+    drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
+    webpages: {
+      resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.webpages-resolve', '1.5.0');
+        return asyncFetcher.submit({ blocks }, { action: `/api/v1/webpages/resolve${toQuery({ ownerId: scope.ownerId, dataPlane: scope.dataPlane })}`, expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: options?.signal });
+      }, [asyncFetcher])
+    },
+    timeline: {
+      branchHead: useCallback(async (scope: { ownerId: string; dataPlane: string }, branchId: string, thingId: string, options?: { signal?: AbortSignal }) => {
+        const lookup = parseTimelineBranchLookup({ branchId, thingId });
+        await requireThingtimeCapability('api.timeline', '1.9.0');
+        const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...lookup })}`, options);
+        return parseTimelineBranchLookupResult(result, scope.ownerId, lookup);
+      }, []),
+      checkoutBranch: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchCheckoutRequest, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.8.0');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      branchMerge: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchMergeRequest, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.7.0');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      entry: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId })}`, options);
+      }, []),
+      branches: useCallback(async (scope: { ownerId: string; dataPlane: string }, thingId: string, before?: number, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), thingId, branches: 1, before })}`, options);
+      }, []),
+      branch: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineBranchCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal; storage?: TimelineStorage }) => {
+        const expectedDataPlane = planeRef.current;
+        if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        await requireThingtimeCapability('api.timeline', options?.storage === 'home' ? '1.6.0' : '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ownerId, ...(options?.storage === 'home' ? { storage: 'home' } : {}) })}`, { ...options, expectedDataPlane });
+      }, []),
+      page: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: TimelinePageRequest, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...request, ...(request.thingId === null ? { history: 1 } : {}) })}`, options);
+      }, []),
+      push: useCallback(async (scope: { ownerId: string; dataPlane: string }, event: TimelineEvent, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
+        return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: { command: 'preview-version' | 'apply-version'; mode: 'restore' | 'merge'; eventId: string; expectedHeadId?: string; operationId?: string; choices?: Record<string, 'current' | 'incoming'> }) => {
+        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
+        return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
+      }, [asyncFetcher])
+    },
     tiers: useCallback(async (options?: { signal?: AbortSignal }) => {
       await requireThingtimeCapability('api.tiers', '1.1.0');
       return getJson('/api/v1/tiers', options);
@@ -283,6 +351,11 @@ export function useApi() {
       }
     },
     settings: {
+      lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), []),
+      setLopuPrompt: useCallback(async (args: Record<string, unknown>) => {
+        await requireThingtimeCapability('api.settings-lopu-prompt', '1.0.0');
+        return asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-prompt', errorContext: 'save Lopu instructions' });
+      }, [asyncFetcher]),
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
 			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
@@ -516,14 +589,16 @@ export function useApi() {
         // providerId = one of the viewer's Secure Vault providers (v1.ai.models()
         // → vaultProviders[].id); null clears it back to the catalog model
         create: useCallback(
-          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; management?: 'client' | 'server' }) => {
+          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server' }) => {
+            if (args?.accessMode) await requireThingtimeCapability('api.lopu-chats', '1.6.0');
             if (args?.management) await requireThingtimeCapability('api.lopu-chats', '1.5.0');
             return asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' });
           },
           [asyncFetcher]
         ),
         update: useCallback(
-          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; management?: 'client' | 'server'; archived?: boolean }) => {
+          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server'; archived?: boolean }) => {
+            if (args.accessMode) await requireThingtimeCapability('api.lopu-chats-update', '1.5.0');
             if (args.management) {
               await requireThingtimeCapability('api.lopu-chats', '1.5.0');
               await requireThingtimeCapability('api.lopu-chats-update', '1.4.0');
@@ -550,8 +625,10 @@ export function useApi() {
       // providers (v1.ai.models() → vaultProviders[].realtimeModels); a
       // refusal throws the route's error shape (400 with the reason)
       voiceSession: useCallback(
-        async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) =>
-          asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal }),
+        async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) => {
+          await requireThingtimeCapability('api.lopu-voice-session', '1.2.0');
+          return asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal });
+        },
         [asyncFetcher]
       ),
       // the viewer's Lopu account (verified flag, credits, usage — design note
@@ -586,7 +663,9 @@ export function useApi() {
         set: useCallback(
           async (args?: { url?: string; savedId?: string; reset?: boolean }) => {
             const body = args?.savedId ? { savedId: args.savedId } : args?.reset ? { reset: true } : { url: args?.url };
-            const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint' });
+            // Reset/selection is the recovery path for a stale data source.
+            const ret = asyncFetcher.submit(body, { action: '/api/v1/mongodb/endpoint', expectedDataPlane: null });
+            ret.then(announceTimelineScopeChange).catch(() => {});
             // the data plane just moved — cached feeds/lists are stale, so
             // refresh root data the same way login/logout do
             ret.then(refreshRootData).catch(() => {});
@@ -605,7 +684,8 @@ export function useApi() {
         ),
         remove: useCallback(
           async (args?: { id?: string }) => {
-            const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE' });
+            const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/mongodb/endpoints', method: 'DELETE', expectedDataPlane: null });
+            ret.then(announceTimelineScopeChange).catch(() => {});
             // removing the session's active endpoint clears the override
             ret.then(refreshRootData).catch(() => {});
             return ret;
@@ -959,9 +1039,11 @@ export function useApi() {
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => {
+          const expectedDataPlane = planeRef.current;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.31.0' : '1.27.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
-          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
+          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
         },
 				[]
 			),
@@ -1453,7 +1535,7 @@ export function useApi() {
       // path in every browser while the API-level battery stayed green.
       run: useCallback(async (args) => {
         const actor = actionActor.current;
-        await requireThingtimeCapability('api.actions-run', '1.31.0');
+        await requireThingtimeCapability('api.actions-run', '1.35.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
         const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor });
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');

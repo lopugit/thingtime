@@ -8,10 +8,15 @@ const source = () => ({ shareId: 'recording', ownerId: 'owner', thingtime: ['att
 const folder = () => ({ shareId: 'folder', ownerId: 'owner', thingtime: ['folder'], updatedAt: time });
 const harness = () => {
   const session = {}; const writes: any[] = [];
-  const state = { source: source() as any, folder: folder() as any, sourceMatches: 1, folderMatches: 1, custom: false, commits: 0, rollbacks: 0 };
+  const state = { source: source() as any, folder: folder() as any, sourceMatches: 1, folderMatches: 1, custom: false, commits: 0, rollbacks: 0, history: [] as any[], failHistory: false };
   const deps = {
     customEndpoint: () => state.custom,
     now: () => time,
+    record: async (_things: any, before: any, after: any, capture: any, currentSession: any) => {
+      assert.equal(currentSession, session);
+      if (state.failHistory) throw new Error('History unavailable');
+      state.history.push({ before, after, capture });
+    },
     transaction: async (work: any) => { try { const result = await work(session); state.commits++; return result; }
       catch (error) { state.rollbacks++; throw error; } },
     collection: async () => ({
@@ -29,11 +34,13 @@ test('managed writer locks destination and CAS-updates only placement in one hom
   assert.deepEqual(await moveManagedContent('owner', 'recording', 'folder', time.toISOString(), h.deps), { id: 'recording', folderId: 'folder' });
   assert.equal(h.state.commits, 1); assert.equal(h.writes.length, 2);
   assert.equal(h.writes[0].query.shareId, 'folder');
-  assert.deepEqual(Object.keys(h.writes[0].update.$set), ['updatedAt']);
-  assert.equal(h.writes[0].update.$set.updatedAt.getTime(), time.getTime() + 1);
+  assert.deepEqual(Object.keys(h.writes[0].update.$set), ['folderMutationToken']);
+  assert.match(h.writes[0].update.$set.folderMutationToken, /^[a-f0-9-]{36}$/);
   assert.deepEqual(h.writes[1].query, { shareId: 'recording', ownerId: 'owner', thingtime: ['attachment'], updatedAt: time });
   assert.deepEqual(h.writes[1].update, { $set: { folderId: 'folder', updatedAt: new Date(time.getTime() + 1) } });
   assert.deepEqual(h.state.source, before);
+  assert.equal(h.state.history.length, 1);
+  assert.equal(h.state.history[0].after.folderId, 'folder');
 });
 
 test('root placement does not touch a destination and custom endpoints never enter the writer', async () => {
@@ -75,4 +82,10 @@ test('archive move rechecks root state in the transaction and never rewrites his
   h.state.source.archiveDeleting = true;
   await assert.rejects(moveManagedContent('owner', 'recording', 'folder', undefined, h.deps), /complete archive/);
   assert.equal(h.writes.length, 2);
+});
+
+test('history failure rolls back a managed move instead of reporting success', async () => {
+  const h = harness(); h.state.failHistory = true;
+  await assert.rejects(moveManagedContent('owner', 'recording', 'folder', undefined, h.deps), /History unavailable/);
+  assert.equal(h.state.commits, 0); assert.equal(h.state.rollbacks, 1);
 });

@@ -763,7 +763,7 @@ export const BuilderDrawer = (props: {
 		setSaving(false);
 		if (result.ok) {
 			setMetaDirty(false);
-			lopu({ title: mode === 'site' ? 'Your page is saved — this is your Thingtime now 🧱✨' : 'Page saved ✨', status: 'success' });
+			lopu({ title: draft.branch ? 'Branch changes saved on this device' : mode === 'site' ? 'Your page is saved — this is your Thingtime now 🧱✨' : 'Page saved ✨', status: 'success' });
 			// Only the single-page draft.save() reports an id; onSaveAll settles
 			// several drafts at once and has no single page to hand back, so the
 			// id is read off the narrowed result instead of the union.
@@ -878,7 +878,7 @@ export const BuilderDrawer = (props: {
 								{regionLabel}
 							</Text>
 						) : null}
-						<BlockInspector draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} />
+						<Box as="fieldset" disabled={!!draft.branch?.locked} minW={0} border={0} p={0}><BlockInspector draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} /></Box>
 					</>
 				) : !props.helpText ? (
 					<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.7">
@@ -902,7 +902,8 @@ export const BuilderDrawer = (props: {
 									onPageName(event.target.value);
 									setMetaDirty(true);
 								}}
-								data-testid="builder-page-name"
+								isDisabled={draft.branch?.locked}
+                                data-testid="builder-page-name"
 							/>
 						</FieldRow>
 						{mode === 'page' ? (
@@ -921,7 +922,7 @@ export const BuilderDrawer = (props: {
 									: 'Saving forks this page into your Things — only you see your version.'}
 							</Text>
 						)}
-						{mode === 'page' && pageId && source === 'user' ? (
+						{mode === 'page' && pageId && source === 'user' && !draft.branch ? (
 							<Flex alignItems="center" gap={2} minWidth={0}>
 								<Box
 									as="a"
@@ -952,21 +953,22 @@ export const BuilderDrawer = (props: {
 					</Flex>
 				</Box>
 
-				{!props.hideTransfer && <ThingTransferControls id={pageId} linkKey={draft.resolved?.page?.linkKey}
+				{!props.hideTransfer && !draft.branch && <ThingTransferControls id={pageId} linkKey={draft.resolved?.page?.linkKey}
 					disabledReason={!pageId || source !== 'user' || draft.dirty || metaDirty || anyDirty ? 'Save this page before copying or downloading its saved content.' : undefined} />}
 				<Flex columnGap={2}>
 					<Button
 						size="sm"
 						onClick={handleSave}
+						onMouseDown={draft.branch ? event => event.preventDefault() : undefined}
 						isLoading={saving}
-						isDisabled={anyDirty !== undefined ? !anyDirty && !metaDirty : !draft.dirty && !metaDirty && source === 'user'}
+						isDisabled={!!draft.branch?.locked || (anyDirty !== undefined ? !anyDirty && !metaDirty : !draft.dirty && !metaDirty && source === 'user')}
 						data-testid="builder-save"
 						flex={1}
 					>
-						{source === 'user' ? 'Save' : mode === 'site' ? 'Save my version' : 'Save page'}
+						{draft.branch ? 'Save to branch' : source === 'user' ? 'Save' : mode === 'site' ? 'Save my version' : 'Save page'}
 					</Button>
 					{draft.dirty ? (
-						<Button size="sm" variant="outline" onClick={draft.discardDraft} data-testid="builder-discard">
+						<Button size="sm" variant="outline" onClick={draft.discardDraft} isDisabled={draft.branch?.locked} data-testid="builder-discard">
 							Discard
 						</Button>
 					) : null}

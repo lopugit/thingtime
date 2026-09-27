@@ -4,6 +4,7 @@ import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
+import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
@@ -647,6 +648,7 @@ export const ThemeStudio = () => {
 									</Box>
 									<Flex gap="6px" flexWrap="wrap">
 										<ActionButton onClick={() => applySaved(saved)}>Apply</ActionButton>
+										<ActionButton onClick={() => openThingHistory(saved.id, ['theme'])}>History</ActionButton>
 										<ThingTransferControls id={saved.id} canCut onImported={refreshMyThemes} />
 										{saved.visibility === 'public' ? <ActionButton onClick={() => shareSaved(saved)}>Share 🔗</ActionButton> : null}
 										<ActionButton tone="danger" onClick={() => deleteSaved(saved)}>

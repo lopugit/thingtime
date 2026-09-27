@@ -1,3 +1,6 @@
+import { isLopuAccessActor, lopuAccessMode } from '~/api/utils/lopu/accessMode';
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import type { ResolveActionActor } from '~/api/utils/actions/firstPartyActionHost';
 import { LOPU_CONTINUE_PROMPT, continuationRequestId, LOPU_RECOVERABLE_STOPS, lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
 import { lopuPageReference, lopuPageReferences, LOPU_MAX_PAGE_REFERENCES } from '~/utils/lopuPageContext';
 import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
@@ -53,6 +56,7 @@ const HISTORY_TURNS = 40;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 type ReplyBody = {
+  accessMode?: 'ask' | 'full';
   management?: 'client' | 'server';
   continueFromRequestId?: string;
   automaticContinuation?: boolean;
@@ -104,6 +108,10 @@ const parseContext = (raw: unknown): { ok: true; context: LopuChatContext | null
   if (raw.page !== undefined && raw.page !== null) {
     if (!isRecord(raw.page)) return { ok: false, error: 'context.page must be an object' };
     const page: NonNullable<LopuChatContext['page']> = {};
+    for (const field of ['dirty', 'ready'] as const) {
+      if (raw.page[field] !== undefined && typeof raw.page[field] !== 'boolean') return { ok: false, error: `context.page.${field} must be a boolean` };
+      if (typeof raw.page[field] === 'boolean') page[field] = raw.page[field];
+    }
     if (raw.page.id !== undefined && raw.page.id !== null) {
       const id = optionalToken(raw.page.id, MAX_CONTEXT_ID_CHARS);
       if (!id) return { ok: false, error: 'context.page.id must be a webpage id' };
@@ -135,6 +143,7 @@ const parseBody = (body: unknown): Validation => {
   let attachmentIds: string[], thingIds: string[];
   try { attachmentIds = lopuReferenceIds(body.attachmentIds); thingIds = lopuReferenceIds(body.thingIds); }
   catch (error) { return { ok: false, error: (error as Error).message }; }
+  if (body.accessMode !== undefined && body.accessMode !== 'ask' && body.accessMode !== 'full') return { ok: false, error: 'accessMode must be ask or full.' };
   if (body.management !== undefined && body.management !== 'client' && body.management !== 'server') return { ok: false, error: 'management must be client or server.' };
   const continuation = typeof body.continueFromRequestId === 'string' ? body.continueFromRequestId : undefined;
   if (body.continueFromRequestId !== undefined && !continuation) return { ok: false, error: 'Invalid continuation request.' };
@@ -172,6 +181,7 @@ const parseBody = (body: unknown): Validation => {
     ok: true,
     value: {
       attachmentIds, thingIds,
+      ...(body.accessMode ? { accessMode: body.accessMode as 'ask' | 'full' } : {}),
       ...(body.management ? { management: body.management as 'client' | 'server' } : {}),
       ...(continuation ? { continueFromRequestId: continuation, automaticContinuation: body.automaticContinuation === true } : {}),
       chatId,
@@ -215,7 +225,7 @@ export const action = async ({ request }: { request: Request }) => {
 
 // Internal entry point for an explicitly requested recording handoff. The
 // public action always authenticates above; no caller-supplied user is accepted.
-export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getScopedUser>>, execution: { scheduled?: boolean } = {}) => {
+export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getScopedUser>>, execution: { scheduled?: boolean; resolveActionActor?: ResolveActionActor } = {}) => {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
   if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
@@ -234,6 +244,9 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   const parsed = parseBody(body);
   if (parsed.ok === false) return json({ ok: false, error: parsed.error }, { status: 400 });
   const input = parsed.value;
+  if (input.accessMode !== undefined && (input.chatId || input.continueFromRequestId)) return json({ ok: false, error: 'Change existing chat access through chat settings.' }, { status: 400 });
+  const resolveActionActor = execution.resolveActionActor ?? (() => getCurrentUser(request));
+  if (input.accessMode !== undefined && !isLopuAccessActor(await resolveActionActor(), user.id)) return json({ ok: false, error: 'Change chat access from your first-party account session' }, { status: 403 });
   const viewer = { id: user.id, username: user.username };
   let previousRecoveryFailures = 0;
   if (input.continueFromRequestId) {
@@ -353,6 +366,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     if (!chatId) {
       const created = await createLopuChat(user.id, {
         title: titleFromMessage(input.text),
+        accessMode: lopuAccessMode(input.accessMode),
         ...(input.management ? { management: input.management } : {}),
         ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {}),
         ...(providerExplicit && vaultProvider ? { providerId: vaultProvider.id } : {})
@@ -439,6 +453,14 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           const generator = streamLopuChatTurn({
             readNotes: createLopuNoteReader(user.id, persistedChatId, input.requestId),
             readOnly: execution.scheduled,
+            resolveActionActor: execution.scheduled ? undefined : resolveActionActor,
+            readAccessMode: async () => {
+              const actor = await resolveActionActor();
+              if (!actor || actor.id !== user.id || actor.temporary || actor.accountKind !== 'user') return 'ask';
+              const current = await getLopuChat(user.id, persistedChatId);
+              if (current.ok === false) throw new Error('This chat is no longer available');
+              return lopuAccessMode(current.settings.accessMode);
+            },
             viewer,
             chatId: persistedChatId,
             userMessageId,
@@ -446,6 +468,10 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
             text: input.text + lopuReferenceContext(references) + attachedContent.text,
             media: attachedContent.media,
             history,
+            readReferences: loaded.ok ? loaded.readReferences : undefined,
+            checkpointResults: input.continueFromRequestId
+              ? await (await import('~/api/utils/lopu/backgroundTasks')).readCheckpointToolResults(request, chatId, input.continueFromRequestId)
+              : undefined,
             choice,
             vaultProvider,
             context: input.context,
@@ -509,6 +535,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
               chatId: persistedChatId,
               requestId: input.requestId,
               text,
+              readReferences: outcome?.readReferences,
               lopu: {
                 model: outcome?.model ?? choice?.model ?? null,
                 effort: outcome?.effort ?? choice?.effort ?? null,

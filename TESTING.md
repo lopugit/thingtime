@@ -1,5 +1,186 @@
 # TESTING.md — per-area manual test checklists
 
+## Unified Timeline
+
+- [ ] Open a named page branch in Builder on desktop and at 390px. Edit text,
+  component args and page metadata; Save twice without reopening. Each save
+  advances one branch revision. Click Save directly from the first inline text
+  edit (without blur/Tab): the button stays reachable and saves that final text
+  plus any metadata. Exact-ID reads confirm the published page
+  is unchanged. Plain field editing still opens and saves under StrictMode.
+- [ ] Reload before Save, recover the branch draft while Timeline/component
+  reads are blocked, Save offline, reload again, reconnect and open History.
+  The queued push advances once; Open in Builder reopens the accepted version.
+  Cached components remain visible. Stale pushes freeze editing and retain the
+  local version. Discard cannot race a new edit or save.
+- [ ] On branch View and an authored mode=run link, click an Action control: no
+  Action request or live source runtime may execute. Branch links with another
+  owner/source, and logout, hide private content immediately. Non-page branches
+  explain that their fields must be edited through Edit branch.
+- [ ] Run `test:timeline:visual-branch` on the guarded disposable replica set.
+  Guessed private component refs must not inherit an audience from caller blocks;
+  malformed scopes and oversized drafts refuse with private/no-store responses.
+
+- [ ] At 390px, branch names take a complete row above the wrapping controls;
+  adding Edit branch must not squeeze names into a vertical column.
+- [ ] History → Branches → Edit branch: change a field, verify the device-saved
+  notice, reload before Save, and explicitly Resume draft. Repeat offline and at
+  390px. Save to branch while disconnected, reload, reconnect and Retry sync;
+  verify one branch revision and unchanged published content by exact-ID readback.
+  An acknowledged branch save releases only its own draft pin, including retries
+  after reload; newer edits and refused pushes retain their recovery pins.
+- [ ] Keep a branch editor open while a second caller advances its head. Save
+  the older edit: it must remain in History, show a failed push, and require merge.
+  A background checkout refresh must not overwrite fields typed from cache.
+- [ ] Switch account or database with a branch editor open: no previous fields
+  or completion may appear under the new identity. Correct an oversized capture
+  and verify the next bounded edit can save; an uncorrected failure cannot flush.
+- [ ] Run `test:timeline:branch-merge` for real checkout/edit/retry/divergence and
+  private/source refusal. Protected adapters and over-limit checkout must refuse
+  clearly without modifying published content.
+
+- [ ] With two disposable databases, select the custom endpoint in the browser.
+  Open a saved theme's History on `/themes`: home events appear without changing
+  the selection. Open Timeline: the modal closes and Home account stays selected.
+  Toggle Selected database: only that database's events appear, even when event
+  and Thing ids match. Test desktop and 390px, reload with Timeline requests
+  blocked, and recover without losing each scope's cached history. Switching
+  accounts or an authorization refusal must hide private cached content.
+  Open Thing in home explains the selection change and opens the correct home
+  Thing with an account/database-qualified link. Run the guarded
+  `test:timeline:home-scope` for real branch/restore and concurrency isolation.
+- [ ] Create home/custom Things with the same id and different content. Cache
+  each permalink, then block Thing reads and switch databases in another tab.
+  Only the matching database's cached content can appear; an uncached source
+  offers retry without borrowing the prior view. Unblock and recover. A pinned
+  History link must show a recovery action when its database/account differs,
+  never render the other Thing. Open in home account and rename it: only home
+  content and home history change. Repeat at desktop and 390px with no overflow.
+  The guarded HTTP suite checks stale GET/PATCH/DELETE refusals, unchanged
+  content/history, malformed source keys and selected-source preconditions on
+  explicit-home Timeline requests. Endpoint changes invalidate root identity
+  across tabs; deleting a saved endpoint does too, while merely saving one does
+  not. API clients omitting the optional precondition retain their old behavior.
+- [ ] In fallback mode, root identity and ordinary Thing reads/writes use the
+  same upstream with the database precondition, cookie and selection intact.
+  Matching requests work and stale ones retain the upstream 409 refusal.
+  Actor-fenced commands and vault verification still refuse fallback before
+  reading their bodies. Run `test:root-data` for the dispatcher/proxy regression.
+- [ ] Create a saved theme, rename/move it in Things, then edit tokens and
+  visibility through its dedicated theme API. Shared History preserves every
+  exact parent and approved before/after token value; identical saves add no
+  event. Public themes still have private history. Invalid writes add no event.
+  Select a custom data source and create a theme: its history and accounting
+  still commit at home. At the allowance ceiling, token edits refuse atomically
+  but deletion retains its approved prior version; retry adds no event/charge.
+  Generic protected-content restore remains unavailable. Run the guarded
+  `test:timeline:themes` and `test:timeline:quota` HTTP suites.
+- [ ] On the disposable replica, set a synthetic user's allowance to its exact
+  current usage through the normal admin API. Growing edits, retained shrinking
+  edits and restore application return 507 without changing content, timestamp,
+  head, events or storage bytes. History and restore previews still work. A
+  downgrade below usage returns 409 and preserves the assignment/data. At the
+  ceiling, folder moves and deletion drains work; deleting the Thing retains its
+  exact before-version and keeps accounted bytes. Retrying deletion adds no
+  duplicate event or charge. The error must not promise that deleting a Thing
+  frees retained history. Run `test:timeline:quota` using README's isolated setup.
+- [ ] Delete a folder with more than 100 children and a nested subfolder.
+  Direct children move to its parent, descendants stay under their subfolder,
+  and every moved item has exactly one relational event in the deletion's
+  operation. Race deletion against creates and moves; no successful write may
+  retain the deleted folder id. Race two moves through four folders: at most
+  one succeeds if both would create a cycle. Interrupted drains keep the root
+  and return an actionable retry, never a false deletion success.
+- [ ] Move an ordinary Thing repeatedly without editing its content. Compact
+  history reconstructs the exact saved content through those moves; restoration
+  never borrows a later edit. A deleted destination refuses without a success
+  event. Restoring in the Thing page updates its visible value without a reload,
+  keeps later versions, and is usable on desktop and at 375px.
+- [ ] Move a protected library item directly and through folder deletion.
+  History contains only folder ids, never file keys, archive messages or private
+  crystal fields; generic content restore is unavailable. Destinations and all
+  ancestors use the same ownership and transaction fences.
+
+- [ ] Rename a theme, algorithm, emoji or chat archive through Things. Shared
+  History shows the old/new display titles with the correct source and parent,
+  while source names, content, permissions and archived messages stay unchanged.
+  A stale or invalid request creates no event; a repeated identical title adds
+  no content event. Refuse/roll back the rename if its history cannot commit.
+  The metadata adapter never copies credentials or protected payloads, and does
+  not offer generic protected-content restoration. The permalink title updates
+  immediately after Rename without navigation; original source names stay the
+  same in both the optimistic view and the reloaded result.
+- [ ] Interrupt the Thing read after a rename/restore or while reloading a
+  cached Thing. Temporary network/server failures keep its last-known content
+  and offer Try again. Retry recovers without navigation. An explicit missing,
+  unauthorized, forbidden or changed-identity response clears the projection;
+  another account or Thing never inherits it. Diagnostics remain live-only.
+- [ ] Run a server Action with nested updates and a delete. History shows
+  Action as the source, a shared operation id, separate events and exact parent
+  versions. Repeat through Lopu: AI remains the initiating source, including
+  server-hosted browser flows. Concurrent requests and subsequent API edits
+  keep their own origin. Client source/actor/operation claims cannot override it.
+  Fail a later step: only committed changes appear. Ask/refused tools and browser
+  preparation create no successful-change event. Operation grouping does not
+  authorize replaying an Action or imply complete Action outcome coverage.
+- [ ] Upgrade an earlier local Timeline cache with pending edits and a released
+  draft. Pending work survives; the released draft does not reappear. Revisions
+  and links are independent records. Missing links fail visibly without deleting
+  pending work; cache eviction removes only that cached event's local links.
+- [ ] Open `/login` and a public page while signed out, reload, sign in,
+  open History, then sign out again. The page must render without the session
+  recovery boundary or a null Timeline connection crash. Repeat at 390px.
+  A pending discovery or account/database switch never exposes another scope.
+- [ ] Open History from Things, Builder and a Component definition. Changes
+  made through the API appear without opening an editor; older pages load on
+  demand. The private Timeline folder never offers rename/move/share/delete.
+- [ ] Edit a block/prop/definition, reload before Save and recover the exact
+  draft. Type before Timeline discovery finishes, retry a failed IndexedDB
+  write, and reconnect after going offline: original event ids and parent
+  order survive. A failed capture cannot later report a successful flush.
+- [ ] Save while another edit lands; the newer edit remains dirty and pinned
+  for recovery. A background refresh must preserve the draft's original
+  version fence as well as its content, so the next save cannot overwrite an
+  unseen remote change. Switch account/data source during each async step.
+  Repeat while an AI save completes: only an exact content acknowledgment
+  clears a dirty editor. Late or metadata-only saves cannot erase new typing
+  or an intentional empty page; a new Thing cannot inherit another Thing's head.
+- [ ] Preview and restore an earlier version; a new event appears and later
+  history remains available. Retry the same request after losing its response;
+  it must return the original receipt. Changing its payload must fail.
+- [ ] Merge independent fields and overlapping edits, missing vs null,
+  reordered arrays, and two-parent histories. Choose each overlap explicitly;
+  inspect the resulting comparison before applying. A changed live head,
+  missing ancestor, foreign Thing or ambiguous merge base must refuse safely.
+- [ ] At desktop and 375px, history lists, version comparisons, draft recovery
+  and action controls remain readable and reachable without horizontal overflow.
+- [ ] Create a named branch from a selected version, reload, pull it, and view
+  its exact version after the event cache has been evicted. Push a descendant;
+  published content stays unchanged. Attach another Thing through the API and
+  verify each membership has an independent head and shares branch metadata.
+- [ ] Select a version and use **Merge selected version…** on a named branch.
+  Review independent changes and explicit overlap choices on desktop and mobile.
+  Opening, cancelling and reopening the review must not reuse an aborted request.
+  Lose connectivity after review: save locally, reload, then retry sync. There is
+  one merged event and one branch advance, and the published Thing is unchanged.
+  Race a newer branch head after preview; the refused push retains the merged
+  version. A full command queue must preserve the already-captured event and
+  offer a retry without changing its identity. Switching the selected row must
+  not change the concrete version named in an existing review.
+- [ ] Restore/merge a compact draft whose ancestry includes a folder move.
+  It inherits the historical folder and latest draft content, not the live Thing
+  or the older full snapshot's folder. Missing or ambiguous ancestry refuses.
+- [ ] Queue a branch while another edit upload is in flight. Its selected
+  local version must upload first; deferred work must say waiting to sync.
+  Lose a push response and retry with the same identity. Race two pushes:
+  one wins, the other remains actionable without claiming history reads failed.
+  A refused push can be cancelled while keeping its version; an uncertain
+  outcome cannot be discarded. Test wrong-account and generic CRUD access.
+- [ ] Send Lopu a saved page whose block context exceeds the message budget,
+  a dirty omitted draft, an unready editor and an explicitly empty page. The
+  saved clean page is loaded with its real blocks; missing/unready drafts
+  never become an empty replacement, including after continuation/resume.
+
 ## Editable record app primitives
 
 - [ ] Planner controls: switch day/week, dates, filters and 5/10/15/20/infinite
@@ -928,14 +1109,52 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] Desktop speech bridge 1.1.0 requests continuous capture only for the
+      message composer, so the native 1.5-second utterance cutoff cannot preempt
+      its configurable silence window. Private-page Transcribe and older bridge
+      clients retain the utterance boundary. Reject non-boolean continuous-mode
+      requests before spawning a helper; 1.0.0 clients remain supported.
+
+- [ ] Standard Mac/browser dictation writes partial and final words directly
+      into Message Lopu, with no separate transcript preview. Enable Hear me out
+      while checking draft-only interactions.
+      Begin with typed text; stop mid-phrase, edit, resume, and switch Chat ↔ Voice:
+      preserve the draft and append new speech without repeating revised words.
+      A recognizer restart/failure retains the draft. Typing and explicit Send
+      stop capture; late callbacks cannot overwrite edits or refill a sent draft.
+      Rejected sends restore the text. With Spoken replies on, stop playback
+      and send again: cancellation cannot hang the turn queue or start the mic.
+      Run `scripts/lopu-dictation.browser.html`
+      in page/compact layouts at desktop and 390px, then verify real speech in
+      the signed installed Mac app. Private-page Transcribe and Direct voice
+      keep their existing dedicated flows when Hear me out is off.
+- [ ] Dictation defaults to five seconds of silence before sending the entire
+      current draft once and stopping the microphone. Speech during the delay
+      resets it; final/restarted recognizers do not duplicate text or extend a
+      silent deadline. Settings → Lopu → Voice transcription and the voice gear
+      share a persistent custom 1–120 second delay (default 5); check reload,
+      empty/invalid/extreme inputs, decimals, and cross-tab preference sync.
+- [ ] Chat settings → Hear me out never auto-sends. After ten seconds of silence
+      with words in the draft, one “Send now?” popup appears while listening
+      continues. Keep listening/Escape dismiss it; another ten seconds asks
+      again. New speech dismisses and resets it. Send now sends the latest whole
+      draft exactly once; rejection restores it. Stop, typing, chat/account/mode
+      changes, lock and unmount cancel pending prompts/sends. Empty captures do
+      neither. While Lopu is replying, silence/Send now use the ordinary message
+      queue; later delivery must not replace a newer unsent draft. Test standard and compact layouts at desktop and 390px, including
+      keyboard focus, scrolling the voice settings, and popup overlap. Enabling
+      Hear me out overrides Direct voice/Transcribe; an already active native
+      iOS recording stops and cannot restart in this unsupported mode.
+      Run both regressions in `scripts/lopu-dictation.browser.html` separately.
 - [ ] On Mac, listen silently across at least two native no-input retry cycles
       (15 seconds), then speak: silence must not show a red service error or
-      send a message, and the spoken phrase must send exactly once. Stop ends
+      send a message; the phrase fills the draft and the selected silence policy
+      sends once or asks. Stop ends
       capture/retries. An interrupted helper still reports a real error, and
       retry clears it without removing conversation messages.
 - [ ] After a microphone permission or recognition failure, retry voice input:
       the previous recognition error disappears immediately, a successful
-      transcript sends normally, and existing messages/turn failures remain.
+      transcript fills the draft, and existing messages/turn failures remain.
       Repeat a failed retry and switch chats; errors must not accumulate or
       leak into another conversation. On Mac, interrupt a disposable native
       capture to exercise recovery without resetting OS permissions.
@@ -1988,6 +2207,54 @@ email whose link points at the attacker.
 - [ ] `npm --prefix remix run test:marketing` (publishing + store tests) and
       `npm --prefix remix run test:api-capabilities` pass.
 
+## Account drafts and reusable post templates
+
+- [ ] Signed in, type rich text, partial marketplace values, tags, an audience,
+      empty poll options and a nested Thing. Wait for “Saved to your drafts”,
+      close/reopen and reload: all values recover. No post is published by typing.
+- [ ] Disconnect while writing; reload on the same device, reconnect and retry.
+      The last input and the exact uncertain write identity survive. Two tabs
+      editing one draft produce a conflict with “Save as a new draft”, never an
+      older overwrite. Switching accounts never shows or saves another account's
+      drafts; local workspace/cross-tab channels are scoped to that account.
+- [ ] Load another draft while the current one is dirty: the previous draft
+      remains available. Late callbacks from an old rich-text editor cannot
+      erase a newly loaded template. Test both normalized and unfinished blocks.
+- [ ] Publish a draft: it leaves the picker. Reload during/after cleanup: the
+      completed draft does not reopen. If another device has a newer revision,
+      cleanup preserves that newer draft. Failed posts retain their draft.
+- [ ] Save an existing post from its menu as a template. Load it twice, change
+      text, then publish. The original template stays unchanged and selectable.
+      Existing media, audience, tags, listing and layout survive the copy.
+- [ ] Upload a file, save a draft, close the composer, reopen and publish.
+      Template copies get independent files; deleting the source post does not
+      break them. A template's own files cannot be consumed directly by posting.
+- [ ] Plain comments/replies resume when their input is opened. Failed writes
+      keep text, and typing a newer reply while a request finishes keeps the newer
+      draft. The rich reply picker lists drafts only for the current parent.
+- [ ] Edit a Thing, a raw definition (including invalid JSON), a schema's field
+      tree and a schema-based form. Close/reopen: each resumes in its own editor.
+      The Thing editor's draft picker can recover a saved account Thing.
+- [ ] Type incomplete JSON into a schema form, including nested array entries.
+      Reload: the exact text and whitespace return, and invalid JSON cannot
+      publish. Correct it and publish: typed JSON is saved and the draft retires.
+      Older drafts containing parsed JSON still restore the original values.
+- [ ] Recover a definition draft after another device saves a newer definition:
+      preserve the raw draft and its original version, refuse stale publication,
+      and keep History available. “Use latest saved version” must preserve the
+      recovered text in History before clearing its working draft; a failed
+      backup keeps the working draft. Repeat with a legacy draft lacking a version.
+- [ ] Check the picker at desktop and 390px mobile widths: buttons stay usable,
+      names wrap, the dialog scrolls, and nothing overlaps. The resume setting
+      controls account restoration while keeping local recovery enabled.
+- [ ] Run `npm --prefix remix run test:drafts` and related feed/editor/schema/
+      autosave/attachment/capability suites. For transactional acceptance, create
+      a disposable local fixture through `seed-fixture.mjs`, then run
+      `node remix/scripts/verify-account-drafts.mjs remix/.fixtures/<name>.json --media`.
+      Enable fixture uploads and local object storage per README first. This
+      exercises ownership, revisions, replay, tombstones and independent copies
+      through the real API and Mongo transactions, never direct test DB writes.
+
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
 - [ ] Seed the `thingtime` LocalForage value with valid-looking hostile and
@@ -2000,9 +2267,10 @@ email whose link points at the attacker.
       nor any function source before a second navigation.
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE
       root property, `New Thing`, with no default children (no `name`).
-- [ ] The draft path is session-scoped (`tmp.<sessionId>.New Thing`): add a
-      field, reload the page, reopen the tab → the draft is EMPTY again and
-      the store's `tmp` branch holds only the new session.
+- [ ] The live editor path is session-scoped (`tmp.<sessionId>.New Thing`).
+      While signed in, add a field and reload: account draft recovery restores
+      the value into the new session. Opening a second composer preserves the
+      first composer's branch. Successfully publishing clears only its draft.
 - [ ] Post button stays disabled until the thing has real content (empty
       strings don't count; numbers/booleans/nulls do).
 - [ ] Photos toggle ON requires ≥1 valid image URL before Post enables;
@@ -5634,8 +5902,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 - [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
       allow Speech Recognition and Microphone, and speak a synthetic test phrase.
-      One transcript reaches the selected chat/model without Chromium's `network`
-      error; the mic pauses during the reply. Stop during a permission prompt,
+      The live transcript fills the message field without Chromium's `network`
+      error; explicit Send reaches the selected chat/model and stops the mic.
+      Stop during a permission prompt,
       during capture, and immediately after an interim result: no late turn sends.
       Reload/close/switch account or chat: capture stops and no transcript crosses
       the boundary. Denied permissions show the relevant macOS settings category.
@@ -6548,12 +6817,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Scroll modal/page from top to bottom; Save remains reachable.
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (99 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (100 checks: closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
       owner-private history, private-action 404, delegated (`source: 'component'`)
       runs refusing a foreign action by id, docs twins).
+      Declared own prototype-named inputs remain ordinary data; omitted inputs
+      never resolve through an inherited prototype.
 - [ ] Run-trail lifecycle: run an action, confirm `GET /api/v1/actions/runs?action=<id>`
       lists it, DELETE the action, and confirm the same query is now empty while
       another action keeps its own runs. action-run is protected (no route deletes
@@ -7248,6 +7519,54 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] Action discovery: inspect an owned server/browser Action in Ask mode;
+      no confirmation or run is created. Check enum choices, required fields,
+      numeric bounds, reference hints and oversized JSON defaults. Candidate
+      validation makes no writes; invalid inputs must fail before an Ask card.
+      Corrected input still needs approval. Revoke readability and inspect again.
+      Failed multi-step runs retain their run ID and require state readback
+      before replay; inspection never promises downstream success.
+
+- [ ] Large Lopu reads: inspect a component with a deeply nested form, more
+      than 60 children and long text. Default `get_thing` explains omissions;
+      `path` + `offset` reads every JSON page exactly. Verify escaped pointer
+      keys, a missing path, changed revisions and access revoked between pages.
+      A rejected workspace category lists the exact case-sensitive choices;
+      correcting it succeeds without speculative writes to discover an enum.
+
+- [ ] Chat Action access: new/legacy chats start in Ask. Confirming runs exactly
+      the proposed Action/tool; Full runs without cards and persists on reload
+      only for that chat. Check desktop and 390px composer/settings, switch
+      chats/accounts, rapid toggles, failed saves and a pending save followed by
+      Send. Background refresh must preserve an unsent chat's selected mode.
+- [ ] Run the opt-in disposable [Lopu Action QA](docs/lopu-action-access.md):
+      nested browser Action saves/reads Equipment without a page button; a
+      server Action returns its result; stable-ID retry leaves one record.
+      Full-to-Ask pauses the next call, logout rejects execution, scoped/foreign
+      sessions cannot change access, and an Action cannot update chat permissions.
+      Stale existing-chat reply bodies must not re-grant Full access.
+
+- [ ] Lopu read continuity: read a 24k+ JSON value across several hosted
+      checkpoints and verify the next provider request receives all previous
+      pages without model-issued rereads. Resume after reload; deny foreign chat
+      access, revoked Thing access and mixed revisions. Confirm raw JSON/grants
+      never enter public history or private locator storage. Run the disposable
+      Lopu Action QA for real protected-message persistence and readback.
+- [ ] Completed tool context: force a checkpoint immediately after an Action,
+      then continue and verify its exact result reaches the provider without a
+      second Action execution. Only the exact prior request in the current
+      account, chat and deployment can supply results. Revoked chat membership,
+      expired output, incomplete calls and pending confirmation restore nothing;
+      raw inputs/grants/messages never enter the continuation context. A 410
+      task result is fetched once per account/deployment; transient errors retry.
+- [ ] Tool-protocol recovery: split `json tt-tool` / `tt-tool json` fences at
+      every character; run exactly one complete call. Ordinary JSON examples,
+      result fences, malformed/truncated inputs and Stop must not execute tools.
+      A native provider that prints a tool call receives at most two corrective
+      hops; repeated failure stays recoverable, never falsely completed. Pending
+      confirmation must not trigger corrective execution. Verify failure run IDs
+      and recovery hints reach the next model hop.
+
 - [ ] `test:api-capabilities` must run both the API-docs and origin-scoped
       manifest suites; when merging independently versioned features, verify
       every asserted version against the combined registry rather than leaving
@@ -7403,14 +7722,14 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   a 72dvh sheet (drag handle, Escape/scrim close), the composer sits above
   the safe area, nothing scrolls horizontally or hides under the nav.
 - Voice mode (`/lopu/voice`, or the floating window's mic): the same column
-  with the text composer folded away and the voice deck below it — gear ·
+  with the shared text composer and the voice deck below it — gear ·
   64px mic (idle card / listening rainbow pulse / thinking spinner / speaking
-  breathe) · Stop while Lopu replies — plus a single rounded "Or type to
-  Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
-  included). With no SpeechRecognition (the in-app Browser pane) the mic
+  breathe) · Stop while Lopu replies. Standard Mac/browser recognition fills
+  the editable Message Lopu draft; stopping retains it and Enter/Send submits
+  a normal chat turn (the same brain, tools included). With no SpeechRecognition
+  (the in-app Browser pane) the mic
   click toasts "No microphone here" and the typed path still works; with a
-  mic, listening pauses for the whole turn and for Lopu's speech (never its
-  own voice back), then resumes. The gear popover (never a full-width card)
+  mic, typing or sending stops capture. The gear popover (never a full-width card)
   holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
   vault provider whose kind lists a realtime model — the hint reads the
   reason otherwise; a realtime-model select when it lists several) and the
@@ -9072,3 +9391,159 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Run compiler, capability, schema, Action, Component and page tests; native
   DOM/layout regressions; build/typecheck. Verify both actions-run 1.31.0
   manifests, deployed source SHA and runtime digest before production delivery.
+
+### Web standards: native animation programs (2026-09-27)
+
+- Run all 111 animation programs with default and edited keyframes/timing. Check
+  real interpolation and computed styles, playback state, ready/finished
+  promises, changing targets/timelines, native keyframe copies and query results.
+- Run animationBoundaryFixtures. Check exact half-way interpolation, clone
+  timing independence, trusted finish/cancel/remove events, native handler `this`
+  identity and shadow queries.
+  Actual native keyframe errors remain catchable. Refuse foreign effect/target/
+  timeline handles, unsupported option fields, excess objects/keyframes/values,
+  forged callbacks and asynchronous reads in synchronous DOM batches.
+- Detect ignored getAnimations pseudoElement filters with a real pseudo-effect;
+  report unsupported instead of presenting an unfiltered result as a success.
+  Draft iterationComposite/startTime support must remain honestly reported.
+  Native Event.isTrusted own accessors must distinguish constructed from trusted
+  playback events. Pseudo-element samples must not invoke commitStyles.
+- Edit JSON inputs and save in Builder. Fully reload the private Component,
+  run its edited definition, reference it from a second private page and confirm
+  the same native result. Verify anonymous reads return 404, Stop removes its
+  frame, a fresh Run works, and 390px editing/results do not overflow the page.
+- Run platform/compiler, capability, schema, Action, Component and page tests;
+  the broader DOM/CSS/SVG/observer/range native audit; lint, build and typecheck.
+  Verify both 1.32.0 manifests, exact deployed source and runtime hash in preview
+  and production before claiming delivery. Clean up disposable local fixtures.
+
+
+### Timeline large Thing regression
+
+- Grow a valid data Thing past 2 MiB through requests below the ordinary body cap.
+  It must still shrink, update, restore supported content and delete successfully.
+- Verify full retained reconstruction, including escaped text and Unicode crossing
+  part boundaries. Missing/altered/foreign parts must refuse reconstruction.
+- History pages stay within their response budget; no part payload or credential
+  is exposed by generic Things reads/search. Generic part edits/deletes refuse.
+- Account bytes include retained large content exactly once. Deletion transfers
+  the same logical bytes into history rather than charging the part envelopes.
+
+### Web standards: native ARIA object programs (2026-09-27)
+
+- Run every ARIAMixin program with default and edited values/references. Compare
+  actual native property assignment with attribute reflection; clear values with
+  null. Unsupported native properties must remain explicit.
+- Run ariaBoundaryFixtures: null versus empty relationship lists, string false
+  versus null, stable element/cached-array identity, immutable native FrozenArray,
+  old snapshots after attribute reset, shadow ancestry, wrong/foreign handles,
+  64-reference bounds, detached relationship refusal and resource-attribute denial.
+- Save an edited relationship Component, fully reload and run it, then reuse that
+  same Component on a second private Builder page. Check anonymous reads return
+  404, Stop removes the frame and a fresh Run restores the edited result.
+- Check 390px and desktop inputs/results, and both animation tiles after the
+  stage height fix. Saved user definitions must remain untouched by catalogue updates.
+- Run platform, capability, schema, Action, Component and page suites, native
+  regression audit, lint, typecheck comparison and production build. Verify both
+  1.33.0 manifests and exact deployed runtime in preview and production.
+
+## Public schema copies, durable chat files and Lopu instructions (2026-09-27)
+
+- [ ] Run `test:schemas`, `test:migrations`, `test:components`,
+      `test:attachments`, `test:lopu`, `test:lopu-chat-streaming`,
+      `test:lopu-streaming`, `test:lopu-ui` and `test:api-capabilities`.
+- [ ] Seed through `backfill-user-storage-accounting`; anonymously read every
+      `schema-<id>` from the registry. Copy Post, a collection/root schema and a
+      user schema; preserve nested fields, enum constraints, bounded JSON,
+      render and `forkOf`. Extend the copy and create an ordinary private Thing.
+      Copies never acquire protected native write powers or mutate the source.
+- [ ] On a real local upload form, choose an actual file, wait for Ready,
+      click Use file and submit. No invalid Post type, reserved `component-` ID or unfinished-file error;
+      both content URL and attachment ID persist in the returned Thing. Repeat
+      desktop/mobile, retry a failed commit, and deny anonymous file access.
+- [ ] Run `scripts/verify-schema-files.ts` using the isolated setup in README.
+      Save a chat photo to a folder and a Product property, retry the same tool
+      identity (same file), delete the source chat and compare exact saved bytes.
+      Reject foreign, blocked/pending, linked-only and unapproved sources.
+      Moderation updating a fresh copy must not prevent transactional placement.
+- [ ] In Settings → Lopu, add/edit/remove instructions, toggle one off, save and
+      reload. Only enabled entries reach the next provider request. An admin
+      edit of the base prompt appears in the public viewer and the next chat,
+      voice, musing and recording-analysis request. Start a new direct voice
+      session to receive a changed prompt. Check desktop and 390px layouts.
+- [ ] Ordinary users cannot edit shared guidance or write another account's
+      instructions. Guests/service accounts cannot read private instructions.
+      Stale revisions return 409; drafts survive background refresh and failed
+      saves. Account switching never displays or sends the previous list.
+      Custom instructions cannot replace server permissions or Confirm cards.
+- [ ] Generate the Xcode project and build the iOS simulator target. Web and
+      native direct voice require voice-session 1.2.0 and use its instructions.
+
+### PR #954 integration regressions
+
+- [ ] In Ask before running mode, saving a chat attachment and extending a Schema show a real Confirm card before writing. Full access permits the same tools; scheduled read-only work still refuses them.
+- [ ] Retry a private file save as the first request finishes: retain the completed independent file. Reject mismatched retry metadata without deleting that file; cleanup claims must not cross pending-to-ready finalization.
+- [ ] Verify all current registry kinds, including Timeline definitions, appear in the public Schema projection and pass the ordinary Schema validator.
+### Web standards: reusable native XPath objects (2026-09-27)
+
+- Run all 30 XPath entries with default and edited programs; assert actual scalar,
+  ordered node, iterator and snapshot results, not just successful execution.
+- Verify Document, constructed evaluator and compiled expression paths, optional
+  arguments/result reuse, namespace maps, Node resolver identity and nullable
+  prefix lookup. Keep wrong-type, malformed-expression and unresolved-prefix
+  exceptions native; compare unknown numeric result types with the same browser.
+- Remove a snapshot node and verify its retained identity/length. Mutate an
+  iterator's tree and verify invalidIteratorState and native InvalidStateError.
+- Reject surface/scalar escapes, foreign/fabricated contexts, wrong result
+  handles and asynchronous resolver impersonation before native evaluation.
+- Exercise nested predicate, traversal, actual whole-tree/text and accumulated
+  compiled-query work limits. String literals containing brackets/slashes must
+  not be treated as XPath traversal syntax.
+- Round-trip edited Action-produced programs through private Component writes,
+  assert anonymous 404s and idempotent installation, then save/reload/run in the
+  Builder and reuse the same Component on another private page. Verify Stop and
+  fresh Run, desktop and 390px layout, and unchanged opaque runtime CSP.
+- Check both 1.34.0 manifests and exact runtime/deployment identity in preview
+  and production before claiming that the new objects are live.
+
+### Web standards: native traversal and editable synchronous callbacks (2026-09-27)
+
+- Run all 41 entries with default and edited programs; check exact native node
+  order, getter values, method results, callback identity and pointer state.
+  Compare TreeWalker reject pruning with NodeIterator's skip-like rejection.
+- Exercise iterator reversal and removal on both sides of its reference pointer,
+  TreeWalker currentNode outside its original root but inside the owned document,
+  zero-mask callback suppression, null/function/object filters, native return
+  conversion and recursive-filter InvalidStateError followed by successful reuse.
+- Keep callable callbacks strict in the built classic IIFE: an omitted native
+  receiver must remain undefined, never become the runtime Window. Check object
+  callback this, callback-thrown falsy data, native errors and nested handle identity.
+- Refuse asynchronous tokens, foreign/wrong handles, prototype/global/async
+  escapes, large trees and callback work/collection/depth limits. Check literal
+  copies (including property-name text) and joins before allowing unbounded allocation, and catch/finally loops.
+- Edit the filter's program logic itself, not only selector inputs. Round-trip
+  Action-produced definitions through private Component writes, preserve all
+  callback nodes, assert anonymous 404 and idempotent suite installation. Save,
+  reload and Run in Builder, reuse the same saved Component on a second page,
+  verify Stop/fresh Run, and inspect desktop/mobile layout.
+- Run the broader native regression audit after changing the shared bridge and
+  worker error transport. Verify both 1.35.0 manifests, unchanged opaque sandbox
+  policy and exact runtime/deployment identity on preview and production.
+
+
+### Direct Timeline branch lookup (2026-09-28)
+
+- On the disposable replica set, run `test:timeline:branch-merge` and
+  `test:timeline:home-scope` with the guarded `TIMELINE_TEST_BASE`. Lookup must
+  return the exact named branch/Thing head, reflect its next accepted push,
+  leave published content/history untouched, and feed an exact checkout.
+- Query a missing membership, another signed-in account, stale account/source,
+  duplicate selectors and mixed page/version selectors. Expect 404, 404, 409,
+  and 400 respectively; anonymous reads return 401 and rate limits fail closed.
+- Create the same branch and Thing ids in home and a custom database with
+  different names/versions. Concurrent explicit-home and selected reads must
+  remain separate and leave the surrounding selection unchanged.
+- `test:timeline` additionally covers two exact owner-scoped storage lookups,
+  canonical public projection, a cold local branch cache, queued push retention,
+  delayed-reply revision protection and cancellation after an identity change.
+  No visual Builder behavior is introduced by this increment.

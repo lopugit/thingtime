@@ -41,6 +41,17 @@ components; reuse them instead of adding parallel versions.
 
 ## Shared navigation and Builder controls
 
+Owned Things inherit `history` from `THING_ACTIONS`. `TimelineHost` opens the
+same History modal from Things, persisted entity menus and Builder definitions;
+`TimelineLibrary` renders the managed Timeline folder through PageShell.
+`TimelineVersionActions` previews restores/merges and presents conflict choices.
+`TimelineBranches` creates named alternatives from a selected version, pulls heads,
+loads an exact version and pushes a selection with a durable command queue. A
+refused push stays visible on that branch; it does not turn healthy History reads
+into an error. Unknown outcomes retain the original request identity.
+Draft recovery uses the account-scoped `TimelineProvider` queue independently
+of an open modal. See [contract and acceptance](../unified-timeline.md).
+
 The compact Commander trigger opens shortcuts, recents, remote search and
 commands in one surface. Builder page/component menus share `BuilderThingMenu`;
 ordinary public page views do not expose floating editor controls. Admin remains
@@ -66,6 +77,21 @@ browser acceptance also checks reload and repeated search through the renderer.
 
 ## Tests
 
+- `scripts/lopu-dictation.browser.html` exercises the real Lopu voice surface
+  with synthetic speech/HTTP: live composer revisions, stop/resume, edits,
+  mode switches, stale callbacks, recognition failure and rejected-send recovery.
+  `composerDictation.test.ts` covers draft merging and the shared input limit.
+  `dictationSilence.ts` owns a logical recording's configurable five-second send
+  window and ten-second Hear me out reminder, surviving native recognizer
+  restarts. Desktop speech bridge 1.1.0 uses continuous native capture for the
+  composer while retaining the legacy/private-page utterance boundary.
+  `LopuDictationSettings` shares controls across Settings → Lopu and
+  the voice gear; chat settings exposes the same Hear me out preference.
+  Timers submit the current composer draft through `externalSubmitDraftRef`,
+  never cached recognition text. Stop/edit/owner/chat/mode changes cancel them.
+  Hear me out uses Mac/browser device dictation; native iOS recording refuses
+  this mode instead of silently auto-sending. Dedicated Transcribe/Direct voice
+  retain their flows while it is off.
 - `npm --prefix remix run test:nav`, `test:lopu-ui`, `test:things` (menu
   models), `test:feed` (card contracts). Menu/layout behaviour is verified in a
   live browser at desktop and 375 px widths (`TESTING.md` "Shared page shell",

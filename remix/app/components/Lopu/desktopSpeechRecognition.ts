@@ -38,7 +38,7 @@ export class DesktopSpeechRecognition {
 				this.onend?.();
 			}
 		});
-		void this.bridge.startSpeechRecognition!({ sessionId, lang: this.lang }).catch(() => {
+		void this.bridge.startSpeechRecognition!({ sessionId, lang: this.lang, ...(this.bridge.speechRecognitionVersion === '1.1.0' ? { continuous: this.continuous } : {}) }).catch(() => {
 			if (this.sessionId !== sessionId) return;
 			this.detach();
 			this.onerror?.({ error: 'service-unavailable', message: desktopSpeechErrorMessage('service-unavailable') });
@@ -65,7 +65,7 @@ export const speechRecognitionCtor = () => {
 	if (bridge?.platform === 'darwin') {
 		// Electron exposes Chromium's constructor even though its remote speech
 		// service is unavailable. Never fall back to that false capability.
-		return bridge.speechRecognitionVersion === '1.0.0' && bridge.startSpeechRecognition &&
+		return ['1.0.0', '1.1.0'].includes(bridge.speechRecognitionVersion ?? '') && bridge.startSpeechRecognition &&
 			bridge.stopSpeechRecognition && bridge.onSpeechRecognition ? DesktopSpeechRecognition : null;
 	}
 	return window.SpeechRecognition || window.webkitSpeechRecognition || null;

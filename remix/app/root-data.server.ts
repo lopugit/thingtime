@@ -3,8 +3,11 @@ import { getDeploymentDataEnvironment, type DeploymentDataEnvironment } from './
 import { getCurrentUser } from './api/utils/auth/getCurrentUser';
 import { isVercelStatusEnabled } from './api/utils/vercel/environment';
 import { Session } from './cookies.server';
+import { getRequestMongoEndpoint } from './api/utils/mongodb/endpoint';
+import { mongoDataPlane } from './api/utils/mongodb/dataPlane';
 
 export type RootLoaderData = {
+	dataPlane: string;
 	envFromCookie: Record<string, string | undefined>;
 	/** Public, non-secret database/authentication authority for this deployment. */
 	dataEnvironment: DeploymentDataEnvironment | null;
@@ -72,6 +75,7 @@ export async function loadRootData(request: Request) {
 
   return {
 		data: {
+			dataPlane: mongoDataPlane(await getRequestMongoEndpoint(request)),
 			envFromCookie: { ...processEnv },
 			dataEnvironment: getDeploymentDataEnvironment(),
 			devKitEnv,
@@ -82,7 +86,7 @@ export async function loadRootData(request: Request) {
       'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
       'Pragma': 'no-cache',
       'Set-Cookie': await Session.serialize({ ...cookie, pingCounter }),
-      'Vary': 'Cookie'
+      'Vary': 'Cookie, x-tt-mongo-url'
     }
   };
 }

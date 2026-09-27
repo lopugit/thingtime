@@ -1,3 +1,7 @@
+import { traversalRecipe } from './traversalFixtures';
+import { xpathRecipe } from './xpathFixtures';
+import { ariaRecipe } from './ariaFixtures';
+import { animationRecipe } from './animationFixtures';
 import { rangeRecipe } from './rangeFixtures';
 import { observerRecipe } from './observerFixtures';
 import { layoutRecipe } from './layoutFixtures';
@@ -411,6 +415,14 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const traversal = traversalRecipe(feature);
+	if (traversal) return traversal;
+	const xpath = xpathRecipe(feature);
+	if (xpath) return xpath;
+	const aria = ariaRecipe(feature);
+	if (aria) return aria;
+	const animation = animationRecipe(feature);
+	if (animation) return animation;
 	const range = rangeRecipe(feature);
 	if (range) return range;
 	const observer = observerRecipe(feature);

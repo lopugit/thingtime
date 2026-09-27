@@ -217,7 +217,7 @@ test('confirmation keys are deterministic and grants are single-use within a tur
   assert.deepEqual(del, { key: 'delete_thing:thing-9', tool: 'delete_thing', summary: 'Delete thing thing-9', subject: { id: 'thing-9' } });
   const run = actionConfirmation({ action: 'purge', inputs: { id: 'thing-9' } }, { id: 'action-1', name: 'Purge', actionKey: 'purge' });
   assert.equal(run.key, `run_action:action-1:${stableInputHash({ id: 'thing-9' })}`);
-  assert.match(run.summary, /Run the action "Purge" \(purge\) with inputs \{"id":"thing-9"\} — it deletes things/);
+  assert.match(run.summary, /Run the action "Purge" \(purge\) with inputs \{"id":"thing-9"\}/);
   assert.match(confirmationRefusal(run), /do not call run_action again in this reply/);
 
   const ledger = createLopuToolConfirmations([{ key: 'delete_thing:thing-9', tool: 'delete_thing', summary: 'Delete thing thing-9' }]);
@@ -285,4 +285,13 @@ test('boundToolData shrinks oversized payloads and drops render trees before tru
   const shrunk = boundToolData(longStrings) as any;
   assert.ok(JSON.stringify(shrunk).length <= 16 * 1024);
   assert.ok(Array.isArray(shrunk.notes));
+});
+
+
+test('Action inspection supports discovery without treating omitted candidate inputs as an empty run', () => {
+  assert.deepEqual(validateLopuToolInput('inspect_action', { action: ' save-equipment ' }), { ok: true, input: { action: 'save-equipment' } });
+  assert.deepEqual(validateLopuToolInput('inspect_action', { action: 'save-equipment', inputs: {} }), { ok: true, input: { action: 'save-equipment', inputs: {} } });
+  assert.equal(validateLopuToolInput('inspect_action', { action: 'save-equipment', inputs: [] }).ok, false);
+  assert.equal(validateLopuToolInput('inspect_action', {}).ok, false);
+  assert.equal(LOPU_TOOL_DEFINITIONS.find(tool => tool.name === 'inspect_action')?.mutates, undefined);
 });

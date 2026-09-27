@@ -1,3 +1,5 @@
+import { isLopuAccessActor } from '~/api/utils/lopu/accessMode';
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
 import { getScopedUser } from '~/api/utils/auth/scopedUser';
@@ -67,6 +69,7 @@ export const action = async ({ request }: { request: Request }) => {
 	});
 	const access = await assertLopuAccess(user, { billing });
 	if (access.ok === false) return lopuAccessResponse(access);
+	if (body.accessMode !== undefined && !isLopuAccessActor(await getCurrentUser(request), user.id)) return json({ ok: false, error: 'Change chat access from your first-party account session' }, { status: 403 });
 	const result = await createLopuChat(user.id, body);
 	if (result.ok === false) {
 		return json({ ok: false, error: result.error }, { status: result.status });

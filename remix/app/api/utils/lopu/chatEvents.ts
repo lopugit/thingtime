@@ -1,3 +1,4 @@
+import type { LopuReadReference } from './readContext';
 import type { LopuPageReference } from '~/utils/lopuPageContext';
 import type { LopuToolLink } from '~/utils/lopuLinks';
 // The Lopu chat wire protocol — one JSON object per NDJSON line, streamed by
@@ -59,6 +60,10 @@ export type LopuChatStopReason =
 // operate on what the user actually sees; `source: 'user'` means the viewer
 // owns the doc and a patch may be persisted (with expectedUpdatedAt).
 export type LopuChatPageContext = {
+  // Missing blocks never mean an empty page. Dirty/unknown omitted drafts
+  // must not be replaced with the saved page during a tool mutation.
+  dirty?: boolean;
+  ready?: boolean;
   id?: string;
   source?: 'user' | 'system';
   pageKey?: string;
@@ -149,6 +154,8 @@ export type LopuChatTurnOutcome = {
   // model hops the turn took (the accounting row records it)
   hops?: number;
   toolCalls: LopuToolCallSummary[];
+  // Server-only locators; never included in wire metadata or message projections.
+  readReferences?: LopuReadReference[];
   stopReason: LopuChatStopReason;
   error?: string;
 };

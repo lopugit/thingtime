@@ -58,3 +58,10 @@ canonical link), `tt:custom` + `tt:user/<name>[/comment|/write]` and
   (shared compositions), `test:things`.
 - `TESTING.md`: "Post interactions & inherit chains", "Things page" (share
   dialog), sharing sections under the attachments and webpages checklists.
+
+
+Branch visual previews use `webpages/componentPreview.ts`: caller-authored
+blocks never supply an inherited root audience. Resolution is batched under
+the actual viewer in the selected data plane; guessed private components
+return missing refs. Branch audience edits are version content, not a live
+sharing operation. See the visual branch checks in `TESTING.md`.

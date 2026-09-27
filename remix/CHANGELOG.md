@@ -68,6 +68,197 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: Named page branches open in the visual Builder,
+  sharing durable draft events and revision-checked saves with the field editor.
+  Offline recovery, one-click inline saves, stale-push preservation and scoped
+  current-component previews keep published content unchanged. Validated on
+  desktop/390px, disposable HTTP, full unit/build and baseline TypeScript checks.
+  [PR #977](../PRs/977-timeline-visual-branches-edit-named-timeline-branches-in-the-visual-builder.md).
+
+- 2026-09-28 — **Codex (AI)**: Direct private named-branch lookup for cold
+  editors, with account/database fences and canonical cache adoption that
+  preserves queued pushes. Timeline 1.9.0; existing schemas and indexes.
+  [PR #976](../PRs/976-timeline-branch-lookup-resolve-named-timeline-branches-directly-with-scoped-reads.md).
+
+- 2026-09-28 — **Codex (AI)**: Named Timeline branches can open their exact
+  historical content in the shared field editor. Device-first drafts survive
+  reload, resume offline, and push through the existing revision-fenced queue;
+  stale or divergent edits stay in History. Published Things are unchanged.
+  Added private bounded checkout in `api.timeline` 1.8.0, API regressions and
+  desktop/mobile acceptance. Visual Builder branch switching remains open.
+  Details: [PR #975](../PRs/975-timeline-branch-checkout-edit-named-timeline-branches-with-durable-offline-drafts.md).
+
+- 2026-09-28 — **Codex (AI)**: Named Timeline branches can review and merge a
+  selected version with explicit conflict choices. Merges use the existing
+  canonical local/remote event and branch queues, survive offline reload and
+  retries, and preserve the version after a stale push. Published Things stay
+  unchanged. Shared version reconstruction retains folder moves through later
+  drafts. Added real API and desktop/mobile offline acceptance; `api.timeline`
+  advances to 1.7.0. Direct branch checkout/editing remains in progress.
+  Details: [PR #974](../PRs/974-timeline-branch-merge-review-and-merge-versions-into-named-timeline-branches.md).
+
+- 2026-09-28 — **Codex (AI)**: Fixed a Timeline null-connection crash on
+  signed-out pages and sign-out transitions. Require a viewer and connection
+  before checking account/database identity; preserve same-viewer cached
+  history and all scope fences. Added a regression and desktop/mobile
+  sign-in/sign-out acceptance.
+
+- 2026-09-28 — **Codex (AI)**: History can open its Thing in the home database
+  through an explicit selection change. Links pin account/database identity;
+  Thing-page caches and cross-tab invalidation keep same-id records separate.
+  Root data shares Timeline's canonical database key, and negotiated optional
+  API preconditions refuse stale-source reads/writes before handlers run.
+  MongoDB endpoint capability 1.1.0; no Timeline record-format change.
+  Fallback deployments forward the same source precondition as root identity;
+  the upstream enforces it without breaking ordinary Thing reads/writes.
+  [PR #972 details](../PRs/972-timeline-thing-navigation-open-history-things-in-their-matching-database.md).
+
+- 2026-09-28 — **Codex (AI)**: Home history is accessible while a custom database
+  stays selected. Saved themes expose History; Timeline offers Home account and
+  Selected database views. Shared connection leases prevent duplicate home
+  uploads and keep each database's pending edits/cache separate. Explicit scoped
+  API routing covers branches and restore with existing account/source fences;
+  Timeline 1.6.0. Opening Timeline also closes the History modal.
+  [PR #971 details](../PRs/971-timeline-home-scope-keep-home-history-accessible-across-database-selections.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu continuations recover completed tool results
+  from their exact private background transcript, so a checkpoint after an
+  Action preserves its output without rerunning it. Account, chat, deployment,
+  retention and completion checks remain required. Expired task outputs stop
+  repeated polling. Reply capability 1.19.2.
+  [PR #969 details](../PRs/969-lopu-checkpoint-tool-results-preserve-completed-tool-results-when-lopu-resumes.md).
+
+- 2026-09-27 — **Codex (AI)**: Saved theme creation, token/visibility updates
+  and deletion now record approved token versions in shared History. Content,
+  head and storage commit together in the home database, including under a
+  custom data-source selection. Identical saves add no event; deleting at the
+  storage ceiling retains the prior version. Timeline 1.5.0 and themes/delete
+  1.1.0; dedicated restore, selection history and legacy coverage remain open.
+  [PR #970 details](../PRs/970-timeline-theme-history-record-saved-theme-changes-in-shared-history.md).
+
+- 2026-09-27 — **Codex (AI)**: Timeline quota acceptance uses synthetic accounts
+  and the normal admin API on a guarded disposable replica. At the exact limit,
+  reads, folder organization and deletion retain history; refused edits/restores
+  leave content, events and accounting untouched. Below-usage downgrades remain
+  refused. Storage errors now explain that retained history uses space instead
+  of promising deletion will free it. Fork-safe test setup is in README.
+
+- 2026-09-27 — **Codex (AI)**: Things display-name edits for themes, algorithms,
+  emoji and chat archives now appear in shared History. Strict title-only
+  snapshots preserve protected payloads; content, quota and history commit
+  together. Stale/refused writes and unchanged titles add no successful event.
+  The Thing permalink updates immediately after Rename, and optimistic views
+  preserve protected source names. Temporary refresh failures keep the matching
+  cached Thing with a retry control; access refusals clear it.
+  Timeline 1.4.0 / Things 1.33.2. Dedicated
+  content writers and protected restoration remain in progress. See
+  [PR #966 details](../PRs/966-timeline-library-history-record-library-renames-in-shared-history-and-refresh-thing-views.md).
+
+- **2026-09-27 · Codex (AI):** Added 41 reusable native traversal programs and bounded synchronous callback definitions saved as Component data. Verified 116 native cases, edited-filter save/reload/reuse, private API round-trips, responsive layout and production output; Actions contract is 1.35.0. See [PR #962 details](../PRs/962-web-standards-traversal-reusable-native-traversal-and-editable-callback-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Folder deletion records each child move before
+  removing the folder; shared transactional ancestor checks prevent deleted
+  destinations and concurrent cycles. Compact placement history restores exact
+  saved content, and the open Thing refreshes after restore/merge. Protected
+  library moves retain folder metadata only. Timeline 1.3.0 / Things 1.33.1;
+  [PR #965 implementation and acceptance](../PRs/965-timeline-folder-history-record-folder-moves-and-restore-their-exact-thing-history.md).
+
+- 2026-09-27 — **Codex (AI)**: Private account autosave for post/comment, Thing,
+  definition and schema editors; shared draft/template picker, reusable post
+  templates with independent media, revision-safe recovery and scoped local
+  workspaces. Preserve original definition versions during recovery so stale
+  drafts cannot overwrite newer saved content; retain recovered text in History.
+  Preserve raw JSON schema input through account recovery and parse only for
+  validation/publication, including schemas copied from the platform catalog.
+  Verified full unit, production output, real API/media and browser recovery
+  flows against current main. See [PR #957 details](../PRs/957-codex-account-drafts-autosave-account-drafts-and-add-reusable-post-templates.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu Mac/browser dictation waits five seconds
+  before sending the current message draft. Settings → Lopu → Voice transcription
+  and the voice gear share a custom 1–120 second delay. Chat settings adds
+  **Hear me out**: keep listening and ask “Send now?” every ten seconds of silence,
+  with no automatic send. Manual Stop retains the draft; stale timers and rejected
+  sends cannot lose text. Removed the Mac dictation capture's fixed 1.5-second cutoff.
+  See [PR #961 details](../PRs/961-codex-voice-silence-settings--configurable-dictation-silence-and-hear-me-out.md).
+
+- 2026-09-27 — **Codex (AI)**: Canonical Thing changes from server Actions and
+  Lopu tools now retain trusted origin and group nested writes through the
+  existing relational Timeline operation links. Concurrent calls stay isolated;
+  partial failures record only committed edits, and browser preparation claims
+  no execution. Shared local/remote record schemas remain unchanged. Complete
+  Action outcomes and ordinary browser execution receipts remain in progress.
+  [PR #959 details](../PRs/959-timeline-mutation-coverage-preserve-action-and-ai-provenance-in-thing-history.md).
+
+- 2026-09-27 — **Codex (AI)**: Reviewed PR #954 against current main, preserved Lopu Ask/Full permissions with prompt settings, validated all 100 public schema definitions, and fixed concurrent attachment-save rollback deleting a completed file. Full unit suite, 902 API checks, real-byte acceptance, settings isolation/concurrency, production web build and iOS simulator build pass; no added TypeScript diagnostics. [QA details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
+  event and relationship records, durable draft recovery, private relational event/link Things and transactional
+  ordinary Thing history. Shared History now previews restores and three-way
+  merges with explicit conflict choices and idempotent, version-fenced commits.
+  Named branches now use separate branch/Thing head records, durable local
+  commands, private exact-version reads, and transactional forward-only pushes.
+  Concurrent/deferred pushes preserve versions and show per-branch outcomes.
+  Large versions retain separate snapshot parts, so history cannot strand later
+  edits or deletion; the real API grow/shrink/restore/delete regression passes.
+  IndexedDB upgrades pending work to atomic relationship records; server ancestry
+  uses exact parent links and existing shared indexes. Lopu preserves missing/dirty page context instead of treating it as an empty
+  page. Disposable replica-set and browser evidence, limits and outstanding
+  delivery gates: [PR #956 notes](../PRs/956-unified-timeline-add-relational-timeline-history-and-durable-branch-synchronization.md) and [implementation contract](../docs/unified-timeline.md).
+
+- 2026-09-27 — **Codex (AI)**: Add 53 reusable ARIA object programs with native nullable reflection, owned element relationships and frozen-list identity; negotiate Actions 1.33.0. Make animation stages grow to keep both tiles visible. Validate production output and retain the managed loopback dev stack; see [PR #955 details](../PRs/955-web-standards-aria-reusable-native-aria-object-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu can execute saved browser and server Actions
+  from chat. Per-chat **Ask before running** and **Full access** controls gate
+  mutations, persist safely across chat/account changes, and retain existing
+  Action, account and storage boundaries. The internal host shares canonical
+  data routes with Nitro and works in durable workflows. See
+  [execution contract](../docs/lopu-action-access.md) and
+  [PR #953 validation](../PRs/953-codex-lopu-workspace-actions--allow-lopu-actions-with-per-chat-access.md).
+
+- 2026-09-27 — **Codex (AI)**: Follow-up to the live Lopu Action run: large
+  Thing reads now offer lossless, authorized JSON Pointer pages instead of
+  repeating a truncated summary. Workspace select errors report their exact
+  allowed values, so Lopu can correct categories without trial writes. See
+  [PR #960 validation](../PRs/960-lopu-action-observation-lossless-inspection-and-actionable-category-errors.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu can inspect Action contracts and check
+  candidate inputs without execution. Invalid inputs fail before confirmation;
+  partial failures retain their run identity and recovery guidance. Newly
+  authored workspace Actions expose canonical choices, numeric bounds and
+  reference hints. Existing installed apps and their data are preserved. See
+  [PR #964 validation](../PRs/964-lopu-action-guidance-inspect-action-contracts-and-recover-from-errors.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu now recognizes JSON-labelled tool fences,
+  repairs printed tool requests with bounded corrective hops, and restores
+  lossless read pages across checkpoints with fresh access/revision checks.
+  Private message metadata stores only read locators; Action failure recovery
+  details now reach the next model hop. Reply capability is 1.19.1. See
+  [PR #967 validation](../PRs/967-lopu-stall-recovery-fix-tool-call-stalls-and-preserve-read-context.md).
+
+
+
+- 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
+  message field. Stop keeps partial words, recording again appends, and explicit
+  Send uses the ordinary composer with late-result and rejected-send protection.
+  See [PR #952](../PRs/952-codex-voice-composer-draft--keep-voice-transcription-in-the-editable-message-draft.md) for behavior and validation.
+
+- 2026-09-27 — **Codex (AI)**: Web Standards adds 111 editable native animation
+  programs with saved keyframes/timing, playback promises and callbacks, scoped
+  receivers and cleanup. Both manifests/client negotiate actions-run 1.32.0.
+  Browser validation includes native interpolation, keyframe copying and ignored
+  option detection. See the [animation guide](../docs/web-standards-builder.md#native-web-animation-programs) and [PR #951 details](../PRs/951-web-standards-animations-reusable-web-animations-programs.md).
+- 2026-09-27 — **Codex (AI)**: Publish all built-in schemas as copyable public
+  Schema Things, preserve nested/JSON fields and render templates in forks,
+  fix real Builder file commits, and let Lopu save chat attachments as durable
+  private files for Thing properties. Add visible shared Lopu guidance,
+  private tickable custom instructions, admin base-prompt editing, and shared
+  prompt composition across chat, voice, musings and recording analysis.
+  Includes isolated local upload/schema acceptance and native voice support.
+  [PR #954 details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
+
 - 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
   editable boundaries, native document edits and bounded contextual fragments.
   Check owned endpoints and concrete native getters; negotiate actions-run 1.31.0.

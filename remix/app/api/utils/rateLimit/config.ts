@@ -11,6 +11,8 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'drafts.read': { limit: 180, windowMs: 60_000, enabled: true },
+  'drafts.write': { limit: 240, windowMs: 60_000, enabled: true },
   'invites.create': { limit: 20, windowMs: 3_600_000, enabled: true },
   'invites.read': { limit: 120, windowMs: 60_000, enabled: true },
   // Private attachment storage: start and completion mutate both S3 and the
@@ -140,6 +142,8 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },
   'notifications.read': { limit: 60, windowMs: 60_000, enabled: true },
   'notifications.record': { limit: 120, windowMs: 60_000, enabled: true },
+  'timeline.read': { limit: 240, windowMs: 60_000, enabled: true },
+  'timeline.write': { limit: 240, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.devices': { limit: 30, windowMs: 60_000, enabled: true },
   // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so
@@ -260,6 +264,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
   // interactive read/save; the public GET keys anonymous callers by IP and
   // the admin POST is enforced fail-closed at the route
+  'settings.lopu-prompt': { limit: 30, windowMs: 60_000, enabled: true },
   'settings.lopu-chat-defaults': { limit: 30, windowMs: 60_000, enabled: true },
   // Thingtime.LopuAccess singleton (GET public / POST admin) — the client
   // reads it to render the locked state; the admin POST fails closed

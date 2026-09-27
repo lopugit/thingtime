@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 4,409 have interactive recipes (302 HTML, 1,196 CSS, 890
-JavaScript and 2,021 Web API entries); the rest are
+editable program. 4,914 have interactive recipes (302 HTML, 1,196 CSS, 890
+JavaScript and 2,526 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -72,7 +72,9 @@ bounded data compiler, with no raw-source escape or eval, and runs in a worker
 terminated after two seconds of execution. Worker startup is separately bounded
 at ten seconds, so process startup cannot consume the execution allowance.
 Regexps execute there; native input patterns are
-excluded because main-thread validation cannot be terminated. DOM methods have
+excluded because main-thread validation cannot be terminated. Synchronous native
+callbacks use the bounded data interpreter described below; they do not execute
+compiled source on the frame thread. DOM methods have
 an explicit allowlist and event budget. CSS/document changes remain local to the
 frame. This runtime intentionally cannot demonstrate APIs needing permissions
 it has not been granted.
@@ -819,3 +821,182 @@ static offsets with live boundaries adjusted by the browser. Both capability
 manifests and the client negotiate `api.actions-run` 1.31.0. See the
 [DOM ranges standard](https://dom.spec.whatwg.org/#ranges) and
 [HTML contextual-fragment algorithm](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#dom-range-createcontextualfragment).
+
+## Native Web Animation programs
+
+111 more catalogue entries contain editable native animation programs. Each saved
+Component includes its keyframe arrays or property-indexed objects, timing JSON,
+preview time, ID, native operations, asynchronous callbacks and result projection.
+The same `tt-web-platform` runtime executes a newly authored program or a saved
+Component reference; no animation-specific Component renderer is introduced.
+
+`animationPolicy.ts` registers Animation, KeyframeEffect, DocumentTimeline and
+AnimationPlaybackEvent constructors and receiver members. This includes native
+KeyframeEffect copying, playback controls, effect/timeline changes, timing and
+computed-keyframe records, ready/finished promises, finish/cancel/remove handlers,
+and scoped Element/Document/ShadowRoot animation queries. The existing worker
+callback transport carries the authored handler function and restores its native
+animation receiver as `this` (including opaque handle identity). Registered promise
+reads await the browser result and are refused in synchronous DOM batches.
+
+The program selects its owned surface before construction; target and effect
+receivers are checked against that surface. Native allocation is capped at 32
+objects, keyframes at 64, properties per frame at 32, and total keyframe values at
+512. Dictionary keys and scalar sizes are validated before native conversion.
+The shared DOM input/handle budgets, two-second execution deadline and opaque
+network-denying runtime CSP still apply. Stop and normal completion cancel every
+tracked animation and fence late callbacks/promises. The recipe explicitly
+commits sampled element styles before completion; pseudo-element samples report
+computed styles because native commitStyles refuses those targets.
+
+Unsupported native members stay explicit. Examples probe both exposed accessors
+and actual behavior: a browser that ignores getAnimations' pseudoElement option
+must report unsupported instead of appearing to filter successfully. The optional
+iterationComposite field is checked before invoking constructors so ignored
+options cannot masquerade as implemented behavior. Event.isTrusted is read from
+its unforgeable own native accessor, preserving trusted browser events versus
+constructed events. Group/Sequence effects, animation triggers, scroll/view
+attachment ranges and remaining Level 2 additions are still separate work.
+
+Both origin manifests and the client require `api.actions-run` 1.32.0. The
+canonical catalogue/save Actions, private Component API and storage schema are
+unchanged. Test `animationBoundaryFixtures.ts` in a native browser as well as the
+unit/contract suites: it checks exact interpolation, independent copied timing,
+trusted finish/cancel/remove events, shadow queries, native exceptions, foreign
+receivers, allocation limits and asynchronous batch refusal.
+
+Sources: [published Web Animations](https://www.w3.org/TR/web-animations-1/),
+[current Level 1 draft](https://drafts.csswg.org/web-animations-1/), and
+[Level 2 additions](https://drafts.csswg.org/web-animations-2/). Inventory source
+status is retained; an editable example does not imply cross-browser support or
+that a draft feature has reached Recommendation status.
+
+## Native ARIA object programs
+
+All 53 catalogued ARIAMixin entries have editable programs: nullable string
+properties, role, the active-descendant element, and seven element-reference
+lists. Each saved Component holds the document, role/value inputs, selectors,
+content attributes, native assignments and result projections. It compares
+property assignment with content-attribute reflection and can clear the property
+with null. These examples demonstrate reflection; complete accessible widgets
+also require appropriate semantics and keyboard interaction.
+
+`ariaPolicy.ts` registers bounded native Element accessors. Strings accept null
+or at most 4096 characters; lists accept null or at most 64 owned Element handles.
+Every reference is checked before native assignment. Reference writes require
+the active owned surface because detached DOM cloning would lose explicit
+relationships in the visible projection. Surface attribute mutations are limited
+to role/aria-* names. Existing ownership checks reject runtime/foreign nodes,
+and the shared worker deadline, request/handle limits and sandbox CSP remain.
+
+Native FrozenArray results retain their frozen state, cached array identity and
+contained element identity across worker messages. Snapshots remain unchanged
+when an attribute resets a relationship. Up to 128 distinct native frozen arrays
+may be transported per run. Ordinary mutable array results remain mutable.
+Unimplemented native properties produce explicit unsupported results, including
+ariaOwnsElements in the validated browser. The published inventory's draft/status
+metadata is retained; coverage does not imply universal browser support.
+
+The catalogue Action contract and client minimum are `api.actions-run` 1.33.0.
+Canonical installation, private Component persistence and reuse on another page
+continue through the existing suite, Action, Component and Webpage contracts.
+`ariaBoundaryFixtures.ts` checks null versus empty lists, string false versus
+null, native relationship resets, cached/frozen object identity, shadow ancestry,
+wrong/stale handles, allocation limits and refusal of unrelated surface writes.
+
+The animation example now uses content-driven stage height with a minimum, so
+both tiles remain visible when text wraps. Existing saved definitions are not
+silently rewritten.
+
+Sources: [ARIA IDL interfaces](https://w3c.github.io/aria/#idl-interface) and
+[HTML attribute reflection](https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflecting-content-attributes-in-idl-attributes).
+
+## Native XPath object programs
+
+Thirty XPath catalogue entries now produce editable saved programs for
+`XPathEvaluator`, `XPathEvaluatorBase`, `XPathExpression`, `XPathResult` and
+`XPathNSResolver`. The authored tree, expression, context selector, namespace
+map, native result type, iteration/snapshot projection and mutation are ordinary
+Component program data. `Document.evaluate` and a constructed evaluator share
+the same policy; compiled expressions can be evaluated repeatedly with an
+optional owned result argument. The bridge preserves actual native return values,
+errors, node identity, snapshot retention and iterator invalidation.
+
+Queries require the owned detached document. Even scalar queries are refused
+in surface mode: checking returned Nodes alone cannot prevent a scalar query
+from reading ancestors outside the program. Native Node namespace resolvers
+retain identity (`createNSResolver(node)` returns that node). Alternatively,
+a saved map of at most 16 prefixes to URI strings supplies a bounded synchronous
+callback interface. Ordinary worker callbacks remain asynchronous and are not
+accepted as synchronous resolvers. Nullable Node namespace lookup inputs are
+preserved. Live native handles are run-local; the complete program that creates
+and composes them is what persists in the database.
+
+Main-thread XPath cannot be interrupted by the worker deadline. Before calling
+the native parser/evaluator, the runtime bounds expressions to 512 characters
+and 64 tokens, parentheses to depth 8, and refuses nested predicates and path
+traversal inside predicates. Evaluation counts the whole owned document plus
+any disconnected context tree, at most 128 nodes/attributes and 1,024 text and
+attribute characters. A conservative syntax/tree/text work estimate caps each
+evaluation at 16 million units and a run at 64 million; compiled expressions
+spend that same budget every time. These are implementation limits, not XPath
+standard limits. Existing native DOM and two-second execution budgets also apply.
+
+Actions negotiate `api.actions-run` 1.34.0. No dedicated XPath Component renderer,
+new storage endpoint or external configuration is required. The
+[DOM Living Standard XPath interfaces](https://dom.spec.whatwg.org/#xpath) were
+checked on 27 September 2026 (standard last updated 24 September). DOM's XPath
+algorithms remain incompletely specified; browser behavior is exposed rather
+than emulated. For example, the tested Chromium maps an unknown unsigned-short
+result type to its ANY_TYPE behavior.
+
+## Native traversal and synchronous callback programs
+
+Forty-one entries cover `TreeWalker`, `NodeIterator`, `NodeFilter` and both
+Document factories. Saved Component data includes the authored tree, roots,
+starting nodes, mask, filter definition, explicit callback bindings and result
+projections. The native engine supplies traversal order, skip versus reject,
+iterator pointer reversal/removal adjustment, `detach()` compatibility behavior,
+filter identity and recursive-filter `InvalidStateError`. Legacy node masks
+can produce an empty result in an HTML tree; no retired node type is fabricated.
+
+The generic `dom` action `callback` takes `[definition, bindings]`. Its `key`
+is a callback hook name (for example `acceptNode` or `lookupNamespaceURI`), or
+`function` to create a callable. `definition` uses existing expression/statement
+nodes: primitive literals, variables and input bindings; own data reads; arrays
+and records; conditional, binary and unary expressions; selected bounded string
+and array methods; registered synchronous DOM get/set/call/constant operations;
+local let/const bindings, assignment, blocks, if, while, for-of, try/catch/finally,
+throw, return, break and continue. Arrow `function` definitions have lexical
+undefined `this`; anonymous `function-expression` definitions receive the native
+callback receiver under strict semantics. Destructuring, nested functions,
+generators, async operations, globals, arbitrary source and prototype access are
+outside this synchronous subset. The ordinary worker language remains separate
+and terminable; it is not silently substituted for a synchronous callback.
+
+`input` reads the callback's explicit captured bindings. The callback handle's
+`bindings` property can replace those run-local inputs, including owned handles;
+this lets a saved program compose a traverser and its filter without serializing
+live browser objects. Reading the property returns a bounded snapshot. Native
+callback identity and nested handle identity survive the worker transport.
+Thrown callback data (including null, false, zero and empty text) remains
+catchable as data. Native errors preserve their name. XPath namespace resolution
+can reuse the same callback mechanism as well as its existing prefix maps.
+
+Callbacks have 16 registrations per run, 256 definition nodes, depth 16,
+2,048 evaluation steps per invocation, 32,768 aggregate steps, 512 invocations
+per definition, call depth 8, strings of 4,096 characters and collections of
+64 items. Copying callback data spends bounded work and admits at most 1,024
+nodes / 65,536 text characters, including property names. Traversal inspects its owned detached tree
+before native execution, with a 128-node limit. Existing DOM handle/request,
+mutation and ownership checks apply to callback DOM operations too. These are
+runtime limits, not limits in the standards.
+
+Actions negotiate `api.actions-run` 1.35.0 on both manifests and through the
+existing client. No new Component renderer, Thing kind or storage endpoint is
+introduced. The manual acceptance checklist covers changing the filter's logic,
+saving/reloading the complete Component and reusing it on another Builder page.
+
+Sources: [DOM traversal](https://dom.spec.whatwg.org/#traversal) and
+[Web IDL callback invocation](https://webidl.spec.whatwg.org/#call-a-user-objects-operation),
+checked 27 September 2026 (updated 24 and 23 September respectively).

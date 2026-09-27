@@ -377,3 +377,47 @@ test('event and stream Components retain exactly the inputs used by their comple
 	}
 	assert.ok(checked >= 124);
 });
+
+test('native callback this restores the same opaque receiver as an earlier DOM result', async () => {
+	const messages: any[] = [];
+	const context = vm.createContext({ postMessage: (message: unknown) => messages.push(message) });
+	const b = await import('./programBuilders');
+	const program = {
+		version: 1,
+		title: 'Callback receiver identity',
+		steps: [
+			b.declare('target', b.domSurface()),
+			b.declare('pending', b.method(b.global('Promise'), 'withResolvers')),
+			b.perform(
+				b.domSet(
+					b.variable('target'),
+					'onfinish',
+					b.domCallback({
+						op: 'function-expression',
+						params: [],
+						body: [
+							b.perform(
+								b.call(b.get(b.variable('pending'), 'resolve'), [
+									{ op: 'binary', operator: '===', left: { op: 'this' }, right: b.variable('target') }
+								])
+							)
+						]
+					})
+				)
+			),
+			...b.returns(b.awaited(b.get(b.variable('pending'), 'promise')))
+		]
+	};
+	vm.runInContext(compilePlatformWorker(program), context);
+	const deliver = (data: unknown) => vm.runInContext(`onmessage({data:${JSON.stringify(data)}})`, context);
+	const running = deliver({});
+	const receiver = { $dom: 'animation', type: 'Animation' };
+	await deliver({ type: 'tt-platform-dom-result', id: messages.at(-1).id, result: { value: receiver } });
+	await Promise.resolve();
+	const request = messages.at(-1);
+	assert.equal(request.action, 'set');
+	await deliver({ type: 'tt-platform-dom-result', id: request.id, result: { value: null } });
+	await deliver({ type: 'tt-platform-dom-callback', id: 1, args: [], thisArg: receiver });
+	await running;
+	assert.deepEqual(JSON.parse(JSON.stringify(messages.at(-1))), { ok: true, result: true });
+});

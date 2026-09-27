@@ -2,6 +2,170 @@
 
 https://thingtime.com
 
+### Unified Timeline (implementation in progress)
+
+Large retained Timeline versions are split into protected relational snapshot
+parts so history cannot strand edits/deletion of an existing large Thing. No
+additional collection, index, secret or configuration is needed. Complete large
+preview and streamed restoration are still listed in the Timeline acceptance
+ledger.
+
+The shared History panel records ordinary Thing revisions and editor drafts in
+the account's private **Timeline** folder. Local IndexedDB keeps authored edits
+and a bounded cache; the database keeps the complete accepted history. Preview
+a restore or merge before applying it; restores append a version and merges ask
+for explicit choices where both sides changed the same field.
+Events and relationship links use identical relational records locally and
+remotely. Each revision/link is a separate document, with bounded history pages
+assembled on demand; Things and branches do not collect growing history arrays.
+In per-Thing History, **Branches** creates a named alternative from the selected
+version, pulls branch updates, and pushes another selected version. Each
+branch/Thing head is its own document. Pending commands survive reload and retry
+with the original identity; a conflicting push preserves both versions.
+**Merge selected version…** compares with a named branch, asks you to choose
+any overlapping fields, then saves the reviewed two-parent version locally and
+queues its branch push. A stale push keeps that version in History. Published
+content stays unchanged. **Edit branch** opens historical fields; **Open in Builder**
+opens block-based pages in the usual visual editor. Branch text, props, layout
+and page metadata use the same device-first draft events and guarded branch
+pushes. Recover drafts after reload; queued or conflicting pushes stay in History.
+Preview currently uses visible current components with live Actions paused;
+exact historical dependencies and AI branch editing remain open. Visual checkout
+requires Timeline 1.9.0 and webpages-resolve 1.5.0, with no schema migration.
+Named-branch comparison requires `api.timeline` 1.7.0 and a connection. Once
+reviewed, the local event and push survive reload/offline in the same existing
+stores, with no schema migration or additional setup.
+
+Forks need the existing transaction-capable Mongo replica set and completed
+storage-accounting migrations. Timeline uses the normal `getThingsCollection()`
+data plane and requires no extra credentials, provider account or collection.
+The browser needs IndexedDB on a stable origin for reload/offline recovery.
+Database version 5 adds individual branch, head and command stores while
+preserving the earlier relational event/link migration and pending drafts.
+Account, origin and custom Mongo data source each have separate local queues.
+History is private and available only to full account credentials.
+
+`api.timeline` 1.6.0 adds explicit home-history access while a custom database is
+selected. Saved themes have a **History** button, and the Timeline folder lets
+you choose **Home account** or **Selected database** without changing the active
+database. Both use the same records and scope-keyed IndexedDB stores; sessions
+that resolve to home share one upload queue. No additional runtime setup is needed.
+
+Saved theme creation, token/visibility edits and deletion also use this shared
+history (`api.timeline` 1.5.0, `api.themes` / `api.themes-delete` 1.1.0). The
+approved token snapshots remain private even for public themes and commit with
+the home-database writer/accounting when a custom data source is selected.
+They preserve historical token values rather than applying current defaults.
+No new runtime setup is needed. Dedicated theme restoration, active-theme
+selection history and legacy-theme migration coverage remain in progress.
+
+Run `npm --prefix remix run test:timeline` for the focused suite. The opt-in HTTP
+suite uses `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> npm --prefix
+remix run test:timeline:integration`. It refuses any database except the disposable
+local `timeline-rs` replica set at `127.0.0.1:20337`; it creates fixtures through
+the app API. Never use a shared or production database for these checks.
+`test:timeline:themes` uses the same guard for theme creation, unchanged saves,
+rename/move/edit ancestry, privacy and retained deletion. The quota suite below
+also checks atomic theme-save refusal and retained deletion at the ceiling.
+`test:timeline:home-scope` creates a second database on that guarded replica and
+checks concurrent history isolation, exact versions, branches and home restore
+under a custom selection, matching live Thing ids and stale read/write refusal.
+`test:timeline:visual-branch` uses the same guard for a visual page/branch
+fixture and batched component permission checks. Optionally set
+`TIMELINE_TEST_FIXTURE_PATH` to a private temporary JSON file for browser testing;
+it contains disposable sign-in credentials and must stay untracked.
+`test:timeline:branch-merge` uses the same guard for named-branch comparisons,
+canonical merged-event uploads, explicit conflicts, exact retries and stale-push
+retention. Set `TIMELINE_TEST_FIXTURE_PATH` to a private temporary file only when
+browser acceptance needs its synthetic login, and remove it afterward.
+The home-scope suite's private fixture file contains only synthetic local
+credentials; remove it after browser acceptance.
+
+History's **Open Thing in home** explicitly switches the selected database, then
+opens an account- and database-qualified Thing link. Thing-page caches include
+that same database identity, so switching sources cannot reuse another source's
+same-id content. `api.mongodb-endpoint` 1.1.0 exposes the public `dataPlane` key
+in root data and supports `X-Thingtime-Expected-Data-Plane` as an optional request
+precondition. It refuses stale selections with 409 and invalid keys with 400;
+it never selects a database or grants access. Updated clients negotiate this
+capability before scoped reads/writes. When this deployment uses its configured
+API fallback, root identity and ordinary source-fenced requests use that same
+fallback; the selection and precondition are forwarded for upstream enforcement.
+Existing actor-fenced commands and vault verification retain their local-origin
+requirements. No new secret or environment variable is required; use the
+existing MongoDB or fallback setup.
+
+For quota acceptance, use that same disposable replica and a dedicated local
+dev-server process. Run the following once with a new private fixture path:
+
+```sh
+TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> \
+TIMELINE_TEST_ADMIN_FIXTURE=/tmp/timeline-quota-<unique-run>.json \
+npm --prefix remix run test:timeline:quota -- --prepare-admin
+```
+
+This registers an ordinary synthetic account, saves its generated credentials
+in a new mode-0600 file, and prints only its username. Restart only this test
+server with `ADMIN_USERNAMES=<printed-synthetic-username>` in its process
+environment; signup deliberately refuses already-allowlisted usernames. Run
+the same command without `--prepare-admin`. It authenticates that exact fixture,
+creates a separate regular account and assigns its test allowance through the
+normal admin API. Do not add the synthetic username to shared env files, use
+real accounts, or print/commit the credential file. Remove the test process
+override and fixture when finished. The test checks exact-ceiling refusals,
+folder organization/deletion, retained-byte accounting and the existing 409
+refusal to downgrade below usage. It does not manufacture an over-limit ledger.
+
+Retained history counts toward account storage. Deleting a recorded Thing keeps
+its history and therefore does not by itself free those bytes. At the limit,
+history reads and previews remain available; saving another retained version
+needs enough storage. Retention controls are still in the delivery ledger.
+See [the implementation contract and open delivery gates](docs/unified-timeline.md).
+
+### Public schemas, uploaded files and Lopu instructions
+
+Every built-in schema (root Thing, content kinds and database collections) is
+published as a Thingtime-owned public Schema Thing at `schema-<id>`. Browse
+`/schemas`, open a schema and choose **Copy and extend** to save an independent
+Schema in your Things. Copies retain nested fields and render templates; open
+record fields use bounded JSON. `forkOf` records the source. Editing a copy
+never changes the platform definition or another person's schema. Native write
+permissions, protected kinds and specialized validation continue to apply.
+
+After deploying a fork, an administrator should dry-run and then run
+**backfill-user-storage-accounting** in Admin migrations. That fenced migration
+also refreshes the public schema catalog; do not run a standalone schema seed
+around active storage ledgers. Existing identities, posts and ownership remain
+in place. No new environment variable is needed for schemas or prompt settings.
+
+**Settings → Lopu** shows the shared base prompt and saves a private list of
+custom instructions with individual enable switches. **Settings → Admin → Lopu
+base prompt** edits the shared public guidance. Set the normal server
+`ADMIN_USERNAMES=<your-admin-username>` on your fork, and use its normal MongoDB
+configuration. The base prompt is public: keep credentials in Secure Vault.
+Changes apply to the next AI reply and newly started direct voice sessions.
+Chat, voice, musings and recording analysis share this guidance; surface rules
+and server-enforced permissions remain in effect. Simultaneous edits report a
+conflict and offer reload rather than overwriting someone else's changes.
+
+Lopu can save an owned chat attachment as an independent private file Thing,
+optionally file it in an owned folder, and use its ID/content URL in another
+Thing's properties. The original chat remains intact; deleting it does not
+delete the saved copy. This requires the existing private-upload approval and
+quota, and the existing object-storage configuration. Private URLs retain their
+access checks when placed in a public Thing. Public sharing remains explicit.
+
+For isolated acceptance, start a loopback MongoDB replica set and a PM2-managed
+web stack with `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:<port>/thingtime?replicaSet=<name>`,
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<absolute-test-directory>` and
+`LOPU_CHAT_PROVIDER=test`. Create a disposable account with `seed-fixture.mjs`,
+then set `ADMIN_USERNAMES=<fixture-username>` in both the app and test process.
+From `remix/`, run `node --import tsx scripts/verify-schema-files.ts
+.fixtures/<fixture>.json`. It refuses non-loopback databases/APIs, exercises the
+real multipart upload and Lopu tool paths, verifies private bytes after chat
+deletion, and creates an upload form for browser acceptance. The local storage
+adapter tests the lifecycle without claiming a live S3 or model-provider test.
+
 ### Builder service workspaces
 
 Insert **Service workspace** from the builder block menu. Its native
@@ -4216,3 +4380,51 @@ needed for standard device transcription. Build and install using the
 Microphone and Speech Recognition when macOS asks. Re-enable denied access in
 System Settings → Privacy & Security. On-device recognition is preferred where
 the language supports it; Apple's service may be used otherwise.
+
+### Account drafts and templates
+
+Signed-in post, comment, Thing, definition and schema editors save private
+working drafts to the account. The post composer has **Load drafts & templates**;
+post menus offer **Save as template**. Loading a template creates an editable copy
+and keeps the template. The picker includes an automatic account-resume preference;
+local device recovery stays enabled. Offline changes sync when connectivity returns.
+The 512 KiB editing-snapshot limit is separate from attachment byte quotas.
+
+No new secret or deployment variable is needed. Forks need the normal authenticated
+MongoDB setup **with transactions/a replica set** and the existing private attachment
+storage configuration for uploaded files and independent template media copies.
+The development-only `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` stand-in and fixture
+upload approval flow above support local verification; never configure the local
+stand-in on Vercel. Use placeholder values in shared setup files.
+
+Create a disposable fixture with `seed-fixture.mjs`, then run
+`node remix/scripts/verify-account-drafts.mjs remix/.fixtures/<name>.json --media`.
+Fixture JSON contains test credentials and stays ignored. The verifier exercises
+only the real local API. Existing device Thing data/preferences are retained and
+copied once to the first opening account; later accounts use separate device
+workspaces and draft caches. Hydration alone does not upload that legacy data.
+
+
+### Lopu Action access QA
+
+Lopu's per-chat Ask/Full modes require no new deployment secret. Existing
+first-party sessions, Mongo transactions and the Lopu provider setup still
+apply. For an isolated verification without model billing:
+
+1. Start a disposable loopback Mongo replica at port `22563`, replica set
+   `lopuActions`, with a new empty dbpath. Do not point this check at shared data.
+2. Use the canonical PM2 app definition with an isolated process name and
+   `TT_WEB_PORT=22560`, `TT_HMR_PORT=22561`, `TT_API_PORT=22562`.
+   Set `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:22563/?replicaSet=lopuActions`
+   and a fresh local-only `JWT_SECRET` on both the app and script; unset
+   `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` for this disposable stack. No production
+   credentials or provider keys are required.
+3. From `remix/`, run `TT_LOPU_ACTIONS_LOCAL=1 node --import tsx
+   scripts/verify-lopu-actions.mts` with the same Mongo/JWT environment.
+   The script refuses any other Mongo URI, creates synthetic accounts and data,
+   and revokes its login at completion. Stop the named QA PM2 processes afterward.
+4. Open `/scripts/lopu-actions.browser.html` on the QA Vite origin for the
+   production composer's isolated desktop/phone fixture.
+
+This checks runtime and storage behavior, not live provider reasoning or
+production gear migration. See [Lopu Action access](docs/lopu-action-access.md).

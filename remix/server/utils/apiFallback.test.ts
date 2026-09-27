@@ -3,6 +3,10 @@ import test from 'node:test';
 
 import { getApiFallbackOrigin, shouldProxyApiToFallback } from './apiFallback';
 import handleApi from '../routes/api/[...]';
+import handleRootData from '../routes/api/root-data.get';
+import { enforceExpectedDataPlane, mongoDataPlane } from '../../app/api/utils/mongodb/dataPlane';
+import { getRequestMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
+import { EXPECTED_DATA_PLANE_HEADER } from '../../app/utils/dataPlane';
 
 const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN'] as const;
 
@@ -58,5 +62,43 @@ test('vault verification refuses fallback without reading or forwarding credenti
 		assert.equal(response.headers.get('Cache-Control'), 'private, no-store, max-age=0');
 		assert.equal(request.bodyUsed, false);
 		assert.ok(!(await response.text()).includes('synthetic'));
+	});
+});
+
+test('fallback forwards the database identity, selection and cookie for upstream read/write enforcement', async (t) => {
+	await withFallbackEnv('https://fallback.test', async () => {
+		const location = 'mongodb://scope.test/example';
+		const plane = mongoDataPlane({ url: location, savedId: null });
+		const forwarded: Request[] = [];
+		const upstream = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+			assert.equal(url.origin, 'https://fallback.test');
+			const request = new Request(url, init); forwarded.push(request);
+			assert.equal(request.headers.get('Cookie'), 'session=synthetic');
+			assert.equal(request.headers.get('x-tt-mongo-url'), location);
+			const selected = await getRequestMongoEndpoint(request);
+			if (url.pathname === '/api/root-data') return Response.json({ dataPlane: mongoDataPlane(selected) });
+			const refused = enforceExpectedDataPlane(request, selected);
+			if (refused) return refused;
+			if (request.method === 'PATCH') assert.deepEqual(await request.json(), { id: 'same-id', crystal: { name: 'Updated' } });
+			return Response.json({ ok: true });
+		});
+		try {
+			const headers = { Cookie: 'session=synthetic', 'x-tt-mongo-url': location };
+			const root = await (handleRootData as any)({ req: new Request('http://127.0.0.1:17340/api/root-data', { headers }) });
+			assert.equal((await root.json()).dataPlane, plane);
+			for (const method of ['GET', 'PATCH']) for (const expected of [plane, 'home']) {
+				const request = new Request('http://127.0.0.1:17340/api/v1/things?id=same-id', { method,
+					headers: { ...headers, 'Content-Type': 'application/json', [EXPECTED_DATA_PLANE_HEADER]: expected },
+					...(method === 'PATCH' ? { body: JSON.stringify({ id: 'same-id', crystal: { name: 'Updated' } }) } : {}) });
+				const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/things' } } });
+				assert.equal(forwarded.at(-1)?.headers.get(EXPECTED_DATA_PLANE_HEADER), expected);
+				assert.equal(response.status, expected === plane ? 200 : 409);
+				if (expected !== plane) assert.equal((await response.json()).code, 'DATA_PLANE_CHANGED');
+			}
+			const count = forwarded.length;
+			const actorRequest = new Request('http://127.0.0.1:17340/api/v1/things', { method: 'POST', headers: { ...headers, 'X-Thingtime-Expected-Actor': 'synthetic-account', [EXPECTED_DATA_PLANE_HEADER]: plane }, body: '{}' });
+			const refusedActor = await (handleApi as any)({ req: actorRequest, context: { params: { path: 'v1/things' } } });
+			assert.equal(refusedActor.status, 503); assert.equal(forwarded.length, count); assert.equal(actorRequest.bodyUsed, false);
+		} finally { upstream.mock.restore(); }
 	});
 });

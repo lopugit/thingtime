@@ -35,6 +35,9 @@ export async function resolveLopuMedia(
 			continue;
 		}
 		const file = described.attachment;
+		// Give the model durable identities as well as pixels. Content URLs keep
+		// the live attachment gate; presigned storage credentials never enter text.
+		notes.push(`Attachment reference: ${JSON.stringify({ id: file.id, name: file.name, contentType: file.contentType, url: described.linked ? file.url : `/api/v1/attachments/content?id=${encodeURIComponent(file.id)}` })}. Use save_attachment to save an independent private file, then use its returned URL/id in create_data or update_thing. The source remains subject to its existing access and lifecycle.`);
 		const type = file.contentType.split(';')[0].toLowerCase();
 		const supported = isLopuImage(type) || type === 'application/pdf' || isLopuText(type);
 		if (described.linked || !supported) {

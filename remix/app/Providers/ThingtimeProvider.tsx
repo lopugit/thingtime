@@ -312,13 +312,18 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 					}
 				}
 
+        if (nextThingtime.options?.namespace === 'user' && !nextThingtime.options?.fromRemote) {
+          const parts = Array.isArray(nextThingtime.path) ? [...nextThingtime.path] : smarts.parsePropertyPath(nextThingtime.path);
+          while (parts[0] === 'tt' || parts[0] === 'thingtime') parts.shift();
+          if (parts.length) events.next({ type: 'draft-edit', path: [parts[0]], value: nextState[parts[0]] });
+        }
 				return nextState;
 			},
 			(error) => console.error('[tt] There was an error applying a queued Thingtime update', error)
 		);
 		setThingtimeFlushScheduledRef.current = false;
 		if (result.applied) setThingtimeObjectWrapper(result.state);
-	}, [setThingtimeObjectWrapper]);
+	}, [setThingtimeObjectWrapper, events]);
 
 	const setThingtime = React.useCallback<SetThingtimeProps>(
 		(
@@ -392,7 +397,20 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		const hydrate = async () => {
 			try {
-				const localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
+				let localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
+        // Preserve the pre-account device workspace once, without ever uploading
+        // it on hydration or handing it to a later account on this device.
+        if (persistLocal && !localStorageThingtime && props.accountId) {
+          let claim: string | null = null;
+          try {
+            claim = localStorage.getItem('tt-legacy-workspace-account');
+            if (!claim) { claim = props.accountId; localStorage.setItem('tt-legacy-workspace-account', claim); }
+          } catch { /* Account isolation takes precedence when storage is unavailable. */ }
+          if (claim === props.accountId) {
+            localStorageThingtime = await localforage.getItem('thingtime');
+            if (localStorageThingtime) await localforage.setItem(storageKey, localStorageThingtime);
+          }
+        }
 				if (cancelled) return;
 
 				if (localStorageThingtime) {
@@ -470,7 +488,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			cancelled = true;
 			clearTimeout(retryTimer);
 		};
-	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey]);
+	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey, props.accountId]);
 
 	// thingtime change listener
 	React.useEffect(() => {
@@ -509,7 +527,9 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	};
 
 	React.useEffect(() => {
+		if (!persistLocal) return;
 		const channel = createThingtimeSyncChannel({
+			channelName: storageKey,
 			tabId: syncTabIdRef.current as string,
 			onRemoteWrite: (path, value) => setThingtimeSyncRef.current?.(path, value)
 		});
@@ -518,7 +538,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			syncChannelRef.current = null;
 			channel?.close();
 		};
-	}, []);
+	}, [storageKey, persistLocal]);
 
 	React.useEffect(() => {
 		const persistence = persistenceRef.current;

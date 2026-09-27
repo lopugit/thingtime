@@ -29,12 +29,14 @@ import {
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
 import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
-import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
+import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingRenameCrystal, thingsCacheKey } from '~/components/Things/thingsCore';
 import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
-import { pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
+import { clearLocalCache, pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { isDataPlane, scopedThingCacheKey } from '~/utils/dataPlane';
 import type * as InstallSuite from '~/components/Builder/installSuite';
 import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
@@ -43,7 +45,7 @@ import { ThingComments } from '~/components/Things/ThingComments';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
 import { ScheduledTaskPanel } from '~/components/Lopu/ScheduledTaskPanel';
 import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
-import { thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
+import { canKeepThingAfterReadFailure, thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
 
 const DIAGNOSTIC_ID_PATTERN = /^migration-diagnostic-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -257,7 +259,23 @@ const InertLabel = ({ kind, author, platform }: { kind: string; author: string |
 // ACL-aware Things API.
 export default function ThingPage() {
 	const [params] = useSearchParams();
-	return params.get('archive') === 'true' ? <ChatArchivePage /> : <GenericThingPage />;
+	const dataPlane = useDataPlane(); const user = useCurrentUser(); const api = useApi();
+	const [busy, setBusy] = React.useState(false); const [error, setError] = React.useState('');
+	const expected = params.get('dataPlane'); const expectedOwner = params.get('historyOwner');
+	const invalid = params.getAll('dataPlane').length > 1 || params.getAll('historyOwner').length > 1 || (expected !== null && !isDataPlane(expected));
+	const wrongOwner = expectedOwner !== null && expectedOwner !== user?.id;
+	if (invalid || wrongOwner || (expected !== null && expected !== dataPlane)) return <Flex width="100%" align="center" flexDir="column" px={4} pt="100px"><Box {...CARD_STYLES} p={6} width="100%" maxW="720px">
+		<Heading as="h1" size="md">Open the matching Thing</Heading>
+		<Text mt={3}>{invalid ? 'This history link has an invalid database location.' : wrongOwner ? 'This history link belongs to another account. Switch to that account to continue.' : expected === 'home' ? 'This Thing lives in your home account. Open it there to keep its content, components and edits together.' : 'This Thing belongs to a different database. Select the matching database to continue.'}</Text>
+		{!invalid && !wrongOwner && expected === 'home' ? <Button mt={4} isLoading={busy} onClick={async () => {
+			setBusy(true); setError('');
+			try { await api.v1.mongodb.endpoint.set({ reset: true }); }
+			catch (cause) { setError(apiErrorMessage(cause, 'Could not switch to your home database.')); }
+			finally { setBusy(false); }
+		}}>Open in home account</Button> : <Button as={Link} to={wrongOwner ? '/profile' : '/mongodb-status'} mt={4}>{wrongOwner ? 'Open account' : 'Choose database'}</Button>}
+		{error ? <Text role="status" mt={3}>{error}</Text> : null}
+	</Box></Flex>;
+	return params.get('archive') === 'true' ? <ChatArchivePage /> : <GenericThingPage key={dataPlane ?? 'unknown'} />;
 }
 
 function GenericThingPage() {
@@ -270,6 +288,7 @@ function GenericThingPage() {
 	apiRef.current = api;
 	const { v1 } = api;
 	const currentUser = useCurrentUser();
+	const dataPlane = useDataPlane();
 	const lopu = useLopu();
 	const lopuRef = React.useRef(lopu);
 	lopuRef.current = lopu;
@@ -277,7 +296,7 @@ function GenericThingPage() {
 	const loadThing = v1.things.get;
 	const { observeView } = useViewTracking();
 	const diagnosticRoute = DIAGNOSTIC_ID_PATTERN.test(id);
-	const requestKey = `${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}\u0000${linkKey}`;
+	const requestKey = `${dataPlane ?? 'unknown'}\u0000${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}\u0000${linkKey}`;
 	const back = REFERRERS[parseThingsReferrer(searchParams.get('from'))];
 
 	// Optimistic-render house rule: the last-known projection of this thing
@@ -286,7 +305,7 @@ function GenericThingPage() {
 	// cached: they are admin-only and short-lived.
 	// A bearer-key response must never become the optimistic no-key paint on a
 	// later visit. Hidden-link reads stay live-only and leave no local cache.
-	const cacheKey = linkKey ? null : `${THING_CACHE_PREFIX}${currentUser?.id || 'anon'}-${id}`;
+	const cacheKey = linkKey ? null : scopedThingCacheKey(currentUser?.id ?? null, dataPlane, id);
 	const seedState = React.useCallback(
 		(key: string): ThingLoadState => {
 			if (diagnosticRoute) return { key, loading: true, data: null, error: null };
@@ -298,6 +317,15 @@ function GenericThingPage() {
 		[cacheKey, diagnosticRoute, id]
 	);
 	const [loadState, setLoadState] = React.useState<ThingLoadState>(() => seedState(requestKey));
+	const [historyRefresh, setHistoryRefresh] = React.useState(0);
+	const refreshThing = React.useCallback(() => setHistoryRefresh(value => value + 1), []);
+	React.useEffect(() => {
+		const applied = (event: Event) => {
+			if ((event as CustomEvent).detail?.thingId === id) setHistoryRefresh(value => value + 1);
+		};
+		window.addEventListener('thingtime:timeline-applied', applied);
+		return () => window.removeEventListener('thingtime:timeline-applied', applied);
+	}, [id]);
 	// Both representations are useful on a permalink: the preview is the
 	// human-facing surface, while the full JSON remains available for people
 	// inspecting a Thing's exact shape. They are independent so either one (or
@@ -316,7 +344,10 @@ function GenericThingPage() {
 
 	React.useEffect(() => {
 		const controller = new AbortController();
-		setLoadState(seedState(requestKey));
+		// Restore/merge refetches in place. Keep the last projection visible,
+		// including large Things that intentionally exceed the local cache cap.
+		setLoadState(current => current.key === requestKey && current.data
+			? { ...current, loading: true, error: null } : seedState(requestKey));
 
 		if (diagnosticRoute && !currentUser?.isAdmin) {
 			setLoadState({
@@ -359,16 +390,17 @@ function GenericThingPage() {
 			})
 			.catch((cause) => {
 				if (controller.signal.aborted || (cause instanceof Error && cause.name === 'AbortError')) return;
-				setLoadState({
+				if (cacheKey && !canKeepThingAfterReadFailure(cause)) clearLocalCache(cacheKey);
+				setLoadState(current => ({
 					key: requestKey,
 					loading: false,
-					data: null,
+					data: !diagnosticRoute && current.key === requestKey && current.data?.kind === 'thing' && canKeepThingAfterReadFailure(cause) ? current.data : null,
 					error: apiErrorMessage(cause, 'This Thing is missing, private, or no longer available.')
-				});
+				}));
 			});
 
 		return () => controller.abort();
-	}, [cacheKey, currentUser?.isAdmin, diagnosticRoute, id, linkKey, loadDiagnostic, loadThing, requestKey, seedState]);
+	}, [cacheKey, currentUser?.isAdmin, diagnosticRoute, historyRefresh, id, linkKey, loadDiagnostic, loadThing, requestKey, seedState]);
 
 	const diagnostic = visibleState.data?.kind === 'diagnostic' ? visibleState.data.diagnostic : null;
 	const thing = visibleState.data?.kind === 'thing' ? visibleState.data.thing : null;
@@ -832,7 +864,13 @@ function GenericThingPage() {
 						{thing && <ThingTransferControls id={thing.id} linkKey={linkKey} />}
 					</Box>
 					{thing && !diagnosticRoute ? <PersistedThingMenu id={thing.id} initialThing={{ id: thing.id, thingtime: kinds,
-						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} /> : null}
+						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} onChanged={refreshThing}
+						onRenamed={title => setLoadState(current => {
+							if (current.key !== requestKey || current.data?.kind !== 'thing' || current.data.thing.id !== id) return current;
+							const previous = current.data.thing;
+							return { ...current, data: { ...current.data, thing: { ...previous,
+								crystal: { ...previous.crystal, ...thingRenameCrystal({ thingtime: kindsOf(previous), crystal: previous.crystal || {} }, title) } } } };
+						})} /> : null}
 					<Button
 						as={Link}
 						to={diagnosticRoute ? '/migrations' : back.to}
@@ -855,11 +893,12 @@ function GenericThingPage() {
 				{!loading && error ? (
 					<Box {...CARD_STYLES} p={{ base: 5, md: 6 }}>
 						<Heading as="h2" fontSize="lg">
-							This Thing cannot be opened
+							{thing ? 'Could not refresh this Thing' : 'This Thing cannot be opened'}
 						</Heading>
 						<Text mt={2} color={MUTED} fontSize="sm">
 							{error}
 						</Text>
+						<Button mt={3} size="sm" variant="outline" onClick={refreshThing}>Try again</Button>
 					</Box>
 				) : null}
 
@@ -1029,7 +1068,9 @@ function GenericThingPage() {
 						) : null}
 
 						{thing && isThingOwner && ['scheduled-task', 'reminder'].includes(thing.crystal?.type) ? <ScheduledTaskPanel key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} /> : null}
-						{thing && (!post || !sections.preview) ? <ThingComments collectionControls thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
+						{thing && (!post || !sections.preview) ? dataPlane?.startsWith('custom-')
+							? <Text color={MUTED} fontSize="sm">Comments are available in your home database.</Text>
+							: <ThingComments collectionControls thingId={thing.id} linkKey={linkKey} initialPost={visibleState.data?.kind === 'thing' ? visibleState.data.discussion || visibleState.data.post : null} /> : null}
 
 						{diagnostic?.revealables.length ? (
 							<SensitiveThingReveal
