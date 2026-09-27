@@ -1,10 +1,10 @@
 # PR #954 — Public schemas, uploads and Lopu instructions
 
-Branch: `codex/post-schemas-attachments` · base: `develop`
+Branch: `codex/post-schemas-attachments` · base: `main`
 
 ## Behavior
 
-All 95 built-in registry definitions, including root and collection shapes, are
+All 100 built-in registry definitions, including root and collection shapes, are
 projected into ordinary public `thingtime: ['schema']` Things owned by `system`.
 The reserved `schema-<id>` identity prevents squatting. The same projection and
 normal Schema validator power API copies, the schema browser and Lopu. Copies
@@ -66,7 +66,7 @@ invoke an AI prompt. Tool authorization and Confirm cards are server-enforced.
   same 91 TypeScript diagnostics, with no added diagnostic signatures. The
   repository's recorded ratchet baseline is 89; it was not increased.
 - Isolated loopback MongoDB replica set and local object-storage adapter:
-  all 95 system Schema Things read anonymously; real PNG upload into a chat;
+  all 100 system Schema Things read anonymously; real PNG upload into a chat;
   Lopu copies it, files it, assigns its URL to a Product, returns the same file
   on retry, then reads byte-identical content after deleting the original chat.
   Anonymous content access fails. No production data or live S3 was used.
@@ -97,11 +97,24 @@ before reconciling accounting. Running the raw seed outside that fence is
 refused once ledgers are live. No new secret/environment setting is required;
 README documents fork-safe admin, storage and isolated acceptance setup.
 
-This PR targets develop. Production deployment, migration execution and a
-main promotion have not been performed. Local storage tests do not establish
+This PR targets main following explicit user approval on 2026-09-27. Production migration execution is a separate rollout step; it is not part of merge validation. Local storage tests do not establish
 live S3 behavior or model-provider inference. Existing protected-kind write
 paths remain required even when their public shape has been copied.
 
 Graph maintenance: the local semantic proxy health endpoint timed out. The
 required structural/code graph is refreshed through the repository wrapper;
 changed Markdown is documented here but not newly semantically indexed.
+
+## Main integration review and QA — 2026-09-27
+
+Rebased the feature commits onto main, then integrated the subsequent XPath merge (`c25edbf3a`). This excludes unrelated develop-only work. Current Ask/Full controls and omitted-page context fences remain intact; chat clients negotiate 1.17.0. All 100 current built-in schemas, including Timeline kinds, are pinned and validated.
+
+Review found a private attachment retry race: a failed request could delete the same file another request had just finalized. Rollback now only claims unfinished private uploads, using the canonical atomic state claim; ready replays accept a transition after start, and rejected start metadata cannot delete a previous request's file. Finalization commits an independent owner-private file after source authorization; public draft copies still enforce their post-finalization revocation check. Five new regressions cover these boundaries.
+
+- Full `test:unit`: **4,114 passed, 8 existing skips, 0 failures** across 77 test commands (4,122 tests).
+- Live isolated HTTP API suite: **902/902 passed**, including mutations and generated endpoint documentation tests. Read-only subset: 803/803.
+- Live settings API: public base, private account isolation, enabled/disabled preservation, admin-only edits, anonymous/foreign-account refusals, and concurrent-save 409 all pass. Test settings restored afterward.
+- Repeated real-byte acceptance: all 100 public Schema Things readable anonymously; chat attachment saved independently, filed, assigned to Product, idempotently replayed, and byte-identical after deleting the original chat. Anonymous bytes denied. Uses actual per-chat Full policy, re-read before each tool.
+- Production build and `verify:vercel-output` pass. iOS XcodeGen + simulator build passes again. No live provider calls or live S3 writes are claimed.
+- Fresh TypeScript comparison against a clean archive of current main: **91 diagnostics on each, no added signatures**. Missing local Timeline test dependencies were installed before the comparison; the baseline was not raised.
+- Desktop/390px interactive evidence from the feature implementation remains listed above. The repeat browser pass hit the desktop browser's policy on its stale `data:` connection-error page; requested that the user reopen the HTTP app. API/build verification continued without bypassing that browser restriction.
