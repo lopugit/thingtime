@@ -69,6 +69,12 @@ version preview/apply commands, exact version reads, and named branch create/pus
 `app/api/utils/timeline`. `test:timeline` and its opt-in replica-set integration
 cover the contract. See [Unified Timeline](../unified-timeline.md).
 
+Lopu reply 1.19.0 adds read-only `inspect_action` in `chatTools.ts`, reusing
+`actions/execute.ts` resolution and `actions/actionInputs.ts` validation.
+`test:lopu` covers confirmation ordering, revoked reads and incomplete contracts;
+`test:lopu-chat-streaming` covers provider transport. `workspaceAppComposition.ts`
+authors typed save inputs from the canonical service fields (`test:schemas`).
+
 Lopu reply 1.18.0 adds bounded, lossless crystal inspection to `get_thing`.
 `app/api/utils/lopu/thingInspection.ts` walks only the authorized public crystal;
 JSON Pointer, revision and offset select exact pages without relaxing ACLs.

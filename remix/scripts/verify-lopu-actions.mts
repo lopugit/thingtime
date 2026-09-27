@@ -30,11 +30,11 @@ async function saveAction(crystal: any) {
   const saved = await api('/api/v1/things', { thingtime: ['action'], crystal, acl: ['tt:user'] });
   return saved.thing.id;
 }
-const save = await saveAction({ name: 'Save equipment', actionKey: `qa-save-${suffix}`, runtime: 'browser', inputs: [{ name: 'title', type: 'string', required: true }], capabilities: [{ capability: 'http.request', endpoints: ['POST /api/v1/builder/workspaces'] }], steps: [
-  { op: 'http.request', method: 'POST', path: '/api/v1/builder/workspaces', feature: 'api.builder-workspaces', minimumVersion: '1.0.1', body: { operation: 'save', rootId, id: equipmentId, kind: 'equipment', values: { title: '$input.title', category: 'Battery' } } },
+const save = await saveAction({ name: 'Save equipment', actionKey: `qa-save-${suffix}`, runtime: 'browser', inputs: [{ name: 'title', type: 'string', required: true }, { name: 'category', type: 'enum', values: ['Tool', 'Battery'], required: true }], capabilities: [{ capability: 'http.request', endpoints: ['POST /api/v1/builder/workspaces'] }], steps: [
+  { op: 'http.request', method: 'POST', path: '/api/v1/builder/workspaces', feature: 'api.builder-workspaces', minimumVersion: '1.0.1', body: { operation: 'save', rootId, id: equipmentId, kind: 'equipment', values: { title: '$input.title', category: '$input.category' } } },
   { op: 'return', value: '$step.1' }
 ] });
-const outer = await saveAction({ name: 'Port equipment', actionKey: `qa-port-${suffix}`, runtime: 'browser', inputs: [{ name: 'title', type: 'string', required: true }], capabilities: [{ capability: 'actions.invoke', actions: [save] }], steps: [ { op: 'actions.invoke', action: save, inputs: { title: '$input.title' } }, { op: 'return', value: '$step.1' } ] });
+const outer = await saveAction({ name: 'Port equipment', actionKey: `qa-port-${suffix}`, runtime: 'browser', inputs: [{ name: 'title', type: 'string', required: true }, { name: 'category', type: 'enum', values: ['Tool', 'Battery'], required: true }], capabilities: [{ capability: 'actions.invoke', actions: [save] }], steps: [ { op: 'actions.invoke', action: save, inputs: { title: '$input.title', category: '$input.category' } }, { op: 'return', value: '$step.1' } ] });
 const chat = await createLopuChat(viewer.id, { title: 'Action access QA' });
 assert.equal(chat.ok, true);
 if (!chat.ok) throw new Error(chat.error);
@@ -47,7 +47,22 @@ const readAccessMode = async () => {
 };
 const events: any[] = [];
 const context = (approved: any[] = []) => createLopuToolContext(viewer, {}, event => events.push(event), { chatId, readAccessMode, resolveActionActor: actor, approved, mint: action => mintLopuConfirmation({ userId: viewer.id, chatId, action }) });
-const call = { id: 'port', name: 'run_action', input: { action: outer, inputs: { title: '56V battery' } } };
+const call = { id: 'port', name: 'run_action', input: { action: outer, inputs: { title: '56V battery', category: 'Battery' } } };
+const inspect = await runLopuTool({ id: 'inspect', name: 'inspect_action', input: { action: `qa-port-${suffix}`, inputs: { title: '56V battery', category: 'battery' } } }, context());
+assert.equal(inspect.ok, true, JSON.stringify(inspect));
+assert.equal((inspect.data as any).id, outer, 'owner-scoped key resolves to canonical id');
+assert.equal((inspect.data as any).runtime, 'browser');
+assert.deepEqual((inspect.data as any).inputs.find((field: any) => field.name === 'category').values, ['Tool', 'Battery']);
+assert.equal((inspect.data as any).validation.ok, false);
+assert.deepEqual(events, [], 'inspection creates no approval card');
+const wrongInput = await runLopuTool({ ...call, input: { ...call.input, inputs: { title: '56V battery', category: 'battery' } } }, context());
+assert.equal(wrongInput.ok, false);
+assert.equal(wrongInput.needsConfirmation, undefined);
+assert.deepEqual(events, [], 'invalid run inputs create no approval card');
+const foreignContext = createLopuToolContext({ id: randomUUID(), username: 'no-access' }, {}, () => {});
+const hidden = await runLopuTool({ id: 'hidden', name: 'inspect_action', input: { action: outer } }, foreignContext);
+assert.equal(hidden.ok, false, 'a private Action cannot be inspected by another viewer');
+assert.equal(hidden.data, undefined);
 assert.equal((await runLopuTool(call, context()) as any).needsConfirmation, true);
 assert.equal((await api(`/api/v1/builder/workspaces?rootId=${rootId}`)).records.filter((r: any) => r.kind === 'equipment').length, 0);
 const card = events.find(event => event.type === 'confirm');
@@ -68,6 +83,8 @@ const read = await saveAction({ name: 'Read Thing', actionKey: `qa-read-${suffix
 const readResult = await runLopuTool({ id: 'read', name: 'run_action', input: { action: read } }, context());
 assert.equal(readResult.ok, true, JSON.stringify(readResult));
 const server = await saveAction({ name: 'Server calculation', actionKey: `qa-server-${suffix}`, inputs: [], capabilities: [], steps: [{ op: 'return', value: { calculated: 42 } }] });
+const serverContract = await runLopuTool({ id: 'server-inspect', name: 'inspect_action', input: { action: server } }, context());
+assert.equal((serverContract.data as any).runtime, 'server');
 const serverResult = await runLopuTool({ id: 'server', name: 'run_action', input: { action: server } }, context());
 assert.equal(serverResult.ok, true, JSON.stringify(serverResult));
 assert.equal((serverResult as any).data.result.calculated, 42);
@@ -79,5 +96,5 @@ assert.equal(staleReply.status, 400, 'reply bodies cannot change existing chat p
 await api('/api/v1/auth/logout', {});
 const revoked = await runLopuTool(call, context());
 assert.equal(revoked.ok, false);
-console.log('PASS: real registration, nested browser Actions, signed Ask approval, persisted Full/Ask changes, stale reply refusal, workspace upsert/readback, Things API, server Action, revoked session. Disposable replica contains only synthetic fixtures.');
+console.log('PASS: real registration, Action inspection and candidate validation, private inspection refusal, invalid-input confirmation ordering, nested browser Actions, signed Ask approval, persisted Full/Ask changes, stale reply refusal, workspace upsert/readback, Things API, server Action, revoked session. Disposable replica contains only synthetic fixtures.');
 process.exit(0);

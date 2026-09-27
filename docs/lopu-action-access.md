@@ -47,6 +47,25 @@ writes, waits for the latest save before sending, tracks the last confirmed
 value for rollback, and fences old-account completions. Failed saves prevent
 sending until the selection is successfully saved again.
 
+## Discovering inputs and recovering from errors
+
+`inspect_action { action, inputs? }` reads the authorized saved program without
+running it. It returns the runtime, typed inputs, exact enum choices, defaults
+and direct effects. Optional `inputs` checks candidate values against declared
+types. This is not a dry run of child Actions, downstream APIs or budgets and
+does not grant permission. Large contracts set `inputsComplete: false` and link
+to lossless `get_thing` pages at `/inputs`.
+
+Ask mode rejects invalid declared inputs before creating a confirmation card.
+New workspace app definitions describe select choices, numeric bounds and
+record references directly in their saved Action inputs. Existing installed
+programs are preserved; no user-owned Actions or records are migrated.
+
+Lopu's working guidance discovers exact IDs, reuses inspected contracts and
+responds to the specific failure. A failed multi-step Action may already have
+written data; its tool result retains the run ID when available and calls for
+state readback before retrying with the original operation identity.
+
 ## Contracts and verification
 
 - `api.lopu-chats` **1.6.0**: access mode on create/list.
