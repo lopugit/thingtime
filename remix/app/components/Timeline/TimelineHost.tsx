@@ -1,8 +1,10 @@
+import { historyStorageForThing, timelineFolderHref, type TimelineStorage } from '../../timeline/storageScope';
+import { TimelineStorageProvider, useTimelineSession, useSelectedTimelineSession } from '../../timeline/TimelineProvider';
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../timeline/snapshotParts';
 import React from 'react';
 import { TimelineBranches } from './TimelineBranches';
 import { Box, Button, Flex, Heading, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Text } from '@chakra-ui/react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '../Nav/Drawer/useDrawer';
 import { PageHeader, PageShell } from '../Layout/PageShell';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -12,8 +14,8 @@ import { timelineChanges, timelineChangeLabel, timelineValueLabel } from '../../
 import { TimelineVersionActions } from './TimelineVersionActions';
 
 const OPEN_HISTORY = 'thingtime:open-history';
-export function openThingHistory(thingId: string) {
-	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId } }));
+export function openThingHistory(thingId: string, thingtime?: readonly string[]) {
+	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId, storage: historyStorageForThing(thingtime) } }));
 }
 
 const date = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -32,6 +34,9 @@ const thingTitle = (event: TimelineEvent) => {
 
 function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId?: string }) {
 	const timeline = useThingTimeline(thingId);
+	const session = useTimelineSession(); const selectedSession = useSelectedTimelineSession();
+	const homeHistory = session.connection?.scope.dataPlane === 'home';
+	const differentSource = homeHistory && selectedSession.connection?.scope.dataPlane !== 'home';
 	const navigate = useNavigate();
 	const [selection, setSelection] = React.useState<{ identity: string; event: TimelineEvent } | null>(null);
 	const selected = selection?.identity === timeline.identity ? selection.event : null;
@@ -49,8 +54,9 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 			<Text flex="1" fontSize="sm" color="var(--tt-muted)">{pending ? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting to sync` : timeline.error ? 'Could not refresh history' : timeline.ready ? 'Saved to your account' : 'Opening history…'}</Text>
 			<Button size="sm" variant="ghost" onClick={() => setShowDrafts(value => !value)} aria-pressed={showDrafts}>{showDrafts ? 'Hide drafts' : 'Show drafts'}</Button>
 			<Button size="sm" variant="outline" onClick={() => void timeline.refresh()}>Refresh</Button>
-			{thingId && timeline.folderId ? <Button size="sm" variant="ghost" onClick={() => navigate(`/things?folder=${encodeURIComponent(timeline.folderId!)}`)}>Open Timeline</Button> : null}
+			{thingId && timeline.folderId ? <Button size="sm" variant="ghost" onClick={() => navigate(timelineFolderHref(timeline.folderId!, homeHistory ? 'home' : 'selected'))}>Open Timeline</Button> : null}
 		</Flex>
+		{differentSource ? <Text fontSize="sm" color="var(--tt-muted)">Home account history · your selected database is unchanged.</Text> : null}
 		{timeline.error ? <Text role="status" fontSize="sm" color="var(--tt-muted)">{timeline.error} {timeline.rows.length ? 'Your cached changes are still here.' : ''}</Text> : null}
 		{thingId ? <TimelineBranches key={timeline.identity} thingId={thingId} selected={selected} onSelect={setSelected} /> : null}
 		{timeline.ready && !events.length ? <Box p={6} borderWidth="1px" borderRadius="xl" borderColor="var(--tt-border)"><Heading size="sm">No recorded changes yet</Heading><Text mt={2} color="var(--tt-muted)">Changes recorded from now on appear here. Older activity cannot be reconstructed automatically.</Text></Box> : null}
@@ -74,37 +80,44 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 				</Box>)}
 				<Button size="sm" variant="ghost" mb={3} onClick={() => setShowData(value => !value)} aria-expanded={showData}>{showData ? 'Hide data' : 'View data'}</Button>
 				{showData ? (['before', 'after'] as const).map(side => <Box key={side} mb={4}><Text fontWeight="600" fontSize="sm" mb={2}>{side === 'before' ? 'Before' : 'After'}</Text><Box as="pre" fontSize="xs" whiteSpace="pre-wrap" overflowWrap="anywhere" maxH="280px" overflow="auto" p={3} borderRadius="md" bg="var(--tt-surface)">{preview(selected[side])}</Box></Box>) : null}
-				<Button size="sm" variant="outline" onClick={() => navigate(`/thing/${encodeURIComponent(selected.thingId)}`)}>Open Thing</Button>
+				<Button size="sm" variant="outline" isDisabled={differentSource} onClick={() => navigate(`/thing/${encodeURIComponent(selected.thingId)}`)}>Open Thing</Button>
+				{differentSource ? <Text fontSize="xs" color="var(--tt-muted)" mt={2}>Switch to your home database to open this Thing. You can browse and compare its history here.</Text> : null}
 				<TimelineVersionActions key={`${timeline.identity}:${selected.id}`} event={selected} onApplied={() => void timeline.refresh()} />
 			</Box> : null}
 		</Flex>
 	</Flex>;
 }
 
-export function TimelineLibrary({ folderId }: { folderId: string }) {
+export function TimelineLibrary({ folderId, storage = 'selected' }: { folderId: string; storage?: TimelineStorage }) {
 	const navigate = useNavigate();
-	const user = useCurrentUser();
+	const user = useCurrentUser(); const selected = useSelectedTimelineSession();
 	return <PageShell width={1100} columnProps={{ pt: 4 }}>
 		<Button alignSelf="flex-start" variant="ghost" size="sm" onClick={() => navigate('/things')}>← Things</Button>
 		<PageHeader eyebrow="Thingtime · Things" title="Timeline" variant="ink" subtitle="Your changes across Thingtime, saved in one place." />
-		<TimelinePanel key={`${user?.id}:${folderId}`} thingId={null} folderId={folderId} />
+		{selected.connection?.scope.dataPlane !== 'home' ? <Flex gap={2} wrap="wrap" role="group" aria-label="History location">
+			<Button size="sm" variant={storage === 'home' ? 'solid' : 'outline'} aria-pressed={storage === 'home'} onClick={() => navigate(timelineFolderHref(folderId, 'home'))}>Home account</Button>
+			<Button size="sm" variant={storage === 'selected' ? 'solid' : 'outline'} aria-pressed={storage === 'selected'} onClick={() => navigate(timelineFolderHref(folderId, 'selected'))}>Selected database</Button>
+		</Flex> : null}
+		<TimelineStorageProvider storage={storage}><TimelinePanel key={`${user?.id}:${folderId}:${storage}`} thingId={null} folderId={folderId} /></TimelineStorageProvider>
 	</PageShell>;
 }
 
 export function TimelineHost() {
-	const [thingId, setThingId] = React.useState<string | null>(null);
+	const [target, setTarget] = React.useState<{ thingId: string; storage: TimelineStorage } | null>(null);
 	const user = useCurrentUser();
+	const location = useLocation();
+	React.useEffect(() => setTarget(null), [location.key]);
 	React.useEffect(() => {
 		const open = (event: Event) => {
 			const id = (event as CustomEvent).detail?.thingId;
-			if (typeof id === 'string' && id.length > 0 && id.length <= 200) setThingId(id);
+			if (typeof id === 'string' && id.length > 0 && id.length <= 200) setTarget({ thingId: id, storage: (event as CustomEvent).detail?.storage === 'home' ? 'home' : 'selected' });
 		};
 		window.addEventListener(OPEN_HISTORY, open);
 		return () => window.removeEventListener(OPEN_HISTORY, open);
 	}, []);
-	return <Modal isOpen={thingId !== null} onClose={() => setThingId(null)} size="5xl" scrollBehavior="inside" isCentered>
+	return <Modal isOpen={target !== null} onClose={() => setTarget(null)} size="5xl" scrollBehavior="inside" isCentered>
 		<ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} /><ModalContent maxW="min(1100px, calc(100vw - 24px))" maxH="calc(100dvh - 24px)" containerProps={{ zIndex: DRAWER_MODAL_Z }}>
-			<ModalHeader>History</ModalHeader><ModalCloseButton /><ModalBody pb={6} minW={0}>{thingId ? <TimelinePanel key={`${user?.id}:${thingId}`} thingId={thingId} /> : null}</ModalBody>
+			<ModalHeader>History</ModalHeader><ModalCloseButton /><ModalBody pb={6} minW={0}>{target ? <TimelineStorageProvider storage={target.storage}><TimelinePanel key={`${user?.id}:${target.thingId}:${target.storage}`} thingId={target.thingId} /></TimelineStorageProvider> : null}</ModalBody>
 		</ModalContent>
 	</Modal>;
 }

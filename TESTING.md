@@ -2,6 +2,16 @@
 
 ## Unified Timeline
 
+- [ ] With two disposable databases, select the custom endpoint in the browser.
+  Open a saved theme's History on `/themes`: home events appear without changing
+  the selection. Open Timeline: the modal closes and Home account stays selected.
+  Toggle Selected database: only that database's events appear, even when event
+  and Thing ids match. Test desktop and 390px, reload with Timeline requests
+  blocked, and recover without losing each scope's cached history. Switching
+  accounts or an authorization refusal must hide private cached content.
+  Ordinary Open Thing navigation is disabled for cross-source home history;
+  it must never open a same-id Thing from the wrong database. Run the guarded
+  `test:timeline:home-scope` for real branch/restore and concurrency isolation.
 - [ ] Create a saved theme, rename/move it in Things, then edit tokens and
   visibility through its dedicated theme API. Shared History preserves every
   exact parent and approved before/after token value; identical saves add no

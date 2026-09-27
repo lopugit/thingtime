@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createTimelineHandlers } from './_timeline.tsx';
 import { entryFixture, eventFixture } from '../../../../timeline/testFixtures.ts';
+import { runWithMongoEndpoint, getActiveMongoEndpoint } from '../../../../api/utils/mongodb/endpoint.ts';
+import { timelineDiscovery, timelineDataPlane } from '../../../../api/utils/timeline/service.ts';
 
 function setup() {
 	const calls: any[] = [];
@@ -94,4 +96,38 @@ test('invalid cursors, missing data source, and excessive page sizes do not quer
 	assert.equal((await h.handlers.loader({ request: request('GET', 'ownerId=user-1&thingId=page-1') })).status, 400);
 	assert.equal((await h.handlers.action({ request: request('POST', 'ownerId=user-1') })).status, 400);
 	assert.equal(h.calls.filter(call => ['page', 'push'].includes(call[0])).length, 0);
+});
+
+test('explicit home requests leave custom selection only within their async operation and keep every authorization fence', async () => {
+	const previous = process.env.MONGODB_CONNECTION_STRING;
+	process.env.MONGODB_CONNECTION_STRING = 'mongodb://home.test/thingtime';
+	try {
+		const selection = { url: 'mongodb://custom.test/other', savedId: null };
+		let owner: string | null = 'user-1'; const reads: string[] = []; const writes: string[] = [];
+		const handlers = createTimelineHandlers({ user: async () => owner ? ({ id: owner } as any) : null,
+			limit: async () => ({ allowed: true } as any), discovery: timelineDiscovery,
+			page: async () => { await Promise.resolve(); reads.push(timelineDataPlane()); return { entries: [], nextBefore: null, nextAfter: null }; },
+			push: async (_owner, event) => { await Promise.resolve(); writes.push(timelineDataPlane()); return entryFixture(event); }
+		});
+		await runWithMongoEndpoint(selection, async () => {
+			const custom = timelineDataPlane(); assert.match(custom, /^custom-/);
+			const home = 'ownerId=user-1&dataPlane=home&thingId=page-1&storage=home';
+			const [homeRead, selectedRead] = await Promise.all([
+				handlers.loader({ request: request('GET', home) }),
+				handlers.loader({ request: request('GET', `ownerId=user-1&dataPlane=${custom}&thingId=page-1`) })
+			]);
+			assert.equal(homeRead.status, 200); assert.equal(selectedRead.status, 200);
+			assert.deepEqual(new Set(reads), new Set(['home', custom]));
+			assert.equal(getActiveMongoEndpoint(), selection);
+			assert.equal((await handlers.action({ request: request('POST', home) })).status, 200);
+			assert.deepEqual(writes, ['home']); assert.equal(timelineDataPlane(), custom);
+			for (const query of [home.replace('&storage=home', ''), home.replace('dataPlane=home', `dataPlane=${custom}`)]) assert.equal((await handlers.loader({ request: request('GET', query) })).status, 409);
+			for (const query of [home + '&storage=selected', home.replace('storage=home', 'storage=other')]) assert.equal((await handlers.loader({ request: request('GET', query) })).status, 400);
+			owner = 'other'; assert.equal((await handlers.action({ request: request('POST', home) })).status, 409);
+			owner = null; assert.equal((await handlers.loader({ request: request('GET', home) })).status, 401);
+			assert.equal(reads.length, 2); assert.equal(writes.length, 1);
+		});
+		assert.equal(getActiveMongoEndpoint(), null);
+		assert.equal(runWithMongoEndpoint({ url: process.env.MONGODB_CONNECTION_STRING, savedId: null }, timelineDataPlane), 'home');
+	} finally { if (previous === undefined) delete process.env.MONGODB_CONNECTION_STRING; else process.env.MONGODB_CONNECTION_STRING = previous; }
 });
