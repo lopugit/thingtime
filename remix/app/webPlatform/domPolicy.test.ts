@@ -1,3 +1,4 @@
+import { XPATH_CONSTRUCTORS } from './xpathPolicy';
 import { ANIMATION_CONSTRUCTORS, ANIMATION_STATIC, ANIMATION_GLOBALS } from './animationPolicy';
 import { RANGE_CONSTRUCTORS } from './rangePolicy';
 import { OBSERVER_CONSTRUCTORS } from './observerPolicy';
@@ -44,6 +45,7 @@ test('every catalogue DOM request names a member the receiver policy registers',
 			assert.ok(
 				[
 					'Path2D',
+					...Object.keys(XPATH_CONSTRUCTORS),
 					'ImageData',
 					...Object.keys(RANGE_CONSTRUCTORS),
 					...Object.keys(ANIMATION_CONSTRUCTORS),
