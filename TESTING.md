@@ -2,6 +2,15 @@
 
 ## Unified Timeline
 
+- [ ] On the disposable replica, set a synthetic user's allowance to its exact
+  current usage through the normal admin API. Growing edits, retained shrinking
+  edits and restore application return 507 without changing content, timestamp,
+  head, events or storage bytes. History and restore previews still work. A
+  downgrade below usage returns 409 and preserves the assignment/data. At the
+  ceiling, folder moves and deletion drains work; deleting the Thing retains its
+  exact before-version and keeps accounted bytes. Retrying deletion adds no
+  duplicate event or charge. The error must not promise that deleting a Thing
+  frees retained history. Run `test:timeline:quota` using README's isolated setup.
 - [ ] Delete a folder with more than 100 children and a nested subfolder.
   Direct children move to its parent, descendants stay under their subfolder,
   and every moved item has exactly one relational event in the deletion's

@@ -38,6 +38,32 @@ suite uses `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> npm --prefix
 remix run test:timeline:integration`. It refuses any database except the disposable
 local `timeline-rs` replica set at `127.0.0.1:20337`; it creates fixtures through
 the app API. Never use a shared or production database for these checks.
+
+For quota acceptance, use that same disposable replica and a dedicated local
+dev-server process. Run the following once with a new private fixture path:
+
+```sh
+TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> \
+TIMELINE_TEST_ADMIN_FIXTURE=/tmp/timeline-quota-<unique-run>.json \
+npm --prefix remix run test:timeline:quota -- --prepare-admin
+```
+
+This registers an ordinary synthetic account, saves its generated credentials
+in a new mode-0600 file, and prints only its username. Restart only this test
+server with `ADMIN_USERNAMES=<printed-synthetic-username>` in its process
+environment; signup deliberately refuses already-allowlisted usernames. Run
+the same command without `--prepare-admin`. It authenticates that exact fixture,
+creates a separate regular account and assigns its test allowance through the
+normal admin API. Do not add the synthetic username to shared env files, use
+real accounts, or print/commit the credential file. Remove the test process
+override and fixture when finished. The test checks exact-ceiling refusals,
+folder organization/deletion, retained-byte accounting and the existing 409
+refusal to downgrade below usage. It does not manufacture an over-limit ledger.
+
+Retained history counts toward account storage. Deleting a recorded Thing keeps
+its history and therefore does not by itself free those bytes. At the limit,
+history reads and previews remain available; saving another retained version
+needs enough storage. Retention controls are still in the delivery ledger.
 See [the implementation contract and open delivery gates](docs/unified-timeline.md).
 
 ### Public schemas, uploaded files and Lopu instructions
