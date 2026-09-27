@@ -74,6 +74,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   uploads and keep each database's pending edits/cache separate. Explicit scoped
   API routing covers branches and restore with existing account/source fences;
   Timeline 1.6.0. Opening Timeline also closes the History modal.
+  [PR #971 details](../PRs/971-timeline-home-scope-keep-home-history-accessible-across-database-selections.md).
 
 - 2026-09-27 — **Codex (AI)**: Lopu continuations recover completed tool results
   from their exact private background transcript, so a checkpoint after an
