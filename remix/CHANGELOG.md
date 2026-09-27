@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: Fixed a Timeline null-connection crash on
+  signed-out pages and sign-out transitions. Require a viewer and connection
+  before checking account/database identity; preserve same-viewer cached
+  history and all scope fences. Added a regression and desktop/mobile
+  sign-in/sign-out acceptance.
+
 - 2026-09-28 — **Codex (AI)**: History can open its Thing in the home database
   through an explicit selection change. Links pin account/database identity;
   Thing-page caches and cross-tab invalidation keep same-id records separate.

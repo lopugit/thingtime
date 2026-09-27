@@ -90,6 +90,10 @@
   draft. Pending work survives; the released draft does not reappear. Revisions
   and links are independent records. Missing links fail visibly without deleting
   pending work; cache eviction removes only that cached event's local links.
+- [ ] Open `/login` and a public page while signed out, reload, sign in,
+  open History, then sign out again. The page must render without the session
+  recovery boundary or a null Timeline connection crash. Repeat at 390px.
+  A pending discovery or account/database switch never exposes another scope.
 - [ ] Open History from Things, Builder and a Component definition. Changes
   made through the API appear without opening an editor; older pages load on
   demand. The private Timeline folder never offers rename/move/share/delete.

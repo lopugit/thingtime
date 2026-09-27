@@ -499,3 +499,25 @@ modules. The root-data suite also exercises the real dispatcher/proxy with a
 mocked upstream: forwarded root identity, cookies, selection, GET/PATCH bodies,
 matching success, stale-source refusal and unchanged actor/vault restrictions.
 The complete universal-history and version-control ledger remains open.
+
+
+## Signed-out connection guard — 2026-09-28
+
+The History-to-Thing identity check could compare two absent owner ids as equal
+and then read a null connection while rendering the home Timeline session.
+`timelineConnectionForViewer` now requires both the viewer and connection before
+checking account and database identity. Signed-out pages render normally; a
+cached connection for the same signed-in viewer still paints immediately during
+discovery, and a stale account/database connection remains hidden.
+
+The focused regression covers missing connection, absent viewer, sign-out,
+account change, data-plane change and valid cached reuse. This correction changes
+no local/remote event schema, queue, API contract or storage behavior.
+
+
+Browser acceptance reproduced the original null-scope exception after logging
+out. The corrected local app then passed login → private Timeline → logout →
+reload, with working forms on desktop and a 390px viewport (375px content width,
+375px scroll width). Screenshots: [desktop login](../PRs/assets/timeline-signed-out-guard/login-desktop.png),
+[mobile login](../PRs/assets/timeline-signed-out-guard/login-mobile.png),
+[private History](../PRs/assets/timeline-signed-out-guard/history-desktop.png).
