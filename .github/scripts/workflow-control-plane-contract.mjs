@@ -801,10 +801,31 @@ export function assertControlPlaneContract() {
     /- name: Confirm this push still owns the analysis\n\s+id: ownership\n\s+if: github\.event_name == 'push' && needs\.scope\.outputs\.analysis_ref == ''/u,
     "only a branch-ref push re-checks ownership; PR and centrally dispatched runs are untouched",
   );
+  // Both ownership gates must be re-checked on the upload itself, in order.
+  // `preinit` and `ownership` are each skipped on non-push events, and a
+  // skipped step's output is the empty string, which is `!= 'false'` -- so the
+  // pair still analyzes every other event while either one alone can suppress
+  // an adopted branch upload. Pin the two clauses as properties rather than
+  // pinning the whole condition verbatim, so adding a third ownership gate
+  // does not silently throw here and skip every assertion below it.
+  const triggeringRevisionUpload =
+    /- name: Analyze the triggering revision\n\s+if: ([^\n]+)\n/u.exec(
+      codeql,
+    )?.[1] ?? "";
   assert.match(
-    codeql,
-    /- name: Analyze the triggering revision\n\s+if: needs\.scope\.outputs\.analysis_ref == '' && steps\.ownership\.outputs\.upload != 'false'/u,
-    "the re-check suppresses only an adopted branch upload, and its skipped empty output still analyzes every other event",
+    triggeringRevisionUpload,
+    /needs\.scope\.outputs\.analysis_ref == ''/u,
+    "the branch-ref upload stays scoped to runs without a centrally dispatched analysis ref",
+  );
+  assert.match(
+    triggeringRevisionUpload,
+    /steps\.preinit\.outputs\.own != 'false'/u,
+    "a push disowned before database init does not upload the branch snapshot it declined to register",
+  );
+  assert.match(
+    triggeringRevisionUpload,
+    /steps\.ownership\.outputs\.upload != 'false'/u,
+    "the post-init re-check suppresses an adopted branch upload, and its skipped empty output still analyzes every other event",
   );
   assert.match(
     codeql,
@@ -842,8 +863,13 @@ export function assertControlPlaneContract() {
   // removed, and either mistake reintroduces a lone first uploader.
   assert.match(
     siblingStartBarrier,
-    /if: strategy\.job-total > 1\n[\s\S]*?EXPECTED_LEGS: \$\{\{ strategy\.job-total \}\}/u,
-    "the barrier is gated on, and counts, the live matrix size, so adding or removing a language cannot leave it waiting for the wrong number of legs",
+    /if: [^\n]*strategy\.job-total > 1/u,
+    "the barrier is gated on the live matrix size, so a single-language matrix cannot leave it waiting for a sibling that does not exist",
+  );
+  assert.match(
+    siblingStartBarrier,
+    /EXPECTED_LEGS: \$\{\{ strategy\.job-total \}\}/u,
+    "the barrier counts the live matrix size, so adding or removing a language cannot leave it waiting for the wrong number of legs",
   );
   // "Started" is the whole point: #662 passed while its js-ts analysis was
   // still running, so the sibling's presence -- not its result -- is what the
