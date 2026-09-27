@@ -476,6 +476,7 @@ export type LopuChatViewVariant = 'page' | 'pane' | 'window';
 
 export type LopuChatViewProps = {
 	externalSendRef?: React.MutableRefObject<((text: string) => Promise<SendLopuResult | undefined>) | null>;
+	externalSubmitDraftRef?: React.MutableRefObject<(() => void) | null>;
 	externalDictationRef?: React.MutableRefObject<((transcript: ComposerTranscript) => void) | null>;
 	// Freeze capture before editing or submitting so late speech cannot replace
 	// an edit or refill a draft that has already been sent.
@@ -513,6 +514,7 @@ export type LopuChatViewProps = {
 export const LopuChatView = ({
 	externalSendRef,
 	externalDictationRef,
+	externalSubmitDraftRef,
 	onDraftInteraction,
 	onSendDraft,
 	chatId,
@@ -858,6 +860,7 @@ export const LopuChatView = ({
      <LopuMessageQueue items={chat.queue.items.filter(item => item.chatId === chat.chatId)} paused={chat.queue.paused} error={chat.queue.error} lockedIds={chat.queue.batch?.ids}/>
      {composerError ? <Text role="status" fontSize="sm" mb={2}>{composerError}</Text> : null}
 					<LopuComposer
+                        submitRef={externalSubmitDraftRef}
        onSendManaged={(text, management) => void submit(text, management)}
 						attachments={<><LopuPageAttachments owner={chat.viewer.id} current={currentPage} selected={selectedPages} onChange={setSelectedPages} disabled={submitting} /><LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} expanded={attachmentsExpanded} onExpandedChange={setAttachmentsExpanded} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={submitting} /></>}
 						onAttachFiles={files => { if (uploadsRef.current?.addFiles(files)) setAttachmentsExpanded(true); }}
