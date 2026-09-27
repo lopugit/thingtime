@@ -70,6 +70,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-27 — **Codex (AI)**: Add 53 reusable ARIA object programs with native nullable reflection, owned element relationships and frozen-list identity; negotiate Actions 1.33.0. Make animation stages grow to keep both tiles visible.
 
+- 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
+  message field. Stop keeps partial words, recording again appends, and explicit
+  Send uses the ordinary composer with late-result and rejected-send protection.
+  See [PR #952](../PRs/952-codex-voice-composer-draft--keep-voice-transcription-in-the-editable-message-draft.md) for behavior and validation.
+
 - 2026-09-27 — **Codex (AI)**: Web Standards adds 111 editable native animation
   programs with saved keyframes/timing, playback promises and callbacks, scoped
   receivers and cleanup. Both manifests/client negotiate actions-run 1.32.0.
