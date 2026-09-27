@@ -73,7 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   destinations and concurrent cycles. Compact placement history restores exact
   saved content, and the open Thing refreshes after restore/merge. Protected
   library moves retain folder metadata only. Timeline 1.3.0 / Things 1.33.1;
-  [implementation and acceptance](../docs/unified-timeline.md#folder-placement-increment--2026-09-27).
+  [PR #965 implementation and acceptance](../PRs/965-timeline-folder-history-record-folder-moves-and-restore-their-exact-thing-history.md).
 
 - 2026-09-27 — **Codex (AI)**: Private account autosave for post/comment, Thing,
   definition and schema editors; shared draft/template picker, reusable post
