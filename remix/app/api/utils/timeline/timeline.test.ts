@@ -1,3 +1,5 @@
+import { TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_SNAPSHOT_PARTS_ADAPTER, parseTimelineSnapshotPart } from '../../../timeline/snapshotParts.ts';
+import { readTimelineSnapshot, storeTimelineSnapshotParts } from './snapshotParts.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Binary } from 'mongodb';
@@ -6,7 +8,7 @@ import { entryFixture, eventFixture } from '../../../timeline/testFixtures.ts';
 import { TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, parseTimelineEntry } from '../../../timeline/contract.ts';
 import { appendTimelineEvent, readTimelinePage, readTimelineNodes, timelineFolderId, TIMELINE_PAGE_MAX_BYTES } from './repository.ts';
 import { packTimelineEntry, unpackTimelineEntry, unpackTimelineLink } from './envelope.ts';
-import { thingContentSnapshot, thingMutationEvent } from './recordMutation.ts';
+import { thingContentSnapshot, thingMutationEvent, prepareThingMutation } from './recordMutation.ts';
 import { validateClientTimelineEvent } from './service.ts';
 import { thingStorageSizeBytes, currentContentStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION } from '../storage/storageCore.ts';
 import { COLLECTION_SCHEMA_VERSIONS, isProtectedThingtime } from '../../../schemas/registry.ts';
@@ -197,4 +199,54 @@ test('server content projection omits credentials and counters, suppresses bookk
 	assert.deepEqual(event.before, thingContentSnapshot(before));
 	assert.equal(JSON.stringify(event).includes('private-link'), false); assert.equal(JSON.stringify(event).includes('password'), false);
 	assert.equal(thingMutationEvent(null, { ...before, shareId: 'timeline-internal' }, capture), null);
+});
+
+
+test('large valid Things retain exact separate snapshot parts without blocking updates or deletion', async () => {
+ const h = harness();
+ const source = { shareId: 'large', ownerId: 'user-1', thingtime: ['data'], crystal: { items: Array.from({ length: 500 }, (_, n) => `${n}:` + 'x'.repeat(4490)) }, tags: [], extended: null };
+ const capture = { id: 'large-create', operationId: 'large-op', actorId: 'user-1', source: 'api' as const, now: new Date('2026-09-27T05:00:00.000Z') };
+ const prepared = prepareThingMutation(null, source, capture)!;
+ assert.equal(prepared.event.after?.adapter, TIMELINE_SNAPSHOT_PARTS_ADAPTER);
+ assert.ok(prepared.parts.length > 30);
+ assert.ok(Buffer.byteLength(JSON.stringify(prepared.event)) < 4096);
+ await h.append(prepared.event);
+ await storeTimelineSnapshotParts(h.things, prepared.parts, h.session, capture.now);
+ const count = h.rows().length;
+ await storeTimelineSnapshotParts(h.things, prepared.parts, h.session, capture.now);
+ assert.equal(h.rows().length, count, 'retry never duplicates parts');
+ assert.deepEqual(await readTimelineSnapshot(h.things, source.ownerId, prepared.event.id, 'after', prepared.event.after), thingContentSnapshot(source));
+ assert.equal(h.charge(), thingStorageSizeBytes(source), 'the event meters retained payload exactly once');
+ for (const doc of h.rows().filter(row => row.thingtime.includes(TIMELINE_SNAPSHOT_PART_KIND))) {
+  assert.equal(doc.storageClass, 'control');
+  assert.deepEqual(parseTimelineSnapshotPart(JSON.parse(fromBin(doc.secure))), prepared.parts.find(part => part.id === JSON.parse(fromBin(doc.secure)).id));
+  assert.equal(canView(doc, { id: source.ownerId }), false);
+ }
+ const updated = prepareThingMutation(source, { ...source, crystal: { value: 'smaller now' } }, { ...capture, id: 'large-update' })!;
+ assert.equal(updated.event.before?.adapter, TIMELINE_SNAPSHOT_PARTS_ADAPTER);
+ assert.equal(updated.event.after?.adapter, 'thing-content');
+ const deletion = prepareThingMutation(source, null, { ...capture, id: 'large-delete' })!;
+ const doc = { thingtime: [TIMELINE_EVENT_KIND], crystal: { name: 'Change' }, ...packTimelineEntry(entryFixture(deletion.event)) };
+ assert.equal(thingStorageSizeBytes(doc), thingStorageSizeBytes(source));
+ assert.throws(() => validateClientTimelineEvent('user-1', { ...prepared.event, source: 'client', mode: 'draft', clientId: 'browser' }), /provenance/);
+ await assert.rejects(readTimelineSnapshot(h.things, 'other', prepared.event.id, 'after', prepared.event.after), /unavailable/);
+ const part = h.rows().find(row => row.thingtime.includes(TIMELINE_SNAPSHOT_PART_KIND));
+ const raw = JSON.parse(fromBin(part.secure));
+ part.secure = toBin(JSON.stringify({ ...raw, data: raw.data.replace('x', 'y') }));
+ await assert.rejects(readTimelineSnapshot(h.things, source.ownerId, prepared.event.id, 'after', prepared.event.after), /does not match/);
+ await assert.rejects(storeTimelineSnapshotParts(h.things, prepared.parts, h.session, capture.now), /identity changed/);
+ h.rows().splice(h.rows().indexOf(part), 1);
+ await assert.rejects(readTimelineSnapshot(h.things, source.ownerId, prepared.event.id, 'after', prepared.event.after), /unavailable/);
+});
+
+
+test('large snapshot parts preserve escaped text and surrogate boundaries exactly', async () => {
+ const h = harness();
+ const source = { shareId: 'unicode-large', ownerId: 'user-1', thingtime: ['data'], crystal: { items: Array.from({ length: 200 }, () => '😀\u0000'.repeat(1490)) }, tags: [], extended: null };
+ const now = new Date('2026-09-27T05:00:00.000Z');
+ const prepared = prepareThingMutation(null, source, { id: 'unicode-event', operationId: 'unicode-op', actorId: 'user-1', source: 'api', now })!;
+ assert.ok(prepared.parts.length > 1);
+ await h.append(prepared.event);
+ await storeTimelineSnapshotParts(h.things, prepared.parts, h.session, now);
+ assert.deepEqual(await readTimelineSnapshot(h.things, source.ownerId, prepared.event.id, 'after', prepared.event.after), thingContentSnapshot(source));
 });

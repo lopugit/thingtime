@@ -9134,3 +9134,15 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   the broader DOM/CSS/SVG/observer/range native audit; lint, build and typecheck.
   Verify both 1.32.0 manifests, exact deployed source and runtime hash in preview
   and production before claiming delivery. Clean up disposable local fixtures.
+
+
+### Timeline large Thing regression
+
+- Grow a valid data Thing past 2 MiB through requests below the ordinary body cap.
+  It must still shrink, update, restore supported content and delete successfully.
+- Verify full retained reconstruction, including escaped text and Unicode crossing
+  part boundaries. Missing/altered/foreign parts must refuse reconstruction.
+- History pages stay within their response budget; no part payload or credential
+  is exposed by generic Things reads/search. Generic part edits/deletes refuse.
+- Account bytes include retained large content exactly once. Deletion transfers
+  the same logical bytes into history rather than charging the part envelopes.

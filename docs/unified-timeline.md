@@ -238,3 +238,28 @@ real HTTP integration checks above.
 
 The local semantic proxy health check timed out. Structural code graph refresh
 continues, but changed Markdown is not claimed to have fresh semantic coverage.
+
+## Large version retention
+
+A pre-merge regression check found that a valid Thing can grow beyond the
+bounded Timeline event size through ordinary patches. Requiring its complete
+before/after data inside one event stranded later edits and deletion. Large
+snapshots now use the shared `TimelineSnapshotPart` format: each bounded fragment
+is a separate protected `timeline-snapshot-part` Thing linked to its event by
+parentId/targetId, side and ordinal. The event keeps only scalar reference,
+completeness and integrity metadata. Parts and event commit in the content
+transaction; no growing arrays are stored on either record.
+
+The parent event meters the original retained content exactly once. Missing,
+foreign or altered parts fail closed on reconstruction. Client uploads cannot
+forge server snapshot references. Small snapshots remain inline; history pages
+do not eagerly fetch large payloads. Browser caches retain the same canonical
+reference in the event, and the shared part schema is available for on-demand
+payload caching rather than a second client representation.
+
+The real HTTP fixture grew a Thing beyond 2 MiB through bounded API patches,
+shrunk it, restored every original field from retained parts, and deleted it.
+Generic reads/deletes refused the protected parts. Full large-version UI preview
+and streamed restoration beyond the existing 4 MiB version-content budget remain
+in the active goal; History labels the retained data honestly rather than showing
+internal part metadata as a content diff.

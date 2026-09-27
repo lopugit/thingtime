@@ -76,3 +76,25 @@ first-paint, identity/data-plane-switch and live-quota acceptance. An actual
 concurrent AI-provider/browser save run also remains unverified.
 
 No production installation or completed end-to-end delivery is claimed here.
+
+
+## Large Thing regression fixed before the first main merge
+
+A schema-valid 2.25 MiB Thing exposed a regression: the original event snapshot
+budget prevented its later editing/deletion. Large content now splits into
+independent protected snapshot-part records with exact integrity/completeness
+checks. The same transaction records the event and parts; the event accounts for
+retained logical content once. No existing Thing needs to be truncated to proceed.
+The real HTTP suite grew, shrank, restored and deleted a large Thing and verified
+protected-part refusal. Full large-version UI preview and streaming beyond the
+version-content comparison budget remain accepted follow-up work.
+
+The seven focused suites (Timeline, API capabilities, schemas, storage, Things,
+Lopu UI and webpages) passed after integrating the then-current develop tree;
+main differed only in the component style-rule fix, whose three tests also pass.
+After adding parts, Timeline passes 59 cases, schemas pass 241 cases, and the
+real HTTP suite passes all existing cases plus large-Thing retention. The full
+Vite/Nitro/Vercel build and compiled capability endpoint (api.timeline 1.2.0)
+pass on the main base. Changed configured TypeScript lint has no errors; raw
+TypeScript still reports 91 existing diagnostics, none in changed files. The
+PR body carries the final head and broader check limitations.

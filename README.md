@@ -4,6 +4,12 @@ https://thingtime.com
 
 ### Unified Timeline (implementation in progress)
 
+Large retained Timeline versions are split into protected relational snapshot
+parts so history cannot strand edits/deletion of an existing large Thing. No
+additional collection, index, secret or configuration is needed. Complete large
+preview and streamed restoration are still listed in the Timeline acceptance
+ledger.
+
 The shared History panel records ordinary Thing revisions and editor drafts in
 the account's private **Timeline** folder. Local IndexedDB keeps authored edits
 and a bounded cache; the database keeps the complete accepted history. Preview

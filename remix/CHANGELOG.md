@@ -75,6 +75,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Named branches now use separate branch/Thing head records, durable local
   commands, private exact-version reads, and transactional forward-only pushes.
   Concurrent/deferred pushes preserve versions and show per-branch outcomes.
+  Large versions retain separate snapshot parts, so history cannot strand later
+  edits or deletion; the real API grow/shrink/restore/delete regression passes.
   IndexedDB upgrades pending work to atomic relationship records; server ancestry
   uses exact parent links and existing shared indexes. Lopu preserves missing/dirty page context instead of treating it as an empty
   page. Disposable replica-set and browser evidence, limits and outstanding

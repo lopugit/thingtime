@@ -220,6 +220,13 @@ with protected `storageClass: 'control'`; arbitrary user content stays in the
 metered event snapshot. Stored event counts are immutable completeness checks,
 not arrays of relationships.
 
+Large Timeline snapshots use independent protected `timeline-snapshot-part`
+Things, with the shared canonical part record in secure BinData. Scalar event,
+side and ordinal fields link each part; parentId/targetId reference the event.
+The event's scalar reference retains count, byte size and integrity hash, never a
+part-id list. Content, event and parts commit together. The event meters retained
+customer bytes once; part envelopes use the platform control storage class.
+
 Named `timeline-branch` Things carry one immutable branch record. Each
 `timeline-branch-head` Thing joins that branch to one Thing and its current
 event id, guarded by a scalar revision. A branch can contain many Things and a

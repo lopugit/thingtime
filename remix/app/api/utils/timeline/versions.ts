@@ -1,3 +1,5 @@
+import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../../timeline/snapshotParts.ts';
+import { readTimelineSnapshot } from './snapshotParts.ts';
 import { createHash } from 'node:crypto';
 import { copyBoundedJson } from '../../../utils/boundedJson.ts';
 import type { TimelineEntry, TimelineSnapshot } from '../../../timeline/contract.ts';
@@ -76,23 +78,26 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
   const headId = (doc as any).timelineHeadId as string;
   if (!headId) reject(409, 'Save this Thing once before applying an earlier version.');
   if (request.command === 'apply-version' && headId !== request.expectedHeadId) reject(409, 'Thing changed after the version preview. Refresh and compare again.');
-  const graph = request.mode === 'merge' || source.event.after?.adapter !== 'thing-content' ? await loadVersionGraph(request.mode === 'merge' ? [source.event.id, headId] : [source.event.id], source.event.thingId, ids => readTimelineNodes(things, ownerId, ids)) : new Map<string, TimelineGraphNode>();
+  const graph = request.mode === 'merge' || !['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(source.event.after?.adapter ?? '') ? await loadVersionGraph(request.mode === 'merge' ? [source.event.id, headId] : [source.event.id], source.event.thingId, ids => readTimelineNodes(things, ownerId, ids)) : new Map<string, TimelineGraphNode>();
   const baseNode = request.mode === 'merge' ? versionMergeBase(graph, headId, source.event.id) : null;
   const base = baseNode ? (await read([baseNode.id]))[0] : null;
+  const resolved = (entry: TimelineEntry) => readTimelineSnapshot(things, ownerId, entry.event.id, 'after', entry.event.after);
   const basisFor = async (entry: TimelineEntry): Promise<TimelineSnapshot | null> => {
-   if (entry.event.after?.adapter === 'thing-content') return entry.event.after;
+   if (['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(entry.event.after?.adapter ?? '')) return resolved(entry);
    const queue = [entry.event.id]; const seen = new Set<string>();
    for (let cursor = 0; cursor < queue.length; cursor++) {
     const id = queue[cursor]; if (seen.has(id)) continue; seen.add(id); const next = graph.get(id)!;
-    if (next.afterAdapter === 'thing-content') return (await read([id]))[0]?.event.after ?? null;
+    if (['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(next.afterAdapter ?? '')) { const saved = (await read([id]))[0]; return saved ? resolved(saved) : null; }
     queue.push(...next.parentIds);
    }
    return null;
   };
   const currentSnapshot = thingContentSnapshot(doc)!;
   const current = restorableContent(currentSnapshot);
-  const incoming = restorableContent(source.event.after, (await basisFor(source))?.value);
-  const baseContent = base ? restorableContent(base.event.after, (await basisFor(base))?.value) : null;
+  const sourceSnapshot = await resolved(source);
+  const incoming = restorableContent(sourceSnapshot, sourceSnapshot?.adapter === 'thing-content' ? undefined : (await basisFor(source))?.value);
+  const baseSnapshot = base ? await resolved(base) : null;
+  const baseContent = base ? restorableContent(baseSnapshot, baseSnapshot?.adapter === 'thing-content' ? undefined : (await basisFor(base))?.value) : null;
   let merged: ReturnType<typeof mergeVersionValues>;
   try { merged = baseContent ? mergeVersionValues(baseContent, current, incoming, request.choices) : { value: incoming, conflicts: [] }; }
   catch { return reject(422, 'This comparison or its conflict choices are no longer valid. Refresh the comparison before applying it.'); }

@@ -1,6 +1,8 @@
+import { TIMELINE_SNAPSHOT_MAX_BYTES } from '../../../timeline/snapshotParts.ts';
+import { splitLargeThingSnapshot, storeTimelineSnapshotParts } from './snapshotParts.ts';
 import { randomUUID } from 'node:crypto';
 import { copyBoundedJson } from '../../../utils/boundedJson.ts';
-import { TIMELINE_EVENT_MAX_BYTES, TIMELINE_RESERVED_PREFIX, parseTimelineEvent, type TimelineEvent, type TimelineSnapshot } from '../../../timeline/contract.ts';
+import { TIMELINE_RESERVED_PREFIX, parseTimelineEvent, type TimelineEvent, type TimelineSnapshot } from '../../../timeline/contract.ts';
 import { appendTimelineEvent } from './repository.ts';
 import { isProtectedThingtime } from '../../../schemas/registry.ts';
 import { currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore.ts';
@@ -17,7 +19,7 @@ export function thingContentSnapshot(doc: any): TimelineSnapshot | null {
 			thingtime: doc.thingtime ?? ['data'], crystal: doc.crystal ?? null, extended: doc.extended ?? null,
 			tags: doc.tags ?? [], acl: doc.acl ?? ['tt:user'], folderId: doc.folderId ?? null, targetId: doc.targetId ?? null,
 			geo: doc.geo ?? null
-		}, { maxBytes: TIMELINE_EVENT_MAX_BYTES / 2 - 4096, maxDepth: 90, maxNodes: 90_000, sortKeys: true }, 'Thing revision')
+		}, { maxBytes: TIMELINE_SNAPSHOT_MAX_BYTES, maxDepth: 90, maxNodes: 90_000, sortKeys: true }, 'Thing revision')
 	};
 }
 
@@ -38,7 +40,7 @@ export const newThingMutationCapture = (actorId: string, source: TimelineEvent['
 	id: randomUUID(), operationId: randomUUID(), actorId, source, now: new Date()
 });
 
-export function thingMutationEvent(before: any, after: any, capture: ThingMutationCapture): TimelineEvent | null {
+export function prepareThingMutation(before: any, after: any, capture: ThingMutationCapture) {
 	const target = after ?? before;
 	if (!target?.shareId || !target?.ownerId || target.shareId.startsWith(TIMELINE_RESERVED_PREFIX)) return null;
 	// Protected credentials/operational kinds require an explicit outcome
@@ -49,21 +51,29 @@ export function thingMutationEvent(before: any, after: any, capture: ThingMutati
 	const next = thingContentSnapshot(after);
 	if (JSON.stringify(previous) === JSON.stringify(next) && !capture.operation) return null;
 	const operation = capture.operation ?? (!before ? 'create' : !after ? 'delete' : 'update');
-	return parseTimelineEvent({
+	const beforeParts = splitLargeThingSnapshot(previous, target.ownerId, capture.id, 'before');
+	const afterParts = splitLargeThingSnapshot(next, target.ownerId, capture.id, 'after');
+	const event = parseTimelineEvent({
 		formatVersion: 1, id: capture.id, ownerId: target.ownerId, thingId: target.shareId,
 		branchId: capture.branchId ?? 'main', parentIds: capture.parentIds ?? (before?.timelineHeadId ? [before.timelineHeadId] : []),
 		operationId: capture.operationId, actorId: capture.actorId, source: capture.source, clientId: null,
 		occurredAt: capture.now.toISOString(), mode: 'revision', operation,
 		label: capture.label ?? ({ create: 'Created Thing', update: 'Edited Thing', delete: 'Deleted Thing', restore: 'Restored version', merge: 'Merged versions', effect: 'Completed action' }[operation]),
-		before: previous, after: next, dependencies: []
+		before: beforeParts.snapshot, after: afterParts.snapshot, dependencies: []
 	});
+	return { event, parts: [...beforeParts.parts, ...afterParts.parts] };
+}
+
+export function thingMutationEvent(before: any, after: any, capture: ThingMutationCapture): TimelineEvent | null {
+	return prepareThingMutation(before, after, capture)?.event ?? null;
 }
 
 /** Call within the content transaction after its successful CAS. A thrown
  * append/accounting error rolls back the content and head as one operation. */
 export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
-	const event = thingMutationEvent(before, after, capture);
-	if (!event) return null;
+	const prepared = prepareThingMutation(before, after, capture);
+	if (!prepared) return null;
+	const { event, parts } = prepared;
 	// An untrusted legacy byte stamp must not prevent deletion. The old payload
 	// moves into a fully stamped history record; the existing delete path and
 	// this append fence the ledger for exact reconciliation, never guess a delta.
@@ -72,6 +82,7 @@ export async function recordThingMutation(things: any, before: any, after: any, 
 		if (currentContentStorageSizeBytes(before) === null) await markUserStorageNeedsReconcile(ownerId, session);
 		else await retainDeletedThingStorage(ownerId, bytes, session);
 	} } : {});
+	await storeTimelineSnapshotParts(things, parts, session, capture.now);
 	if (after) {
 		const result = await things.updateOne({ shareId: after.shareId, ownerId: after.ownerId }, { $set: { timelineHeadId: event.id } }, { session });
 		if (result.matchedCount !== 1) throw new Error('Timeline mutation lost its Thing');

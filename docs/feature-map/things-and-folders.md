@@ -150,3 +150,10 @@ Thing kind, collection or persistence path is involved. See
 callbacks and native operations are complete saved Component data; existing
 catalogue/save Actions and private Thing serialization remain canonical. See
 [native animation programs](../web-standards-builder.md#native-web-animation-programs).
+
+
+Timeline large-version retention uses `timeline/snapshotParts.ts` as the shared
+part/reference contract and `api/utils/timeline/snapshotParts.ts` for atomic
+storage and checked reconstruction. Each part is its own protected Thing; event
+headers stay bounded and carry no part-id arrays. The event accounts for original
+retained bytes; part envelopes are control storage.

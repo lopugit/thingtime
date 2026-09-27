@@ -161,6 +161,34 @@ assert.equal(deletedHistory.data.entries[0].event.before.value.crystal.value, 'R
 assert.equal(deletedHistory.data.entries[0].event.after, null);
 assert.deepEqual(deletedHistory.data.entries[0].event.parentIds, [deletedHistory.data.entries[1].event.id]);
 assert.equal((await call(`/api/v1/things?id=${disposable.data.thing.id}`)).response.status, 404);
+// A valid large Thing can grow through bounded patches. History must not
+// strand it once its total content exceeds the event transport size.
+const largeSlice = Array.from({ length: 100 }, (_, n) => `${n}:` + 'x'.repeat(4490));
+let large = (await call('/api/v1/things', { thingtime: ['data'], crystal: { group0: largeSlice }, visibility: 'private' })).data.thing;
+assert.ok(large?.id);
+for (let n = 1; n < 5; n++) {
+ const changed = await call('/api/v1/things', { id: large.id, crystal: { [`group${n}`]: largeSlice }, expectedUpdatedAt: large.updatedAt }, 'PATCH');
+ assert.equal(changed.data.ok, true, `Large Thing growth ${n} failed: ${changed.data.error}`); large = changed.data.thing;
+}
+const largeHistory = () => call(`/api/v1/timeline?${query}&thingId=${large.id}`);
+const largeVersion = (await largeHistory()).data.entries[0].event;
+assert.equal(largeVersion.after.adapter, 'thing-content-parts');
+assert.ok(largeVersion.after.value.partCount > 30);
+assert.ok(JSON.stringify(largeVersion.after).length < 2048);
+assert.ok(Buffer.byteLength(JSON.stringify(largeVersion)) < 4 * 1024 * 1024);
+const partId = `${largeVersion.id}/snapshots/after/0`;
+const partThingId = `timeline-snapshot-part-${createHash('sha256').update(JSON.stringify([ownerId, partId])).digest('hex')}`;
+assert.equal((await call(`/api/v1/things?id=${partThingId}`)).response.status, 404, 'Snapshot parts cannot leak through generic reads');
+assert.equal((await call('/api/v1/things', { id: partThingId }, 'DELETE')).response.status, 403);
+const shrunk = await call('/api/v1/things/update', { id: large.id, crystal: { title: 'Reduced large Thing' }, replaceCrystal: true, expectedUpdatedAt: large.updatedAt });
+assert.equal(shrunk.data.ok, true, 'History must not prevent shrinking a large Thing');
+assert.equal((await largeHistory()).data.entries[0].event.before.adapter, 'thing-content-parts');
+const fullRestore = await version({ command: 'apply-version', mode: 'restore', eventId: largeVersion.id, expectedHeadId: shrunk.data.thing.timelineHeadId, operationId: randomUUID() });
+assert.equal(fullRestore.data.ok, true, `Large retained snapshot restoration failed: ${fullRestore.data.error}`);
+const largeRestored = (await call(`/api/v1/things?id=${large.id}`)).data.thing;
+for (let n = 0; n < 5; n++) assert.deepEqual(largeRestored.crystal[`group${n}`], largeSlice, 'Every retained byte must survive restoration');
+assert.equal((await call('/api/v1/things', { id: large.id }, 'DELETE')).data.ok, true, 'History must not block deletion of a large Thing');
+assert.equal((await largeHistory()).data.entries[0].event.before.adapter, 'thing-content-parts');
 const originalCookie = cookie;
 const outsiderName = `timeline-${randomUUID().slice(0, 8)}`;
 const outsider = await call('/api/v1/auth/register', { username: outsiderName, password, email: `${outsiderName}@example.invalid`, displayName: 'Timeline privacy fixture' });
@@ -172,4 +200,4 @@ assert.deepEqual((await call(`/api/v1/timeline?${outsiderQuery}&branches=1&thing
 assert.equal((await call(`/api/v1/timeline?${outsiderQuery}`, { ...branchCommand, operationId: randomUUID(), branchId: `branch-${randomUUID()}` })).response.status, 404);
 cookie = originalCookie;
 await writeFile('/tmp/thingtime-timeline-fixture.json', JSON.stringify({ base, username, password, cookie, ownerId, thingId: thing.id, folderId: discovery.data.folderId }), { mode: 0o600 });
-console.log(JSON.stringify({ ok: true, checks: ['disposable-replica-set', 'api-create-update-delete-history', 'stale-write-rollback', 'durable-draft-sync', 'idempotent-retry', 'provenance-refusal', 'account-isolation', 'protected-folder', 'private-search', 'restore-and-exact-retry', 'three-way-merge', 'explicit-conflict-resolution', 'named-branches', 'branch-push-CAS-and-retry', 'branch-fast-forward-only', 'relational-branch-memberships', 'branch-pagination', 'private-exact-version', 'protected-branch-CRUD', 'foreign-branch-refusal'], fixture: '/tmp/thingtime-timeline-fixture.json' }));
+console.log(JSON.stringify({ ok: true, checks: ['disposable-replica-set', 'api-create-update-delete-history', 'stale-write-rollback', 'durable-draft-sync', 'idempotent-retry', 'provenance-refusal', 'account-isolation', 'protected-folder', 'private-search', 'restore-and-exact-retry', 'three-way-merge', 'explicit-conflict-resolution', 'named-branches', 'branch-push-CAS-and-retry', 'branch-fast-forward-only', 'relational-branch-memberships', 'branch-pagination', 'private-exact-version', 'protected-branch-CRUD', 'foreign-branch-refusal', 'large-Thing-grow-shrink-restore-delete', 'private-relational-snapshot-parts'], fixture: '/tmp/thingtime-timeline-fixture.json' }));

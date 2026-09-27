@@ -1,3 +1,4 @@
+import { TIMELINE_SNAPSHOT_PARTS_ADAPTER, parseTimelineSnapshotReference } from './snapshotParts.ts';
 import { copyBoundedJson, type JsonValue } from '../utils/boundedJson.ts';
 
 /** Bounded sync/view aggregates. records.ts normalizes these into identical
@@ -83,6 +84,10 @@ export function validateTimelineEventFields(value: Record<string, any>): void {
 	if (typeof value.label !== 'string' || !value.label.trim() || value.label.length > 240) throw new Error('Invalid Timeline label');
 	snapshot(value.before);
 	snapshot(value.after);
+	for (const side of ['before', 'after'] as const) if (value[side]?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER) {
+		const reference = parseTimelineSnapshotReference(value[side].value);
+		if (value[side].version !== 1 || reference.eventId !== value.id || reference.side !== side || value.source === 'client' || value.mode !== 'revision') throw new Error('Invalid retained Timeline snapshot provenance');
+	}
 	if (value.mode === 'effect' ? value.operation !== 'effect' : value.operation === 'effect') throw new Error('Invalid Timeline effect mode');
 	if (value.operation === 'create' && (value.before !== null || value.after === null)) throw new Error('Invalid Timeline creation');
 	if (value.operation === 'delete' && (value.before === null || value.after !== null)) throw new Error('Invalid Timeline deletion');

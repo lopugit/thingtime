@@ -1,3 +1,4 @@
+import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../timeline/snapshotParts';
 import React from 'react';
 import { TimelineBranches } from './TimelineBranches';
 import { Box, Button, Flex, Heading, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Text } from '@chakra-ui/react';
@@ -18,6 +19,7 @@ export function openThingHistory(thingId: string) {
 const date = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 const preview = (snapshot: TimelineSnapshot | null) => {
 	if (!snapshot) return 'This Thing does not exist at this point.';
+	if (snapshot.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER) return 'The complete data for this large version is retained in your account. Full preview is not available here yet.';
 	const text = JSON.stringify(snapshot.value, null, 2);
 	return text.length > 16_000 ? `${text.slice(0, 16_000)}\n… Preview shortened for display.` : text;
 };
@@ -36,7 +38,8 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 	const setSelected = (event: TimelineEvent | null) => setSelection(event ? { identity: timeline.identity, event } : null);
 	const [showDrafts, setShowDrafts] = React.useState(true);
 	const [showData, setShowData] = React.useState(false);
-	const changes = React.useMemo(() => selected ? timelineChanges(selected.before, selected.after) : [], [selected]);
+	const largeVersion = selected?.before?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER || selected?.after?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER;
+	const changes = React.useMemo(() => selected && !largeVersion ? timelineChanges(selected.before, selected.after) : [], [selected, largeVersion]);
 	const events = timeline.rows.filter(row => showDrafts || row.event.mode !== 'draft');
 	const pending = timeline.rows.filter(row => row.status === 'pending').length;
 	if (!timeline.signedIn) return <Text>Sign in to see your Timeline.</Text>;
@@ -63,6 +66,7 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 			{selected ? <Box flex="1" minW={0} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="xl" p={4}>
 				<Flex justify="space-between" align="center" gap={2} mb={3}><Heading size="sm">{selected.label}</Heading><Button size="xs" variant="ghost" onClick={() => setSelected(null)}>Close preview</Button></Flex>
 				<Text fontSize="xs" color="var(--tt-muted)" mb={4}>{selected.branchId} · {date(selected.occurredAt)}</Text>
+				{largeVersion ? <Text fontSize="sm" mb={3}>The complete data for this large version is retained in your account. Full preview is not available here yet.</Text> : null}
 				{changes.map((change, index) => <Box key={index} mb={3} p={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
 					<Text fontWeight="600" mb={2} overflowWrap="anywhere">{timelineChangeLabel(change.path)}</Text>
 					<Text fontSize="sm" color="var(--tt-muted)" noOfLines={4} overflowWrap="anywhere">Before: {timelineValueLabel(change.before)}</Text>

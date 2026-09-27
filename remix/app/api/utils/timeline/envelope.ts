@@ -1,3 +1,4 @@
+import { TIMELINE_SNAPSHOT_PARTS_ADAPTER, parseTimelineSnapshotReference } from '../../../timeline/snapshotParts.ts';
 import { TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_EVENT_MAX_BYTES, parseTimelineEntry, parseTimelineReceipt, type TimelineEntry } from '../../../timeline/contract.ts';
 import { joinTimelineEvent, parseTimelineEventRecord, parseTimelineLink, splitTimelineEvent, type TimelineLink } from '../../../timeline/records.ts';
 import { binaryBytes, fromBin, toBin } from '../auth/binary.ts';
@@ -46,6 +47,7 @@ export function timelinePayloadBytes(doc: Envelope): number | null {
 		let total = 0;
 		for (const snapshot of [event.before, event.after]) {
 			if (!snapshot) continue;
+			if (snapshot.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER && snapshot.version === 1) { total += parseTimelineSnapshotReference(snapshot.value).retainedBytes; continue; }
 			const value = snapshot.value as any;
 			const keys = ['thingtime', 'crystal', 'extended', 'tags', 'acl', 'folderId', 'targetId', 'geo'];
 			if (snapshot.adapter !== 'thing-content' || snapshot.version !== 1 || !value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== keys.length || keys.some(key => !Object.prototype.hasOwnProperty.call(value, key))) {
