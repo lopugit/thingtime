@@ -47,7 +47,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
   finally { pending.current = false; if (alive.current) setBusy(false); }
  };
  const changes = React.useMemo(() => preview ? timelineChanges(preview.current, preview.result) : [], [preview]);
- if (!event.after || event.mode === 'effect' || !['thing-content', 'webpage-draft', 'definition-source'].includes(event.after.adapter)) return null;
+ if (!event.after || event.mode === 'effect' || !['thing-content', 'webpage-draft', 'definition-source', 'folder-placement'].includes(event.after.adapter)) return null;
  return <Box mt={4} borderTopWidth="1px" borderColor="var(--tt-border)" pt={4}>
   {saved ? <Text role="status" fontSize="sm">Version saved. The previous versions are still in your Timeline.</Text> : preview ? <>
    <Heading size="sm" mb={2}>{preview.mode === 'merge' ? 'Review merge' : 'Review restore'}</Heading>
@@ -60,7 +60,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
     <Flex gap={2} wrap="wrap" mt={2}>{(['current', 'incoming'] as const).map(side => <Button key={side} size="sm" variant={choices[key] === side ? 'solid' : 'outline'} aria-pressed={choices[key] === side} isDisabled={busy} onClick={() => setChoices(previous => ({ ...previous, [key]: side }))}>{side === 'current' ? 'Keep current' : 'Use this version'}</Button>)}</Flex>
    </Box>; })}
    {!preview.conflicts.length && !changes.length ? <Text fontSize="sm" mb={3}>The content already matches. Applying records the version relationship.</Text> : null}
-   {changes.map((change, index) => <Box key={index} mb={3}><Text fontWeight="600" fontSize="sm" overflowWrap="anywhere">{timelineChangeLabel(change.path)}</Text><Text fontSize="sm" color="var(--tt-muted)" overflowWrap="anywhere" noOfLines={3}>Current: {timelineValueLabel(change.before)}</Text><Text fontSize="sm" overflowWrap="anywhere" noOfLines={3}>Result: {timelineValueLabel(change.after)}</Text></Box>)}
+   {changes.map((change, index) => <Box key={index} mb={3}><Text fontWeight="600" fontSize="sm" overflowWrap="anywhere">{timelineChangeLabel(change.path)}</Text><Text fontSize="sm" color="var(--tt-muted)" overflowWrap="anywhere" noOfLines={3}>Current: {timelineValueLabel(change.before, change.path)}</Text><Text fontSize="sm" overflowWrap="anywhere" noOfLines={3}>Result: {timelineValueLabel(change.after, change.path)}</Text></Box>)}
    <Flex gap={2} wrap="wrap"><Button size="sm" isLoading={busy} isDisabled={preview.conflicts.some(conflict => !choices[JSON.stringify(conflict.path)])} onClick={() => void (preview.conflicts.length ? compare(preview.mode, choices) : apply())}>{preview.conflicts.length ? 'Review choices' : preview.mode === 'merge' ? 'Apply merge' : 'Restore this version'}</Button><Button size="sm" variant="ghost" isDisabled={busy} onClick={() => { setPreview(null); setChoices({}); setError(''); request.current = null; }}>Cancel</Button></Flex>
   </> : <Flex gap={2} wrap="wrap"><Button size="sm" variant="outline" isLoading={busy} onClick={() => void compare('restore')}>Restore…</Button><Button size="sm" variant="ghost" isDisabled={busy} onClick={() => void compare('merge')}>Merge into current…</Button></Flex>}
   {error ? <Text role="alert" fontSize="sm" mt={3} overflowWrap="anywhere">{error}</Text> : null}

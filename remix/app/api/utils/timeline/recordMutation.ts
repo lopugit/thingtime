@@ -5,9 +5,10 @@ import { copyBoundedJson } from '../../../utils/boundedJson.ts';
 import { TIMELINE_RESERVED_PREFIX, parseTimelineEvent, type TimelineEvent, type TimelineSnapshot } from '../../../timeline/contract.ts';
 import { appendTimelineEvent } from './repository.ts';
 import { isProtectedThingtime } from '../../../schemas/registry.ts';
-import { currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore.ts';
+import { currentContentStorageSizeBytes, thingStorageSizeBytes, StorageMutationError } from '../storage/storageCore.ts';
 import { markUserStorageNeedsReconcile, retainDeletedThingStorage } from '../storage/userStorage';
 import { timelineMutationContext } from './mutationContext';
+import { folderPlacementSnapshot } from '../../../timeline/folderPlacement.ts';
 
 /** Explicit content projection. Never copy a Mongo document wholesale: secure,
  * tokens, hidden-link keys, grants and platform ledger state are not revisions.
@@ -52,9 +53,18 @@ export function prepareThingMutation(before: any, after: any, capture: ThingMuta
 	// adapter; a future generic caller cannot accidentally snapshot their crystal.
 	if (isProtectedThingtime(target.thingtime ?? [])) return null;
 	if (before && after && (before.shareId !== after.shareId || before.ownerId !== after.ownerId)) throw new Error('A Timeline mutation cannot change Thing identity');
-	const previous = thingContentSnapshot(before);
-	const next = thingContentSnapshot(after);
+	let previous = thingContentSnapshot(before);
+	let next = thingContentSnapshot(after);
 	if (JSON.stringify(previous) === JSON.stringify(next) && !capture.operation) return null;
+	// Placement keeps its saved content ancestor instead of retaining another
+	// full copy of unchanged content. A pre-Timeline Thing first needs a complete
+	// baseline; later placement versions reconstruct through that parent chain.
+	const placementOnly = previous && next && !capture.operation &&
+		JSON.stringify({ ...previous.value as any, folderId: null }) === JSON.stringify({ ...next.value as any, folderId: null });
+	if (placementOnly && before.timelineHeadId) {
+		previous = folderPlacementSnapshot(before.folderId ?? null);
+		next = folderPlacementSnapshot(after.folderId ?? null);
+	}
 	const operation = capture.operation ?? (!before ? 'create' : !after ? 'delete' : 'update');
 	const beforeParts = splitLargeThingSnapshot(previous, target.ownerId, capture.id, 'before');
 	const afterParts = splitLargeThingSnapshot(next, target.ownerId, capture.id, 'after');
@@ -63,7 +73,7 @@ export function prepareThingMutation(before: any, after: any, capture: ThingMuta
 		branchId: capture.branchId ?? 'main', parentIds: capture.parentIds ?? (before?.timelineHeadId ? [before.timelineHeadId] : []),
 		operationId: capture.operationId, actorId: capture.actorId, source: capture.source, clientId: null,
 		occurredAt: capture.now.toISOString(), mode: 'revision', operation,
-		label: capture.label ?? ({ create: 'Created Thing', update: 'Edited Thing', delete: 'Deleted Thing', restore: 'Restored version', merge: 'Merged versions', effect: 'Completed action' }[operation]),
+		label: capture.label ?? (placementOnly ? 'Moved Thing' : { create: 'Created Thing', update: 'Edited Thing', delete: 'Deleted Thing', restore: 'Restored version', merge: 'Merged versions', effect: 'Completed action' }[operation]),
 		before: beforeParts.snapshot, after: afterParts.snapshot, dependencies: []
 	});
 	return { event, parts: [...beforeParts.parts, ...afterParts.parts] };
@@ -93,5 +103,26 @@ export async function recordThingMutation(things: any, before: any, after: any, 
 		if (result.matchedCount !== 1) throw new Error('Timeline mutation lost its Thing');
 		after.timelineHeadId = event.id;
 	}
+	return entry;
+}
+
+/** Dedicated placement adapter for the protected library families. It retains
+ * only folder ids: never file keys, archive messages, credentials or crystal.
+ * Protected content restore remains owned by each family's dedicated writer. */
+export async function recordFolderPlacement(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
+	if (!isProtectedThingtime(before.thingtime ?? [])) return recordThingMutation(things, before, after, capture, session);
+	if (before.ownerId !== after.ownerId || before.shareId !== after.shareId ||
+		before.thingtime?.length !== 1 || !['attachment', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(before.thingtime[0]) ||
+		JSON.stringify(before.thingtime) !== JSON.stringify(after.thingtime)) throw new StorageMutationError(409, 'storage_conflict', 'This folder contains a managed item that must be moved through its own editor before deleting the folder');
+	if ((before.folderId ?? null) === (after.folderId ?? null)) return null;
+	const event = parseTimelineEvent({ formatVersion: 1, id: capture.id, ownerId: before.ownerId, thingId: before.shareId,
+		branchId: 'main', parentIds: before.timelineHeadId ? [before.timelineHeadId] : [], operationId: capture.operationId,
+		actorId: capture.actorId, source: capture.source, clientId: null, occurredAt: capture.now.toISOString(),
+		mode: 'revision', operation: 'update', label: capture.label ?? 'Moved Thing',
+		before: folderPlacementSnapshot(before.folderId ?? null, true), after: folderPlacementSnapshot(after.folderId ?? null, true), dependencies: [] });
+	const entry = await appendTimelineEvent(things, event, session);
+	const result = await things.updateOne({ ...(after._id ? { _id: after._id } : {}), shareId: after.shareId, ownerId: after.ownerId }, { $set: { timelineHeadId: event.id } }, { session });
+	if (result.matchedCount !== 1) throw new Error('Timeline placement lost its Thing');
+	after.timelineHeadId = event.id;
 	return entry;
 }

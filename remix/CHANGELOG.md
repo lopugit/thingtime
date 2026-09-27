@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Folder deletion records each child move before
+  removing the folder; shared transactional ancestor checks prevent deleted
+  destinations and concurrent cycles. Compact placement history restores exact
+  saved content, and the open Thing refreshes after restore/merge. Protected
+  library moves retain folder metadata only. Timeline 1.3.0 / Things 1.33.1;
+  [implementation and acceptance](../docs/unified-timeline.md#folder-placement-increment--2026-09-27).
+
 - 2026-09-27 — **Codex (AI)**: Private account autosave for post/comment, Thing,
   definition and schema editors; shared draft/template picker, reusable post
   templates with independent media, revision-safe recovery and scoped local

@@ -289,3 +289,39 @@ Generic reads/deletes refused the protected parts. Full large-version UI preview
 and streamed restoration beyond the existing 4 MiB version-content budget remain
 in the active goal; History labels the retained data honestly rather than showing
 internal part metadata as a content diff.
+
+## Folder placement increment — 2026-09-27
+
+Folder deletion now moves direct children in bounded transactions before the
+root is removed. Each child and its event commit together; one operation links
+all moved children and the final folder deletion. Subfolder descendants retain
+their placement. A partial drain keeps the physical root and returns a retry;
+retrying does not invent events for children already moved. Canonical creates,
+moves, managed library placement and archive imports write the same private
+ancestor fences, without changing ancestor content or its visible edit time.
+Those writes make concurrent deletion and four-folder cycle races conflict.
+
+The shared `folder-placement` version-1 adapter stores only a folder id after
+an ordinary Thing already has a saved content ancestor. The first legacy move
+still captures a full baseline. Restore and merge follow exact saved ancestry;
+they never use the current Thing as historical content. Explicit restore/merge
+retains a full result and its existing retry contract. The protected library
+families use `managed-folder-placement`, containing only folder ids. Their full
+content history and dedicated restore adapters remain open. Placement metadata
+is unmetered platform bookkeeping; client-authored drafts remain metered.
+These are identical local/remote snapshot formats within the existing relational
+event/link storage. No growing list is added to a Thing or folder.
+
+`api.timeline` 1.3.0 advertises compact placement restoration and comparison;
+`api.things` 1.33.1 advertises the corrected placement transaction behavior.
+History labels moves explicitly, calls the root “My Things,” and the open Thing
+page refetches after restore/merge while retaining its last projection.
+
+The disposable HTTP checks cover creation/deletion races, competing ancestor
+moves, protected theme metadata, preserved subtrees, missing-destination refusal,
+105 children across drain batches, exact replay, and reconstruction through four
+consecutive moves. Run `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port>
+npm --prefix remix run test:timeline:folders`; both scripts require the same
+strict disposable replica-set guard as the main integration suite. Fixtures are
+created through ordinary account APIs, including supported bulk-copy requests.
+Quota-ceiling/downgrade tests and further protected writer coverage remain open.

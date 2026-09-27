@@ -1,5 +1,6 @@
 import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
-import { newThingMutationCapture, recordThingMutation, type ThingMutationCapture } from '../timeline/recordMutation';
+import { newThingMutationCapture, recordThingMutation, recordFolderPlacement, type ThingMutationCapture } from '../timeline/recordMutation';
+import { lockFolderDestination, MAX_FOLDER_DEPTH } from './folderPlacement';
 import { isFolderThing, folderThingMatch } from '../../../schemas/folderThing';
 import { postThingReferences, type PostThingReference } from '../../../components/Feed/postThingReferences';
 import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
@@ -1285,7 +1286,6 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 const FOLDER_UNFILEABLE = ['reaction', 'save', 'vote', UPDOWN_THINGTIME];
 // Ancestor-walk bound. Legitimate folder trees are shallow; the walk fails
 // closed at the cap so a corrupt chain can never loop the server.
-const MAX_FOLDER_DEPTH = 64;
 
 // Validates a raw folderId input for a thing of the given schemas. Returns the
 // resolved folder shareId, null for root, or a Fail. Ownership is strict: the
@@ -1702,8 +1702,9 @@ export const createThing = async (
 
 	const timelineCapture = ownerId !== 'system' && !app?.sandbox ? newThingMutationCapture(viewer?.id ?? ownerId) : null;
   try {
-		if (billable || registeredApp || target || hooks.afterInsert || timelineCapture) {
+		if (billable || registeredApp || target || doc.folderId || hooks.afterInsert || timelineCapture) {
 			await withMongoTransaction(async (session) => {
+				if (doc.folderId) await lockFolderDestination(things, ownerId, doc.folderId, session, isFolderThing(doc) ? doc.shareId : undefined);
 				if (billable) await applyUserStorageDelta(ownerId, sizeBytes, session);
 				if (registeredApp) await applyAppStorageDeltaTransaction(registeredApp, sizeBytes, session);
 				await things.insertOne(doc as any, { session });
@@ -4992,12 +4993,12 @@ type RootDeleteResult = { state: 'blocked' | 'missing' } | { state: 'deleted'; d
 // before-image delete share one snapshot; target-attached creates also write
 // the root, so a concurrent attachment either becomes visible on transaction
 // retry or loses to the deletion and aborts cleanly.
-const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, actorId: string): Promise<RootDeleteResult> => {
+const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, actorId: string, capture = newThingMutationCapture(actorId)): Promise<RootDeleteResult> => {
 	const things = await getThingsCollection();
-	const capture = newThingMutationCapture(actorId);
 	return withMongoTransaction(async (session) => {
 		const root = (await things.findOne(deleteFilter as any, { session })) as any as ThingDoc | null;
 		if (!root) return { state: 'missing' };
+		if (isFolderThing(root) && await things.findOne({ ownerId: root.ownerId, folderId: root.shareId }, { session, projection: { _id: 1 } })) return { state: 'blocked' };
 		const child = await things.findOne({ ...await cascadeAttachmentFilter(cascadeLinkIdsOf(root)), _id: { $ne: (root as any)._id } } as any, {
 			session,
 			projection: { _id: 1 }
@@ -5011,6 +5012,34 @@ const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, ac
 		if (deleted.ownerId !== 'system' && storageSandboxState(deleted) !== 'sandbox') await recordThingMutation(things, deleted, null, capture, session);
 		return { state: 'deleted', doc: deleted };
 	});
+};
+
+// Only small candidate identities are read in a batch. Each child and its
+// history commit together; even a legacy large snapshot stays bounded to one
+// child per transaction. The original physical folder remains the retry anchor.
+const drainFolderPlacement = async (deleteFilter: Record<string, any>, capture: ThingMutationCapture): Promise<void> => {
+	const things = await getThingsCollection();
+	const candidates = await things.find({ ownerId: deleteFilter.ownerId, folderId: deleteFilter.shareId },
+		{ projection: { _id: 1, shareId: 1 } }).limit(STORAGE_DELETE_TRANSACTION_BATCH).toArray();
+	for (const candidate of candidates) {
+		const move = { ...newThingMutationCapture(capture.actorId), operationId: capture.operationId, source: capture.source, label: 'Moved out of deleted folder' };
+		await withMongoTransaction(async session => {
+			const root = await things.findOne(deleteFilter as any, { session });
+			if (!root || !isFolderThing(root)) throw new StorageMutationError(409, 'storage_conflict', 'Folder changed while its contents were being moved — try again');
+			const before = await things.findOne({ _id: candidate._id, ownerId: root.ownerId, folderId: root.shareId }, { session });
+			if (!before) return;
+			const folderId = root.folderId || null;
+			await lockFolderDestination(things, root.ownerId, folderId, session, isFolderThing(before) ? before.shareId : undefined);
+			const fenced = await things.updateOne({ _id: root._id }, { $set: { folderMutationToken: move.id } }, { session });
+			if (fenced.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'Folder changed while its contents were being moved — try again');
+			const previousTime = new Date(before.updatedAt).getTime();
+			const after = { ...before, folderId, updatedAt: new Date(Math.max(move.now.getTime(), Number.isFinite(previousTime) ? previousTime + 1 : 0)) };
+			const moved = await things.updateOne({ _id: before._id, ownerId: before.ownerId, folderId: root.shareId, updatedAt: before.updatedAt },
+				{ $set: { folderId, updatedAt: after.updatedAt } }, { session });
+			if (moved.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'A folder item changed — try again');
+			if (before.ownerId !== 'system' && storageSandboxState(before) !== 'sandbox') await recordFolderPlacement(things, before, after, move, session);
+		});
+	}
 };
 
 // Subspace report rows hang off the ROOT post by crystal.postId (targetId =
@@ -5103,8 +5132,9 @@ export const deleteThing = async (
 	const anchoredDeleteFilter = {
 		...deleteFilter,
 		_id: (initial as any)._id,
-		...(hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null ? { updatedAt: initial.updatedAt } : {})
+		...(isFolderThing(initial) || (hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null) ? { updatedAt: initial.updatedAt } : {})
 	};
+	const deleteCapture = newThingMutationCapture(viewer.id);
 
 	try {
 		if (hooks.beforeCascade) {
@@ -5169,20 +5199,12 @@ export const deleteThing = async (
 			}
 			if (rewalk) continue;
 
-			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter, viewer.id);
+			if (isFolderThing(anchoredRoot)) await drainFolderPlacement(anchoredDeleteFilter, deleteCapture);
+			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter, viewer.id, deleteCapture);
 			if (rootResult.state === 'blocked') continue;
 			if (rootResult.state === 'deleted') {
 				await refundDeletedNamespaceDocs([rootResult.doc]);
 				await clearSubspaceReportsFor(rootResult.doc, deletedCommentIds);
-				// deleting a folder never deletes what's inside it — contents (and
-				// subfolders) re-parent to the deleted folder's own parent, so the
-				// worst a folder delete can do to your things is flatten them one level
-				if (isFolderThing(rootResult.doc)) {
-					await things.updateMany(
-						{ ownerId: viewer.id, folderId: rootResult.doc.shareId } as any,
-						{ $set: { folderId: rootResult.doc.folderId || null, updatedAt: new Date() } } as any
-					);
-				}
   return { ok: true };
 			}
 
@@ -5193,7 +5215,7 @@ export const deleteThing = async (
 			if (!stillExists) return { ok: true };
 			return fail(409, 'Thing changed while it was being deleted — try again');
 		}
-		return fail(409, 'Thing kept receiving new attachments while it was being deleted — try again');
+		return fail(409, 'Deletion is not finished. Some contents remain or new items arrived — try again');
 	} catch (error) {
 		const storageFail = storageMutationFail(error);
 		if (storageFail) return storageFail;
@@ -5542,8 +5564,9 @@ export const updateThing = async (
   const timelineCapture = doc.ownerId !== 'system' && !storageScope?.sandbox ? options.timeline?.capture ?? newThingMutationCapture(viewer.id) : null;
   let writeResult;
   try {
-		if (wasBillable || isBillable || registeredStorageScope || timelineCapture) {
+		if (wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture) {
 			await withMongoTransaction(async (session) => {
+				if (hasFolderChange) await lockFolderDestination(things, viewer.id, nextFolderId, session, isFolderThing(doc) ? doc.shareId : undefined);
 				if (accountDelta !== 0) await applyUserStorageDelta(doc.ownerId, accountDelta, session);
 				if (registeredStorageScope && appDelta !== 0) {
 					await applyAppStorageDeltaTransaction(registeredStorageScope, appDelta, session);
@@ -5553,7 +5576,7 @@ export const updateThing = async (
 						_id: (doc as any)._id,
 						...expectedSize,
 						...(options.timeline ? { timelineHeadId: options.timeline.expectedHeadId } : {}),
-						...((timelineCapture || options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null) ? { updatedAt: doc.updatedAt } : {})
+						...((timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
 					} as any,
 					{ $set: set, $unset: unset } as any,
 					{ session }
