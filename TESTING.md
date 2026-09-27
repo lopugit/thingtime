@@ -9102,3 +9102,21 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   the broader DOM/CSS/SVG/observer/range native audit; lint, build and typecheck.
   Verify both 1.32.0 manifests, exact deployed source and runtime hash in preview
   and production before claiming delivery. Clean up disposable local fixtures.
+
+### Web standards: native ARIA object programs (2026-09-27)
+
+- Run every ARIAMixin program with default and edited values/references. Compare
+  actual native property assignment with attribute reflection; clear values with
+  null. Unsupported native properties must remain explicit.
+- Run ariaBoundaryFixtures: null versus empty relationship lists, string false
+  versus null, stable element/cached-array identity, immutable native FrozenArray,
+  old snapshots after attribute reset, shadow ancestry, wrong/foreign handles,
+  64-reference bounds, detached relationship refusal and resource-attribute denial.
+- Save an edited relationship Component, fully reload and run it, then reuse that
+  same Component on a second private Builder page. Check anonymous reads return
+  404, Stop removes the frame and a fresh Run restores the edited result.
+- Check 390px and desktop inputs/results, and both animation tiles after the
+  stage height fix. Saved user definitions must remain untouched by catalogue updates.
+- Run platform, capability, schema, Action, Component and page suites, native
+  regression audit, lint, typecheck comparison and production build. Verify both
+  1.33.0 manifests and exact deployed runtime in preview and production.

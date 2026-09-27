@@ -143,3 +143,7 @@ Thing kind, collection or persistence path is involved. See
 callbacks and native operations are complete saved Component data; existing
 catalogue/save Actions and private Thing serialization remain canonical. See
 [native animation programs](../web-standards-builder.md#native-web-animation-programs).
+
+`ariaFixtures.ts` supplies 53 editable ARIA programs. Role/value inputs, selectors,
+relationships and projections persist in ordinary Components through the canonical
+suite Actions and can be referenced by another page. See [native ARIA programs](../web-standards-builder.md#native-aria-object-programs).

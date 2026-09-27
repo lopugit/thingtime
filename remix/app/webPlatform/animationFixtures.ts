@@ -391,7 +391,7 @@ export function animationRecipe(f: Feature): Recipe | undefined {
 				}
 			],
 			styles: [
-				{ selector: '.stage', declarations: { padding: '24px', overflow: 'hidden', height: '160px', background: '#f5f3ff' } },
+				{ selector: '.stage', declarations: { padding: '24px', overflow: 'hidden', 'min-height': '200px', background: '#f5f3ff' } },
 				{ selector: '.tile', declarations: { width: '150px', padding: '16px', background: '#a78bfa', color: '#211345', 'border-radius': '12px' } },
 				{ selector: '.alternate', declarations: { margin: '12px 0', background: '#67e8f9' } },
 				{ selector: '.tile::before', declarations: { content: '"✦ "' } }
