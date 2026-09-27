@@ -2,6 +2,15 @@
 
 ## Unified Timeline
 
+- [ ] Create a saved theme, rename/move it in Things, then edit tokens and
+  visibility through its dedicated theme API. Shared History preserves every
+  exact parent and approved before/after token value; identical saves add no
+  event. Public themes still have private history. Invalid writes add no event.
+  Select a custom data source and create a theme: its history and accounting
+  still commit at home. At the allowance ceiling, token edits refuse atomically
+  but deletion retains its approved prior version; retry adds no event/charge.
+  Generic protected-content restore remains unavailable. Run the guarded
+  `test:timeline:themes` and `test:timeline:quota` HTTP suites.
 - [ ] On the disposable replica, set a synthetic user's allowance to its exact
   current usage through the normal admin API. Growing edits, retained shrinking
   edits and restore application return 507 without changing content, timestamp,

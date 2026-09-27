@@ -1,5 +1,10 @@
 # API endpoints and capabilities
 
+Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
+`api.timeline` 1.5.0. The dedicated home writer records approved token versions
+and retained deletion in its content transaction; no new endpoint or collection
+is introduced. See [the Timeline contract](../unified-timeline.md).
+
 All data access goes through `/api/v1/...` (`FUNDAMENTALS.md` §1). Nitro
 routes every documented endpoint to one catch-all handler; the docs registry is
 the source of truth for the route table and both capability manifests.
