@@ -19,23 +19,23 @@ import {
 
 test('normalizeLopuChatSettings accepts catalog models, composed ids and null resets', () => {
 	const plain = normalizeLopuChatSettings({ model: 'claude-opus-5', effort: 'high', speed: 'fast' });
-	assert.deepEqual(plain, { ok: true, settings: { model: 'claude-opus-5', effort: 'high', speed: 'fast', providerId: null }, changed: true });
+	assert.deepEqual(plain, { ok: true, settings: { accessMode: 'ask', model: 'claude-opus-5', effort: 'high', speed: 'fast', providerId: null }, changed: true });
 
 	const composed = normalizeLopuChatSettings({ model: 'claude-opus-5:max:fast' });
-	assert.deepEqual(composed, { ok: true, settings: { model: 'claude-opus-5', effort: 'max', speed: 'fast', providerId: null }, changed: true });
+	assert.deepEqual(composed, { ok: true, settings: { accessMode: 'ask', model: 'claude-opus-5', effort: 'max', speed: 'fast', providerId: null }, changed: true });
 
 	const explicitWins = normalizeLopuChatSettings({ model: 'claude-opus-5:max', effort: 'low' });
 	assert.equal(explicitWins.ok, true);
 	assert.equal((explicitWins as any).settings.effort, 'low');
 
 	const untouched = normalizeLopuChatSettings({}, { model: 'gpt-5.5', effort: 'high', speed: null });
-	assert.deepEqual(untouched, { ok: true, settings: { model: 'gpt-5.5', effort: 'high', speed: null, providerId: null }, changed: false });
+	assert.deepEqual(untouched, { ok: true, settings: { accessMode: 'ask', model: 'gpt-5.5', effort: 'high', speed: null, providerId: null }, changed: false });
 
 	const reset = normalizeLopuChatSettings({ model: null, effort: '', speed: null }, { model: 'gpt-5.5', effort: 'high', speed: 'fast' });
-	assert.deepEqual(reset, { ok: true, settings: { model: null, effort: null, speed: null, providerId: null }, changed: true });
+	assert.deepEqual(reset, { ok: true, settings: { accessMode: 'ask', model: null, effort: null, speed: null, providerId: null }, changed: true });
 
 	// the 'default' sentinel is not a pinned model
-	assert.deepEqual(normalizeLopuChatSettings({ model: 'default' }), { ok: true, settings: { model: null, effort: null, speed: null, providerId: null }, changed: false });
+	assert.deepEqual(normalizeLopuChatSettings({ model: 'default' }), { ok: true, settings: { accessMode: 'ask', model: null, effort: null, speed: null, providerId: null }, changed: false });
 });
 
 test('normalizeLopuChatSettings rejects unknown models and unsupported explicit knobs, clamps inherited ones', () => {
@@ -54,20 +54,21 @@ test('normalizeLopuChatSettings rejects unknown models and unsupported explicit 
 
 	// switching models under inherited settings clamps instead of failing
 	const clamped = normalizeLopuChatSettings({ model: 'claude-haiku-4-5' }, { model: 'claude-opus-5', effort: 'max', speed: 'fast' });
-	assert.deepEqual(clamped, { ok: true, settings: { model: 'claude-haiku-4-5', effort: null, speed: null, providerId: null }, changed: true });
+	assert.deepEqual(clamped, { ok: true, settings: { accessMode: 'ask', model: 'claude-haiku-4-5', effort: null, speed: null, providerId: null }, changed: true });
 	const preferHigh = normalizeLopuChatSettings({ model: 'gpt-5' }, { model: 'gpt-5.6-sol', effort: 'ultra', speed: 'fast' });
-	assert.deepEqual(preferHigh, { ok: true, settings: { model: 'gpt-5', effort: 'high', speed: 'fast', providerId: null }, changed: true });
+	assert.deepEqual(preferHigh, { ok: true, settings: { accessMode: 'ask', model: 'gpt-5', effort: 'high', speed: 'fast', providerId: null }, changed: true });
 	// a null (catalog default) model accepts any known effort token
 	assert.equal(normalizeLopuChatSettings({ effort: 'ultra' }).ok, true);
 });
 
 test('lopuChatStateOf reads stored settings forgivingly', () => {
-	assert.deepEqual(lopuChatStateOf(undefined), { model: null, effort: null, speed: null, providerId: null, turns: 0, lastModel: null });
+	assert.deepEqual(lopuChatStateOf(undefined), { model: null, effort: null, speed: null, providerId: null, accessMode: 'ask', turns: 0, lastModel: null });
 	assert.deepEqual(lopuChatStateOf({ model: ' claude-opus-5 ', effort: 'high', speed: 'fast', turns: 3, lastModel: 'claude-opus-4-8' }), {
 		model: 'claude-opus-5',
 		effort: 'high',
 		speed: 'fast',
 		providerId: null,
+		accessMode: 'ask',
 		turns: 3,
 		lastModel: 'claude-opus-4-8'
 	});
@@ -76,6 +77,7 @@ test('lopuChatStateOf reads stored settings forgivingly', () => {
 		effort: null,
 		speed: null,
 		providerId: null,
+		accessMode: 'ask',
 		turns: 0,
 		lastModel: null
 	});
@@ -84,7 +86,7 @@ test('lopuChatStateOf reads stored settings forgivingly', () => {
 test('chat settings carry a Secure Vault providerId: pinned, kept across model changes, cleared by null, shape-checked', () => {
 	const id = 'prov-0123456789abcdef';
 	const pinned = normalizeLopuChatSettings({ providerId: id });
-	assert.deepEqual(pinned, { ok: true, settings: { model: null, effort: null, speed: null, providerId: id }, changed: true });
+	assert.deepEqual(pinned, { ok: true, settings: { accessMode: 'ask', model: null, effort: null, speed: null, providerId: id }, changed: true });
 	// a model change leaves the pin alone
 	const kept = normalizeLopuChatSettings({ model: 'claude-opus-5' }, { model: null, effort: null, speed: null, providerId: id });
 	assert.equal(kept.ok, true);
@@ -92,7 +94,7 @@ test('chat settings carry a Secure Vault providerId: pinned, kept across model c
 	// null and '' clear it; an identical pin is not a change
 	for (const cleared of [null, '']) {
 		const result = normalizeLopuChatSettings({ providerId: cleared }, { model: 'gpt-5.5', effort: 'high', speed: null, providerId: id });
-		assert.deepEqual(result, { ok: true, settings: { model: 'gpt-5.5', effort: 'high', speed: null, providerId: null }, changed: true });
+		assert.deepEqual(result, { ok: true, settings: { accessMode: 'ask', model: 'gpt-5.5', effort: 'high', speed: null, providerId: null }, changed: true });
 	}
 	assert.equal((normalizeLopuChatSettings({ providerId: id }, { model: null, effort: null, speed: null, providerId: id }) as any).changed, false);
 	// settings without the field read as "Thingtime's models"
@@ -356,4 +358,17 @@ test('saved recovery streak survives the public assistant metadata projection', 
  const meta = publicLopuMessageMeta({role:'assistant',requestId:'saved',stopReason:'error',continuationSafe:true,recoveryFailures:5});
  assert.equal(meta?.recoveryFailures,5);
  assert.equal(publicLopuMessageMeta({role:'user',recoveryFailures:5})?.recoveryFailures,undefined);
+});
+
+
+test('chat access defaults to Ask, validates changes and preserves Full access across unrelated settings edits', () => {
+  assert.equal(lopuChatStateOf({}).accessMode, 'ask');
+  assert.equal(lopuChatStateOf({ accessMode: 'anything' }).accessMode, 'ask');
+  const full = normalizeLopuChatSettings({ accessMode: 'full' });
+  assert.equal(full.ok, true);
+  if (!full.ok) return;
+  assert.equal(full.settings.accessMode, 'full');
+  const edited = normalizeLopuChatSettings({ speed: 'normal' }, full.settings);
+  assert.equal(edited.ok && edited.settings.accessMode, 'full');
+  assert.equal(normalizeLopuChatSettings({ accessMode: true }).ok, false);
 });

@@ -1,3 +1,4 @@
+import { internalRequestActor } from './internalRequestActor';
 import { getSubscription } from '../subscriptions/subscriptions';
 import { getAuthToken } from './authCookie';
 import { verifyJwt } from './jwt';
@@ -147,6 +148,8 @@ export const introspectToken = async (token: string): Promise<TokenIntrospection
 
 // Resolve the authenticated user for a request, or null.
 export const getCurrentUser = async (request: Request): Promise<PublicUser | null> => {
+  const internal = internalRequestActor(request);
+  if (internal) return internal();
   const token = await getAuthToken(request);
   if (!token) return null;
 

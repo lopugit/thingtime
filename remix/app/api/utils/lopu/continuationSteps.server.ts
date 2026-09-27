@@ -61,7 +61,7 @@ export async function runLopuPart(
   if (!reserved.matchedCount) return {next:null,reason:'stopped',delay:0};
  }
 	if (!task) {
-		const accepted = await startBackgroundTask(request, (req) => replyAsUser(req, user), {
+		const accepted = await startBackgroundTask(request, (req) => replyAsUser(req, user, { resolveActionActor: () => resolveSessionUser(grant.sessionId, root.ownerId) }), {
 			user,
 			scope: root.taskScope,
 			rootTaskId: rootId,
@@ -99,7 +99,7 @@ export async function runLopuPart(
    // Another delivery finished between our stale read and this claim. Fall
    // through to acknowledged-reservation cleanup and its saved checkpoint.
   } else {
-   await executeBackgroundTask(request, (req) => replyAsUser(req, user), task, user, JSON.stringify(input));
+   await executeBackgroundTask(request, (req) => replyAsUser(req, user, { resolveActionActor: () => resolveSessionUser(grant.sessionId, root.ownerId) }), task, user, JSON.stringify(input));
    task = await things.findOne({ shareId: task.shareId, thingtime: AI_TASK_KIND });
   }
 	}
