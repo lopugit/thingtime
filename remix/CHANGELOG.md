@@ -74,7 +74,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and offer an explicit current-component preview. Added bounded private API
   reads, insertion/preview regressions and desktop/mobile acceptance. Timeline
   capability 1.10.0; nested runtime dependencies and dependency-aware merges
-  remain open.
+  remain open. [PR #978](../PRs/978-timeline-component-snapshots-preserve-recorded-component-definitions-in-timeline-page-versions.md).
 
 - 2026-09-28 — **Codex (AI)**: Named page branches open in the visual Builder,
   sharing durable draft events and revision-checked saves with the field editor.
