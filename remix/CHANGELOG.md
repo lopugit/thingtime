@@ -71,6 +71,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
   editable boundaries, native document edits and bounded contextual fragments.
   Check owned endpoints and concrete native getters; negotiate actions-run 1.31.0.
+  See [PR #950](../PRs/950-codex-web-standards-ranges--add-reusable-live-and-static-range-programs.md).
 
 
 - 2026-09-27 — **Codex (AI)**: Add 81 reusable observer programs with database-authored callbacks, native records, scoped targets and synchronous mutation batches. Disconnect on completion/Stop, preserve unsupported results in callbacks, and negotiate actions-run 1.30.0. See [PR #949](../PRs/949-codex-web-standards-observers--add-reusable-observer-programs-and-database-authored-callbacks.md).
