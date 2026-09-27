@@ -81,6 +81,15 @@ test('schemaRenderOf reads a schema thing render template and nothing else', () 
   assert.equal(schemaRenderOf(undefined), null);
 });
 
+test('managed and attachment renames preserve source names in the optimistic projection', async () => {
+  const { thingRenameCrystal } = await import('./thingsCore');
+  for (const kind of ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment']) {
+    const thing = { ...makeThing('library', kind), crystal: { name: 'Original identity', payload: { retained: true } } };
+    const next = { ...thing.crystal, ...thingRenameCrystal(thing, 'Display title') };
+    assert.deepEqual(next, { name: 'Original identity', payload: { retained: true }, title: 'Display title' });
+  }
+});
+
 test('explicit legacy Lopu folder markers use canonical browse links and sort before data', async () => {
   const { isFolder, sortThings, thingIcon, thingDisplayName, thingRenameCrystal } = await import('./thingsCore');
   const folder = { ...makeThing('legacy-folder', 'data'), crystal: { kind: 'folder', name: 'Original folder', value: { kept: true } } };

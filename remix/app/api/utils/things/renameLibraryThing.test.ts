@@ -11,15 +11,20 @@ function harness(kind = 'theme') {
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, storageClass: 'content', storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
     ...(kind === 'chat-archive' ? { archiveRootId: input.id, archiveVersion: 1 } : {}) };
   row.sizeBytes = thingStorageSizeBytes(row);
-  const writes: any[] = [], deltas: number[] = [];
-  const state = { row, matches: 1, commits: 0, rollbacks: 0, custom: false };
+  const writes: any[] = [], deltas: number[] = [], records: any[] = [];
+  const state = { row, matches: 1, commits: 0, rollbacks: 0, custom: false, historyFailure: false };
   const session = {};
   const deps: any = { custom: () => state.custom, now: () => now,
     transaction: async (work: any) => { try { const result = await work(session); state.commits++; return result; } catch (error) { state.rollbacks++; throw error; } },
     storageDelta: async (owner: string, delta: number, tx: any) => { assert.equal(owner, input.ownerId); assert.equal(tx, session); deltas.push(delta); },
+    record: async (_things: any, before: any, after: any, capture: any, tx: any) => {
+      assert.equal(tx, session); assert.equal(writes.length, 1); assert.equal(capture.actorId, input.ownerId);
+      if (state.historyFailure) throw new Error('History unavailable');
+      records.push({ before, after, capture });
+    },
     collection: async () => ({ findOne: async (query: any, options: any) => { assert.equal(query.ownerId, input.ownerId); assert.equal(options.session, session); return state.row; },
       updateOne: async (query: any, update: any, options: any) => { assert.equal(options.session, session); writes.push({ query, update }); return { matchedCount: state.matches }; } }) };
-  return { deps, state, writes, deltas };
+  return { deps, state, writes, deltas, records };
 }
 test('managed library renames change display metadata with quota and version fences, preserving payload/history', async () => {
   for (const kind of ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive']) {
@@ -33,6 +38,8 @@ test('managed library renames change display metadata with quota and version fen
     assert.equal(h.writes[0].update.$set['crystal.title'], input.title);
     assert.equal(h.deltas[0], h.writes[0].update.$set.sizeBytes - before.sizeBytes);
     assert.equal(h.state.commits, 1);
+    assert.equal(h.records.length, 1); assert.deepEqual(h.records[0].before, before);
+    assert.equal(h.records[0].after.crystal.title, input.title);
   }
 });
 test('PAT/app/service/cross-origin/custom-plane or invalid-name renames never touch storage', async () => {
@@ -52,5 +59,12 @@ test('foreign/namespace/transient/history rows and stale versions remain unmodif
 test('a concurrent managed rename rolls back its quota delta and returns conflict', async () => {
   const h = harness(); h.state.matches = 0;
   assert.deepEqual(await renameLibraryThing(input, h.deps), { ok: false, status: 409, error: 'Thing changed; refresh before renaming' });
+  assert.equal(h.state.commits, 0); assert.equal(h.state.rollbacks, 1);
+  assert.equal(h.records.length, 0);
+});
+
+test('history failure rolls back the rename and never returns a success receipt', async () => {
+  const h = harness(); h.state.historyFailure = true;
+  assert.deepEqual(await renameLibraryThing(input, h.deps), { ok: false, status: 503, error: 'Could not rename this Thing; try again' });
   assert.equal(h.state.commits, 0); assert.equal(h.state.rollbacks, 1);
 });
