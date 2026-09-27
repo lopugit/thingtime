@@ -62,3 +62,5 @@ composes ordinary Component and read-only Action Things. Its live totals use
 `webstandards.browse`; plan statuses are editable Component arguments. Remaining
 feature lists link to the canonical catalogue rather than copying its inventory.
 The account-drafts release on main is integrated before final CI and deployment.
+The subsequent Timeline provenance merge is also preserved, including trusted
+Action/AI mutation attribution and its compatible capability history.

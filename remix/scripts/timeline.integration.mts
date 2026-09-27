@@ -190,6 +190,54 @@ for (let n = 0; n < 5; n++) assert.deepEqual(largeRestored.crystal[`group${n}`],
 assert.equal((await call('/api/v1/things', { id: large.id }, 'DELETE')).data.ok, true, 'History must not block deletion of a large Thing');
 assert.equal((await largeHistory()).data.entries[0].event.before.adapter, 'thing-content-parts');
 const originalCookie = cookie;
+// The real executor, including nested Actions, must record through the same
+// transactional Thing writer. Client provenance fields are never authority.
+const actionData = await call('/api/v1/things', { thingtime: ['data'], crystal: { title: 'Action timeline fixture' }, visibility: 'private' });
+const deleteData = await call('/api/v1/things', { thingtime: ['data'], crystal: { title: 'Action delete fixture' }, visibility: 'private' });
+assert.equal(actionData.data.ok, true); assert.equal(deleteData.data.ok, true);
+const target = actionData.data.thing.id;
+const deletionTarget = deleteData.data.thing.id;
+const makeAction = async (crystal: Record<string, unknown>) => {
+ const saved = await call('/api/v1/things', { thingtime: ['action'], crystal, visibility: 'private' });
+ assert.equal(saved.data.ok, true, `Action fixture failed: ${saved.data.error}`);
+ return saved.data.thing.id;
+};
+const childAction = await makeAction({ name: 'Nested Timeline update', actionKey: `timeline-child-${randomUUID()}`,
+ capabilities: [{ capability: 'things.update' }], steps: [{ op: 'things.update', id: target, values: { nested: true } }] });
+const rootAction = await makeAction({ name: 'Timeline operation', actionKey: `timeline-root-${randomUUID()}`,
+ capabilities: [{ capability: 'things.update' }, { capability: 'things.delete' }, { capability: 'actions.invoke', actions: [childAction] }],
+ steps: [{ op: 'things.update', id: target, values: { root: true } }, { op: 'actions.invoke', action: childAction }, { op: 'things.delete', id: deletionTarget }] });
+const actionRun = await call('/api/v1/actions/run', { action: rootAction, source: 'system', actorId: 'forged', operationId: 'forged' });
+assert.equal(actionRun.data.status, 'ok', `Action run failed: ${actionRun.data.error}`);
+const actionHistory = () => call(`/api/v1/timeline?${query}&thingId=${target}`);
+const actionEvents = (await actionHistory()).data.entries.map((entry: any) => entry.event);
+assert.equal(actionEvents.length, 3);
+assert.deepEqual(actionEvents.map((item: any) => item.source), ['action', 'action', 'api']);
+assert.equal(actionEvents[0].actorId, ownerId);
+assert.equal(actionEvents[0].operationId, actionEvents[1].operationId);
+assert.notEqual(actionEvents[0].operationId, 'forged');
+assert.notEqual(actionEvents[0].id, actionEvents[1].id);
+assert.deepEqual(actionEvents[0].parentIds, [actionEvents[1].id]);
+const actionDeletion = (await call(`/api/v1/timeline?${query}&thingId=${deletionTarget}`)).data.entries[0].event;
+assert.equal(actionDeletion.operation, 'delete'); assert.equal(actionDeletion.source, 'action');
+assert.equal(actionDeletion.operationId, actionEvents[0].operationId);
+const partialAction = await makeAction({ name: 'Partially completed Timeline operation', actionKey: `timeline-partial-${randomUUID()}`,
+ capabilities: [{ capability: 'things.update' }], steps: [
+ { op: 'things.update', id: target, values: { partial: true } },
+ { op: 'things.update', id: `missing-${randomUUID()}`, values: { refused: true } }] });
+assert.equal((await call('/api/v1/actions/run', { action: partialAction })).data.status, 'error');
+const partialEvents = (await actionHistory()).data.entries;
+assert.equal(partialEvents.length, 4, 'Only the committed step gets a change event');
+assert.equal(partialEvents[0].event.source, 'action');
+assert.notEqual(partialEvents[0].event.operationId, actionEvents[0].operationId);
+assert.equal((await call('/api/v1/things', { id: target, crystal: { direct: true }, source: 'ai' }, 'PATCH')).data.ok, true);
+assert.equal((await actionHistory()).data.entries[0].event.source, 'api', 'Executor context cannot leak into a later HTTP request');
+const browserAction = await makeAction({ name: 'Prepared Timeline operation', actionKey: `timeline-browser-${randomUUID()}`, runtime: 'browser',
+ capabilities: [{ capability: 'http.request', endpoints: ['PATCH /api/v1/things'] }], steps: [
+ { op: 'http.request', method: 'PATCH', path: '/api/v1/things', feature: 'api.things', minimumVersion: '1.27.0', body: { id: target, crystal: { prepared: true } } }] });
+const beforePrepare = (await actionHistory()).data.entries;
+assert.equal((await call('/api/v1/actions/run', { action: browserAction, execution: 'browser', executionVersion: '1.11.0' })).data.status, 'prepared');
+assert.deepEqual((await actionHistory()).data.entries, beforePrepare, 'Preparing a browser Action cannot claim it executed');
 const outsiderName = `timeline-${randomUUID().slice(0, 8)}`;
 const outsider = await call('/api/v1/auth/register', { username: outsiderName, password, email: `${outsiderName}@example.invalid`, displayName: 'Timeline privacy fixture' });
 assert.equal(outsider.data.ok, true);
@@ -200,4 +248,4 @@ assert.deepEqual((await call(`/api/v1/timeline?${outsiderQuery}&branches=1&thing
 assert.equal((await call(`/api/v1/timeline?${outsiderQuery}`, { ...branchCommand, operationId: randomUUID(), branchId: `branch-${randomUUID()}` })).response.status, 404);
 cookie = originalCookie;
 await writeFile('/tmp/thingtime-timeline-fixture.json', JSON.stringify({ base, username, password, cookie, ownerId, thingId: thing.id, folderId: discovery.data.folderId }), { mode: 0o600 });
-console.log(JSON.stringify({ ok: true, checks: ['disposable-replica-set', 'api-create-update-delete-history', 'stale-write-rollback', 'durable-draft-sync', 'idempotent-retry', 'provenance-refusal', 'account-isolation', 'protected-folder', 'private-search', 'restore-and-exact-retry', 'three-way-merge', 'explicit-conflict-resolution', 'named-branches', 'branch-push-CAS-and-retry', 'branch-fast-forward-only', 'relational-branch-memberships', 'branch-pagination', 'private-exact-version', 'protected-branch-CRUD', 'foreign-branch-refusal', 'large-Thing-grow-shrink-restore-delete', 'private-relational-snapshot-parts'], fixture: '/tmp/thingtime-timeline-fixture.json' }));
+console.log(JSON.stringify({ ok: true, checks: ['action-and-nested-operation-provenance', 'partial-action-committed-steps-only', 'browser-prepare-no-mutation', 'disposable-replica-set', 'api-create-update-delete-history', 'stale-write-rollback', 'durable-draft-sync', 'idempotent-retry', 'provenance-refusal', 'account-isolation', 'protected-folder', 'private-search', 'restore-and-exact-retry', 'three-way-merge', 'explicit-conflict-resolution', 'named-branches', 'branch-push-CAS-and-retry', 'branch-fast-forward-only', 'relational-branch-memberships', 'branch-pagination', 'private-exact-version', 'protected-branch-CRUD', 'foreign-branch-refusal', 'large-Thing-grow-shrink-restore-delete', 'private-relational-snapshot-parts'], fixture: '/tmp/thingtime-timeline-fixture.json' }));

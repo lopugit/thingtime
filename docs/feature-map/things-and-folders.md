@@ -18,6 +18,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Indexes | `app/api/utils/mongodb/collections.ts` `ensureIndexes()` (central registry; new indexes are rare, evidence-backed exceptions) |
 | Shared event/link records, IndexedDB relational queue/index, bounded cache, draft recorder and account sync | `app/timeline/` (`records.ts` and `branches.ts` are the identical local/remote durable schemas) |
 | Transactional history recording, protected binary event Things and paging | `app/api/utils/timeline/` |
+| Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
 | Shared History modal and managed Timeline folder | `app/components/Timeline/TimelineHost.tsx` |
 
 ## Authorization helper

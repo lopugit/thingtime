@@ -1,18 +1,22 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
 import { internalRequestActor, withInternalRequestActor } from '../auth/internalRequestActor';
+import { timelineMutationContext, withTimelineMutationContext } from '../timeline/mutationContext';
 let requests = 0;
+const provenance: any[] = [];
 mock.module('../../../../server/utils/actionDataRoutes', { namedExports: { actionDataRoutes: {
   'v1/builder/workspaces': async () => ({ loader: async ({ request }: any) => {
     requests++;
+    provenance.push(timelineMutationContext('owner'));
     assert.equal(request.headers.has('Authorization'), false);
     assert.equal(request.headers.has('Cookie'), false);
     assert.equal((await internalRequestActor(request)!())?.id, 'owner');
     return Response.json({ ok: true, rootId: new URL(request.url).searchParams.get('rootId') });
   } })
 } } });
-mock.module('./execute', { namedExports: { runAction: async () => { throw new Error('not prepared'); } } });
-const { createFirstPartyActionHost } = await import('./firstPartyActionHost');
+let prepared: any;
+mock.module('./execute', { namedExports: { runAction: async () => { if (prepared) return prepared; throw new Error('not prepared'); } } });
+const { createFirstPartyActionHost, runFirstPartyAction } = await import('./firstPartyActionHost');
 const { dispatchActionRequest, isLopuActionPath } = await import('./internalActionRequest');
 const user: any = { id: 'owner', username: 'owner', accountKind: 'user' };
 const step = { path: '/api/v1/builder/workspaces', method: 'GET', query: { rootId: 'root' }, feature: 'api.builder-workspaces', minimumVersion: '1.0.1', maxResultBytes: 1024 };
@@ -57,4 +61,23 @@ test('internal authority is scoped to the exact Request and removed after succes
     } catch (error) { assert.match(String(error), /failed route/); }
     assert.equal(internalRequestActor(request), undefined);
   }
+});
+
+test('server-hosted browser Action requests share provenance and preserve their AI initiator', async () => {
+  const request = { op: 'http.request', method: 'GET', path: step.path, feature: step.feature, minimumVersion: step.minimumVersion, query: { rootId: 'root' } };
+  prepared = { ok: true, status: 'prepared', execution: 'browser', actionId: 'action', viewer: user, inputs: {}, program: {
+    name: 'Read workspace', runtime: 'browser', capabilities: [{ capability: 'http.request', endpoints: [`GET ${step.path}`] }], steps: [request, request]
+  } };
+  const options = { resolveActor: async () => user, isAuthorized: async () => true };
+  for (const source of ['action', 'ai'] as const) {
+    provenance.length = 0;
+    const run = () => runFirstPartyAction(user, { action: 'action', inputs: {} }, options);
+    const result = source === 'ai' ? await withTimelineMutationContext(user.id, 'ai', run) : await run();
+    assert.equal(result.status, 'ok');
+    assert.equal(provenance.length, 2);
+    assert.deepEqual(provenance.map(item => item.source), [source, source]);
+    assert.equal(provenance[0].operationId, provenance[1].operationId);
+  }
+  assert.equal(timelineMutationContext('owner'), null);
+  prepared = undefined;
 });
