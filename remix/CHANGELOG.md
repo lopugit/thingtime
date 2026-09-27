@@ -71,7 +71,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-27 — **Codex (AI)**: Follow-up to the live Lopu Action run: large
   Thing reads now offer lossless, authorized JSON Pointer pages instead of
   repeating a truncated summary. Workspace select errors report their exact
-  allowed values, so Lopu can correct categories without trial writes.
+  allowed values, so Lopu can correct categories without trial writes. See
+  [PR #960 validation](../PRs/960-lopu-action-observation-lossless-inspection-and-actionable-category-errors.md).
 
 - 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
 
