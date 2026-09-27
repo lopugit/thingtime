@@ -36,6 +36,7 @@ const BORDER = '1px solid var(--tt-border, #ececef)';
 
 export type AttachmentComposerProps = {
 	ownerId: string;
+  preserveDrafts?: boolean;
 	disabled?: boolean;
 	remainingBytes?: number | null;
 	storageStatus?: 'ready' | 'reconciling' | 'unavailable';
@@ -474,7 +475,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		ownerId,
 		onCleanupError,
 		onSelectionError,
-		disabled === true,
+		disabled === true || props.preserveDrafts === true,
 		onCleanupDeferred,
 		{ purpose, maxFiles: boundedMaxFiles, imageOnly, maxBytesPerFile, allowedContentTypes, remainingBytes, storageStatus, initialLinkedSeeds }
 	);

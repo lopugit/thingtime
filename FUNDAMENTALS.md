@@ -328,6 +328,17 @@ random browser credential, mirrored to a host-only SameSite cookie for media.
 
 `error-log` is a server-minted, non-billable control kind in home `things_v2`. It uses the reserved `error-log-` ID namespace, no public ACL and no generic read/write path. Only the current-admin error-log endpoint projects bounded, irreversibly redacted detail from its binary envelope and safe searchable metadata. Seven-day TTL and bounded best-effort capture prevent indefinite retention; no account data or request payload is intentionally captured. `/things?logs=1` is its read-only admin browser.
 
+### Private account drafts
+
+`draft` is a protected home `things` kind. Each editor draft/template is an
+atomic, owner-private, quota-accounted record; files are relational attachment
+children. Only `/api/v1/drafts` may read/write its editing snapshot. Generic
+Thing CRUD, exports, feeds and search must not expose or publish it. Revision
+checks fence concurrent writes; discarded drafts retain empty tombstones to
+reject late saves. Templates clone their media through the canonical storage
+service, and only working drafts can donate media to a published target. See
+[the draft feature map](docs/feature-map/account-drafts-and-templates.md).
+
 ## 4. One MongoDB connection source
 
 The connection string comes from exactly one place:

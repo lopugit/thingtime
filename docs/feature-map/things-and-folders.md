@@ -138,3 +138,8 @@ acceptance checklist in the runtime documentation and `TESTING.md`.
 operations and projections survive ordinary Component serialization; no new
 Thing kind, collection or persistence path is involved. See
 [live and static ranges](../web-standards-builder.md#native-live-and-static-ranges).
+
+## Account drafts and templates
+
+See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
+private draft API, editor recovery, account isolation and independent media copies.

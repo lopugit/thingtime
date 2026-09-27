@@ -208,3 +208,8 @@ Range programs require `api.actions-run` 1.31.0. Forty additional saved programs
 use owned live/static ranges, native boundary/mutation methods and bounded
 contextual fragments through the existing DOM bridge. See
 [live and static ranges](../web-standards-builder.md#native-live-and-static-ranges).
+
+## Account drafts and templates
+
+See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
+private draft API, editor recovery, account isolation and independent media copies.

@@ -1,3 +1,4 @@
+import { draftRequest } from '~/drafts/draftClient';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
 import { useCallback, useRef } from 'react';
@@ -88,6 +89,7 @@ export function useApi() {
   actionActor.current = actionUser?.id;
 
   const v1 = {
+    drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     tiers: useCallback(async (options?: { signal?: AbortSignal }) => {
       await requireThingtimeCapability('api.tiers', '1.1.0');
       return getJson('/api/v1/tiers', options);

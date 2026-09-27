@@ -1,3 +1,5 @@
+import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { DraftSaveStatus } from '~/drafts/DraftPicker';
 import React from 'react';
 import { Button, Flex, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Text, Textarea } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
@@ -21,6 +23,14 @@ function Editor({ id, actor, onClose, onSaved }: React.ComponentProps<typeof Thi
  const [saving, setSaving] = React.useState(false);
  const active = React.useRef(true);
  const pending = React.useRef(false);
+ const restored = React.useRef(false);
+ const draft = useAccountDraft({ actor, surface: 'definition', context: `definition:${id}`,
+  onRestore: saved => { const value = JSON.parse(saved.snapshot); if (typeof value.source === 'string') { restored.current = true; setSource(value.source); } }
+ });
+ React.useEffect(() => {
+  if (thing && !saving) draft.capture({ name: String(thing.crystal?.name || 'Thing definition').slice(0, 160), surface: 'definition', context: `definition:${id}`,
+    snapshot: JSON.stringify({ source }), attachmentIds: [] }, true);
+ }, [source, thing, saving, draft.capture, id]);
  React.useEffect(() => {
   active.current = true;
   let cancelled = false;
@@ -28,7 +38,7 @@ function Editor({ id, actor, onClose, onSaved }: React.ComponentProps<typeof Thi
    if (cancelled) return;
    if (!response?.ok || !response.thing) throw new Error(response?.error || 'Could not open this definition');
    if (!actor || response.thing.author?.id !== actor) throw new Error('Save a private copy before editing this definition.');
-   setThing(response.thing); setSource(JSON.stringify(response.thing.crystal, null, 2));
+   setThing(response.thing); if (!restored.current) setSource(JSON.stringify(response.thing.crystal, null, 2));
   }).catch((failure: Error) => { if (!cancelled) setError(failure.message); });
   return () => { cancelled = true; active.current = false; };
  }, [id, actor]);
@@ -40,19 +50,20 @@ function Editor({ id, actor, onClose, onSaved }: React.ComponentProps<typeof Thi
   if (checked.ok === false) { setError(checked.error); return; }
   pending.current = true; setSaving(true); setError('');
   try {
+   await draft.flush();
    const response = await apiRef.current.v1.things.update({ id, crystal: parsed, replaceCrystal: true, expectedUpdatedAt: thing.updatedAt, expectedActor: actor });
    if (!response?.ok) throw new Error(response?.error || 'Could not save the definition');
    const readback = await apiRef.current.v1.things.get({ id });
    if (!readback?.ok || !readback.thing) throw new Error('Saved, but readback failed. Reopen the definition to check it.');
    if (!active.current) return;
-   onSaved?.(readback.thing); onClose();
+   await draft.clear().catch(() => {}); onSaved?.(readback.thing); onClose();
   } catch (failure: any) { if (active.current) setError(failure?.error || failure?.message || 'Could not save'); }
   finally { pending.current = false; if (active.current) setSaving(false); }
  };
  return <Modal isOpen onClose={() => { if (!pending.current) onClose(); }} size="4xl" scrollBehavior="inside" isCentered>
   <ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} /><ModalContent maxW="min(960px, calc(100vw - 24px))" maxH="calc(100dvh - 24px)" containerProps={{ zIndex: DRAWER_MODAL_Z }}>
    <ModalHeader>Edit {thing?.crystal?.name || 'definition'}</ModalHeader><ModalCloseButton isDisabled={saving} />
-   <ModalBody minW={0}>
+   <ModalBody minW={0}><DraftSaveStatus status={draft.status} error={draft.error} retry={draft.retry} />
     <Flex gap={2} mb={4}><Button size="sm" variant={mode === 'fields' ? 'solid' : 'outline'} isDisabled={!!parseError || !thing} onClick={() => setMode('fields')}>Fields</Button><Button size="sm" variant={mode === 'source' ? 'solid' : 'outline'} onClick={() => setMode('source')}>Source</Button></Flex>
     {thing ? mode === 'source' ? <Textarea aria-label="Definition source" fontFamily="mono" fontSize="sm" rows={22} value={source} onChange={(event) => { setSource(event.target.value); setError(''); }} /> : <DefinitionValueEditor value={parsed} onChange={(value) => { setSource(JSON.stringify(value, null, 2)); setError(''); }} /> : <Text>{error ? '' : 'Opening definition…'}</Text>}
     {parseError || error ? <Text role="alert" color="red.600" mt={3} overflowWrap="anywhere">{parseError || error}</Text> : null}

@@ -4216,3 +4216,26 @@ needed for standard device transcription. Build and install using the
 Microphone and Speech Recognition when macOS asks. Re-enable denied access in
 System Settings → Privacy & Security. On-device recognition is preferred where
 the language supports it; Apple's service may be used otherwise.
+
+### Account drafts and templates
+
+Signed-in post, comment, Thing, definition and schema editors save private
+working drafts to the account. The post composer has **Load drafts & templates**;
+post menus offer **Save as template**. Loading a template creates an editable copy
+and keeps the template. The picker includes an automatic account-resume preference;
+local device recovery stays enabled. Offline changes sync when connectivity returns.
+The 512 KiB editing-snapshot limit is separate from attachment byte quotas.
+
+No new secret or deployment variable is needed. Forks need the normal authenticated
+MongoDB setup **with transactions/a replica set** and the existing private attachment
+storage configuration for uploaded files and independent template media copies.
+The development-only `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` stand-in and fixture
+upload approval flow above support local verification; never configure the local
+stand-in on Vercel. Use placeholder values in shared setup files.
+
+Create a disposable fixture with `seed-fixture.mjs`, then run
+`node remix/scripts/verify-account-drafts.mjs remix/.fixtures/<name>.json --media`.
+Fixture JSON contains test credentials and stays ignored. The verifier exercises
+only the real local API. Existing device Thing data/preferences are retained and
+copied once to the first opening account; later accounts use separate device
+workspaces and draft caches. Hydration alone does not upload that legacy data.

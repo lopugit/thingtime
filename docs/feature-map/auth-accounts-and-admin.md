@@ -55,3 +55,8 @@ proves the host connected.
 - Local admin bootstrap recipe: register a throwaway user, add its username to
   `ADMIN_USERNAMES` in `remix/.env`, restart the dev stack.
 - `TESTING.md`: the auth, passkey, account switcher and admin sections.
+
+## Account drafts and templates
+
+See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
+private draft API, editor recovery, account isolation and independent media copies.

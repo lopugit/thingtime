@@ -1,86 +1,43 @@
 import React from 'react';
 import localforage from 'localforage';
+import { useAccountDraft } from '~/drafts/useAccountDraft';
 
-// Per-user, per-target draft persistence for comment/reply inputs — type,
-// leave, come back later and continue where you left off. Backed by
-// localforage (same store engine as the thingtime editor drafts), keyed by
-// user so accounts sharing a device never see each other's drafts.
-//
-// Device-local by design for now: syncing drafts into server-side profile
-// data needs its own API surface.
-
-const draftKey = (userId: string, targetId: string) => `tt-draft:${userId}:${targetId}`;
-
-const SAVE_DEBOUNCE_MS = 350;
-
-export const useCommentDraft = (
-  userId: string | null | undefined,
-  targetId: string
-): {
-  value: string;
-  setValue: (next: string) => void;
-  clear: () => void;
-  // true once the stored draft (if any) has been loaded
-  hydrated: boolean;
-} => {
-  const [value, setValueState] = React.useState('');
-  const [hydrated, setHydrated] = React.useState(false);
-  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const key = userId ? draftKey(userId, targetId) : null;
-
+// The plain comment/reply inputs share the account-backed draft protocol with
+// rich posts. Migrate the former per-device text only if nothing newer exists.
+export const useCommentDraft = (userId: string | null | undefined, targetId: string, isOpen = false) => {
+  const scope = `${userId || 'guest'}:${targetId}`;
+  const [state, setState] = React.useState({ scope, value: '' });
+  const live = React.useRef(state); live.current = state;
+  const pending = React.useRef(false);
+  const [restored, setRestored] = React.useState(false);
+  const value = state.scope === scope ? state.value : '';
+  const draft = useAccountDraft({ actor: userId, surface: 'comment', resumeRemote: isOpen, context: `comment:plain:${targetId}`,
+    onRestore: saved => {
+      const restored = JSON.parse(saved.snapshot);
+      if (typeof restored.text === 'string') { setState({ scope, value: restored.text }); setRestored(true); }
+    }
+  });
+  const setValue = React.useCallback((next: string) => {
+    setState({ scope, value: next });
+    draft.capture({ name: (next || 'Comment draft').slice(0, 160), surface: 'comment', context: `comment:plain:${targetId}`,
+      snapshot: JSON.stringify({ text: next }), attachmentIds: [] }, !!next, true);
+  }, [scope, targetId, draft.capture]);
   React.useEffect(() => {
+    if (!userId) return;
     let cancelled = false;
-    if (!key) {
-      setHydrated(true);
-      return;
-    }
-    localforage
-      .getItem<string>(key)
-      .then((stored) => {
-        if (cancelled) return;
-        if (typeof stored === 'string' && stored) setValueState(stored);
-        setHydrated(true);
-      })
-      .catch(() => {
-        if (!cancelled) setHydrated(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [key]);
-
-  const setValue = React.useCallback(
-    (next: string) => {
-      setValueState(next);
-      if (!key) return;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        if (next.trim()) {
-          void localforage.setItem(key, next);
-        } else {
-          void localforage.removeItem(key);
-        }
-      }, SAVE_DEBOUNCE_MS);
-    },
-    [key]
-  );
-
-  const clear = React.useCallback(() => {
-    setValueState('');
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    if (key) void localforage.removeItem(key);
-  }, [key]);
-
-  React.useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    },
-    []
-  );
-
-  return { value, setValue, clear, hydrated };
+    void localforage.getItem<string>(`tt-draft:${userId}:${targetId}`).then(stored => {
+      if (!cancelled && stored && !draft.current()) setValue(stored);
+    });
+    return () => { cancelled = true; };
+  }, [userId, targetId, setValue, draft.current]);
+  const clear = React.useCallback(async (submitted?: string) => {
+    if (submitted !== undefined && live.current.value.trim() !== submitted) return;
+    setState({ scope, value: '' });
+    await draft.clear().catch(() => {});
+    if (userId) void localforage.removeItem(`tt-draft:${userId}:${targetId}`);
+  }, [scope, userId, targetId, draft.clear]);
+  return { value, setValue, clear, hydrated: restored, flush: draft.flush,
+    begin: () => { if (pending.current) return false; pending.current = true; return true; },
+    end: () => { pending.current = false; }
+  };
 };

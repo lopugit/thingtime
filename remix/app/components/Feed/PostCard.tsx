@@ -902,7 +902,7 @@ const CommentRow = (props: {
   const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
-	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated } = useCommentDraft(user?.id, comment.id);
+	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = useCommentDraft(user?.id, comment.id, replyInputOpen);
   const pending = isPendingComment(comment);
 
   // ＋ in the quick row opens the full custom picker (same as posts)
@@ -1142,17 +1142,18 @@ const CommentRow = (props: {
   // swaps in when the write lands, and a failure restores your text
   const submitReply = async () => {
     const text = replyText.trim();
-    if (!text) return;
+    if (!text || !beginReply()) return;
 
     const pendingReply = buildPendingComment(user, comment.id, text);
-    clearReplyDraft();
     freshReplies.note(pendingReply.id);
     setReplies((prev) => [...(prev || []), pendingReply]);
     onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: current.commentCount + 1 }) }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
 
     try {
+      await flushReplyDraft();
       const resp = await api.v1.things.comment({ id: comment.id, text });
+      await clearReplyDraft(text);
       freshReplies.swap(pendingReply.id, resp.comment.id);
       setReplies((prev) => {
         const mapped = (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply));
@@ -1169,9 +1170,8 @@ const CommentRow = (props: {
       freshReplies.drop(pendingReply.id);
       setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
       onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: Math.max(0, current.commentCount - 1) }) }));
-      setReplyText(text); // give the draft back
       lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
-    }
+    } finally { endReply(); }
   };
 
   // the rich composer posts through api.v1.things.comment itself and hands
@@ -1501,7 +1501,7 @@ function PostCardImpl(props: PostCardProps) {
   const navDirRef = React.useRef<'push' | 'pop'>('push');
   const focusedComment = focusStack.length ? focusStack[focusStack.length - 1] : null;
   // the comment text persists as a per-user draft — leave and pick it up later
-  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft } = useCommentDraft(user?.id, post.id);
+  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = useCommentDraft(user?.id, post.id, commentsOpen);
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
   // one EMPTY reply input at a time across this card's comment tree
   const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
@@ -2029,10 +2029,9 @@ function PostCardImpl(props: PostCardProps) {
   // swaps in when the write lands, and a failure restores your text
   const submitComment = async () => {
     const text = commentText.trim();
-    if (!text) return;
+    if (!text || !beginComment()) return;
 
     const pendingComment = buildPendingComment(user, post.id, text);
-    clearCommentDraft();
     freshComments.note(pendingComment.id);
     onChanged?.(post.id, (prev) => ({
       ...prev,
@@ -2042,7 +2041,9 @@ function PostCardImpl(props: PostCardProps) {
     onEngagement?.({ thingId: post.id, signal: 'comment' });
 
     try {
+      await flushCommentDraft();
       const resp = await api.v1.things.comment({ id: post.id, text });
+      await clearCommentDraft(text);
       freshComments.swap(pendingComment.id, resp.comment.id);
       onChanged?.(post.id, (prev) => ({
         ...prev,
@@ -2057,9 +2058,8 @@ function PostCardImpl(props: PostCardProps) {
         comments: prev.comments.filter((comment) => comment.id !== pendingComment.id),
         ...(prev.commentCount === undefined ? {} : { commentCount: Math.max(0, prev.commentCount - 1) })
       }));
-      setCommentText(text); // give the draft back
       lopu({ title: err?.error || 'Comment did not send 😞', status: 'error' });
-    }
+    } finally { endComment(); }
   };
 
   // the rich composer posts through api.v1.things.comment itself and hands

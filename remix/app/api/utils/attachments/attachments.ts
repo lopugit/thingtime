@@ -1,3 +1,4 @@
+import { ownedMediaDraftIds } from '../drafts/media';
 import { attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { createHash, randomUUID } from 'node:crypto';
 
@@ -83,6 +84,7 @@ type AttachmentCleanupOutcome = { status: 'deleted' | 'skipped' } | { status: 'd
 type AttachmentViewer = AttachmentAccessViewer;
 
 type AttachmentServiceDependencies = {
+  ownedMediaDraftIds: typeof ownedMediaDraftIds;
 	store: AttachmentStore;
 	getS3: () => AttachmentS3;
 	now: () => Date;
@@ -264,6 +266,7 @@ const exactPartRequest = (value: unknown, partCount: number) => {
 };
 
 const defaultDependencies: AttachmentServiceDependencies = {
+  ownedMediaDraftIds,
 	store: attachmentStore,
 	getS3: getPrivateS3,
 	now: () => new Date(),
@@ -1409,10 +1412,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const byId = new Map(docs.map((doc) => [doc.shareId, doc]));
 			const ordered = normalized.map((id) => byId.get(id)).filter((doc): doc is AttachmentDoc => !!doc);
 			const bindingStates = new Set<'draft' | 'bound'>();
+            const sourceDrafts = purpose === 'post' || purpose === 'comment'
+              ? await dependencies.ownedMediaDraftIds(ownerId, ordered.map(doc => doc.targetId).filter((id): id is string => typeof id === 'string' && id !== normalizedExpectedTargetId))
+              : [];
 			if (
 				ordered.length !== normalized.length ||
 				ordered.some((doc) => {
-					const draft = !doc.targetId && !!doc.attachmentExpiresAt && doc.attachmentExpiresAt.getTime() > now;
+					const draft = (!doc.targetId && !!doc.attachmentExpiresAt && doc.attachmentExpiresAt.getTime() > now) || (!!doc.targetId && sourceDrafts.includes(doc.targetId) && doc.attachmentExpiresAt === undefined);
 					const idempotentlyBound =
 						!!normalizedExpectedTargetId && doc.targetId === normalizedExpectedTargetId && doc.attachmentExpiresAt === undefined;
 					if (draft) bindingStates.add('draft');

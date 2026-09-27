@@ -1,3 +1,6 @@
+import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { DraftSaveStatus } from '~/drafts/DraftPicker';
 import React from 'react';
 import {
   Box,
@@ -324,6 +327,11 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
   const [value, setValue] = React.useState<Record<string, unknown>>({});
   const [publishing, setPublishing] = React.useState(false);
   const [touched, setTouched] = React.useState(false);
+  const user = useCurrentUser();
+  const draft = useAccountDraft({ actor: user?.id, surface: 'schema', context: `schema-form:${source.id}`,
+    onRestore: saved => setValue(JSON.parse(saved.snapshot).value || {}) });
+  React.useEffect(() => { if (!publishing) draft.capture({ name: `${source.name} draft`.slice(0, 160), surface: 'schema', context: `schema-form:${source.id}`,
+    snapshot: JSON.stringify({ value }), attachmentIds: [] }, Object.keys(value).length > 0); }, [value, source.id, source.name, publishing, draft.capture]);
 
   const handleChange = React.useCallback((path: string[], next: unknown) => {
     setTouched(true);
@@ -343,6 +351,7 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
       // the scope/provenance tags spread LAST so no user field can clobber
       // them (top-level fields named schema/schemaId are also rejected at
       // author time); schemaId pins usage counts to this exact schema thing
+      await draft.flush();
       const resp: any = await api.v1.things.create({
         thingtime: ['data'],
         crystal: {
@@ -361,6 +370,7 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
         duration: 8000,
         ...(searchableSchemaSource(source) ? { link: { label: 'Find it on /search', href: schemaSearchPath(source) } } : {})
       });
+      await draft.clear().catch(() => {});
       if (resetOnCreate) {
         setValue({});
         setTouched(false);
@@ -375,6 +385,7 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
 
   return (
     <Flex direction="column" gap={3}>
+      <DraftSaveStatus status={draft.status} error={draft.error} retry={draft.retry} />
       {source.description && (
         <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
           {source.description}

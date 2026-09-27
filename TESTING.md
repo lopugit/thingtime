@@ -1988,6 +1988,45 @@ email whose link points at the attacker.
 - [ ] `npm --prefix remix run test:marketing` (publishing + store tests) and
       `npm --prefix remix run test:api-capabilities` pass.
 
+## Account drafts and reusable post templates
+
+- [ ] Signed in, type rich text, partial marketplace values, tags, an audience,
+      empty poll options and a nested Thing. Wait for “Saved to your drafts”,
+      close/reopen and reload: all values recover. No post is published by typing.
+- [ ] Disconnect while writing; reload on the same device, reconnect and retry.
+      The last input and the exact uncertain write identity survive. Two tabs
+      editing one draft produce a conflict with “Save as a new draft”, never an
+      older overwrite. Switching accounts never shows or saves another account's
+      drafts; local workspace/cross-tab channels are scoped to that account.
+- [ ] Load another draft while the current one is dirty: the previous draft
+      remains available. Late callbacks from an old rich-text editor cannot
+      erase a newly loaded template. Test both normalized and unfinished blocks.
+- [ ] Publish a draft: it leaves the picker. Reload during/after cleanup: the
+      completed draft does not reopen. If another device has a newer revision,
+      cleanup preserves that newer draft. Failed posts retain their draft.
+- [ ] Save an existing post from its menu as a template. Load it twice, change
+      text, then publish. The original template stays unchanged and selectable.
+      Existing media, audience, tags, listing and layout survive the copy.
+- [ ] Upload a file, save a draft, close the composer, reopen and publish.
+      Template copies get independent files; deleting the source post does not
+      break them. A template's own files cannot be consumed directly by posting.
+- [ ] Plain comments/replies resume when their input is opened. Failed writes
+      keep text, and typing a newer reply while a request finishes keeps the newer
+      draft. The rich reply picker lists drafts only for the current parent.
+- [ ] Edit a Thing, a raw definition (including invalid JSON), a schema's field
+      tree and a schema-based form. Close/reopen: each resumes in its own editor.
+      The Thing editor's draft picker can recover a saved account Thing.
+- [ ] Check the picker at desktop and 390px mobile widths: buttons stay usable,
+      names wrap, the dialog scrolls, and nothing overlaps. The resume setting
+      controls account restoration while keeping local recovery enabled.
+- [ ] Run `npm --prefix remix run test:drafts` and related feed/editor/schema/
+      autosave/attachment/capability suites. For transactional acceptance, create
+      a disposable local fixture through `seed-fixture.mjs`, then run
+      `node remix/scripts/verify-account-drafts.mjs remix/.fixtures/<name>.json --media`.
+      Enable fixture uploads and local object storage per README first. This
+      exercises ownership, revisions, replay, tombstones and independent copies
+      through the real API and Mongo transactions, never direct test DB writes.
+
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
 - [ ] Seed the `thingtime` LocalForage value with valid-looking hostile and
@@ -2000,9 +2039,10 @@ email whose link points at the attacker.
       nor any function source before a second navigation.
 - [ ] Open the feed composer → Thingtime tab: the editor shows exactly ONE
       root property, `New Thing`, with no default children (no `name`).
-- [ ] The draft path is session-scoped (`tmp.<sessionId>.New Thing`): add a
-      field, reload the page, reopen the tab → the draft is EMPTY again and
-      the store's `tmp` branch holds only the new session.
+- [ ] The live editor path is session-scoped (`tmp.<sessionId>.New Thing`).
+      While signed in, add a field and reload: account draft recovery restores
+      the value into the new session. Opening a second composer preserves the
+      first composer's branch. Successfully publishing clears only its draft.
 - [ ] Post button stays disabled until the thing has real content (empty
       strings don't count; numbers/booleans/nulls do).
 - [ ] Photos toggle ON requires ≥1 valid image URL before Post enables;

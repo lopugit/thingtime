@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Private account autosave for post/comment, Thing,
+  definition and schema editors; shared draft/template picker, reusable post
+  templates with independent media, revision-safe recovery and scoped local
+  workspaces. Added real local API/transaction/media verification and setup
+  guidance. See [draft feature map](../docs/feature-map/account-drafts-and-templates.md).
+
 - 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
   editable boundaries, native document edits and bounded contextual fragments.
   Check owned endpoints and concrete native getters; negotiate actions-run 1.31.0.

@@ -99,3 +99,8 @@ remains an expiring draft until the protected transfer writer commits it.
 original bytes; portable exports/imports retain the immutable file purpose.
 `test:attachments` covers file lifecycle and access alongside recordings.
 The minimum origin contracts are listed in [remote-files.md](../remote-files.md).
+
+## Account drafts and templates
+
+See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
+private draft API, editor recovery, account isolation and independent media copies.
