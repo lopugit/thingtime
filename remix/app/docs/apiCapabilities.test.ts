@@ -12,7 +12,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
 		['api.things', '1.33.0', '1.32.0'], ['api.things-update', '1.10.0', '1.9.0'],
-		['api.actions-run', '1.27.0', '1.26.0'], ['api.webpages-suites-install', '1.3.0', '1.2.0']
+		['api.actions-run', '1.28.0', '1.27.0'], ['api.webpages-suites-install', '1.3.0', '1.2.0']
 	]) {
 		assert.equal(route[feature], minimum);
 		assert.equal(wellKnown[feature].version, minimum);
@@ -98,8 +98,8 @@ test('standalone Thing copying negotiates the additive copy contract on both man
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.27.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.27.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.28.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.28.0');
 	for (const unsupported of ['', '1.1.0', '1.2.0', '1.2.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.3.0'), false);
 	assert.equal(capabilitySatisfies('1.3.1', '1.3.0'), true);
 });
@@ -619,4 +619,12 @@ test('cursor discussion clients require the additive 1.27 contract while media k
   for (const old of [undefined, '1.24.0', '1.25.0', '1.26.0', '2.0.0']) assert.equal(capabilitySatisfies(old, '1.27.0'), false);
   for (const current of ['1.27.0', '1.27.1', '1.29.0']) assert.equal(capabilitySatisfies(current, '1.27.0'), true);
   assert.equal(capabilitySatisfies('1.24.0', '1.24.0'), true, 'the prior gallery contract remains independently compatible');
+});
+
+
+test('CSSOM clients require the asynchronous stylesheet receiver contract', () => {
+  const version = createApiCapabilitiesManifest().features['api.actions-run'];
+  assert.equal(capabilitySatisfies(version, '1.28.0'), true);
+  assert.equal(thingtimeCapabilityManifest('https://cssom.test').features['api.actions-run'].version, version);
+  for (const prior of [undefined, '1.26.0', '1.27.0', '1.27.9', '2.0.0']) assert.equal(capabilitySatisfies(prior, '1.28.0'), false);
 });

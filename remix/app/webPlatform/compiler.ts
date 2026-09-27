@@ -219,8 +219,9 @@ export function compilePlatformProgram(raw: unknown): string {
 			};
 		switch (node.op) {
 			case 'dom':
-				if (!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static'].includes(node.action)) throw new Error('Unsupported DOM action');
-				if (!['document', 'surface'].includes(node.action) && (typeof node.key !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(node.key)))
+				if (!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static'].includes(node.action))
+					throw new Error('Unsupported DOM action');
+				if (!['document', 'surface'].includes(node.action) && (typeof node.key !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,60}$/.test(node.key)))
 					throw new Error('Expected a DOM member name');
 				return `__ttDom(${quoted(node.action)},${['document', 'surface', 'construct'].includes(node.action) ? 'null' : e(node.target)},${quoted(
 					node.key || ''

@@ -8936,3 +8936,28 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   transform matches it. Check anonymous API denial, Stop/fresh Run, desktop and
   narrow preview rendering. Keep the program editable and reusable on another
   Builder page through normal Component references.
+
+
+### Web standards: CSS Object Model
+
+- Run all 102 CSSOM programs with default and edited inputs. Compare native
+  declaration values/priorities, rule lists and computed styles. CSSRule.cssText
+  remains its specified no-op; imported sheets can raise native SecurityError.
+  Missing page descriptors and ignored baseURL options report unsupported.
+- Run cssomBoundaryFixtures: awaited replace returns its native sheet, grouping
+  rules retain parent identity, adopted sheets affect the owned sample, computed
+  declarations reject writes, and escaped selectors find their actual element.
+  Refuse foreign sheets, runtime-document access through a shadow host, root
+  attachment outside the owned sample, closed roots, excessive nested/cumulative
+  rules, text and adopted sheets. Window.open and constructor escape stay closed.
+- The complete authored adoption recipe must compute 120px/180px for its
+  default/edited inputs; outer sample styles must not override shadow styles.
+- Stop or deadline during pending native replacement must prevent late replies
+  from reviving the worker. A native rejection ends cleanly with one cleanup.
+- Round-trip edited CSSOM programs through the catalogue Action and private
+  Thing APIs. Save an edited adopted stylesheet in the workbench, fully reload
+  and run the saved Component, reuse it on a separate Builder page, check the
+  computed width, anonymous 404, Stop/fresh Run and desktop/390px overflow.
+- Re-run Typed OM, CSS, SVG/filter, Canvas, DOM and form browser regressions;
+  match runtime digest, restrictive CSP and both actions-run 1.28 manifests on
+  exact preview/main deployments before calling production @lopu delivered.
