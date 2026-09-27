@@ -242,3 +242,5 @@ first-party host reuses `browserActionRuntime.ts` and the canonical
 also spreads. Register a new delegable data route in that shared map; other
 routes stay in the catch-all. Both still need the API docs registry entry.
 See [authorization and validation](../lopu-action-access.md).
+
+Native traversal and editable synchronous callback objects/functions require `api.actions-run` 1.35.0. `synchronousCallback.ts` evaluates bounded data instructions; `domBridge.ts` retains native ownership, traversal and callback/error transport. Both manifests and the existing Actions client negotiate the contract. See [runtime limits and acceptance](../web-standards-builder.md#native-traversal-and-synchronous-callback-programs).

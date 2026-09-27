@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-27 · Codex (AI):** Added 41 reusable native traversal programs and bounded synchronous callback definitions saved as Component data. Verified 115 native cases, edited-filter save/reload/reuse, private API round-trips, responsive layout and production output; Actions contract is 1.35.0.
+
 - 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API

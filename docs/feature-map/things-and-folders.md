@@ -161,3 +161,5 @@ retained bytes; part envelopes are control storage.
 `ariaFixtures.ts` supplies 53 editable ARIA programs. Role/value inputs, selectors,
 relationships and projections persist in ordinary Components through the canonical
 suite Actions and can be referenced by another page. See [native ARIA programs](../web-standards-builder.md#native-aria-object-programs).
+
+`traversalFixtures.ts` produces 41 reusable tree traversal programs. Synchronous filter definitions and explicit captured bindings persist as ordinary Component data. Live traversers and callbacks are recreated each run; the existing suite/save Actions and Thing API remain the only storage path. See [native traversal programs](../web-standards-builder.md#native-traversal-and-synchronous-callback-programs).
