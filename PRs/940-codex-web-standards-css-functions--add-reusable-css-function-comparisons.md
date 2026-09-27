@@ -26,8 +26,8 @@ and full Vercel build/output verification pass. The installed TypeScript
 configuration reports 91 diagnostics on both base and branch, with zero
 introduced diagnostics (the tracked ratchet baseline is 89).
 
-962 local opaque-runtime browser checks: 932 pass, 30 explicit unsupported,
-zero failures. This includes default/edited runs for all 180 entries, eleven CSS
+963 local opaque-runtime browser checks: 933 pass, 30 explicit unsupported,
+zero failures. This includes default/edited runs for all 180 entries, twelve CSS
 probe regressions and 591 prior SVG/filter/Canvas/DOM/form checks. Every supported
 edited pair changes native computed output. Five CSS functions are unsupported
 in tested Chromium: cross-fade(), device-cmyk(), image element(), image filter()
@@ -58,3 +58,6 @@ freshness is therefore unverified. The structural graph is refreshed separately.
 CSS probes call the native Element geometry method so a form control named
 getBoundingClientRect cannot shadow the observation. A native regression covers
 this case alongside the existing form-clobbering boundaries.
+
+Legacy syntax-only probes without a rendered #sample retain computed:null;
+only an explicitly requested missing target/control produces a target error.

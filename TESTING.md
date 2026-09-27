@@ -8906,7 +8906,8 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   accepted missing-variable syntax, rejected declarations, pseudo-element reads,
   scoped comparison, missing targets, closed pseudo-element vocabulary and
   field limits before/after substitution. Named form controls cannot shadow the
-  native geometry method. CSS.supports(true) is not visual proof.
+  native geometry method. Legacy syntax-only programs without #sample retain
+  their null computed result. CSS.supports(true) is not visual proof.
 - Published-value aliases retain interactive coverage. The paged-media element()
   must not accidentally receive the same-name image function's implementation.
 - Round-trip edited programs through catalogue, private Thing storage and the

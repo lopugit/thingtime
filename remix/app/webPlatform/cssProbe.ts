@@ -21,9 +21,12 @@ export function readCSSProbe(root: Element, probe: Probe, substitute: (value: un
 	const compareTarget = probe.compareTarget ? substitute(probe.compareTarget) : undefined;
 	validateCSSProbe({ ...probe, name: property, value, target, compareTarget });
 	const pseudoElement = probe.pseudoElement || null;
-	const observe = (selector: string) => {
+	const observe = (selector: string, optional = false) => {
 		const element = root.querySelector(selector);
-		if (!element) throw new Error(`No CSS probe element matches ${selector}`);
+		if (!element) {
+			if (optional) return { computed: null, elementBounds: null };
+			throw new Error(`No CSS probe element matches ${selector}`);
+		}
 		const rect = Element.prototype.getBoundingClientRect.call(element);
 		return {
 			computed: getComputedStyle(element, pseudoElement).getPropertyValue(property),
@@ -33,7 +36,8 @@ export function readCSSProbe(root: Element, probe: Probe, substitute: (value: un
 		};
 	};
 	const supported = CSS.supports(property, value);
-	const observed = observe(target);
+	// Older programs can ask only about syntax without rendering #sample.
+	const observed = observe(target, !probe.target && !compareTarget && !pseudoElement);
 	const comparison = compareTarget ? observe(compareTarget) : undefined;
 	return {
 		property,

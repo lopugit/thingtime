@@ -98,5 +98,10 @@ export const CSS_PROBE_BOUNDARY_FIXTURES: { name: string; program: PlatformProgr
 			document: [{ tag: 'form', attributes: { id: 'sample' }, children: [{ tag: 'input', attributes: { name: 'getBoundingClientRect' } }] }]
 		},
 		expected: { computed: '120px', supported: true }
+	},
+	{
+		name: 'CSS legacy syntax-only probes keep their null computed result',
+		program: { ...base, document: [] },
+		expected: { supported: true, computed: null, elementBounds: null }
 	}
 ];
