@@ -135,6 +135,8 @@ mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { exports: {
   createClaudeOAuthClient: (options: any = {}) => new Anthropic({ apiKey: null, authToken: options.token || process.env.CLAUDE_CODE_OAUTH_TOKEN, baseURL: process.env.ANTHROPIC_BASE_URL })
 } });
 
+mock.module(new URL('../settings/lopuPromptSettings.ts', import.meta.url).href, { exports: { getLopuPromptSettings: async () => ({ basePrompt: 'Lopu test base', instructions: [] }) } });
+
 const { streamLopuMusing } = await import('./musing.ts');
 
 beforeEach(() => {

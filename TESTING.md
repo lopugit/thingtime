@@ -972,8 +972,15 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] Desktop speech bridge 1.1.0 requests continuous capture only for the
+      message composer, so the native 1.5-second utterance cutoff cannot preempt
+      its configurable silence window. Private-page Transcribe and older bridge
+      clients retain the utterance boundary. Reject non-boolean continuous-mode
+      requests before spawning a helper; 1.0.0 clients remain supported.
+
 - [ ] Standard Mac/browser dictation writes partial and final words directly
-      into Message Lopu, with no separate transcript preview or automatic send.
+      into Message Lopu, with no separate transcript preview. Enable Hear me out
+      while checking draft-only interactions.
       Begin with typed text; stop mid-phrase, edit, resume, and switch Chat ↔ Voice:
       preserve the draft and append new speech without repeating revised words.
       A recognizer restart/failure retains the draft. Typing and explicit Send
@@ -983,10 +990,29 @@ is fixed, and cite the checklist you ran in the PR description.
       Run `scripts/lopu-dictation.browser.html`
       in page/compact layouts at desktop and 390px, then verify real speech in
       the signed installed Mac app. Private-page Transcribe and Direct voice
-      keep their existing dedicated flows.
+      keep their existing dedicated flows when Hear me out is off.
+- [ ] Dictation defaults to five seconds of silence before sending the entire
+      current draft once and stopping the microphone. Speech during the delay
+      resets it; final/restarted recognizers do not duplicate text or extend a
+      silent deadline. Settings → Lopu → Voice transcription and the voice gear
+      share a persistent custom 1–120 second delay (default 5); check reload,
+      empty/invalid/extreme inputs, decimals, and cross-tab preference sync.
+- [ ] Chat settings → Hear me out never auto-sends. After ten seconds of silence
+      with words in the draft, one “Send now?” popup appears while listening
+      continues. Keep listening/Escape dismiss it; another ten seconds asks
+      again. New speech dismisses and resets it. Send now sends the latest whole
+      draft exactly once; rejection restores it. Stop, typing, chat/account/mode
+      changes, lock and unmount cancel pending prompts/sends. Empty captures do
+      neither. While Lopu is replying, silence/Send now use the ordinary message
+      queue; later delivery must not replace a newer unsent draft. Test standard and compact layouts at desktop and 390px, including
+      keyboard focus, scrolling the voice settings, and popup overlap. Enabling
+      Hear me out overrides Direct voice/Transcribe; an already active native
+      iOS recording stops and cannot restart in this unsupported mode.
+      Run both regressions in `scripts/lopu-dictation.browser.html` separately.
 - [ ] On Mac, listen silently across at least two native no-input retry cycles
       (15 seconds), then speak: silence must not show a red service error or
-      send a message; the phrase fills the draft and explicit Send sends once. Stop ends
+      send a message; the phrase fills the draft and the selected silence policy
+      sends once or asks. Stop ends
       capture/retries. An interrupted helper still reports a real error, and
       retry clears it without removing conversation messages.
 - [ ] After a microphone permission or recognition failure, retry voice input:
@@ -9177,6 +9203,43 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   regression audit, lint, typecheck comparison and production build. Verify both
   1.33.0 manifests and exact deployed runtime in preview and production.
 
+## Public schema copies, durable chat files and Lopu instructions (2026-09-27)
+
+- [ ] Run `test:schemas`, `test:migrations`, `test:components`,
+      `test:attachments`, `test:lopu`, `test:lopu-chat-streaming`,
+      `test:lopu-streaming`, `test:lopu-ui` and `test:api-capabilities`.
+- [ ] Seed through `backfill-user-storage-accounting`; anonymously read every
+      `schema-<id>` from the registry. Copy Post, a collection/root schema and a
+      user schema; preserve nested fields, enum constraints, bounded JSON,
+      render and `forkOf`. Extend the copy and create an ordinary private Thing.
+      Copies never acquire protected native write powers or mutate the source.
+- [ ] On a real local upload form, choose an actual file, wait for Ready,
+      click Use file and submit. No invalid Post type, reserved `component-` ID or unfinished-file error;
+      both content URL and attachment ID persist in the returned Thing. Repeat
+      desktop/mobile, retry a failed commit, and deny anonymous file access.
+- [ ] Run `scripts/verify-schema-files.ts` using the isolated setup in README.
+      Save a chat photo to a folder and a Product property, retry the same tool
+      identity (same file), delete the source chat and compare exact saved bytes.
+      Reject foreign, blocked/pending, linked-only and unapproved sources.
+      Moderation updating a fresh copy must not prevent transactional placement.
+- [ ] In Settings → Lopu, add/edit/remove instructions, toggle one off, save and
+      reload. Only enabled entries reach the next provider request. An admin
+      edit of the base prompt appears in the public viewer and the next chat,
+      voice, musing and recording-analysis request. Start a new direct voice
+      session to receive a changed prompt. Check desktop and 390px layouts.
+- [ ] Ordinary users cannot edit shared guidance or write another account's
+      instructions. Guests/service accounts cannot read private instructions.
+      Stale revisions return 409; drafts survive background refresh and failed
+      saves. Account switching never displays or sends the previous list.
+      Custom instructions cannot replace server permissions or Confirm cards.
+- [ ] Generate the Xcode project and build the iOS simulator target. Web and
+      native direct voice require voice-session 1.2.0 and use its instructions.
+
+### PR #954 integration regressions
+
+- [ ] In Ask before running mode, saving a chat attachment and extending a Schema show a real Confirm card before writing. Full access permits the same tools; scheduled read-only work still refuses them.
+- [ ] Retry a private file save as the first request finishes: retain the completed independent file. Reject mismatched retry metadata without deleting that file; cleanup claims must not cross pending-to-ready finalization.
+- [ ] Verify all current registry kinds, including Timeline definitions, appear in the public Schema projection and pass the ordinary Schema validator.
 ### Web standards: reusable native XPath objects (2026-09-27)
 
 - Run all 30 XPath entries with default and edited programs; assert actual scalar,

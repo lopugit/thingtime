@@ -70,6 +70,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - **2026-09-27 · Codex (AI):** Added 41 reusable native traversal programs and bounded synchronous callback definitions saved as Component data. Verified 115 native cases, edited-filter save/reload/reuse, private API round-trips, responsive layout and production output; Actions contract is 1.35.0.
 
+- 2026-09-27 — **Codex (AI)**: Lopu Mac/browser dictation waits five seconds
+  before sending the current message draft. Settings → Lopu → Voice transcription
+  and the voice gear share a custom 1–120 second delay. Chat settings adds
+  **Hear me out**: keep listening and ask “Send now?” every ten seconds of silence,
+  with no automatic send. Manual Stop retains the draft; stale timers and rejected
+  sends cannot lose text. Removed the Mac dictation capture's fixed 1.5-second cutoff.
+  See [PR #961 details](../PRs/961-codex-voice-silence-settings--configurable-dictation-silence-and-hear-me-out.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Reviewed PR #954 against current main, preserved Lopu Ask/Full permissions with prompt settings, validated all 100 public schema definitions, and fixed concurrent attachment-save rollback deleting a completed file. Full unit suite, 902 API checks, real-byte acceptance, settings isolation/concurrency, production web build and iOS simulator build pass; no added TypeScript diagnostics. [QA details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
+
+
 - 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
@@ -106,6 +118,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   receivers and cleanup. Both manifests/client negotiate actions-run 1.32.0.
   Browser validation includes native interpolation, keyframe copying and ignored
   option detection. See the [animation guide](../docs/web-standards-builder.md#native-web-animation-programs) and [PR #951 details](../PRs/951-web-standards-animations-reusable-web-animations-programs.md).
+- 2026-09-27 — **Codex (AI)**: Publish all built-in schemas as copyable public
+  Schema Things, preserve nested/JSON fields and render templates in forks,
+  fix real Builder file commits, and let Lopu save chat attachments as durable
+  private files for Thing properties. Add visible shared Lopu guidance,
+  private tickable custom instructions, admin base-prompt editing, and shared
+  prompt composition across chat, voice, musings and recording analysis.
+  Includes isolated local upload/schema acceptance and native voice support.
+  [PR #954 details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
 
 - 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
   editable boundaries, native document edits and bounded contextual fragments.
