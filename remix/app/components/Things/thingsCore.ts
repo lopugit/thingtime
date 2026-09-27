@@ -329,9 +329,10 @@ export const interpolateRenderTree = (
   return walk(tree) as Record<string, unknown>;
 };
 
-// A title is shared metadata; keep an existing schema name in sync too.
-export const thingRenameCrystal = (thing: Pick<ThingsThing, 'crystal'>, title: string): Record<string, string> =>
-  ({ title, ...(typeof thing.crystal?.name === 'string' ? { name: title } : {}) });
+// Match the writer's projection: dedicated library/attachment renames change
+// display metadata only; ordinary schema names stay in sync with their title.
+export const thingRenameCrystal = (thing: Pick<ThingsThing, 'crystal' | 'thingtime'>, title: string): Record<string, string> =>
+  ({ title, ...(!isManagedLibraryThing(thing) && !thing.thingtime.includes('attachment') && typeof thing.crystal?.name === 'string' ? { name: title } : {}) });
 
 export const isManagedLibraryThing = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
   thing.thingtime.length === 1 && ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(thing.thingtime[0]);

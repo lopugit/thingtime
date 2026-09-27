@@ -29,10 +29,10 @@ import {
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
 import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
-import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
+import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingRenameCrystal, thingsCacheKey } from '~/components/Things/thingsCore';
 import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
-import { pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
+import { clearLocalCache, pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import type * as InstallSuite from '~/components/Builder/installSuite';
@@ -43,7 +43,7 @@ import { ThingComments } from '~/components/Things/ThingComments';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
 import { ScheduledTaskPanel } from '~/components/Lopu/ScheduledTaskPanel';
 import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
-import { thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
+import { canKeepThingAfterReadFailure, thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
 
 const DIAGNOSTIC_ID_PATTERN = /^migration-diagnostic-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -299,6 +299,7 @@ function GenericThingPage() {
 	);
 	const [loadState, setLoadState] = React.useState<ThingLoadState>(() => seedState(requestKey));
 	const [historyRefresh, setHistoryRefresh] = React.useState(0);
+	const refreshThing = React.useCallback(() => setHistoryRefresh(value => value + 1), []);
 	React.useEffect(() => {
 		const applied = (event: Event) => {
 			if ((event as CustomEvent).detail?.thingId === id) setHistoryRefresh(value => value + 1);
@@ -370,12 +371,13 @@ function GenericThingPage() {
 			})
 			.catch((cause) => {
 				if (controller.signal.aborted || (cause instanceof Error && cause.name === 'AbortError')) return;
-				setLoadState({
+				if (cacheKey && !canKeepThingAfterReadFailure(cause)) clearLocalCache(cacheKey);
+				setLoadState(current => ({
 					key: requestKey,
 					loading: false,
-					data: null,
+					data: !diagnosticRoute && current.key === requestKey && current.data?.kind === 'thing' && canKeepThingAfterReadFailure(cause) ? current.data : null,
 					error: apiErrorMessage(cause, 'This Thing is missing, private, or no longer available.')
-				});
+				}));
 			});
 
 		return () => controller.abort();
@@ -843,7 +845,13 @@ function GenericThingPage() {
 						{thing && <ThingTransferControls id={thing.id} linkKey={linkKey} />}
 					</Box>
 					{thing && !diagnosticRoute ? <PersistedThingMenu id={thing.id} initialThing={{ id: thing.id, thingtime: kinds,
-						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} /> : null}
+						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} onChanged={refreshThing}
+						onRenamed={title => setLoadState(current => {
+							if (current.key !== requestKey || current.data?.kind !== 'thing' || current.data.thing.id !== id) return current;
+							const previous = current.data.thing;
+							return { ...current, data: { ...current.data, thing: { ...previous,
+								crystal: { ...previous.crystal, ...thingRenameCrystal({ thingtime: kindsOf(previous), crystal: previous.crystal || {} }, title) } } } };
+						})} /> : null}
 					<Button
 						as={Link}
 						to={diagnosticRoute ? '/migrations' : back.to}
@@ -866,11 +874,12 @@ function GenericThingPage() {
 				{!loading && error ? (
 					<Box {...CARD_STYLES} p={{ base: 5, md: 6 }}>
 						<Heading as="h2" fontSize="lg">
-							This Thing cannot be opened
+							{thing ? 'Could not refresh this Thing' : 'This Thing cannot be opened'}
 						</Heading>
 						<Text mt={2} color={MUTED} fontSize="sm">
 							{error}
 						</Text>
+						<Button mt={3} size="sm" variant="outline" onClick={refreshThing}>Try again</Button>
 					</Box>
 				) : null}
 

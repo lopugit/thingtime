@@ -325,3 +325,39 @@ npm --prefix remix run test:timeline:folders`; both scripts require the same
 strict disposable replica-set guard as the main integration suite. Fixtures are
 created through ordinary account APIs, including supported bulk-copy requests.
 Quota-ceiling/downgrade tests and further protected writer coverage remain open.
+
+## Protected library display names — 2026-09-27
+
+Advertised by `api.timeline` 1.4.0 and the compatible `api.things` 1.33.2 fix.
+The dedicated Things display-title writer now records theme, feed algorithm,
+custom emoji and chat-archive renames in the same transaction as their content
+and storage accounting. Each event uses the shared `library-title` version-1
+snapshot (`{title: string | null}`) in both local caches and remote storage. A
+missing historical display title is null; the source name and protected payload
+are never captured by this adapter. History presents **Renamed theme/algorithm/
+emoji/chat archive**, the before/after titles and the exact previous saved head.
+Unchanged titles add no content event. Refused writes add no successful event,
+and a history/head failure rolls the rename back. Retained title content counts
+against the existing history storage allowance.
+
+This covers the existing home-account, first-party display-metadata operation;
+its user/account/origin/data-plane restrictions remain unchanged. It does not
+provide generic protected-content restore or claim that theme/algorithm/emoji/
+archive creation, payload updates and deletion are all covered. Those dedicated
+writers and restoration adapters remain in the open coverage audit above.
+
+The opt-in `test:timeline:library` script uses the same disposable replica-set
+guard as the other Timeline HTTP checks. It verifies title-only events, stale
+and forged-input refusals, exact parent chains, independent API operation ids,
+unchanged-title suppression and the original identity's preservation. Unit tests
+cover all four supported kinds and rollback on recording failure.
+
+Browser validation also caught a stale title on the Thing permalink after a
+successful menu rename. It now updates its matching in-memory projection and
+refetches through the existing identity-fenced loader. The shared optimistic
+rename helper preserves managed source names and attachment names, matching the
+dedicated writers instead of briefly inventing a change to protected identity.
+
+Temporary read failures after a mutation or cached reload preserve the matching
+Thing projection and expose Try again. Explicit authorization, identity and
+missing-record refusals still clear it; private diagnostics remain live-only.

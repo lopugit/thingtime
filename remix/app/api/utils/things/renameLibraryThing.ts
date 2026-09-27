@@ -2,9 +2,11 @@ import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/co
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { currentContentStorageSizeBytes, StorageMutationError, thingStorageSizeBytes } from '../storage/storageCore';
+import { newThingMutationCapture } from '../timeline/recordMutation';
+import { recordLibraryTitle } from '../timeline/libraryTitle';
 
 const defaults = { collection: getHomeThingsCollection, transaction: withHomeMongoTransaction,
-  custom: isCustomMongoEndpointActive, storageDelta: applyUserStorageDelta, now: () => new Date() };
+  custom: isCustomMongoEndpointActive, storageDelta: applyUserStorageDelta, now: () => new Date(), record: recordLibraryTitle };
 
 // Display metadata for protected personal-library Things. This deliberately
 // preserves emoji shortcodes, theme tokens, algorithm weights and archived
@@ -20,6 +22,7 @@ export async function renameLibraryThing(input: {
   const title = input.title.trim(), id = input.id;
   const expected = input.expectedUpdatedAt === undefined ? undefined : typeof input.expectedUpdatedAt === 'string' ? new Date(input.expectedUpdatedAt) : new Date(NaN);
   if (expected && !Number.isFinite(expected.getTime())) return fail(400, 'Invalid rename version');
+  const capture = newThingMutationCapture(input.ownerId);
   try {
     return await deps.transaction(async session => {
       const things = await deps.collection();
@@ -42,6 +45,7 @@ export async function renameLibraryThing(input: {
         storageClass: before.storageClass, storageAccountingVersion: before.storageAccountingVersion } as any,
         { $set: { 'crystal.title': title, sizeBytes, updatedAt } }, { session });
       if (result.matchedCount !== 1) throw new StorageMutationError(409, 'storage_conflict', 'Thing changed; refresh before renaming');
+      await deps.record(things, before, { ...before, crystal, sizeBytes, updatedAt }, capture, session);
       return { ok: true as const, id, title, updatedAt: updatedAt.toISOString() };
     });
   } catch (error) {
