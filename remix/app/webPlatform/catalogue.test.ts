@@ -91,7 +91,8 @@ test('malformed parameter descriptors cannot reach the React surface', () => {
 
 test('isolated runtime cannot inherit account authority, network origins, eval or executable HTML', () => {
 	const csp = readFileSync(new URL('../../scripts/csp.mjs', import.meta.url), 'utf8').split('export const platformRuntimeCsp =')[1];
-	assert.ok(csp.includes("sandbox: ['allow-scripts']"));
+	assert.ok(csp.includes("sandbox: ['allow-scripts', 'allow-forms']"));
+	assert.ok(csp.includes("'form-action': [\"'none'\"]"));
 	assert.ok(!csp.includes('allow-same-origin'));
 	assert.ok(!csp.includes('unsafe-eval'));
 	assert.ok(!csp.includes('https:'));

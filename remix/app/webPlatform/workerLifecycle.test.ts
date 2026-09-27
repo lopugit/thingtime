@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runPlatformWorker } from './workerLifecycle';
+import type { DOMCallback } from './workerLifecycle';
 
 function fixture() {
 	let terminated = 0,
@@ -119,4 +120,65 @@ test('DOM policy failures end execution and release resources once', () => {
 	assert.deepEqual(results, [{ ok: false, result: 'Stale DOM handle' }]);
 	assert.equal(messages.length, 1);
 	assert.equal(cleaned, 1);
+});
+
+test('asynchronous native DOM results are fenced by stop, timeout and rejection', async (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	for (const mode of ['reply', 'stop', 'timeout', 'reject']) {
+		const messages: unknown[] = [],
+			results: unknown[] = [];
+		let cleanups = 0,
+			resolve!: (v: unknown) => void,
+			reject!: (e: Error) => void;
+		const pending = new Promise((yes, no) => {
+			resolve = yes;
+			reject = no;
+		});
+		const worker: any = { onmessage: null, onerror: null, terminate: () => {}, postMessage: (value: unknown) => messages.push(value) };
+		const stop = runPlatformWorker(
+			worker,
+			{},
+			(ok, result) => results.push({ ok, result }),
+			() => cleanups++,
+			() => pending
+		);
+		worker.onmessage({ data: { type: 'tt-platform-worker-ready' } });
+		worker.onmessage({ data: { type: 'tt-platform-dom', id: 1 } });
+		assert.equal(messages.length, 1, 'native result is awaited');
+		if (mode === 'stop') stop();
+		if (mode === 'timeout') t.mock.timers.tick(2000);
+		if (mode === 'reject') reject(new Error('native failure'));
+		else resolve({ value: 42 });
+		await Promise.resolve();
+		await Promise.resolve();
+		assert.equal(messages.length, mode === 'reply' ? 2 : 1, 'late replies cannot revive a stopped worker');
+		if (mode === 'reject') assert.deepEqual(results, [{ ok: false, result: 'native failure' }]);
+		stop();
+		assert.equal(cleanups, 1);
+	}
+});
+
+test('native callback receivers cross the worker boundary and stop fences later delivery', () => {
+	const messages: unknown[] = [];
+	let deliver!: DOMCallback;
+	const worker: any = { onmessage: null, onerror: null, terminate() {}, postMessage: (value: unknown) => messages.push(value) };
+	const stop = runPlatformWorker(
+		worker,
+		{},
+		() => {},
+		() => {},
+		(_request, callback) => {
+			deliver = callback;
+			return { value: null };
+		}
+	);
+	worker.onmessage({ data: { type: 'tt-platform-worker-ready' } });
+	worker.onmessage({ data: { type: 'tt-platform-dom', id: 1 } });
+	const receiver = { $dom: 'animation', type: 'Animation' };
+	deliver(1, ['event'], undefined, receiver);
+	assert.deepEqual(messages.at(-1), { type: 'tt-platform-dom-callback', id: 1, args: ['event'], thisArg: receiver });
+	const count = messages.length;
+	stop();
+	deliver(1, ['late'], undefined, receiver);
+	assert.equal(messages.length, count);
 });

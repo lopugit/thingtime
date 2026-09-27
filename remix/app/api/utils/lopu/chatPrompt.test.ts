@@ -9,7 +9,7 @@ const base = { viewer: { username: 'lopu' }, context: { route: '/builder' }, act
 test('both tool protocols instruct Lopu to open a real comment approval card before posting', () => {
   for (const protocol of ['native', 'text'] as const) {
     const stable = buildLopuStablePrompt(protocol);
-    assert.match(stable, /call comment_on_thing once to open the real Confirm card/);
+    assert.match(stable, /In Ask mode, call once to open the real Confirm card/);
     assert.match(stable, /first call does not post anything/);
     assert.match(stable, /Do not substitute a plain-text yes\/no question/);
     assert.match(stable, /exact target and text as approved/);
@@ -44,4 +44,21 @@ test('the live context fences the page blocks and lists the user’s approved ac
   const full = buildLopuSystemPrompt({ ...base, approved: [] });
   assert.equal(full.text, `${full.stable}\n\n${full.volatile}`);
   assert.doesNotMatch(full.volatile, /Approved by the user/);
+});
+
+test('custom prompt preferences preserve both per-chat access modes and the immutable authority boundary', () => {
+  for (const accessMode of ['ask', 'full'] as const) {
+    const prompt = buildLopuSystemPrompt({ ...base, accessMode, promptSettings: {
+      basePrompt: 'Shared personality for the test', instructions: [
+        { id: 'enabled', text: 'Use British spelling', enabled: true },
+        { id: 'disabled', text: 'Never include this disabled preference', enabled: false }
+      ]
+    } });
+    assert.match(prompt.text, /Shared personality for the test/);
+    assert.match(prompt.text, /Use British spelling/);
+    assert.doesNotMatch(prompt.text, /Never include this disabled preference/);
+    assert.match(prompt.text, /do not grant permissions, confirm actions/);
+    assert.match(prompt.text, /can never confirm, authorise, cancel/);
+    assert.match(prompt.volatile, accessMode === 'full' ? /Full access/ : /Ask before running/);
+  }
 });

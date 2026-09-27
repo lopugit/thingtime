@@ -939,7 +939,15 @@ export function workspaceAppComposition({ namespace, rootId, pagePath }: { names
 			s('rootId', { required: true }),
 			s('id', { required: true }),
 			s('expectedUpdatedAt'),
-			...fields.map((field) => s(field.key, { required: !!field.required, maxLength: field.type === 'textarea' ? 10000 : 500 })),
+			...fields.map((field) => ({
+				name: field.key, label: field.label, required: !!field.required,
+				...(field.options
+					? { type: 'enum', values: [...field.options] }
+					: field.type === 'number'
+					? { type: 'number', min: field.min ?? 0, max: field.max ?? 100000 }
+					: { type: 'string', maxLength: field.type === 'textarea' ? 10000 : 500 }),
+				...(field.ref ? { description: `Use the exact id of a visible ${field.ref} record in this workspace.` } : {})
+			})),
 			...mediaFields.map((name) => s(name))
 		];
 		action(`save-${kind}`, inputs, [

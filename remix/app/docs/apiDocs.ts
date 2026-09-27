@@ -642,6 +642,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'drafts', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Private drafts and templates', endpoint: '/api/v1/drafts',
+    summary: 'Autosave unfinished Things and posts to the current account; reuse post templates.',
+    detail: 'Owner-only, quota-accounted snapshots. Writes use an expected actor, revision and stable write id. Files stay private and durable until the draft is discarded or published. Templates are copied into fresh working drafts and never consumed. Generic Thing CRUD cannot access this protected kind.',
+    auth: { mode: 'session-or-bearer', description: 'Full account session; app tokens and personal access tokens are refused.' },
+    methods: ['GET', 'POST'], steps: ['GET to page through your drafts or read an exact id.', 'POST save, delete, from-post, instantiate or recover with expectedActor.'],
+    requestExamples: [{ name: 'Drafts', description: 'List private post drafts and templates.', method: 'GET', query: { surface: 'post' } }],
+    responseExamples: [{ status: 200, description: 'Private drafts.', body: { ok: true, drafts: [], nextCursor: null } }]
+  }),
+
+  endpoint({
     id: 'builder-workspaces', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'builder',
     title: 'Service workspaces', endpoint: '/api/v1/builder/workspaces',
     summary: 'Folder-backed service management for builder apps, with live role and customer-scoped access.',
@@ -3144,6 +3154,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'settings-lopu-prompt', group: 'settings', title: 'Lopu base prompt and personal instructions',
+    endpoint: '/api/v1/settings/lopu-prompt', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    summary: 'Read the public base prompt, manage your private instruction checklist, or edit the base prompt as an admin.',
+    detail: 'GET returns base {basePrompt, revision} and the authenticated account’s personal {instructions, revision}; anonymous readers get no personal instructions. POST scope personal accepts up to 30 {id,text,enabled} entries (2000 characters each, 16000 total). POST scope base is admin-only and accepts basePrompt (16000 characters maximum). Both require the revision from GET (null before the first save); stale edits return 409. Preferences apply to the next AI-generated Lopu reply, including chat, voice and musings. Task-specific prompts, tool contracts and permissions still apply. Canned messages do not call a model.',
+    auth: { mode: 'optional', description: 'Public base prompt; private instructions are session-owned. Editing the base requires an administrator.' },
+    methods: ['GET', 'POST'],
+    steps: ['GET the current settings and revisions.', 'POST scope personal with instructions and personal.revision, or scope base with basePrompt and base.revision as an admin.', 'On 409 reload and reconcile before saving.'],
+    requestExamples: [{ name: 'Read prompt settings', description: 'Load the base and your private checklist.', method: 'GET' }, { name: 'Save an instruction', description: 'First personal save.', method: 'POST', body: { scope: 'personal', revision: null, instructions: [{ id: 'concise', text: 'Keep answers brief.', enabled: true }] } }],
+    responseExamples: [{ status: 200, description: 'Saved private checklist.', body: { ok: true, personal: { revision: 'new-revision', instructions: [{ id: 'concise', text: 'Keep answers brief.', enabled: true }] } } }]
+  }),
+  endpoint({
     id: 'settings-lopu-chat-defaults',
     group: 'settings',
     title: 'Lopu chat defaults',
@@ -4482,11 +4503,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // temporary session is 403 { code: LOPU_GUEST } like every other Lopu write (additive
     // refusals; GET is never gated). contractVersion feeds /api/v1/capabilities, featureVersion
     // the well-known Thingtime manifest.
-    contractVersion: '1.5.0',
-    featureVersion: '1.5.0',
+    contractVersion: '1.6.0',
+    featureVersion: '1.6.0',
     // 1.4.0: entries expose lopu.archived; list includes active and archived chats.
     summary: 'Lists the caller’s conversations with Lopu, or starts a new one. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
       'Optional management: "client" | "server" is stored in lopu settings and applies to subsequent sends; changing it does not interrupt existing work. ' +
       'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
       'externalSource carries { access: "lopu", provider: "lopu" }, so it also appears in /api/v1/chats and its ' +
@@ -4565,10 +4587,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: `providerId` retunes / clears the chat's pinned Secure Vault provider
     // (additive). 1.1.1: fails closed on a limiter outage. contractVersion feeds
     // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.4.0',
-    featureVersion: '1.4.0',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
     summary: 'Renames a Lopu conversation or retunes its model, effort, speed and pinned provider. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
       'Optional management: "client" | "server" is stored in lopu settings and applies to subsequent sends; changing it does not interrupt existing work. ' +
       'POST { chatId, title?, model?, effort?, speed?, providerId?, archived? }. Only the conversation’s member (its owner) may update it. ' +
       'archived: true hides the chat from the active Lopu view; false restores it. This owner-only, idempotent boolean ' +
@@ -4694,10 +4717,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.14.2',
-    featureVersion: '1.14.2',
+    contractVersion: '1.19.2',
+    featureVersion: '1.19.2',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.19.2 restores up to eight completed tool results (64 KiB) from the exact interrupted private background task on a verified continuation. Current account, conversation, deployment, retention and completed-boundary checks apply. No Action is replayed and no result is added to public message history. Expired task output stops refetching until the account or deployment changes. ' +
+      'Version 1.19.1 repairs split JSON-labelled tool fences, retries printed tool requests with bounded corrective hops, and preserves private read locators across checkpoints. Restored get_thing pages reauthorize the viewer and require the same revision; results and grants are never persisted as history. Action failure recovery data reaches the next provider hop. ' +
+      'Version 1.19.0 adds read-only inspect_action by authorized id or owner-scoped actionKey. It returns runtime, declared input descriptors, direct effects and optional candidate-input validation without execution, run records or confirmation. Oversized contracts explicitly point to lossless get_thing /inputs pages. Validation covers declared types only, not downstream API state or execution budgets. Invalid run_action inputs are refused before an Ask card. Partial failures retain a runId when available and instruct state verification before replay. Newly authored workspace save Actions expose canonical enum choices, numeric bounds and reference hints; existing saved programs are unchanged. ' +
+      'Version 1.18.0 adds lossless get_thing crystal inspection. Optional path is a JSON Pointer relative to the authorized public crystal (empty means the whole crystal); offset defaults to zero. crystalRead returns path, revision (SHA-256 of the selected JSON), offset, nextOffset, totalChars, complete and a JSON text chunk of at most 4000 UTF-16 characters. Follow nextOffset with the same path and revision, concatenate chunks before parsing, and restart at zero on revision mismatch. Every page rechecks access. Default reads remain bounded summaries with an inspection hint when content is omitted. Service-workspace select validation errors list exact allowed values. ' +
+      'Version 1.17 composes the current shared base prompt with enabled personal instructions for each request. get_schema and create_schema can inspect and extend every public built-in or visible user Schema; create_data validates the selected schema. save_attachment saves an independent owner-private copy of an authorized chat attachment and returns its stable ID and content URL for Thing properties, with optional owned-folder placement. Existing tool authorization and confirmation checks still apply. ' +
+      'Canonical Thing writes from authorized tools retain AI provenance in the shared Timeline, including nested Actions and server-hosted browser flows. Each tool invocation groups its committed changes through relational operation links; refusal or an unexecuted step creates no successful-change event. ' +
+      'Version 1.16.0 preserves context.page dirty, ready and updatedAt metadata when blocks are omitted. Missing blocks are never an empty page: clean saved pages are resolved through the authorized API; dirty, unknown or still-loading omitted drafts refuse mutation. Continuations preserve these fences. ' +
+      'Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
       'Version 1.14.2 corrects packaged Claude runtime availability for server-managed Vercel Workflow replies. It uses the existing shared OAuth credential selection and preserves model settings, tool permissions, cancellation and continuation rules; the public request and event shapes are unchanged. ' +
       'Version 1.14.1 routes native-tool gpt-5.6-sol replies through the Responses transport, preserving selected reasoning effort and fast priority instead of sending an unsupported Chat Completions combination. Provider conversation storage is disabled; encrypted reasoning is retained only within the active tool loop. The public event shape, tool permissions, confirmation checks and continuation boundaries remain compatible. Other models and text-tool providers retain their existing transport. ' +
       'Version 1.14 adds management (client or server) and explicit continueFromRequestId with automaticContinuation. The server supplies the continuation prompt, checks the latest saved assistant boundary and uses a deterministic resume request ID. Continuations cannot resubmit attachments, confirmation grants or old draft snapshots. Persisted user metadata and meta events mark continuation=true so the transcript omits synthetic user bubbles. done and persisted assistant metadata include continuationSafe and recoveryFailures; automatic recovery requires true and fewer than five consecutive saved errors. The server derives this streak from the preceding checkpoint, so polling, reloads and account switches cannot reset it. Successful checkpoints reset the streak; explicit manual Continue starts a fresh bounded streak. Manual Stop, archived conversations, newer messages, incomplete tools and pending confirmations block automatic continuation. create_thing now accepts type folder plus optional owned folderId and stores the canonical folder kind. ' +
@@ -4952,13 +4983,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Pick a Secure Vault connection whose kind lists a realtime model (GET /api/v1/ai/models → vaultProviders[].realtimeModels).',
 			'POST its providerId with an optional model, effort and textResponse.',
-			'Open the returned webSocketUrl with the ephemeral token as the client secret; it expires after five minutes and is single-session.'
+			'Version 1.2.0 returns instructions composed from the shared base, voice guidance and enabled private instructions. Send it unchanged in session.update; start a new session after editing settings. Open the returned webSocketUrl with the ephemeral token as the client secret; it expires after five minutes and is single-session.'
 		],
 		requestExamples: [
 			{ name: 'Start direct voice', description: 'The stored provider token stays server-side.', method: 'POST', body: { providerId: '<vault-provider-id>', model: 'grok-voice-latest', effort: 'none', textResponse: false } }
 		],
 		responseExamples: [
-			{ status: 200, description: 'The short-lived realtime session.', body: { ok: true, session: { provider: 'xai', model: 'grok-voice-latest', token: '<ephemeral-token>', expiresAt: 1800000000, webSocketUrl: 'wss://api.x.ai/v1/realtime?model=grok-voice-latest', effort: 'none', textResponse: false } } },
+			{ status: 200, description: 'The short-lived realtime session.', body: { ok: true, session: { provider: 'xai', model: 'grok-voice-latest', token: '<ephemeral-token>', expiresAt: 1800000000, webSocketUrl: 'wss://api.x.ai/v1/realtime?model=grok-voice-latest', effort: 'none', textResponse: false, instructions: 'Shared base prompt, voice guidance and enabled personal instructions.' } } },
 			{ status: 400, description: 'The connection is not the caller’s, its kind has no realtime model, or the model/effort is not eligible.', body: { ok: false, error: 'Direct voice needs a provider with realtime speech (xAI Grok Voice) — this connection has none.' } },
 			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
 		],
@@ -5226,12 +5257,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'mongodb-endpoint',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'mongodb',
     title: 'MongoDB data endpoint',
     endpoint: '/api/v1/mongodb/endpoint',
     summary: 'Read or change the MongoDB endpoint the data plane uses for this browser session.',
     detail:
-      'Thin-frontend mode: the session can point the open data plane (things, feed, search, comments, reactions, schemas, app-data) at any reachable MongoDB. Identity, auth and the protected system kinds always stay on the home Thingtime DB. The override is an httpOnly session cookie (tt_mongo) — or send an x-tt-mongo-url header per request from API clients. Activation probes the endpoint (connect + ping) before accepting it. Responses never include the URL itself, only the credentials-stripped host and db name.',
+      'Thin-frontend mode: the session can point the open data plane (things, feed, search, comments, reactions, schemas, app-data) at any reachable MongoDB. Identity, auth and the protected system kinds always stay on the home Thingtime DB. The override is an httpOnly session cookie (tt_mongo) — or send an x-tt-mongo-url header per request from API clients. Activation probes the endpoint (connect + ping) before accepting it. Responses never include the URL itself, only the credentials-stripped host and db name. In 1.1.0, root data includes dataPlane, the same public home/custom location identity used by Timeline. Send X-Thingtime-Expected-Data-Plane on API reads or writes to fence the selected database before the route runs: malformed identities return 400 and changed selections return 409 DATA_PLANE_CHANGED, with no handler execution. The header is a precondition, never a routing instruction or authorization grant. Explicit home Timeline requests still compare against the session selection before entering their home context. Ordinary source-fenced requests use the same configured fallback as root data; the public precondition, cookie and database selection are forwarded unchanged for upstream enforcement. Actor-fenced commands and vault verification retain their existing local-origin requirement. Browser endpoint changes invalidate mounted account/data views across tabs; Thing permalink caches and History links include the database identity. Reset and endpoint deletion omit the optional precondition so recovery stays available.',
     auth: {
       mode: 'optional',
 			description: 'Works logged out for { url } and { reset }. Selecting a saved endpoint ({ savedId }) requires a signed-in session.'
@@ -6254,12 +6286,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		notes: ['No response or log contains the cron secret. Free omni text screening makes draining the off-era backlog costless.']
 	}),
   endpoint({
-    id: 'themes',
+    id: 'themes', featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'themes',
     title: 'Themes',
     endpoint: '/api/v1/themes',
     summary: 'Lists or saves themes for the authenticated user.',
-    detail: 'Theme records let Thingtime users save and share visual configurations. Reads and writes require an authenticated user.',
+    detail: 'Theme records let Thingtime users save and share visual configurations. Reads and writes require an authenticated user. Modern saved themes record approved token content in private shared Timeline events in the same home transaction, even when a custom data plane is selected. Identical content adds no event; display-title and folder events retain one parent chain. Legacy storage retains its migration fences. Dedicated theme restoration and active-theme selection history remain in progress.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -6342,12 +6374,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'themes-delete',
+    id: 'themes-delete', featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'themes',
     title: 'Delete theme',
     endpoint: '/api/v1/themes/delete',
     summary: 'Deletes a theme owned by the current user.',
-    detail: 'Use this route for explicit user deletion actions. It does not delete themes owned by other users.',
+    detail: 'Use this route for explicit user deletion actions. It does not delete themes owned by other users. Modern theme deletion retains its approved before-version in private Timeline history in the same home transaction. The retained payload replaces its deleted storage bytes without requiring growth allowance; repeated deletion returns 404 without another event. Legacy storage retains its migration fences.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -9146,9 +9178,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.33.0',
-    contractVersion: '1.33.0',
+    featureVersion: '1.33.2',
+    contractVersion: '1.33.2',
     group: 'things',
+    // 1.33.1: placement and folder deletion share transactional ancestry fences.
+    // 1.33.2: protected library display-title renames commit title-only history.
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
@@ -11958,6 +11992,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'timeline', contractVersion: '1.11.0', featureVersion: '1.11.0', group: 'things',
+    title: 'Timeline history and draft synchronization', endpoint: '/api/v1/timeline',
+    summary: 'Read private history, synchronize drafts, restore or merge versions, and synchronize named branches.',
+    detail: 'In 1.11.0, preview-branch-merge accepts optional componentChoices, keyed by JSON-encoded single-reference paths with current/incoming choices. Supplying it returns components:{base,current,incoming,entries,choices}: bounded reference-to-dependency maps and canonical capture entries, never additional durable state. The shared comparison merges atomic definitions by content and preserves selected links; conflicting or missing history needs explicit review. Folder-only versions inherit their crystal source. Legacy comparisons with retained dependencies refuse with 409 instead of dropping them. Combined capture metadata is preflighted against the remaining 4 MiB response budget and read in batches of at most 128. The merged client event keeps the selected dependency links and uses the existing branch push queue. Published Things remain unchanged. In 1.10.0, GET components=1 with eventId, ownerId and dataPlane returns {ok,eventId,entries} containing only that private version’s linked component-binding events. Optional storage selects home/selected as usual; duplicate or unrelated query fields are refused. The reader batches at most 120 references and caps responses at 4 MiB. Each binding retains only {ref,component:{id,crystal}|null} in an ordinary immutable event and relationship records. It captures readable definitions, not another author’s private history or runtime outputs. New server page mutations capture definitions in the content transaction; client drafts retain the definitions shown by their editor. Existing versions without bindings remain explicitly incomplete. In 1.6.0, storage=home explicitly selects home history without changing the browser database selection; omit storage (or use selected) for the selected database. ownerId and dataPlane remain mandatory identity fences on reads/writes. The scoped selection applies to drafts, exact versions, branches, comparisons and restoration alike. A selection equal to the home URI identifies as home. GET with ownerId discovers the current dataPlane and managed Timeline folder id. Add thingId and dataPlane to page history, or history=1 for the complete account feed; before pages older events and after pages newer events, with server positions independent of client clocks. POST the shared version-1 TimelineEvent as the body, with ownerId and dataPlane in the query. Only current-owner, source:client, mode:draft events are accepted. A draft upload never changes the target Thing or claims a server operation ran. Event identity is immutable and retries return the original receipt. Durable storage uses identical local/server event and relationship records: every parent, dependency, Thing, branch and operation link is its own document; the bounded API aggregate assembles those references on read. Server mutation transactions mint revision events. In 1.3.0, folder moves retain compact folder-placement snapshots with an exact saved content ancestor; version restore and merge reconstruct that historical content. Folder deletion drains child placements and their events before removing the folder. Protected library moves use managed-folder-placement, containing only folder ids; generic content restoration is unavailable for these records. Version commands use the same POST: {command:preview-version,mode:restore|merge,eventId,choices?} returns a comparison, conflicts and expectedHeadId; {command:apply-version,mode,eventId,expectedHeadId,operationId,choices?} commits through ordinary Thing validation with a fresh UUID v4 operationId. Retry the exact command and operationId after a lost response. Changed live heads or unresolved overlaps are refused. Conflict choices map JSON-encoded property paths to current or incoming. Arrays are compared atomically. Restores create a new revision and retain later history. In 1.2.0, GET eventId plus dataPlane loads one exact private version, with optional matching thingId; it cannot be combined with history/branch paging parameters. GET branches=1 plus thingId and dataPlane pages named branches with before and limit (maximum 40). POST {command:create-branch,operationId,branchId,thingId,eventId,expectedRevision:0,name} creates a branch; branchId is branch- followed by a UUID v4. POST {command:advance-branch,operationId,branchId,thingId,eventId,expectedRevision,name:null} moves a head forward; expectedRevision:0 attaches a different Thing. Names are 1-80 characters. Branch metadata and each per-Thing head are separate canonical local/remote records. Commands return {ok,branch,head,entry}, with an immutable audit event; exact retries return the original result. Stale or divergent pushes return 409 without moving the head or published content. Pull branches again to compare. In 1.7.0, POST {command:preview-branch-merge,branchId,thingId,eventId,expectedHeadId,expectedRevision,choices:{}} compares an incoming version with the exact named branch head using their shared ancestor. It returns {ok,preview:{branch,head,incomingEventId,baseEventId,current,incoming,result,conflicts}} without writing. Choices use the same current/incoming grammar. Persist the reviewed result locally as a canonical source:client, mode:draft, operation:merge event with both versions as parents, then enqueue advance-branch against the preview revision. Upload the event before the command; retries preserve both immutable identities. A stale branch refuses the push while keeping the merged version in History. Merging a branch never publishes the Thing. In 1.8.0, POST {command:checkout-branch,branchId,thingId,expectedHeadId,expectedRevision} reads an exact private branch version as {ok,checkout:{branch,head,entry,snapshot}}. The entry remains the original canonical event/receipt; snapshot is a transient full thing-content view reconstructed from its historical ancestors. Checkout never writes or borrows current published content. Branch field edits use ordinary client draft events and advance-branch commands. Cached full versions and pinned drafts remain editable offline; stale or divergent pushes retain the draft and require a merge. Checkout replies are bounded to 4 MiB. In 1.9.0, GET branchId plus thingId, ownerId and dataPlane reads one named branch directly as {ok,branch,head}, without scanning branch pages or loading version content. Only those query fields and optional storage are accepted; duplicates, version selectors and paging fields are refused. A missing branch/Thing membership returns 404. The response uses the existing canonical records. Feed the returned head id/revision into checkout-branch; an intervening push still returns 409. This read never acknowledges pending pushes or changes published content. In 1.4.0, dedicated home-library display-title renames record library-title version-1 snapshots containing only {title:string|null}; themes, feed algorithms, custom emoji and chat archives retain their original source name and protected payload. Retained title content is metered, unchanged titles append no content event, and failed recording rolls back the rename. These metadata snapshots do not support generic protected-content restore. Full account credentials are required; scoped app/PAT credentials are excluded. All responses are private/no-store.',
+    auth: { mode: 'session-or-bearer', description: 'A current full account session; scoped credentials cannot read account history.' },
+    methods: ['GET', 'POST'],
+    steps: ['Negotiate api.timeline 1.0.0 for synchronization, 1.1.0 for version commands, 1.2.0 for branches and exact version reads, 1.3.0 for compact folder-placement restore and merge, 1.4.0 for library display-title history, 1.5.0 for approved saved-theme content revisions, 1.6.0 for explicit home history under a custom database selection, 1.7.0 for named-branch merge previews, 1.8.0 for exact branch checkout, 1.9.0 for direct named branch lookup, 1.10.0 for recorded component dependencies, or 1.11.0 for component-aware branch merges.', 'Discover the current account/data-plane scope before opening local storage.', 'Read each Thing’s recent history, page older history on demand, and pull newer events by server position.', 'Persist authored drafts locally before POST; retry the exact immutable event until its receipt arrives. Large server snapshots may use thing-content-parts references; their payloads remain protected and are reconstructed for supported version operations.', 'Preview a restore or merge, resolve overlaps, then apply against that exact head.'],
+    requestExamples: [{ name: 'Discover scope', description: 'Bind subsequent synchronization to the selected account and data source.', method: 'GET', query: { ownerId: 'current-user-id' } }, { name: 'Discover home history', description: 'Use home history while leaving the selected database unchanged.', method: 'GET', query: { ownerId: 'current-user-id', storage: 'home' } }, { name: 'Read a named branch', description: 'Resolve one branch/Thing pointer independently of paged history and local caches.', method: 'GET', query: { ownerId: 'current-user-id', dataPlane: 'home', branchId: 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5', thingId: 'page-id' } }],
+    responseExamples: [{ status: 200, description: 'Current synchronization scope.', body: { ok: true, ownerId: 'current-user-id', dataPlane: 'home', folderId: 'timeline-folder-…' } }, { status: 409, description: 'Changed identity or immutable event conflict.', body: { ok: false, error: 'Account changed; reconnect Timeline' } }]
+  }),
+  endpoint({
     id: 'notifications-record',
     featureVersion: '1.0.0',
     contractVersion: '1.0.0',
@@ -12499,6 +12544,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'schemas',
     title: 'Thingtime Schemas',
     endpoint: '/api/v1/schemas',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     summary: 'Returns every Thingtime Schema — the root thing schema, crystal sub-schemas, and collection schemas.',
     detail:
       'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /docs/schemas; published community schemas live at /schemas.',
@@ -12509,7 +12556,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET'],
     steps: [
       'GET with no parameters for every schema plus collectionVersions.',
-      'GET ?id=post (or comment, reaction, share, thing, ...) for one schema.',
+      'GET ?id=post (or comment, reaction, share, thing, ...) for one schema. All schemas return a copy payload with editable fields, optional preview and forkOf provenance; POST it to /api/v1/things to save your own schema.',
       'Crystal schemas are the ids a thing may carry in its thingtime array.',
       'Handle 404 for unknown schema ids.'
     ],
@@ -12746,14 +12793,25 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.13.0',
-    contractVersion: '1.13.0',
+    // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
+    // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
+    featureVersion: '1.35.0',
+    contractVersion: '1.35.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
-      'Web standards catalogue expressions return editable DOM receiver programs for detached document trees. The dom expression requests document/get/set/call operations through a bounded isolated worker bridge; real native receivers remain local to the run and mutations are projected into the preview. Saved programs preserve the complete operation data. ' +
+      'Traversal programs expose native TreeWalker, NodeIterator and NodeFilter behavior on owned detached trees. Generic synchronous callback objects or functions execute bounded data definitions with explicit bindings through the existing DOM policy, preserving native callback identity, pointer/removal semantics, reentrancy and thrown data. Source evaluation and asynchronous callbacks are not used for synchronous filters. ' +
+      'Server-executed Thing writes retain trusted Action provenance and share an operation id across nested steps. AI-initiated Actions retain AI provenance; preparing a browser program records no successful mutation. Client-supplied source/actor/operation fields cannot claim server provenance. ' +
+      'XPath programs reuse owned detached documents, compiled expressions, native result types and Node or data-backed namespace resolvers. Synchronous work is bounded by expression and actual tree complexity; scalar queries cannot inspect the surrounding runtime. Native node identity, snapshot and iterator semantics are preserved. ' +
+      'ARIA programs edit native nullable properties and owned element relationships, preserve frozen reference-list identity, and compare property assignment with content-attribute reflection. Browser support remains explicit; saved programs contain all inputs, relationships and projections. ' +
+      'Layout programs read bounded Window metrics and owned Element, Range, CaretPosition and geometry receivers. Document hit tests exclude runtime nodes; scrollingElement is a metrics-only projection. Scrolling awaits native completion. Saved event bindings support media queries, VisualViewport handlers and exact callback removal. ' +
+      'CSSOM programs edit native declarations, stylesheet rules and open shadow-root adopted stylesheets through owned bounded receivers. Asynchronous stylesheet replacement shares the run deadline and Stop fence; computed declarations retain native read-only errors. Examples and edited inputs remain ordinary Component program data. ' +
+      'Live DOM programs may observe bounded native events and pass local element arguments. Explicit allowFormEvents enables validation/submit events in an opaque frame with form-action navigation denied. Prototype method dispatch resists named controls, and event receipts expose submitter and user-edited validity. ' +
+      'SVG programs author namespace-aware bounded document trees and reuse native surface receivers for shape measurements, unit conversion, animated values, transforms and typed lists. Registered primitive IDL constants can be read without exposing constructors. Local references, SVG list sizes and viewport writes are validated; program data and edited inputs persist through the existing private Component save Action. ' +
+      'Canvas programs use explicit surface receivers for native 2D drawing, typed settings, paths, gradients, patterns and pixels. The existing worker DOM bridge exposes bounded surface/construct operations; it refuses foreign nodes, unrelated surface mutations, unregistered contexts and excessive resource sizes. Saved Component programs retain all drawing operations and edited inputs. ' +
+      'Web standards catalogue expressions return editable DOM receiver programs for detached document trees, including typed HTML form state, validation, text selection and live option/radio collections. Collection length writes enforce allocation limits before invoking native setters and detached collection mutations retain their owning tree budget. The dom expression requests document/get/set/call operations through a bounded isolated worker bridge; real native receivers remain local to the run and mutations are projected into the preview. Saved programs preserve the complete operation data. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
@@ -12951,13 +13009,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.4.0',
-    featureVersion: '1.4.0',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     detail:
+      'In 1.5.0, authenticated POST with ownerId and dataPlane in the query and {blocks} in the body resolves current components for an unsaved or branch draft. It uses the ordinary 120-block/8-level/48-KiB sanitized block limits, a 192-KiB request cap and 4-MiB response cap. Returns {ok,components,refs}; it reads no live page, grants no inherited audience from caller-supplied blocks and writes nothing. Recheck the scope before adopting results. These are current component definitions, not a historical dependency checkout. All POST replies are private/no-store. ' +
       'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
       'component things by componentKey or shareId, container blocks lay children out, text blocks carry short ' +
       'copy, and native blocks mark where a built-in Thingtime screen sits on a site page. This endpoint resolves ' +
@@ -12976,7 +13035,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       mode: 'optional',
       description: 'Anonymous callers resolve public pages, hidden standalone pages by their exact canonical id, and seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
     },
-    methods: ['GET'],
+    methods: ['GET', 'POST'],
     steps: [
       'GET with exactly one of id=<shareId>, path=</route>, or global=1.',
       'Read page (null when no doc matches a path/global lookup) and source ("user" | "system").',

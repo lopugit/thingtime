@@ -5,6 +5,7 @@ import type { PreparedBrowserAction } from '~/schemas/browserActions';
 import { runLookup } from './lookup';
 import { revealUserVaultValue } from '../lopu/userVault';
 import { randomUUID } from 'node:crypto';
+import { withTimelineMutationContext } from '../timeline/mutationContext';
 
 import {
 	ACL_ALL,
@@ -91,6 +92,7 @@ export type ActionRunTraceEntry = {
 };
 
 type ActionBudget = {
+	assertAuthorized?: () => Promise<void>;
 	usedLookup?: boolean;
 	deadline: number;
 	opsRemaining: number;
@@ -482,6 +484,7 @@ const executeProgram = async (
 		};
 
 		for (let index = 0; index < program.steps.length; index += 1) {
+			await budget.assertAuthorized?.();
 			const step = program.steps[index];
 			const label = stepPrefix ? `${stepPrefix}.${index + 1}` : String(index + 1);
 			const startedAt = Date.now();
@@ -849,7 +852,10 @@ const writeRunRecord = async (
 // The program's identity + derived effects WITHOUT running it — what Lopu's
 // confirmation gate reads before run_action (a deleting program needs the
 // user's approval first). Same deliberate-path resolution as runAction.
-export type InspectActionProgramResult = Fail | { ok: true; id: string; name: string; actionKey: string | null; effects: ActionEffects };
+export type InspectActionProgramResult = Fail | {
+	ok: true; id: string; name: string; actionKey: string | null; effects: ActionEffects;
+	runtime: 'browser' | 'server'; inputs: Record<string, unknown>[];
+};
 
 export const inspectActionProgram = async (viewer: Viewer, reference: string): Promise<InspectActionProgramResult> => {
 	const program = await resolveActionProgram(viewer, reference);
@@ -859,15 +865,17 @@ export const inspectActionProgram = async (viewer: Viewer, reference: string): P
 		id: program.id,
 		name: program.name,
 		actionKey: typeof program.crystal.actionKey === 'string' ? program.crystal.actionKey : null,
+		runtime: program.crystal.runtime === 'browser' ? 'browser' : 'server',
+		inputs: program.inputs,
 		effects: deriveActionEffects(program.steps)
 	};
 };
 
-export const runAction = async (
+const executeActionRun = async (
 	viewer: Viewer,
 	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
 	shared?: SharedComposition,
-	context?: { firstPartyActorId?: string }
+	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void> }
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
 	// account authority. Only stored composition reads are added below.
@@ -900,6 +908,7 @@ export const runAction = async (
 	const validated = validateRunInputs(program.inputs, request.inputs);
 	if (isFail(validated)) return validated;
 	if (jsonBytes(validated.inputs) > limits.maxInputBytes) return fail(413, `Resolved inputs exceed this action's ${limits.maxInputBytes}-byte cap`);
+	if (context?.browserOnly && program.crystal.runtime !== 'browser') return fail(409, 'Use a browser Action when composing browser flows');
 	if (program.crystal.runtime === 'browser') {
 		if (shared || program.ownerId !== viewer.id || viewer.pat || context?.firstPartyActorId !== viewer.id) return fail(403, 'Browser flows require your own Action and a first-party session');
 		if (request.execution !== 'browser') return fail(409, 'This Action runs in the browser. Use a client supporting api.actions-run 1.7.0');
@@ -911,6 +920,7 @@ export const runAction = async (
 
 	const startedAt = new Date();
 	const budget: ActionBudget = {
+		assertAuthorized: context?.assertAuthorized,
 		deadline: Date.now() + limits.timeoutMs,
 		opsRemaining: limits.maxOperations,
 		maxDepth: limits.maxDepth,
@@ -992,6 +1002,9 @@ export const runAction = async (
 		trace: budget.trace
 	};
 };
+
+export const runAction = (...args: Parameters<typeof executeActionRun>): Promise<RunActionResult> =>
+	withTimelineMutationContext(args[2] ? null : args[0]?.id ?? null, 'action', () => executeActionRun(...args));
 
 // ── run history ─────────────────────────────────────────────────────────────
 

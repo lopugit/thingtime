@@ -5,7 +5,9 @@ PR: https://github.com/lopugit/thingtime/pull/909
 Base: `main`, initially `111062f1abe96936e989ae2ca8245f5e4a02bc06`
 Merged on 26 September 2026 at `645193968c0f589a0ef310cb21d0a1c43da136ba`.
 The named-control follow-up described below is tracked on
-`codex/web-standards-dom-boundaries`; its production delivery is not yet verified.
+`codex/web-standards-dom-boundaries`. It shipped in [PR #912](https://github.com/lopugit/thingtime/pull/912)
+at `e887f769a66ba8da6203eede2c0bfcde94212467`; production source and the four
+native boundary programs were verified after deployment.
 
 ## Problem and behavior
 

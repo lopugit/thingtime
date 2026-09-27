@@ -229,3 +229,90 @@ test('comment copies retain their purpose and reject post/comment cross-purpose 
  f.setSource({ attachmentPurpose: 'post' });
  assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'comment')).ok, false);
 });
+
+test('saving own chat media as a private file uses private upload permission and pins the original bytes', async () => {
+  for (const purpose of ['message', 'post', 'comment', 'file', 'recording'] as const) {
+    const f = fixture();
+    f.setSource({ ownerId: 'visitor', attachmentPurpose: purpose });
+    f.setDestination({ attachmentPurpose: 'file' });
+    f.deps.canCopy = async (owner, scope) => { assert.equal(owner, 'visitor'); assert.equal(scope, 'file'); return true; };
+    f.deps.start = async (_owner, input: any) => { assert.equal(input.purpose, 'file'); assert.equal(input.requestId, 'stable-save'); return { ok: true, upload: { id: 'copy' } }; };
+    assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'file', 'stable-save')).ok, true);
+    assert.equal(f.parts[0].sourceVersionId, 'source-version');
+    assert.equal(f.events.includes('cleanup'), false);
+  }
+});
+test('foreign, revoked, or moderated chat media cannot be turned into a private file', async () => {
+  for (const source of [{ ownerId: 'author' }, { ownerId: 'visitor', moderation: { status: 'blocked' } }, { ownerId: 'visitor', moderation: { status: 'pending' } }, { ownerId: 'visitor', attachmentPurpose: 'profile' }]) {
+    const f = fixture(); f.setSource({ attachmentPurpose: 'message', ...source } as any);
+    assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'file')).ok, false);
+    assert.equal(f.events.includes('reserve'), false); assert.equal(f.parts.length, 0);
+  }
+  const f = fixture(); f.setSource({ ownerId: 'visitor', attachmentPurpose: 'message' }); f.setDestination({ attachmentPurpose: 'file' });
+  f.deps.start = async () => ({ ok: true, upload: { id: 'copy' } });
+  f.deps.getS3 = () => ({ copyUploadPart: async () => { f.revoke(); } } as any);
+  assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'file')).ok, false);
+  assert.equal(f.events.at(-1), 'cleanup');
+});
+test('a lost save receipt replays the same durable file without copying or deleting it', async () => {
+  const f = fixture(); f.setSource({ ownerId: 'visitor', attachmentPurpose: 'message' });
+  f.setDestination({ attachmentPurpose: 'file', attachmentState: 'ready', crystal: { name: 'photo.png', contentType: 'image/png', size: 9 * 1024 * 1024, mediaKind: 'image' } });
+  f.deps.start = async () => ({ ok: true, upload: { id: 'copy', state: 'ready' } });
+  const saved = await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'file');
+  assert.equal(saved.ok, true);
+  assert.equal(f.parts.length, 0); assert.equal(f.events.includes('cleanup'), false); assert.equal(f.events.includes('complete'), false);
+});
+
+test('a retry racing a completed save replays the ready file even when start observed pending', async () => {
+  const f = fixture(); f.setSource({ ownerId: 'visitor', attachmentPurpose: 'message' });
+  f.setDestination({ attachmentPurpose: 'file', attachmentState: 'ready', crystal: { name: 'photo.png', contentType: 'image/png', size: 9 * 1024 * 1024, mediaKind: 'image' } });
+  f.deps.start = async () => ({ ok: true, upload: { id: 'copy', state: 'pending' } });
+  const saved = await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'file', 'stable-save');
+  assert.equal(saved.ok, true);
+  assert.equal(f.parts.length, 0); assert.equal(f.events.includes('cleanup'), false);
+});
+
+test('a failed concurrent part retry cannot delete the committed private file', async () => {
+  const f = fixture(); f.setSource({ ownerId: 'visitor', attachmentPurpose: 'message' }); f.setDestination({ attachmentPurpose: 'file' });
+  f.deps.start = async () => ({ ok: true, upload: { id: 'copy', state: 'pending' } });
+  let deletes = 0;
+  const service = createAttachmentService({ store: {
+    getOwned: async () => ({ shareId: 'copy', ownerId: 'visitor', attachmentPurpose: 'file', attachmentState: 'ready' }),
+    claimDeleting: async () => { deletes++; throw Error('Durable file must survive'); }
+  } as any, getS3: () => { throw Error('Durable file must never be touched'); } });
+  f.deps.remove = service.remove;
+  f.deps.getS3 = () => ({ copyUploadPart: async () => { throw Error('NoSuchUpload: another request completed'); } } as any);
+  const result = await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'file', 'stable-save');
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.doesNotMatch(result.error, /cleanup is pending/);
+  assert.equal(deletes, 0);
+});
+
+test('private-copy rollback CAS cannot claim a pending upload that became ready', async () => {
+  let state = 'pending'; let deletes = 0;
+  const service = createAttachmentService({ store: {
+    getOwned: async () => ({ shareId: 'copy', ownerId: 'visitor', attachmentPurpose: 'file', attachmentState: state, uploadId: 'mpu' }),
+    claimDeleting: async (_owner: string, _id: string, allowed: string[]) => {
+      state = 'ready'; // another request commits between the read and claim
+      if (!allowed.includes(state)) return null;
+      deletes++; throw Error('Durable file must survive');
+    }
+  } as any, getS3: () => ({} as any) });
+  assert.deepEqual(await service.remove('visitor', { id: 'copy' }, { pendingOnly: true }), { ok: true, deferred: false });
+  assert.equal(state, 'ready'); assert.equal(deletes, 0);
+});
+
+test('a rejected upload start cannot roll back a file associated with the request id', async () => {
+  const f = fixture(); f.setSource({ ownerId: 'visitor', attachmentPurpose: 'message' });
+  f.deps.start = async () => ({ ok: false, status: 409, error: 'Request metadata differs' });
+  assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'file', 'existing-file')).ok, false);
+  assert.equal(f.events.includes('cleanup'), false);
+});
+
+test('a finalized private copy stays independent when its source is deleted after the commit', async () => {
+  const f = fixture(); f.setSource({ ownerId: 'visitor', attachmentPurpose: 'message' }); f.setDestination({ attachmentPurpose: 'file' });
+  f.deps.start = async () => ({ ok: true, upload: { id: 'copy' } });
+  f.deps.complete = async () => { f.revoke(); return { ok: true, attachment: { id: 'copy' } }; };
+  assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'file')).ok, true);
+  assert.equal(f.events.includes('cleanup'), false);
+});

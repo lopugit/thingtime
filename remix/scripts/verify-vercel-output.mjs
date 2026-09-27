@@ -372,7 +372,7 @@ if (!sdkHeaders || routes.indexOf(sdkHeaders) < cspHeadersIndex || routes.indexO
 if (getDirectiveSources(librarySdkCsp,'sandbox').join(' ') !== 'allow-scripts') throw new Error('SDK previews must retain opaque-origin containment.');
 
 const platformHeaders = routes.find(route => route.src === '^/platform/runtime\\.html$' && route.headers?.['Content-Security-Policy'] === platformRuntimeCsp);
-if (!platformHeaders || getDirectiveSources(platformRuntimeCsp,'sandbox').join(' ') !== 'allow-scripts') throw new Error('Web Platform runtime must retain opaque-origin containment.');
+if (!platformHeaders || getDirectiveSources(platformRuntimeCsp,'sandbox').join(' ') !== 'allow-scripts allow-forms' || getDirectiveSources(platformRuntimeCsp,'form-action').join(' ') !== "'none'") throw new Error('Web Platform runtime must retain opaque-origin containment.');
 for (const filename of ['platform/runtime.html','platform/runtime.js']) if (!existsSync(join('.vercel/output/static', filename))) throw new Error(`Missing Web Platform runtime ${filename}`);
 for (const extension of ['html', 'js']) {
  const headers = routes.find(route => route.src === `^/platform/runtime\\.${extension}$`);

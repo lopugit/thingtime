@@ -187,6 +187,9 @@ mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { exports: {
   createClaudeOAuthClient: (options: any = {}) => new Anthropic({ apiKey: null, authToken: options.token || process.env.CLAUDE_CODE_OAUTH_TOKEN, baseURL: process.env.ANTHROPIC_BASE_URL })
 } });
 
+let promptSettings = { basePrompt: 'You are Lopu. Shared admin prompt.', instructions: [] as Array<{ id: string; text: string; enabled: boolean }> };
+mock.module(new URL('../settings/lopuPromptSettings.ts', import.meta.url).href, { exports: { getLopuPromptSettings: async () => promptSettings } });
+
 const { streamLopuChatTurn, LOPU_FALLBACK_VAULT, createTtToolTextParser, unwrapEnvelopeContent, wrapBareToolCalls } = await import('./chat.ts');
 const { parseAiWorkflowModelOptionId } = await import('../settings/prConflictResolverModelWaterfallCore.ts');
 const { LOPU_VAULT_HOST_NOT_ALLOWED_REASON } = await import('./vaultProviders.ts');
@@ -249,6 +252,7 @@ const text = (events: any[]) => events.filter((event) => event.type === 'delta')
 const meta = (events: any[]) => events.find((event) => event.type === 'meta');
 
 beforeEach(() => {
+  promptSettings = { basePrompt: 'You are Lopu. Shared admin prompt.', instructions: [] };
   anthropicPlans.length = 0;
   anthropicRequests.length = 0;
   openAiPlans.length = 0;
@@ -452,16 +456,14 @@ test('OpenAI text mode: fenced tt-tool blocks become tool calls, text outside st
   assert.equal(anthropicRequests.length, 0);
 });
 
-test('the tt-tool text parser holds back partial fence markers and closes a cut-off fence', () => {
+test('the tt-tool text parser holds partial markers and refuses cut-off arguments', () => {
   let count = 0;
   const parser = createTtToolTextParser({ nextId: () => `call_${++count}`, mode: 'execute' });
   const events = [...parser.push('Hello `'), ...parser.push('`` not a fence\n'), ...parser.push('```tt-tool\n{"name":"navigate","input":{"path":"/lopu"')];
   assert.deepEqual(events.filter((event) => event.type === 'text').map((event: any) => event.text).join(''), 'Hello ``` not a fence\n');
   assert.equal(events.some((event) => event.type === 'tool_use_start' && (event as any).name === 'navigate'), true);
-  const tail = parser.finish();
-  const use = tail.find((event) => event.type === 'tool_use') as any;
-  assert.deepEqual(use.input, { path: '/lopu' });
-  assert.deepEqual(parser.calls(), [{ id: 'call_1', name: 'navigate', input: { path: '/lopu' } }]);
+  assert.throws(() => parser.finish(), /incomplete tool arguments/);
+  assert.deepEqual(parser.calls(), []);
 });
 
 test('unwrapEnvelopeContent peels the envelopes some OpenAI-compatible bridges leave around the reply', () => {
@@ -588,6 +590,17 @@ test('hosting checkpoints occur after completed tools without forcing a wrap-up 
  assert.equal(outcome.stopReason, 'checkpoint'); assert.equal(toolCalls.length, 1);
  assert.equal(outcome.toolCalls[0].ok, true); assert.equal(anthropicRequests.length, 1);
  assert.equal(events.some(event => event.type === 'error'), false);
+});
+
+test('lossless crystal pages arrive as complete JSON at the provider', async () => {
+ const { inspectThingCrystal } = await import('./thingInspection');
+ const crystalRead = inspectThingCrystal({ render: { text: '🍀漢\\\"'.repeat(2000) } }, { path: '/render', offset: 0 });
+ const data = { thing: { id: 'form', kind: 'component' }, crystalRead };
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'read', name: 'get_thing', inputChunks: ['{"id":"form","path":"/render","offset":0}'] }], stopReason: 'tool_use' },
+   { blocks: [{ type: 'text', text: 'Read the first page.' }], stopReason: 'end_turn' });
+ await collect(turn('read the form', 'claude-opus-5', { deps: { runTool: async () => ({ ok: true, summary: 'Read form crystal /render', data }) } }));
+ const delivered = JSON.parse(anthropicRequests[1].body.messages.at(-1).content[0].content);
+ assert.deepEqual(delivered.data, data);
 });
 
 test('a provider error after output keeps what streamed, emits a retryable error, and never retries another provider', async () => {
@@ -1176,4 +1189,130 @@ test('GPT-5.6 Sol rejects a later-hop call ID replay while preserving its first 
   assert.equal(outcome.toolCalls[0].ok, true);
   assert.equal(events.filter(event => event.type === 'tool_result' && event.ok).length, 1);
   assert.equal(responsesRequests.length, 2);
+});
+
+for (const provider of ['claude', 'openai'] as const) test(`${provider}: the next reply receives new admin guidance and only enabled private instructions`, async () => {
+  const plan = () => provider === 'claude' ? anthropicPlans.push({ blocks: [{ type: 'text', text: 'Hello' }] }) : openAiPlans.push({ contentChunks: ['Hello'] });
+  const choice = provider === 'claude' ? 'claude-opus-5:high' : 'gpt-5.5:high';
+  promptSettings = { basePrompt: 'Current admin guidance', instructions: [{ id: 'on', text: 'Unique Alice preference', enabled: true }, { id: 'off', text: 'Disabled Alice preference', enabled: false }] };
+  plan(); await collect(turn('Hello', choice));
+  const requests = provider === 'claude' ? anthropicRequests : openAiRequests;
+  const first = JSON.stringify(requests[0].body);
+  assert.match(first, /Current admin guidance/); assert.match(first, /Unique Alice preference/); assert.doesNotMatch(first, /Disabled Alice preference/);
+  promptSettings = { basePrompt: 'New admin guidance', instructions: [] };
+  plan(); await collect(turn('Hello again', choice));
+  const next = JSON.stringify(requests[1].body);
+  assert.match(next, /New admin guidance/); assert.doesNotMatch(next, /Current admin guidance|Unique Alice preference|Disabled Alice preference/);
+});
+
+
+test('providers discover inspect_action and receive enum contracts without a lossy wrapper', async () => {
+ const data = { id: 'save', runtime: 'browser', inputsComplete: true, inputs: [{ name: 'category', type: 'enum', values: ['Tool', 'Battery', 'Vehicle', 'Fuel', 'Other'] }], validation: { ok: false, error: 'Input category must be one of Tool, Battery, Vehicle, Fuel, Other' } };
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'inspect', name: 'inspect_action', inputChunks: ['{"action":"save","inputs":{"category":"battery"}}'] }], stopReason: 'tool_use' },
+   { blocks: [{ type: 'text', text: 'The accepted category is Battery.' }], stopReason: 'end_turn' });
+ await collect(turn('check the action inputs', 'claude-opus-5', { deps: { runTool: async () => ({ ok: true, summary: 'Inspected save', data }) } }));
+ assert.ok(anthropicRequests[0].body.tools.some((tool: any) => tool.name === 'inspect_action'));
+ const delivered = JSON.parse(anthropicRequests[1].body.messages.at(-1).content[0].content);
+ assert.deepEqual(delivered.data, data);
+});
+
+test('a malformed native tool reply repairs itself within the turn without executing displayed JSON', async () => {
+ const displayed = '```json tt-tool\n{"name":"navigate","input":{"path":"/lopu"}}\n```';
+ anthropicPlans.push({ blocks: [{ type: 'text', text: displayed }], stopReason: 'end_turn' },
+  { blocks: [{ type: 'tool_use', id: 'fixed', name: 'navigate', inputChunks: ['{"path":"/lopu"}'] }], stopReason: 'tool_use' },
+  { blocks: [{ type: 'text', text: 'Continued successfully.' }], stopReason: 'end_turn' });
+ const { outcome } = await collect(turn('Continue', 'claude-opus-5'));
+ assert.equal(outcome.stopReason, 'end_turn');
+ assert.equal(toolCalls.length, 1);
+ assert.match(anthropicRequests[1].body.messages.at(-1).content, /did not execute/);
+ assert.match(outcome.text, /Continued successfully/);
+});
+
+test('repeated displayed tool calls stop after two repair hops instead of silently reporting completion', async () => {
+ const displayed = '```json\n{"name":"run_action","input":{"id":"action"}}\n```';
+ for (let i = 0; i < 3; i++) anthropicPlans.push({ blocks: [{ type: 'text', text: displayed }], stopReason: 'end_turn' });
+ const { outcome, events } = await collect(turn('Run it', 'claude-opus-5'));
+ assert.equal(outcome.stopReason, 'error');
+ assert.equal(anthropicRequests.length, 3);
+ assert.equal(toolCalls.length, 0);
+ assert.ok(events.some(event => event.type === 'error'));
+});
+
+test('waiting for confirmation is not treated as a tool-protocol stall', async () => {
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'delete', name: 'delete_thing', inputChunks: ['{"id":"private"}'] }], stopReason: 'tool_use' },
+  { blocks: [{ type: 'text', text: 'Please confirm.\n```json\n{"name":"delete_thing","input":{"id":"private"}}\n```' }], stopReason: 'end_turn' });
+ const { outcome, events } = await collect(turn('Delete', 'claude-opus-5'));
+ assert.equal(outcome.stopReason, 'end_turn');
+ assert.equal(anthropicRequests.length, 2);
+ assert.equal(events.filter(event => event.type === 'confirm').length, 1);
+ assert.equal(toolCalls.length, 1);
+});
+
+test('six-page JSON survives hosted checkpoints and reaches the final edit without model rereads', async () => {
+ const { inspectThingCrystal } = await import('./thingInspection');
+ const crystal = { render: { text: 'x'.repeat(23733) } };
+ const full = JSON.stringify(crystal.render);
+ assert.equal(full.length, 23744);
+ const revision = inspectThingCrystal(crystal, { path: '/render', offset: 0 }).revision;
+ const reads: number[] = [];
+ let writes = 0;
+ const runner = async (call: any) => {
+  if (call.name === 'get_thing') {
+   reads.push(call.input.offset);
+   return { ok: true, summary: 'Read page', data: { thing: { id: 'planner' }, crystalRead: inspectThingCrystal(crystal, call.input) } };
+  }
+  writes++;
+  return { ok: true, summary: 'Saved', data: { thing: { id: 'planner' } } };
+ };
+ let readReferences: unknown[] = [];
+ process.env.VERCEL = '1';
+ for (let offset = 0; offset < full.length; offset += 4000) {
+  anthropicPlans.push({ blocks: [{ type: 'tool_use', id: `page-${offset}`, name: 'get_thing', inputChunks: [JSON.stringify({ id: 'planner', path: '/render', offset, revision })] }], stopReason: 'tool_use' });
+  let clock = 0;
+  const { outcome } = await collect(turn('Continue the planner fix.', 'claude-opus-5', { readReferences, deps: { runTool: runner, now: () => clock += 65000 } }));
+  assert.equal(outcome.stopReason, 'checkpoint');
+  readReferences = outcome.readReferences!;
+  assert.equal(readReferences.length, offset / 4000 + 1);
+  if (offset) {
+   const restored = JSON.parse(anthropicRequests.at(-1)!.body.messages.at(-1).content.split('\n').at(-1));
+   assert.equal(restored.pages.map((page: any) => page.crystalRead.json).join(''), full.slice(0, offset));
+  }
+ }
+ delete process.env.VERCEL;
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'save-once', name: 'edit_thing', inputChunks: ['{"id":"planner","set":{"name":"Fixed"}}'] }], stopReason: 'tool_use' },
+  { blocks: [{ type: 'text', text: 'Saved the fix.' }], stopReason: 'end_turn' });
+ const { outcome } = await collect(turn('Continue the planner fix.', 'claude-opus-5', { readReferences, deps: { runTool: runner } }));
+ assert.equal(outcome.stopReason, 'end_turn');
+ const restored = JSON.parse(anthropicRequests[6].body.messages.at(-1).content.split('\n').at(-1));
+ assert.equal(restored.pages.map((page: any) => page.crystalRead.json).join(''), full);
+ assert.equal(writes, 1);
+ assert.equal(anthropicRequests.length, 8, 'six read hops, one write and one final answer, no extra model rereads');
+ assert.deepEqual(reads.slice(-6), [0, 4000, 8000, 12000, 16000, 20000], 'restoration rereads exact authorized pages internally');
+});
+
+test('Action failure recovery data reaches the next model hop', async () => {
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'run', name: 'run_action', inputChunks: ['{"id":"action"}'] }], stopReason: 'tool_use' },
+  { blocks: [{ type: 'text', text: 'Inspecting the saved run before retrying.' }], stopReason: 'end_turn' });
+ const data = { runId: 'run-1', recovery: { tool: 'get_thing', id: 'run-1' } };
+ await collect(turn('Run', 'claude-opus-5', { deps: { runTool: async () => ({ ok: false, error: 'Action failed', data }) } }));
+ assert.deepEqual(JSON.parse(anthropicRequests[1].body.messages.at(-1).content[0].content).data, data);
+});
+
+test('a checkpointed Action result reaches the resumed provider without rerunning the Action', async () => {
+ const { checkpointToolResults } = await import('./checkpointResults');
+ process.env.VERCEL = '1';
+ let clock = 0, runs = 0;
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'run-once', name: 'run_action', inputChunks: ['{"action":"planner"}'] }], stopReason: 'tool_use' });
+ const { outcome, events } = await collect(turn('Inspect planner', 'claude-opus-5', { deps: { now: () => clock += 65000, runTool: async () => {
+  runs++; return { ok: true, summary: 'Ran planner', data: { result: { days: [{ today: true, records: [] }] } } };
+ } } }));
+ assert.equal(outcome.stopReason, 'checkpoint');
+ const checkpointResults = checkpointToolResults([...events, { type: 'done', continuationSafe: true, stopReason: outcome.stopReason }].map(event => JSON.stringify(event)).join('\n'));
+ delete process.env.VERCEL;
+ anthropicPlans.push({ blocks: [{ type: 'text', text: 'The saved result shows today has no visits.' }] });
+ await collect(turn('Continue', 'claude-opus-5', { checkpointResults, deps: { runTool: async () => { throw new Error('Completed Action replayed'); } } }));
+ const prompt = anthropicRequests.at(-1)!.body.messages.at(-1).content;
+ assert.match(prompt, /Completed tool results from the exact interrupted reply/);
+ assert.deepEqual(JSON.parse(prompt.split('\n').at(-1))[0].data.result.days, [{ today: true, records: [] }]);
+ assert.equal(runs, 1);
 });

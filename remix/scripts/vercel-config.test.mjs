@@ -15,6 +15,16 @@ import { claudeRuntimeFunctions, packageClaudeOAuthArtifacts, verifyClaudeOAuthA
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const vercelConfig = JSON.parse(readFileSync(resolve(repositoryRoot, 'vercel.json'), 'utf8'));
 
+test('live form event context stays opaque and cannot navigate or reach the account network', () => {
+	const directives = Object.fromEntries(platformRuntimeCsp.split(';').map(part => {
+		const [name, ...values] = part.trim().split(/\s+/); return [name, values];
+	}));
+	assert.deepEqual(directives.sandbox, ['allow-scripts', 'allow-forms']);
+	assert.deepEqual(directives['form-action'], ["'none'"]);
+	assert.deepEqual(directives['connect-src'], ['data:', 'blob:']);
+	assert.deepEqual(directives['base-uri'], ["'none'"]);
+});
+
 test('emitted Web Platform routes prevent stale compiler reuse and keep document CSP scoped', async (t) => {
 	const root = await fs.mkdtemp(join(tmpdir(), 'thingtime-platform-routes-'));
 	t.after(() => fs.rm(root, { recursive: true, force: true }));

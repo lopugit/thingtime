@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
 let savedText = '', providerContext: any, writes = 0, savedContinuation = false, savedMeta: any, stopReason = 'fallback', events: any[] = [], allowContinuation = true;
+let providerCheckpointResults: any, checkpointReads = 0;
+mock.module('./backgroundTasks', { namedExports: { readCheckpointToolResults: async (_request: Request, chatId: string, requestId: string) => {
+ checkpointReads++; return [{ id: 'saved', name: 'run_action', ok: true, summary: 'Completed', data: { chatId, requestId } }];
+} } });
 const ok = async () => ({ ok: true });
 mock.module('../rateLimit/enforce', { namedExports: { enforceRateLimit: async () => ({ allowed: true }), rateLimitedResponseInit: () => ({status:429}) } });
 mock.module('../ai/models', { namedExports: { listAiModels: async () => ({ models: [], defaults: {} }), resolveLopuModelChoice: ok } });
@@ -10,7 +14,7 @@ mock.module('./chatMedia.server', { namedExports: { resolveLopuMedia: async () =
 mock.module('./chatAttachments', { namedExports: { lopuReferenceIds: () => [], resolveLopuThingReferences: async () => [], lopuReferenceContext: () => '' } });
 mock.module('./chat', { namedExports: {
  hasLopuChatProviderConfigured: ()=>false, lopuChatProviderMode: ()=>'fallback',
- streamLopuChatTurn: async function* (input: any) { providerContext = input.context; yield {type:'meta',chatId:input.chatId,userMessageId:input.userMessageId,requestId:input.requestId}; for (const event of events) yield event; yield {type:'delta',text:'Checked'}; return {text:'Checked',stopReason,provider:'fallback',toolCalls:[],usage:null}; }
+ streamLopuChatTurn: async function* (input: any) { providerContext = input.context; providerCheckpointResults = input.checkpointResults; yield {type:'meta',chatId:input.chatId,userMessageId:input.userMessageId,requestId:input.requestId}; for (const event of events) yield event; yield {type:'delta',text:'Checked'}; return {text:'Checked',stopReason,provider:'fallback',toolCalls:[],usage:null}; }
 } });
 mock.module('../messenger/lopuChats', { namedExports: {
  readLopuContinuation: async () => allowContinuation ? {ok:true,meta:savedMeta ?? {}} : {ok:false,status:409,error:'Newer work'},
@@ -44,6 +48,17 @@ test('actual reply route validates references before writes and forwards/persist
 });
 
 const { continuationRequestId, LOPU_CONTINUE_PROMPT } = await import('./continuationCore');
+test('reply parsing preserves omitted-versus-empty blocks, readiness and saved-base metadata', async () => {
+ for (const page of [
+  {id:'page',source:'user',dirty:true,ready:true,updatedAt:'2026-09-27T05:00:00.000Z'},
+  {id:'page',source:'user',dirty:false,ready:true,blocks:[]},
+  {dirty:false,ready:false}
+ ]) {
+  const response = await replyAsUser(request({page}),viewer); assert.equal(response.status,200); await response.text();
+  assert.deepEqual(providerContext.page,page);
+ }
+ for (const page of [{dirty:'false'}, {ready:0}]) { const response = await replyAsUser(request({page}),viewer); assert.equal(response.status,400); }
+});
 test('actual reply route hides only explicit continuations and refuses replay inputs', async () => {
  const requestId = await continuationRequestId('test-chat', 'previous');
  const input = {chatId:'test-chat',requestId,continueFromRequestId:'previous',automaticContinuation:true,text:'ignored'};
@@ -94,4 +109,18 @@ test('automatic requests inherit persisted error streak while explicit Continue 
  stopReason = 'checkpoint';
  assert.equal((await send(true)).recoveryFailures, 0, 'successful progress resets the error streak');
  stopReason = 'fallback';
+});
+
+test('only a verified continuation reads stored tool results; caller-supplied results are ignored', async () => {
+ checkpointReads = 0; allowContinuation = true; events = []; stopReason = 'fallback';
+ const send = (body: any) => replyAsUser(new Request('https://thingtime.test/api/v1/lopu/chats/reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), viewer);
+ await (await send({ chatId: 'test-chat', requestId: 'ordinary', text: 'Hi', checkpointResults: [{ data: 'injected' }] })).text();
+ assert.equal(checkpointReads, 0); assert.equal(providerCheckpointResults, undefined);
+ const previous = 'prior-checkpoint', requestId = await continuationRequestId('test-chat', previous);
+ await (await send({ chatId: 'test-chat', requestId, continueFromRequestId: previous, checkpointResults: [{ data: 'injected' }] })).text();
+ assert.equal(checkpointReads, 1);
+ assert.deepEqual(providerCheckpointResults[0].data, { chatId: 'test-chat', requestId: previous });
+ allowContinuation = false;
+ assert.equal((await send({ chatId: 'test-chat', requestId, continueFromRequestId: previous })).status, 409);
+ assert.equal(checkpointReads, 1); allowContinuation = true;
 });

@@ -36,6 +36,7 @@ import type { UseWebpageDraft } from './useWebpage';
 import { componentTextOverrides } from './componentTextOverrides';
 import { VIEWPORT_PRESETS, boundViewportDimension, type BuilderViewportSize } from './BuilderViewport';
 import { matchingTextArg, type SeamlessMode } from './seamlessMode';
+import { openThingHistory } from '~/components/Timeline/TimelineHost';
 
 const EDITOR_MODES = ['builder', 'edit', 'layout', 'view'] as const;
 const PAGE_POPUP_MODIFIERS = [{ name: 'preventOverflow', options: { altAxis: true, tether: false, padding: 12 } }];
@@ -69,7 +70,7 @@ export default function SeamlessPageEditor({
 	mode: SeamlessMode;
 	onMode: (mode: SeamlessMode) => void;
 }) {
-	const builder = useBuilderChrome(draft, { enabled: mode !== 'view' });
+	const builder = useBuilderChrome(draft, { enabled: mode !== 'view' && !draft.branch?.locked });
 	const chromeRef = React.useRef(builder.chrome);
 	chromeRef.current = builder.chrome;
 	const chrome = React.useMemo<BuilderChrome>(
@@ -93,6 +94,11 @@ export default function SeamlessPageEditor({
 	const [acl, setAcl] = React.useState<string[]>(() => initialPageAudience(draft.resolved?.source, draft.resolved?.page?.acl));
 	const [preset, setPreset] = React.useState('full');
 	const [running, setRunning] = React.useState(false);
+	const [historyError, setHistoryError] = React.useState('');
+ const displayedName = draft.branch ? draft.resolved?.page?.crystal.name || '' : pageName;
+ const displayedAcl = draft.branch ? draft.resolved?.page?.acl || ['tt:user'] : acl;
+ const changeName = (name: string) => draft.branch ? draft.branch.updateMetadata({ name }) : setPageName(name);
+ const changeAcl = (acl: string[]) => draft.branch ? draft.branch.updateMetadata({ acl }) : setAcl(acl);
 	const [openControl, setOpenControl] = React.useState<'mode' | 'viewport' | null>(null);
 	React.useLayoutEffect(() => {
 		onChrome(chrome);
@@ -125,6 +131,7 @@ export default function SeamlessPageEditor({
 		};
 	}, [pageHost]);
 	const finishEdit = React.useRef<(() => void) | null>(null);
+	const [inlineEditing, setInlineEditing] = React.useState(false);
 	const lopu = useLopu();
 	const navigate = useNavigate();
 
@@ -146,6 +153,7 @@ export default function SeamlessPageEditor({
 			const id = frame?.dataset.blockId;
 			if (!frame || !id) return;
 			const { draft: latest, chrome: controls } = current.current;
+			if (latest.branch?.locked) { event.preventDefault(); event.stopPropagation(); return; }
 			const block = findBlock(latest.blocks, id);
 			if (!block) return;
 			// Edit clicks cannot submit, navigate, or invoke an action.
@@ -185,13 +193,14 @@ export default function SeamlessPageEditor({
 			const previousEditable = target.getAttribute('contenteditable');
 			const previousLabel = target.getAttribute('aria-label');
 			const previousOutline = target.style.outline;
+			setInlineEditing(true);
 			target.contentEditable = 'plaintext-only';
 			target.setAttribute('aria-label', 'Edit text');
 			target.style.outline = '1px dashed var(--tt-accent, hotpink)';
 			let finished = false;
 			const finish = (cancel = false) => {
 				if (finished) return;
-				finished = true;
+				finished = true; setInlineEditing(false);
 				const value = target.textContent || '';
 				// Restore React's last committed DOM before asking it to apply the
 				// new draft. The browser owns only the active editing interval.
@@ -279,7 +288,7 @@ export default function SeamlessPageEditor({
 		onMode(next);
 	};
 	const run = async (standalone = false) => {
-		if (running) return;
+		if (running || current.current.draft.branch) return;
 		flushSync(() => finishEdit.current?.());
 		setRunning(true);
 		const result = await current.current.draft.save({ name: pageName, acl });
@@ -297,6 +306,13 @@ export default function SeamlessPageEditor({
 		else url.searchParams.set('mode', 'visit');
 		window.location.assign(url.href);
 	};
+
+ const saveBranch = async () => {
+  if (running) return;
+  flushSync(() => finishEdit.current?.()); setRunning(true); setHistoryError('');
+  const result = await current.current.draft.save(); setRunning(false);
+  if (!result.ok) setHistoryError(result.error || 'Your branch draft is preserved.');
+ };
 
 	const presentation = viewport?.presentation === 'container' ? 'container' : 'viewport';
 	const changeViewport = (id: string, kind = presentation) => {
@@ -491,13 +507,17 @@ export default function SeamlessPageEditor({
 							justifyContent="center"
 						>
 							<Flex className="ttBuilderPageLinks" alignItems="center" justifyContent="center" flexWrap="wrap" maxWidth="100%" gap={1}>
+                                {draft.resolved?.page?.id ? <Button size="sm" variant="ghost" onClick={() => openThingHistory(draft.resolved!.page!.id)}>History</Button> : null}
+                                {draft.history?.recoverable.length ? <Popover placement="top" isLazy><PopoverTrigger><Button size="sm" variant="outline">Drafts ({draft.history.recoverable.length})</Button></PopoverTrigger><Portal containerRef={controlsLayer}><PopoverContent pointerEvents="auto" maxW="calc(100vw - 32px)" zIndex={DRAWER_POPUP_Z}><PopoverCloseButton /><PopoverBody pt={8} maxH="min(400px, 65dvh)" overflow="auto"><Text fontWeight="600" mb={2}>Unsaved drafts on this device</Text>{draft.history.recoverable.map(event => <Box key={event.id} mb={3}><Text fontSize="xs" mb={1}>{new Date(event.occurredAt).toLocaleString()}</Text><Flex gap={2}><Button size="xs" onClick={() => { setHistoryError(''); void draft.history!.recover(event).catch(error => setHistoryError(error.message)); }}>Recover draft</Button><Button size="xs" variant="ghost" onClick={() => void draft.history!.dismiss(event).catch(error => setHistoryError(error.message))}>Dismiss</Button></Flex></Box>)}</PopoverBody></PopoverContent></Portal></Popover> : null}
                                 {draft.resolved?.page?.id ? <BuilderThingMenu id={draft.resolved.page.id}
-                                disabledReason={draft.dirty || pageName !== draft.resolved.page.crystal?.name || JSON.stringify(acl) !== JSON.stringify(draft.resolved.page.acl) ? 'Save your page before changing settings or transferring its saved content.' : undefined}
+                                disabledReason={draft.branch ? 'This editor saves to a branch. Use History to review or merge it before changing published settings.' : draft.dirty || pageName !== draft.resolved.page.crystal?.name || JSON.stringify(acl) !== JSON.stringify(draft.resolved.page.acl) ? 'Save your page before changing settings or transferring its saved content.' : undefined}
                                 onChanged={draft.refresh} onMetadataChanged={thing => { setPageName(thing.crystal?.name || 'Untitled page'); setAcl(thing.acl); }} /> : null}
 								<Button as={Link} to="/builder" size="sm" variant="ghost">
 									← My pages
 								</Button>
 							</Flex>
+							{draft.history?.error || (historyError && historyError !== draft.branch?.notice) ? <Text role="alert" flexBasis="100%" fontSize="xs" color="red.600" px={2} whiteSpace="normal" maxW="600px">{draft.history?.error || historyError}</Text> : draft.history?.saving ? <Text role="status" fontSize="xs" px={2}>Saving draft…</Text> : null}
+                            {draft.branch ? <Flex gap={2} align="center" wrap="wrap" maxW="100%"><Text fontSize="sm" fontWeight="600" overflowWrap="anywhere">{draft.branch.name}</Text><Button size="sm" onMouseDown={event => event.preventDefault()} onClick={() => draft.branch?.locked ? openThingHistory(draft.resolved!.page!.id) : void saveBranch()} isLoading={running} isDisabled={!draft.branch.locked && !draft.dirty && !inlineEditing}>{draft.branch.locked ? 'Review in History' : 'Save to branch'}</Button>{draft.branch.notice ? <Text role="status" fontSize="xs" maxW="360px" whiteSpace="normal">{draft.branch.notice}</Text> : null}</Flex> : null}
 							{previewControls}
 							<Box
 								className="ttBuilderControlsDivider"
@@ -520,12 +540,12 @@ export default function SeamlessPageEditor({
 										{modeLabel(item)}
 									</Button>
 								))}
-								<Button size="sm" variant="ghost" onClick={() => run()} isLoading={running} title="Save and open the page without builder UI">
+								{!draft.branch ? <><Button size="sm" variant="ghost" onClick={() => run()} isLoading={running} title="Save and open the page without builder UI">
 									Visit ↗
 								</Button>
 								<Button size="sm" variant="ghost" onClick={() => run(true)} isDisabled={running} title="Save and open without Thingtime navigation">
 									Deploy ↗
-								</Button>
+								</Button></> : null}
 							</Flex>
 							<Menu
 								isOpen={openControl === 'mode'}
@@ -559,13 +579,13 @@ export default function SeamlessPageEditor({
 												</MenuItemOption>
 											))}
 										</MenuOptionGroup>
-										<MenuDivider />
+										{!draft.branch ? <><MenuDivider />
 										<MenuItem onClick={() => run()} isDisabled={running}>
 											Visit ↗
 										</MenuItem>
 										<MenuItem onClick={() => run(true)} isDisabled={running}>
 											Deploy ↗
-										</MenuItem>
+										</MenuItem></> : null}
 									</MenuList>
 								</Portal>
 							</Menu>
@@ -576,22 +596,24 @@ export default function SeamlessPageEditor({
 					</Box>
 					{drawerOpen && (
 						<BuilderDrawer
-							hideTransfer={mode === 'view'}
+							hideTransfer={mode === 'view' || !!draft.branch}
 							onSaved={(id) => {
 								if (id !== draft.resolved?.page?.id) navigate(`/builder?page=${encodeURIComponent(id)}`);
 							}}
 							title="Seamless builder"
 							draft={draft}
+							anyDirty={draft.branch ? draft.dirty || inlineEditing : undefined}
+							onSaveAll={draft.branch ? async () => { flushSync(() => finishEdit.current?.()); return current.current.draft.save(); } : undefined}
 							selectedId={builder.selectedId}
 							onDeselect={builder.deselect}
 							onClose={() => setDrawerOpen(false)}
 							mode="page"
-							pageName={pageName}
-							onPageName={setPageName}
-							audienceAcl={acl}
-							onAudienceAcl={setAcl}
+							pageName={displayedName}
+							onPageName={changeName}
+							audienceAcl={displayedAcl}
+							onAudienceAcl={changeAcl}
 							onUploadToBlock={builder.uploadToBlock}
-							helpText={HELP[mode]}
+							helpText={draft.branch ? 'Edit this branch and save to your account. Published content stays unchanged. Recorded component definitions are used when available; live data and actions are paused.' : HELP[mode]}
 							footerSpace="var(--tt-builder-toolbar-clearance, 160px)"
 						/>
 					)}

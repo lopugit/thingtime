@@ -72,7 +72,7 @@ async function main() {
 							new Promise((resolve) => {
 								const runId = item2.id.slice(-64);
 								const frame = document.createElement('iframe');
-								frame.setAttribute('sandbox', 'allow-scripts');
+								frame.setAttribute('sandbox', item2.program.allowFormEvents ? 'allow-scripts allow-forms' : 'allow-scripts');
 								let finished = false,
 									ready = false;
 								const finish = (value) => {

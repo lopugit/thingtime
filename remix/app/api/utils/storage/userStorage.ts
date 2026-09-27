@@ -180,7 +180,7 @@ const explainPositiveAdmissionFailure = async (ownerId: string, deltaBytes: numb
     throw new StorageMutationError(
       507,
       'quota_exceeded',
-      `This would exceed the account storage allowance (${usedBytes} of ${allowanceBytes} bytes used — delete content or change tier)`
+      `This change needs more account storage (${usedBytes} of ${allowanceBytes} bytes used). Saved history also uses storage; deleting a Thing keeps its recorded history.`
     );
   }
   throw new StorageMutationError(503, 'accounting_unavailable', 'Account storage accounting is unavailable — try again');
@@ -351,6 +351,20 @@ export const applyUserStorageDelta = async (ownerId: string, deltaBytes: number,
   // must never block deletion. An initialized-but-inconsistent ledger is
   // fenced from new growth until the source-document reconciliation repairs it.
   await markUserStorageNeedsReconcile(ownerId, session, now);
+};
+
+/** Only the Timeline deletion recorder calls this, after the canonical delete
+ * refunded the exact removed payload in the SAME transaction. It moves those
+ * bytes into retained history without admitting new customer content. Existing
+ * overage must not block cleanup. Unknown ledgers remain fenced for reconcile. */
+export const retainDeletedThingStorage = async (ownerId: string, bytes: number, session: any): Promise<void> => {
+  if (!session || !Number.isSafeInteger(bytes) || bytes < 0) throw new StorageMutationError(500, 'storage_invariant', 'Invalid retained deletion storage');
+  if (!bytes) return;
+  const result = await (await getThingsCollection()).updateOne({
+    ...readyUserStorageMatch(ownerId),
+    $expr: { $and: [safeWholeNumberExpression('$crystal.storageUsedBytes'), { $lte: [{ $add: ['$crystal.storageUsedBytes', bytes] }, Number.MAX_SAFE_INTEGER] }] }
+  } as any, { $inc: { 'crystal.storageUsedBytes': bytes }, $set: { 'crystal.storageUpdatedAt': new Date() } }, { session });
+  if (!result.matchedCount) await markUserStorageNeedsReconcile(ownerId, session);
 };
 
 // Recovery path for a delete whose persisted byte stamp cannot be trusted.

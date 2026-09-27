@@ -1,3 +1,5 @@
+import { randomUUID as lopuSettingsRevision } from 'node:crypto';
+import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
 import { Binary, ObjectId } from 'mongodb';
 
@@ -28,6 +30,8 @@ import { isAdminDoc, isEnvAdmin } from './admin';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 import { sanitizeBirthday } from './birthday';
+import { toBin, fromBin } from './binary';
+export { toBin, fromBin } from './binary';
 
 // Users are THINGS now (thingtime ["user"], see
 // TODO/claude-todo/22-everything-is-a-thing-collections.md): public
@@ -233,16 +237,6 @@ export const toPublicProfile = (user: any): PublicProfile => ({
 
 // BinData wrappers: the wildcard text index tokenizes every STRING field, so
 // secrets travel as binary — invisible to $text, still exact-queryable.
-export const toBin = (value: string) => new Binary(Buffer.from(value, 'utf8'));
-export const fromBin = (value: any): string => {
-	// Buffer.isBuffer FIRST: a real Node Buffer also has a `.buffer` (the whole
-	// ArrayBuffer slab), so the buffer branch would decode the entire pool
-	if (Buffer.isBuffer(value)) return value.toString('utf8');
-	if (typeof value === 'string') return value;
-	if (value?.buffer) return Buffer.from(value.buffer, value.byteOffset || 0, value.length ?? value.byteLength).toString('utf8');
-	return '';
-};
-
 // A user thing's private state is the opaque BinData blob (`secure`). The $**
 // wildcard text index tokenizes string FIELDS only — binary is invisible to it
 // — so blobbing the whole subdocument means no field inside it (email,
@@ -2093,3 +2087,30 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 };
 
 export const updateUserProfile = createUpdateUserProfile();
+
+// Personal instructions are private secure metadata: never part of a profile,
+// Thing crystal, search index, admin roster, or another viewer's prompt.
+export const getUserLopuInstructions = async (userId: string): Promise<LopuInstructionSettings> => {
+  const thing = await (await getThingsCollection()).findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
+  const legacy = !thing && ObjectId.isValid(userId)
+    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.lopuInstructions': 1 } }) : null;
+  const stored = (thing ? unpackSecure((thing as any).secure).meta : legacy?.meta)?.lopuInstructions;
+  if (!stored) return { revision: null, instructions: [] };
+  return { revision: stored.revision, instructions: validateLopuInstructions(stored.instructions) };
+};
+export const setUserLopuInstructions = async (userId: string, instructions: unknown, expectedRevision: string | null): Promise<LopuInstructionSettings> => {
+  const settings = { revision: lopuSettingsRevision(), instructions: validateLopuInstructions(instructions) };
+  const result = await mutateUserThingSecure(userId, secure => {
+    if ((secure.meta!.lopuInstructions?.revision ?? null) !== expectedRevision) throw new LopuPromptConflictError();
+    secure.meta!.lopuInstructions = settings;
+  });
+  if (result === 'mutated') return settings;
+  if (result === 'contended') throw new SecureWriteContendedError(userId);
+  if (!ObjectId.isValid(userId)) throw new Error('Account not found.');
+  const legacy = await (await getUsersCollection()).updateOne(
+    { _id: new ObjectId(userId), 'meta.lopuInstructions.revision': expectedRevision } as any,
+    { $set: { 'meta.lopuInstructions': settings, updatedAt: new Date() } }
+  );
+  if (!legacy.matchedCount) throw new LopuPromptConflictError();
+  return settings;
+};

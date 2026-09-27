@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { validateServiceValues, serviceVisibleIds, serviceWeekStart, serviceDateOffset, type ServiceRecord } from './serviceWorkspace';
 const record = (id: string, kind: ServiceRecord['kind'], values = {}): ServiceRecord => ({ id, kind, values, updatedAt: 'now' });
+test('select validation gives Action callers the exact accepted values without weakening validation', () => {
+	assert.throws(() => validateServiceValues('equipment', { title: 'Battery', category: 'battery' }),
+		/Choose a valid category\. Allowed values \(case-sensitive\): "Tool", "Battery", "Vehicle", "Fuel", "Other"/);
+	assert.equal(validateServiceValues('equipment', { title: 'Battery', category: 'Battery' }).category, 'Battery');
+	assert.throws(() => validateServiceValues('member', { username: 'alice', role: 'owner' }), /Allowed values.*"Admin"/);
+});
 test('calendar math survives month, leap-year and year boundaries', () => {
 	assert.equal(serviceWeekStart('2026-01-04'), '2025-12-29');
 	assert.equal(serviceDateOffset('2024-02-28', 1), '2024-02-29');

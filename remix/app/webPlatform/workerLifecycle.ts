@@ -1,4 +1,5 @@
 type WorkerPort = Pick<Worker, 'onmessage' | 'onerror' | 'postMessage' | 'terminate'>;
+export type DOMCallback = (id: number, args: unknown[], error?: string, thisArg?: unknown) => void;
 
 /** Browser process startup has its own bound; it is not program execution. */
 export function runPlatformWorker(
@@ -6,7 +7,7 @@ export function runPlatformWorker(
 	input: unknown,
 	send: (ok: boolean, result: unknown) => void,
 	release: () => void,
-	dom?: (request: unknown) => unknown
+	dom?: (request: unknown, callback: DOMCallback) => unknown
 ) {
 	let done = false;
 	let running = false;
@@ -35,8 +36,17 @@ export function runPlatformWorker(
 		} else if (running && event.data?.type === 'tt-platform-dom') {
 			try {
 				if (!dom) throw new Error('This execution context has no document');
-				const result = dom(event.data);
-				worker.postMessage({ type: 'tt-platform-dom-result', id: event.data.id, ok: true, result });
+				const result = dom(event.data, (id, args, error, thisArg) => {
+					if (done) return;
+					if (error) finish(false, error);
+					else worker.postMessage({ type: 'tt-platform-dom-callback', id, args, ...(thisArg === undefined ? {} : { thisArg }) });
+				});
+				const reply = (value: unknown) => {
+					if (!done) worker.postMessage({ type: 'tt-platform-dom-result', id: event.data.id, ok: true, result: value });
+				};
+				if (result instanceof Promise)
+					void result.then(reply, (error) => finish(false, error instanceof Error ? error.message : 'Invalid DOM operation'));
+				else reply(result);
 			} catch (error) {
 				// Protocol and budget errors terminate the run; malformed requests must
 				// not keep an unbounded error/retry loop alive on the frame thread.

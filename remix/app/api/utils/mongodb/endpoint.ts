@@ -115,6 +115,10 @@ const mongoEndpointStorage = new AsyncLocalStorage<MongoEndpointSelection>();
 export const runWithMongoEndpoint = <T>(selection: MongoEndpointSelection | null, fn: () => T): T =>
   selection ? mongoEndpointStorage.run(selection, fn) : fn();
 
+// Explicitly leave an enclosing custom selection for this async operation.
+// Never mutate the caller's selection or another concurrent request.
+export const runWithHomeMongoEndpoint = <T>(fn: () => T): T => mongoEndpointStorage.exit(fn);
+
 export const getActiveMongoEndpoint = (): MongoEndpointSelection | null =>
   mongoEndpointStorage.getStore() ?? null;
 

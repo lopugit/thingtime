@@ -1,11 +1,22 @@
+import { readCSSProbe } from './cssProbe';
+import { SVG_FILTER_TAGS, SVG_FILTER_LIMITS } from './svgFilterSupport';
 import { compilePlatformProgram, validatePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
 import { runPlatformWorker } from './workerLifecycle';
 import { inspectPlatformInterface } from './interfaceProbe';
 import { createPlatformDOMBridge } from './domBridge';
+import { canvasArgument, CANVAS_LIMITS } from './canvasSupport';
+import { SVG_NAMESPACE, SVG_LIMITS, svgTag, svgAttribute } from './svgSupport';
+import { LIVE_DOM_EVENTS, bindLiveDOMEvent, nativeDOMMethod, platformEventReceipt, UnsupportedDOMFeature } from './liveDOM';
+import { localPlatformResource } from './mediaPolicy';
+import { readMediaProperty, writeMediaProperty, mediaReceipt, mediaMethodResult } from './liveMedia';
+import { resolveDOMScalar } from './liveDOM';
+import { layoutArgument } from './layoutSupport';
 import type { PlatformNode } from './types';
 // Form controls may shadow instance methods while their parent is being built.
 const appendNode = Node.prototype.appendChild;
+const listen = EventTarget.prototype.addEventListener;
+const closestElement = Element.prototype.closest;
 let started = false;
 addEventListener('message', (event) => {
 	if (event.source !== parent || started || event.data?.type !== 'tt-platform-start') return;
@@ -14,11 +25,30 @@ addEventListener('message', (event) => {
 	started = true;
 	const send = (ok: boolean, result: unknown) =>
 		parent.postMessage({ type: 'tt-platform-result', runId, ok, text: JSON.stringify(result, null, 2).slice(0, 65536) }, '*');
+	const domState = { active: true };
+	const unbind: (() => void)[] = [];
+	const stopDOM = () => {
+		domState.active = false;
+		for (const stop of unbind.splice(0)) stop();
+		for (const element of document.querySelectorAll('audio,video')) {
+			try {
+				nativeDOMMethod(element, 'pause')();
+			} catch {
+				/* A stopped run cannot retain playback. */
+			}
+		}
+	};
+	addEventListener('pagehide', stopDOM, { once: true });
 	try {
 		const program = validatePlatformProgram(raw);
 		compilePlatformProgram(program);
 		const root = document.getElementById('surface')!;
 		let nodes = 0;
+		let mediaNodes = 0;
+		let canvasNodes = 0;
+		let svgNodes = 0,
+			filterNodes = 0,
+			filters = 0;
 		const substitute = (value: unknown) =>
 			typeof value === 'string'
 				? value.replace(/\[\[([A-Za-z_][A-Za-z0-9_]*)\]\]/g, (_, name) =>
@@ -26,22 +56,46 @@ addEventListener('message', (event) => {
 				  )
 				: String(value);
 		const blocked = new Set(['script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'base', 'link', 'meta', 'style']);
-		const render = (node: PlatformNode, depth = 0): Node => {
+		const render = (node: PlatformNode, depth = 0, inheritedSVG = false): Node => {
 			if (++nodes > 300 || depth > 20) throw new Error('Document exceeds its rendering budget');
 			if (typeof node === 'string') return document.createTextNode(substitute(node));
-			if (!node || typeof node !== 'object' || typeof node.tag !== 'string' || !/^[a-z][a-z0-9-]{0,40}$/.test(node.tag) || blocked.has(node.tag))
+			if (!node || typeof node !== 'object' || typeof node.tag !== 'string') throw new Error('Invalid document element');
+			if (node.namespace !== undefined && node.namespace !== 'svg') throw new Error('Unregistered document namespace');
+			const svg = inheritedSVG || node.namespace === 'svg' || node.tag === 'svg';
+			if (svg) {
+				svgTag(node.tag);
+				if (SVG_FILTER_TAGS.has(node.tag) && ++filterNodes > SVG_FILTER_LIMITS.nodes) throw new Error('SVG filter node budget exceeded');
+				if (node.tag === 'filter' && ++filters > SVG_FILTER_LIMITS.filters) throw new Error('SVG filter count budget exceeded');
+				if (++svgNodes > SVG_LIMITS.nodes) throw new Error('Document exceeds its SVG budget');
+			} else if (!/^[a-z][a-z0-9-]{0,40}$/.test(node.tag) || blocked.has(node.tag))
 				throw new Error('This document element needs a dedicated browsing context');
-			const el = document.createElement(node.tag);
+			if (['audio', 'video'].includes(node.tag) && ++mediaNodes > 8) throw new Error('Document exceeds its media budget');
+			if (node.tag === 'canvas' && ++canvasNodes > CANVAS_LIMITS.canvases) throw new Error('Document exceeds its Canvas budget');
+			const el = svg ? document.createElementNS(SVG_NAMESPACE, node.tag) : document.createElement(node.tag);
 			for (const [key, value] of Object.entries(node.attributes || {})) {
 				if (/^on/i.test(key) || ['srcdoc', 'is', 'nonce', 'action', 'formaction', 'ping', 'autofocus', 'pattern'].includes(key.toLowerCase()))
 					throw new Error('Use declarative events and local document attributes');
 				const val = substitute(value);
-				if (['src', 'href', 'poster', 'data'].includes(key.toLowerCase()) && !/^#|^data:image\/(png|jpeg|gif|webp);base64,/.test(val))
+				if (svg) svgAttribute(node.tag, key, val);
+				if (node.tag === 'canvas' && ['width', 'height'].includes(key.toLowerCase()))
+					canvasArgument(Number(val), 'canvas-size', () => {
+						throw new Error('No handle');
+					});
+				if (['src', 'href', 'poster', 'data'].includes(key.toLowerCase()) && !localPlatformResource(val, node.tag, key.toLowerCase()))
 					throw new Error('Use local demo resources');
-				if (value === false) continue;
-				el.setAttribute(key, value === true ? '' : val);
+				if (value === false && !svg) continue;
+				el.setAttribute(key, !svg && value === true ? '' : val);
 			}
-			for (const child of node.children || []) appendNode.call(el, render(child, depth + 1));
+			if (
+				svg &&
+				node.tag === 'filter' &&
+				(el.getAttribute('filterUnits') !== 'userSpaceOnUse' ||
+					el.getAttribute('primitiveUnits') !== 'userSpaceOnUse' ||
+					!el.hasAttribute('width') ||
+					!el.hasAttribute('height'))
+			)
+				throw new Error('Filters require explicit bounded user-space regions');
+			for (const child of node.children || []) appendNode.call(el, render(child, depth + 1, svg));
 			return el;
 		};
 		for (const node of program.document || []) root.appendChild(render(node));
@@ -56,60 +110,188 @@ addEventListener('message', (event) => {
 			)
 			.join('\n');
 		document.head.appendChild(sheet);
-		const methods = new Set([
-			'show',
-			'showModal',
-			'close',
-			'showPopover',
-			'hidePopover',
-			'togglePopover',
-			'focus',
-			'blur',
-			'click',
-			'select',
-			'checkValidity',
-			'reportValidity',
-			'reset',
-			'requestSubmit',
-			'stepUp',
-			'stepDown',
-			'scrollIntoView',
-			'animate',
-			'setAttribute',
-			'removeAttribute',
-			'toggleAttribute'
-		]);
+		// Install cancellation before any immediate or event-driven call. The
+		// sandbox also denies form navigation; requestSubmit still dispatches its
+		// real validation/submit events, whose receipts show cancellation.
+		listen.call(document, 'submit', (event) => event.preventDefault(), true);
+		listen.call(document, 'click', (event) => {
+			const a = event.target instanceof Element ? closestElement.call(event.target, 'a') : null;
+			if (a && !a.getAttribute('href')?.startsWith('#')) event.preventDefault();
+		});
 		const events = { used: 0 };
+		const commandState: { sequence: number; result?: { ok: boolean; value: unknown } } = { sequence: 0 };
+		const observed: (ReturnType<typeof platformEventReceipt> & { label?: string; defaultPreventedAfterDispatch?: boolean })[] = [];
+		const immediate: (() => boolean)[] = [];
+		let lastDOMResult: { ok: boolean; value: unknown } | undefined;
+		const reportDOM = (ok: boolean, value: unknown) => {
+			lastDOMResult = { ok, value };
+			send(ok, value);
+		};
+		const reportCommand = (ok: boolean, value: unknown) => {
+			commandState.result = { ok, value };
+			reportDOM(ok, value);
+		};
+		let eventReportQueued = false;
+		const pendingReceipts: { event: Event; receipt: (typeof observed)[number] }[] = [];
+		const afterDispatch = (event: Event, receipt: (typeof observed)[number]) => {
+			pendingReceipts.push({ event, receipt });
+			if (pendingReceipts.length > 20) pendingReceipts.shift();
+			if (eventReportQueued) return;
+			eventReportQueued = true;
+			// A microtask checkpoint can precede the native handler's return-false
+			// processing. A new task observes cancellation after dispatch completes.
+			setTimeout(() => {
+				eventReportQueued = false;
+				for (const pending of pendingReceipts.splice(0)) pending.receipt.defaultPreventedAfterDispatch = pending.event.defaultPrevented;
+				if (!domState.active || !lastDOMResult?.ok) return;
+				const value = lastDOMResult.value;
+				reportDOM(true, { ...(value && typeof value === 'object' ? value : {}), events: [...observed] });
+			}, 0);
+		};
+		const mediaQueries = new Map<string, MediaQueryList>();
+		const resolveTarget = (raw: string): EventTarget | null => {
+			const selector = substitute(raw);
+			if (selector === '$visualViewport') {
+				if (!window.visualViewport) throw new UnsupportedDOMFeature('This browser does not expose VisualViewport');
+				return window.visualViewport;
+			}
+			if (selector.startsWith('$media:')) {
+				const query = selector.slice(7);
+				if (query.length > 2048 || (mediaQueries.size >= 32 && !mediaQueries.has(query))) throw new Error('Media query budget exceeded');
+				if (!mediaQueries.has(query)) mediaQueries.set(query, window.matchMedia(query));
+				return mediaQueries.get(query)!;
+			}
+			return root.querySelector(selector);
+		};
 		for (const operation of program.dom || []) {
-			if (!methods.has(operation.method)) throw new Error('This DOM method is not registered');
-			const element = root.querySelector(operation.target) as any;
+			const element = resolveTarget(operation.target);
 			if (!element) throw new Error(`No element matches ${operation.target}`);
-			const execute = () => {
+			const execute = (event?: Event) => {
+				if (!domState.active) return false;
 				try {
-					if (++events.used > 200) throw new Error('Reset the demo to replenish its event budget');
-					const args = (operation.args || []).map((v) => (typeof v === 'string' ? substitute(v) : v));
+					if (++events.used > 200) {
+						stopDOM();
+						throw new Error('Reset the demo to replenish its event budget');
+					}
+					if (!operation.method && !operation.property) {
+						if (!event) throw new Error('Event observation requires a dispatched event');
+						const receipt = {
+							...platformEventReceipt(event),
+							...(mediaReceipt(event.target) ? { media: mediaReceipt(event.target) } : {}),
+							...(operation.label ? { label: substitute(operation.label).slice(0, 100) } : {})
+						};
+						observed.push(receipt);
+						if (observed.length > 20) observed.shift();
+						reportDOM(commandState.result?.ok ?? true, { event: receipt, ...(commandState.result ? { command: commandState.result.value } : {}) });
+						afterDispatch(event, receipt);
+						return true;
+					}
+					// Even a refused newer command owns the latest outcome.
+					const sequence = ++commandState.sequence;
+					if (operation.property && !(element instanceof Element)) throw new Error('Media properties require an element');
+					const args = (operation.args || []).map((value) => {
+						if (value && typeof value === 'object' && (value as { op?: string }).op === 'event') {
+							const event = value as { op: string; interface: string; type: string; init: unknown };
+							if (
+								operation.method !== 'dispatchEvent' ||
+								Object.keys(event).some((k) => !['op', 'interface', 'type', 'init'].includes(k)) ||
+								!['MediaQueryListEvent', 'MouseEvent', 'Event'].includes(event.interface) ||
+								!LIVE_DOM_EVENTS.has(event.type)
+							)
+								throw new Error('Unregistered native event descriptor');
+							const init = layoutArgument(event.init || {}, 'layout-event', () => {
+								throw new Error('Event receivers are not exposed');
+							}) as EventInit;
+							const ctor = { Event, MouseEvent, MediaQueryListEvent: window.MediaQueryListEvent }[
+								event.interface as 'Event' | 'MouseEvent' | 'MediaQueryListEvent'
+							];
+							if (!ctor) throw new UnsupportedDOMFeature('This browser does not expose ' + event.interface);
+							return new ctor(event.type, init);
+						}
+						if (value && typeof value === 'object' && !Array.isArray(value) && (value as { op?: unknown }).op === 'element') {
+							const selector = (value as { selector?: unknown }).selector;
+							if (Object.keys(value).length !== 2 || typeof selector !== 'string' || !selector || selector.length > 500)
+								throw new Error('Expected one bounded element selector');
+							const target = root.querySelector(selector);
+							if (!target) throw new Error(`No element matches ${selector}`);
+							return target;
+						}
+						return typeof value === 'string' ? substitute(value) : value;
+					});
+					if (operation.method === 'setAttribute' && element instanceof Element && element.namespaceURI === SVG_NAMESPACE)
+						svgAttribute(element.localName, String(args[0]), String(args[1]));
+					if (operation.method === 'setAttribute' && element instanceof HTMLCanvasElement && /^(width|height)$/i.test(String(args[0])))
+						canvasArgument(Number(args[1]), 'canvas-size', () => {
+							throw new Error('No handle');
+						});
 					if (operation.method === 'setAttribute' && /^(on|src|href|srcdoc|action|formaction|is|nonce|pattern)/i.test(String(args[0])))
 						throw new Error('Attribute is not writable by this control');
-					if (typeof element[operation.method] !== 'function') throw new Error('This browser does not implement the method');
-					const result = element[operation.method](...args);
-					send(true, { method: operation.method, result: typeof result === 'object' ? String(result) : result ?? null });
+					const result = operation.property
+						? Object.prototype.hasOwnProperty.call(operation, 'value')
+							? writeMediaProperty(element as Element, operation.property, resolveDOMScalar(operation.value, input))
+							: readMediaProperty(element as Element, operation.property)
+						: nativeDOMMethod(element, operation.method!)(...args);
+					if (!domState.active) return false;
+					const outcome = {
+						...(operation.property ? { property: operation.property } : { method: operation.method }),
+						result: operation.property ? result : mediaMethodResult(result),
+						...(mediaReceipt(element) ? { media: mediaReceipt(element) } : {}),
+						...(observed.length ? { events: [...observed] } : {})
+					};
+					if (result instanceof Promise) {
+						reportCommand(true, { ...outcome, result: null, status: 'pending' });
+						result.then(
+							(value) => {
+								if (domState.active && sequence === commandState.sequence)
+									reportCommand(true, {
+										...outcome,
+										status: 'fulfilled',
+										result: mediaMethodResult(value),
+										media: mediaReceipt(element),
+										events: [...observed]
+									});
+							},
+							(error) => {
+								if (domState.active && sequence === commandState.sequence)
+									reportCommand(false, {
+										method: operation.method,
+										status: 'rejected',
+										name: error instanceof Error ? error.name : 'Error',
+										message: error instanceof Error ? error.message.slice(0, 256) : 'Media operation failed'
+									});
+							}
+						);
+					} else reportCommand(true, outcome);
+					return true;
 				} catch (e) {
-					send(false, e instanceof Error ? e.message : 'DOM operation failed');
+					if (e instanceof UnsupportedDOMFeature) {
+						stopDOM();
+						reportDOM(true, { status: 'unsupported', message: e.message });
+					} else reportCommand(false, e instanceof Error ? e.message : 'DOM operation failed');
+					return false;
 				}
 			};
 			if (operation.event) {
 				const [selector, eventName] = operation.event.split('|');
-				const trigger = root.querySelector(selector);
-				if (!trigger || !['click', 'input', 'change', 'submit', 'toggle', 'focus', 'blur'].includes(eventName))
-					throw new Error('Invalid event binding');
-				trigger.addEventListener(eventName, execute);
-			} else execute();
+				const trigger = resolveTarget(selector);
+				if (!trigger) throw new Error('Invalid event binding');
+				const remove = bindLiveDOMEvent(trigger, eventName, operation, input, execute);
+				unbind.push(remove);
+				if (operation.removeOn) {
+					const [removeSelector, removeEvent] = operation.removeOn.split('|');
+					const remover = root.querySelector(removeSelector);
+					if (!remover) throw new Error('Invalid listener removal trigger');
+					unbind.push(
+						bindLiveDOMEvent(remover, removeEvent, { target: removeSelector }, input, () => {
+							remove();
+							reportDOM(true, { listener: 'removed', events: [...observed] });
+						})
+					);
+				}
+			} else immediate.push(execute);
 		}
-		document.addEventListener('submit', (e) => e.preventDefault());
-		document.addEventListener('click', (e) => {
-			const a = (e.target as Element)?.closest?.('a');
-			if (a && !a.getAttribute('href')?.startsWith('#')) e.preventDefault();
-		});
+		// Observers are ready even when declared after an immediate operation.
+		for (const execute of immediate) if (!execute()) return;
 		let probe: unknown;
 		if (program.probe) {
 			const p = program.probe;
@@ -118,13 +300,7 @@ addEventListener('message', (event) => {
 				const el = root.querySelector(p.target || '#sample');
 				probe = { attribute: p.name, value: el?.getAttribute(p.name), markup: el?.outerHTML.slice(0, 4000) };
 			}
-			if (p.kind === 'css')
-				probe = {
-					property: p.name,
-					value: substitute(p.value || ''),
-					supported: CSS.supports(p.name, substitute(p.value || '')),
-					computed: root.querySelector('#sample') ? getComputedStyle(root.querySelector('#sample')!).getPropertyValue(p.name) : null
-				};
+			if (p.kind === 'css') probe = readCSSProbe(root, p, substitute);
 			if (p.kind === 'selector') {
 				const selector = substitute(p.name);
 				probe = { selector, supported: CSS.supports(`selector(${selector})`), matches: root.querySelectorAll(selector).length };
@@ -134,7 +310,8 @@ addEventListener('message', (event) => {
 			}
 		}
 		if (!program.steps?.length) {
-			send(true, probe ?? { rendered: nodes, styles: program.styles?.length || 0, events: program.dom?.length || 0 });
+			if (lastDOMResult?.ok === false) send(false, lastDOMResult.value);
+			else send(true, probe ?? lastDOMResult?.value ?? { rendered: nodes, styles: program.styles?.length || 0, events: program.dom?.length || 0 });
 			return;
 		}
 		// Compile data to a Blob module; neither eval nor Function is used. Infinite
@@ -146,16 +323,21 @@ addEventListener('message', (event) => {
 		const stop = runPlatformWorker(
 			worker,
 			input,
-			send,
+			(ok, value) => {
+				lastDOMResult = undefined;
+				send(ok, value);
+			},
 			() => {
 				bridge?.stop();
 				URL.revokeObjectURL(url);
 			},
-			(request) => (bridge ??= createPlatformDOMBridge(root)).request(request)
+			(request, callback) => (bridge ??= createPlatformDOMBridge(root, callback)).request(request)
 		);
 		addEventListener('pagehide', stop, { once: true });
 	} catch (e) {
-		send(false, e instanceof Error ? e.message : 'Invalid platform program');
+		stopDOM();
+		if (e instanceof UnsupportedDOMFeature) send(true, { status: 'unsupported', message: e.message });
+		else send(false, e instanceof Error ? e.message : 'Invalid platform program');
 	}
 });
 parent.postMessage({ type: 'tt-platform-ready' }, '*');

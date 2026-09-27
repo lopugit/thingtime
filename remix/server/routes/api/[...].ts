@@ -1,9 +1,11 @@
+import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
 import { getCurrentUser } from '../../../app/api/utils/auth/getCurrentUser';
 import { recordErrorLog, withErrorLogRequest } from '../../../app/api/utils/errors/errorLogs';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
+import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
@@ -14,8 +16,7 @@ type RouteModule = {
 };
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
-  'v1/library/request': () => import('../../../app/routes/api/v1/library/request/_request'),
-  'v1/builder/workspaces': () => import('../../../app/routes/api/v1/builder/workspaces/_workspaces'),
+  ...actionDataRoutes,
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
@@ -227,6 +228,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/notifications/email/weekly-summary': () => import('../../../app/routes/api/v1/notifications/email/weekly-summary/_weekly-summary'),
   'v1/notifications/read': () => import('../../../app/routes/api/v1/notifications/read/_read'),
   'v1/notifications/record': () => import('../../../app/routes/api/v1/notifications/record/_record'),
+  'v1/timeline': () => import('../../../app/routes/api/v1/timeline/_timeline'),
   'v1/notifications/settings': () => import('../../../app/routes/api/v1/notifications/settings/_settings'),
   'v1/oauth/authorize': () => import('../../../app/routes/api/v1/oauth/authorize/_authorize'),
   'v1/oauth/desktop/authorize': () => import('../../../app/routes/api/v1/oauth/desktop/authorize/_authorize'),
@@ -239,19 +241,11 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/oauth/userinfo': () => import('../../../app/routes/api/v1/oauth/userinfo/_userinfo'),
   'v1/actions/run': () => import('../../../app/routes/api/v1/actions/run/_run'),
   'v1/actions/runs': () => import('../../../app/routes/api/v1/actions/runs/_runs'),
-  'v1/components/browse': () => import('../../../app/routes/api/v1/components/browse/_browse'),
   'v1/marketing/publications': () => import('../../../app/routes/api/v1/marketing/publications/_publications'),
-  'v1/webpages/resolve': () => import('../../../app/routes/api/v1/webpages/resolve/_resolve'),
-  'v1/things/fork': () => import('../../../app/routes/api/v1/things/fork/_fork'),
-  'v1/things/import': () => import('../../../app/routes/api/v1/things/import/_import'),
-  'v1/things/export': () => import('../../../app/routes/api/v1/things/export/_export'),
-  'v1/webpages/demos': () => import('../../../app/routes/api/v1/webpages/demos/_demos'),
-  'v1/webpages/suites/install': () => import('../../../app/routes/api/v1/webpages/suites/install/_install'),
   'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),
   'v1/network-probe/download': () => import('../../../app/routes/api/v1/network-probe/download/_download'),
   'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),
-  'v1/schemas': () => import('../../../app/routes/api/v1/schemas/_schemas'),
-  'v1/schemas/browse': () => import('../../../app/routes/api/v1/schemas/browse/_browse'),
+  'v1/settings/lopu-prompt': () => import('../../../app/routes/api/v1/settings/lopu-prompt/_lopu-prompt'),
   'v1/settings/lopu-chat-defaults': () => import('../../../app/routes/api/v1/settings/lopu-chat-defaults/_lopu-chat-defaults'),
   'v1/settings/lopu-access': () => import('../../../app/routes/api/v1/settings/lopu-access/_lopu-access'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>
@@ -278,33 +272,14 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/get': () => import('../../../app/routes/api/v1/get/_get'),
   'v1/groups': () => import('../../../app/routes/api/v1/groups/_groups'),
   'v1/groups/audience-sources': () => import('../../../app/routes/api/v1/groups/audience-sources/_audience-sources'),
-  'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
-  'v1/things/actions': () => import('../../../app/routes/api/v1/things/actions/_actions'),
-  'v1/things/bulk': () => import('../../../app/routes/api/v1/things/bulk/_bulk'),
+  'v1/drafts': () => import('../../../app/routes/api/v1/drafts/_drafts'),
   'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
   'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),
   'v1/tokens/revoke': () => import('../../../app/routes/api/v1/tokens/revoke/_revoke'),
   'v1/tokens/self': () => import('../../../app/routes/api/v1/tokens/self/_self'),
-  'v1/things/comment': () => import('../../../app/routes/api/v1/things/comment/_comment'),
-  'v1/things/delete': () => import('../../../app/routes/api/v1/things/delete/_delete'),
-  'v1/things/feed': () => import('../../../app/routes/api/v1/things/feed/_feed'),
-  'v1/things/react': () => import('../../../app/routes/api/v1/things/react/_react'),
-  'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
-  'v1/things/quota': () => import('../../../app/routes/api/v1/things/quota/_quota'),
-  'v1/things/rss': () => import('../../../app/routes/api/v1/things/rss/_rss'),
   'v1/sitemap': () => import('../../../app/routes/api/v1/sitemap/_sitemap'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
 	'v1/vault/reveal': () => import('../../../app/routes/api/v1/vault/reveal/_reveal'),
-  'v1/things/save': () => import('../../../app/routes/api/v1/things/save/_save'),
-  'v1/things/saved': () => import('../../../app/routes/api/v1/things/saved/_saved'),
-  'v1/things/search': () => import('../../../app/routes/api/v1/things/search/_search'),
-  'v1/things/share': () => import('../../../app/routes/api/v1/things/share/_share'),
-  'v1/things/trending': () => import('../../../app/routes/api/v1/things/trending/_trending'),
-  'v1/things/update': () => import('../../../app/routes/api/v1/things/update/_update'),
-  'v1/things/user': () => import('../../../app/routes/api/v1/things/user/_user'),
-  'v1/things/views': () => import('../../../app/routes/api/v1/things/views/_views'),
-  'v1/things/vote': () => import('../../../app/routes/api/v1/things/vote/_vote'),
-  'v1/things/updown': () => import('../../../app/routes/api/v1/things/updown/_updown'),
   'v1/users/activity': () => import('../../../app/routes/api/v1/users/activity/_activity'),
   'v1/users/connections': () => import('../../../app/routes/api/v1/users/connections/_connections'),
   'v1/users/follow': () => import('../../../app/routes/api/v1/users/follow/_follow'),
@@ -408,6 +383,8 @@ export default defineHandler(async (event) => {
     if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
       return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     }
+    // Root data uses this same fallback. Forward its public database
+    // precondition and selection unchanged for the upstream to enforce.
     if (path === 'v1/vault/reveal') {
       return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
         status: 503,
@@ -452,7 +429,10 @@ export default defineHandler(async (event) => {
   // the data plane below the handler resolves the session's active endpoint.
   // Admin routes are exempt: migrations and other admin writes must always
   // operate on the home deployment, never on an override DB.
-  const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
+  const selectedEndpoint = await getRequestMongoEndpoint(event.req);
+  const dataPlaneFailure = enforceExpectedDataPlane(event.req, selectedEndpoint);
+  if (dataPlaneFailure) return dataPlaneFailure;
+  const mongoEndpoint = path.startsWith('v1/admin/') ? null : selectedEndpoint;
 
   try {
 		const response = await runWithMongoEndpoint(mongoEndpoint, async () => {

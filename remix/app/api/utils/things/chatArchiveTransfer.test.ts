@@ -161,7 +161,8 @@ test('archive folder placement fences deletion and refuses foreign, missing and 
     const run = createTransferChatArchive('importer', manifest, 'chat', { ...empty(), folderId: folder.shareId }, deps);
     if (mode === 'valid') {
       await run; assert.equal(state.committed[0].folderId, folder.shareId);
-      assert.ok(state.locks[0].update.$set.updatedAt > folder.updatedAt);
+      assert.match(state.locks[0].update.$set.folderMutationToken, /^[a-f0-9-]{36}$/);
+      assert.equal(state.locks[0].update.$set.updatedAt, undefined);
     } else { await assert.rejects(run, /folder/); assert.equal(state.inserts, 0); }
   }
 });

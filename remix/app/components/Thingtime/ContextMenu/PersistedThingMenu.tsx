@@ -1,4 +1,5 @@
 import { RenameDialog } from '~/components/Things/ThingsDialogs';
+import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { thingRenameCrystal, isManagedLibraryThing, type ThingsThing } from '~/components/Things/thingsCore';
 import { useSharedAccess, useSharedThingPath } from '~/components/Sharing/SharedMedia';
 import React from 'react';
@@ -70,7 +71,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
       if (currentIdentity.current === identity) lopu({ title: 'Could not send to Lopu', description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error' });
     } finally { busy.current = false; setSending(false); }
   };
-  const model = buildThingEntityMenu({ rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, ...capabilities,
+  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!user?.id && thing?.author?.id === user.id, rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, ...capabilities,
     'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, user?.id) ? { disabled: sending || handoffDisabled } : false
   }, extensions);
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
@@ -78,6 +79,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
       switch (event.action.command) {
         case 'open': navigate(href); break;
         case 'inspect': navigate(inspectHref); break;
+        case 'history': openThingHistory(id, thing?.thingtime); break;
         case 'copy-link': {
           const url = thingEntityLink(href, window.location.origin, thing, user?.id, sharedAccess.key);
           void navigator.clipboard.writeText(url.href).then(() => lopu({ title: 'Link copied',

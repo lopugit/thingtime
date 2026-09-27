@@ -619,6 +619,11 @@ export const visitStoredTemplateActions = (
 			return;
 		}
 		if ((node.tag === 'tt-collection' || node.chakra === 'Collection') && isPlainObject(node.props)) {
+			// Collection reads declare a literal saved Action, like a block source.
+			// Runtime rows/inputs cannot add authority or change this dependency.
+			const sourceAction = isPlainObject(node.props.source) ? node.props.source.action : undefined;
+			if (typeof sourceAction === 'string' && sourceAction && sourceAction.length <= 128 && !/[{}$\s]/.test(sourceAction))
+				visit(sourceAction, { ttAction: sourceAction }, sourceAction);
 			const row = node.props.itemTemplate;
 			// Only this control resolves its row template a second time. Row data
 			// is runtime input and must never become an inherited authority grant.

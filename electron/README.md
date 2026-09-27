@@ -311,3 +311,25 @@ secrets and exact gate.
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same
 server-side env as the web dev stack. Do not commit secret-bearing env files.
+
+### Mac voice input
+
+Lopu's standard voice mode uses the bundled, signed `ThingtimeSpeech` executable
+and Apple's Speech framework on macOS. Electron exposes Chromium's Web Speech
+constructor but its remote recognition service fails with `network`; desktop
+therefore negotiates `speechRecognitionVersion: 1.0.0` instead. Browser speech
+and direct-provider voice retain their existing paths. No API key is required.
+
+Press the microphone to request macOS Microphone and Speech Recognition access.
+If refused, enable Thingtime under System Settings → Privacy & Security in both
+categories. Nothing prompts or records at app startup. Recognition prefers
+on-device processing when the selected language supports it; otherwise Apple's
+service may process the audio. The helper does not save audio to disk.
+
+One bounded helper belongs to the bundled main window and emits only transient
+transcripts. Stop, reload, window close, renderer exit, parent exit and the
+startup watchdog release capture. The existing Lopu engine pauses recognition
+while processing/replying, and routes final text through the selected chat/model.
+Run `pnpm --dir electron test` plus the `desktopSpeechRecognition.test.ts` and
+`voice*.test.ts` tests in Remix. Verify a spoken turn and stopping capture in
+the installed signed app; mocked callbacks cannot prove macOS recognition.

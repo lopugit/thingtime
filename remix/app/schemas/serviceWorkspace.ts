@@ -156,7 +156,7 @@ export function validateServiceValues(kind: ServiceKind, input: unknown, timeZon
 			const text = raw.trim();
 			if (text.length > (field.type === 'textarea' ? 10000 : 500)) throw new Error(`${field.label} is too long`);
 			if (field.required && !text) throw new Error(`${field.label} is required`);
-			if (field.options && !field.options.includes(text)) throw new Error(`Choose a valid ${field.label.toLowerCase()}`);
+			if (field.options && !field.options.includes(text)) throw new Error(`Choose a valid ${field.label.toLowerCase()}. Allowed values (case-sensitive): ${field.options.map(option => JSON.stringify(option)).join(', ')}`);
 			if (field.type === 'date' && !validServiceDate(text)) throw new Error('Choose a valid date');
 			if (field.type === 'time' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(text)) throw new Error('Choose a valid time');
 			if (

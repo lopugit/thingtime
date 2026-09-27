@@ -1,3 +1,10 @@
+import { XPATH_CONSTRUCTORS } from './xpathPolicy';
+import { ANIMATION_CONSTRUCTORS, ANIMATION_STATIC, ANIMATION_GLOBALS } from './animationPolicy';
+import { RANGE_CONSTRUCTORS } from './rangePolicy';
+import { OBSERVER_CONSTRUCTORS } from './observerPolicy';
+import { LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS } from './layoutPolicy';
+import { CSSOM_CONSTRUCTORS, CSSOM_STATIC } from './cssomPolicy';
+import { TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC } from './typedCSSPolicy';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { WEB_FEATURES } from './catalogue';
@@ -5,8 +12,7 @@ import { featureRecipe } from './recipes';
 import { DOM_RECEIVER_POLICY } from './domBridge';
 
 const members = (names: string) => names.split(' ').filter(Boolean);
-const union = (pick: (policy: (typeof DOM_RECEIVER_POLICY)[string]) => string[]) =>
-	new Set(Object.values(DOM_RECEIVER_POLICY).flatMap(pick));
+const union = (pick: (policy: (typeof DOM_RECEIVER_POLICY)[string]) => string[]) => new Set(Object.values(DOM_RECEIVER_POLICY).flatMap(pick));
 const reads = union((p) => members(p.reads));
 const writes = union((p) => members(p.writes || ''));
 const calls = union((p) => Object.keys(p.calls || {}));
@@ -20,17 +26,58 @@ test('every catalogue DOM request names a member the receiver policy registers',
 		if (!value || typeof value !== 'object') return;
 		const node = value as { op?: unknown; action?: unknown; key?: unknown };
 		if (node.op === 'dom') requested.set(`${node.action}:${node.key || ''}`, id);
+		if (node.op === 'object' && Array.isArray((value as any).entries)) {
+			const command = Object.fromEntries((value as any).entries);
+			if (['get', 'set', 'call'].includes(command.action) && 'target' in command && 'args' in command)
+				requested.set(`${command.action}:${command.key}`, id);
+		}
 		for (const item of Object.values(value)) collect(item, id);
 	};
 	for (const f of WEB_FEATURES) collect(featureRecipe(f).program.steps, f.id);
 	assert.ok(requested.size > 40, `expected broad DOM coverage, saw ${requested.size} distinct operations`);
 	for (const [request, id] of requested) {
 		const [action, key] = request.split(':');
-		if (action === 'document') {
+		if (['document', 'surface', 'batch'].includes(action)) {
 			assert.equal(key, '', `${id}: a document request carries no member name`);
 			continue;
 		}
-		const registry = action === 'get' ? reads : action === 'set' ? writes : calls;
+		if (action === 'callback') {
+			assert.equal(key, 'acceptNode');
+			continue;
+		}
+		if (action === 'call' && key === 'acceptNode') continue;
+		if (action === 'construct') {
+			assert.ok(
+				[
+					'Path2D',
+					...Object.keys(XPATH_CONSTRUCTORS),
+					'ImageData',
+					...Object.keys(RANGE_CONSTRUCTORS),
+					...Object.keys(ANIMATION_CONSTRUCTORS),
+					...Object.keys(TYPED_CSS_CONSTRUCTORS),
+					...Object.keys(CSSOM_CONSTRUCTORS),
+					...Object.keys(LAYOUT_CONSTRUCTORS),
+					...Object.keys(OBSERVER_CONSTRUCTORS)
+				].includes(key)
+			);
+			continue;
+		}
+		if (action === 'static') {
+			assert.ok(
+				[
+					...Object.values(TYPED_CSS_STATIC),
+					...Object.values(CSSOM_STATIC),
+					...Object.values(LAYOUT_STATIC),
+					...Object.values(ANIMATION_STATIC)
+				].some((p) => key in p)
+			);
+			continue;
+		}
+		if (action === 'global') {
+			assert.ok([...Object.values(LAYOUT_GLOBALS), ...Object.values(ANIMATION_GLOBALS)].some((v) => v.split(' ').includes(key)));
+			continue;
+		}
+		const registry = ['get', 'constant'].includes(action) ? reads : action === 'set' ? writes : calls;
 		assert.ok(registry.has(key), `${id}: DOM ${action} of ${key} is not registered in DOM_RECEIVER_POLICY`);
 	}
 	// Writable members must also be readable, or an example cannot show its effect.
@@ -44,7 +91,7 @@ test('registered DOM members fit the compiler and bridge request envelope', () =
 		const method = Object.keys(policy.calls || {});
 		for (const key of [...read, ...write, ...method]) {
 			// compiler.ts gates node.key with this pattern; domBridge caps key length at 60.
-			assert.match(key, /^[A-Za-z_][A-Za-z0-9_]{0,60}$/, `${name}.${key}`);
+			assert.match(key, /^[A-Za-z_][A-Za-z0-9_-]{0,60}$/, `${name}.${key}`);
 		}
 		assert.equal(new Set(read).size, read.length, `${name} repeats a readable member`);
 		for (const key of write) assert.ok(read.includes(key), `${name}.${key} is writable but not readable`);

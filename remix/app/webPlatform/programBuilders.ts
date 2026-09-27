@@ -6,7 +6,7 @@ export const parameter = (name: string, label: string, value: unknown, type: 'te
 	default: value
 });
 export const global = (name: string) => ({ op: 'global', name });
-export const input = (name: string) => ({ op: 'input', name });
+export const input = (name: string) => ({ op: 'input' as const, name });
 export const literal = (value: unknown) => ({ op: 'literal', value });
 export const get = (target: unknown, key: unknown) => ({ op: 'get', target, key });
 export const method = (target: unknown, key: string, args: unknown[] = []) => ({ op: 'method', target, key, args });
@@ -40,3 +40,38 @@ export const domDocument = () => awaited({ op: 'dom', action: 'document' });
 export const domGet = (target: unknown, key: string) => awaited({ op: 'dom', action: 'get', target, key });
 export const domSet = (target: unknown, key: string, value: unknown) => awaited({ op: 'dom', action: 'set', target, key, args: [value] });
 export const domCall = (target: unknown, key: string, args: unknown[] = []) => awaited({ op: 'dom', action: 'call', target, key, args });
+
+/** Native binding and assignment patterns, shared by all program authors. */
+export const arrayPattern = (items: unknown[], rest?: unknown) => ({ op: 'array-pattern', items, ...(rest === undefined ? {} : { rest }) });
+export const objectPattern = (entries: { key: unknown; target: unknown; computed?: boolean }[], rest?: unknown) => ({
+	op: 'object-pattern',
+	entries,
+	...(rest === undefined ? {} : { rest })
+});
+export const defaultPattern = (target: unknown, value: unknown) => ({ op: 'default-pattern', target, value });
+
+export const domConstruct = (key: string, args: unknown[] = []) => awaited({ op: 'dom', action: 'construct', key, args });
+
+export const domSurface = () => awaited({ op: 'dom', action: 'surface' });
+/** Register an authored worker function for a bounded asynchronous native callback. */
+export const domCallback = (value: unknown) => ({ op: 'dom-callback', value });
+/** A synchronous callback object (named hook) or callable function. Definition
+ * and explicit captured bindings are ordinary saved data, never native source. */
+export const domSyncCallback = (key: string, definition: unknown, bindings: unknown = object({})) =>
+	awaited({ op: 'dom', action: 'callback', key, args: [definition, bindings] });
+export const domGlobal = (namespace: string, key: string) => awaited({ op: 'dom', action: 'global', target: namespace, key });
+
+/** Read a registered primitive Web IDL constant without exposing a constructor. */
+export const domConstant = (interfaceName: string, key: string) => awaited({ op: 'dom', action: 'constant', target: interfaceName, key });
+
+/** Invoke a registered native CSS factory or parser without exposing a global object. */
+export const domStatic = (namespace: string, key: string, args: unknown[] = []) =>
+	awaited({ op: 'dom', action: 'static', target: namespace, key, args });
+
+/** Member operations in one native task; failures do not roll back earlier writes. */
+export const domBatch = (commands: { action: 'get' | 'set' | 'call'; target: unknown; key: string; args?: unknown[] }[]) =>
+	awaited({
+		op: 'dom',
+		action: 'batch',
+		args: [array(...commands.map((c) => object({ action: c.action, target: c.target, key: c.key, args: array(...(c.args || [])) })))]
+	});
