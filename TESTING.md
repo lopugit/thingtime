@@ -32,11 +32,17 @@ persisted; every check is client-side.
       messages in the timeline" off hides message bubbles in rows and the panel.
 - [ ] With `prefers-reduced-motion: reduce`, no animation runs and the sheet,
       toast and rows still appear.
-- [ ] View → Evolution inside the browser: a Thing picker row, then one line with
-      nodes (hollow, verb-coloured), labels alternating above and below, day
-      ticks, a "now" marker, and for Primary button a dashed variation lane;
-      clicking a node selects that event in the detail panel; "Open the full
-      Evolution concept" links to the sibling entry.
+- [ ] Look → Cards / Line / Frames inside the timeline browser, at every scope:
+      with Everything the horizontal strip carries every Thing's changes (the
+      Thing card of each event), with This Thing a picker row chooses the Thing;
+      Cards alternate above and below a spine that fills to the selected change
+      with a minimap; Line shows alternating labels and day ticks; Frames is a
+      filmstrip with change chips on the connectors; kind/who/what chips, search
+      and the day scrubber still apply; clicking a card, node or label opens the
+      detail panel without the strip jumping; the variation lane appears for
+      Primary button in every look; "Open the Evolution concept" links to the
+      sibling entry. The app bar shows Scope and Look — there is no separate
+      Versions view (section 3 explains variations as lanes).
 - [ ] `/docs/design?entry=thingtime-history-evolution` and the bundle URL
       `/docs/design-bundles/thingtime-history-evolution/index.html` render with
       no console errors and open on the Cards look: the Thing's cards as of each

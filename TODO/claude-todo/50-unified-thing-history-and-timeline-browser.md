@@ -39,9 +39,19 @@ and it only ever grows: restore, undo, variations and merges append versions.
 
 ## Required experience (the concept, in words)
 
+### One browser: Scope × Look
+
+- There is one History browser with two dials. **Scope** says what is on the
+  timeline (Everything · This Thing · Page + related). **Look** says how it is
+  drawn (List · Cards · Line · Frames). Every combination shares the filter
+  chips, search, the 30-day scrubber and the detail panel; variations are
+  drawn as dashed lanes inside every look rather than a separate "Versions"
+  view, and named versions get a pin.
+
 ### Global timeline browser — `/history`
 
-- Newest first, grouped by day, with a session sub-label (count · devices).
+- **List look** (the default): newest first, grouped by day, with a session
+  sub-label (count · devices).
 - Scope segmented control: **Everything**, **This Thing**, **Page + related**
   (the page plus the Components and records it renders).
 - URL-driven filters, as on `/notifications`: kind (posts, pages, components,
@@ -67,10 +77,11 @@ and it only ever grows: restore, undo, variations and merges append versions.
 - Optimistic rendering: paint the cached first page per viewer + scope, then
   reconcile; never flash empty.
 
-### Evolution view — one Thing, left to right
+### Horizontal looks — Cards, Line, Frames (any scope)
 
-- A third view beside Timeline and Versions: the selected Thing's versions on
-  one horizontal line, oldest on the left, newest at **now**. Hollow nodes
+- The same events drawn left to right, oldest on the left, newest at **now**;
+  with scope Everything the spine carries every Thing's changes, with This
+  Thing (or Page + related) it reads as that Thing's evolution. Hollow nodes
   coloured by verb; labels alternate above and below (version · time, the
   change label, actor and sync state); minor moments (a sync, an attachment)
   are small dots; a variation runs on a dashed lane below its starting version;
@@ -91,8 +102,10 @@ and it only ever grows: restore, undo, variations and merges append versions.
 - Scrub with a slider, ←/→, Home/End or the minimap; Space or **Play** steps
   through versions; select a node or card to see the diff in the shared panel;
   **Compare** any two versions (even across a variation) read-only.
-- Concept: [`docs/design/thingtime-history-evolution/index.html`](../../docs/design/thingtime-history-evolution/index.html);
-  the timeline concept's browser also carries the line view in place.
+- Concepts: the timeline concept's browser carries all four looks at every
+  scope; [`docs/design/thingtime-history-evolution/index.html`](../../docs/design/thingtime-history-evolution/index.html)
+  is the same browser with the scope dial set to This Thing and as-of renders
+  inside the cards.
 
 ### Contextual entry points
 

@@ -109,10 +109,11 @@
 
   /* split */
   .split { display:grid; grid-template-columns:minmax(0,1fr) 340px; min-height:520px; }
-  .timeline { padding:6px 18px 18px; max-height:640px; overflow:auto; scroll-behavior:smooth; }
+  .timeline { padding:6px 18px 18px; max-height:640px; overflow:auto; scroll-behavior:smooth; min-width:0; }
+  .timeline.horiz { max-height:none; overflow:visible; }
   .detail { border-left:1px solid var(--tt-border); background:var(--tt-surface); padding:18px; max-height:640px; overflow:auto; }
   @media (max-width:820px){
-    .split { grid-template-columns:1fr; }
+    .split { grid-template-columns:minmax(0,1fr); }
     .timeline { max-height:none; }
     .detail { display:none; position:fixed; left:0; right:0; bottom:0; max-height:78vh; border-left:0; border-top:1px solid var(--tt-border);
       border-radius:18px 18px 0 0; box-shadow:0 -24px 60px -24px rgba(20,20,40,.35); z-index:60; background:var(--tt-card);
@@ -270,6 +271,59 @@
   .nowlab { position:absolute; transform:translateX(-50%); font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-ink); font-weight:600; }
   .lanelab2 { position:absolute; font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--tt-muted); white-space:nowrap; }
   .lanelab2.var { color:var(--tt-rainbow-5); }
+  /* cards look inside the browser */
+  .evo .cardbox { position:relative; }
+  .evo .spine { position:absolute; height:4px; border-radius:4px; background:#e4e4ea; transform:translateY(-50%); overflow:hidden; }
+  .evo .spine .fill { position:absolute; left:0; top:0; bottom:0; width:0; border-radius:4px; background:var(--tt-gradient); background-size:200% auto; animation:pan 7s linear infinite; transition:width .55s cubic-bezier(.2,.9,.3,1); }
+  .evo .spine.var { height:0; background:none; border-top:2.5px dashed var(--tt-rainbow-5); overflow:visible; }
+  .evo .nowmark.pulse { animation:nowpulse 2.2s ease-out infinite; }
+  @keyframes nowpulse { 0%{ box-shadow:0 0 0 0 rgba(22,22,26,.35);} 70%{ box-shadow:0 0 0 10px transparent;} 100%{ box-shadow:0 0 0 0 transparent;} }
+  .evo .mlbl { position:absolute; width:130px; transform:translateX(-50%); text-align:center; font-size:11px; color:var(--tt-text); line-height:1.25; cursor:pointer; }
+  .evo .mlbl span { font-family:var(--tt-mono); font-size:10px; color:var(--tt-muted); }
+  .evo .vcard { position:absolute; width:var(--card-w,250px); transform:translateX(-50%); background:var(--tt-card); border:1px solid var(--tt-border); border-radius:16px; box-shadow:0 1px 2px rgba(0,0,0,.04); cursor:pointer; outline:0; z-index:2; text-align:left;
+    transition:transform .25s ease, box-shadow .25s ease, opacity .3s ease, filter .3s ease, border-color .2s ease; }
+  .evo .vcard:hover { transform:translateX(-50%) translateY(-3px); box-shadow:0 18px 40px -26px rgba(20,20,40,.35); }
+  .evo .vcard:focus-visible { outline:2px solid var(--tt-rainbow-5); outline-offset:2px; }
+  .evo .vcard.sel { border-color:var(--tt-ink); box-shadow:0 0 0 3px rgba(22,22,26,.08), 0 22px 48px -26px rgba(20,20,40,.4); transform:translateX(-50%) scale(1.03); z-index:5; }
+  .evo .vcard.future { opacity:.45; filter:saturate(.5); }
+  .evo .vcard .pin { position:absolute; top:-11px; left:12px; font-family:var(--tt-mono); font-size:10px; font-weight:600; background:var(--tt-ink); color:#fff; border-radius:6px; padding:2px 7px; z-index:2; }
+  .evo .fh { display:flex; align-items:center; gap:8px; padding:10px 12px 8px; border-bottom:1px solid var(--tt-border-light); }
+  .evo .fh .v { font-family:var(--tt-mono); font-size:11px; font-weight:600; color:var(--tt-ink); background:var(--tt-surface-alt); border-radius:6px; padding:2px 7px; }
+  .evo .fh .when { font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .evo .fh .verb { margin-left:auto; font-family:var(--tt-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; padding:2px 7px; border-radius:6px; background:color-mix(in srgb, var(--vc) 14%, white); color:var(--vc); font-weight:600; }
+  .evo .fb { padding:10px 12px; }
+  .evo .fb .tcard { width:100%; }
+  .evo .fb .tcard .t span { white-space:normal; max-height:3.9em; overflow:hidden; max-width:none; }
+  .evo .fb .tcard .t b { max-width:none; }
+  .evo .callout { margin:0 12px 8px; border:1px dashed var(--tt-border); border-radius:10px; padding:6px 8px; background:var(--tt-surface); }
+  .evo .callout .eb { font-family:var(--tt-mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--vc,var(--tt-muted)); display:block; margin-bottom:4px; font-weight:600; }
+  .evo .callout .chips { display:flex; flex-wrap:wrap; gap:4px; }
+  .evo .callout .more { font-family:var(--tt-mono); font-size:10px; color:var(--tt-muted); align-self:center; }
+  .evo .vcard .msg { margin:0 12px 8px; max-width:none; }
+  .evo .ff { display:flex; align-items:center; gap:6px; padding:8px 12px 10px; border-top:1px solid var(--tt-border-light); flex-wrap:wrap; }
+  .evo .ff .who { font-size:12px; color:var(--tt-text); display:flex; align-items:center; gap:6px; min-width:0; }
+  .evo .ff .who b { color:var(--tt-ink); }
+  .evo .ff .pill { margin-left:auto; }
+  .evo-mini { display:none; margin:8px 0 0; height:28px; position:relative; background:var(--tt-surface-alt); border:1px solid var(--tt-border); border-radius:999px; }
+  .evo-mini .md { position:absolute; top:50%; width:9px; height:9px; border-radius:50%; transform:translate(-50%,-50%); background:#fff; border:2px solid var(--vc,var(--tt-muted)); cursor:pointer; z-index:1; padding:0; }
+  .evo-mini .md.sel { background:var(--vc); box-shadow:0 0 0 3px color-mix(in srgb, var(--vc) 25%, white); }
+  .evo-mini .md.moment { width:5px; height:5px; border-width:1.5px; }
+  .evo-mini .md.var { top:72%; }
+  .evo-mini .md.now { background:var(--tt-ink); border-color:var(--tt-ink); }
+  .evo-mini .win { position:absolute; top:2px; bottom:2px; border:1.5px solid var(--tt-ink); border-radius:999px; background:rgba(22,22,26,.05); pointer-events:none; }
+  /* frames look inside the browser */
+  .evo.frames .lane { display:flex; align-items:stretch; padding:16px 16px 12px; position:relative; }
+  .evo.frames .lane.variation { padding-top:30px; }
+  .evo.frames .lane .lanelab { position:absolute; left:16px; top:8px; font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--tt-rainbow-5); }
+  .evo.frames .vcard { position:static; transform:none; width:240px; flex:0 0 auto; }
+  .evo.frames .vcard.sel { transform:scale(1.02); }
+  .evo.frames .conn { flex:0 0 auto; width:var(--w,120px); position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 6px; }
+  .evo.frames .conn::before { content:""; position:absolute; left:0; right:0; top:50%; height:2px; background:var(--tt-border); }
+  .evo.frames .conn::after { content:""; position:absolute; right:2px; top:50%; width:7px; height:7px; border-top:2px solid var(--tt-faint); border-right:2px solid var(--tt-faint); transform:translateY(-50%) rotate(45deg); }
+  .evo.frames .conn.var::before { background:repeating-linear-gradient(90deg, var(--tt-rainbow-5) 0 5px, transparent 5px 9px); }
+  .evo.frames .conn .delta { position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:4px; max-width:100%; }
+  .evo.frames .conn .elapsed { font-family:var(--tt-mono); font-size:10px; color:var(--tt-muted); background:var(--tt-surface); padding:0 4px; white-space:nowrap; }
+  .evo.frames .conn .chg { font-size:10.5px; }
   .evo-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; font-size:12.5px; color:var(--tt-muted); padding:10px 2px 0; }
   .evo-foot a { color:var(--tt-rainbow-5); font-weight:600; text-decoration:none; }
 
@@ -403,9 +457,11 @@
   <!-- ===================== A. HISTORY BROWSER ===================== -->
   <section class="concept" id="browser">
     <h2>1 · The History browser — <span style="font-family:var(--tt-mono);font-size:18px;color:var(--tt-muted)">/history</span></h2>
-    <p class="sub">A global timeline of every recorded change, newest first, grouped by day. Scope it to <b>everything</b>, to
-    <b>one Thing</b>, or to a <b>page and its related Things</b> (the Components and records it renders). Click a row to inspect it; the same panel opens
-    from any Thing's ⋯ menu.</p>
+    <p class="sub">One browser, two dials. <b>Scope</b> says what is on the timeline: <b>everything</b>, <b>one Thing</b>, or a <b>page and its related Things</b>
+    (the Components and records it renders). <b>Look</b> says how it is drawn: <b>List</b> (newest first, grouped by day), <b>Cards</b> (the Thing's cards over time,
+    alternating above and below a spine that fills as you move), <b>Line</b> (the classic quiet timeline) or <b>Frames</b> (a filmstrip). Every look keeps the same
+    filters, day scrubber and detail panel; variations are drawn as dashed lanes in every look. Click a row, card or node to inspect it; the same panel opens from
+    any Thing's ⋯ menu.</p>
 
     <div class="app" aria-label="History browser mock">
       <div class="app-bar">
@@ -417,10 +473,11 @@
         </div>
         <label class="search"><span aria-hidden="true">🔍</span><span class="sr">Search history</span>
           <input id="q" type="search" placeholder="Search history…" /><kbd>⌘K</kbd></label>
-        <div class="seg" role="group" aria-label="View">
-          <button type="button" data-view="timeline" aria-pressed="true">Timeline</button>
-          <button type="button" data-view="versions" aria-pressed="false">Versions</button>
-          <button type="button" data-view="evolution" aria-pressed="false">Evolution</button>
+        <div class="seg" role="group" aria-label="Look">
+          <button type="button" data-look="list" aria-pressed="true">List</button>
+          <button type="button" data-look="cards" aria-pressed="false">Cards</button>
+          <button type="button" data-look="line" aria-pressed="false">Line</button>
+          <button type="button" data-look="frames" aria-pressed="false">Frames</button>
         </div>
         <div class="syncpill" id="syncpill"><i class="d"></i><span id="synctext">Synced · 2 saved on this device</span></div>
       </div>
@@ -515,10 +572,10 @@
 
   <!-- ===================== C. VERSIONS ===================== -->
   <section class="concept" id="versions">
-    <h2>3 · Versions — branches in friendly words</h2>
-    <p class="sub">The same events, drawn as lanes. A <b>variation</b> is a private branch from a shared starting version. <b>Get latest changes</b> pulls,
-    <b>Send changes</b> pushes, and when the same property changed on both sides, <b>Review and combine</b> shows a calm three-way choice —
-    nothing is overwritten silently.</p>
+    <h2>3 · Variations — branches in friendly words</h2>
+    <p class="sub">Not a separate view: a <b>variation</b> is a private branch from a shared starting version, and every look draws it as a dashed lane
+    (a second row of cards, a dashed line, a second filmstrip row). <b>Get latest changes</b> pulls, <b>Send changes</b> pushes, and when the same property
+    changed on both sides, <b>Review and combine</b> shows a calm three-way choice — nothing is overwritten silently. This graph is the same data as the browser above.</p>
     <div class="versions">
       <div class="vtop">
         <div class="tcard"><div class="ic">📄</div><div class="t"><b>Gear tracking</b><span>page · 4 versions · 1 variation</span></div><span class="v">v4 now</span></div>
@@ -668,7 +725,8 @@
       changes:[{k:'colour', b:'Sage green', a:'Forest green', sw:['#9bb89a','#2f6b2f']}], msg:{who:'collab', text:'Went a touch darker for contrast on the hero.'} }
   ];
   var nextId = 15;
-  var state = { scope:'all', view:'timeline', q:'', filters:{kind:{}, actor:{}, verb:{}, sync:{}}, sel:12, day:null, offline:false, showMsgs:true, compare:false, tab:'changes', evoThing:'gear' };
+  var state = { scope:'all', look:'list', q:'', filters:{kind:{}, actor:{}, verb:{}, sync:{}}, sel:12, day:null, offline:false, showMsgs:true, compare:false, tab:'changes', evoThing:'gear' };
+  var cardsRowH=null, horizLayout=null;
 
   // ---------- helpers ----------
   var $ = function(s, r){ return (r||document).querySelector(s); };
@@ -696,7 +754,7 @@
   function anyOn(o){ for (var k in o) if (o[k]) return true; return false; }
 
   function inScope(ev){
-    if (state.scope==='gear') return ev.thing==='gear';
+    if (state.scope==='gear') return ev.thing===state.evoThing;
     if (state.scope==='page') return !!PAGE_SCOPE[ev.thing];
     return true;
   }
@@ -775,9 +833,8 @@
   }
   function renderTimeline(){
     var list=visible(), tl=$('#timeline');
-    if (state.view==='evolution'){ renderEvolution(); return; }
-    if (state.view==='versions'){ tl.innerHTML='<div class="empty">Versions view is drawn in section 3 below — same events, as lanes. <br/><button type="button" class="btn small" style="margin-top:10px" id="jumpVersions">Jump to versions ↓</button></div>';
-      $('#jumpVersions').addEventListener('click', function(){ jumpTo($('#versions')); }); return; }
+    tl.classList.toggle('horiz', state.look!=='list');
+    if (state.look!=='list'){ renderHorizontal(list, false); return; }
     if (!list.length){ tl.innerHTML='<div class="empty">Nothing recorded matches these filters. <br/><span style="font-size:12.5px">History never deletes on its own — try clearing a chip.</span></div>'; return; }
     var html='', lastKey=null;
     list.forEach(function(ev){
@@ -795,39 +852,124 @@
     tl.innerHTML=html;
     EVENTS.forEach(function(e){ delete e.fresh; });
   }
-  // ---------- evolution (line) view: one Thing, left to right ----------
+  // ---------- horizontal looks (cards · line · frames) for any scope ----------
   var PX_PER_HOUR=6.2;
   function fmtEvoWhen(d){ return (sameDay(d,TODAY)?'Today':fmtShort(d))+' · '+fmtTime(d); }
-  function renderEvolution(){
-    var tl=$('#timeline'), thingId=state.evoThing;
-    var evs=EVENTS.filter(function(e){ return e.thing===thingId; }).sort(function(a,b){ return a.at-b.at; });
-    var main=evs.filter(function(e){ return !e.lane; }), vars=evs.filter(function(e){ return e.lane; });
-    var picker='<div class="evo-pick"><span class="lab">Thing</span>'+Object.keys(THINGS).map(function(id){ var t=THINGS[id]; return '<button type="button" class="chip" data-evo-thing="'+id+'" aria-pressed="'+(id===thingId)+'">'+t.icon+' '+esc(t.title)+'</button>'; }).join('')+'</div>';
-    if (!main.length){ tl.innerHTML=picker+'<div class="empty">No recorded changes for this Thing yet.</div>'; return; }
-    var pad=100, lineY=118, t0=main[0].at.getTime(), xs=[];
-    main.forEach(function(e,i){ var minor=e.verb==='synced', prevMinor=i>0&&main[i-1].verb==='synced'; var minGap=(minor||prevMinor)?110:168; var ideal=pad+(e.at.getTime()-t0)/3600000*PX_PER_HOUR; xs.push(Math.round(i===0?pad:Math.max(ideal, xs[i-1]+minGap))); });
-    var mapTime=function(t){ if (t<=main[0].at.getTime()) return xs[0]-(main[0].at.getTime()-t)/3600000*PX_PER_HOUR; for (var i=1;i<main.length;i++){ var a=main[i-1].at.getTime(), b=main[i].at.getTime(); if (t<=b){ var f=b===a?1:(t-a)/(b-a); return xs[i-1]+f*(xs[i]-xs[i-1]); } } return xs[xs.length-1]+(t-main[main.length-1].at.getTime())/3600000*PX_PER_HOUR; };
-    var nowX=Math.round(Math.max(xs[xs.length-1]+110, Math.min(mapTime(TODAY.getTime()), xs[xs.length-1]+240)));
-    var varY=lineY+150, varXs=[], fromX=null;
-    if (vars.length){ var from=main.filter(function(e){ return e.id===vars[0].parent; })[0] || main[Math.max(0, main.length-2)]; fromX=xs[main.indexOf(from)]; vars.forEach(function(e,i){ varXs.push(Math.round(Math.max(mapTime(e.at.getTime()), i===0?fromX+150:varXs[i-1]+168))); }); }
-    var W=Math.max(nowX+110, (varXs.length?varXs[varXs.length-1]+110:0), tl.clientWidth-40), H=vars.length?varY+92:lineY+112;
-    var html='<div class="linebox" style="width:'+W+'px;height:'+H+'px">';
-    html+='<span class="lanelab2" style="left:12px;top:'+(lineY+40)+'px">'+(vars.length?'shared · main':'versions')+'</span>';
-    html+='<div class="baseline" style="left:'+(xs[0]-36)+'px;width:'+(nowX-xs[0]+36)+'px;top:'+lineY+'px"></div>';
-    var d=new Date(main[0].at); d.setHours(0,0,0,0); var lastTick=-999;
-    while (d.getTime()<=TODAY.getTime()+86400000){ var x=Math.round(mapTime(d.getTime())); if (x>=xs[0]-30 && x<=nowX+20 && x-lastTick>=62){ html+='<span class="tick2'+(sameDay(d,TODAY)?' today':'')+'" style="left:'+x+'px;top:'+(lineY+15)+'px">'+DAYS[d.getDay()].slice(0,3)+' '+d.getDate()+'</span>'; lastTick=x; } d.setDate(d.getDate()+1); }
-    html+='<span class="nowmark" style="left:'+nowX+'px;top:'+lineY+'px"></span><span class="nowlab" style="left:'+nowX+'px;top:'+(lineY-28)+'px">now</span>';
-    var branchId = vars.length ? vars[0].parent : null;
-    main.forEach(function(e,i){ var x=xs[i], above= e.id===branchId ? true : i%2===0, vc=VERB[e.verb].c, minor=e.verb==='synced', on=state.sel===e.id;
-      html+='<i class="stem" style="left:'+x+'px;top:'+(above?lineY-21:lineY+9)+'px;height:13px"></i>';
-      html+='<button type="button" class="node'+(minor?' moment':'')+(on?' sel':'')+'" data-id="'+e.id+'" style="left:'+x+'px;top:'+lineY+'px;--vc:'+vc+'" aria-label="'+esc(e.title)+'"></button>';
-      html+='<div class="lbl'+(minor?' moment':'')+(above?' above':' below')+(on?' sel':'')+'" data-id="'+e.id+'" style="left:'+x+'px;top:'+(above?lineY-104:lineY+34)+'px;height:82px;--vc:'+vc+'"><span class="lv">'+(minor?'':'v'+e.v+' · ')+fmtEvoWhen(e.at)+'</span><span class="lt">'+esc(e.title)+'</span><span class="la">'+esc(ACTORS[e.actor].label)+' · '+(e.sync==='local'?'on this device':e.sync==='review'?'needs review':'synced')+'</span></div>'; });
-    if (vars.length){ html+='<i class="elbow" style="left:'+fromX+'px;top:'+(lineY+8)+'px;height:'+(varY-lineY-8)+'px"></i><div class="baseline var" style="left:'+fromX+'px;width:'+(varXs[varXs.length-1]-fromX+56)+'px;top:'+varY+'px"></div><span class="lanelab2 var" style="left:'+(fromX+12)+'px;top:'+(varY-22)+'px">variation · darker palette</span>';
-      vars.forEach(function(e,i){ var x=varXs[i], on=state.sel===e.id; html+='<i class="stem" style="left:'+x+'px;top:'+(varY+9)+'px;height:13px"></i><button type="button" class="node'+(on?' sel':'')+'" data-id="'+e.id+'" style="left:'+x+'px;top:'+varY+'px;--vc:#a555e8" aria-label="'+esc(e.title)+'"></button><div class="lbl below'+(on?' sel':'')+'" data-id="'+e.id+'" style="left:'+x+'px;top:'+(varY+30)+'px;height:70px;--vc:#a555e8"><span class="lv">'+fmtEvoWhen(e.at)+'</span><span class="lt">'+esc(e.title)+'</span><span class="la">'+esc(ACTORS[e.actor].label)+' · on this device</span></div>'; }); }
-    html+='</div>';
-    tl.innerHTML=picker+'<div class="evo" id="evo">'+html+'</div><div class="evo-foot"><span>One Thing, left to right: nodes true to time, crowded edits spread just enough to read. Click a node for its diff.</span><a href="../thingtime-history-evolution/index.html">Open the full Evolution concept ↗</a></div>';
-    var sel=$('#evo .node.sel'); if (sel){ var evo=$('#evo'); evo.scrollLeft=Math.max(0, parseFloat(sel.style.left)-evo.clientWidth/2); }
+  function elapsedLabel(a,b){ var m=Math.round((b-a)/60000); if (m<60) return m+' min later'; var h=Math.round(m/60); if (h<36) return h+' h later'; var d=Math.round(h/24); return d+' day'+(d===1?'':'s')+' later'; }
+  function isMoment(ev){ return ev.verb==='synced'; }
+  function pickerHtml(){
+    if (state.scope!=='gear') return '';
+    return '<div class="evo-pick"><span class="lab">Thing</span>'+Object.keys(THINGS).map(function(id){ var t=THINGS[id]; return '<button type="button" class="chip" data-evo-thing="'+id+'" aria-pressed="'+(id===state.evoThing)+'">'+t.icon+' '+esc(t.title)+'</button>'; }).join('')+'</div>';
   }
+  function vcardHtml(ev, x, pos, above, lane){
+    var v=VERB[ev.verb], a=ACTORS[ev.actor];
+    var chips=ev.changes.slice(0,2).map(chip).join('')+(ev.changes.length>2?'<span class="more">+'+(ev.changes.length-2)+' more</span>':'');
+    return '<div class="vcard'+(lane?' var':'')+(above?' above':' below')+(state.sel===ev.id?' sel':'')+'" data-id="'+ev.id+'" data-day="'+dayKey(ev.at)+'" role="button" tabindex="0" aria-label="'+esc(ev.title)+'" style="'+(x!=null?'left:'+x+'px;':'')+(pos?pos+';':'')+'--vc:'+v.c+'">'+
+      (ev.restoredFrom?'<span class="pin">↩︎ restored</span>':'')+
+      '<div class="fh"><span class="v">v'+ev.v+'</span><span class="when">'+fmtEvoWhen(ev.at)+'</span><span class="verb">'+esc(ev.verb)+'</span></div>'+
+      '<div class="fb">'+tcard(ev,true)+'</div>'+
+      '<div class="callout"><span class="eb">'+(ev.verb==='created'?'created with':ev.verb==='restored'?'restored':'what changed')+'</span><div class="chips">'+chips+'</div></div>'+
+      (state.showMsgs ? message(ev) : '')+
+      '<div class="ff"><span class="who">'+avatar(ev.actor)+'<span><b>'+esc(a.label)+'</b> · '+esc(ev.title)+'</span></span>'+syncPill(ev)+'</div></div>';
+  }
+  function connHtml(prev, next, width, isVar){
+    return '<div class="conn'+(isVar?' var':'')+'" style="--w:'+width+'px"><div class="delta"><span class="elapsed">'+elapsedLabel(prev.at, next.at)+'</span>'+next.changes.slice(0,2).map(chip).join('')+(next.changes.length>2?'<span class="elapsed">+'+(next.changes.length-2)+' more</span>':'')+'</div></div>';
+  }
+  function renderHorizontal(list, relayout){
+    var tl=$('#timeline'), look=state.look;
+    var evs=list.slice().sort(function(a,b){ return a.at-b.at; });
+    var main=evs.filter(function(e){ return !e.lane; }), vars=evs.filter(function(e){ return e.lane; });
+    var picker=pickerHtml();
+    var foot='<div class="evo-foot"><span>'+(look==='cards'?'The Thing\'s cards over time, alternating above and below a spine that fills to the selected change.':look==='line'?'Nodes true to time; crowded edits spread just enough to read.':'A filmstrip: what changed rides the connectors.')+' Same scope, filters and detail panel as List.</span><a href="../thingtime-history-evolution/index.html">Open the Evolution concept (one Thing, all looks) ↗</a></div>';
+    if (!main.length && !vars.length){ tl.innerHTML=picker+'<div class="empty">Nothing recorded matches these filters. <br/><span style="font-size:12.5px">History never deletes on its own — try clearing a chip.</span></div>'; horizLayout=null; return; }
+    if (look==='frames'){
+      var html='<div class="lane">'+main.map(function(e,i){ return (i>0?connHtml(main[i-1], e, 120, false):'')+vcardHtml(e, null, '', false, false); }).join('')+'</div>';
+      if (vars.length){ var from=main.filter(function(e){ return e.id===vars[0].parent; })[0]; html+='<div class="lane variation"><span class="lanelab">variation · darker palette'+(from?' · from v'+from.v:'')+'</span>'+vars.map(function(e,i){ var prev = i===0 ? (from||e) : vars[i-1]; return connHtml(prev, e, 120, true)+vcardHtml(e, null, '', false, true); }).join('')+'</div>'; }
+      tl.innerHTML=picker+'<div class="evo frames" id="evo">'+html+'</div>'+foot; horizLayout=null; scrollHorizontalToSel(); return;
+    }
+    var cards = look==='cards', cardW = cards ? (window.matchMedia('(max-width:600px)').matches ? 230 : 250) : 0;
+    var pad = cards ? Math.round(cardW/2)+40 : 100, gapMain = cards ? Math.round(cardW*0.62)+16 : 168, gapMoment = cards ? 110 : 110;
+    var xs=[], t0=(main[0]||vars[0]).at.getTime();
+    main.forEach(function(e,i){ var minor=isMoment(e), prevMinor=i>0&&isMoment(main[i-1]); var minGap=(minor||prevMinor)?gapMoment:gapMain; var ideal=pad+(e.at.getTime()-t0)/3600000*PX_PER_HOUR; xs.push(Math.round(i===0?pad:Math.max(ideal, xs[i-1]+minGap))); });
+    var mapTime=function(t){ if (!main.length) return pad+(t-t0)/3600000*PX_PER_HOUR; if (t<=main[0].at.getTime()) return xs[0]-(main[0].at.getTime()-t)/3600000*PX_PER_HOUR; for (var i=1;i<main.length;i++){ var a=main[i-1].at.getTime(), b=main[i].at.getTime(); if (t<=b){ var f=b===a?1:(t-a)/(b-a); return xs[i-1]+f*(xs[i]-xs[i-1]); } } return xs[xs.length-1]+(t-main[main.length-1].at.getTime())/3600000*PX_PER_HOUR; };
+    var lastX = xs.length ? xs[xs.length-1] : pad;
+    var nowX=Math.round(Math.max(lastX+(cards?130:110), Math.min(mapTime(TODAY.getTime()), lastX+(cards?260:240))));
+    var rowH = cards ? (cardsRowH || 340) : 0, gutter = cards ? 52 : 0;
+    var lineY = cards ? rowH + gutter + 26 : 118;
+    // variation row
+    var varXs=[], fromX=null, fromEv=null, elbowX=null, varY=null;
+    if (vars.length){ fromEv=main.filter(function(e){ return e.id===vars[0].parent; })[0] || null; fromX = fromEv ? xs[main.indexOf(fromEv)] : null;
+      vars.forEach(function(e,i){ var floor = i===0 ? (fromX!=null ? fromX + (cards?Math.round(cardW*0.5)+90:150) : pad) : varXs[i-1]+gapMain; varXs.push(Math.round(Math.max(mapTime(e.at.getTime()), floor))); });
+      varY = cards ? lineY + gutter + rowH + 44 : lineY + 150; }
+    var W=Math.max(nowX+(cards?cardW/2+70:110), (varXs.length?varXs[varXs.length-1]+(cards?cardW/2+70:110):0), tl.clientWidth-40);
+    var H = cards ? (vars.length ? varY + gutter + rowH + 24 : lineY + gutter + rowH + 28) : (vars.length ? varY + 92 : lineY + 112);
+    var x0 = (xs.length?xs[0]:pad) - (cards?60:36);
+    horizLayout={ xs:xs, ids:main.map(function(e){return e.id;}), x0:x0, nowX:nowX, W:W, varIds:vars.map(function(e){return e.id;}), varXs:varXs };
+    var selIdx = main.findIndex(function(e){ return e.id===state.sel; });
+    var html='<div class="'+(cards?'cardbox':'linebox')+'" style="width:'+W+'px;height:'+H+'px;--card-w:'+cardW+'px">';
+    if (cards) html+='<div class="spine" style="left:'+x0+'px;width:'+(nowX-x0)+'px;top:'+lineY+'px"><i class="fill" id="fill" style="width:'+Math.max(0,(selIdx>=0?xs[selIdx]:nowX)-x0)+'px"></i></div>';
+    else html+='<div class="baseline" style="left:'+x0+'px;width:'+(nowX-x0)+'px;top:'+lineY+'px"></div>';
+    var d=new Date((main[0]||vars[0]).at); d.setHours(0,0,0,0); var lastTick=-999;
+    while (d.getTime()<=TODAY.getTime()+86400000){ var tx=Math.round(mapTime(d.getTime())); if (tx>=x0 && tx<=nowX+20 && tx-lastTick>=62){ html+='<span class="tick2'+(sameDay(d,TODAY)?' today':'')+'" style="left:'+tx+'px;top:'+(lineY+(cards?16:15))+'px">'+DAYS[d.getDay()].slice(0,3)+' '+d.getDate()+'</span>'; lastTick=tx; } d.setDate(d.getDate()+1); }
+    html+='<span class="nowmark'+(cards?' pulse':'')+'" style="left:'+nowX+'px;top:'+lineY+'px"></span><span class="nowlab" style="left:'+nowX+'px;top:'+(lineY-28)+'px">now</span>';
+    html+='<span class="lanelab2" style="left:12px;top:'+(lineY+40)+'px">'+(vars.length?'shared · main':state.scope==='all'?'everything':'versions')+'</span>';
+    var cardCount=0, momentCount=0, sourceAbove=true;
+    main.forEach(function(e,i){ var x=xs[i], vc=VERB[e.verb].c, minor=isMoment(e), on=state.sel===e.id;
+      // Cards: version cards alternate among themselves (moments only carry a small label);
+      // Line: every label alternates in sequence so neighbours are never on the same side.
+      var above = cards ? (minor ? (momentCount%2===0) : (cardCount%2===0)) : (i%2===0);
+      if (minor) momentCount++; else cardCount++;
+      if (fromEv && e.id===fromEv.id) sourceAbove=above;
+      if (cards){
+        if (minor){ html+='<button type="button" class="node moment'+(on?' sel':'')+'" data-id="'+e.id+'" data-day="'+dayKey(e.at)+'" style="left:'+x+'px;top:'+lineY+'px;--vc:'+vc+'" aria-label="'+esc(e.title)+'"></button><div class="mlbl'+(on?' sel':'')+'" data-id="'+e.id+'" style="left:'+x+'px;top:'+(above?lineY-46:lineY+34)+'px">'+esc(e.title)+'<br><span>'+fmtEvoWhen(e.at)+'</span></div>'; return; }
+        html+='<i class="stem" style="left:'+x+'px;'+(above?'bottom:'+(H-lineY)+'px;height:'+gutter+'px':'top:'+lineY+'px;height:'+gutter+'px')+'"></i>';
+        html+='<button type="button" class="node'+(on?' sel':'')+'" data-id="'+e.id+'" data-day="'+dayKey(e.at)+'" style="left:'+x+'px;top:'+lineY+'px;--vc:'+vc+'" aria-label="'+esc(e.title)+'"></button>';
+        html+=vcardHtml(e, x, above ? 'bottom:'+(H-lineY+gutter)+'px' : 'top:'+(lineY+gutter)+'px', above, false);
+      } else {
+        html+='<i class="stem" style="left:'+x+'px;top:'+(above?lineY-21:lineY+9)+'px;height:13px"></i>';
+        html+='<button type="button" class="node'+(minor?' moment':'')+(on?' sel':'')+'" data-id="'+e.id+'" data-day="'+dayKey(e.at)+'" style="left:'+x+'px;top:'+lineY+'px;--vc:'+vc+'" aria-label="'+esc(e.title)+'"></button>';
+        html+='<div class="lbl'+(minor?' moment':'')+(above?' above':' below')+(on?' sel':'')+'" data-id="'+e.id+'" style="left:'+x+'px;top:'+(above?lineY-104:lineY+34)+'px;height:82px;--vc:'+vc+'"><span class="lv">'+(minor?'':'v'+e.v+' · ')+fmtEvoWhen(e.at)+'</span><span class="lt">'+esc(e.title)+'</span><span class="la">'+esc(ACTORS[e.actor].label)+' · '+(e.sync==='local'?'on this device':e.sync==='review'?'needs review':'synced')+'</span></div>';
+      }
+    });
+    if (vars.length){
+      var startX = fromX!=null ? fromX : varXs[0]-40;
+      if (fromX!=null){ elbowX = !sourceAbove ? fromX + (cards ? Math.round(cardW/2) + 16 : 84) : fromX;   // route around a below-hanging card or label
+        if (!sourceAbove) html+='<div class="'+(cards?'spine var':'baseline var')+'" style="left:'+fromX+'px;width:'+(elbowX-fromX)+'px;top:'+lineY+'px"></div>';
+        html+='<i class="elbow" style="left:'+elbowX+'px;top:'+(lineY+8)+'px;height:'+(varY-lineY-8)+'px"></i>'; startX=elbowX; }
+      html+='<div class="'+(cards?'spine var':'baseline var')+'" style="left:'+startX+'px;width:'+(varXs[varXs.length-1]-startX+(cards?90:56))+'px;top:'+varY+'px"></div>';
+      html+='<span class="lanelab2 var" style="left:'+(startX+14)+'px;top:'+(varY-24)+'px">variation · darker palette'+(fromEv?' · from v'+fromEv.v:'')+'</span>';
+      vars.forEach(function(e,i){ var x=varXs[i], on=state.sel===e.id;
+        html+='<i class="stem" style="left:'+x+'px;top:'+varY+'px;height:'+(cards?gutter:13)+'px"></i>';
+        html+='<button type="button" class="node'+(on?' sel':'')+'" data-id="'+e.id+'" data-day="'+dayKey(e.at)+'" style="left:'+x+'px;top:'+varY+'px;--vc:#a555e8" aria-label="'+esc(e.title)+'"></button>';
+        if (cards) html+=vcardHtml(e, x, 'top:'+(varY+gutter)+'px', false, true);
+        else html+='<div class="lbl below'+(on?' sel':'')+'" data-id="'+e.id+'" style="left:'+x+'px;top:'+(varY+30)+'px;height:70px;--vc:#a555e8"><span class="lv">'+fmtEvoWhen(e.at)+'</span><span class="lt">'+esc(e.title)+'</span><span class="la">'+esc(ACTORS[e.actor].label)+' · on this device</span></div>'; });
+    }
+    html+='</div>';
+    tl.innerHTML=picker+'<div class="evo'+(cards?' cards':' line')+'" id="evo">'+html+'</div>'+(cards?'<div class="evo-mini" id="evomini" aria-label="Overview of the whole timeline"></div>':'')+foot;
+    if (cards){
+      var tallest=0; $$('#evo .vcard').forEach(function(c){ tallest=Math.max(tallest, c.offsetHeight); });
+      if (!relayout && tallest > rowH - 4){ cardsRowH = tallest + 10; renderHorizontal(list, true); return; }
+      renderHorizontalMini(main, vars);
+      $('#evo').addEventListener('scroll', syncHorizontalMini, {passive:true});
+      $$('#evo .vcard:not(.var)').forEach(function(c){ var i=horizLayout.ids.indexOf(parseInt(c.getAttribute('data-id'),10)); c.classList.toggle('future', selIdx>=0 && i>selIdx); });
+    }
+    scrollHorizontalToSel();
+  }
+  function renderHorizontalMini(main, vars){
+    var mini=$('#evomini'); if (!mini || !horizLayout) return; var W=horizLayout.W, html='';
+    main.forEach(function(e,i){ html+='<button type="button" class="md'+(isMoment(e)?' moment':'')+(state.sel===e.id?' sel':'')+'" data-id="'+e.id+'" style="left:'+(horizLayout.xs[i]/W*100).toFixed(2)+'%;--vc:'+VERB[e.verb].c+'" aria-label="'+esc(e.title)+'"></button>'; });
+    vars.forEach(function(e,i){ html+='<button type="button" class="md var'+(state.sel===e.id?' sel':'')+'" data-id="'+e.id+'" style="left:'+(horizLayout.varXs[i]/W*100).toFixed(2)+'%;--vc:#a555e8" aria-label="'+esc(e.title)+'"></button>'; });
+    html+='<i class="md now" style="left:'+(horizLayout.nowX/W*100).toFixed(2)+'%"></i><span class="win" id="evominiwin"></span>';
+    mini.innerHTML=html; mini.style.display='block'; syncHorizontalMini();
+  }
+  function syncHorizontalMini(){ var win=$('#evominiwin'), evo=$('#evo'), box=$('#evo .cardbox'); if (!win||!evo||!box) return; var W=box.offsetWidth||1; win.style.left=Math.max(0, evo.scrollLeft/W*100)+'%'; win.style.width=Math.min(100, evo.clientWidth/W*100)+'%'; }
+  function scrollHorizontalToSel(){ var evo=$('#evo'); if (!evo) return; var el=$('#evo .node.sel') || $('#evo .vcard.sel'); if (!el) return; var left = el.style.left ? parseFloat(el.style.left) : el.offsetLeft + el.offsetWidth/2; evo.scrollLeft=Math.max(0, left - evo.clientWidth/2); }
+  function applyHorizontalSelection(){
+    $$('#evo .node, #evo .vcard, #evo .lbl, #evo .mlbl, #evomini .md').forEach(function(el){ el.classList.toggle('sel', parseInt(el.getAttribute('data-id'),10)===state.sel); });
+    if (horizLayout && state.look==='cards'){ var i=horizLayout.ids.indexOf(state.sel); var fill=$('#fill'); if (fill){ var sx = i>=0 ? horizLayout.xs[i] : horizLayout.nowX; fill.style.width=Math.max(0, sx-horizLayout.x0)+'px'; }
+      $$('#evo .vcard:not(.var)').forEach(function(c){ var k=horizLayout.ids.indexOf(parseInt(c.getAttribute('data-id'),10)); c.classList.toggle('future', i>=0 && k>i); }); }
+  }
+  function jumpHorizontalToDay(key){ var el=$('#evo [data-day="'+key+'"]'); if (!el) return false; var evo=$('#evo'); var left = el.style.left ? parseFloat(el.style.left) : el.offsetLeft + el.offsetWidth/2; evo.scrollLeft=Math.max(0, left - evo.clientWidth/2); return true; }
   function renderBars(){
     var bars=$('#bars'), html='';
     var start=new Date(TODAY); start.setDate(start.getDate()-29);
@@ -910,7 +1052,8 @@
   // ---------- actions ----------
   function openDetail(id){
     state.sel=id; state.compare=false; state.tab='changes';
-    renderTimeline(); renderDetail();
+    if (state.look!=='list' && $('#evo')) applyHorizontalSelection(); else renderTimeline();
+    renderDetail();
     if (window.matchMedia('(max-width:820px)').matches){ $('#detail').classList.add('open'); $('#backdrop').classList.add('open'); }
   }
   function closeDetail(){ $('#detail').classList.remove('open'); $('#backdrop').classList.remove('open'); }
@@ -965,7 +1108,7 @@
 
   // ---------- events ----------
   $$('[data-scope]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); state.scope=b.getAttribute('data-scope'); state.day=null; renderAll(); }); });
-  $$('[data-view]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-view]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); state.view=b.getAttribute('data-view'); renderTimeline(); }); });
+  $$('[data-look]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-look]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); state.look=b.getAttribute('data-look'); cardsRowH=null; renderTimeline(); }); });
   $('#filters').addEventListener('click', function(e){
     var b=e.target.closest('.chip'); if (!b) return;
     var f=b.getAttribute('data-f'), v=b.getAttribute('data-v'); var on=b.getAttribute('aria-pressed')!=='true';
@@ -976,12 +1119,14 @@
   $('#bars').addEventListener('click', function(e){
     var b=e.target.closest('button'); if (!b) return; var key=b.getAttribute('data-day');
     state.day = state.day===key ? null : key; renderBars(); renderTimeline();
-    var g=$('.day[data-day="'+key+'"]'); if (g){ jumpTo(g); $('#scrubhint').textContent='Jumped to '+b.getAttribute('data-tip'); }
+    var g=$('.day[data-day="'+key+'"]');
+    if (g){ jumpTo(g); $('#scrubhint').textContent='Jumped to '+b.getAttribute('data-tip'); }
+    else if (state.look!=='list' && jumpHorizontalToDay(key)) $('#scrubhint').textContent='Jumped to '+b.getAttribute('data-tip');
     else $('#scrubhint').textContent='No recorded changes on '+b.getAttribute('data-tip').split(' · ')[0];
   });
   $('#timeline').addEventListener('click', function(e){
-    var pick=e.target.closest('[data-evo-thing]'); if (pick){ state.evoThing=pick.getAttribute('data-evo-thing'); renderTimeline(); return; }
-    var node=e.target.closest('.node, .lbl'); if (node){ openDetail(parseInt(node.getAttribute('data-id'),10)); return; }
+    var pick=e.target.closest('[data-evo-thing]'); if (pick){ state.evoThing=pick.getAttribute('data-evo-thing'); cardsRowH=null; renderAll(); return; }
+    var node=e.target.closest('.node, .lbl, .vcard, .mlbl, .evo-mini .md'); if (node && node.hasAttribute('data-id')){ openDetail(parseInt(node.getAttribute('data-id'),10)); if (state.look!=='list') scrollHorizontalToSel(); return; }
     var act=e.target.closest('[data-act]'); var row=e.target.closest('.ev'); if (!row) return; var id=parseInt(row.getAttribute('data-id'),10); var ev=findEv(id);
     if (act){ var a=act.getAttribute('data-act'); e.stopPropagation();
       if (a==='restore') return restore(ev);
@@ -996,6 +1141,7 @@
     // Restore). Cancelling the key here would swallow their native activation,
     // so a keyboard user could never reach the row actions — let them through.
     if (e.target.closest('[data-act]')) return;
+    var card=e.target.closest('.vcard'); if (card){ e.preventDefault(); openDetail(parseInt(card.getAttribute('data-id'),10)); return; }
     var row=e.target.closest('.ev'); if (row){ e.preventDefault(); openDetail(parseInt(row.getAttribute('data-id'),10)); }
   });
   $('#detail').addEventListener('click', function(e){
@@ -1015,7 +1161,7 @@
   });
   $('#backdrop').addEventListener('click', closeDetail);
   document.addEventListener('keydown', function(e){ if (e.key==='Escape') closeDetail(); });
-  $('#openFromEditor').addEventListener('click', function(){ state.scope='gear'; $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-scope')==='gear'?'true':'false'); }); renderAll(); openDetail(13); jumpTo($('#browser')); });
+  $('#openFromEditor').addEventListener('click', function(){ state.scope='gear'; state.evoThing='gear'; $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-scope')==='gear'?'true':'false'); }); renderAll(); openDetail(13); jumpTo($('#browser')); });
   $('#openFromPost').addEventListener('click', function(){ state.scope='all'; state.filters.kind={post:true}; $$('[data-f="kind"]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-v')==='post'?'true':'false'); }); renderAll(); openDetail(2); jumpTo($('#browser')); });
   $$('.graph .node').forEach(function(n){ n.addEventListener('click', function(){ openDetail(parseInt(n.getAttribute('data-ev'),10)); jumpTo($('#browser')); }); });
   $('#btnReview').addEventListener('click', function(){ $('#merge').classList.add('open'); });
@@ -1026,7 +1172,7 @@
   $('#offline').addEventListener('click', function(){ state.offline=!state.offline; this.setAttribute('aria-checked', state.offline?'true':'false'); renderSync(); if (state.offline) toast('Offline mode', 'Edits keep saving locally. Reconnect to sync.'); });
   $('#simEdit').addEventListener('click', simulateEdit);
   $('#simReconnect').addEventListener('click', reconnect);
-  $('#msgToggle').addEventListener('click', function(){ state.showMsgs=!state.showMsgs; this.setAttribute('aria-checked', state.showMsgs?'true':'false'); renderTimeline(); renderDetail(); });
+  $('#msgToggle').addEventListener('click', function(){ state.showMsgs=!state.showMsgs; this.setAttribute('aria-checked', state.showMsgs?'true':'false'); cardsRowH=null; renderTimeline(); renderDetail(); });
   $$('[data-toggle]').forEach(function(t){ if (t.id==='msgToggle') return; t.addEventListener('click', function(){ t.setAttribute('aria-checked', t.getAttribute('aria-checked')==='true'?'false':'true'); }); });
   $$('[data-keep]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-keep]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); }); });
 

@@ -54,6 +54,21 @@ authorize a merge.
 
 - 2026-09-27 — concept, docs and verification landed; PR opened.
 
+## Scope × Look unification — 2026-09-27
+
+Owner asked for the Cards style on the Timeline view too and for Timeline,
+Versions and Evolution to share the same view styles. Unified the model in
+both concepts: **Scope** (Everything · This Thing · Page + related) × **Look**
+(List · Cards · Line · Frames). The timeline concept's browser now draws
+Cards, Line and Frames on the global timeline (every Thing's changes on one
+spine; with This Thing a picker chooses the Thing), keeping the filters, the
+day scrubber (which now jumps the strip too) and the detail panel; selecting
+a card no longer re-renders the strip. The old "Versions" view is gone —
+variations are dashed lanes inside every look and section 3 explains them.
+The Evolution concept's app bar shows the same Scope/Look dials (Everything,
+Page + related and List link to the timeline concept). TODO 50, TESTING and
+the gallery notes describe the model.
+
 ## Cards look follow-up — 2026-09-27
 
 Owner asked for a version where the horizontal timeline shows the Thing's card
