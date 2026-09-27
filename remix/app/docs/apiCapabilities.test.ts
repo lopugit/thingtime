@@ -8,6 +8,8 @@ import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtime
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
 	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.6.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.6.0');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');

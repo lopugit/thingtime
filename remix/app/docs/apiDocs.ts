@@ -5257,12 +5257,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'mongodb-endpoint',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     group: 'mongodb',
     title: 'MongoDB data endpoint',
     endpoint: '/api/v1/mongodb/endpoint',
     summary: 'Read or change the MongoDB endpoint the data plane uses for this browser session.',
     detail:
-      'Thin-frontend mode: the session can point the open data plane (things, feed, search, comments, reactions, schemas, app-data) at any reachable MongoDB. Identity, auth and the protected system kinds always stay on the home Thingtime DB. The override is an httpOnly session cookie (tt_mongo) — or send an x-tt-mongo-url header per request from API clients. Activation probes the endpoint (connect + ping) before accepting it. Responses never include the URL itself, only the credentials-stripped host and db name.',
+      'Thin-frontend mode: the session can point the open data plane (things, feed, search, comments, reactions, schemas, app-data) at any reachable MongoDB. Identity, auth and the protected system kinds always stay on the home Thingtime DB. The override is an httpOnly session cookie (tt_mongo) — or send an x-tt-mongo-url header per request from API clients. Activation probes the endpoint (connect + ping) before accepting it. Responses never include the URL itself, only the credentials-stripped host and db name. In 1.1.0, root data includes dataPlane, the same public home/custom location identity used by Timeline. Send X-Thingtime-Expected-Data-Plane on API reads or writes to fence the selected database before the route runs: malformed identities return 400 and changed selections return 409 DATA_PLANE_CHANGED, with no handler execution. The header is a precondition, never a routing instruction or authorization grant. Explicit home Timeline requests still compare against the session selection before entering their home context. Ordinary source-fenced requests use the same configured fallback as root data; the public precondition, cookie and database selection are forwarded unchanged for upstream enforcement. Actor-fenced commands and vault verification retain their existing local-origin requirement. Browser endpoint changes invalidate mounted account/data views across tabs; Thing permalink caches and History links include the database identity. Reset and endpoint deletion omit the optional precondition so recovery stays available.',
     auth: {
       mode: 'optional',
 			description: 'Works logged out for { url } and { reset }. Selecting a saved endpoint ({ savedId }) requires a signed-in session.'

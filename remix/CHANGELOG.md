@@ -68,6 +68,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: History can open its Thing in the home database
+  through an explicit selection change. Links pin account/database identity;
+  Thing-page caches and cross-tab invalidation keep same-id records separate.
+  Root data shares Timeline's canonical database key, and negotiated optional
+  API preconditions refuse stale-source reads/writes before handlers run.
+  MongoDB endpoint capability 1.1.0; no Timeline record-format change.
+  Fallback deployments forward the same source precondition as root identity;
+  the upstream enforces it without breaking ordinary Thing reads/writes.
+  [PR #972 details](../PRs/972-timeline-thing-navigation-open-history-things-in-their-matching-database.md).
+
 - 2026-09-28 — **Codex (AI)**: Home history is accessible while a custom database
   stays selected. Saved themes expose History; Timeline offers Home account and
   Selected database views. Shared connection leases prevent duplicate home

@@ -154,6 +154,13 @@ test('OTP challenges and failed or unrelated mutations do not reset the account'
 	assert.equal(changesRootIdentity('/api/v1/auth/logout', { ok: true }), true);
 });
 
+test('successful database selections and removals invalidate the mounted data identity', () => {
+	assert.equal(changesRootIdentity('/api/v1/mongodb/endpoint', { ok: true }), true);
+	assert.equal(changesRootIdentity('/api/v1/mongodb/endpoint', { ok: false }), false);
+	assert.equal(changesRootIdentity('/api/v1/mongodb/endpoints', { ok: true }, 'DELETE'), true);
+	assert.equal(changesRootIdentity('/api/v1/mongodb/endpoints', { ok: true }, 'POST'), false);
+});
+
 test('only temporary read failures permit keeping the mounted session', async () => {
 	for (const status of [401, 403, 404, 429, 500, 502, 503, 504]) {
 		await assert.rejects(fetchRootData('/api/root-data', signal(), async () => new Response('', { status }), options),

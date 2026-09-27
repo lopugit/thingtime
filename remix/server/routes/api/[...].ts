@@ -5,6 +5,7 @@ import { getCurrentUser } from '../../../app/api/utils/auth/getCurrentUser';
 import { recordErrorLog, withErrorLogRequest } from '../../../app/api/utils/errors/errorLogs';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
+import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
 import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
@@ -382,6 +383,8 @@ export default defineHandler(async (event) => {
     if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
       return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     }
+    // Root data uses this same fallback. Forward its public database
+    // precondition and selection unchanged for the upstream to enforce.
     if (path === 'v1/vault/reveal') {
       return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
         status: 503,
@@ -426,7 +429,10 @@ export default defineHandler(async (event) => {
   // the data plane below the handler resolves the session's active endpoint.
   // Admin routes are exempt: migrations and other admin writes must always
   // operate on the home deployment, never on an override DB.
-  const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
+  const selectedEndpoint = await getRequestMongoEndpoint(event.req);
+  const dataPlaneFailure = enforceExpectedDataPlane(event.req, selectedEndpoint);
+  if (dataPlaneFailure) return dataPlaneFailure;
+  const mongoEndpoint = path.startsWith('v1/admin/') ? null : selectedEndpoint;
 
   try {
 		const response = await runWithMongoEndpoint(mongoEndpoint, async () => {
