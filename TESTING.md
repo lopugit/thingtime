@@ -928,6 +928,11 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] On Mac, listen silently across at least two native no-input retry cycles
+      (15 seconds), then speak: silence must not show a red service error or
+      send a message, and the spoken phrase must send exactly once. Stop ends
+      capture/retries. An interrupted helper still reports a real error, and
+      retry clears it without removing conversation messages.
 - [ ] After a microphone permission or recognition failure, retry voice input:
       the previous recognition error disappears immediately, a successful
       transcript sends normally, and existing messages/turn failures remain.
