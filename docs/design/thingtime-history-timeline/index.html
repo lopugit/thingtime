@@ -638,6 +638,12 @@
   var $ = function(s, r){ return (r||document).querySelector(s); };
   var $$ = function(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  // An explicit `behavior` on scrollIntoView wins over the CSS `scroll-behavior`
+  // the reduced-motion block sets, so asking for `smooth` there would animate
+  // anyway. Read the preference here instead, live, so the toggle takes effect
+  // without a reload and every jump on the page honours it.
+  var REDUCE_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
+  function jumpTo(el){ if (el) el.scrollIntoView({ behavior: REDUCE_MOTION.matches ? 'auto' : 'smooth', block:'start' }); }
   var DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function dayKey(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
@@ -734,7 +740,7 @@
   function renderTimeline(){
     var list=visible(), tl=$('#timeline');
     if (state.view==='versions'){ tl.innerHTML='<div class="empty">Versions view is drawn in section 3 below — same events, as lanes. <br/><button type="button" class="btn small" style="margin-top:10px" id="jumpVersions">Jump to versions ↓</button></div>';
-      $('#jumpVersions').addEventListener('click', function(){ $('#versions').scrollIntoView({behavior:'smooth', block:'start'}); }); return; }
+      $('#jumpVersions').addEventListener('click', function(){ jumpTo($('#versions')); }); return; }
     if (!list.length){ tl.innerHTML='<div class="empty">Nothing recorded matches these filters. <br/><span style="font-size:12.5px">History never deletes on its own — try clearing a chip.</span></div>'; return; }
     var html='', lastKey=null;
     list.forEach(function(ev){
@@ -890,7 +896,7 @@
   $('#bars').addEventListener('click', function(e){
     var b=e.target.closest('button'); if (!b) return; var key=b.getAttribute('data-day');
     state.day = state.day===key ? null : key; renderBars(); renderTimeline();
-    var g=$('.day[data-day="'+key+'"]'); if (g){ g.scrollIntoView({behavior:'smooth', block:'start'}); $('#scrubhint').textContent='Jumped to '+b.getAttribute('data-tip'); }
+    var g=$('.day[data-day="'+key+'"]'); if (g){ jumpTo(g); $('#scrubhint').textContent='Jumped to '+b.getAttribute('data-tip'); }
     else $('#scrubhint').textContent='No recorded changes on '+b.getAttribute('data-tip').split(' · ')[0];
   });
   $('#timeline').addEventListener('click', function(e){
@@ -911,7 +917,7 @@
     else if (a==='undo') undo(ev);
     else if (a==='variation') variation(ev);
     else if (a==='compare'){ state.compare=!state.compare; renderDetail(); }
-    else if (a==='review'){ $('#merge').classList.add('open'); $('#versions').scrollIntoView({behavior:'smooth', block:'start'}); }
+    else if (a==='review'){ $('#merge').classList.add('open'); jumpTo($('#versions')); }
     else if (a==='preview') toast('Previewing Ana\'s version', 'Read-only · your variation is untouched.');
     else if (a==='note'){ var ta=$('#detail textarea'); var txt=ta&&ta.value.trim(); if (txt){ ev.msg={who:'you', text:txt}; renderAll(); toast('Note saved', 'It travels with the change, on every device.'); } else toast('Write a note first', 'A sentence is plenty.'); }
     else if (a==='askLopu'){ ev.msg={who:'lopu', text:'This changed '+ev.changes.map(function(c){return c.k;}).join(', ')+' on '+thingTitleAt(ev)+'. Say "undo that" if you want it back.'}; renderAll(); toast('Lopu explained it 🦄', 'Explanations are saved as the change\'s message.'); }
@@ -920,9 +926,9 @@
   });
   $('#backdrop').addEventListener('click', closeDetail);
   document.addEventListener('keydown', function(e){ if (e.key==='Escape') closeDetail(); });
-  $('#openFromEditor').addEventListener('click', function(){ state.scope='gear'; $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-scope')==='gear'?'true':'false'); }); renderAll(); openDetail(13); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); });
-  $('#openFromPost').addEventListener('click', function(){ state.scope='all'; state.filters.kind={post:true}; $$('[data-f="kind"]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-v')==='post'?'true':'false'); }); renderAll(); openDetail(2); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); });
-  $$('.graph .node').forEach(function(n){ n.addEventListener('click', function(){ openDetail(parseInt(n.getAttribute('data-ev'),10)); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); }); });
+  $('#openFromEditor').addEventListener('click', function(){ state.scope='gear'; $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-scope')==='gear'?'true':'false'); }); renderAll(); openDetail(13); jumpTo($('#browser')); });
+  $('#openFromPost').addEventListener('click', function(){ state.scope='all'; state.filters.kind={post:true}; $$('[data-f="kind"]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-v')==='post'?'true':'false'); }); renderAll(); openDetail(2); jumpTo($('#browser')); });
+  $$('.graph .node').forEach(function(n){ n.addEventListener('click', function(){ openDetail(parseInt(n.getAttribute('data-ev'),10)); jumpTo($('#browser')); }); });
   $('#btnReview').addEventListener('click', function(){ $('#merge').classList.add('open'); });
   $('#btnVariation').addEventListener('click', function(){ variation(findEv(13)); });
   $('#btnPull').addEventListener('click', function(){ toast('You are up to date', 'Nothing new from Ana since 4:09 pm — that one still needs review.'); });
