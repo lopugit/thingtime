@@ -72,7 +72,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   definition and schema editors; shared draft/template picker, reusable post
   templates with independent media, revision-safe recovery and scoped local
   workspaces. Added real local API/transaction/media verification and setup
-  guidance. See [draft feature map](../docs/feature-map/account-drafts-and-templates.md).
+  guidance. See [PR #957 details](../PRs/957-codex-account-drafts-autosave-account-drafts-and-add-reusable-post-templates.md).
 
 - 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
   message field. Stop keeps partial words, recording again appends, and explicit
