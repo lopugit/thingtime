@@ -830,6 +830,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		previousConversation.current = { ownerId: captureOwner, chatId };
 		const ownerChanged = previous.ownerId !== captureOwner;
 		const chatChanged = previous.chatId !== chatId;
+		if (ownerChanged || chatChanged) setRecognitionError(null);
 		// The first successful capture assigns a canonical ID to the current
 		// new chat. That is not a user switching to another conversation.
 		const assignedCurrentVoiceChat = previous.chatId === null && chatId !== null && (!directChatRef.current || directChatRef.current.chatId === chatId);
