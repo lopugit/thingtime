@@ -20,7 +20,7 @@ labels without returning the allowed values, causing repeated reads and probes.
   provider's existing result bounds; default reads explain omissions.
 - Generic workspace select validation reports exact accepted values while
   retaining strict validation. No equipment-specific mapping is hard-coded.
-- Both discovery manifests publish the additive reply contract 1.17.0.
+- Both discovery manifests publish the additive reply contract 1.18.0.
 
 ## Validation
 
@@ -40,3 +40,7 @@ labels without returning the allowed values, causing repeated reads and probes.
 
 The AST graph snapshot was refreshed with its matching manifest; semantic
 extraction for changed prose is not claimed by this AST-only update.
+
+Main integration preserves PR #954 prompt settings and schema/attachment tools.
+Its 1.17.0 contract is retained; this additive inspection contract is 1.18.0.
+Both test groups remain in the Lopu runner.

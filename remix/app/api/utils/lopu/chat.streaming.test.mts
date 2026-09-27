@@ -187,6 +187,9 @@ mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { exports: {
   createClaudeOAuthClient: (options: any = {}) => new Anthropic({ apiKey: null, authToken: options.token || process.env.CLAUDE_CODE_OAUTH_TOKEN, baseURL: process.env.ANTHROPIC_BASE_URL })
 } });
 
+let promptSettings = { basePrompt: 'You are Lopu. Shared admin prompt.', instructions: [] as Array<{ id: string; text: string; enabled: boolean }> };
+mock.module(new URL('../settings/lopuPromptSettings.ts', import.meta.url).href, { exports: { getLopuPromptSettings: async () => promptSettings } });
+
 const { streamLopuChatTurn, LOPU_FALLBACK_VAULT, createTtToolTextParser, unwrapEnvelopeContent, wrapBareToolCalls } = await import('./chat.ts');
 const { parseAiWorkflowModelOptionId } = await import('../settings/prConflictResolverModelWaterfallCore.ts');
 const { LOPU_VAULT_HOST_NOT_ALLOWED_REASON } = await import('./vaultProviders.ts');
@@ -249,6 +252,7 @@ const text = (events: any[]) => events.filter((event) => event.type === 'delta')
 const meta = (events: any[]) => events.find((event) => event.type === 'meta');
 
 beforeEach(() => {
+  promptSettings = { basePrompt: 'You are Lopu. Shared admin prompt.', instructions: [] };
   anthropicPlans.length = 0;
   anthropicRequests.length = 0;
   openAiPlans.length = 0;
@@ -1187,4 +1191,18 @@ test('GPT-5.6 Sol rejects a later-hop call ID replay while preserving its first 
   assert.equal(outcome.toolCalls[0].ok, true);
   assert.equal(events.filter(event => event.type === 'tool_result' && event.ok).length, 1);
   assert.equal(responsesRequests.length, 2);
+});
+
+for (const provider of ['claude', 'openai'] as const) test(`${provider}: the next reply receives new admin guidance and only enabled private instructions`, async () => {
+  const plan = () => provider === 'claude' ? anthropicPlans.push({ blocks: [{ type: 'text', text: 'Hello' }] }) : openAiPlans.push({ contentChunks: ['Hello'] });
+  const choice = provider === 'claude' ? 'claude-opus-5:high' : 'gpt-5.5:high';
+  promptSettings = { basePrompt: 'Current admin guidance', instructions: [{ id: 'on', text: 'Unique Alice preference', enabled: true }, { id: 'off', text: 'Disabled Alice preference', enabled: false }] };
+  plan(); await collect(turn('Hello', choice));
+  const requests = provider === 'claude' ? anthropicRequests : openAiRequests;
+  const first = JSON.stringify(requests[0].body);
+  assert.match(first, /Current admin guidance/); assert.match(first, /Unique Alice preference/); assert.doesNotMatch(first, /Disabled Alice preference/);
+  promptSettings = { basePrompt: 'New admin guidance', instructions: [] };
+  plan(); await collect(turn('Hello again', choice));
+  const next = JSON.stringify(requests[1].body);
+  assert.match(next, /New admin guidance/); assert.doesNotMatch(next, /Current admin guidance|Unique Alice preference|Disabled Alice preference/);
 });

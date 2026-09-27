@@ -9184,6 +9184,43 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   regression audit, lint, typecheck comparison and production build. Verify both
   1.33.0 manifests and exact deployed runtime in preview and production.
 
+## Public schema copies, durable chat files and Lopu instructions (2026-09-27)
+
+- [ ] Run `test:schemas`, `test:migrations`, `test:components`,
+      `test:attachments`, `test:lopu`, `test:lopu-chat-streaming`,
+      `test:lopu-streaming`, `test:lopu-ui` and `test:api-capabilities`.
+- [ ] Seed through `backfill-user-storage-accounting`; anonymously read every
+      `schema-<id>` from the registry. Copy Post, a collection/root schema and a
+      user schema; preserve nested fields, enum constraints, bounded JSON,
+      render and `forkOf`. Extend the copy and create an ordinary private Thing.
+      Copies never acquire protected native write powers or mutate the source.
+- [ ] On a real local upload form, choose an actual file, wait for Ready,
+      click Use file and submit. No invalid Post type, reserved `component-` ID or unfinished-file error;
+      both content URL and attachment ID persist in the returned Thing. Repeat
+      desktop/mobile, retry a failed commit, and deny anonymous file access.
+- [ ] Run `scripts/verify-schema-files.ts` using the isolated setup in README.
+      Save a chat photo to a folder and a Product property, retry the same tool
+      identity (same file), delete the source chat and compare exact saved bytes.
+      Reject foreign, blocked/pending, linked-only and unapproved sources.
+      Moderation updating a fresh copy must not prevent transactional placement.
+- [ ] In Settings → Lopu, add/edit/remove instructions, toggle one off, save and
+      reload. Only enabled entries reach the next provider request. An admin
+      edit of the base prompt appears in the public viewer and the next chat,
+      voice, musing and recording-analysis request. Start a new direct voice
+      session to receive a changed prompt. Check desktop and 390px layouts.
+- [ ] Ordinary users cannot edit shared guidance or write another account's
+      instructions. Guests/service accounts cannot read private instructions.
+      Stale revisions return 409; drafts survive background refresh and failed
+      saves. Account switching never displays or sends the previous list.
+      Custom instructions cannot replace server permissions or Confirm cards.
+- [ ] Generate the Xcode project and build the iOS simulator target. Web and
+      native direct voice require voice-session 1.2.0 and use its instructions.
+
+### PR #954 integration regressions
+
+- [ ] In Ask before running mode, saving a chat attachment and extending a Schema show a real Confirm card before writing. Full access permits the same tools; scheduled read-only work still refuses them.
+- [ ] Retry a private file save as the first request finishes: retain the completed independent file. Reject mismatched retry metadata without deleting that file; cleanup claims must not cross pending-to-ready finalization.
+- [ ] Verify all current registry kinds, including Timeline definitions, appear in the public Schema projection and pass the ordinary Schema validator.
 ### Web standards: reusable native XPath objects (2026-09-27)
 
 - Run all 30 XPath entries with default and edited programs; assert actual scalar,

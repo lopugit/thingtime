@@ -69,7 +69,7 @@ version preview/apply commands, exact version reads, and named branch create/pus
 `app/api/utils/timeline`. `test:timeline` and its opt-in replica-set integration
 cover the contract. See [Unified Timeline](../unified-timeline.md).
 
-Lopu reply 1.17.0 adds bounded, lossless crystal inspection to `get_thing`.
+Lopu reply 1.18.0 adds bounded, lossless crystal inspection to `get_thing`.
 `app/api/utils/lopu/thingInspection.ts` walks only the authorized public crystal;
 JSON Pointer, revision and offset select exact pages without relaxing ACLs.
 `test:lopu` covers the parser, output bounds and per-page authorization; the
@@ -248,3 +248,7 @@ first-party host reuses `browserActionRuntime.ts` and the canonical
 also spreads. Register a new delegable data route in that shared map; other
 routes stay in the catch-all. Both still need the API docs registry entry.
 See [authorization and validation](../lopu-action-access.md).
+
+## Lopu schemas, files and prompt settings
+
+`api.lopu-chats-reply` 1.17.0 combines all earlier page-context and Ask/Full contracts with current base/personal prompt composition, visible-schema inspection and extension, and independent private attachment saving. The new `api.settings-lopu-prompt` 1.0.0 route supports authenticated personal checklists and admin base edits with revision conflicts. `api.lopu-voice-session` 1.2.0 returns composed session instructions consumed by both web and iOS direct voice clients. Endpoint docs remain the executable registration source; tests cover both manifests and the route import map.

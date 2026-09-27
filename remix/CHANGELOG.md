@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   repeating a truncated summary. Workspace select errors report their exact
   allowed values, so Lopu can correct categories without trial writes. See
   [PR #960 validation](../PRs/960-lopu-action-observation-lossless-inspection-and-actionable-category-errors.md).
+- 2026-09-27 — **Codex (AI)**: Reviewed PR #954 against current main, preserved Lopu Ask/Full permissions with prompt settings, validated all 100 public schema definitions, and fixed concurrent attachment-save rollback deleting a completed file. Full unit suite, 902 API checks, real-byte acceptance, settings isolation/concurrency, production web build and iOS simulator build pass; no added TypeScript diagnostics. [QA details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
+
 
 - 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
 
@@ -110,6 +112,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   receivers and cleanup. Both manifests/client negotiate actions-run 1.32.0.
   Browser validation includes native interpolation, keyframe copying and ignored
   option detection. See the [animation guide](../docs/web-standards-builder.md#native-web-animation-programs) and [PR #951 details](../PRs/951-web-standards-animations-reusable-web-animations-programs.md).
+- 2026-09-27 — **Codex (AI)**: Publish all built-in schemas as copyable public
+  Schema Things, preserve nested/JSON fields and render templates in forks,
+  fix real Builder file commits, and let Lopu save chat attachments as durable
+  private files for Thing properties. Add visible shared Lopu guidance,
+  private tickable custom instructions, admin base-prompt editing, and shared
+  prompt composition across chat, voice, musings and recording analysis.
+  Includes isolated local upload/schema acceptance and native voice support.
+  [PR #954 details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
 
 - 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
   editable boundaries, native document edits and bounded contextual fragments.
