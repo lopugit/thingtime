@@ -250,11 +250,11 @@
   .baseline { position:absolute; height:3px; border-radius:3px; transform:translateY(-50%); background:linear-gradient(90deg,#e3e3e8 0%,#cfcfd6 35%,var(--tt-rainbow-5) 78%,var(--tt-ink) 100%); }
   .baseline.var { height:0; background:none; border-top:2.5px dashed var(--tt-rainbow-5); }
   .elbow { position:absolute; width:0; border-left:2.5px dashed var(--tt-rainbow-5); transform:translateX(-50%); }
-  .node { position:absolute; transform:translate(-50%,-50%); width:15px; height:15px; border-radius:50%; background:#fff; border:3px solid var(--vc); padding:0; cursor:pointer; z-index:3; transition:transform .12s ease; }
-  .node:hover { transform:translate(-50%,-50%) scale(1.3); }
-  .node:focus-visible { outline:2px solid var(--tt-ink); outline-offset:3px; }
-  .node.sel { background:var(--vc); box-shadow:0 0 0 6px color-mix(in srgb, var(--vc) 22%, white); }
-  .node.moment { width:9px; height:9px; border-width:2px; }
+  .evo .node { position:absolute; transform:translate(-50%,-50%); width:15px; height:15px; border-radius:50%; background:#fff; border:3px solid var(--vc); padding:0; cursor:pointer; z-index:3; transition:transform .12s ease; }
+  .evo .node:hover { transform:translate(-50%,-50%) scale(1.3); }
+  .evo .node:focus-visible { outline:2px solid var(--tt-ink); outline-offset:3px; }
+  .evo .node.sel { background:var(--vc); box-shadow:0 0 0 6px color-mix(in srgb, var(--vc) 22%, white); }
+  .evo .node.moment { width:9px; height:9px; border-width:2px; }
   .stem { position:absolute; width:1px; background:#d6d6dc; transform:translateX(-50%); }
   .lbl { position:absolute; width:140px; transform:translateX(-50%); text-align:center; line-height:1.3; display:flex; flex-direction:column; gap:1px; cursor:pointer; }
   .lbl.above { justify-content:flex-end; }
