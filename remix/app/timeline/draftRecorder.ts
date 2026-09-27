@@ -21,6 +21,7 @@ export class TimelineDraftRecorder {
 			thingId: this.thingId, branchId: this.branchId, parentIds: this.head ? [this.head] : [], operationId: this.uuid(),
 			source: 'client', clientId: this.clientId, occurredAt: this.now(), mode: 'draft', operation: 'update', label, before, after, dependencies: []
 		}); } catch (error) { this.captureFailure = error; throw error; }
+		this.captureFailure = null;
 		if (JSON.stringify(event.before) === JSON.stringify(event.after)) return Promise.resolve(this.last);
 		this.queued.push(event); this.head = event.id;
 		return this.flush().then(() => event.id);

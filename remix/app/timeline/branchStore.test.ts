@@ -48,10 +48,11 @@ test('a stale merged-branch push retains the accepted merged version after its c
 	const backend = new IndexedDbTimelineBackend(new IDBFactory()); const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend);
 	const snapshot = { adapter: 'thing-content', version: 1, value: { crystal: {}, extended: {}, tags: [], geo: null, acl: null, folderId: null } };
 	const proposal = createBranchMergeProposal({ ...member(), incomingEventId: 'incoming', baseEventId: 'ancestor', current: snapshot, incoming: snapshot, result: snapshot, conflicts: [] }, 'browser');
-	await store.enqueue(proposal.event); await branches.enqueue(proposal.command);
+	await store.enqueue(proposal.event, { pinDraft: true }); await branches.enqueue(proposal.command);
 	const sync = new TimelineSync(store, { page: async () => { throw new Error('unused'); }, push: async event => entryFixture(event), branch: async () => { throw { status: 409, error: 'Branch changed' }; } }, branches);
 	await assert.rejects(sync.pushPending(), TimelineBranchCommandRefusal);
 	assert.equal((await branches.queued())[0].failure?.status, 409);
+	assert.equal((await store.draft('page', branchId))?.id, proposal.event.id);
 	await branches.dismissRejected(proposal.command.operationId);
 	assert.equal((await store.forThing('page'))[0].event.id, proposal.event.id); assert.deepEqual(await branches.queued(), []);
 	await backend.close();
@@ -140,4 +141,20 @@ test('a branch queued during an upload waits for its new local version instead o
 	assert.deepEqual(order, ['first']); assert.equal((await branches.queued())[0].failure, undefined);
 	assert.equal(await sync.pushPending(), 2); assert.deepEqual(order, ['first', 'latest', 'branch']);
 	assert.equal((await branches.queued()).length, 0); await backend.close();
+});
+
+
+test('branch acknowledgment releases its saved draft pin after reload while preserving newer or refused edits', async () => {
+ for (const newer of [false, true]) {
+  const backend = new IndexedDbTimelineBackend(new IDBFactory()); const branches = new TimelineBranchStore(scope, backend); const events = new TimelineLocalStore(scope, backend);
+  const base = eventFixture('base', { thingId: 'page', branchId });
+  await events.enqueue(base, { pinDraft: true }); await branches.enqueue(command);
+  if (newer) await events.enqueue(eventFixture('newer', { thingId: 'page', branchId, parentIds: ['base'] }), { pinDraft: true });
+  const audit = entryFixture(eventFixture(`branch-op-${operationId}`, { thingId: 'page', branchId, source: 'api', clientId: null, mode: 'effect', operation: 'effect', before: null, after: { adapter: 'timeline-branch', version: 1, value: member() } }), 3);
+  let lost = true;
+  const sync = new TimelineSync(events, { page: async () => { throw new Error('unused'); }, push: async event => entryFixture(event, event.id === 'base' ? 1 : 2), branch: async () => { if (lost) { lost = false; throw new Error('Lost reply'); } return { ok: true, ...member(), entry: audit }; } }, branches);
+  await assert.rejects(sync.pushPending(), /Lost reply/); assert.equal((await events.draft('page', branchId))?.id, newer ? 'newer' : 'base');
+  await sync.pushPending(); assert.equal((await events.draft('page', branchId))?.id ?? null, newer ? 'newer' : null);
+  await backend.close();
+ }
 });

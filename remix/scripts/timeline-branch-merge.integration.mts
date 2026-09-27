@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
+import { branchCheckoutRequest, parseBranchCheckout, branchCrystalSnapshot, branchEditCommand } from '../app/timeline/branchCheckout.ts';
 import { parseBranchMergePreview, createBranchMergeProposal } from '../app/timeline/branchMerge.ts';
 
 const base = process.env.TIMELINE_TEST_BASE;
@@ -83,8 +84,29 @@ assert.equal((await call(`/api/v1/timeline?ownerId=${ownerId}&dataPlane=custom-o
 const other = await call('/api/v1/things', { thingtime: ['data'], crystal: { title: 'Other Thing' }, visibility: 'private' });
 const foreignEvent = (await call(`/api/v1/timeline?${query}&thingId=${other.data.thing.id}`)).data.entries[0].event;
 assert.equal((await version({ ...conflictRequest, eventId: foreignEvent.id, expectedHeadId: winner.id, expectedRevision: 3 })).response.status, 404);
+// Check out and edit the named branch using its full historical content.
+const latest = (await call(`/api/v1/timeline?${query}&thingId=${thing.id}&branches=1`)).data.branches.find((entry: any) => entry.branch.id === branchId);
+const checkoutRequest = branchCheckoutRequest(latest);
+const checkoutReply = await version(checkoutRequest);
+assert.equal(checkoutReply.response.status, 200); assert.equal(checkoutReply.response.headers.get('cache-control'), 'private, no-store');
+const checkout = parseBranchCheckout(checkoutReply.data.checkout, ownerId, checkoutRequest);
+assert.equal(checkout.entry.event.id, winner.id);
+const fields = branchCrystalSnapshot(checkout.snapshot, { ...(checkout.snapshot.value as any).crystal, title: 'Edited on branch', flag: false, count: 0, empty: '' });
+const edited = { ...winner, id: randomUUID(), operationId: randomUUID(), branchId, parentIds: [winner.id], before: checkout.snapshot, after: fields, label: 'Edit branch fields' };
+assert.equal((await version(edited)).data.ok, true);
+const editCommand = branchEditCommand(checkout, edited.id);
+const editPush = await version(editCommand); assert.equal(editPush.data.ok, true); assert.equal(editPush.data.head.revision, 4);
+assert.deepEqual((await version(editCommand)).data, editPush.data, 'Branch edit retry is idempotent');
+assert.equal((await version(checkoutRequest)).response.status, 409, 'Checkout refuses a stale branch');
+assert.equal((await call(`/api/v1/timeline?${query}`, checkoutRequest, 'POST', false)).response.status, 401);
+assert.deepEqual((await call(`/api/v1/things?id=${thing.id}`)).data.thing.crystal, root.after.value.crystal, 'Branch editing never publishes');
+const divergentEdit = { ...edited, id: randomUUID(), operationId: randomUUID(), after: branchCrystalSnapshot(checkout.snapshot, { conflict: true }) };
+assert.equal((await version(divergentEdit)).data.ok, true);
+assert.equal((await version(branchEditCommand(editPush.data, divergentEdit.id))).response.status, 409, 'A divergent resumed draft cannot overwrite the current branch');
+assert.equal((await call(`/api/v1/timeline?${query}&eventId=${divergentEdit.id}`)).data.entry.event.id, divergentEdit.id);
+
 // Keep a fresh conflict for the rendered desktop/mobile acceptance, entirely in this disposable account.
 const uiBranchId = `branch-${randomUUID()}`;
 assert.equal((await version({ command: 'create-branch', operationId: randomUUID(), branchId: uiBranchId, thingId: thing.id, eventId: left.id, expectedRevision: 0, name: 'Explore a different colour' })).data.ok, true);
 if (process.env.TIMELINE_TEST_FIXTURE_PATH) await writeFile(process.env.TIMELINE_TEST_FIXTURE_PATH, JSON.stringify({ username, password, ownerId, thingId: thing.id, branchId: uiBranchId, incomingId: divergent.id }, null, 2), { mode: 0o600 });
-console.log('PASS: named branch merge, conflicts, canonical upload, lost-reply retries, stale push retention, privacy and unchanged published Thing');
+console.log('PASS: named branch merge, conflicts, canonical upload, lost-reply retries, stale push retention, privacy, exact checkout, branch editing and unchanged published Thing');
