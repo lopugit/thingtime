@@ -2,6 +2,14 @@
 
 ## Unified Timeline
 
+- [ ] Run a server Action with nested updates and a delete. History shows
+  Action as the source, a shared operation id, separate events and exact parent
+  versions. Repeat through Lopu: AI remains the initiating source, including
+  server-hosted browser flows. Concurrent requests and subsequent API edits
+  keep their own origin. Client source/actor/operation claims cannot override it.
+  Fail a later step: only committed changes appear. Ask/refused tools and browser
+  preparation create no successful-change event. Operation grouping does not
+  authorize replaying an Action or imply complete Action outcome coverage.
 - [ ] Upgrade an earlier local Timeline cache with pending edits and a released
   draft. Pending work survives; the released draft does not reappear. Revisions
   and links are independent records. Missing links fail visibly without deleting
@@ -6680,12 +6688,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Scroll modal/page from top to bottom; Save remains reachable.
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (99 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (100 checks: closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
       owner-private history, private-action 404, delegated (`source: 'component'`)
       runs refusing a foreign action by id, docs twins).
+      Declared own prototype-named inputs remain ordinary data; omitted inputs
+      never resolve through an inherited prototype.
 - [ ] Run-trail lifecycle: run an action, confirm `GET /api/v1/actions/runs?action=<id>`
       lists it, DELETE the action, and confirm the same query is now empty while
       another action keeps its own runs. action-run is protected (no route deletes

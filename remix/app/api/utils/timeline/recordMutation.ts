@@ -7,6 +7,7 @@ import { appendTimelineEvent } from './repository.ts';
 import { isProtectedThingtime } from '../../../schemas/registry.ts';
 import { currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore.ts';
 import { markUserStorageNeedsReconcile, retainDeletedThingStorage } from '../storage/userStorage';
+import { timelineMutationContext } from './mutationContext';
 
 /** Explicit content projection. Never copy a Mongo document wholesale: secure,
  * tokens, hidden-link keys, grants and platform ledger state are not revisions.
@@ -36,9 +37,13 @@ export type ThingMutationCapture = {
 };
 
 /** Create ONCE, outside transaction retry callbacks, preserving operation ids. */
-export const newThingMutationCapture = (actorId: string, source: TimelineEvent['source'] = 'api'): ThingMutationCapture => ({
-	id: randomUUID(), operationId: randomUUID(), actorId, source, now: new Date()
-});
+export const newThingMutationCapture = (actorId: string, source?: TimelineEvent['source']): ThingMutationCapture => {
+	// Explicit internal captures (restore/merge, for example) retain their own
+	// identity contract. Ordinary writes inherit only trusted executor context.
+	const context = source === undefined ? timelineMutationContext(actorId) : null;
+	return { id: randomUUID(), operationId: context?.operationId ?? randomUUID(), actorId,
+		source: source ?? context?.source ?? 'api', now: new Date() };
+};
 
 export function prepareThingMutation(before: any, after: any, capture: ThingMutationCapture) {
 	const target = after ?? before;

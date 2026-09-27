@@ -5,6 +5,7 @@ import type { PreparedBrowserAction } from '~/schemas/browserActions';
 import { runLookup } from './lookup';
 import { revealUserVaultValue } from '../lopu/userVault';
 import { randomUUID } from 'node:crypto';
+import { withTimelineMutationContext } from '../timeline/mutationContext';
 
 import {
 	ACL_ALL,
@@ -870,7 +871,7 @@ export const inspectActionProgram = async (viewer: Viewer, reference: string): P
 	};
 };
 
-export const runAction = async (
+const executeActionRun = async (
 	viewer: Viewer,
 	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
 	shared?: SharedComposition,
@@ -1001,6 +1002,9 @@ export const runAction = async (
 		trace: budget.trace
 	};
 };
+
+export const runAction = (...args: Parameters<typeof executeActionRun>): Promise<RunActionResult> =>
+	withTimelineMutationContext(args[2] ? null : args[0]?.id ?? null, 'action', () => executeActionRun(...args));
 
 // ── run history ─────────────────────────────────────────────────────────────
 

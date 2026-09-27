@@ -240,9 +240,8 @@ const run = async () => {
 		JSON.stringify(protoDefault.body).slice(0, 300)
 	);
 
-	// A boolean input named __proto__ can never hold an own key (the assignment
-	// hits the accessor and is a silent no-op), so $input.__proto__ must read as
-	// undefined — never as Object.prototype leaking into a step value.
+	// Declared own keys survive the null-prototype input accumulator. Omitting
+	// that key must still resolve to nothing, never an inherited prototype.
 	const protoLeak = await createThing(alice.cookie, {
 		thingtime: ['action'],
 		crystal: {
@@ -258,9 +257,15 @@ const run = async () => {
 		inputs: JSON.parse('{"__proto__":true}')
 	});
 	check(
-		'$input.__proto__ resolves to nothing, not Object.prototype',
-		protoLeakRun.status === 200 && protoLeakRun.body?.status === 'ok' && protoLeakRun.body?.result == null,
+		'$input.__proto__ preserves the explicitly supplied boolean',
+		protoLeakRun.status === 200 && protoLeakRun.body?.status === 'ok' && protoLeakRun.body?.result === true,
 		JSON.stringify(protoLeakRun.body).slice(0, 300)
+	);
+	const protoOmittedRun = await runAction(alice.cookie, { action: `proto-leak-${suffix}`, inputs: {} });
+	check(
+		'omitted $input.__proto__ resolves to nothing, not Object.prototype',
+		protoOmittedRun.status === 200 && protoOmittedRun.body?.status === 'ok' && protoOmittedRun.body?.result == null,
+		JSON.stringify(protoOmittedRun.body).slice(0, 300)
 	);
 
 	const run1 = await runAction(alice.cookie, { action: `create-customer-${suffix}`, inputs: { name: 'Ada Lovelace', email: 'ada@example.com' } });
