@@ -8894,3 +8894,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   reads return 404. Check desktop/390px, retained drawing, Stop and fresh Run.
 - Verify preview/main deployment source, runtime digest, unchanged restrictive CSP
   and both actions-run 1.25.0 manifests. Missing browser members report unsupported.
+
+### CSS function comparisons (2026-09-27)
+
+- Run every function and published-value recipe with default and edited inputs.
+  Supported edits must change native computed output. Compare visible controls,
+  3D perspective, grid tracks, shape clipping, paused easing progress, anchor
+  geometry and nested generated counters. Unsupported syntax must retain an
+  honest native fallback rather than a manufactured result.
+- Run cssProbeBoundaryFixtures: arithmetic, parameterized property/target,
+  accepted missing-variable syntax, rejected declarations, pseudo-element reads,
+  scoped comparison, missing targets, closed pseudo-element vocabulary and
+  field limits before/after substitution. Named form controls cannot shadow the
+  native geometry method. Legacy syntax-only programs without #sample retain
+  their null computed result. CSS.supports(true) is not visual proof.
+- Published-value aliases retain interactive coverage. The paged-media element()
+  must not accidentally receive the same-name image function's implementation.
+- Round-trip edited programs through catalogue, private Thing storage and the
+  authored save-draft Action. Save/reopen/reload/run an edited width expression,
+  verify its native pixel result, and confirm anonymous reads return 404.
+- Check desktop/390px controls, page overflow, retained completed output, Stop
+  frame removal and fresh Run. Run prior SVG/filter/Canvas/DOM/form regressions.
+- Match exact preview/production source, runtime digest, restrictive CSP and both
+  actions-run 1.26.0 manifests before production @lopu verification.

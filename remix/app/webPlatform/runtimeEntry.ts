@@ -1,3 +1,4 @@
+import { readCSSProbe } from './cssProbe';
 import { SVG_FILTER_TAGS, SVG_FILTER_LIMITS } from './svgFilterSupport';
 import { compilePlatformProgram, validatePlatformProgram } from './compiler';
 import { compilePlatformWorker } from './workerSource';
@@ -252,13 +253,7 @@ addEventListener('message', (event) => {
 				const el = root.querySelector(p.target || '#sample');
 				probe = { attribute: p.name, value: el?.getAttribute(p.name), markup: el?.outerHTML.slice(0, 4000) };
 			}
-			if (p.kind === 'css')
-				probe = {
-					property: p.name,
-					value: substitute(p.value || ''),
-					supported: CSS.supports(p.name, substitute(p.value || '')),
-					computed: root.querySelector('#sample') ? getComputedStyle(root.querySelector('#sample')!).getPropertyValue(p.name) : null
-				};
+			if (p.kind === 'css') probe = readCSSProbe(root, p, substitute);
 			if (p.kind === 'selector') {
 				const selector = substitute(p.name);
 				probe = { selector, supported: CSS.supports(`selector(${selector})`), matches: root.querySelectorAll(selector).length };
