@@ -248,7 +248,18 @@ export type ThingtimeNodeDeviceRequest =
 			};
 	  };
 
+export type DesktopSpeechEvent = {
+	sessionId: string;
+	type: 'ready' | 'partial' | 'final' | 'error' | 'end';
+	text?: string;
+	error?: string;
+};
+
 export type ThingtimeDesktopBridge = {
+	speechRecognitionVersion?: string;
+	startSpeechRecognition?: (request: { sessionId: string; lang: string }) => Promise<{ ok: true }>;
+	stopSpeechRecognition?: (request: { sessionId: string }) => Promise<{ ok: true }>;
+	onSpeechRecognition?: (callback: (event: DesktopSpeechEvent) => void) => () => void;
 	discoverAiSources?: () => Promise<{ sources: ThingtimeAiDesktopSource[] }>;
 	beginAiSync?: (request: {
 		sourceId: string;
