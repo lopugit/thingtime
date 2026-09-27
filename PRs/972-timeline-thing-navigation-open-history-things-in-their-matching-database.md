@@ -41,6 +41,11 @@ on custom Thing pages.
   Those were synthetic values, never real credentials. The final tests generate
   their credentials at runtime while preserving the same identity/privacy
   assertions; no account credential was exposed or needs rotation.
+- Root-data privacy compares its returned identity with a credential-free
+  location, so including even a hash of the credential fails the assertion.
+  CodeQL's earlier path originated in the test's expected-value calculation;
+  this independent reference strengthens the test without changing production
+  hashing, scope identities, scanner configuration or alert policy.
 - `test:timeline:home-scope` passed against the guarded disposable loopback
   replica. It creates matching live Thing ids in two databases, verifies exact
   Timeline/root identity, stale GET/PATCH/DELETE refusals with unchanged content

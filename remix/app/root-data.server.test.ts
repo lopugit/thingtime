@@ -130,7 +130,9 @@ test('root data identifies the request database without disclosing its URL or cr
 	const url = `mongodb://${randomUUID()}:${password}@scope.test:27017/example`;
 	const response = await rootDataResponse(new Request('https://thingtime.test/api/root-data', { headers: { 'x-tt-mongo-url': url } }));
 	const body = await response.json();
-	assert.equal(body.dataPlane, mongoDataPlane({ url, savedId: null }));
+	// Compare with a credential-free location: even hashing the credentials
+	// (rather than leaking them verbatim) must fail this privacy assertion.
+	assert.equal(body.dataPlane, mongoDataPlane({ url: 'mongodb://scope.test:27017/example', savedId: null }));
 	assert.match(body.dataPlane, /^custom-[a-f0-9]{64}$/);
 	assert.equal(JSON.stringify(body).includes(password), false);
 	assert.equal(JSON.stringify(body).includes('scope.test'), false);
