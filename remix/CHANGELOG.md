@@ -73,6 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   repeating a truncated summary. Workspace select errors report their exact
   allowed values, so Lopu can correct categories without trial writes.
 
+- 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
   event and relationship records, durable draft recovery, private relational event/link Things and transactional
