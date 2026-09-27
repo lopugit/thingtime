@@ -18,18 +18,35 @@ function closesEveryString(text: string): boolean {
 	return !quote;
 }
 
+// The CSS parser consumes `(` and `[` as blocks that end at their matching
+// closer or the end of the stylesheet, never at `}`, so an unbalanced delimiter
+// swallows the rest of the rule and every later rule in the same instance
+// stylesheet the way `/*` would — `.a(` as a selector and `rgb(0,0,0` as a
+// declaration value both do it. A delimiter inside a terminated string is only
+// data, so the scan tracks quotes to keep `[title="]"]` and `content:"("` legal;
+// that is only sound once every string is known to close, so callers check
+// `closesEveryString` first.
+function balancesEveryBlock(text: string): boolean {
+	const closers: string[] = [];
+	let quote = '';
+	for (const char of text) {
+		if (quote) {
+			if (char === quote) quote = '';
+		} else if (char === '"' || char === "'") quote = char;
+		else if (char === '(' || char === '[') closers.push(char === '(' ? ')' : ']');
+		else if ((char === ')' || char === ']') && closers.pop() !== char) return false;
+	}
+	return !closers.length;
+}
+
 // Only a comma outside `()`, `[]` and a quoted string separates the selector
 // list, so the comma in `:is(.a, .b)` or `[title="a,b"]` stays with its own
-// compound instead of being prefixed twice. An unbalanced delimiter is rejected
-// rather than emitted: the CSS parser consumes `(` and `[` as blocks, so `.a(`
-// would swallow this rule's body and every later rule the way `/*` would. A
-// quoted `]` is only data, so tracking the quote keeps `[title="]"]` legal while
-// still rejecting the unterminated `[title="]`. That quote tracking is only
-// sound once every string is known to close, so the string scan runs first.
+// compound instead of being prefixed twice. Balance and string termination are
+// verified up front, so the split only has to track nesting depth.
 function topLevelSelectors(selector: string): string[] | null {
-	if (!closesEveryString(selector)) return null;
-	const closers: string[] = [];
+	if (!closesEveryString(selector) || !balancesEveryBlock(selector)) return null;
 	const parts: string[] = [];
+	let depth = 0;
 	let quote = '';
 	let start = 0;
 	for (let index = 0; index < selector.length; index++) {
@@ -37,15 +54,14 @@ function topLevelSelectors(selector: string): string[] | null {
 		if (quote) {
 			if (char === quote) quote = '';
 		} else if (char === '"' || char === "'") quote = char;
-		else if (char === '(' || char === '[') closers.push(char === '(' ? ')' : ']');
-		else if (char === ')' || char === ']') {
-			if (closers.pop() !== char) return null;
-		} else if (char === ',' && !closers.length) {
+		else if (char === '(' || char === '[') depth++;
+		else if (char === ')' || char === ']') depth--;
+		else if (char === ',' && !depth) {
 			parts.push(selector.slice(start, index).trim());
 			start = index + 1;
 		}
 	}
-	return quote || closers.length ? null : [...parts, selector.slice(start).trim()];
+	return [...parts, selector.slice(start).trim()];
 }
 
 // Each selector is prefixed independently. Authored styles cannot select the
@@ -83,8 +99,10 @@ export function componentStyleRules(value: unknown, scope: string): string {
 					// A quoted value stays legal for `content` and `font-family`, but a
 					// string left open by a missing quote or an embedded newline runs past
 					// this declaration and consumes the closing `}`, which swallows every
-					// later rule in the same instance stylesheet exactly like `/*`.
-					if (!closesEveryString(value)) return [];
+					// later rule in the same instance stylesheet exactly like `/*`. An
+					// unbalanced `(` or `[` consumes that `}` the same way, so `rgb(0,0,0`
+					// is rejected while the balanced `rgb(0,0,0)` a value needs stays legal.
+					if (!closesEveryString(value) || !balancesEveryBlock(value)) return [];
 					// Match the renderer's containment boundary. Untrusted CSS cannot
 					// place a viewport overlay over the surrounding Thingtime controls.
 					if (key === 'position' && !/^(static|relative)(\s*!important)?$/i.test(value.trim())) return [];

@@ -102,6 +102,21 @@ test('style rules reject scope escape, resource loads, injection and viewport po
 		componentStyleRules(rule('.x', { content: '"→"', 'font-family': '"Helvetica Neue", serif' }), 'safe'),
 		/content:"→";font-family:"Helvetica Neue", serif/
 	);
+	// An unbalanced delimiter in a value consumes the closing `}` exactly like an
+	// open string, because the CSS parser ends a `(` or `[` block at its matching
+	// closer or the end of the stylesheet and never at `}`.
+	for (const value of ['rgb(0,0,0', 'a[b', 'calc(1px + (2px', 'rgb(0,0,0)]', 'var(--a))'])
+		assert.equal(componentStyleRules(rule('.x', { color: value }), 'safe'), '');
+	assert.equal(
+		componentStyleRules([{ selector: '.a', declarations: { color: 'rgb(0,0,0' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// Balanced functions stay legal, and a delimiter inside a terminated string is
+	// data: real values need `var()`, `calc()` and a quoted `(`.
+	assert.match(
+		componentStyleRules(rule('.x', { color: 'var(--app-ink, #18392d)', width: 'calc(100% - 24px)', content: '"("' }), 'safe'),
+		/color:var\(--app-ink, #18392d\);width:calc\(100% - 24px\);content:"\("/
+	);
 	assert.match(componentStyleRules(rule('.x', { font: '12px/1.5 serif', 'aspect-ratio': '16 / 9' }), 'safe'), /font:12px\/1\.5 serif;aspect-ratio:16 \/ 9/);
 	assert.equal(componentStyleRules(rule('.x', { position: 'fixed', 'z-index': '99999' }), 'safe'), '');
 	assert.equal(componentStyleRules(rule('.x', { color: 'red' }), 'bad"scope'), '');
