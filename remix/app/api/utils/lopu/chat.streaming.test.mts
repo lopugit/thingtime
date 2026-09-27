@@ -1206,3 +1206,14 @@ for (const provider of ['claude', 'openai'] as const) test(`${provider}: the nex
   const next = JSON.stringify(requests[1].body);
   assert.match(next, /New admin guidance/); assert.doesNotMatch(next, /Current admin guidance|Unique Alice preference|Disabled Alice preference/);
 });
+
+
+test('providers discover inspect_action and receive enum contracts without a lossy wrapper', async () => {
+ const data = { id: 'save', runtime: 'browser', inputsComplete: true, inputs: [{ name: 'category', type: 'enum', values: ['Tool', 'Battery', 'Vehicle', 'Fuel', 'Other'] }], validation: { ok: false, error: 'Input category must be one of Tool, Battery, Vehicle, Fuel, Other' } };
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'inspect', name: 'inspect_action', inputChunks: ['{"action":"save","inputs":{"category":"battery"}}'] }], stopReason: 'tool_use' },
+   { blocks: [{ type: 'text', text: 'The accepted category is Battery.' }], stopReason: 'end_turn' });
+ await collect(turn('check the action inputs', 'claude-opus-5', { deps: { runTool: async () => ({ ok: true, summary: 'Inspected save', data }) } }));
+ assert.ok(anthropicRequests[0].body.tools.some((tool: any) => tool.name === 'inspect_action'));
+ const delivered = JSON.parse(anthropicRequests[1].body.messages.at(-1).content[0].content);
+ assert.deepEqual(delivered.data, data);
+});

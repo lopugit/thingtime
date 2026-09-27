@@ -67,3 +67,8 @@ Integrated main `c36d20782` after the native Web Standards traversal work
 are preserved alongside Timeline 1.3.0 and Things 1.33.1. The folder mutation
 implementation is unchanged. Final required CI runs against this combined head;
 prior green checks do not satisfy that gate.
+
+Integrated main `66c37ddab` after Lopu Action guidance (PR #964) landed.
+The source files merged cleanly; only the generated graph required regeneration.
+The new read-only Action contracts and error-directed guidance are preserved.
+Required checks are rerun for the new exact combined head.

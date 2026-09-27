@@ -286,3 +286,12 @@ test('boundToolData shrinks oversized payloads and drops render trees before tru
   assert.ok(JSON.stringify(shrunk).length <= 16 * 1024);
   assert.ok(Array.isArray(shrunk.notes));
 });
+
+
+test('Action inspection supports discovery without treating omitted candidate inputs as an empty run', () => {
+  assert.deepEqual(validateLopuToolInput('inspect_action', { action: ' save-equipment ' }), { ok: true, input: { action: 'save-equipment' } });
+  assert.deepEqual(validateLopuToolInput('inspect_action', { action: 'save-equipment', inputs: {} }), { ok: true, input: { action: 'save-equipment', inputs: {} } });
+  assert.equal(validateLopuToolInput('inspect_action', { action: 'save-equipment', inputs: [] }).ok, false);
+  assert.equal(validateLopuToolInput('inspect_action', {}).ok, false);
+  assert.equal(LOPU_TOOL_DEFINITIONS.find(tool => tool.name === 'inspect_action')?.mutates, undefined);
+});

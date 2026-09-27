@@ -852,7 +852,10 @@ const writeRunRecord = async (
 // The program's identity + derived effects WITHOUT running it — what Lopu's
 // confirmation gate reads before run_action (a deleting program needs the
 // user's approval first). Same deliberate-path resolution as runAction.
-export type InspectActionProgramResult = Fail | { ok: true; id: string; name: string; actionKey: string | null; effects: ActionEffects };
+export type InspectActionProgramResult = Fail | {
+	ok: true; id: string; name: string; actionKey: string | null; effects: ActionEffects;
+	runtime: 'browser' | 'server'; inputs: Record<string, unknown>[];
+};
 
 export const inspectActionProgram = async (viewer: Viewer, reference: string): Promise<InspectActionProgramResult> => {
 	const program = await resolveActionProgram(viewer, reference);
@@ -862,6 +865,8 @@ export const inspectActionProgram = async (viewer: Viewer, reference: string): P
 		id: program.id,
 		name: program.name,
 		actionKey: typeof program.crystal.actionKey === 'string' ? program.crystal.actionKey : null,
+		runtime: program.crystal.runtime === 'browser' ? 'browser' : 'server',
+		inputs: program.inputs,
 		effects: deriveActionEffects(program.steps)
 	};
 };
