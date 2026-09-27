@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { isProtectedThingtime, PROTECTED_THINGTIME, projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
+import { isProtectedThingtime, MAX_SCHEMA_FIELDS, PROTECTED_THINGTIME, projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
 
 // The congruence alarm for builtin-schema seeding (seed-builtin-schemas in
 // api/utils/migrations/migrations.ts): every builtin schema must
@@ -23,7 +23,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "lopu-recording-job": [],
   "lopu-recording-reminder": [],
   "lopu-reminder": [],
-  "thing": ["shareId", "schemaVersion", "thingtime", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentPurpose", "attachmentProfileSlot", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
+  "thing": ["shareId", "schemaVersion", "thingtime", "crystal", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentPurpose", "attachmentProfileSlot", "moderation", "subspaceMod", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
   "post": ["type", "text", "richText", "images", "listing", "thing", "title", "subspaceId", "flairId"],
   "attachment": ["name", "filenamePreview", "title", "description", "size", "contentType", "mediaKind", "detectedContentType"],
   "comment": ["text"],
@@ -52,7 +52,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "subscription": ["quotaKind", "subjectType", "subjectId", "tier", "tierVersionId", "tierVersion", "tierQuotas", "overrides", "note", "updatedBy", "storageUsedBytes", "storageAccountingVersion", "storageLedgerStatus", "storageReconciledAt"],
   "account-link": ["linkKind", "userId", "targetId", "role", "createdBy"],
   "app-storage": ["quotaKind", "appId", "usedBytes", "storageAllowanceBytes"],
-  "service-quota": ["quotaKind", "quotaVersion", "key", "policy", "dayKey", "dailyUsed", "permitIds", "releasedIds"],
+  "service-quota": ["quotaKind", "quotaVersion", "key", "policy", "dayKey", "dailyUsed", "reservations", "permitIds", "releasedIds", "rollingPermits"],
   "migration-diagnostic": ["diagnosticVersion", "migrationId", "mode", "status", "outcome", "summary", "capturedAt"],
   "error-log": ["source", "message", "provider", "status", "code", "requestId", "route", "method", "providerType", "providerRequestId", "retryAfter", "attempt"],
   "ai-model": ["modelId", "label", "provider", "efforts", "speeds", "family", "enabled", "sortOrder", "contextWindow", "notes"],
@@ -106,7 +106,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "password-reset": ["token", "userId", "email", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
   "auth-otp": ["challenge", "userId", "purpose", "codeHash", "attempts", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
   "email-message": ["provider", "stream", "templateKey", "status", "from", "replyTo", "to", "subject", "html", "text", "sensitive", "metadata", "tags", "providerMessageId", "suppressedRecipients", "schemaVersion", "createdAt", "updatedAt"],
-  "rate-limit": ["key", "expiresAt", "count", "schemaVersion"],
+  "rate-limit": ["key", "expiresAt", "requests", "count", "schemaVersion"],
   "deployment-peer": ["origin", "signingPublicKey", "firstSeenAt", "lastSeenAt", "expiresAt", "syncCursor", "schemaVersion"],
   "admin-integration-secret": ["id", "label", "cipherText", "iv", "tag", "createdAt", "updatedAt", "schemaVersion"],
   "admin-integration-endpoint": ["id", "origin", "secretId", "allowedPathPrefixes", "allowRead", "writeMode", "schemaVersion"],
@@ -247,6 +247,11 @@ for (const schema of crystalSchemas) {
     assert.deepEqual(validated.thingtime, ['schema']);
     assert.equal(validated.crystal.name, schema.title);
     assert.deepEqual(fieldNames(validated.crystal), EXPECTED_PROJECTED_FIELDS[schema.id]);
+    // Every concrete top-level field survives; open objects must not disappear
+    // just because the registry does not enumerate their keys.
+    assert.deepEqual(fieldNames(validated.crystal), schema.fields
+      .filter(field => !['*', 'schema', 'schemaid'].includes(field.name.toLowerCase()))
+      .map(field => field.name));
 
     // Normalization is a fixed point: re-validating the stored crystal must
     // reproduce it exactly, or the migration's drift comparison (stored vs
@@ -256,6 +261,23 @@ for (const schema of crystalSchemas) {
     if (revalidated.ok === true) assert.deepEqual(revalidated.crystal, validated.crystal);
   });
 }
+
+test('opaque native objects remain copyable bounded JSON, including the root crystal', () => {
+  for (const schema of crystalSchemas) {
+    const fields = projectBuiltinSchemaCrystal(schema).fields as Array<Record<string, unknown>>;
+    for (const source of schema.fields.filter(field => field.type === 'object' && !field.children?.length)) {
+      assert.equal(fields.find(field => field.name === source.name)?.type, 'json', `${schema.id}.${source.name}`);
+    }
+  }
+});
+
+test('schema extension headroom retains a total field-node limit', () => {
+  const fields = Array.from({ length: MAX_SCHEMA_FIELDS - 1 }, (_, index) => ({ name: `field${index}`, type: 'string' }));
+  const crystal = { name: 'Bounded', fields: [{ name: 'nested', type: 'object', children: fields }] };
+  assert.equal(validateThingtimeCrystal(['schema'], crystal).ok, true);
+  fields.push({ name: 'tooMany', type: 'string' });
+  assert.equal(validateThingtimeCrystal(['schema'], crystal).ok, false);
+});
 
 test("post.listing carries sanitizePostCrystal's real shape, not an opaque object", () => {
   const projected = projectBuiltinSchemaCrystal(crystalSchemas.find((schema) => schema.id === 'post')!);

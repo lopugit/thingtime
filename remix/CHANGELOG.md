@@ -109,6 +109,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   private tickable custom instructions, admin base-prompt editing, and shared
   prompt composition across chat, voice, musings and recording analysis.
   Includes isolated local upload/schema acceptance and native voice support.
+  [PR #954 details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
 
 - 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
   editable boundaries, native document edits and bounded contextual fragments.

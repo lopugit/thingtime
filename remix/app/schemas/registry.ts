@@ -1250,7 +1250,9 @@ const dataSchema: ThingtimeSchema = {
 // builder. Field defs are bounded and whitelisted — never arbitrary JSON.
 export const MAX_SCHEMA_NAME_CHARS = 60;
 export const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
-export const MAX_SCHEMA_FIELDS = 40; // total field nodes, counting nested children/items
+// Accommodates the complete root Thing shape plus user extensions while
+// keeping schema trees bounded (nested children/items count toward this cap).
+export const MAX_SCHEMA_FIELDS = 80;
 export const MAX_SCHEMA_ENUM_VALUES = 30;
 export const MAX_SCHEMA_ENUM_VALUE_CHARS = 60;
 export const MAX_SCHEMA_UNIT_CHARS = 20;
@@ -5090,17 +5092,16 @@ export const SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES: ReadonlySet<string> = new Se
 // builtinSchemaProjection.test.ts pins that congruence so registry/grammar
 // drift fails a test instead of seeding an invalid thing.
 //
-// Open 'record' fields become bounded 'json' fields so copies retain program
-// payloads, rich text, render templates and other open structures.
+// Open 'record' and opaque 'object' fields become bounded 'json' fields so
+// copies retain crystals, program payloads, rich text and other open structures.
 // Deliberately dropped names:
 // - reserved top-level names ('schema'/'schemaid' — data's convention field IS
 //   the tagging namespace the reservation protects)
 // - names outside the field grammar (the '*' catch-all)
 // 'id' fields project as 'string' (ids are strings on the wire). Everything
 // else carries through: required, enum values, number min/max, string
-// maxLength / string[] maxItems (registry `max`), object children (recursed —
-// an object whose children ALL project away is dropped, since a childless
-// object can't validate).
+// maxLength / string[] maxItems (registry `max`), object children (recursed).
+// An object without projectable children remains available as bounded JSON.
 const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record<string, unknown> | null => {
   const type = field.type === 'id' ? 'string' : field.type === 'record' ? 'json' : field.type;
   if (!(SCHEMA_FIELD_TYPES as readonly string[]).includes(type)) return null;
@@ -5124,8 +5125,8 @@ const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record
     const children = (field.children || [])
       .map((child) => projectBuiltinField(child, depth + 1))
       .filter((child): child is Record<string, unknown> => child !== null);
-    if (!children.length) return null;
-    out.children = children;
+    if (children.length) out.children = children;
+    else out.type = 'json';
   }
   return out;
 };
