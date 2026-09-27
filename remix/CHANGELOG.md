@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Canonical Thing changes from server Actions and
+  Lopu tools now retain trusted origin and group nested writes through the
+  existing relational Timeline operation links. Concurrent calls stay isolated;
+  partial failures record only committed edits, and browser preparation claims
+  no execution. Shared local/remote record schemas remain unchanged. Complete
+  Action outcomes and ordinary browser execution receipts remain in progress.
+
 - 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
   event and relationship records, durable draft recovery, private relational event/link Things and transactional
   ordinary Thing history. Shared History now previews restores and three-way

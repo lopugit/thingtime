@@ -1537,7 +1537,7 @@ const runNavigate = (ctx: LopuToolContext, callId: string, input: { path: string
 
 // The one entry point the provider loop calls. Validates, executes as the
 // viewer, and never throws.
-export const runLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Promise<LopuToolResult> => {
+const executeLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Promise<LopuToolResult> => {
   if (ctx.readOnly && LOPU_TOOL_DEFINITIONS.find(tool => tool.name === call.name)?.mutates) return { ok: false, error: 'Scheduled updates may read context and produce this chat reply, but cannot perform additional mutations. Ask in an interactive chat to take action.' };
   const validated = validateLopuToolInput(call.name, call.input);
   if (validated.ok === false) return validated;
@@ -1657,6 +1657,11 @@ export const runLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Pro
     console.error(`[lopu] tool ${call.name} threw:`, error?.message || error);
     return { ok: false, error: `${call.name} failed: ${typeof error?.message === 'string' ? error.message.slice(0, 300) : 'unexpected error'}` };
   }
+};
+
+export const runLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Promise<LopuToolResult> => {
+  const { withTimelineMutationContext } = await import('../timeline/mutationContext');
+  return withTimelineMutationContext(ctx.viewer.id, 'ai', () => executeLopuTool(call, ctx));
 };
 
 // Pure helper for prompts/tests: the grammar the tools speak, pulled from code.

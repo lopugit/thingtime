@@ -6,6 +6,7 @@ import { capabilitySatisfies } from '../capabilities/capabilityContract';
 import { actionHttpEndpoint } from '~/schemas/browserActions';
 import type { BrowserActionHost } from '~/components/Actions/browserActionRuntime';
 import { finishBrowserAction, readActionResponse } from '~/components/Actions/actionFlowResult';
+import { withTimelineMutationContext } from '../timeline/mutationContext';
 
 // Server-only authority supplied by the authenticated chat entry point. It is
 // never serialized into a program, provider prompt, tool input or tool result.
@@ -80,7 +81,7 @@ export function createFirstPartyActionHost(actorId: string, options: Options): B
 	};
 }
 
-export async function runFirstPartyAction(viewer: { id: string; username: string }, input: { action: string; inputs: Record<string, unknown> }, options: Options) {
+async function executeFirstPartyAction(viewer: { id: string; username: string }, input: { action: string; inputs: Record<string, unknown> }, options: Options) {
 	options.signal?.throwIfAborted();
 	const user = await options.resolveActor();
 	options.signal?.throwIfAborted();
@@ -96,3 +97,6 @@ export async function runFirstPartyAction(viewer: { id: string; username: string
 	if (prepared.ok === false || prepared.status !== 'prepared') return prepared;
 	return finishBrowserAction(prepared, createFirstPartyActionHost(viewer.id, options));
 }
+
+export const runFirstPartyAction = (...args: Parameters<typeof executeFirstPartyAction>) =>
+	withTimelineMutationContext(args[0].id, 'action', () => executeFirstPartyAction(...args));

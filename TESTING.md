@@ -2,6 +2,14 @@
 
 ## Unified Timeline
 
+- [ ] Run a server Action with nested updates and a delete. History shows
+  Action as the source, a shared operation id, separate events and exact parent
+  versions. Repeat through Lopu: AI remains the initiating source, including
+  server-hosted browser flows. Concurrent requests and subsequent API edits
+  keep their own origin. Client source/actor/operation claims cannot override it.
+  Fail a later step: only committed changes appear. Ask/refused tools and browser
+  preparation create no successful-change event. Operation grouping does not
+  authorize replaying an Action or imply complete Action outcome coverage.
 - [ ] Upgrade an earlier local Timeline cache with pending edits and a released
   draft. Pending work survives; the released draft does not reappear. Revisions
   and links are independent records. Missing links fail visibly without deleting

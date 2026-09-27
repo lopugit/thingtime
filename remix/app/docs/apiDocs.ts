@@ -4696,10 +4696,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.16.0',
-    featureVersion: '1.16.0',
+    contractVersion: '1.16.1',
+    featureVersion: '1.16.1',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Authorized tool writes retain AI provenance in the shared Timeline, including nested Actions and server-hosted browser flows. Each tool invocation groups its committed changes through relational operation links; refusal or an unexecuted step creates no successful-change event. ' +
       'Version 1.16.0 preserves context.page dirty, ready and updatedAt metadata when blocks are omitted. Missing blocks are never an empty page: clean saved pages are resolved through the authorized API; dirty, unknown or still-loading omitted drafts refuse mutation. Continuations preserve these fences. ' +
       'Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
       'Version 1.14.2 corrects packaged Claude runtime availability for server-managed Vercel Workflow replies. It uses the existing shared OAuth credential selection and preserves model settings, tool permissions, cancellation and continuation rules; the public request and event shapes are unchanged. ' +
@@ -12762,13 +12763,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'actions-run',
     // 1.33.0 adds owned ARIA reflection, element relationships and native FrozenArray transport.
-    featureVersion: '1.33.0',
-    contractVersion: '1.33.0',
+    featureVersion: '1.33.1',
+    contractVersion: '1.33.1',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Server-executed Thing writes retain trusted Action provenance and share an operation id across nested steps. AI-initiated Actions retain AI provenance; preparing a browser program records no successful mutation. Client-supplied source/actor/operation fields cannot claim server provenance. ' +
       'ARIA programs edit native nullable properties and owned element relationships, preserve frozen reference-list identity, and compare property assignment with content-attribute reflection. Browser support remains explicit; saved programs contain all inputs, relationships and projections. ' +
       'Layout programs read bounded Window metrics and owned Element, Range, CaretPosition and geometry receivers. Document hit tests exclude runtime nodes; scrollingElement is a metrics-only projection. Scrolling awaits native completion. Saved event bindings support media queries, VisualViewport handlers and exact callback removal. ' +
       'CSSOM programs edit native declarations, stylesheet rules and open shadow-root adopted stylesheets through owned bounded receivers. Asynchronous stylesheet replacement shares the run deadline and Stop fence; computed declarations retain native read-only errors. Examples and edited inputs remain ordinary Component program data. ' +

@@ -106,7 +106,7 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
   if (request.command === 'preview-version') return { ok: true as const, preview: { eventId: source.event.id, thingId: source.event.thingId, mode: request.mode, expectedHeadId: headId, current: snapshot(current), incoming: snapshot(incoming), result: snapshot(merged.value), baseEventId: base?.event.id ?? null, conflicts: merged.conflicts } };
   if (merged.conflicts.length) reject(409, 'Choose which overlapping changes to keep before merging.');
   if (request.mode === 'merge' && headId === source.event.id) reject(409, 'This version is already current.');
-  const capture = { ...newThingMutationCapture(ownerId), id: committedId!, operationId: signature, operation: request.mode, parentIds: [...new Set([headId, source.event.id])], label: request.mode === 'merge' ? 'Merged branch into current version' : 'Restored earlier version' };
+  const capture = { ...newThingMutationCapture(ownerId, 'api'), id: committedId!, operationId: signature, operation: request.mode, parentIds: [...new Set([headId, source.event.id])], label: request.mode === 'merge' ? 'Merged branch into current version' : 'Restored earlier version' };
   const result = await deps.update({ id: ownerId }, source.event.thingId, merged.value as any, { replaceCrystal: true, expectedUpdatedAt: new Date(doc!.updatedAt).toISOString(), timeline: { expectedHeadId: headId, capture } });
   if (result.ok === false) { const completed = await existing(); if (completed) return { ok: true as const, entry: completed }; reject(result.status, result.error); }
   const entry = await existing();
