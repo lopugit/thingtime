@@ -80,7 +80,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     assert.equal(manifest.features[feature]?.version, '1.2.0');
   }
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.4.0');
-	assert.equal(manifest.features['api.actions-run']?.version, '1.31.0');
+	assert.equal(manifest.features['api.actions-run']?.version, '1.32.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.7.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.11.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.15.0');
@@ -405,3 +405,12 @@ test('functional demo capabilities advertise compatible catalog and install cont
   const features = thingtimeCapabilityManifest('https://workspace.test').features;
   assert.equal(features['api.builder-workspaces'].version, '1.0.1');
  });
+
+
+test('native animation programs require compatible playback lifecycle support', () => {
+  for (const manifest of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://animation.test').features).map(([key, value]) => [key, value.version]))]) {
+    assert.equal(manifest['api.actions-run'], '1.32.0');
+  }
+  for (const version of ['1.32.0', '1.32.1', '1.33.0']) assert.equal(capabilitySatisfies(version, '1.32.0'), true);
+  for (const version of ['', '1.31.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.32.0'), false);
+});

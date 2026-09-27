@@ -20,7 +20,7 @@ export function useAccountDraft({
 	const key = `tt-account-draft:${typeof location === 'undefined' ? '' : location.origin}:${actor || 'guest'}:${context}`;
 	const [status, setStatus] = React.useState<DraftSaveState>('idle');
 	const [error, setError] = React.useState('');
-	const scope = React.useMemo(() => ({ active: true, touched: false, restoring: false, baseline: null as string | null }), [key]);
+	const scope = React.useMemo(() => ({ key, active: true, touched: false, restoring: false, baseline: null as string | null }), [key]);
 	const restore = React.useRef(onRestore);
 	restore.current = onRestore;
 	const session = React.useMemo(

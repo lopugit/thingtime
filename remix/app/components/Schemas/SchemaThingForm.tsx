@@ -330,8 +330,9 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
   const user = useCurrentUser();
   const draft = useAccountDraft({ actor: user?.id, surface: 'schema', context: `schema-form:${source.id}`,
     onRestore: saved => setValue(JSON.parse(saved.snapshot).value || {}) });
-  React.useEffect(() => { if (!publishing) draft.capture({ name: `${source.name} draft`.slice(0, 160), surface: 'schema', context: `schema-form:${source.id}`,
-    snapshot: JSON.stringify({ value }), attachmentIds: [] }, Object.keys(value).length > 0); }, [value, source.id, source.name, publishing, draft.capture]);
+  const captureDraft = draft.capture;
+ React.useEffect(() => { if (!publishing) captureDraft({ name: `${source.name} draft`.slice(0, 160), surface: 'schema', context: `schema-form:${source.id}`,
+    snapshot: JSON.stringify({ value }), attachmentIds: [] }, Object.keys(value).length > 0); }, [value, source.id, source.name, publishing, captureDraft]);
 
   const handleChange = React.useCallback((path: string[], next: unknown) => {
     setTouched(true);

@@ -424,9 +424,10 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
 		}
 	});
 	const snapshot = JSON.stringify({ name, description, fields: drafts });
-	React.useEffect(() => {
-		if (!publishing) draft.capture({ name: name || 'Schema draft', surface: 'schema', context, snapshot, attachmentIds: [] }, true);
-	}, [snapshot, publishing, context, draft.capture]);
+	const captureDraft = draft.capture;
+ React.useEffect(() => {
+		if (!publishing) captureDraft({ name: name || 'Schema draft', surface: 'schema', context, snapshot, attachmentIds: [] }, true);
+	}, [snapshot, name, publishing, context, captureDraft]);
 	const compiled = React.useMemo(() => compileDrafts(drafts, 1, ''), [drafts]);
 	const issues = [...compiled.issues];
 	if (!name.trim()) issues.unshift('Give your schema a name');

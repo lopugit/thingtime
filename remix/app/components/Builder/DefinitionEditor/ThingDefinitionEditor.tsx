@@ -27,10 +27,11 @@ function Editor({ id, actor, onClose, onSaved }: React.ComponentProps<typeof Thi
  const draft = useAccountDraft({ actor, surface: 'definition', context: `definition:${id}`,
   onRestore: saved => { const value = JSON.parse(saved.snapshot); if (typeof value.source === 'string') { restored.current = true; setSource(value.source); } }
  });
+ const captureDraft = draft.capture;
  React.useEffect(() => {
-  if (thing && !saving) draft.capture({ name: String(thing.crystal?.name || 'Thing definition').slice(0, 160), surface: 'definition', context: `definition:${id}`,
+  if (thing && !saving) captureDraft({ name: String(thing.crystal?.name || 'Thing definition').slice(0, 160), surface: 'definition', context: `definition:${id}`,
     snapshot: JSON.stringify({ source }), attachmentIds: [] }, true);
- }, [source, thing, saving, draft.capture, id]);
+ }, [source, thing, saving, captureDraft, id]);
  React.useEffect(() => {
   active.current = true;
   let cancelled = false;

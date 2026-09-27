@@ -17,25 +17,26 @@ export const useCommentDraft = (userId: string | null | undefined, targetId: str
       if (typeof restored.text === 'string') { setState({ scope, value: restored.text }); setRestored(true); }
     }
   });
+  const { capture, current, clear: clearDraft } = draft;
   const setValue = React.useCallback((next: string) => {
     setState({ scope, value: next });
-    draft.capture({ name: (next || 'Comment draft').slice(0, 160), surface: 'comment', context: `comment:plain:${targetId}`,
+    capture({ name: (next || 'Comment draft').slice(0, 160), surface: 'comment', context: `comment:plain:${targetId}`,
       snapshot: JSON.stringify({ text: next }), attachmentIds: [] }, !!next, true);
-  }, [scope, targetId, draft.capture]);
+  }, [scope, targetId, capture]);
   React.useEffect(() => {
     if (!userId) return;
     let cancelled = false;
     void localforage.getItem<string>(`tt-draft:${userId}:${targetId}`).then(stored => {
-      if (!cancelled && stored && !draft.current()) setValue(stored);
+      if (!cancelled && stored && !current()) setValue(stored);
     });
     return () => { cancelled = true; };
-  }, [userId, targetId, setValue, draft.current]);
+  }, [userId, targetId, setValue, current]);
   const clear = React.useCallback(async (submitted?: string) => {
     if (submitted !== undefined && live.current.value.trim() !== submitted) return;
     setState({ scope, value: '' });
-    await draft.clear().catch(() => {});
+    await clearDraft().catch(() => {});
     if (userId) void localforage.removeItem(`tt-draft:${userId}:${targetId}`);
-  }, [scope, userId, targetId, draft.clear]);
+  }, [scope, userId, targetId, clearDraft]);
   return { value, setValue, clear, hydrated: restored, flush: draft.flush,
     begin: () => { if (pending.current) return false; pending.current = true; return true; },
     end: () => { pending.current = false; }

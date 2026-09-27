@@ -139,6 +139,11 @@ operations and projections survive ordinary Component serialization; no new
 Thing kind, collection or persistence path is involved. See
 [live and static ranges](../web-standards-builder.md#native-live-and-static-ranges).
 
+`animationFixtures.ts` authors 111 reusable animation programs. Keyframes, timing,
+callbacks and native operations are complete saved Component data; existing
+catalogue/save Actions and private Thing serialization remain canonical. See
+[native animation programs](../web-standards-builder.md#native-web-animation-programs).
+
 ## Account drafts and templates
 
 See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the

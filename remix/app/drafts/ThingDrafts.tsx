@@ -76,6 +76,7 @@ export function ThingDraftsProvider({ children }: { children: React.ReactNode })
 	);
 	React.useEffect(() => {
 		active.current = true;
+    const activeSessions = sessions.current;
 		const subscription = events?.subscribe((event: any) => {
 			if (event?.type !== 'draft-edit' || !user) return;
 			const path = event.path as string[];
@@ -107,7 +108,7 @@ export function ThingDraftsProvider({ children }: { children: React.ReactNode })
 			window.removeEventListener('online', retry);
 			active.current = false;
 			queueMicrotask(() => {
-				if (!active.current) for (const session of sessions.current.values()) session.dispose();
+				if (!active.current) for (const session of activeSessions.values()) session.dispose();
 			});
 		};
 	}, [events, lopu, sessionFor, user]);
