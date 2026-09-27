@@ -7331,6 +7331,13 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] Large Lopu reads: inspect a component with a deeply nested form, more
+      than 60 children and long text. Default `get_thing` explains omissions;
+      `path` + `offset` reads every JSON page exactly. Verify escaped pointer
+      keys, a missing path, changed revisions and access revoked between pages.
+      A rejected workspace category lists the exact case-sensitive choices;
+      correcting it succeeds without speculative writes to discover an enum.
+
 - [ ] Chat Action access: new/legacy chats start in Ask. Confirming runs exactly
       the proposed Action/tool; Full runs without cards and persists on reload
       only for that chat. Check desktop and 390px composer/settings, switch
