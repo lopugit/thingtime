@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: Named Timeline branches can open their exact
+  historical content in the shared field editor. Device-first drafts survive
+  reload, resume offline, and push through the existing revision-fenced queue;
+  stale or divergent edits stay in History. Published Things are unchanged.
+  Added private bounded checkout in `api.timeline` 1.8.0, API regressions and
+  desktop/mobile acceptance. Visual Builder branch switching remains open.
+
 - 2026-09-28 — **Codex (AI)**: Named Timeline branches can review and merge a
   selected version with explicit conflict choices. Merges use the existing
   canonical local/remote event and branch queues, survive offline reload and

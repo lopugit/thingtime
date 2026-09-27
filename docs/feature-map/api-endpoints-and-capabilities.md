@@ -299,3 +299,9 @@ canonical draft merge event, then queues ordinary `advance-branch`. No new
 endpoint, storage schema or collection is introduced. Both manifests assert
 1.7.0 and `useApi.v1.timeline.branchMerge` negotiates it. Run `test:timeline` and
 `test:timeline:branch-merge`; see the named-branch section of Unified Timeline.
+
+
+Timeline 1.8.0 adds read-only `checkout-branch` on the registered Timeline route.
+The exact branch revision and head are required. A transient materialized snapshot
+accompanies the unchanged canonical entry; ordinary client events and branch
+commands remain the only branch-edit writes. See the Unified Timeline contract.

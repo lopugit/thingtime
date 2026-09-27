@@ -68,6 +68,9 @@ export class TimelineSync {
 			await this.store.accept([entry]);
 			this.assertActive();
 			await this.branchStore!.accept([branch], command.operationId);
+			// An acknowledged named head is saved work, including retries after reload.
+			// Release only that exact draft; a newer editor pin must survive.
+			await this.store.releaseDraft(command.eventId);
 			accepted++;
 		}
 		if (branchFailure) throw new TimelineBranchCommandRefusal('A branch push needs attention. Its selected version remains in History.');
