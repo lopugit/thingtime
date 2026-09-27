@@ -75,6 +75,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   unchanged. Shared version reconstruction retains folder moves through later
   drafts. Added real API and desktop/mobile offline acceptance; `api.timeline`
   advances to 1.7.0. Direct branch checkout/editing remains in progress.
+  Details: [PR #974](../PRs/974-timeline-branch-merge-review-and-merge-versions-into-named-timeline-branches.md).
 
 - 2026-09-28 — **Codex (AI)**: Fixed a Timeline null-connection crash on
   signed-out pages and sign-out transitions. Require a viewer and connection
