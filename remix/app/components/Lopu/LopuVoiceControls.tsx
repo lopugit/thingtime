@@ -152,6 +152,8 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const [busy, setBusy] = React.useState<'thinking' | 'speaking' | null>(null);
 	const [interim, setInterim] = React.useState('');
 	const [items, setItems] = React.useState<LopuVoiceItem[]>([]);
+	// Recognition failures describe the current capture, not conversation history.
+	const [recognitionError, setRecognitionError] = React.useState<LopuVoiceItem | null>(null);
 	const [nativeReady, setNativeReady] = React.useState(false);
 	const [webSupported, setWebSupported] = React.useState(false);
 	const captureOwner = React.useSyncExternalStore(subscribeLopuStore, () => getLopuStoreSnapshot().userId, () => null);
@@ -354,7 +356,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			activeRef.current = false;
 			setActive(false);
 			setInterim('');
-			pushItem({ role: 'assistant', text: typeof event.message === 'string' ? event.message : `Voice input unavailable${code ? ` (${code})` : ''}. Try again or type to Lopu.`, error: true });
+			setRecognitionError({ id: newId('voice-error'), at: Date.now(), role: 'assistant', text: typeof event.message === 'string' ? event.message : `Voice input unavailable${code ? ` (${code})` : ''}. Try again or type to Lopu.`, error: true });
 		};
 		recognition.onend = () => {
 			if (recognitionRef.current !== recognition) return;
@@ -375,7 +377,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			return false;
 		}
 		return true;
-	}, [pushItem, stopRecognition]);
+	}, [stopRecognition]);
 	startRecognitionRef.current = startRecognition;
 
 	// ——— turns ——————————————————————————————————————————————————————————————
@@ -726,6 +728,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 
 	const start = React.useCallback(() => {
 		if (activeRef.current) return;
+		setRecognitionError(null);
 		const current = optionsRef.current;
 		const wantsDirect = current.directVoice === true && !current.transcribe;
 		const bridge = getNativeBridge();
@@ -816,7 +819,10 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		abortLopuTurn();
 	}, [cancelSpeech]);
 
-	const clearItems = React.useCallback(() => setItems([]), []);
+	const clearItems = React.useCallback(() => {
+		setItems([]);
+		setRecognitionError(null);
+	}, []);
 	const previousConversation = React.useRef({ ownerId: captureOwner, chatId: options.chatId ?? null });
 	React.useEffect(() => {
 		const previous = previousConversation.current;
@@ -824,13 +830,14 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		previousConversation.current = { ownerId: captureOwner, chatId };
 		const ownerChanged = previous.ownerId !== captureOwner;
 		const chatChanged = previous.chatId !== chatId;
+		if (ownerChanged || chatChanged) setRecognitionError(null);
 		// The first successful capture assigns a canonical ID to the current
 		// new chat. That is not a user switching to another conversation.
 		const assignedCurrentVoiceChat = previous.chatId === null && chatId !== null && (!directChatRef.current || directChatRef.current.chatId === chatId);
 		if (ownerChanged || (chatChanged && !assignedCurrentVoiceChat)) {
-			stop(); setItems([]); directChatRef.current = null;
+			stop(); clearItems(); directChatRef.current = null;
 		}
-	}, [captureOwner, options.chatId, stop]);
+	}, [captureOwner, options.chatId, stop, clearItems]);
 
 	// leaving the surface ends the session: microphone, speech, native audio,
 	// the realtime socket
@@ -854,7 +861,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		direct,
 		phase: busy ?? (active ? 'listening' : 'idle'),
 		interim,
-		items,
+		items: recognitionError ? [...items, recognitionError] : items,
 		sessionId: sessionIdRef.current,
 		start,
 		stop,
