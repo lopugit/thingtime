@@ -75,6 +75,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   repeated polling. Reply capability 1.19.2.
   [PR #969 details](../PRs/969-lopu-checkpoint-tool-results-preserve-completed-tool-results-when-lopu-resumes.md).
 
+- 2026-09-27 — **Codex (AI)**: Timeline quota acceptance uses synthetic accounts
+  and the normal admin API on a guarded disposable replica. At the exact limit,
+  reads, folder organization and deletion retain history; refused edits/restores
+  leave content, events and accounting untouched. Below-usage downgrades remain
+  refused. Storage errors now explain that retained history uses space instead
+  of promising deletion will free it. Fork-safe test setup is in README.
+
 - 2026-09-27 — **Codex (AI)**: Things display-name edits for themes, algorithms,
   emoji and chat archives now appear in shared History. Strict title-only
   snapshots preserve protected payloads; content, quota and history commit
