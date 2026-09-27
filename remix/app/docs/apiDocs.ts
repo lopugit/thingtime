@@ -12746,9 +12746,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    // 1.31.0 adds owned live/static ranges and bounded native contextual fragments.
-    featureVersion: '1.31.0',
-    contractVersion: '1.31.0',
+    // 1.32.0 adds owned native animation objects, keyframes, playback promises and callbacks.
+    featureVersion: '1.32.0',
+    contractVersion: '1.32.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
