@@ -30,8 +30,13 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
   `thingsScope`.
 - Folder listing (`listThings({ folder })`) is owner-only; `FOLDER_UNFILEABLE`
   kinds (reactions, saves, votes, updowns) live under their target.
-- Deleting a folder re-parents its contents to the folder's parent; deleting a
-  post cascades its attachments through `prepareAttachmentCascadeForThing`.
+- Deleting a folder drains direct children to its parent in bounded transactions
+  before removing the folder. Each child move and its Timeline event commit
+  together; subfolder descendants stay nested. `things/folderPlacement.ts` writes
+  private ancestor fences shared by canonical, managed and archive placements,
+  preventing deleted destinations and concurrent folder cycles. Protected library
+  moves use a metadata-only history adapter. Deleting a post cascades its
+  attachments through `prepareAttachmentCascadeForThing`.
 
 ## `/things` page (Drive surface)
 

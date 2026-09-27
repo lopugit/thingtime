@@ -2,6 +2,22 @@
 
 ## Unified Timeline
 
+- [ ] Delete a folder with more than 100 children and a nested subfolder.
+  Direct children move to its parent, descendants stay under their subfolder,
+  and every moved item has exactly one relational event in the deletion's
+  operation. Race deletion against creates and moves; no successful write may
+  retain the deleted folder id. Race two moves through four folders: at most
+  one succeeds if both would create a cycle. Interrupted drains keep the root
+  and return an actionable retry, never a false deletion success.
+- [ ] Move an ordinary Thing repeatedly without editing its content. Compact
+  history reconstructs the exact saved content through those moves; restoration
+  never borrows a later edit. A deleted destination refuses without a success
+  event. Restoring in the Thing page updates its visible value without a reload,
+  keeps later versions, and is usable on desktop and at 375px.
+- [ ] Move a protected library item directly and through folder deletion.
+  History contains only folder ids, never file keys, archive messages or private
+  crystal fields; generic content restore is unavailable. Destinations and all
+  ancestors use the same ownership and transaction fences.
 - [ ] Run a server Action with nested updates and a delete. History shows
   Action as the source, a shared operation id, separate events and exact parent
   versions. Repeat through Lopu: AI remains the initiating source, including

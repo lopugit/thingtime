@@ -298,6 +298,14 @@ function GenericThingPage() {
 		[cacheKey, diagnosticRoute, id]
 	);
 	const [loadState, setLoadState] = React.useState<ThingLoadState>(() => seedState(requestKey));
+	const [historyRefresh, setHistoryRefresh] = React.useState(0);
+	React.useEffect(() => {
+		const applied = (event: Event) => {
+			if ((event as CustomEvent).detail?.thingId === id) setHistoryRefresh(value => value + 1);
+		};
+		window.addEventListener('thingtime:timeline-applied', applied);
+		return () => window.removeEventListener('thingtime:timeline-applied', applied);
+	}, [id]);
 	// Both representations are useful on a permalink: the preview is the
 	// human-facing surface, while the full JSON remains available for people
 	// inspecting a Thing's exact shape. They are independent so either one (or
@@ -316,7 +324,10 @@ function GenericThingPage() {
 
 	React.useEffect(() => {
 		const controller = new AbortController();
-		setLoadState(seedState(requestKey));
+		// Restore/merge refetches in place. Keep the last projection visible,
+		// including large Things that intentionally exceed the local cache cap.
+		setLoadState(current => current.key === requestKey && current.data
+			? { ...current, loading: true, error: null } : seedState(requestKey));
 
 		if (diagnosticRoute && !currentUser?.isAdmin) {
 			setLoadState({
@@ -368,7 +379,7 @@ function GenericThingPage() {
 			});
 
 		return () => controller.abort();
-	}, [cacheKey, currentUser?.isAdmin, diagnosticRoute, id, linkKey, loadDiagnostic, loadThing, requestKey, seedState]);
+	}, [cacheKey, currentUser?.isAdmin, diagnosticRoute, historyRefresh, id, linkKey, loadDiagnostic, loadThing, requestKey, seedState]);
 
 	const diagnostic = visibleState.data?.kind === 'diagnostic' ? visibleState.data.diagnostic : null;
 	const thing = visibleState.data?.kind === 'thing' ? visibleState.data.thing : null;
