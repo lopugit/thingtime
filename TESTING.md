@@ -972,8 +972,15 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] Desktop speech bridge 1.1.0 requests continuous capture only for the
+      message composer, so the native 1.5-second utterance cutoff cannot preempt
+      its configurable silence window. Private-page Transcribe and older bridge
+      clients retain the utterance boundary. Reject non-boolean continuous-mode
+      requests before spawning a helper; 1.0.0 clients remain supported.
+
 - [ ] Standard Mac/browser dictation writes partial and final words directly
-      into Message Lopu, with no separate transcript preview or automatic send.
+      into Message Lopu, with no separate transcript preview. Enable Hear me out
+      while checking draft-only interactions.
       Begin with typed text; stop mid-phrase, edit, resume, and switch Chat ↔ Voice:
       preserve the draft and append new speech without repeating revised words.
       A recognizer restart/failure retains the draft. Typing and explicit Send
@@ -983,10 +990,29 @@ is fixed, and cite the checklist you ran in the PR description.
       Run `scripts/lopu-dictation.browser.html`
       in page/compact layouts at desktop and 390px, then verify real speech in
       the signed installed Mac app. Private-page Transcribe and Direct voice
-      keep their existing dedicated flows.
+      keep their existing dedicated flows when Hear me out is off.
+- [ ] Dictation defaults to five seconds of silence before sending the entire
+      current draft once and stopping the microphone. Speech during the delay
+      resets it; final/restarted recognizers do not duplicate text or extend a
+      silent deadline. Settings → Lopu → Voice transcription and the voice gear
+      share a persistent custom 1–120 second delay (default 5); check reload,
+      empty/invalid/extreme inputs, decimals, and cross-tab preference sync.
+- [ ] Chat settings → Hear me out never auto-sends. After ten seconds of silence
+      with words in the draft, one “Send now?” popup appears while listening
+      continues. Keep listening/Escape dismiss it; another ten seconds asks
+      again. New speech dismisses and resets it. Send now sends the latest whole
+      draft exactly once; rejection restores it. Stop, typing, chat/account/mode
+      changes, lock and unmount cancel pending prompts/sends. Empty captures do
+      neither. While Lopu is replying, silence/Send now use the ordinary message
+      queue; later delivery must not replace a newer unsent draft. Test standard and compact layouts at desktop and 390px, including
+      keyboard focus, scrolling the voice settings, and popup overlap. Enabling
+      Hear me out overrides Direct voice/Transcribe; an already active native
+      iOS recording stops and cannot restart in this unsupported mode.
+      Run both regressions in `scripts/lopu-dictation.browser.html` separately.
 - [ ] On Mac, listen silently across at least two native no-input retry cycles
       (15 seconds), then speak: silence must not show a red service error or
-      send a message; the phrase fills the draft and explicit Send sends once. Stop ends
+      send a message; the phrase fills the draft and the selected silence policy
+      sends once or asks. Stop ends
       capture/retries. An interrupted helper still reports a real error, and
       retry clears it without removing conversation messages.
 - [ ] After a microphone permission or recognition failure, retry voice input:

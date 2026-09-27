@@ -5,17 +5,17 @@ const { PassThrough } = require('node:stream');
 const test = require('node:test');
 const { DesktopSpeechRecognition, requireSpeechSender } = require('../lib/speech-recognition.cjs');
 
-function fixture() {
+function fixture(continuous = false) {
 	const children = [], events = [];
 	const speech = new DesktopSpeechRecognition({ executable: '/bundled/ThingtimeSpeech', spawnProcess: (file, args, options) => {
 		assert.equal(file, '/bundled/ThingtimeSpeech');
-		assert.deepEqual(args, ['en-AU']);
+		assert.deepEqual(args, continuous ? ['en-AU', 'continuous'] : ['en-AU']);
 		assert.equal(options.shell, undefined);
 		assert.deepEqual(Object.keys(options.env).sort(), ['HOME', 'LANG', 'PATH', 'TMPDIR']);
 		const child = new EventEmitter(); child.stdout = new PassThrough(); child.stdin = new PassThrough();
 		child.kill = () => { child.killed = true; }; children.push(child); return child;
 	} });
-	const start = (sessionId = 'session-1') => speech.start({ sessionId, lang: 'en-AU' }, value => events.push(value));
+	const start = (sessionId = 'session-1') => speech.start({ sessionId, lang: 'en-AU', ...(continuous ? { continuous } : {}) }, value => events.push(value));
 	return { speech, children, events, start };
 }
 
@@ -59,4 +59,12 @@ test('invalid language and session cannot spawn a helper', () => {
 	const f = fixture();
 	for (const request of [{ sessionId: '../bad', lang: 'en-US' }, { sessionId: 'valid', lang: '--file=/etc/passwd' }, null]) assert.throws(() => f.speech.start(request, () => {}));
 	assert.equal(f.children.length, 0);
+});
+
+
+test('continuous dictation is an explicit bounded mode, not a native silence cutoff', () => {
+    const f = fixture(true); f.start(); assert.equal(f.children.length, 1); f.speech.stop();
+    const invalid = fixture();
+    assert.throws(() => invalid.speech.start({ sessionId: 'valid', lang: 'en-AU', continuous: 'continuous' }, () => {}));
+    assert.equal(invalid.children.length, 0);
 });
