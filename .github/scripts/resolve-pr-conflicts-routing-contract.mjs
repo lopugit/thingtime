@@ -1811,8 +1811,12 @@ function assertAdminLoader(block, label) {
   // "Use only the configured model order; never invent a default attempt." An
   // unavailable, malformed or unmappable waterfall must run no model at all.
   // This used to assert the opposite — that the removed `. + ["default"]` hard
-  // fallback was still present — so it threw on every run and aborted the rest
-  // of `assertWorkflowSource`, silently skipping every later assertion.
+  // fallback was still present — so it threw on every run, on the FIRST of the
+  // two loader calls (`merge resolver`). `assertAdminModelRouting` is the last
+  // call in `assertWorkflowSource`, which is in turn the last call in
+  // `selfTest`, so the throw was invisible in the summary while silently
+  // skipping the 60 assertions after it: the entire `rebase resolver` loader
+  // check and the whole remainder of `assertAdminModelRouting`.
   assert.match(block, /no model will run/u, `${label}: fails closed with no invented default`);
   assert.ok(
     !block.includes('. + ["default"]'),
