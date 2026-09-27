@@ -1,3 +1,4 @@
+import { speechRecognitionCtor } from './desktopSpeechRecognition';
 import { aiTaskFetch } from './aiTasks.client';
 import React from 'react';
 import { Box, Button, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
@@ -129,7 +130,7 @@ const RECOGNITION_RESTART_MS = 250;
 
 const speechLang = () => (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
 
-const webRecognitionCtor = () => (typeof window === 'undefined' ? null : window.SpeechRecognition || window.webkitSpeechRecognition || null);
+const webRecognitionCtor = speechRecognitionCtor;
 
 // the reply text the surface hands back should never be read aloud when it
 // carries nothing but whitespace
@@ -332,7 +333,10 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		recognition.continuous = true;
 		recognition.interimResults = true;
 		recognition.lang = speechLang();
+		const recognitionOwner = getLopuStoreSnapshot().userId;
+		const recognitionChat = optionsRef.current.chatId ?? null;
 		recognition.onresult = (event: any) => {
+			if (recognitionRef.current !== recognition || !activeRef.current || recognitionOwner !== getLopuStoreSnapshot().userId || recognitionChat !== (optionsRef.current.chatId ?? null)) return;
 			let preview = '';
 			for (let index = event.resultIndex; index < event.results.length; index += 1) {
 				const text = event.results[index]?.[0]?.transcript || '';
@@ -342,14 +346,15 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			setInterim(preview);
 		};
 		recognition.onerror = (event: any) => {
+			if (recognitionRef.current !== recognition) return;
 			const code = typeof event?.error === 'string' ? event.error : '';
 			// silence and transient hiccups: onend restarts the session
 			if (code === 'aborted' || code === 'no-speech') return;
-			recognitionRef.current = null;
+			stopRecognition();
 			activeRef.current = false;
 			setActive(false);
 			setInterim('');
-			pushItem({ role: 'assistant', text: `Microphone unavailable${code ? ` (${code})` : ''}. Type to Lopu instead.`, error: true });
+			pushItem({ role: 'assistant', text: typeof event.message === 'string' ? event.message : `Voice input unavailable${code ? ` (${code})` : ''}. Try again or type to Lopu.`, error: true });
 		};
 		recognition.onend = () => {
 			if (recognitionRef.current !== recognition) return;
@@ -370,7 +375,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			return false;
 		}
 		return true;
-	}, [pushItem]);
+	}, [pushItem, stopRecognition]);
 	startRecognitionRef.current = startRecognition;
 
 	// ——— turns ——————————————————————————————————————————————————————————————
@@ -709,7 +714,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		if (!startRecognition()) {
 			lopu({
 				title: 'No microphone here 🎙️',
-				description: 'This browser does not offer speech recognition — type to Lopu below, or use the Thingtime iOS app.',
+				description: 'Speech recognition is unavailable here. If you are using Thingtime for Mac, install the latest app update, then try again. You can also type to Lopu.',
 				status: 'info',
 				duration: 8000
 			});
