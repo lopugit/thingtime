@@ -55,6 +55,10 @@ export const domConstruct = (key: string, args: unknown[] = []) => awaited({ op:
 export const domSurface = () => awaited({ op: 'dom', action: 'surface' });
 /** Register an authored worker function for a bounded asynchronous native callback. */
 export const domCallback = (value: unknown) => ({ op: 'dom-callback', value });
+/** A synchronous callback object (named hook) or callable function. Definition
+ * and explicit captured bindings are ordinary saved data, never native source. */
+export const domSyncCallback = (key: string, definition: unknown, bindings: unknown = object({})) =>
+	awaited({ op: 'dom', action: 'callback', key, args: [definition, bindings] });
 export const domGlobal = (namespace: string, key: string) => awaited({ op: 'dom', action: 'global', target: namespace, key });
 
 /** Read a registered primitive Web IDL constant without exposing a constructor. */

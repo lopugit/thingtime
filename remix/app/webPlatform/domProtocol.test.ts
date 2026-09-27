@@ -68,6 +68,25 @@ test('native DOM exceptions remain catchable while unsupported members stay expl
 	assert.deepEqual(missing.results, [{ ok: false, result: { status: 'unsupported', message: 'Missing moveBefore' } }]);
 });
 
+test('synchronous callback throws retain falsy data and nested receiver identity', async () => {
+	for (const thrown of [undefined, null, false, 0, '', { reason: 'filtered' }]) {
+		const result = await run([{ op: 'try', body: returns(domDocument()), error: 'caught', catch: returns(variable('caught')) }], () => ({
+			error: { name: 'AuthoredCallbackThrown', message: 'callback', thrown }
+		}));
+		assert.deepEqual(result.results, [{ ok: true, result: thrown === undefined ? '[undefined]' : thrown }]);
+	}
+	const handle = { $dom: 'run:node', type: 'Element' };
+	const result = await run(
+		[
+			declare('node', domDocument()),
+			declare('bindings', domGet(variable('node'), 'bindings')),
+			...returns({ op: 'binary', operator: '===', left: variable('node'), right: get(variable('bindings'), 'node') })
+		],
+		(request) => ({ value: request.action === 'document' ? handle : { node: handle } })
+	);
+	assert.deepEqual(result.results, [{ ok: true, result: true }]);
+});
+
 test('DOM syntax never interpolates member source and reserves its backing helper', () => {
 	for (const value of [
 		{ op: 'dom', action: 'eval' },

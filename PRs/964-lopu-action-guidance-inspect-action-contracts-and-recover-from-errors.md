@@ -32,13 +32,14 @@ The additive chat reply capability is `api.lopu-chats-reply` **1.19.0**.
 
 ## Validation
 
-- `test:lopu`: 180 TypeScript and 155 module-mock tests passed.
+- `test:lopu`: 180 TypeScript and 157 module-mock tests passed.
 - `test:lopu-chat-streaming`: 55 passed, including provider tool advertisement
   and complete enum contract transport.
 - `test:actions`: 156 passed; the existing opt-in fork integration test skipped.
 - `test:schemas`: 261 passed, including saved descriptor sanitization, exact
   canonical choices/bounds, leading-zero serials and optional empty controls.
-- `test:api-capabilities`: 90 passed across both manifests.
+- `test:lopu-ui`: 232 passed.
+- `test:api-capabilities`: 91 passed across both manifests.
 - Production-shaped `npm --prefix remix run build` and focused ESLint passed.
 - Raw TypeScript checking is tracked separately from the repository's existing
   baseline; required CI performs the combined-tree typecheck ratchet.
@@ -54,3 +55,15 @@ The additive chat reply capability is `api.lopu-chats-reply` **1.19.0**.
 Graph maintenance uses the repository Graphify wrapper and coherent snapshot
 pair. Structural freshness is checked against the final source fingerprint;
 semantic extraction availability is separate from code/test verification.
+
+
+## Integration follow-up
+
+Main's Timeline provenance and Web Standards traversal changes were incorporated
+before final verification. Their contracts and tests are preserved. The first
+full CI run found a page-context UI test pinned to the previous reply version.
+It now checks agreement between the two manifests and the actual compatible
+page-context minimum, while the canonical manifest tests continue to verify the
+exact current version. This keeps unrelated additive chat capabilities from
+breaking a page-context compatibility assertion. The UI and manifest suites
+were rerun successfully after the fix.

@@ -12789,13 +12789,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
-    featureVersion: '1.34.1',
-    contractVersion: '1.34.1',
+    // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
+    featureVersion: '1.35.0',
+    contractVersion: '1.35.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Traversal programs expose native TreeWalker, NodeIterator and NodeFilter behavior on owned detached trees. Generic synchronous callback objects or functions execute bounded data definitions with explicit bindings through the existing DOM policy, preserving native callback identity, pointer/removal semantics, reentrancy and thrown data. Source evaluation and asynchronous callbacks are not used for synchronous filters. ' +
       'Server-executed Thing writes retain trusted Action provenance and share an operation id across nested steps. AI-initiated Actions retain AI provenance; preparing a browser program records no successful mutation. Client-supplied source/actor/operation fields cannot claim server provenance. ' +
       'XPath programs reuse owned detached documents, compiled expressions, native result types and Node or data-backed namespace resolvers. Synchronous work is bounded by expression and actual tree complexity; scalar queries cannot inspect the surrounding runtime. Native node identity, snapshot and iterator semantics are preserved. ' +
       'ARIA programs edit native nullable properties and owned element relationships, preserve frozen reference-list identity, and compare property assignment with content-attribute reflection. Browser support remains explicit; saved programs contain all inputs, relationships and projections. ' +

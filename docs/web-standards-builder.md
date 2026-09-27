@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 4,873 have interactive recipes (302 HTML, 1,196 CSS, 890
-JavaScript and 2,485 Web API entries); the rest are
+editable program. 4,914 have interactive recipes (302 HTML, 1,196 CSS, 890
+JavaScript and 2,526 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -72,7 +72,9 @@ bounded data compiler, with no raw-source escape or eval, and runs in a worker
 terminated after two seconds of execution. Worker startup is separately bounded
 at ten seconds, so process startup cannot consume the execution allowance.
 Regexps execute there; native input patterns are
-excluded because main-thread validation cannot be terminated. DOM methods have
+excluded because main-thread validation cannot be terminated. Synchronous native
+callbacks use the bounded data interpreter described below; they do not execute
+compiled source on the frame thread. DOM methods have
 an explicit allowlist and event budget. CSS/document changes remain local to the
 frame. This runtime intentionally cannot demonstrate APIs needing permissions
 it has not been granted.
@@ -947,3 +949,54 @@ checked on 27 September 2026 (standard last updated 24 September). DOM's XPath
 algorithms remain incompletely specified; browser behavior is exposed rather
 than emulated. For example, the tested Chromium maps an unknown unsigned-short
 result type to its ANY_TYPE behavior.
+
+## Native traversal and synchronous callback programs
+
+Forty-one entries cover `TreeWalker`, `NodeIterator`, `NodeFilter` and both
+Document factories. Saved Component data includes the authored tree, roots,
+starting nodes, mask, filter definition, explicit callback bindings and result
+projections. The native engine supplies traversal order, skip versus reject,
+iterator pointer reversal/removal adjustment, `detach()` compatibility behavior,
+filter identity and recursive-filter `InvalidStateError`. Legacy node masks
+can produce an empty result in an HTML tree; no retired node type is fabricated.
+
+The generic `dom` action `callback` takes `[definition, bindings]`. Its `key`
+is a callback hook name (for example `acceptNode` or `lookupNamespaceURI`), or
+`function` to create a callable. `definition` uses existing expression/statement
+nodes: primitive literals, variables and input bindings; own data reads; arrays
+and records; conditional, binary and unary expressions; selected bounded string
+and array methods; registered synchronous DOM get/set/call/constant operations;
+local let/const bindings, assignment, blocks, if, while, for-of, try/catch/finally,
+throw, return, break and continue. Arrow `function` definitions have lexical
+undefined `this`; anonymous `function-expression` definitions receive the native
+callback receiver under strict semantics. Destructuring, nested functions,
+generators, async operations, globals, arbitrary source and prototype access are
+outside this synchronous subset. The ordinary worker language remains separate
+and terminable; it is not silently substituted for a synchronous callback.
+
+`input` reads the callback's explicit captured bindings. The callback handle's
+`bindings` property can replace those run-local inputs, including owned handles;
+this lets a saved program compose a traverser and its filter without serializing
+live browser objects. Reading the property returns a bounded snapshot. Native
+callback identity and nested handle identity survive the worker transport.
+Thrown callback data (including null, false, zero and empty text) remains
+catchable as data. Native errors preserve their name. XPath namespace resolution
+can reuse the same callback mechanism as well as its existing prefix maps.
+
+Callbacks have 16 registrations per run, 256 definition nodes, depth 16,
+2,048 evaluation steps per invocation, 32,768 aggregate steps, 512 invocations
+per definition, call depth 8, strings of 4,096 characters and collections of
+64 items. Copying callback data spends bounded work and admits at most 1,024
+nodes / 65,536 text characters, including property names. Traversal inspects its owned detached tree
+before native execution, with a 128-node limit. Existing DOM handle/request,
+mutation and ownership checks apply to callback DOM operations too. These are
+runtime limits, not limits in the standards.
+
+Actions negotiate `api.actions-run` 1.35.0 on both manifests and through the
+existing client. No new Component renderer, Thing kind or storage endpoint is
+introduced. The manual acceptance checklist covers changing the filter's logic,
+saving/reloading the complete Component and reusing it on another Builder page.
+
+Sources: [DOM traversal](https://dom.spec.whatwg.org/#traversal) and
+[Web IDL callback invocation](https://webidl.spec.whatwg.org/#call-a-user-objects-operation),
+checked 27 September 2026 (updated 24 and 23 September respectively).
