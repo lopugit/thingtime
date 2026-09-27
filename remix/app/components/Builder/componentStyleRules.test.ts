@@ -52,6 +52,18 @@ test('style rules reject scope escape, resource loads, injection and viewport po
 		componentStyleRules([{ selector: '.a"', declarations: { color: 'red' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
 		'\n:where([data-tt-style="safe"]) .b{color:green}'
 	);
+	// A newline ends a CSS string even when its closing quote arrives, so a
+	// balanced-looking `[title="a\nb"]` breaks the stylesheet exactly like the
+	// unterminated `[title="a`: Chrome drops this rule and the next one with it.
+	for (const selector of ['[title="a\nb"]', "[title='a\nb']", '[title="a\rb"]', '[title="a\fb"]', '.a"\n"'])
+		assert.equal(componentStyleRules(rule(selector, { color: 'red' }), 'safe'), '');
+	assert.equal(
+		componentStyleRules(
+			[{ selector: '[title="a\nb"]', declarations: { color: 'red' } }, { selector: '.b', declarations: { color: 'green' } }],
+			'safe'
+		),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
 	// A delimiter inside a terminated string is data rather than structure, so it
 	// neither opens a block nor unbalances the selector around it.
 	assert.equal(componentStyleRules(rule('[title="]"]', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) [title="]"]{color:red}');
@@ -77,6 +89,18 @@ test('style rules reject scope escape, resource loads, injection and viewport po
 	assert.equal(
 		componentStyleRules([{ selector: '.a', declarations: { color: 'red/*' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
 		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// A declaration value left holding an open string consumes the closing `}` and
+	// hides the rules authored after it just like a comment delimiter.
+	for (const value of ['"', "'", 'a"b', '"a\nb"', "'a\rb'"]) assert.equal(componentStyleRules(rule('.x', { content: value }), 'safe'), '');
+	assert.equal(
+		componentStyleRules([{ selector: '.a', declarations: { content: '"' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// Balanced quotes stay legal: `content` and `font-family` need them.
+	assert.match(
+		componentStyleRules(rule('.x', { content: '"→"', 'font-family': '"Helvetica Neue", serif' }), 'safe'),
+		/content:"→";font-family:"Helvetica Neue", serif/
 	);
 	assert.match(componentStyleRules(rule('.x', { font: '12px/1.5 serif', 'aspect-ratio': '16 / 9' }), 'safe'), /font:12px\/1\.5 serif;aspect-ratio:16 \/ 9/);
 	assert.equal(componentStyleRules(rule('.x', { position: 'fixed', 'z-index': '99999' }), 'safe'), '');

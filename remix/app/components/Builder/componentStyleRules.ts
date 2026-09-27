@@ -1,16 +1,33 @@
 export type ComponentStyleRule = { selector: string; declarations: Record<string, string>; maxWidth?: number };
 
+// A CSS string ends at a newline whether or not its closing quote ever arrives,
+// so `[title="a` and `[title="a<newline>b"]` are both broken the same way even
+// though only the first looks unterminated. Either one leaves the enclosing
+// block open, which swallows this rule's body and every later rule in the same
+// instance stylesheet the way `/*` would, so both are rejected rather than
+// emitted. No escape handling is needed because `\` is rejected for selectors by
+// the character class below and for declaration values by their own check.
+function closesEveryString(text: string): boolean {
+	let quote = '';
+	for (const char of text) {
+		if (!quote) {
+			if (char === '"' || char === "'") quote = char;
+		} else if (char === '\n' || char === '\r' || char === '\f') return false;
+		else if (char === quote) quote = '';
+	}
+	return !quote;
+}
+
 // Only a comma outside `()`, `[]` and a quoted string separates the selector
 // list, so the comma in `:is(.a, .b)` or `[title="a,b"]` stays with its own
 // compound instead of being prefixed twice. An unbalanced delimiter is rejected
-// rather than emitted: the CSS parser consumes `(` and `[` as blocks and runs a
-// string to the end of the line, so `.a(` or `.a"` would swallow this rule's
-// body and every later rule in the same instance stylesheet the way `/*` would.
-// A quoted `]` is only data, so tracking the quote keeps `[title="]"]` legal
-// while still rejecting the unterminated `[title="]`. No escape handling is
-// needed because `\` is outside the selector character class checked below, so
-// any selector carrying one is rejected whichever part it lands in.
+// rather than emitted: the CSS parser consumes `(` and `[` as blocks, so `.a(`
+// would swallow this rule's body and every later rule the way `/*` would. A
+// quoted `]` is only data, so tracking the quote keeps `[title="]"]` legal while
+// still rejecting the unterminated `[title="]`. That quote tracking is only
+// sound once every string is known to close, so the string scan runs first.
 function topLevelSelectors(selector: string): string[] | null {
+	if (!closesEveryString(selector)) return null;
 	const closers: string[] = [];
 	const parts: string[] = [];
 	let quote = '';
@@ -63,6 +80,11 @@ export function componentStyleRules(value: unknown, scope: string): string {
 					// comment delimiter would run past this declaration and silently
 					// swallow every later rule in the same instance stylesheet.
 					if (/\/\*|\*\//.test(value)) return [];
+					// A quoted value stays legal for `content` and `font-family`, but a
+					// string left open by a missing quote or an embedded newline runs past
+					// this declaration and consumes the closing `}`, which swallows every
+					// later rule in the same instance stylesheet exactly like `/*`.
+					if (!closesEveryString(value)) return [];
 					// Match the renderer's containment boundary. Untrusted CSS cannot
 					// place a viewport overlay over the surrounding Thingtime controls.
 					if (key === 'position' && !/^(static|relative)(\s*!important)?$/i.test(value.trim())) return [];
