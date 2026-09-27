@@ -88,7 +88,7 @@ must reject main's earlier 1.23.0/1.7.0 workspace-only contracts for those featu
 
 ## Verify
 
-Timeline is registered at `/api/v1/timeline` with `api.timeline` 1.2.0. Its
+Timeline is registered at `/api/v1/timeline` with `api.timeline` 1.7.0. Its
 route handles private discovery, paging, immutable draft upload and explicit
 version preview/apply commands, exact version reads, and named branch create/push/pull. Branch commands use an immutable operation id and per-Thing head revision; divergence refuses without changing published content. Shared formats and the client queue live in
 `app/timeline`; storage, transaction integration and merge ancestry live in
@@ -290,3 +290,12 @@ Native traversal and editable synchronous callback objects/functions require `ap
 ## Lopu schemas, files and prompt settings
 
 `api.lopu-chats-reply` 1.17.0 combines all earlier page-context and Ask/Full contracts with current base/personal prompt composition, visible-schema inspection and extension, and independent private attachment saving. The new `api.settings-lopu-prompt` 1.0.0 route supports authenticated personal checklists and admin base edits with revision conflicts. `api.lopu-voice-session` 1.2.0 returns composed session instructions consumed by both web and iOS direct voice clients. Endpoint docs remain the executable registration source; tests cover both manifests and the route import map.
+
+
+Named-branch comparison uses `preview-branch-merge` on that same endpoint;
+`api/utils/timeline/branchMerge.ts` reads the exact fenced head and shared merge
+base. `TimelineBranchMerge` reuses `TimelineVersionComparison`, persists the
+canonical draft merge event, then queues ordinary `advance-branch`. No new
+endpoint, storage schema or collection is introduced. Both manifests assert
+1.7.0 and `useApi.v1.timeline.branchMerge` negotiates it. Run `test:timeline` and
+`test:timeline:branch-merge`; see the named-branch section of Unified Timeline.

@@ -16,6 +16,7 @@ function setup() {
 		entry: async (ownerId, eventId) => { calls.push(['entry', ownerId, eventId]); return eventId === 'saved' ? entryFixture(eventFixture('saved')) : null; },
 		push: async (ownerId, event) => { calls.push(['push', ownerId, event]); return entryFixture(event); },
 		branches: async (ownerId, thingId, before, limit) => { calls.push(['branches', ownerId, thingId, before, limit]); return { branches: [], nextBefore: null }; },
+		branchMerge: async (ownerId, command) => { calls.push(['branchMerge', ownerId, command]); return { ok: true, preview: {} } as any; },
 		branch: async (ownerId, command) => { calls.push(['branch', ownerId, command]); return { ok: true } as any; }
 	});
 	return { handlers, state, calls };
@@ -130,4 +131,26 @@ test('explicit home requests leave custom selection only within their async oper
 		assert.equal(getActiveMongoEndpoint(), null);
 		assert.equal(runWithMongoEndpoint({ url: process.env.MONGODB_CONNECTION_STRING, savedId: null }, timelineDataPlane), 'home');
 	} finally { if (previous === undefined) delete process.env.MONGODB_CONNECTION_STRING; else process.env.MONGODB_CONNECTION_STRING = previous; }
+});
+
+
+test('named-branch preview is read-only and uses the same private actor and source fences', async () => {
+ const h = setup(); const query = 'ownerId=user-1&dataPlane=home';
+ const command = { command: 'preview-branch-merge', branchId: 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5', thingId: 'page-1', eventId: 'saved', expectedHeadId: 'head', expectedRevision: 1, choices: {} };
+ const result = await h.handlers.action({ request: request('POST', query, command) });
+ assert.equal(result.status, 200); assert.equal(result.headers.get('Cache-Control'), 'private, no-store');
+ assert.deepEqual(h.calls.filter(call => ['push', 'branch', 'branchMerge'].includes(call[0])), [['branchMerge', 'user-1', command]]);
+ assert.equal((await h.handlers.action({ request: request('POST', query, { ...command, operationId: 'extra' }) })).status, 400);
+ h.state.owner = ''; assert.equal((await h.handlers.action({ request: request('POST', query, command) })).status, 401);
+ h.state.owner = 'other'; assert.equal((await h.handlers.action({ request: request('POST', query, command) })).status, 409);
+ h.state.owner = 'user-1'; h.state.plane = 'custom'; assert.equal((await h.handlers.action({ request: request('POST', query, command) })).status, 409);
+ assert.equal(h.calls.filter(call => call[0] === 'branchMerge').length, 1);
+});
+
+
+test('branch comparison replies are capped before sending an oversized preview', async () => {
+ const command = { command: 'preview-branch-merge', branchId: 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5', thingId: 'page-1', eventId: 'saved', expectedHeadId: 'head', expectedRevision: 1, choices: {} };
+ const handlers = createTimelineHandlers({ user: async () => ({ id: 'user-1' } as any), limit: async () => ({ allowed: true } as any), discovery: ownerId => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }), branchMerge: async () => ({ ok: true, preview: { content: 'x'.repeat(4 * 1024 * 1024) } } as any) });
+ const result = await handlers.action({ request: request('POST', 'ownerId=user-1&dataPlane=home', command) });
+ assert.equal(result.status, 413); assert.equal(result.headers.get('Cache-Control'), 'private, no-store'); assert.match((await result.json()).error, /too large/);
 });

@@ -36,6 +36,14 @@ export async function readTimelineBranchHead(things: any, ownerId: string, branc
 	return doc ? branchHeadFromDoc(doc) : null;
 }
 
+export async function readTimelineBranchEntry(things: any, ownerId: string, branchId: string, thingId: string) {
+	const [doc, head] = await Promise.all([
+		things.findOne({ ownerId, thingtime: TIMELINE_BRANCH_KIND, shareId: timelineBranchThingId(ownerId, branchId) }),
+		readTimelineBranchHead(things, ownerId, branchId, thingId)
+	]);
+	return doc && head ? { branch: branchFromDoc(doc), head } : null;
+}
+
 export async function readTimelineBranches(things: any, ownerId: string, thingId: string, before: number | null = null, limit = 40): Promise<TimelineBranchPage> {
 	if (!ownerId || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(thingId) || !Number.isInteger(limit) || limit < 1 || limit > 40 || (before !== null && (!Number.isSafeInteger(before) || before < 1 || !Number.isFinite(new Date(before).getTime())))) refuse(400, 'Invalid branch page request.');
 	const docs = await things.find({ ownerId, thingtime: TIMELINE_BRANCH_HEAD_KIND, targetId: thingId, ...(before !== null ? { createdAt: { $lt: new Date(before) } } : {}) }).sort({ createdAt: -1 }).limit(limit + 1).toArray();

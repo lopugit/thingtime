@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: Named Timeline branches can review and merge a
+  selected version with explicit conflict choices. Merges use the existing
+  canonical local/remote event and branch queues, survive offline reload and
+  retries, and preserve the version after a stale push. Published Things stay
+  unchanged. Shared version reconstruction retains folder moves through later
+  drafts. Added real API and desktop/mobile offline acceptance; `api.timeline`
+  advances to 1.7.0. Direct branch checkout/editing remains in progress.
+
 - 2026-09-28 — **Codex (AI)**: Fixed a Timeline null-connection crash on
   signed-out pages and sign-out transitions. Require a viewer and connection
   before checking account/database identity; preserve same-viewer cached

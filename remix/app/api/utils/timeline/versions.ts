@@ -33,7 +33,7 @@ export async function loadVersionGraph(roots: string[], thingId: string, read: (
   const next: string[] = [];
   for (let offset = 0; offset < frontier.length; offset += 128) {
    const ids = frontier.slice(offset, offset + 128); const found = await read(ids);
-   if (found.length !== ids.length || found.some(entry => !ids.includes(entry.id) || entry.thingId !== thingId)) reject(409, 'Earlier versions are unavailable. History cannot be merged safely.');
+   if (found.length !== ids.length || new Set(found.map(entry => entry.id)).size !== ids.length || found.some(entry => !ids.includes(entry.id) || entry.thingId !== thingId)) reject(409, 'Earlier versions are unavailable. History cannot be merged safely.');
    for (const entry of found) { entries.set(entry.id, entry); next.push(...entry.parentIds); }
    if (entries.size > 2048) reject(409, 'This version is too far back for one merge. Choose a more recent version.');
   }
@@ -53,6 +53,42 @@ export function versionMergeBase(graph: Map<string, TimelineGraphNode>, left: st
  const bases = [...common].filter(id => !older.has(id));
  if (bases.length !== 1) reject(409, bases.length ? 'These branches have multiple merge bases. Choose an earlier version to compare.' : 'These versions have no shared ancestor. Review a restore instead.');
  return graph.get(bases[0])!;
+}
+
+/** Resolve only the nearest full version and latest replacement of each
+ * compact field. This preserves folder moves through draft ancestry without
+ * loading every draft payload or borrowing content from the live Thing. */
+export function createVersionContentReader(
+ graph: Map<string, TimelineGraphNode>,
+ read: (ids: string[]) => Promise<TimelineEntry[]>,
+ snapshot: (entry: TimelineEntry) => Promise<TimelineSnapshot | null>
+) {
+ const cached = new Map<string, TimelineEntry>();
+ return async (entry: TimelineEntry) => {
+  cached.set(entry.event.id, entry);
+  const selected: string[] = []; const fields = new Set<string>(); const seen = new Set<string>();
+  let id = entry.event.id;
+  while (true) {
+   if (seen.has(id) || seen.size >= 2048) reject(409, 'This version has incomplete or cyclic ancestry.');
+   seen.add(id);
+   const node = graph.get(id) ?? (id === entry.event.id ? { id, parentIds: entry.event.parentIds, afterAdapter: entry.event.after?.adapter } : null);
+   if (!node) reject(409, 'An earlier version is unavailable.');
+   if (['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(node.afterAdapter ?? '')) { selected.push(id); break; }
+   const field = node.afterAdapter === 'folder-placement' ? 'folderId' : ['webpage-draft', 'definition-source'].includes(node.afterAdapter ?? '') ? 'crystal' : null;
+   if (!field || node.parentIds.length !== 1) reject(422, 'This draft has no unambiguous saved basis. Recover it in its editor first.');
+   if (!fields.has(field)) { fields.add(field); selected.push(id); }
+   id = node.parentIds[0];
+  }
+  const missing = selected.filter(key => !cached.has(key));
+  if (missing.length) {
+   const found = await read(missing);
+   if (found.length !== missing.length || new Set(found.map(item => item.event.id)).size !== missing.length || found.some(item => !missing.includes(item.event.id) || item.event.ownerId !== entry.event.ownerId || item.event.thingId !== entry.event.thingId)) reject(409, 'An earlier version is unavailable.');
+   for (const item of found) cached.set(item.event.id, item);
+  }
+  let content: ReturnType<typeof versionContent> | undefined;
+  for (const key of selected.reverse()) content = restorableContent(await snapshot(cached.get(key)!), content);
+  return content!;
+ };
 }
 
 const dependencies = { collection: getThingsCollection, find: findViewableThing, update: updateThing };
@@ -82,22 +118,11 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
   const baseNode = request.mode === 'merge' ? versionMergeBase(graph, headId, source.event.id) : null;
   const base = baseNode ? (await read([baseNode.id]))[0] : null;
   const resolved = (entry: TimelineEntry) => readTimelineSnapshot(things, ownerId, entry.event.id, 'after', entry.event.after);
-  const basisFor = async (entry: TimelineEntry): Promise<TimelineSnapshot | null> => {
-   if (['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(entry.event.after?.adapter ?? '')) return resolved(entry);
-   const queue = [entry.event.id]; const seen = new Set<string>();
-   for (let cursor = 0; cursor < queue.length; cursor++) {
-    const id = queue[cursor]; if (seen.has(id)) continue; seen.add(id); const next = graph.get(id)!;
-    if (['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(next.afterAdapter ?? '')) { const saved = (await read([id]))[0]; return saved ? resolved(saved) : null; }
-    queue.push(...next.parentIds);
-   }
-   return null;
-  };
+  const contentFor = createVersionContentReader(graph, read, resolved);
   const currentSnapshot = thingContentSnapshot(doc)!;
   const current = restorableContent(currentSnapshot);
-  const sourceSnapshot = await resolved(source);
-  const incoming = restorableContent(sourceSnapshot, sourceSnapshot?.adapter === 'thing-content' ? undefined : (await basisFor(source))?.value);
-  const baseSnapshot = base ? await resolved(base) : null;
-  const baseContent = base ? restorableContent(baseSnapshot, baseSnapshot?.adapter === 'thing-content' ? undefined : (await basisFor(base))?.value) : null;
+  const incoming = await contentFor(source);
+  const baseContent = base ? await contentFor(base) : null;
   let merged: ReturnType<typeof mergeVersionValues>;
   try { merged = baseContent ? mergeVersionValues(baseContent, current, incoming, request.choices) : { value: incoming, conflicts: [] }; }
   catch { return reject(422, 'This comparison or its conflict choices are no longer valid. Refresh the comparison before applying it.'); }

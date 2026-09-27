@@ -1,4 +1,5 @@
 import React from 'react';
+import { TimelineBranchMerge } from './TimelineBranchMerge';
 import { Box, Button, Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
 import { useTimelineSession } from '../../timeline/TimelineProvider';
 import type { TimelineEvent } from '../../timeline/contract';
@@ -10,6 +11,7 @@ import { TIMELINE_CHANGED_EVENT } from '../../timeline/clientEvents';
  * update branch pointers, never the user's open editor or published content. */
 export function TimelineBranches({ thingId, selected, onSelect }: { thingId: string; selected: TimelineEvent | null; onSelect: (event: TimelineEvent) => void }) {
 	const { connection } = useTimelineSession();
+	const [merge, setMerge] = React.useState<{ target: TimelineBranchEntry; incoming: TimelineEvent } | null>(null);
 	const [open, setOpen] = React.useState(false); const [name, setName] = React.useState('');
 	const [branches, setBranches] = React.useState<TimelineBranchEntry[]>([]); const [queued, setQueued] = React.useState<QueuedBranchCommand[]>([]);
 	const [nextBefore, setNextBefore] = React.useState<number | null>(null);
@@ -72,13 +74,15 @@ export function TimelineBranches({ thingId, selected, onSelect }: { thingId: str
 	return <Box borderWidth="1px" borderColor="var(--tt-border)" borderRadius="xl" p={3}>
 		<Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? 'Hide branches' : 'Branches'}</Button>
 		{open ? <Box mt={3}>
-			<Text fontSize="sm" color="var(--tt-muted)" mb={3}>Keep alternate versions here. View a branch to compare or merge it into the current Thing.</Text>
+			<Text fontSize="sm" color="var(--tt-muted)" mb={3}>Keep alternate versions here. Select a change in History, then review a merge into a branch. Published content stays unchanged.</Text>
 			<Flex gap={2} wrap="wrap" mb={3}><Button size="sm" variant="outline" onClick={() => void pull()}>Pull updates</Button>{queued.some(row => !row.failure) ? <Button size="sm" isDisabled={busy} onClick={() => { void connection?.sync.pushPending().then(() => { window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }).catch((failure: any) => { if (alive.current) setError(failure?.error || failure?.message || 'Could not sync branches.'); }); }}>Retry sync</Button> : null}</Flex>
 			{branches.map(entry => <Flex key={entry.head.id} gap={2} align="center" wrap="wrap" mb={2} p={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
 				<Box flex="1" minW={0}><Text fontWeight="600" overflowWrap="anywhere">{entry.branch.name}</Text><Text fontSize="xs" color="var(--tt-muted)">{queued.some(row => row.command.branchId === entry.branch.id && row.failure) ? 'Needs attention' : queued.some(row => row.command.branchId === entry.branch.id) ? 'Waiting to sync' : 'Saved to your account'}</Text></Box>
 				<Button size="sm" variant="outline" isDisabled={busy} onClick={() => void view(entry)}>View version</Button>
 				<Button size="sm" variant="ghost" isDisabled={busy || !candidate || candidate.id === entry.head.eventId || queued.some(row => row.command.branchId === entry.branch.id)} onClick={() => candidate && void queue({ command: 'advance-branch', operationId: crypto.randomUUID(), branchId: entry.branch.id, thingId, eventId: candidate.id, expectedRevision: entry.head.revision, name: null })}>Push selected version</Button>
+				<Button size="sm" variant="outline" isDisabled={busy || !candidate || candidate.id === entry.head.eventId || queued.some(row => row.command.branchId === entry.branch.id)} onClick={() => candidate && setMerge({ target: entry, incoming: candidate })}>Merge selected version…</Button>
 			</Flex>)}
+			{merge ? <TimelineBranchMerge target={merge.target} incoming={merge.incoming} onClose={() => setMerge(null)} /> : null}
 			{nextBefore !== null ? <Button size="sm" variant="ghost" onClick={() => void pull(nextBefore)}>Load more branches</Button> : null}
 			{queued.map(({ command, failure }) => <Box key={command.operationId} p={3} mb={2} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg"><Text fontSize="sm" role="status">{command.name || branches.find(entry => entry.branch.id === command.branchId)?.branch.name || 'Branch push'} · {failure ? 'needs attention' : 'saved on this device, waiting to sync'}</Text>{failure ? <><Text fontSize="sm" mt={2}>{failure.message}</Text><Text fontSize="xs" color="var(--tt-muted)" mt={1}>Your selected version remains in History.</Text><Flex gap={2} wrap="wrap" mt={2}><Button size="sm" variant="outline" onClick={() => { void connection?.branches.retryRejected(command.operationId).then(() => { window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }).catch((error: any) => { if (alive.current) setError(error?.message); }); }}>Retry command</Button><Button size="sm" variant="ghost" onClick={() => { void connection?.branches.dismissRejected(command.operationId).then(cached).catch((error: any) => { if (alive.current) setError(error?.message); }); }}>Keep version, cancel push</Button></Flex></> : null}</Box>)}
 			<FormControl mt={3}><FormLabel fontSize="sm">New branch from {candidate ? 'the selected version' : 'a version in History'}</FormLabel><Flex gap={2} wrap="wrap"><Input aria-label="Branch name" placeholder="e.g. New layout" size="sm" maxLength={80} flex="1" minW="160px" value={name} onChange={event => setName(event.target.value)} /><Button size="sm" isLoading={busy} isDisabled={!connection || !candidate || !name.trim()} onClick={() => candidate && void queue({ command: 'create-branch', operationId: crypto.randomUUID(), branchId: `branch-${crypto.randomUUID()}`, thingId, eventId: candidate.id, expectedRevision: 0, name: name.trim() })}>Create branch</Button></Flex></FormControl>

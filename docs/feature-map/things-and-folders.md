@@ -195,3 +195,11 @@ suite Actions and can be referenced by another page. See [native ARIA programs](
 missing viewer and missing connection before checking the cached account/data
 plane. Signed-out pages and sign-out transitions return no Timeline connection;
 `storageScope.test.ts` covers this alongside the existing scope isolation tests.
+
+
+Named-branch merge review is `components/Timeline/TimelineBranchMerge.tsx`;
+`TimelineVersionComparison.tsx` is shared with live restore/merge. The same
+canonical local event and branch queue upload in parent-first order. The
+read-only server preview and compact-version materializer live under
+`api/utils/timeline/`. `test:timeline:branch-merge` covers the real API and
+`timeline-folders.integration.mts` checks folder-move → draft reconstruction.

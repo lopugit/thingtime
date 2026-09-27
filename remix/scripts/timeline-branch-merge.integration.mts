@@ -1,0 +1,90 @@
+// Opt-in integration. App data is created only through the real HTTP API.
+// Requires a development server using a disposable local `timeline-rs` set.
+import assert from 'node:assert/strict';
+import { createHash, randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { parseBranchMergePreview, createBranchMergeProposal } from '../app/timeline/branchMerge.ts';
+
+const base = process.env.TIMELINE_TEST_BASE;
+if (!base) throw new Error('Set TIMELINE_TEST_BASE to the isolated local test server');
+if (!['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw new Error('Timeline integration only runs on a disposable local server');
+const status = await fetch(`${base}/api/v1/mongodb/status`).then(response => response.json());
+assert.equal(status.host, '127.0.0.1:20337');
+assert.equal(status.replicaSet, 'timeline-rs');
+assert.equal(status.custom, false);
+assert.equal(status.connected, true);
+
+let cookie = '';
+async function call(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST', authenticated = true) {
+	const response = await fetch(`${base}${path}`, { method, headers: { ...(authenticated && cookie ? { Cookie: cookie } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+	const data = await response.json();
+	return { response, data };
+}
+const username = `timeline-${randomUUID().slice(0, 8)}`;
+const password = process.env.TIMELINE_TEST_PASSWORD || `Timeline-${randomUUID()}-9a!`;
+const registered = await call('/api/v1/auth/register', { username, password, email: `${username}@example.invalid`, displayName: 'Timeline test' });
+assert.equal(registered.data.ok, true, 'Fixture registration failed');
+cookie = registered.response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+const ownerId = registered.data.user.id;
+assert.ok(ownerId);
+const query = `ownerId=${encodeURIComponent(ownerId)}&dataPlane=home`;
+const discovery = await call(`/api/v1/timeline?ownerId=${encodeURIComponent(ownerId)}`);
+assert.equal(discovery.data.ok, true);
+assert.equal(discovery.data.dataPlane, 'home');
+
+const created = await call('/api/v1/things', { thingtime: ['data'], crystal: { title: 'Branch merge acceptance', colour: 'Original', layout: 'Original' }, visibility: 'private' });
+assert.equal(created.data.ok, true);
+const thing = created.data.thing;
+const history = () => call(`/api/v1/timeline?${query}&thingId=${thing.id}`);
+const root = (await history()).data.entries[0].event;
+const version = (body: unknown) => call(`/api/v1/timeline?${query}`, body);
+const draft = async (parent: any, label: string, crystal: any) => {
+ const event = { ...parent, id: randomUUID(), operationId: randomUUID(), actorId: ownerId, source: 'client', clientId: 'branch-merge-integration', mode: 'draft', operation: 'update', branchId: 'draft-test', parentIds: [parent.id], occurredAt: new Date().toISOString(), label, before: parent.after, after: { ...parent.after, value: { ...parent.after.value, crystal } }, dependencies: [] };
+ assert.equal((await version(event)).data.ok, true, 'Draft upload'); return event;
+};
+const left = await draft(root, 'Warm layout', { ...root.after.value.crystal, colour: 'Warm' });
+const right = await draft(root, 'Wide layout', { ...root.after.value.crystal, layout: 'Wide' });
+const branchId = `branch-${randomUUID()}`;
+const named = await version({ command: 'create-branch', operationId: randomUUID(), branchId, thingId: thing.id, eventId: left.id, expectedRevision: 0, name: 'Design experiment' });
+assert.equal(named.data.ok, true);
+const request = { command: 'preview-branch-merge' as const, branchId, thingId: thing.id, eventId: right.id, expectedHeadId: left.id, expectedRevision: 1, choices: {} };
+const preview = await version(request);
+assert.equal(preview.response.status, 200); assert.equal(preview.response.headers.get('cache-control'), 'private, no-store');
+const checked = parseBranchMergePreview(preview.data.preview, ownerId, request);
+assert.deepEqual((checked.result.value as any).crystal, { ...root.after.value.crystal, colour: 'Warm', layout: 'Wide' });
+assert.deepEqual(checked.conflicts, []);
+const proposal = createBranchMergeProposal(checked, 'branch-merge-integration');
+const uploaded = await version(proposal.event); assert.equal(uploaded.data.ok, true);
+assert.deepEqual(uploaded.data.entry.event, proposal.event, 'Canonical event format survives remote upload');
+assert.deepEqual((await version(proposal.event)).data, uploaded.data, 'Lost event reply retries identically');
+const pushed = await version(proposal.command); assert.equal(pushed.data.ok, true);
+assert.equal(pushed.data.head.eventId, proposal.event.id); assert.equal(pushed.data.head.revision, 2);
+assert.deepEqual((await version(proposal.command)).data, pushed.data, 'Lost branch reply has one revision and one receipt');
+assert.equal((await version(request)).response.status, 409, 'Stale preview');
+assert.deepEqual((await call(`/api/v1/things?id=${thing.id}`)).data.thing.crystal, root.after.value.crystal, 'Published Thing remains unchanged');
+const divergent = await draft(root, 'Cool layout', { ...root.after.value.crystal, colour: 'Cool' });
+const conflictRequest = { ...request, eventId: divergent.id, expectedHeadId: proposal.event.id, expectedRevision: 2 };
+const overlap = await version(conflictRequest); assert.equal(overlap.data.ok, true);
+assert.deepEqual(overlap.data.preview.conflicts.map((item: any) => item.path), [['crystal', 'colour']]);
+assert.equal((await version({ ...conflictRequest, choices: { '["crystal","missing"]': 'incoming' } })).response.status, 422);
+const chosen = { ...conflictRequest, choices: { '["crystal","colour"]': 'incoming' as const } };
+const resolved = parseBranchMergePreview((await version(chosen)).data.preview, ownerId, chosen);
+assert.deepEqual(resolved.conflicts, []); assert.equal((resolved.result.value as any).crystal.colour, 'Cool');
+const staleProposal = createBranchMergeProposal(resolved, 'branch-merge-integration');
+const winner = await draft(proposal.event, 'Concurrent branch edit', { ...(proposal.event.after!.value as any).crystal, title: 'Concurrent title' });
+assert.equal((await version({ ...proposal.command, operationId: randomUUID(), eventId: winner.id, expectedRevision: 2 })).data.ok, true);
+assert.equal((await version(staleProposal.event)).data.ok, true);
+assert.equal((await version(staleProposal.command)).response.status, 409);
+const retained = await call(`/api/v1/timeline?${query}&eventId=${staleProposal.event.id}`);
+assert.deepEqual(retained.data.entry.event, staleProposal.event, 'Stale branch push preserves the merged version');
+assert.equal((await call(`/api/v1/timeline?${query}`, request, 'POST', false)).response.status, 401);
+assert.equal((await call(`/api/v1/timeline?ownerId=another-user&dataPlane=home`, request)).response.status, 409);
+assert.equal((await call(`/api/v1/timeline?ownerId=${ownerId}&dataPlane=custom-other`, request)).response.status, 409);
+const other = await call('/api/v1/things', { thingtime: ['data'], crystal: { title: 'Other Thing' }, visibility: 'private' });
+const foreignEvent = (await call(`/api/v1/timeline?${query}&thingId=${other.data.thing.id}`)).data.entries[0].event;
+assert.equal((await version({ ...conflictRequest, eventId: foreignEvent.id, expectedHeadId: winner.id, expectedRevision: 3 })).response.status, 404);
+// Keep a fresh conflict for the rendered desktop/mobile acceptance, entirely in this disposable account.
+const uiBranchId = `branch-${randomUUID()}`;
+assert.equal((await version({ command: 'create-branch', operationId: randomUUID(), branchId: uiBranchId, thingId: thing.id, eventId: left.id, expectedRevision: 0, name: 'Explore a different colour' })).data.ok, true);
+if (process.env.TIMELINE_TEST_FIXTURE_PATH) await writeFile(process.env.TIMELINE_TEST_FIXTURE_PATH, JSON.stringify({ username, password, ownerId, thingId: thing.id, branchId: uiBranchId, incomingId: divergent.id }, null, 2), { mode: 0o600 });
+console.log('PASS: named branch merge, conflicts, canonical upload, lost-reply retries, stale push retention, privacy and unchanged published Thing');
