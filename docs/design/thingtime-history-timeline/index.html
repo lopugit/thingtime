@@ -683,7 +683,9 @@
   }
   function chip(c){
     var cls='chg'+(c.b==null?' add':'')+(c.a==null?' del':'');
-    var sw=function(i){ return c.sw?'<span class="sw" style="background:'+c.sw[i]+'"></span>':''; };
+    // A restore only knows the colour it is restoring to, so the "before" half
+    // of its pair is null; skip that side rather than drawing an empty swatch.
+    var sw=function(i){ return c.sw&&c.sw[i]?'<span class="sw" style="background:'+c.sw[i]+'"></span>':''; };
     var body;
     if (c.b==null) body='<span class="a">'+sw(1)+esc(c.a)+'</span>';
     else if (c.a==null) body='<span class="b">'+sw(0)+esc(c.b)+'</span>';
@@ -869,7 +871,9 @@
   }
   function reconnect(){
     state.offline=false; $('#offline').setAttribute('aria-checked','false');
-    var n=0; EVENTS.forEach(function(e){ if (e.sync==='local' && e.thing==='gear'){ e.sync='synced'; n++; } });
+    // Everything queued syncs, whatever Thing it is on; only variations (lanes)
+    // stay private until they are sent, so the queue can always actually drain.
+    var n=0; EVENTS.forEach(function(e){ if (e.sync==='local' && !e.lane){ e.sync='synced'; n++; } });
     renderAll(); toast('Back online ☁️', n+' change'+(n===1?'':'s')+' synced to your account. The button variation stays private until you send it.');
   }
 
