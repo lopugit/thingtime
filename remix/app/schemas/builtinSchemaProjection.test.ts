@@ -19,6 +19,11 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // a new registry field should appear (or be knowingly dropped as a record/
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
+	'timeline-event': ['name'], // Value-free label; history is in a protected envelope.
+	'timeline-branch': ['name'],
+	'timeline-branch-head': [],
+	'timeline-snapshot-part': [],
+	'timeline-link': [], // Relationship payload and index identities are server-owned.
 	// Protected operational state has no user-editable schema fields.
 	'lopu-background-task': [],
 	'lopu-recording-settings': [],
@@ -212,6 +217,9 @@ test('the builtin crystal-schema set matches the pinned projection table', () =>
 });
 
 test('registered server-owned Things are protected from generic Thing CRUD', () => {
+	assert.ok(PROTECTED_THINGTIME.includes('timeline-event'));
+	assert.ok(PROTECTED_THINGTIME.includes('timeline-link'));
+	assert.ok(PROTECTED_THINGTIME.includes('timeline-snapshot-part'));
 	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));
 	assert.ok(PROTECTED_THINGTIME.includes('migration-diagnostic'));

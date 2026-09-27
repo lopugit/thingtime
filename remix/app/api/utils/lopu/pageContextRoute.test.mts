@@ -44,6 +44,17 @@ test('actual reply route validates references before writes and forwards/persist
 });
 
 const { continuationRequestId, LOPU_CONTINUE_PROMPT } = await import('./continuationCore');
+test('reply parsing preserves omitted-versus-empty blocks, readiness and saved-base metadata', async () => {
+ for (const page of [
+  {id:'page',source:'user',dirty:true,ready:true,updatedAt:'2026-09-27T05:00:00.000Z'},
+  {id:'page',source:'user',dirty:false,ready:true,blocks:[]},
+  {dirty:false,ready:false}
+ ]) {
+  const response = await replyAsUser(request({page}),viewer); assert.equal(response.status,200); await response.text();
+  assert.deepEqual(providerContext.page,page);
+ }
+ for (const page of [{dirty:'false'}, {ready:0}]) { const response = await replyAsUser(request({page}),viewer); assert.equal(response.status,400); }
+});
 test('actual reply route hides only explicit continuations and refuses replay inputs', async () => {
  const requestId = await continuationRequestId('test-chat', 'previous');
  const input = {chatId:'test-chat',requestId,continueFromRequestId:'previous',automaticContinuation:true,text:'ignored'};

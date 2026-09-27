@@ -41,6 +41,17 @@ components; reuse them instead of adding parallel versions.
 
 ## Shared navigation and Builder controls
 
+Owned Things inherit `history` from `THING_ACTIONS`. `TimelineHost` opens the
+same History modal from Things, persisted entity menus and Builder definitions;
+`TimelineLibrary` renders the managed Timeline folder through PageShell.
+`TimelineVersionActions` previews restores/merges and presents conflict choices.
+`TimelineBranches` creates named alternatives from a selected version, pulls heads,
+loads an exact version and pushes a selection with a durable command queue. A
+refused push stays visible on that branch; it does not turn healthy History reads
+into an error. Unknown outcomes retain the original request identity.
+Draft recovery uses the account-scoped `TimelineProvider` queue independently
+of an open modal. See [contract and acceptance](../unified-timeline.md).
+
 The compact Commander trigger opens shortcuts, recents, remote search and
 commands in one surface. Builder page/component menus share `BuilderThingMenu`;
 ordinary public page views do not expose floating editor controls. Admin remains

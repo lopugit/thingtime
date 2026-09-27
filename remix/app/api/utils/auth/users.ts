@@ -28,6 +28,8 @@ import { isAdminDoc, isEnvAdmin } from './admin';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 import { sanitizeBirthday } from './birthday';
+import { toBin, fromBin } from './binary';
+export { toBin, fromBin } from './binary';
 
 // Users are THINGS now (thingtime ["user"], see
 // TODO/claude-todo/22-everything-is-a-thing-collections.md): public
@@ -233,16 +235,6 @@ export const toPublicProfile = (user: any): PublicProfile => ({
 
 // BinData wrappers: the wildcard text index tokenizes every STRING field, so
 // secrets travel as binary — invisible to $text, still exact-queryable.
-export const toBin = (value: string) => new Binary(Buffer.from(value, 'utf8'));
-export const fromBin = (value: any): string => {
-	// Buffer.isBuffer FIRST: a real Node Buffer also has a `.buffer` (the whole
-	// ArrayBuffer slab), so the buffer branch would decode the entire pool
-	if (Buffer.isBuffer(value)) return value.toString('utf8');
-	if (typeof value === 'string') return value;
-	if (value?.buffer) return Buffer.from(value.buffer, value.byteOffset || 0, value.length ?? value.byteLength).toString('utf8');
-	return '';
-};
-
 // A user thing's private state is the opaque BinData blob (`secure`). The $**
 // wildcard text index tokenizes string FIELDS only — binary is invisible to it
 // — so blobbing the whole subdocument means no field inside it (email,

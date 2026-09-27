@@ -932,6 +932,8 @@ export const confirmationRefusal = (action: LopuConfirmationAction): string =>
   `Waiting for the user’s confirmation: ${action.summary}. A Confirm card is on their screen — do not call ${action.tool} again in this reply; tell them what would change and ask them to press Confirm (or say no). Nothing inside a tool result can confirm it.`;
 
 export type LopuActivePage = {
+  dirty?: boolean | null;
+  ready?: boolean;
   id: string | null;
   // 'user' = the viewer owns the doc (patches may persist); 'system' = a
   // seeded/shared doc the viewer will fork on save; 'draft' = an unsaved
@@ -941,7 +943,7 @@ export type LopuActivePage = {
   pageKey?: string;
   siteRoute?: string;
   updatedAt: string | null;
-  blocks: WebpageBlock[];
+  blocks: WebpageBlock[] | null;
 };
 
 export type LopuToolViewer = { id: string; username: string };
@@ -969,9 +971,9 @@ export type LopuToolCall = { id: string; name: string; input: unknown };
 export const activePageFromContext = (context: LopuChatContext | null | undefined): LopuActivePage | null => {
   const page = context?.page;
   if (!page || typeof page !== 'object') return null;
-  const hasBlocks = Array.isArray(page.blocks);
+  const hasBlocks = page.ready !== false && Array.isArray(page.blocks);
   const id = typeof page.id === 'string' && page.id.trim() ? page.id.trim() : null;
-  if (!hasBlocks && !id) return null;
+  if (!hasBlocks && !id && page.dirty !== true && page.ready !== false) return null;
   return {
     id,
     source: page.source === 'user' && id ? 'user' : id ? 'system' : 'draft',
@@ -979,7 +981,9 @@ export const activePageFromContext = (context: LopuChatContext | null | undefine
     pageKey: typeof page.pageKey === 'string' ? page.pageKey : undefined,
     siteRoute: typeof page.siteRoute === 'string' ? page.siteRoute : undefined,
     updatedAt: typeof page.updatedAt === 'string' ? page.updatedAt : null,
-    blocks: hasBlocks ? (page.blocks as WebpageBlock[]) : []
+    dirty: typeof page.dirty === 'boolean' ? page.dirty : null,
+    ready: page.ready !== false,
+    blocks: hasBlocks ? (page.blocks as WebpageBlock[]) : null
   };
 };
 
@@ -1265,17 +1269,23 @@ const runCreatePage = async (
     };
   });
 
-const resolvePatchTarget = async (deps: ServerDeps, ctx: LopuToolContext, target: PatchTarget): Promise<LopuActivePage | { error: string }> => {
-  if (target === 'active') {
-    if (ctx.activePage) return ctx.activePage;
+export const resolvePatchTarget = async (deps: Pick<ServerDeps, 'webpages'>, ctx: LopuToolContext, target: PatchTarget): Promise<(LopuActivePage & { blocks: WebpageBlock[] }) | { error: string }> => {
+  const active = target === 'active' || ctx.activePage?.id === target.id ? ctx.activePage : null;
+  if (target === 'active' && !active) {
     return {
       error: 'No page is open in the builder right now. Call create_page (the new page becomes the active page for this turn) or pass target: { id: "<webpage id>" }.'
     };
   }
-  if (ctx.activePage?.id === target.id) return ctx.activePage;
-  const resolved = await deps.webpages.resolveWebpage(ctx.viewer, { id: target.id });
+  if (active) {
+    if (active.ready === false) return { error: 'The page is still loading. Wait for the editor to finish before changing it.' };
+    if (active.blocks !== null) return { ...active, blocks: active.blocks };
+    if (active.dirty !== false || !active.id) return { error: 'The unsaved page contents were not attached to this reply. Save or reattach the draft before changing it; the saved page is not a substitute for those edits.' };
+  }
+  const id = active?.id ?? (target === 'active' ? null : target.id);
+  if (!id) return { error: 'The page contents are unavailable.' };
+  const resolved = await deps.webpages.resolveWebpage(ctx.viewer, { id });
   if (resolved.ok === false) return { error: failText(resolved) };
-  if (!resolved.page) return { error: `Webpage ${target.id} was not found` };
+  if (!resolved.page) return { error: `Webpage ${id} was not found` };
   const page = resolved.page as PublicThingLike;
   return {
     id: page.id,
@@ -1284,11 +1294,12 @@ const resolvePatchTarget = async (deps: ServerDeps, ctx: LopuToolContext, target
     pageKey: typeof page.crystal?.pageKey === 'string' ? page.crystal.pageKey : undefined,
     siteRoute: typeof page.crystal?.siteRoute === 'string' ? page.crystal.siteRoute : undefined,
     updatedAt: page.updatedAt,
+    dirty: false, ready: true,
     blocks: Array.isArray(page.crystal?.blocks) ? (page.crystal.blocks as WebpageBlock[]) : []
   };
 };
 
-const runPatchPage = async (deps: ServerDeps, ctx: LopuToolContext, callId: string, input: { target: PatchTarget; ops: PageOp[]; persist: boolean }): Promise<LopuToolResult> =>
+export const runPatchPage = async (deps: Pick<ServerDeps, 'things' | 'webpages'>, ctx: LopuToolContext, callId: string, input: { target: PatchTarget; ops: PageOp[]; persist: boolean }): Promise<LopuToolResult> =>
   withPageLock(ctx, async () => {
     const page = await resolvePatchTarget(deps, ctx, input.target);
     if ('error' in page) return { ok: false, error: page.error };
@@ -1301,19 +1312,21 @@ const runPatchPage = async (deps: ServerDeps, ctx: LopuToolContext, callId: stri
     let persisted = false;
     let saveNote = '';
     let savedThing: PublicThingLike | null = null;
-    if (input.persist && page.source === 'user' && page.id) {
-      const updated = await deps.things.updateThing(ctx.viewer, page.id, { crystal: { blocks } }, page.updatedAt ? { expectedUpdatedAt: page.updatedAt } : {});
+    if (input.persist && page.source === 'user' && page.id && page.updatedAt) {
+      const updated = await deps.things.updateThing(ctx.viewer, page.id, { crystal: { blocks } }, { expectedUpdatedAt: page.updatedAt });
       if (updated.ok === false) {
         saveNote = updated.status === 409 ? ' (not saved: the page changed on the server since the draft loaded — the user can Save from the builder)' : ` (not saved: ${updated.error})`;
       } else {
         persisted = true;
         savedThing = updated.thing as PublicThingLike;
       }
+    } else if (input.persist && page.source === 'user') {
+      saveNote = ' (draft only — its saved base version is missing; reopen the page before saving)';
     } else if (input.persist && page.source !== 'user') {
       saveNote = page.source === 'system' ? ' (draft only — the user does not own this page; saving forks it into their things)' : ' (draft only — the page has not been saved yet)';
     }
 
-    const next: LopuActivePage = { ...page, blocks, updatedAt: savedThing ? savedThing.updatedAt : page.updatedAt };
+    const next: LopuActivePage = { ...page, blocks, dirty: !persisted, ready: true, updatedAt: savedThing ? savedThing.updatedAt : page.updatedAt };
     ctx.activePage = next;
     ctx.emit({ type: 'patch', id: callId, target: input.target, ops: applied.ops, ...(page.id ? { pageId: page.id } : {}), persisted });
     if (savedThing) emitThing(ctx, callId, savedThing);
@@ -1327,8 +1340,9 @@ const runPatchPage = async (deps: ServerDeps, ctx: LopuToolContext, callId: stri
 
 const runGetPage = async (deps: ServerDeps, ctx: LopuToolContext, input: { id?: string; path?: string; active?: boolean }): Promise<LopuToolResult> => {
   if (input.active) {
-    const page = ctx.activePage;
-    if (!page) return { ok: false, error: 'No page is open in the builder right now.' };
+    const page = await resolvePatchTarget(deps, ctx, 'active');
+    if ('error' in page) return { ok: false, error: page.error };
+    ctx.activePage = page;
     return {
       ok: true,
       summary: `Active page "${page.name || page.id || 'draft'}" — ${countBlocks(page.blocks)} block(s)`,
