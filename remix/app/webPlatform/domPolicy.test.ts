@@ -1,3 +1,4 @@
+import { RANGE_CONSTRUCTORS } from './rangePolicy';
 import { OBSERVER_CONSTRUCTORS } from './observerPolicy';
 import { LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS } from './layoutPolicy';
 import { CSSOM_CONSTRUCTORS, CSSOM_STATIC } from './cssomPolicy';
@@ -43,6 +44,7 @@ test('every catalogue DOM request names a member the receiver policy registers',
 				[
 					'Path2D',
 					'ImageData',
+					...Object.keys(RANGE_CONSTRUCTORS),
 					...Object.keys(TYPED_CSS_CONSTRUCTORS),
 					...Object.keys(CSSOM_CONSTRUCTORS),
 					...Object.keys(LAYOUT_CONSTRUCTORS),

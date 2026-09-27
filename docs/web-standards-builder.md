@@ -789,3 +789,33 @@ unobserve/disconnect, ownership and resource limits have dedicated checks.
 Primary sources are the [DOM Living Standard](https://dom.spec.whatwg.org/#interface-mutationobserver),
 [Resize Observer](https://www.w3.org/TR/resize-observer/) and
 [Intersection Observer](https://www.w3.org/TR/intersection-observer/).
+
+## Native live and static ranges
+
+Forty additional Range, AbstractRange, StaticRange and StaticRangeInit entries
+now have editable Component programs in `rangeFixtures.ts`. Boundary choices,
+text edits, cloning, extraction, wrapping, comparison and result projections
+are ordinary saved program objects. Existing active-surface Range geometry
+recipes remain unchanged. The separate Selection API is still requires-context.
+
+`rangePolicy.ts` registers native members; `rangeSupport.ts` validates bounded
+fragment input and the four-field StaticRangeInit dictionary. Ranges use
+run-owned nodes and handles. Relative boundary setters check the parent before
+dispatch, and every range read/operation checks its current endpoints. Native
+constructors initially point at their realm document; initialize them with an
+owned node before reading. Concrete native prototype chains provide boundary
+accessors even when an engine inserts an unnamed WebIDL mixin layer.
+
+Document mutations operate on the existing detached-document context and render
+through its checked projection. Active-surface programs retain range reads and
+boundary operations; tree mutations remain unavailable there. Contextual
+fragments accept up to 4,096 characters and 128 basic HTML opening/closing tags,
+without attributes, resources, scripts, comments, custom elements or foreign
+content. Tokens are checked before native parsing. This is a bounded fragment
+input vocabulary, not unrestricted HTML parsing. Native errors remain catchable.
+
+Static range examples insert text after taking a snapshot and compare unchanged
+static offsets with live boundaries adjusted by the browser. Both capability
+manifests and the client negotiate `api.actions-run` 1.31.0. See the
+[DOM ranges standard](https://dom.spec.whatwg.org/#ranges) and
+[HTML contextual-fragment algorithm](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#dom-range-createcontextualfragment).
