@@ -24,7 +24,7 @@ export function readCSSProbe(root: Element, probe: Probe, substitute: (value: un
 	const observe = (selector: string) => {
 		const element = root.querySelector(selector);
 		if (!element) throw new Error(`No CSS probe element matches ${selector}`);
-		const rect = element.getBoundingClientRect();
+		const rect = Element.prototype.getBoundingClientRect.call(element);
 		return {
 			computed: getComputedStyle(element, pseudoElement).getPropertyValue(property),
 			// Pseudo-elements have no Element rectangle. Keep the originating

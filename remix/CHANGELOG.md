@@ -73,7 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   shapes, grids, easing, counters and anchors. Scoped CSS probes distinguish
   syntax acceptance from native computed results and compare a control sample.
   Edited programs retain the existing private Component/Action save path;
-  actions-run 1.26.0 advertises the additive contract.
+  actions-run 1.26.0 advertises the additive contract. Details:
+  [PR #940](../PRs/940-codex-web-standards-css-functions--add-reusable-css-function-comparisons.md).
 
 - 2026-09-27 — **Codex (AI)**: Added 192 reusable SVG filter programs with visible
   original/filtered drawings, typed native values and private Component saving.

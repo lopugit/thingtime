@@ -90,5 +90,13 @@ export const CSS_PROBE_BOUNDARY_FIXTURES: { name: string; program: PlatformProgr
 			probe: { kind: 'css', name: 'width', value: '[[value]]' }
 		},
 		error: 'CSS probe fields must be bounded text'
+	},
+	{
+		name: 'CSS form named controls cannot shadow native geometry',
+		program: {
+			...base,
+			document: [{ tag: 'form', attributes: { id: 'sample' }, children: [{ tag: 'input', attributes: { name: 'getBoundingClientRect' } }] }]
+		},
+		expected: { computed: '120px', supported: true }
 	}
 ];
