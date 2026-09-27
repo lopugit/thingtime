@@ -1,3 +1,4 @@
+import { TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC } from './typedCSSPolicy';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { WEB_FEATURES } from './catalogue';
@@ -30,7 +31,11 @@ test('every catalogue DOM request names a member the receiver policy registers',
 			continue;
 		}
 		if (action === 'construct') {
-			assert.ok(['Path2D', 'ImageData'].includes(key));
+			assert.ok(['Path2D', 'ImageData', ...Object.keys(TYPED_CSS_CONSTRUCTORS)].includes(key));
+			continue;
+		}
+		if (action === 'static') {
+			assert.ok(Object.values(TYPED_CSS_STATIC).some((p) => key in p));
 			continue;
 		}
 		const registry = ['get', 'constant'].includes(action) ? reads : action === 'set' ? writes : calls;

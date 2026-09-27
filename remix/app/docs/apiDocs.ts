@@ -12746,9 +12746,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    // 1.26.0 adds reusable CSS function contexts and scoped comparison probes.
-    featureVersion: '1.26.0',
-    contractVersion: '1.26.0',
+    // 1.27.0 adds bounded native CSS Typed OM factories, receivers and editable recipes.
+    featureVersion: '1.27.0',
+    contractVersion: '1.27.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',

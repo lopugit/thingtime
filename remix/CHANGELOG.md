@@ -68,6 +68,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27: Add reusable CSS Typed OM programs for 249 catalogue entries, with native unit/math/transform/style-map receivers, bounded CSS factories and actions-run 1.27.0 negotiation. Browser/API delivery verification is tracked in the associated PR.
+
+
 - 2026-09-27 — **Codex (AI)**: Reusable CSS function comparisons cover 180
   catalogue entries (137 newly interactive), including maths, colour, transforms,
   shapes, grids, easing, counters and anchors. Scoped CSS probes distinguish
