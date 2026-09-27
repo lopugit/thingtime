@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Follow-up to the live Lopu Action run: large
+  Thing reads now offer lossless, authorized JSON Pointer pages instead of
+  repeating a truncated summary. Workspace select errors report their exact
+  allowed values, so Lopu can correct categories without trial writes.
+
+
 - 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
   event and relationship records, durable draft recovery, private relational event/link Things and transactional
   ordinary Thing history. Shared History now previews restores and three-way
