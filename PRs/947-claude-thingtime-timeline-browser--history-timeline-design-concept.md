@@ -54,6 +54,21 @@ authorize a merge.
 
 - 2026-09-27 — concept, docs and verification landed; PR opened.
 
+## Cards look follow-up — 2026-09-27
+
+Owner asked for a version where the horizontal timeline shows the Thing's card
+view — cards over time, with the edits alternating above and below the line —
+and to "go crazy with it". Added the **Cards** look to
+`docs/design/thingtime-history-evolution/index.html` and made it the default:
+the Thing rendered as of each version inside its card, an edit callout (what
+changed) per card, cards alternating above/below a spine that fills with the
+brand gradient to the selected version, later cards faded until reached,
+moments as dots on the spine, a 📌 badge for named versions, a dashed
+variation row, a minimap with a viewport window under the strip,
+Comfortable/Compact density, Home/End/Space keys and an end-of-story Lopu
+toast. Line and Frames remain as the other looks. Docs, gallery notes and the
+TESTING checklist updated.
+
 ## Evolution view follow-up — 2026-09-27
 
 Owner asked for a left-to-right, scrollable view of one Thing's evolution as an

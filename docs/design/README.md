@@ -28,10 +28,11 @@ directory. Rebuild any entry's bundle with `python3 inline-dc.py <folder>`.
   pills, versions with "Review and combine", and History settings (interactive;
   Prism look). Hand-authored self-contained `index.html` (no `.dc.html` source).
 - `thingtime-history-evolution/` — design concept: the alternative history
-  browser view — one Thing laid out left to right as a classic horizontal
-  timeline (nodes on a line, labels alternating above/below, day axis, dashed
-  variation lane) with a Frames look that renders the Thing as of each version;
-  scrub, play, compare. Hand-authored self-contained `index.html` (no `.dc.html`
+  browser view — one Thing laid out left to right. Cards look (default): the
+  Thing's card as of each version alternating above and below a rainbow
+  progress spine, edit callouts, minimap, density presets, dashed variation
+  row; Line look (nodes on a line, labels alternating, day axis); Frames look
+  (filmstrip); scrub, play, compare. Hand-authored self-contained `index.html` (no `.dc.html`
   source); cross-links with `thingtime-history-timeline/`.
 - `thingtime-landing-1a-classic-centered/` — classic centered · waitlist-first · warm copy
 - `thingtime-landing-1b-product-split/` — product split · the demo IS the hero · confident copy

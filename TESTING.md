@@ -39,8 +39,13 @@ persisted; every check is client-side.
       Evolution concept" links to the sibling entry.
 - [ ] `/docs/design?entry=thingtime-history-evolution` and the bundle URL
       `/docs/design-bundles/thingtime-history-evolution/index.html` render with
-      no console errors; the Thing picker switches the line; Look → Frames shows
-      as-of cards with change chips and elapsed time on the connectors.
+      no console errors and open on the Cards look: the Thing's cards as of each
+      version alternate above and below the spine with an edit callout each,
+      no card overlaps a neighbour, the spine fill reaches the selected card,
+      later cards are faded, the minimap shows dots and a viewport window that
+      follows the strip's scroll, and Density → Compact narrows the cards and
+      hides messages. The Thing picker switches Things (Primary button adds a
+      dashed variation row); Look → Line and Frames still work.
 - [ ] Spacing → Real time keeps true positions (crowded same-day edits spread
       just enough to read) with day ticks; Even spaces versions uniformly.
 - [ ] Scrubber and ←/→ move the selection and scroll it into view; Play steps

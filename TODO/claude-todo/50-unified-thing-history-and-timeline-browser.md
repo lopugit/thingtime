@@ -77,13 +77,20 @@ and it only ever grows: restore, undo, variations and merges append versions.
   a quiet day axis sits under the line, which brightens toward now.
 - **Real time** spacing keeps true positions and spreads only the nodes that
   would collide; **Even** spacing puts every version a step apart.
-- **Frames** look: each version becomes a card that renders the Thing as it
-  was (page heading/folder/blocks/attachments, a Component's actual button, a
-  record's fields, a post's text and audience) with change chips and elapsed
-  time on the connectors.
-- Scrub with a slider or ←/→, **Play** through versions, select a node to see
-  before/after renders and the diff in the shared panel, and **Compare** any
-  two versions (even across a variation) read-only.
+- **Cards** look (the default): the Thing's own card rendered as of each
+  version, hanging alternately above and below a spine that fills with the
+  brand gradient up to the selected version; each card carries an edit callout
+  (what changed), the actor and sync state, and a 📌 badge when the version is
+  named; later cards wait faded until you reach them; moments sit on the spine
+  as dots; a variation gets its own dashed row; a minimap under the strip shows
+  the whole history and the viewport; Comfortable/Compact density.
+- **Frames** look: each version becomes a filmstrip card that renders the
+  Thing as it was (page heading/folder/blocks/attachments, a Component's actual
+  button, a record's fields, a post's text and audience) with change chips and
+  elapsed time on the connectors.
+- Scrub with a slider, ←/→, Home/End or the minimap; Space or **Play** steps
+  through versions; select a node or card to see the diff in the shared panel;
+  **Compare** any two versions (even across a variation) read-only.
 - Concept: [`docs/design/thingtime-history-evolution/index.html`](../../docs/design/thingtime-history-evolution/index.html);
   the timeline concept's browser also carries the line view in place.
 
