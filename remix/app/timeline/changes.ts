@@ -27,12 +27,14 @@ export function timelineChanges(before: TimelineSnapshot | null, after: Timeline
 }
 
 export function timelineChangeLabel(path: string[]): string {
+	if (path.length === 1 && path[0] === 'folderId') return 'Folder';
 	const parts = path[0] === 'crystal' ? path.slice(1) : path;
 	if (!parts.length) return 'Thing';
 	return parts.map(part => part.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ')).join(' › ');
 }
 
-export function timelineValueLabel(slot: TimelineValue): string {
+export function timelineValueLabel(slot: TimelineValue, path: string[] = []): string {
+	if (slot.exists && slot.value === null && path.length === 1 && path[0] === 'folderId') return 'My Things';
 	if (!slot.exists) return 'Not set';
 	if (slot.value === null) return 'Empty';
 	if (typeof slot.value === 'string') return slot.value === '' ? 'Empty text' : slot.value;

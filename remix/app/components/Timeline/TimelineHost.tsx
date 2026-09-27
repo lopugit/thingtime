@@ -69,8 +69,8 @@ function TimelinePanel({ thingId, folderId }: { thingId: string | null; folderId
 				{largeVersion ? <Text fontSize="sm" mb={3}>The complete data for this large version is retained in your account. Full preview is not available here yet.</Text> : null}
 				{changes.map((change, index) => <Box key={index} mb={3} p={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
 					<Text fontWeight="600" mb={2} overflowWrap="anywhere">{timelineChangeLabel(change.path)}</Text>
-					<Text fontSize="sm" color="var(--tt-muted)" noOfLines={4} overflowWrap="anywhere">Before: {timelineValueLabel(change.before)}</Text>
-					<Text fontSize="sm" mt={1} noOfLines={4} overflowWrap="anywhere">After: {timelineValueLabel(change.after)}</Text>
+					<Text fontSize="sm" color="var(--tt-muted)" noOfLines={4} overflowWrap="anywhere">Before: {timelineValueLabel(change.before, change.path)}</Text>
+					<Text fontSize="sm" mt={1} noOfLines={4} overflowWrap="anywhere">After: {timelineValueLabel(change.after, change.path)}</Text>
 				</Box>)}
 				<Button size="sm" variant="ghost" mb={3} onClick={() => setShowData(value => !value)} aria-expanded={showData}>{showData ? 'Hide data' : 'View data'}</Button>
 				{showData ? (['before', 'after'] as const).map(side => <Box key={side} mb={4}><Text fontWeight="600" fontSize="sm" mb={2}>{side === 'before' ? 'Before' : 'After'}</Text><Box as="pre" fontSize="xs" whiteSpace="pre-wrap" overflowWrap="anywhere" maxH="280px" overflow="auto" p={3} borderRadius="md" bg="var(--tt-surface)">{preview(selected[side])}</Box></Box>) : null}

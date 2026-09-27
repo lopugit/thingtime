@@ -1,5 +1,6 @@
 import { copyBoundedJson, type JsonValue } from '../utils/boundedJson.ts';
 import type { TimelineSnapshot } from './contract.ts';
+import { FOLDER_PLACEMENT_ADAPTER, folderPlacementValue } from './folderPlacement.ts';
 
 export type VersionValue = { present: false } | { present: true; value: JsonValue };
 export type VersionConflict = { path: string[]; base: VersionValue; current: VersionValue; incoming: VersionValue };
@@ -52,7 +53,8 @@ export function versionContent(snapshot: TimelineSnapshot | null, basis?: JsonVa
  } else {
   if (!basis || typeof basis !== 'object' || Array.isArray(basis)) throw new Error('Load the saved ancestor before using this draft.');
   content = { ...basis };
-  if (snapshot.adapter === 'webpage-draft' && value?.crystal && typeof value.crystal === 'object' && !Array.isArray(value.crystal)) content.crystal = value.crystal;
+  if (snapshot.adapter === FOLDER_PLACEMENT_ADAPTER) content.folderId = folderPlacementValue(snapshot).folderId;
+  else if (snapshot.adapter === 'webpage-draft' && value?.crystal && typeof value.crystal === 'object' && !Array.isArray(value.crystal)) content.crystal = value.crystal;
   else if (snapshot.adapter === 'definition-source' && typeof value?.source === 'string') {
    try { content.crystal = copy(JSON.parse(value.source)); } catch { throw new Error('This definition draft contains invalid JSON. Recover it in the editor first.'); }
   } else throw new Error('This draft format cannot be applied as a saved version.');
