@@ -7,7 +7,7 @@ import {
 	attachmentExpectedPartBytes,
 	attachmentIdForRequest,
 	createReadyAttachmentPostInsertHook,
-	createAttachmentService,
+	createAttachmentService as createProductionAttachmentService,
 	validateCompletedAttachmentParts
 } from './attachments';
 import {
@@ -25,6 +25,9 @@ import {
 import type { AttachmentS3 } from './privateS3';
 import { StorageMutationError } from '../storage/storageCore';
 import { PrivateS3ConfigError } from './config';
+
+const createAttachmentService = (overrides: Parameters<typeof createProductionAttachmentService>[0] = {}) =>
+  createProductionAttachmentService({ ownedMediaDraftIds: async () => [], ...overrides });
 
 const checksum = (byte: number) => Buffer.alloc(32, byte).toString('base64');
 const now = new Date('2026-08-09T00:00:00.000Z');
@@ -2419,4 +2422,18 @@ test('a fresh anonymous video download follows its plain permalink through a com
   assert.equal((await service.download({ id: 'member', groupIds: new Set(['family']) }, doc.shareId, false)).ok, true);
   root.acl = ['tt:user'];
   assert.equal((await service.download(null, doc.shareId, false)).ok, false);
+});
+
+test('only an authorized working draft can donate a bound file to a post', async () => {
+  const doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'draft-1', attachmentExpiresAt: undefined });
+  let eligible = true;
+  const service = createAttachmentService({
+    store: { getOwnedMany: async () => [doc] } as any, now: () => now, customMongoActive: () => false,
+    ownedMediaDraftIds: async (owner, targets) => { assert.equal(owner, 'user-1'); assert.deepEqual(targets, ['draft-1']); return eligible ? ['draft-1'] : []; }
+  });
+  assert.equal((await service.inspectForPost('user-1', ['attachment-1'])).ok, true);
+  eligible = false;
+  const rejected = await service.inspectForPost('user-1', ['attachment-1']);
+  assert.equal(rejected.ok, false);
+  if (rejected.ok === false) assert.equal(rejected.status, 409);
 });

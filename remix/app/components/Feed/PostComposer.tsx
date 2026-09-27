@@ -1,3 +1,5 @@
+import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { DraftPicker, DraftSaveStatus } from '~/drafts/DraftPicker';
 import { PostThingPicker } from './PostThingPicker';
 import { composePostThing, postThingDraft, postThingReferences, type PostThingReference } from './postThingReferences';
 import React from 'react';
@@ -79,11 +81,8 @@ const EMPTY_ATTACHMENT_SNAPSHOT: AttachmentComposerSnapshot = {
 	hasSelection: false
 };
 
-// The thingtime-tab draft lives under a SESSION-SCOPED branch of the global
-// store: tmp.<sessionId>.New Thing. A fresh session id per composer mount (and
-// pruning prior composer sessions on seed) means drafts never persist across
-// reloads and no stale draft can ever resurface — the editor always opens on
-// one clean "New Thing" root (the key IS the label the editor shows).
+// Each open composer owns a temporary editor branch. Account drafts persist its
+// complete value and restore it into the new branch after navigation.
 const DRAFT_ROOT_KEY = 'New Thing';
 const DRAFT_TMP_KEY = 'tmp';
 
@@ -95,12 +94,6 @@ type PendingPostSubmission = {
 	postType: PostType;
 	unknownOutcome: boolean;
 };
-
-// A composer session id is `s` + 10 hex chars (see draftSessionId below). `tmp`
-// is a plain user-writable root key in the Thingtime editor, so seeding must
-// prune only these composer-owned branches and leave any user-authored `tmp`
-// keys untouched.
-const COMPOSER_SESSION_KEY = /^s[0-9a-f]{10}$/;
 
 // the in-post editor's default height; drag the handle for anything else
 const DEFAULT_EDITOR_HEIGHT = 440;
@@ -169,6 +162,10 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
+  const user = useCurrentUser();
+  return <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+};
+const AccountPostComposer = (props: PostComposerProps) => {
   const { onPosted, parentId, onClose, editPost, subspace } = props;
 
   const isComment = !!parentId;
@@ -184,6 +181,8 @@ export const PostComposer = (props: PostComposerProps) => {
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
   const [expanded, setExpanded] = React.useState(isComment || isEdit);
+  const [draftAttachments, setDraftAttachments] = React.useState<PublicAttachment[]>([]);
+  const [legacyImages, setLegacyImages] = React.useState<string[]>(editPost?.images || []);
 	// Post-type badges are additive TOGGLES, not exclusive tabs: Text is the
 	// always-on base and each toggle switches its field group on top. Edit mode
 	// seeds them from whatever the post already carries.
@@ -274,6 +273,9 @@ export const PostComposer = (props: PostComposerProps) => {
   // bumping the session remounts the block editor with a clean document
   // (while mounted, the editor owns the text)
   const [composerSession, setComposerSession] = React.useState(0);
+  const composerGeneration = React.useRef(0);
+  const editorGeneration = composerGeneration.current;
+  const advanceComposerSession = () => { composerGeneration.current += 1; setComposerSession(session => session + 1); };
 
 	// File-bearing pastes anywhere inside the expanded composer belong to the
 	// post's one media panel. When Photos is still off, retain the File objects
@@ -430,36 +432,10 @@ export const PostComposer = (props: PostComposerProps) => {
   React.useEffect(() => {
     if (seededRef.current || thingtimeLoading || !thingOn || !expanded) return;
     seededRef.current = true;
-    const currentTmp = getThingtime(DRAFT_TMP_KEY);
-    const preserved: Record<string, unknown> = {};
-    if (currentTmp && typeof currentTmp === 'object' && !Array.isArray(currentTmp)) {
-      for (const [key, value] of Object.entries(currentTmp as Record<string, unknown>)) {
-        if (!COMPOSER_SESSION_KEY.test(key)) preserved[key] = value;
-      }
-    }
-    // seed the session BRANCH only — the draft value itself starts undefined,
-    // so the editor opens on a truly blank "Imagine.." slate instead of an
-    // empty object rendering as {} chrome. Editing an existing thingtime post
-    // seeds the draft with the post's thing as of mount (editSeedRef).
-    //
-    // tabLocal because this REPLACES the whole `tmp` branch and the pruning
-    // above cannot tell an abandoned persisted session from another tab's live
-    // one — every `s<hex>` key is dropped. Broadcast, that lands on a peer as
-    // "your composer session no longer exists" and destroys a post someone is
-    // part-way through typing there. Pruning stale sessions out of the
-    // persisted blob is this tab's own housekeeping; `preserved` only copies
-    // user-authored `tmp` keys through unchanged, so nothing a peer needs is
-    // withheld by keeping it off the wire.
-    setThingtime(
-      DRAFT_TMP_KEY,
-      {
-        ...preserved,
-        [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
-      },
-      // Passing options replaces setThingtime's default object, so restate the
-      // namespace this write has always used rather than silently dropping it.
-      { namespace: 'default', tabLocal: true }
-    );
+    // A composer owns only its session; another open composer may still be
+    // using a sibling branch.
+    setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {},
+      { namespace: 'default', tabLocal: true });
     // `thingOn` (not `type`): this branch's guard above reads `thingOn`, and the
     // derived `type` const is declared further down, so naming it here would be
     // a TDZ ReferenceError during render.
@@ -475,7 +451,7 @@ export const PostComposer = (props: PostComposerProps) => {
 	// every attachment going out with this post: in edit mode the existing
 	// bound set (reorderable) plus any NEW uploads from the live panel — an
 	// attachment-only post must stay saveable while its media is reordered
-	const composerAttachments = isEdit ? [...editAttachments, ...attachmentSnapshot.attachments] : attachmentSnapshot.attachments;
+	const composerAttachments = [...(isEdit ? editAttachments : []), ...draftAttachments, ...attachmentSnapshot.attachments];
 	const hasReadyAttachment = composerAttachments.length > 0;
 	const hasReadyVisualAttachment = composerAttachments.some((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video');
 
@@ -543,18 +519,76 @@ export const PostComposer = (props: PostComposerProps) => {
     subspace || (subspaceId ? mySubspaces?.find((entry) => entry.id === subspaceId) || null : null);
   const flairOptions = (activeSubspace?.flairs || []).filter((flair) => !flair.modOnly || activeSubspace?.canModerate);
 
+  const latestEditorDraft = React.useRef<EditorJsDoc | null>(null);
+  const [postEditorDraft, setPostEditorDraft] = React.useState<EditorJsDoc | null>(null);
+  const draftSnapshot = JSON.stringify({
+    photosOn, marketOn, thingOn, pickedThings, pollOn, pollOptions, postEditorValue: postEditorDraft || postEditorValue,
+    title, price, currency, category, condition, listingLocation, tagsInput, visibility, customAcl,
+    postTitle, subspaceId, flairId, layoutMode, layoutPattern, layoutColumns, layoutSpans,
+    thing: getThingtime(draftPath) ?? null, attachments: [...draftAttachments, ...attachmentSnapshot.attachments],
+    editAttachments, legacyImages, pendingSubmission: pendingPostSubmissionRef.current
+  });
+  const draftContext = isEdit ? `post:edit:${editPost!.id}` : isComment ? `comment:rich:${parentId}` : `post:new:${subspace?.id || ''}`;
+  const accountDraft = useAccountDraft({ actor: user?.id, context: draftContext, surface: isComment ? 'comment' : 'post',
+    onRestore: (saved) => {
+      const value = JSON.parse(saved.snapshot);
+      pendingPostSubmissionRef.current = value.pendingSubmission || null;
+      if (pendingPostSubmissionRef.current) pendingPostSubmissionRef.current.unknownOutcome = true;
+      setSubmissionUncertain(!!value.pendingSubmission);
+      advanceComposerSession();
+      setPostEditorDraft(null); latestEditorDraft.current = null;
+      setPhotosOn(!!value.photosOn); setMarketOn(!!value.marketOn); setThingOn(!!value.thingOn);
+      setPickedThings(value.pickedThings || []); setPollOn(!!value.pollOn); setPollOptions(value.pollOptions || ['', '']);
+      if (isEditorJsDoc(value.postEditorValue)) setPostEditorValue(value.postEditorValue);
+      else setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks(value.text || '') });
+      setTitle(value.title || ''); setPrice(value.price || ''); setCurrency(value.currency || 'AUD');
+      setCategory(value.category || 'other'); setCondition(value.condition || ''); setListingLocation(value.listingLocation || '');
+      setTagsInput(value.tagsInput || ''); setVisibility(value.visibility || 'public'); setCustomAcl(value.customAcl || null);
+      audienceAppliedRef.current = !!value.customAcl;
+      setPostTitle(value.postTitle || ''); setSubspaceId(subspace?.id || value.subspaceId || null); setFlairId(value.flairId || null);
+      setLayoutMode(value.layoutMode || 'auto'); setLayoutPattern(value.layoutPattern || [1, 2]); setLayoutColumns(value.layoutColumns || 3); setLayoutSpans(value.layoutSpans || {});
+      setDraftAttachments(value.attachments || []); setLegacyImages(value.legacyImages || []);
+      if (isEdit && value.editAttachments) setEditAttachments(value.editAttachments);
+      setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
+      seededRef.current = true;
+      setThingtime(draftPath, value.thing ?? undefined, { namespace: 'default', tabLocal: true });
+      setExpanded(true);
+    }
+  });
+  const draftContent = {
+    surface: (isComment ? 'comment' : 'post') as 'comment' | 'post', context: draftContext,
+    name: (postTitle || title || text || (thingOn ? 'Thing draft' : 'Post draft')).slice(0, 160), snapshot: draftSnapshot,
+    attachmentIds: [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds].filter(id => !isLegacyLinkedSeedId(id))
+  };
+  React.useEffect(() => {
+    if (!posting && !submissionUncertain) accountDraft.capture(draftContent, !!(text || title || postTitle || thingOn || photosOn || marketOn || pollOn || tagsInput));
+    // Snapshot is the complete editing state; method identities are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftSnapshot, posting, submissionUncertain]);
+
+  const preserveComposerDraft = async () => {
+    const value = await capturePostEditorValue(postTextEditorRef.current, postEditorValue);
+    const document = latestEditorDraft.current || value;
+    accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot), postEditorValue: document }) },
+      !!(blocksToText(document.blocks) || title || postTitle || thingOn || photosOn || marketOn || pollOn || tagsInput), true);
+    await accountDraft.flush();
+  };
+
   const reset = () => {
 		pendingPostSubmissionRef.current = null;
 		setSubmissionUncertain(false);
     setExpanded(isComment);
+    setDraftAttachments([]);
+    setLegacyImages([]);
     setPhotosOn(false);
     setMarketOn(false);
     setThingOn(false);
     setPickedThings([]);
     setPollOn(false);
     setPollOptions(['', '']);
+    setPostEditorDraft(null); latestEditorDraft.current = null;
     setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks('') });
-    setComposerSession((session) => session + 1);
+    advanceComposerSession();
     setTitle('');
     setPrice('');
     setCurrency('AUD');
@@ -585,7 +619,17 @@ export const PostComposer = (props: PostComposerProps) => {
 			}
 		}
 
-		const currentAttachmentIds = [...attachmentSnapshot.attachmentIds];
+		try {
+      if (!pendingPostSubmissionRef.current) {
+        accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot), postEditorValue: submittedEditorValue }) }, true, true);
+        await accountDraft.flush();
+      }
+    } catch {
+      setPosting(false);
+      lopu({ title: 'Your draft has not synced yet', description: 'Retry saving before posting so your work stays recoverable.', status: 'error' });
+      return;
+    }
+		const currentAttachmentIds = [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds];
 		const currentPostShareId = crypto.randomUUID();
 		// polls publish as thingtime posts; the question lives on the thing (the
 		// poll card renders it), so the post text stays empty — no double render
@@ -707,7 +751,8 @@ export const PostComposer = (props: PostComposerProps) => {
 		const attachmentIds = pendingSubmission?.attachmentIds ?? currentAttachmentIds;
 		const submittedPostType = pendingSubmission?.postType ?? type;
 
-		const finishPost = (created: PublicPost) => {
+		const finishPost = async (created: PublicPost) => {
+      await accountDraft.clear().catch(() => lopu({ title: 'Posted successfully; draft cleanup will need a retry', status: 'info' }));
 			if (attachmentIds.length > 0) {
 				// A successful or exactly reconciled save means the server claimed
 				// these drafts (create binds in the insert transaction; an edit binds
@@ -740,10 +785,17 @@ export const PostComposer = (props: PostComposerProps) => {
 		};
 
 		try {
+      if (!pendingSubmission?.unknownOutcome && !isEdit) {
+        // Persist the immutable publish identity before sending it so reloads
+        // reconcile or replay this exact post after an uncertain response.
+        accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot),
+          postEditorValue: submittedEditorValue, pendingSubmission: { ...pendingSubmission, unknownOutcome: true } }) }, true, true);
+        await accountDraft.flush();
+      }
 			if (pendingSubmission?.unknownOutcome && !isComment && !isEdit && postShareId && committedExpectation) {
 				try {
 					const saved = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
-					if (matchesCommittedPostCreate(saved, committedExpectation)) { finishPost(saved.post); return; }
+					if (matchesCommittedPostCreate(saved, committedExpectation)) { await finishPost(saved.post); return; }
 				} catch { /* Retry only the already-frozen identity and payload. */ }
 			}
 			if (isEdit) {
@@ -756,7 +808,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				// mint them into real linked attachments now, in panel order (a
 				// failed PATCH afterwards just leaves 24h-TTL drafts behind).
 				const resolvedPanelIds = await Promise.all(
-					attachmentSnapshot.attachments.map(async (attachment) => {
+					[...draftAttachments, ...attachmentSnapshot.attachments].map(async (attachment) => {
 						if (!isLegacyLinkedSeedId(attachment.id)) return attachment.id;
 						if (!attachment.url) throw new Error('linked media url missing');
 						const minted = await api.v1.attachments.link({
@@ -790,10 +842,10 @@ export const PostComposer = (props: PostComposerProps) => {
 					...(visibility === 'custom' && customAcl ? { acl: customAcl } : {}),
 					...(editAttachmentsChanged ? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...resolvedPanelIds] } : {})
 				});
-				finishPost(updated.post);
+				await finishPost(updated.post);
 			} else {
 				const resp = isComment ? await api.v1.things.comment({ id: parentId, ...payload }) : await api.v1.things.create(payload);
-				finishPost(isComment ? resp.comment : resp.post);
+				await finishPost(isComment ? resp.comment : resp.post);
 			}
 		} catch (error) {
 			let reconciled: PublicPost | null = null;
@@ -820,7 +872,7 @@ export const PostComposer = (props: PostComposerProps) => {
 			}
 			if (reconciled) {
 				window.dispatchEvent(new Event('thingtime:root-data-refresh'));
-				finishPost(reconciled);
+				await finishPost(reconciled);
 			} else {
 				const unknownNow = hasUnknownMutationOutcome(error);
 				const preserveAmbiguousSubmission = shouldFreezeAmbiguousPostSubmission(unknownNow, status, pendingSubmission?.unknownOutcome === true);
@@ -918,7 +970,10 @@ export const PostComposer = (props: PostComposerProps) => {
 					)}
 				</Flex>
 			)}
-			<Box display="contents" {...((posting || submissionUncertain ? { inert: '' } : {}) as any)}>
+			<Box display="contents" inert={posting || submissionUncertain ? true : undefined}>
+      {user && <Flex gap={2} align="center" flexWrap="wrap"><DraftSaveStatus status={accountDraft.status} error={accountDraft.error} retry={accountDraft.retry} />{!isEdit && <DraftPicker actor={user.id} surface={isComment ? 'comment' : 'post'} targetId={isComment ? parentId : undefined} disabled={posting || submissionUncertain} beforeOpen={preserveComposerDraft}
+      onDeleted={async id => { if (accountDraft.current()?.id === id) { await accountDraft.forget(id); reset(); } }}
+      onLoad={accountDraft.load} />}</Flex>}
       {/* type badges — additive toggles that wrap on narrow screens. Text is
       the always-on base; Photos/Marketplace/Things each switch their field
       group on without deselecting the others, and clicking Text switches
@@ -1013,8 +1068,9 @@ export const PostComposer = (props: PostComposerProps) => {
 							pendingMediaFilesRef.current = [];
 							if (isComment || isEdit) onClose?.();
 							else {
-								setExpanded(false);
-								setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
+                setDraftAttachments(files => [...files, ...attachmentSnapshot.attachments]);
+                setExpanded(false);
+                setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
 							}
 						}}
         />
@@ -1046,8 +1102,9 @@ export const PostComposer = (props: PostComposerProps) => {
             // question prompt must actually show for polls
             key={`${composerSession}-${type === 'poll' ? 'poll' : 'post'}`}
 						value={postEditorValue}
+						onDraftValueChange={next => { if (composerGeneration.current === editorGeneration) { latestEditorDraft.current = next; setPostEditorDraft(next); } }}
 						onValueChange={(next) => {
-							if (isEditorJsDoc(next)) setPostEditorValue(next);
+							if (composerGeneration.current === editorGeneration && isEditorJsDoc(next)) setPostEditorValue(next);
 						}}
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
             minHeight="72px"
@@ -1204,8 +1261,8 @@ export const PostComposer = (props: PostComposerProps) => {
       PATCH attachment sync), the gallery layout controls, and the linked
       image URL adder BELOW the uploader grid (type a URL, hit Add, tile
       lands in the grid, field clears for the next one). */}
-      {showPhotos && (
-        <Flex flexDirection="column" rowGap={2}>
+      {(showPhotos || attachmentSnapshot.attachments.length > 0 || draftAttachments.length > 0) && (
+        <Flex display={showPhotos ? "flex" : "none"} flexDirection="column" rowGap={2}>
           <Eyebrow>Photos {type !== 'image' ? '(optional) ' : ''}🖼️</Eyebrow>
 
 					{user && (
@@ -1214,6 +1271,7 @@ export const PostComposer = (props: PostComposerProps) => {
 							key={`attachments-${user.id}-${composerSession}`}
 							ownerId={user.id}
 							disabled={posting || submissionUncertain}
+              preserveDrafts
 							purpose={attachmentPurpose}
 							ariaLabel={attachmentPurpose === 'comment' ? 'Comment attachments' : 'Post attachments'}
 							remainingBytes={user.storage.remainingBytes}
@@ -1222,12 +1280,19 @@ export const PostComposer = (props: PostComposerProps) => {
 							allowLinkedUrls
 							// Preserve every legacy image when reopening an existing post.
 							initialLinkedSeeds={
-								isEdit ? (editPost?.images || []) : undefined
+								legacyImages
 							}
 							tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
-								existingAttachments={isEdit ? editAttachments : undefined}
-								onExistingChange={isEdit ? setEditAttachments : undefined}
-								onExistingRemove={isEdit ? removeExistingAttachment : undefined}
+								existingAttachments={[...(isEdit ? editAttachments : []), ...draftAttachments]}
+								onExistingChange={(files) => {
+                const oldIds = new Set(editAttachmentsSeedRef.current.map(file => file.id));
+                setEditAttachments(files.filter(file => oldIds.has(file.id)));
+                setDraftAttachments(files.filter(file => !oldIds.has(file.id)));
+              }}
+								onExistingRemove={(file) => {
+                if (editAttachments.some(entry => entry.id === file.id)) removeExistingAttachment(file);
+                else setDraftAttachments(files => files.filter(entry => entry.id !== file.id));
+              }}
 						/>
 					)}
 

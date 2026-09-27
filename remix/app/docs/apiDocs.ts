@@ -642,6 +642,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'drafts', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Private drafts and templates', endpoint: '/api/v1/drafts',
+    summary: 'Autosave unfinished Things and posts to the current account; reuse post templates.',
+    detail: 'Owner-only, quota-accounted snapshots. Writes use an expected actor, revision and stable write id. Files stay private and durable until the draft is discarded or published. Templates are copied into fresh working drafts and never consumed. Generic Thing CRUD cannot access this protected kind.',
+    auth: { mode: 'session-or-bearer', description: 'Full account session; app tokens and personal access tokens are refused.' },
+    methods: ['GET', 'POST'], steps: ['GET to page through your drafts or read an exact id.', 'POST save, delete, from-post, instantiate or recover with expectedActor.'],
+    requestExamples: [{ name: 'Drafts', description: 'List private post drafts and templates.', method: 'GET', query: { surface: 'post' } }],
+    responseExamples: [{ status: 200, description: 'Private drafts.', body: { ok: true, drafts: [], nextCursor: null } }]
+  }),
+
+  endpoint({
     id: 'builder-workspaces', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'builder',
     title: 'Service workspaces', endpoint: '/api/v1/builder/workspaces',
     summary: 'Folder-backed service management for builder apps, with live role and customer-scoped access.',

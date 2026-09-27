@@ -237,6 +237,12 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 			);
 		}
 
+		// Draft media stays private even if a corrupt row carries a wider ACL.
+        if (viewer?.id === attachment.ownerId && (attachment.attachmentPurpose === 'post' || attachment.attachmentPurpose === 'comment')) {
+          const draft = await things.findOne({ shareId: targetId, ownerId: viewer.id, thingtime: ['draft'], acl: [ACL_OWNER], draftDeleted: { $ne: true } } as any, { projection: { shareId: 1 } });
+          if (draft) return true;
+        }
+
 		if (attachment.attachmentPurpose === 'comment') {
 			return canViewCommentAttachment(things, viewer, attachment);
 		}
