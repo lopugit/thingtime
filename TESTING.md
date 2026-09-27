@@ -1,5 +1,38 @@
 # TESTING.md — per-area manual test checklists
 
+## History timeline design concept (`docs/design/thingtime-history-timeline/`, `/docs/design`)
+
+Fictional-data design concept for unified Thing history (TODO 50). Nothing is
+persisted; every check is client-side.
+
+- [ ] `/docs/design?entry=thingtime-history-timeline` lists the entry as an App
+      concept and the preview iframe renders the page; the bundle URL
+      `/docs/design-bundles/thingtime-history-timeline/index.html` renders it
+      standalone with no console errors.
+- [ ] Desktop (≥ 821px): the History browser shows the timeline beside a detail
+      panel; the selected row ("You changed colour on Primary button") is
+      highlighted and the panel shows its before/after diff.
+- [ ] Phone (390px, or the gallery's phone preset): the panel is hidden until a
+      row is tapped, then opens as a bottom sheet with a ✕ close; Escape and the
+      backdrop close it; no horizontal scroll anywhere on the page.
+- [ ] Scope, kind/who/what chips and the search box filter rows; counts on the
+      kind chips follow the scope; an empty result shows the "Nothing recorded
+      matches these filters" state rather than a blank pane.
+- [ ] Clicking a scrubber bar jumps the timeline to that day and highlights the
+      day header; a day with no changes explains that instead of jumping.
+- [ ] Restore / Undo / Try a variation each ADD a row at the top with a system
+      message and a Lopu toast; no existing row disappears.
+- [ ] Section 4: toggle Offline, Make an edit → the new row and the header pill
+      say "Saved on this device"; Reconnect & sync → they turn "Synced" while
+      the button variation stays "Saved on this device".
+- [ ] Section 3: Send changes with a pending review opens the merge card;
+      choosing an option resolves it, adds a "Reviewed and combined" row, and
+      clears the "Needs review" pills.
+- [ ] Settings toggles and the retention segmented control respond; "Show
+      messages in the timeline" off hides message bubbles in rows and the panel.
+- [ ] With `prefers-reduced-motion: reduce`, no animation runs and the sheet,
+      toast and rows still appear.
+
 ## Editable record app primitives
 
 - [ ] Planner controls: switch day/week, dates, filters and 5/10/15/20/infinite

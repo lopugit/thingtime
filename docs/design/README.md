@@ -22,6 +22,11 @@ directory. Rebuild any entry's bundle with `python3 inline-dc.py <folder>`.
 - `thingtime-theme-gallery/` — design concept: a browsable, one-click-apply
   public theme gallery; each card is a live mini preview in its own theme.
   Hand-authored self-contained `index.html` (no `.dc.html` source).
+- `thingtime-history-timeline/` — design concept: the unified history timeline
+  and contextual History panel — Thing cards as of each version, property-change
+  chips, contextual messages (you / Lopu / apps / system), local-first sync
+  pills, versions with "Review and combine", and History settings (interactive;
+  Prism look). Hand-authored self-contained `index.html` (no `.dc.html` source).
 - `thingtime-landing-1a-classic-centered/` — classic centered · waitlist-first · warm copy
 - `thingtime-landing-1b-product-split/` — product split · the demo IS the hero · confident copy
 - `thingtime-landing-1c-crowdfund-campaign/` — crowdfund campaign · backers-first · rallying copy

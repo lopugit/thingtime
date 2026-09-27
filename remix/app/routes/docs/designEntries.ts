@@ -22,6 +22,13 @@ export const designKindColors: Record<DesignEntryKind, { bg: string; color: stri
 
 export const designEntries: DesignEntry[] = [
   {
+    slug: 'thingtime-history-timeline',
+    title: 'History timeline — /history and the contextual History panel',
+    kind: 'App',
+    summary: 'Design concept: one timeline of every change with the Thing card as it was, property diffs, and the message that explains why.',
+    notes: 'Interactive: scope and filter chips, a 30-day scrubber, a detail panel (bottom sheet on phones), restore/undo/variation that only append, an offline → synced simulation, review-and-combine merge review, and History settings. Fictional data.'
+  },
+  {
     slug: 'thingtime-algorithm-growth',
     title: 'Algorithm growth — raise your feed brain',
     kind: 'App',

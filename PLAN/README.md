@@ -37,6 +37,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Support agency and accountable remedy roadmap](./support-agency-and-accountable-remedy-roadmap.md)                                 | Support ownership through consistent help, consentful intake, accountable handoffs, domain-bound remedies, correction, closure, and one synthetic pilot     | Proposed |
 | [Change agency and humane product evolution roadmap](./change-agency-and-humane-product-evolution-roadmap.md)                       | Change ownership through exact impact, truthful preview and choice, safe coexistence, rollback, retirement, remedy, and one synthetic preference pilot      | Proposed |
 | [Personalization agency and accountable-memory roadmap](./personalization-agency-and-accountable-memory-roadmap.md)                 | Memory ownership through an inspectable inventory, deterministic effects, correction, exclusion, forgetting, reset, and one four-item synthetic pilot       | Proposed |
+| [Unified Thing history roadmap](./unified-thing-history-roadmap.md)                                                                 | Design concept through a durable editor journal, one contextual History panel, account-synced history Things, the /history timeline browser, versions with review-and-combine, and every writer emitting events | Proposed (M0 delivered) |
 
 ## Conventions
 

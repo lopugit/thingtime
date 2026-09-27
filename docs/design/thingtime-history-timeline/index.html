@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Thingtime · History timeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --tt-rainbow-1:#f34a4a; --tt-rainbow-2:#ffbc48; --tt-rainbow-3:#58ca70;
+    --tt-rainbow-4:#47b5e6; --tt-rainbow-5:#a555e8;
+    --tt-ink:#16161a; --tt-text:#5a5a66; --tt-muted:#9a9aa6; --tt-faint:#b6b6c0;
+    --tt-border:#ececef; --tt-border-light:#f0f0f2; --tt-surface:#fafafb;
+    --tt-surface-alt:#f5f5f7; --tt-card:#ffffff; --tt-hover:#f1f1f4;
+    --tt-heading:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --tt-body:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --tt-mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --tt-gradient:linear-gradient(90deg,#f34a4a,#ffbc48,#58ca70,#47b5e6,#a555e8,#f34a4a);
+    --tt-border-grad:linear-gradient(120deg,#47b5e6,#a555e8,#f34a4a,#ffbc48,#58ca70,#47b5e6);
+    --local:#ffbc48; --synced:#58ca70; --review:#f34a4a;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body { font-family:var(--tt-body); background:var(--tt-surface); color:var(--tt-text);
+    -webkit-font-smoothing:antialiased; line-height:1.55; overflow-x:hidden; }
+  button { font-family:inherit; }
+  .wrap { max-width:1080px; margin:0 auto; padding:56px 24px 80px; }
+  @media (max-width:600px){ .wrap { padding:40px 16px 64px; } }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:40px; flex-wrap:wrap; }
+  .voxel { width:34px; height:34px; display:grid; grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr); gap:2px; background:var(--tt-card);
+    border:1px solid var(--tt-border); border-radius:8px; padding:4px; box-shadow:0 1px 2px rgba(0,0,0,.05); }
+  .voxel i { border-radius:2px; }
+  .voxel i:nth-child(2){ background:var(--tt-rainbow-4); }
+  .voxel i:nth-child(4){ background:var(--tt-rainbow-3); }
+  .voxel i:nth-child(5){ background:var(--tt-rainbow-2); }
+  .voxel i:nth-child(6){ background:var(--tt-rainbow-5); }
+  .voxel i:nth-child(8){ background:var(--tt-rainbow-1); }
+  .brand b { font-family:var(--tt-heading); font-weight:700; font-size:19px; letter-spacing:-.02em; color:var(--tt-ink); }
+  .brand span { font-family:var(--tt-mono); font-size:11px; color:var(--tt-muted); letter-spacing:.14em;
+    text-transform:uppercase; margin-left:auto; }
+  .eyebrow { font-family:var(--tt-mono); font-weight:600; font-size:12px; letter-spacing:.16em;
+    text-transform:uppercase; color:var(--tt-rainbow-5); margin-bottom:14px; }
+  h1 { font-family:var(--tt-heading); font-weight:700; letter-spacing:-.035em;
+    font-size:clamp(36px,6vw,60px); line-height:1.02; color:var(--tt-ink); margin:0 0 18px; }
+  .grad { background:var(--tt-gradient); background-size:200% auto; -webkit-background-clip:text;
+    background-clip:text; color:transparent; animation:pan 7s linear infinite; }
+  @keyframes pan { to { background-position:200% center; } }
+  .lede { font-size:19px; max-width:720px; margin:0 0 10px; }
+  .lede b { color:var(--tt-ink); font-weight:700; }
+  .lede.small { font-size:15px; color:var(--tt-muted); }
+  .lede.small code { font-family:var(--tt-mono); font-size:12.5px; background:var(--tt-surface-alt);
+    border:1px solid var(--tt-border); border-radius:6px; padding:1px 6px; color:var(--tt-text); }
+
+  section.concept { margin-top:52px; }
+  section.concept > h2 { font-family:var(--tt-heading); font-weight:700; letter-spacing:-.03em; font-size:27px;
+    color:var(--tt-ink); margin:0 0 8px; }
+  section.concept > p.sub { margin:0 0 20px; max-width:720px; font-size:15.5px; }
+  section.concept > p.sub b { color:var(--tt-ink); }
+
+  /* ---------- mock app frame ---------- */
+  .app { background:var(--tt-card); border:1px solid var(--tt-border); border-radius:20px;
+    box-shadow:0 24px 60px -34px rgba(20,20,40,.24); overflow:hidden; }
+  .app-bar { display:flex; align-items:center; gap:12px; padding:14px 18px; border-bottom:1px solid var(--tt-border);
+    background:rgba(255,255,255,.78); backdrop-filter:blur(14px); flex-wrap:wrap; }
+  .app-bar .title { font-family:var(--tt-heading); font-weight:700; font-size:17px; color:var(--tt-ink);
+    display:flex; align-items:center; gap:8px; letter-spacing:-.02em; }
+  .seg { display:inline-flex; background:#f1f1f3; border-radius:11px; padding:4px; gap:2px; }
+  .seg button { border:1px solid transparent; background:transparent; color:var(--tt-muted); font-size:12.5px;
+    font-weight:600; padding:6px 11px; border-radius:9px; cursor:pointer; white-space:nowrap; }
+  .seg button[aria-pressed="true"] { background:#fff; color:var(--tt-ink); border-color:var(--tt-border); box-shadow:0 1px 2px rgba(0,0,0,.05); }
+  .search { flex:1 1 180px; min-width:140px; display:flex; align-items:center; gap:8px; background:var(--tt-surface-alt);
+    border:1px solid var(--tt-border); border-radius:10px; padding:7px 11px; color:var(--tt-muted); font-size:13px; }
+  .search input { border:0; background:transparent; outline:none; font:inherit; color:var(--tt-ink); width:100%; min-width:0; }
+  .search kbd { font-family:var(--tt-mono); font-size:10.5px; background:#fff; border:1px solid var(--tt-border);
+    border-radius:6px; padding:1px 6px; color:var(--tt-muted); }
+  .syncpill { display:inline-flex; align-items:center; gap:7px; font-family:var(--tt-mono); font-size:11.5px;
+    color:var(--tt-text); background:var(--tt-surface-alt); border:1px solid var(--tt-border); border-radius:999px; padding:6px 11px; white-space:nowrap; }
+  .syncpill .d { width:8px; height:8px; border-radius:50%; background:var(--synced); box-shadow:0 0 0 0 rgba(88,202,112,.5); animation:pulse 2s ease-out infinite; }
+  .syncpill.local .d { background:var(--local); }
+  .syncpill.review .d { background:var(--review); }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(88,202,112,.45);} 70%{box-shadow:0 0 0 8px transparent;} 100%{box-shadow:0 0 0 0 transparent;} }
+
+  .filters { display:flex; flex-direction:column; gap:8px; padding:12px 18px; border-bottom:1px solid var(--tt-border); }
+  .frow { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .frow .lab { font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--tt-muted); width:46px; flex:0 0 auto; }
+  .chip { font-family:var(--tt-mono); font-size:11.5px; padding:5px 10px; border-radius:999px; border:1px solid var(--tt-border);
+    background:var(--tt-card); color:var(--tt-text); cursor:pointer; display:inline-flex; align-items:center; gap:5px; line-height:1.2; }
+  .chip:hover { background:var(--tt-hover); }
+  .chip[aria-pressed="true"] { background:var(--tt-ink); color:#fff; border-color:var(--tt-ink); }
+  .chip .n { opacity:.6; font-size:10.5px; }
+
+  /* density scrubber */
+  .scrub { padding:12px 18px 10px; border-bottom:1px solid var(--tt-border); }
+  .scrub-top { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:6px; }
+  .scrub-top .lab { font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--tt-muted); }
+  .scrub-top .hint { font-size:12px; color:var(--tt-muted); }
+  .bars { display:grid; grid-template-columns:repeat(30,1fr); gap:3px; height:44px; align-items:end; }
+  .bars button { border:0; background:var(--tt-surface-alt); border-radius:3px 3px 1px 1px; padding:0; height:100%; cursor:pointer; position:relative; min-height:4px; }
+  .bars button i { position:absolute; left:0; right:0; bottom:0; border-radius:3px 3px 1px 1px; background:var(--tt-faint); }
+  .bars button.has i { background:var(--tt-rainbow-4); }
+  .bars button.active i { background:var(--tt-ink); }
+  .bars button:hover i { background:var(--tt-rainbow-5); }
+  .bars button[data-tip]:hover::after { content:attr(data-tip); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%);
+    background:var(--tt-ink); color:#fff; font-family:var(--tt-mono); font-size:10.5px; padding:4px 7px; border-radius:6px; white-space:nowrap; z-index:5; }
+  .ticks { display:flex; justify-content:space-between; margin-top:6px; font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-faint); }
+
+  /* split */
+  .split { display:grid; grid-template-columns:minmax(0,1fr) 340px; min-height:520px; }
+  .timeline { padding:6px 18px 18px; max-height:640px; overflow:auto; scroll-behavior:smooth; }
+  .detail { border-left:1px solid var(--tt-border); background:var(--tt-surface); padding:18px; max-height:640px; overflow:auto; }
+  @media (max-width:820px){
+    .split { grid-template-columns:1fr; }
+    .timeline { max-height:none; }
+    .detail { display:none; position:fixed; left:0; right:0; bottom:0; max-height:78vh; border-left:0; border-top:1px solid var(--tt-border);
+      border-radius:18px 18px 0 0; box-shadow:0 -24px 60px -24px rgba(20,20,40,.35); z-index:60; background:var(--tt-card);
+      padding-bottom:calc(18px + env(safe-area-inset-bottom)); }
+    .detail.open { display:block; animation:sheetin .28s cubic-bezier(.2,.9,.3,1); }
+    @keyframes sheetin { from { transform:translateY(24px); opacity:0; } to { transform:none; opacity:1; } }
+    .backdrop.open { position:fixed; inset:0; background:rgba(18,18,28,.32); z-index:55; }
+  }
+
+  .day { margin-top:16px; }
+  .day-h { display:flex; align-items:center; gap:10px; margin:6px 0 8px; position:sticky; top:0; background:var(--tt-card); padding:6px 0; z-index:2; }
+  .day-h b { font-family:var(--tt-heading); font-weight:600; font-size:14px; color:var(--tt-ink); letter-spacing:-.01em; }
+  .day-h span { font-family:var(--tt-mono); font-size:11px; color:var(--tt-muted); }
+  .day-h .line { flex:1; height:1px; background:var(--tt-border); }
+  .day.jump .day-h b { color:var(--tt-rainbow-5); }
+
+  .ev { display:grid; grid-template-columns:22px 56px minmax(0,1fr); gap:0 10px; position:relative; padding:4px 0 12px; cursor:pointer; border-radius:12px; }
+  .ev:hover { background:var(--tt-surface); }
+  .ev .rail { position:relative; }
+  .ev .rail::before { content:""; position:absolute; left:10px; top:0; bottom:-12px; width:2px; background:var(--tt-border); }
+  .ev:last-child .rail::before { bottom:12px; }
+  .ev .rail i { position:absolute; left:5px; top:12px; width:12px; height:12px; border-radius:50%; background:#fff; border:2.5px solid var(--vc,var(--tt-rainbow-4)); z-index:1; }
+  .ev.lane1 .rail::after { content:""; position:absolute; left:10px; top:0; bottom:-12px; width:2px; border-left:2px dashed var(--tt-rainbow-5); }
+  .ev.lane1 .rail i { left:15px; background:var(--tt-rainbow-5); border-color:var(--tt-rainbow-5); }
+  .ev .when { font-family:var(--tt-mono); font-size:11px; color:var(--tt-muted); padding-top:12px; line-height:1.3; }
+  .ev .when small { display:block; color:var(--tt-faint); font-size:10px; }
+  .ev .body { min-width:0; padding-top:8px; }
+  .ev.sel { background:var(--tt-surface-alt); outline:1px solid var(--tt-border); }
+  .ev.sel .rail i { box-shadow:0 0 0 4px rgba(71,181,230,.18); }
+  .ev.pop { animation:pop .32s cubic-bezier(.2,.9,.3,1); }
+  @keyframes pop { from { transform:translateY(-6px); opacity:0; } to { transform:none; opacity:1; } }
+
+  .sentence { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--tt-text); flex-wrap:wrap; }
+  .sentence b { color:var(--tt-ink); font-weight:700; }
+  .av { width:22px; height:22px; border-radius:50%; display:inline-grid; place-items:center; font-size:11px; font-weight:800;
+    font-family:var(--tt-heading); color:#fff; background:var(--tt-ink); flex:0 0 auto; }
+  .av.lopu { background:var(--tt-border-grad); font-size:13px; }
+  .av.collab { background:#2f8fd6; }
+  .av.app { background:var(--tt-rainbow-2); color:var(--tt-ink); }
+  .av.sys { background:var(--tt-surface-alt); color:var(--tt-muted); border:1px solid var(--tt-border); }
+  .verb { font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; padding:2px 7px; border-radius:6px;
+    background:color-mix(in srgb, var(--vc) 14%, white); color:var(--vc); font-weight:600; }
+  .row2 { display:flex; gap:10px; margin-top:8px; align-items:flex-start; flex-wrap:wrap; }
+
+  /* thing card (as of that version) */
+  .tcard { display:flex; align-items:center; gap:10px; background:var(--tt-card); border:1px solid var(--tt-border); border-radius:12px;
+    padding:8px 10px; min-width:0; max-width:100%; flex:0 1 auto; box-shadow:0 1px 2px rgba(0,0,0,.04); }
+  .tcard .ic { width:34px; height:34px; border-radius:9px; background:var(--tt-surface-alt); display:grid; place-items:center; font-size:17px; flex:0 0 auto; }
+  .tcard .t { min-width:0; }
+  .tcard .t b { display:block; font-family:var(--tt-heading); font-weight:600; font-size:13.5px; color:var(--tt-ink); letter-spacing:-.01em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px; }
+  .tcard .t span { display:block; font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px; }
+  .tcard .v { font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-muted); background:var(--tt-surface-alt); border-radius:6px; padding:2px 6px; flex:0 0 auto; }
+  .tcard.big .ic { width:44px; height:44px; font-size:22px; }
+  .tcard.big .t b { font-size:15px; max-width:100%; white-space:normal; }
+  .tcard.big .t span { max-width:100%; white-space:normal; }
+
+  .changes { display:flex; flex-wrap:wrap; gap:6px; align-content:flex-start; min-width:0; }
+  .chg { font-family:var(--tt-mono); font-size:11px; border:1px solid var(--tt-border); background:var(--tt-card); border-radius:8px; flex-wrap:wrap;
+    padding:4px 8px; color:var(--tt-text); display:inline-flex; gap:6px; align-items:center; max-width:100%; }
+  .chg .k { color:var(--tt-muted); }
+  .chg .b, .chg .a { white-space:nowrap; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+  .chg .b { text-decoration:line-through; color:var(--tt-faint); }
+  .chg .a { color:var(--tt-ink); font-weight:600; }
+  .chg .arrow { color:var(--tt-faint); }
+  .chg.add .a { color:#2f8f4f; }
+  .chg.del .b { color:#d6455a; text-decoration:none; }
+  .chg .sw { width:10px; height:10px; border-radius:3px; border:1px solid rgba(0,0,0,.12); display:inline-block; }
+
+  .msg { margin-top:8px; display:flex; gap:8px; align-items:flex-start; max-width:560px; }
+  .msg .bubble { background:var(--tt-surface-alt); border:1px solid var(--tt-border); border-radius:4px 12px 12px 12px; padding:7px 11px; font-size:13px; color:var(--tt-text); }
+  .msg .bubble b { color:var(--tt-ink); }
+  .msg.lopu .bubble { background:var(--tt-border-grad); padding:1.5px; border:0; }
+  .msg.lopu .bubble > div { background:#fff; border-radius:3px 11px 11px 11px; padding:6px 10px; }
+  .msg.sys .bubble { background:transparent; border-style:dashed; color:var(--tt-muted); font-size:12.5px; }
+  .msg .who { font-family:var(--tt-mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--tt-muted); display:block; margin-bottom:2px; }
+
+  .meta { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
+  .pill { font-family:var(--tt-mono); font-size:10.5px; padding:3px 8px; border-radius:999px; border:1px solid var(--tt-border); display:inline-flex; gap:5px; align-items:center; color:var(--tt-text); background:#fff; }
+  .pill i { width:7px; height:7px; border-radius:50%; background:var(--synced); }
+  .pill.local i { background:var(--local); }
+  .pill.review i { background:var(--review); }
+  .pill.review { border-color:rgba(243,74,74,.4); color:#c23a4c; }
+  .acts { margin-left:auto; display:flex; gap:4px; opacity:0; transition:opacity .15s ease; }
+  .ev:hover .acts, .ev.sel .acts { opacity:1; }
+  .acts button { font-size:11.5px; border:1px solid var(--tt-border); background:#fff; border-radius:7px; padding:3px 8px; cursor:pointer; color:var(--tt-text); }
+  .acts button:hover { background:var(--tt-hover); color:var(--tt-ink); }
+  @media (hover:none){ .acts { opacity:1; } }
+
+  /* detail */
+  .detail .close { display:none; }
+  @media (max-width:820px){ .detail .close { display:inline-flex; position:absolute; right:12px; top:10px; border:1px solid var(--tt-border);
+    background:#fff; border-radius:8px; width:30px; height:30px; align-items:center; justify-content:center; cursor:pointer; font-size:14px; } }
+  .detail .eyebrow { margin-bottom:8px; color:var(--tt-muted); }
+  .dtabs { display:flex; gap:4px; margin:14px 0 12px; border-bottom:1px solid var(--tt-border); }
+  .dtabs button { border:0; background:transparent; font-weight:600; font-size:13px; padding:6px 10px; color:var(--tt-muted); cursor:pointer;
+    border-bottom:2px solid transparent; margin-bottom:-1px; }
+  .dtabs button[aria-selected="true"] { color:var(--tt-ink); border-bottom-color:var(--tt-ink); }
+  .diff { border:1px solid var(--tt-border); border-radius:12px; overflow:hidden; background:#fff; }
+  .diff .r { display:grid; grid-template-columns:1fr; padding:9px 12px; border-top:1px solid var(--tt-border-light); }
+  .diff .r:first-child { border-top:0; }
+  .diff .k { font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--tt-muted); margin-bottom:4px; }
+  .diff .ba { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .diff .ba > div { font-size:13px; padding:6px 8px; border-radius:8px; background:var(--tt-surface-alt); min-width:0; word-break:break-word; }
+  .diff .ba .lab { font-family:var(--tt-mono); font-size:9.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--tt-muted); display:block; }
+  .diff .ba .before { color:var(--tt-muted); }
+  .diff .ba .after { color:var(--tt-ink); font-weight:600; background:rgba(88,202,112,.12); }
+  .diff .ba .after.none { background:var(--tt-surface-alt); color:var(--tt-muted); font-weight:400; }
+  .dbtns { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .btn { border:1px solid #e2e2e6; background:#fff; color:var(--tt-ink); font-weight:600; font-size:12.5px; border-radius:10px; padding:8px 12px; cursor:pointer; }
+  .btn:hover { background:var(--tt-hover); }
+  .btn.primary { background:var(--tt-ink); color:#fff; border-color:var(--tt-ink); box-shadow:0 6px 20px rgba(0,0,0,.14); }
+  .btn.primary:hover { background:#000; }
+  .btn.rainbow { background:var(--tt-border-grad); border:0; color:#fff; text-shadow:0 1px 0 rgba(0,0,0,.2); }
+  .btn.small { font-size:11.5px; padding:6px 10px; border-radius:8px; }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .note { font-size:12.5px; color:var(--tt-muted); margin-top:12px; }
+  .note b { color:var(--tt-text); }
+  .ancestry { font-family:var(--tt-mono); font-size:11px; color:var(--tt-muted); margin-top:10px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .ancestry span { background:var(--tt-surface-alt); border:1px solid var(--tt-border); border-radius:6px; padding:2px 6px; }
+  .msgbox { border:1px dashed var(--tt-border); border-radius:12px; padding:10px 12px; font-size:13px; }
+  .msgbox textarea { width:100%; border:0; background:transparent; resize:vertical; min-height:56px; font:inherit; color:var(--tt-ink); outline:none; }
+  .vers { display:flex; flex-direction:column; gap:6px; }
+  .vers .vr { display:flex; align-items:center; gap:8px; font-size:12.5px; padding:6px 8px; border-radius:8px; border:1px solid var(--tt-border); background:#fff; }
+  .vers .vr i { width:8px; height:8px; border-radius:50%; background:var(--tt-rainbow-4); }
+  .vers .vr.cur { border-color:var(--tt-ink); }
+  .vers .vr .m { margin-left:auto; font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-muted); }
+
+  /* anatomy legend */
+  .legend { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:16px; }
+  @media (max-width:820px){ .legend { grid-template-columns:repeat(2,1fr); } }
+  .legend div { background:var(--tt-card); border:1px solid var(--tt-border); border-radius:14px; padding:14px; font-size:13px; }
+  .legend b { display:block; font-family:var(--tt-heading); font-weight:600; color:var(--tt-ink); margin-bottom:4px; font-size:14px; }
+  .legend .n { font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-rainbow-5); letter-spacing:.12em; text-transform:uppercase; }
+
+  /* entry points */
+  .entries { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media (max-width:820px){ .entries { grid-template-columns:1fr; } }
+  .mini { background:var(--tt-card); border:1px solid var(--tt-border); border-radius:16px; padding:16px; }
+  .mini h3 { font-family:var(--tt-heading); font-weight:600; font-size:15px; color:var(--tt-ink); margin:0 0 4px; letter-spacing:-.01em; }
+  .mini p { font-size:13px; margin:0 0 12px; }
+  .menu { border:1px solid var(--tt-border); border-radius:12px; overflow:hidden; box-shadow:0 16px 40px -12px rgba(20,20,40,.2); background:#fff; font-size:13.5px; }
+  .menu div { padding:8px 12px; display:flex; gap:9px; align-items:center; color:var(--tt-ink); }
+  .menu div + div { border-top:1px solid var(--tt-border-light); }
+  .menu div.new { background:rgba(165,85,232,.09); font-weight:700; }
+  .menu div.new .tag { margin-left:auto; font-family:var(--tt-mono); font-size:10px; color:var(--tt-rainbow-5); letter-spacing:.1em; text-transform:uppercase; }
+  .menu div.danger { color:#d6455a; }
+  .menu div .kbd { margin-left:auto; font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-muted); }
+  .editorbox { border:1px solid var(--tt-border); border-radius:12px; padding:14px 14px 34px; position:relative; background:#fff; min-height:120px; }
+  .editorbox p { margin:0; font-size:14px; color:var(--tt-ink); }
+  .editorbox p.dim { color:var(--tt-muted); margin-top:4px; }
+  .editorbox .hist { position:absolute; right:8px; bottom:6px; display:flex; gap:2px; }
+  .editorbox .hist button { background:transparent; border:0; color:var(--tt-muted); font-size:11px; height:28px; min-width:28px; padding:0 6px; border-radius:5px; cursor:pointer; }
+  .editorbox .hist button:hover { background:var(--tt-hover); color:var(--tt-text); }
+  .editorbox .hist button.on { color:var(--tt-rainbow-5); font-weight:700; }
+  .postcard { border:1px solid var(--tt-border); border-radius:16px; padding:14px; background:#fff; }
+  .postcard .ph { display:flex; align-items:center; gap:8px; font-size:13px; }
+  .postcard .ph b { color:var(--tt-ink); }
+  .postcard .ph .t { color:var(--tt-muted); font-family:var(--tt-mono); font-size:11px; margin-left:auto; }
+  .postcard .pb { margin:10px 0; font-size:14px; color:var(--tt-ink); }
+  .postcard .pf { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .postcard .pf .r { font-size:12.5px; border:1px solid var(--tt-border); border-radius:999px; padding:3px 9px; color:var(--tt-text); }
+  .postcard .pf .edited { margin-left:auto; font-family:var(--tt-mono); font-size:11px; color:var(--tt-rainbow-5); border:1px dashed rgba(165,85,232,.5); border-radius:999px; padding:3px 9px; cursor:pointer; background:rgba(165,85,232,.06); }
+
+  /* versions */
+  .versions { background:var(--tt-card); border:1px solid var(--tt-border); border-radius:20px; padding:20px; }
+  .vtop { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .vtop .sp { flex:1; }
+  .graph { overflow-x:auto; border:1px solid var(--tt-border); border-radius:14px; background:var(--tt-surface); padding:8px; }
+  .graph svg { display:block; min-width:640px; width:100%; height:190px; }
+  .graph text { font-family:var(--tt-body); font-size:12px; fill:var(--tt-text); }
+  .graph text.n { font-family:var(--tt-mono); font-size:10.5px; fill:var(--tt-muted); }
+  .graph text.lane { font-family:var(--tt-mono); font-size:10.5px; fill:var(--tt-muted); letter-spacing:.1em; text-transform:uppercase; }
+  .graph .node { cursor:pointer; }
+  .graph .node:hover circle { stroke-width:4; }
+  .merge { margin-top:14px; border:1px solid rgba(243,74,74,.35); background:rgba(243,74,74,.05); border-radius:14px; padding:14px; display:none; }
+  .merge.open { display:block; animation:pop .32s cubic-bezier(.2,.9,.3,1); }
+  .merge.done { border-color:rgba(88,202,112,.5); background:rgba(88,202,112,.08); }
+  .merge h4 { margin:0 0 6px; font-family:var(--tt-heading); font-size:15px; color:var(--tt-ink); }
+  .merge p { margin:0 0 10px; font-size:13px; }
+  .merge .opts { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  @media (max-width:600px){ .merge .opts { grid-template-columns:1fr; } }
+  .merge .opts button { border:1px solid var(--tt-border); background:#fff; border-radius:10px; padding:10px; text-align:left; cursor:pointer; font-size:13px; color:var(--tt-ink); }
+  .merge .opts button:hover { border-color:var(--tt-ink); }
+  .merge .opts button b { display:block; font-size:12.5px; margin-bottom:2px; }
+  .merge .opts button span { font-family:var(--tt-mono); font-size:11px; color:var(--tt-muted); }
+  .merge .opts button.chosen { border-color:var(--tt-rainbow-3); background:rgba(88,202,112,.1); }
+
+  /* local first stepper */
+  .states { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; gap:10px; align-items:center; }
+  @media (max-width:820px){ .states { grid-template-columns:1fr; } .states .arr { transform:rotate(90deg); text-align:center; } }
+  .state { background:var(--tt-card); border:1px solid var(--tt-border); border-radius:16px; padding:16px; }
+  .state .pill { font-size:11.5px; padding:5px 10px; }
+  .state h3 { margin:10px 0 4px; font-family:var(--tt-heading); font-size:15px; color:var(--tt-ink); }
+  .state p { margin:0; font-size:13px; }
+  .arr { color:var(--tt-faint); font-size:22px; text-align:center; }
+  .sim { margin-top:16px; background:var(--tt-card); border:1px solid var(--tt-border); border-radius:16px; padding:16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .sim .lab { font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--tt-muted); width:100%; }
+  .toggle { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--tt-ink); cursor:pointer; user-select:none; }
+  .toggle .sw { width:38px; height:22px; border-radius:999px; background:#d9d9de; position:relative; transition:background .16s ease; }
+  .toggle .sw::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .16s ease; }
+  .toggle[aria-checked="true"] .sw { background:var(--tt-rainbow-3); }
+  .toggle[aria-checked="true"] .sw::after { transform:translateX(16px); }
+  .toggle.off[aria-checked="true"] .sw { background:var(--tt-rainbow-2); }
+  .simstat { font-family:var(--tt-mono); font-size:11.5px; color:var(--tt-muted); }
+
+  /* settings */
+  .settings { background:var(--tt-card); border:1px solid var(--tt-border); border-radius:20px; overflow:hidden; }
+  .settings .srow { display:flex; align-items:center; gap:14px; padding:14px 18px; border-top:1px solid var(--tt-border-light); flex-wrap:wrap; }
+  .settings .srow:first-child { border-top:0; }
+  .settings .srow .txt { flex:1 1 260px; min-width:0; }
+  .settings .srow b { display:block; font-size:14px; color:var(--tt-ink); }
+  .settings .srow span { font-size:12.5px; color:var(--tt-muted); }
+  .settings .bar { height:8px; border-radius:999px; background:var(--tt-surface-alt); overflow:hidden; width:100%; margin-top:8px; }
+  .settings .bar i { display:block; height:100%; width:3%; background:var(--tt-gradient); background-size:200% auto; animation:pan 7s linear infinite; }
+
+  /* foot + toast */
+  .foot { margin-top:56px; padding-top:22px; border-top:1px solid var(--tt-border); font-size:13px; color:var(--tt-muted); }
+  .foot code { font-family:var(--tt-mono); font-size:12px; background:var(--tt-surface-alt); border:1px solid var(--tt-border); border-radius:6px; padding:1px 6px; color:var(--tt-text); }
+  .foot .row { margin-top:8px; }
+  .toast { position:fixed; top:16px; left:50%; transform:translateX(-50%); width:min(360px,calc(100vw - 32px)); background:var(--tt-border-grad); border-radius:18px; padding:2px;
+    box-shadow:0 14px 38px rgba(20,20,40,.18); z-index:100; display:none; }
+  .toast.show { display:block; animation:toastin .26s cubic-bezier(.2,.9,.3,1); }
+  @keyframes toastin { from { opacity:0; transform:translate(-50%,-8px) scale(.98); } to { opacity:1; transform:translate(-50%,0); } }
+  .toast-inner { background:var(--tt-card); border-radius:16px; padding:13px 16px; }
+  .toast-head { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .toast-head .name { font-family:var(--tt-heading); font-weight:700; font-size:14px; background:var(--tt-gradient); background-size:200% auto; -webkit-background-clip:text; background-clip:text; color:transparent; animation:pan 7s linear infinite; }
+  .toast-head .sub { font-family:var(--tt-mono); font-size:10.5px; color:var(--tt-muted); text-transform:uppercase; letter-spacing:.1em; }
+  .toast .t { font-weight:700; font-size:13.5px; color:var(--tt-ink); }
+  .toast .d { font-size:12px; color:var(--tt-muted); margin-top:2px; }
+  .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .empty { padding:40px 12px; text-align:center; color:var(--tt-muted); font-size:14px; }
+
+  @media (prefers-reduced-motion:reduce){ *{ animation:none !important; transition:none !important; } .timeline { scroll-behavior:auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="voxel"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <b>thingtime</b>
+    <span>design concept · history timeline</span>
+  </div>
+
+  <div class="eyebrow">Unified history, made visible</div>
+  <h1>Every change, <span class="grad">in its place.</span></h1>
+  <p class="lede">One timeline for everything you and your helpers change: each moment shows the
+  <b>Thing as it was</b>, exactly <b>what changed</b>, and the <b>message that explains why</b> —
+  whether you wrote it, Lopu did, or an app or collaborator did. Restore is never destructive: history only ever grows.</p>
+  <p class="lede small">Saved <code>on this device</code> first, then <code>synced to your account</code>. Friendly words on top —
+  <code>Try a variation</code>, <code>Get latest changes</code>, <code>Review and combine</code>, <code>Send changes</code> — real ancestry underneath.</p>
+
+  <!-- ===================== A. HISTORY BROWSER ===================== -->
+  <section class="concept" id="browser">
+    <h2>1 · The History browser — <span style="font-family:var(--tt-mono);font-size:18px;color:var(--tt-muted)">/history</span></h2>
+    <p class="sub">A global timeline of every recorded change, newest first, grouped by day. Scope it to <b>everything</b>, to
+    <b>one Thing</b>, or to a <b>page and its related Things</b> (the Components and records it renders). Click a row to inspect it; the same panel opens
+    from any Thing's ⋯ menu.</p>
+
+    <div class="app" aria-label="History browser mock">
+      <div class="app-bar">
+        <div class="title">🕰️ History</div>
+        <div class="seg" role="group" aria-label="Scope">
+          <button type="button" data-scope="all" aria-pressed="true">Everything</button>
+          <button type="button" data-scope="gear" aria-pressed="false">This Thing</button>
+          <button type="button" data-scope="page" aria-pressed="false">Page + related</button>
+        </div>
+        <label class="search"><span aria-hidden="true">🔍</span><span class="sr">Search history</span>
+          <input id="q" type="search" placeholder="Search history…" /><kbd>⌘K</kbd></label>
+        <div class="seg" role="group" aria-label="View">
+          <button type="button" data-view="timeline" aria-pressed="true">Timeline</button>
+          <button type="button" data-view="versions" aria-pressed="false">Versions</button>
+        </div>
+        <div class="syncpill" id="syncpill"><i class="d"></i><span id="synctext">Synced · 2 saved on this device</span></div>
+      </div>
+
+      <div class="filters" id="filters">
+        <div class="frow"><span class="lab">Kind</span>
+          <button class="chip" data-f="kind" data-v="post" aria-pressed="false">📝 Posts <span class="n" data-count="kind:post"></span></button>
+          <button class="chip" data-f="kind" data-v="page" aria-pressed="false">📄 Pages <span class="n" data-count="kind:page"></span></button>
+          <button class="chip" data-f="kind" data-v="component" aria-pressed="false">🧩 Components <span class="n" data-count="kind:component"></span></button>
+          <button class="chip" data-f="kind" data-v="data" aria-pressed="false">💎 Data <span class="n" data-count="kind:data"></span></button>
+          <button class="chip" data-f="kind" data-v="file" aria-pressed="false">📎 Files <span class="n" data-count="kind:file"></span></button>
+        </div>
+        <div class="frow"><span class="lab">Who</span>
+          <button class="chip" data-f="actor" data-v="you" aria-pressed="false">🙂 You</button>
+          <button class="chip" data-f="actor" data-v="lopu" aria-pressed="false">🦄 Lopu</button>
+          <button class="chip" data-f="actor" data-v="collab" aria-pressed="false">👥 Collaborators</button>
+          <button class="chip" data-f="actor" data-v="app" aria-pressed="false">🧩 Apps</button>
+        </div>
+        <div class="frow"><span class="lab">What</span>
+          <button class="chip" data-f="verb" data-v="edited" aria-pressed="false">Edited</button>
+          <button class="chip" data-f="verb" data-v="created" aria-pressed="false">Created</button>
+          <button class="chip" data-f="verb" data-v="moved" aria-pressed="false">Moved</button>
+          <button class="chip" data-f="verb" data-v="shared" aria-pressed="false">Shared</button>
+          <button class="chip" data-f="verb" data-v="restored" aria-pressed="false">Restored</button>
+          <button class="chip" data-f="verb" data-v="synced" aria-pressed="false">Synced</button>
+          <button class="chip" data-f="sync" data-v="local" aria-pressed="false">💾 Only on this device</button>
+          <button class="chip" data-f="sync" data-v="review" aria-pressed="false">👀 Needs review</button>
+        </div>
+      </div>
+
+      <div class="scrub">
+        <div class="scrub-top"><span class="lab">Last 30 days</span><span class="hint" id="scrubhint">Click a day to jump there</span></div>
+        <div class="bars" id="bars" role="group" aria-label="Changes per day"></div>
+        <div class="ticks"><span id="tick0"></span><span>·</span><span id="tick1"></span><span>·</span><span>today</span></div>
+      </div>
+
+      <div class="split">
+        <div class="timeline" id="timeline" aria-live="polite"></div>
+        <aside class="detail" id="detail" aria-label="Change details"></aside>
+      </div>
+    </div>
+    <div class="backdrop" id="backdrop"></div>
+
+    <div class="legend">
+      <div><span class="n">01</span><b>Thing card, as of then</b>Kind, title and a preview exactly as the Thing looked at that version — never today's title pretending to be the past.</div>
+      <div><span class="n">02</span><b>Change chips</b>Property-level diffs: <span style="font-family:var(--tt-mono)">colour: Sage green → Deep green</span>. Adds are green, removals red, moves amber.</div>
+      <div><span class="n">03</span><b>Contextual message</b>Why it happened: your note, Lopu's explanation, an app's capture note, or a system line ("Restored from version 1").</div>
+      <div><span class="n">04</span><b>Sync state</b>💾 Saved on this device → ☁️ Synced to your account → 👀 Needs review when two people changed the same property.</div>
+    </div>
+  </section>
+
+  <!-- ===================== B. ENTRY POINTS ===================== -->
+  <section class="concept" id="entry">
+    <h2>2 · Where you find it — every Thing, one panel</h2>
+    <p class="sub">History is a base verb every persisted Thing inherits, next to Open, Copy link and Share. The editor's existing
+    <b>Undo · Redo · Changes</b> control becomes the same panel scoped to that Thing, and cards show an honest "Edited" affordance.</p>
+    <div class="entries">
+      <div class="mini">
+        <h3>The ⋯ menu</h3>
+        <p>Inherited by posts, pages, components, data, files — the shared <span style="font-family:var(--tt-mono);font-size:12px">buildThingEntityMenu</span> section.</p>
+        <div class="menu" aria-label="Thing context menu mock">
+          <div>🔎 Open Thing</div>
+          <div>💎 View Thing data</div>
+          <div>🔗 Copy link <span class="kbd">⌘C</span></div>
+          <div>✏️ Edit</div>
+          <div class="new">🕰️ History <span class="tag">new verb</span></div>
+          <div>🌐 Share / permissions</div>
+          <div>🦄 Send to Lopu</div>
+          <div class="danger">🗑️ Delete</div>
+        </div>
+      </div>
+      <div class="mini">
+        <h3>The editor footer</h3>
+        <p>Same muted 28px controls that ship today; <b>Changes</b> opens the scoped panel, and the in-memory journal becomes a durable local log.</p>
+        <div class="editorbox">
+          <p>Gear tracking</p>
+          <p class="dim">Log every piece of kit, where it lives and who has it…</p>
+          <div class="hist"><button type="button" title="Undo">↶</button><button type="button" title="Redo">↷</button><button type="button" class="on" id="openFromEditor">Changes · 4</button></div>
+        </div>
+      </div>
+      <div class="mini">
+        <h3>Cards and pages</h3>
+        <p>An "Edited · 3 versions" chip on the PostCard footer opens History for that post — provenance you can tap, not a silent overwrite.</p>
+        <div class="postcard">
+          <div class="ph"><span class="av">NF</span><b>Lopu</b><span class="t">19 Sep</span></div>
+          <div class="pb">Launch notes: the workshop page is live for friends 🎉</div>
+          <div class="pf"><span class="r">❤️ 4</span><span class="r">💬 2</span><button type="button" class="edited" id="openFromPost">Edited · 3 versions</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== C. VERSIONS ===================== -->
+  <section class="concept" id="versions">
+    <h2>3 · Versions — branches in friendly words</h2>
+    <p class="sub">The same events, drawn as lanes. A <b>variation</b> is a private branch from a shared starting version. <b>Get latest changes</b> pulls,
+    <b>Send changes</b> pushes, and when the same property changed on both sides, <b>Review and combine</b> shows a calm three-way choice —
+    nothing is overwritten silently.</p>
+    <div class="versions">
+      <div class="vtop">
+        <div class="tcard"><div class="ic">📄</div><div class="t"><b>Gear tracking</b><span>page · 4 versions · 1 variation</span></div><span class="v">v4 now</span></div>
+        <div class="sp"></div>
+        <button type="button" class="btn small" id="btnVariation">🌱 Try a variation</button>
+        <button type="button" class="btn small" id="btnPull">⬇️ Get latest changes</button>
+        <button type="button" class="btn small rainbow" id="btnReview">👀 Review and combine</button>
+        <button type="button" class="btn small primary" id="btnPush">⬆️ Send changes</button>
+      </div>
+      <div class="graph">
+        <svg viewBox="0 0 720 190" role="img" aria-label="Version graph: main lane with four versions, a variation lane branching from version 3">
+          <text class="lane" x="12" y="52">shared · main</text>
+          <text class="lane" x="12" y="146">variation · darker palette</text>
+          <line x1="130" y1="60" x2="640" y2="60" stroke="#ececef" stroke-width="3" />
+          <path d="M 470 60 L 520 60 C 548 60, 548 150, 572 150" stroke="#a555e8" stroke-width="2.5" stroke-dasharray="5 4" fill="none" />
+          <line x1="572" y1="150" x2="640" y2="150" stroke="#a555e8" stroke-width="2.5" stroke-dasharray="5 4" />
+          <g class="node" data-ev="3"><circle cx="150" cy="60" r="9" fill="#fff" stroke="#58ca70" stroke-width="3" /><text class="n" x="150" y="36" text-anchor="middle">v1</text><text x="150" y="88" text-anchor="middle">Created</text><text class="n" x="150" y="104" text-anchor="middle">22 Sep · you</text></g>
+          <g class="node" data-ev="4"><circle cx="310" cy="60" r="9" fill="#fff" stroke="#47b5e6" stroke-width="3" /><text class="n" x="310" y="36" text-anchor="middle">v2 · "Lopu's table"</text><text x="310" y="88" text-anchor="middle">+ table, + checklist</text><text class="n" x="310" y="104" text-anchor="middle">22 Sep · Lopu</text></g>
+          <g class="node" data-ev="8"><circle cx="470" cy="60" r="9" fill="#fff" stroke="#ffbc48" stroke-width="3" /><text class="n" x="470" y="36" text-anchor="middle">v3</text><text x="470" y="88" text-anchor="middle">Moved to Workshop</text><text class="n" x="470" y="104" text-anchor="middle">25 Sep · Lopu</text></g>
+          <g class="node" data-ev="13"><circle cx="640" cy="60" r="11" fill="#16161a" stroke="#16161a" stroke-width="3" /><text class="n" x="640" y="36" text-anchor="middle">v4 · now</text><text x="640" y="88" text-anchor="middle">Heading + 1 block</text><text class="n" x="640" y="104" text-anchor="middle">today · you · 💾</text></g>
+          <g class="node" data-ev="12"><circle cx="640" cy="150" r="9" fill="#a555e8" stroke="#a555e8" stroke-width="3" /><text x="640" y="178" text-anchor="middle">Deep green button</text><text class="n" x="560" y="178" text-anchor="middle">from v3</text></g>
+        </svg>
+      </div>
+      <div class="merge" id="merge">
+        <h4>Both of you changed <span style="font-family:var(--tt-mono);font-size:13px">colour</span> on Primary button</h4>
+        <p>Ana sent <b>Forest green</b> at 4:09 pm; your variation has <b>Deep green</b> from 4:02 pm. Both stay in history whatever you pick.</p>
+        <div class="opts">
+          <button type="button" data-pick="mine"><b>Keep mine</b><span class="sw" style="background:#0f6b3f;display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px"></span><span>Deep green</span></button>
+          <button type="button" data-pick="theirs"><b>Keep Ana's</b><span class="sw" style="background:#2f6b2f;display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px"></span><span>Forest green</span></button>
+          <button type="button" data-pick="both"><b>Keep both</b><span>as named variations</span></button>
+        </div>
+        <div class="note" id="mergeNote">Underneath: a three-way merge from the shared starting version (v3). Property-level, never a text splice.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== D. LOCAL FIRST ===================== -->
+  <section class="concept" id="local">
+    <h2>4 · Saved here first, then everywhere</h2>
+    <p class="sub">A durable local event log records every change the moment it settles — refresh, restart, offline, all fine. A sync queue
+    ships it to your account; the pill on each row tells the truth about where it lives. <b>Syncing a private draft never publishes it.</b></p>
+    <div class="states">
+      <div class="state"><span class="pill local"><i></i>Saved on this device</span><h3>Durable immediately</h3><p>Written to the local log before the request leaves. Survives a crash; lost only if the device is.</p></div>
+      <div class="arr">→</div>
+      <div class="state"><span class="pill"><i></i>Synced to your account</span><h3>Protected history Things</h3><p>Each event becomes an owner-private <span style="font-family:var(--tt-mono);font-size:12px">history-event</span> linked to its target. Other devices get it on next open.</p></div>
+      <div class="arr">→</div>
+      <div class="state"><span class="pill review"><i></i>Needs review</span><h3>Honest conflicts</h3><p>Two sides changed one property: both branches are kept and the row asks you to <b>Review and combine</b>.</p></div>
+    </div>
+    <div class="sim">
+      <span class="lab">Try it — the browser above updates live</span>
+      <button type="button" class="toggle off" id="offline" role="switch" aria-checked="false"><span class="sw"></span><span>Offline</span></button>
+      <button type="button" class="btn small" id="simEdit">✏️ Make an edit</button>
+      <button type="button" class="btn small" id="simReconnect" disabled>☁️ Reconnect &amp; sync</button>
+      <span class="simstat" id="simstat">Online · sync queue empty</span>
+    </div>
+  </section>
+
+  <!-- ===================== E. SETTINGS ===================== -->
+  <section class="concept" id="settings">
+    <h2>5 · Settings — the choices that matter</h2>
+    <p class="sub">Popup and the dedicated Settings page share one <b>History</b> category. Safe defaults: record automatically, sync when signed in, keep forever until you say otherwise.</p>
+    <div class="settings">
+      <div class="srow"><div class="txt"><b>Record history automatically</b><span>Every settled change to your Things. Pause any single Thing from its ⋯ menu → History → Pause.</span></div><button type="button" class="toggle" role="switch" aria-checked="true" data-toggle><span class="sw"></span></button></div>
+      <div class="srow"><div class="txt"><b>Sync history to my account</b><span>Off keeps history on this device only. Guest history stays local until you adopt it into an account.</span></div><button type="button" class="toggle" role="switch" aria-checked="true" data-toggle><span class="sw"></span></button></div>
+      <div class="srow"><div class="txt"><b>Keep history</b><span>Pinned and named versions always survive automatic retention. Deleting is per entry, by date, by Thing, or everything.</span></div>
+        <div class="seg" role="group" aria-label="Retention"><button type="button" aria-pressed="true" data-keep>Forever</button><button type="button" aria-pressed="false" data-keep>90 days</button><button type="button" aria-pressed="false" data-keep>Pinned only</button></div></div>
+      <div class="srow"><div class="txt"><b>Show messages in the timeline</b><span>Notes, Lopu explanations and app capture notes. Off shows only the change chips.</span></div><button type="button" class="toggle" role="switch" aria-checked="true" data-toggle id="msgToggle"><span class="sw"></span></button></div>
+      <div class="srow"><div class="txt"><b>Storage</b><span>12.4 MB of history · 0.3% of your account storage. Old result caches are dropped before ordered ids and messages.</span><div class="bar"><i></i></div></div><button type="button" class="btn small">Export history</button><button type="button" class="btn small" style="color:#d6455a">Clear history…</button></div>
+    </div>
+  </section>
+
+  <div class="foot">
+    Hooks into what already exists: the editor journal (<code>editorHistory.ts</code> — branching events with parent, time and property diffs; today in memory)
+    becomes the durable local log; the <code>/notifications</code> history page pattern (cursor paging, URL filters, cache-first paint) is the list engine;
+    the <code>history</code> verb joins <code>THING_ACTIONS</code> so <code>PersistedThingMenu</code> shows it everywhere; toasts route through <code>useLopu()</code>.
+    <div class="row">Data: one owner-private <code>history-event</code> Thing per settled change, linked by <code>targetId</code>, never an embedded array; local IndexedDB log + sync queue; restore and undo append events (nothing is rewritten); conflicts keep both branches and ask.</div>
+    <div class="row">Motion respects <code>prefers-reduced-motion</code> / the theme's <code>general.motion</code> gate. Fictional data throughout.</div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <div class="toast-inner">
+    <div class="toast-head"><span>🦄</span><span class="name">Lopu</span><span class="sub">Thingtime AI</span></div>
+    <div class="t" id="toastT">Restored — nothing was lost</div>
+    <div class="d" id="toastD">Version 12 is back as version 15. Every step is still in your history.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  // ---------- fictional data ----------
+  var THINGS = {
+    post:  { id:'post',  kind:'post',      icon:'📝', title:'Launch notes',     sub:'post · Friends',                 preview:'The workshop page is live for friends 🎉' },
+    gear:  { id:'gear',  kind:'page',      icon:'📄', title:'Gear tracking',    sub:'page · /p/gear-tracking',        preview:'Log every piece of kit, where it lives and who has it.' },
+    btn:   { id:'btn',   kind:'component', icon:'🧩', title:'Primary button',   sub:'component · used on 3 pages',    preview:'Rounded, bold, Sage green.' },
+    rec:   { id:'rec',   kind:'data',      icon:'💎', title:'Equipment record', sub:'data · 4 fields',                preview:'name · owner · location · serial' },
+    photo: { id:'photo', kind:'file',      icon:'📎', title:'workshop.heic',    sub:'file · 2.1 MB · attached',       preview:'Quick capture from Raycast' }
+  };
+  var ACTORS = {
+    you:   { label:'You',  cls:'',       txt:'NF' },
+    lopu:  { label:'Lopu', cls:'lopu',   txt:'🦄' },
+    collab:{ label:'Ana',  cls:'collab', txt:'AR' },
+    app:   { label:'Raycast', cls:'app', txt:'⌨️' },
+    sys:   { label:'Thingtime', cls:'sys', txt:'·' }
+  };
+  var VERB = {
+    edited:  { c:'#47b5e6', word:'changed' },
+    created: { c:'#58ca70', word:'created' },
+    moved:   { c:'#ffbc48', word:'moved' },
+    shared:  { c:'#a555e8', word:'shared' },
+    restored:{ c:'#f34a4a', word:'restored' },
+    synced:  { c:'#9a9aa6', word:'synced' }
+  };
+  var PAGE_SCOPE = { gear:1, btn:1, rec:1, photo:1 };
+  var TODAY = new Date(2026, 8, 27, 16, 20);
+  function at(d, h, m){ return new Date(2026, 8, d, h, m); }
+  var EVENTS = [
+    { id:1,  at:at(19,10,4),  thing:'post', actor:'you',   verb:'created',  title:'Created Launch notes', v:1, parent:null, sync:'synced', device:'Mac',
+      changes:[{k:'draft', b:null, a:'"The workshop page is live…"'}], titleThen:'Launch notes' },
+    { id:2,  at:at(19,10,36), thing:'post', actor:'you',   verb:'shared',   title:'Shared Launch notes with Friends', v:2, parent:1, sync:'synced', device:'Mac',
+      changes:[{k:'audience', b:'Only me', a:'Friends'}], msg:{who:'sys', text:'Shared with Friends · 12 people can see it now'} },
+    { id:3,  at:at(22,8,15),  thing:'gear', actor:'you',   verb:'created',  title:'Created Gear tracking', v:1, parent:null, sync:'synced', device:'Mac',
+      changes:[{k:'blocks', b:null, a:'3 blocks'}], msg:{who:'you', text:'Starting the gear page for the workshop.'}, titleThen:'Gear' },
+    { id:4,  at:at(22,8,41),  thing:'gear', actor:'lopu',  verb:'edited',   title:'Added a table and a checklist', v:2, parent:3, sync:'synced', device:'Mac',
+      changes:[{k:'blocks', b:'3 blocks', a:'5 blocks'},{k:'block · table', b:null, a:'Equipment (4 columns)'},{k:'block · checklist', b:null, a:'Before the demo'}],
+      msg:{who:'lopu', text:'Added an equipment table and a checklist, as you asked in chat. Say "undo that" if you want the shorter page back.'}, titleThen:'Gear' },
+    { id:5,  at:at(23,19,2),  thing:'rec',  actor:'you',   verb:'created',  title:'Created Equipment record', v:1, parent:null, sync:'synced', device:'iPhone',
+      changes:[{k:'fields', b:null, a:'name, owner, location, serial'}] },
+    { id:6,  at:at(24,12,20), thing:'btn',  actor:'collab',verb:'edited',   title:'Matched the new tokens', v:2, parent:1, sync:'synced', device:'Mac',
+      changes:[{k:'radius', b:'10px', a:'12px'},{k:'font-weight', b:'600', a:'700'}], msg:{who:'collab', text:'Matching the new design tokens — let me know if the heavier weight is too much.'} },
+    { id:7,  at:at(24,12,26), thing:'gear', actor:'sys',   verb:'synced',   title:'Got latest changes from Ana', v:2, parent:4, sync:'synced', device:'Mac',
+      changes:[{k:'Primary button', b:'v1', a:'v2'}], msg:{who:'sys', text:'Get latest changes · 2 properties on Primary button, no conflicts'}, titleThen:'Gear' },
+    { id:8,  at:at(25,21,40), thing:'gear', actor:'lopu',  verb:'moved',    title:'Filed under Workshop', v:3, parent:4, sync:'synced', device:'Mac',
+      changes:[{k:'folder', b:'My things', a:'Projects / Workshop'}], msg:{who:'lopu', text:'Filed under Workshop next to its equipment records.'}, titleThen:'Gear' },
+    { id:9,  at:at(26,9,12),  thing:'photo',actor:'app',   verb:'created',  title:'Attached workshop.heic', v:1, parent:null, sync:'synced', device:'Mac',
+      changes:[{k:'attachment', b:null, a:'workshop.heic · 2.1 MB'},{k:'attached to', b:null, a:'Gear tracking'}], msg:{who:'app', text:'Added from Raycast · Quick capture'} },
+    { id:10, at:at(26,9,30),  thing:'rec',  actor:'you',   verb:'edited',   title:'Renamed Equipment record', v:2, parent:5, sync:'synced', device:'Mac',
+      changes:[{k:'name', b:'Equipment record', a:'Kit record'}], titleThen:'Kit record' },
+    { id:11, at:at(26,17,55), thing:'rec',  actor:'you',   verb:'restored', title:'Restored the old name', v:3, parent:10, restoredFrom:5, sync:'synced', device:'iPhone',
+      changes:[{k:'name', b:'Kit record', a:'Equipment record'}], msg:{who:'sys', text:'Restored from version 1 · nothing was lost, version 2 is still here'} },
+    { id:12, at:at(27,16,2),  thing:'btn',  actor:'you',   verb:'edited',   title:'Changed button colour', v:3, parent:6, sync:'local', device:'iPhone', lane:1,
+      changes:[{k:'colour', b:'Sage green', a:'Deep green', sw:['#9bb89a','#0f6b3f']}], msg:{who:'you', text:'Trying the darker palette for the demo — variation, not sent yet.'} },
+    { id:13, at:at(27,16,5),  thing:'gear', actor:'you',   verb:'edited',   title:'Renamed the heading, added a block', v:4, parent:8, sync:'local', device:'iPhone',
+      changes:[{k:'heading', b:'Gear', a:'Gear tracking'},{k:'blocks', b:'5 blocks', a:'6 blocks'},{k:'block · paragraph', b:null, a:'"Who has what, right now"'}] },
+    { id:14, at:at(27,16,9),  thing:'btn',  actor:'collab',verb:'edited',   title:'Changed button colour', v:3, parent:6, sync:'review', device:'Mac',
+      changes:[{k:'colour', b:'Sage green', a:'Forest green', sw:['#9bb89a','#2f6b2f']}], msg:{who:'collab', text:'Went a touch darker for contrast on the hero.'} }
+  ];
+  var nextId = 15;
+  var state = { scope:'all', view:'timeline', q:'', filters:{kind:{}, actor:{}, verb:{}, sync:{}}, sel:12, day:null, offline:false, showMsgs:true, compare:false, tab:'changes' };
+
+  // ---------- helpers ----------
+  var $ = function(s, r){ return (r||document).querySelector(s); };
+  var $$ = function(s, r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  var DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function dayKey(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+  function sameDay(a,b){ return dayKey(a)===dayKey(b); }
+  function fmtTime(d){ var h=d.getHours(), m=d.getMinutes(); var ap=h>=12?'pm':'am'; h=h%12||12; return h+':'+(m<10?'0':'')+m+' '+ap; }
+  function fmtDay(d){
+    if (sameDay(d,TODAY)) return 'Today';
+    var y=new Date(TODAY); y.setDate(y.getDate()-1); if (sameDay(d,y)) return 'Yesterday';
+    return DAYS[d.getDay()]+' '+d.getDate()+' '+MONTHS[d.getMonth()];
+  }
+  function fmtShort(d){ return d.getDate()+' '+MONTHS[d.getMonth()]; }
+  function thingTitleAt(ev){ return ev.titleThen || THINGS[ev.thing].title; }
+  function findEv(id){ for (var i=0;i<EVENTS.length;i++) if (EVENTS[i].id===id) return EVENTS[i]; return null; }
+  function anyOn(o){ for (var k in o) if (o[k]) return true; return false; }
+
+  function inScope(ev){
+    if (state.scope==='gear') return ev.thing==='gear';
+    if (state.scope==='page') return !!PAGE_SCOPE[ev.thing];
+    return true;
+  }
+  function passes(ev){
+    if (!inScope(ev)) return false;
+    var f=state.filters;
+    if (anyOn(f.kind) && !f.kind[THINGS[ev.thing].kind]) return false;
+    if (anyOn(f.actor) && !f.actor[ev.actor]) return false;
+    if (anyOn(f.verb) && !f.verb[ev.verb]) return false;
+    if (anyOn(f.sync) && !f.sync[ev.sync]) return false;
+    if (state.q){
+      var hay=(ev.title+' '+thingTitleAt(ev)+' '+(ev.msg?ev.msg.text:'')+' '+ev.changes.map(function(c){return c.k+' '+c.b+' '+c.a;}).join(' ')).toLowerCase();
+      if (hay.indexOf(state.q.toLowerCase())<0) return false;
+    }
+    return true;
+  }
+  function visible(){ return EVENTS.filter(passes).sort(function(a,b){ return b.at-a.at; }); }
+
+  // ---------- renderers ----------
+  function tcard(ev, big){
+    var t=THINGS[ev.thing];
+    return '<div class="tcard'+(big?' big':'')+'"><div class="ic">'+t.icon+'</div><div class="t"><b>'+esc(thingTitleAt(ev))+'</b><span>'+esc(t.sub)+(big?' · '+esc(t.preview):'')+'</span></div><span class="v">v'+ev.v+'</span></div>';
+  }
+  function chip(c){
+    var cls='chg'+(c.b==null?' add':'')+(c.a==null?' del':'');
+    var sw=function(i){ return c.sw?'<span class="sw" style="background:'+c.sw[i]+'"></span>':''; };
+    var body;
+    if (c.b==null) body='<span class="a">'+sw(1)+esc(c.a)+'</span>';
+    else if (c.a==null) body='<span class="b">'+sw(0)+esc(c.b)+'</span>';
+    else body='<span class="b">'+sw(0)+esc(c.b)+'</span><span class="arrow">→</span><span class="a">'+sw(1)+esc(c.a)+'</span>';
+    return '<span class="'+cls+'"><span class="k">'+esc(c.k)+'</span>'+body+'</span>';
+  }
+  function avatar(who){ var a=ACTORS[who]; return '<span class="av '+a.cls+'" title="'+esc(a.label)+'">'+a.txt+'</span>'; }
+  function message(ev){
+    if (!ev.msg || !state.showMsgs) return '';
+    var who=ev.msg.who, a=ACTORS[who];
+    var inner='<span class="who">'+esc(a.label)+(who==='sys'?'':' said')+'</span>'+esc(ev.msg.text);
+    if (who==='lopu') return '<div class="msg lopu">'+avatar(who)+'<div class="bubble"><div>'+inner+'</div></div></div>';
+    return '<div class="msg '+(who==='sys'?'sys':'')+'">'+avatar(who)+'<div class="bubble">'+inner+'</div></div>';
+  }
+  function syncPill(ev){
+    if (ev.sync==='local') return '<span class="pill local"><i></i>Saved on this device</span>';
+    if (ev.sync==='review') return '<span class="pill review"><i></i>Needs review</span>';
+    return '<span class="pill"><i></i>Synced</span>';
+  }
+  function sentence(ev){
+    var a=ACTORS[ev.actor], v=VERB[ev.verb];
+    var who='<b>'+esc(a.label)+'</b>';
+    var what;
+    if (ev.verb==='created') what='created <b>'+esc(thingTitleAt(ev))+'</b>';
+    else if (ev.verb==='moved') what='moved <b>'+esc(thingTitleAt(ev))+'</b> into <b>'+esc(ev.changes[0].a)+'</b>';
+    else if (ev.verb==='shared') what='shared <b>'+esc(thingTitleAt(ev))+'</b> with <b>'+esc(ev.changes[0].a)+'</b>';
+    else if (ev.verb==='restored') what='restored <b>'+esc(ev.changes[0].k)+'</b> on <b>'+esc(thingTitleAt(ev))+'</b>';
+    else if (ev.verb==='synced') what='got the latest <b>'+esc(ev.changes[0].k)+'</b> for <b>'+esc(thingTitleAt(ev))+'</b>';
+    else { var ks=ev.changes.map(function(c){return c.k.split(' · ')[0];}); var u=[]; ks.forEach(function(k){ if(u.indexOf(k)<0) u.push(k); });
+      what='changed <b>'+esc(u.slice(0,2).join(', '))+(u.length>2?' +'+(u.length-2):'')+'</b> on <b>'+esc(thingTitleAt(ev))+'</b>'; }
+    return avatar(ev.actor)+'<span>'+who+' '+what+'</span><span class="verb" style="--vc:'+v.c+'">'+esc(ev.verb)+'</span>';
+  }
+  function eventRow(ev){
+    var v=VERB[ev.verb];
+    return '<div class="ev'+(ev.lane?' lane1':'')+(state.sel===ev.id?' sel':'')+(ev.fresh?' pop':'')+'" data-id="'+ev.id+'" style="--vc:'+v.c+'" role="button" tabindex="0" aria-label="'+esc(ev.title)+'">'+
+      '<div class="rail"><i></i></div>'+
+      '<div class="when">'+fmtTime(ev.at)+'<small>'+esc(ev.device)+'</small></div>'+
+      '<div class="body">'+
+        '<div class="sentence">'+sentence(ev)+'</div>'+
+        '<div class="row2">'+tcard(ev,false)+'<div class="changes">'+ev.changes.map(chip).join('')+'</div></div>'+
+        message(ev)+
+        '<div class="meta">'+syncPill(ev)+(ev.restoredFrom?'<span class="pill">↩︎ from v1</span>':'')+(ev.lane?'<span class="pill" style="border-color:rgba(165,85,232,.5);color:#7a3fb0">🌱 variation</span>':'')+
+          '<div class="acts"><button type="button" data-act="preview">Preview</button><button type="button" data-act="compare">Compare</button><button type="button" data-act="restore">Restore</button></div></div>'+
+      '</div></div>';
+  }
+  function renderTimeline(){
+    var list=visible(), tl=$('#timeline');
+    if (state.view==='versions'){ tl.innerHTML='<div class="empty">Versions view is drawn in section 3 below — same events, as lanes. <br/><button type="button" class="btn small" style="margin-top:10px" id="jumpVersions">Jump to versions ↓</button></div>';
+      $('#jumpVersions').addEventListener('click', function(){ $('#versions').scrollIntoView({behavior:'smooth', block:'start'}); }); return; }
+    if (!list.length){ tl.innerHTML='<div class="empty">Nothing recorded matches these filters. <br/><span style="font-size:12.5px">History never deletes on its own — try clearing a chip.</span></div>'; return; }
+    var html='', lastKey=null;
+    list.forEach(function(ev){
+      var key=dayKey(ev.at);
+      if (key!==lastKey){
+        if (lastKey!==null) html+='</div>';
+        var count=list.filter(function(e){return dayKey(e.at)===key;}).length;
+        var devs=[]; list.forEach(function(e){ if(dayKey(e.at)===key && devs.indexOf(e.device)<0) devs.push(e.device); });
+        html+='<div class="day'+(state.day===key?' jump':'')+'" data-day="'+key+'"><div class="day-h"><b>'+fmtDay(ev.at)+'</b><span>'+count+' change'+(count===1?'':'s')+' · '+devs.join(' + ')+'</span><span class="line"></span></div>';
+        lastKey=key;
+      }
+      html+=eventRow(ev);
+    });
+    html+='</div>';
+    tl.innerHTML=html;
+    EVENTS.forEach(function(e){ delete e.fresh; });
+  }
+  function renderBars(){
+    var bars=$('#bars'), html='';
+    var start=new Date(TODAY); start.setDate(start.getDate()-29);
+    var counts={};
+    EVENTS.filter(inScope).forEach(function(e){ var k=dayKey(e.at); counts[k]=(counts[k]||0)+1; });
+    var max=1; for (var k in counts) if (counts[k]>max) max=counts[k];
+    for (var i=0;i<30;i++){
+      var d=new Date(start); d.setDate(start.getDate()+i); var key=dayKey(d), n=counts[key]||0;
+      var h=n?Math.max(18, Math.round(n/max*100)):8;
+      html+='<button type="button" class="'+(n?'has':'')+(state.day===key?' active':'')+'" data-day="'+key+'" data-tip="'+fmtShort(d)+' · '+n+' change'+(n===1?'':'s')+'" aria-label="'+fmtShort(d)+', '+n+' changes"><i style="height:'+h+'%"></i></button>';
+      if (i===0) $('#tick0').textContent=fmtShort(d);
+      if (i===15) $('#tick1').textContent=fmtShort(d);
+    }
+    bars.innerHTML=html;
+  }
+  function renderCounts(){
+    $$('[data-count]').forEach(function(el){
+      var parts=el.getAttribute('data-count').split(':'), n=0;
+      EVENTS.forEach(function(e){ if (inScope(e) && THINGS[e.thing].kind===parts[1]) n++; });
+      el.textContent=n?n:'';
+    });
+  }
+  function renderSync(){
+    var local=EVENTS.filter(function(e){return e.sync==='local';}).length, review=EVENTS.filter(function(e){return e.sync==='review';}).length;
+    var queued=EVENTS.filter(function(e){return e.sync==='local' && !e.lane;}).length, privateVars=local-queued;
+    var pill=$('#syncpill'); pill.className='syncpill'+(state.offline?' local':(review?' review':''));
+    var t = state.offline ? 'Offline · '+local+' waiting to sync' : (review ? review+' change'+(review===1?' needs':'s need')+' review' : 'Synced'+(local?' · '+local+' saved on this device':''));
+    $('#synctext').textContent=t;
+    var stat;
+    if (state.offline) stat='Offline · '+local+' change'+(local===1?'':'s')+' queued locally';
+    else if (queued) stat='Online · '+queued+' saved on this device · sync pending';
+    else if (privateVars) stat='Online · sync queue empty · '+privateVars+' variation'+(privateVars===1?'':'s')+' private until sent';
+    else stat='Online · sync queue empty';
+    $('#simstat').textContent=stat;
+    $('#simReconnect').textContent = state.offline ? '☁️ Reconnect & sync' : '☁️ Sync now';
+    $('#simReconnect').disabled = !state.offline && !queued;
+  }
+  function renderDetail(){
+    var ev=findEv(state.sel), d=$('#detail');
+    if (!ev){ d.innerHTML='<div class="empty">Select a change to see what happened.</div>'; return; }
+    var t=THINGS[ev.thing], a=ACTORS[ev.actor];
+    var html='<button type="button" class="close" id="closeDetail" aria-label="Close">✕</button>';
+    html+='<div class="eyebrow">'+esc(fmtDay(ev.at))+' · '+fmtTime(ev.at)+' · '+esc(ev.device)+'</div>';
+    html+=tcard(ev,true);
+    html+='<div class="ancestry"><span>v'+ev.v+'</span>'+(ev.parent?'<span>from v'+(findEv(ev.parent)?findEv(ev.parent).v:'?')+'</span>':'<span>start</span>')+(ev.lane?'<span style="color:#7a3fb0">🌱 darker palette</span>':'')+(ev.restoredFrom?'<span>↩︎ restored v1</span>':'')+'<span>'+esc(a.label)+'</span></div>';
+    html+='<div class="dtabs" role="tablist"><button type="button" role="tab" data-tab="changes" aria-selected="'+(state.tab==='changes')+'">Changes</button><button type="button" role="tab" data-tab="message" aria-selected="'+(state.tab==='message')+'">Message</button><button type="button" role="tab" data-tab="versions" aria-selected="'+(state.tab==='versions')+'">Versions</button></div>';
+    if (state.tab==='changes'){
+      html+='<div class="diff">'+ev.changes.map(function(c){
+        return '<div class="r"><div class="k">'+esc(c.k)+'</div><div class="ba"><div class="before"><span class="lab">'+(state.compare?'Then':'Before')+'</span>'+(c.b==null?'<em>—</em>':esc(c.b))+'</div><div class="after'+(c.a==null?' none':'')+'"><span class="lab">'+(state.compare?'Now':'After')+'</span>'+(c.a==null?'<em>removed</em>':esc(c.a))+'</div></div></div>';
+      }).join('')+'</div>';
+      if (ev.sync==='review'){
+        html+='<div class="note" style="color:#c23a4c"><b>Needs review:</b> your variation also changed <span style="font-family:var(--tt-mono)">colour</span> (Deep green). Both versions are kept.</div>';
+        html+='<div class="dbtns"><button type="button" class="btn rainbow" data-act="review">👀 Review and combine</button><button type="button" class="btn" data-act="preview">Preview Ana\'s</button></div>';
+      } else {
+        html+='<div class="dbtns"><button type="button" class="btn primary" data-act="restore">↩︎ Restore this version</button><button type="button" class="btn" data-act="undo">Undo this change</button><button type="button" class="btn" data-act="variation">🌱 Try a variation</button><button type="button" class="btn" data-act="compare">'+(state.compare?'Back to before / after':'Compare with now')+'</button></div>';
+        html+='<div class="note">Restoring creates a <b>new</b> version from this one. Undo reverts just these properties; later edits to other properties stay.</div>';
+      }
+    } else if (state.tab==='message'){
+      if (ev.msg) html+=message(ev).replace('class="msg','style="margin-top:0" class="msg');
+      html+='<div class="msgbox" style="margin-top:10px"><span class="who" style="font-family:var(--tt-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tt-muted)">Add a note to this change</span><textarea placeholder="Why did this change? Future you will thank you…"></textarea><div class="dbtns" style="margin-top:6px"><button type="button" class="btn small primary" data-act="note">Save note</button><button type="button" class="btn small" data-act="askLopu">Ask Lopu to explain</button></div></div>';
+      html+='<div class="note">Messages are part of the event, so they sync with it and appear wherever the change does — timeline, panel, and "Edited" chips.</div>';
+    } else {
+      var vs=EVENTS.filter(function(e){return e.thing===ev.thing;}).sort(function(a,b){return a.at-b.at;});
+      html+='<div class="vers">'+vs.map(function(e){ return '<div class="vr'+(e.id===ev.id?' cur':'')+'"><i style="background:'+VERB[e.verb].c+'"></i><span>v'+e.v+' · '+esc(e.title)+'</span><span class="m">'+fmtShort(e.at)+'</span></div>'; }).join('')+'</div>';
+      html+='<div class="dbtns"><button type="button" class="btn small" data-act="pin">📌 Name this version</button><button type="button" class="btn small" data-act="export">Export</button></div>';
+      html+='<div class="note">Named and pinned versions survive automatic retention; every other version is still here until you delete it.</div>';
+    }
+    d.innerHTML=html;
+  }
+  function renderAll(){ renderCounts(); renderBars(); renderTimeline(); renderDetail(); renderSync(); }
+
+  // ---------- toast ----------
+  var toastTimer=null;
+  function toast(t, d){ $('#toastT').textContent=t; $('#toastD').textContent=d; var el=$('#toast'); el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+    clearTimeout(toastTimer); toastTimer=setTimeout(function(){ el.classList.remove('show'); }, 4200); }
+
+  // ---------- actions ----------
+  function openDetail(id){
+    state.sel=id; state.compare=false; state.tab='changes';
+    renderTimeline(); renderDetail();
+    if (window.matchMedia('(max-width:820px)').matches){ $('#detail').classList.add('open'); $('#backdrop').classList.add('open'); }
+  }
+  function closeDetail(){ $('#detail').classList.remove('open'); $('#backdrop').classList.remove('open'); }
+  function addEvent(ev){ ev.id=nextId++; ev.at=ev.at||new Date(TODAY.getTime()+ (nextId*60000)); ev.fresh=true; EVENTS.push(ev); state.sel=ev.id; state.compare=false; state.tab='changes'; renderAll(); $('#timeline').scrollTop=0; }
+  function restore(ev){
+    var latest=EVENTS.filter(function(e){return e.thing===ev.thing;}).sort(function(a,b){return b.v-a.v;})[0];
+    var ch=ev.changes.filter(function(c){return c.a!=null;}).map(function(c){ return {k:c.k, b:'(now)', a:c.a, sw:c.sw?[null,c.sw[1]]:null}; });
+    addEvent({ thing:ev.thing, actor:'you', verb:'restored', title:'Restored version '+ev.v, v:latest.v+1, parent:latest.id, restoredFrom:ev.id, sync:state.offline?'local':'synced', device:'Mac',
+      changes:ch.length?ch:[{k:'version', b:'v'+latest.v, a:'v'+ev.v}], msg:{who:'sys', text:'Restored from version '+ev.v+' · nothing was lost, v'+latest.v+' is still here'} });
+    toast('Restored — nothing was lost', 'Version '+ev.v+' is back as a new version. Every step stays in your history.');
+  }
+  function undo(ev){
+    var latest=EVENTS.filter(function(e){return e.thing===ev.thing;}).sort(function(a,b){return b.v-a.v;})[0];
+    addEvent({ thing:ev.thing, actor:'you', verb:'restored', title:'Undid: '+ev.title, v:latest.v+1, parent:latest.id, sync:state.offline?'local':'synced', device:'Mac',
+      changes:ev.changes.map(function(c){ return {k:c.k, b:c.a, a:c.b, sw:c.sw?[c.sw[1],c.sw[0]]:null}; }), msg:{who:'sys', text:'Undid just this change · other edits after it were kept'} });
+    toast('Undone', 'Only those properties went back. Later changes to other properties were kept.');
+  }
+  function variation(ev){
+    var latest=EVENTS.filter(function(e){return e.thing===ev.thing;}).sort(function(a,b){return b.v-a.v;})[0];
+    addEvent({ thing:ev.thing, actor:'you', verb:'created', title:'Started a variation', v:latest.v+1, parent:ev.id, lane:1, sync:'local', device:'Mac',
+      changes:[{k:'variation', b:null, a:'"try something" · from v'+ev.v}], msg:{who:'sys', text:'A private branch from v'+ev.v+'. Send changes when it is ready, or keep it as a named version.'} });
+    toast('Variation started 🌱', 'Private until you send it. The shared version is untouched.');
+  }
+  function resolveReview(pick){
+    EVENTS.forEach(function(e){ if (e.sync==='review') e.sync='synced'; });
+    var text = pick==='mine' ? 'Kept Deep green · Ana\'s Forest green stays in history' : pick==='theirs' ? 'Kept Forest green · your Deep green stays in history' : 'Kept both as named variations · pick one on the page later';
+    addEvent({ thing:'btn', actor:'you', verb:'synced', title:'Reviewed and combined', v:4, parent:14, sync:'synced', device:'Mac',
+      changes:[{k:'colour', b:'Sage green', a: pick==='theirs' ? 'Forest green' : pick==='mine' ? 'Deep green' : 'Deep green · Forest green', sw: pick==='theirs'?['#9bb89a','#2f6b2f']:['#9bb89a','#0f6b3f']}], msg:{who:'sys', text:text} });
+    var m=$('#merge'); m.classList.add('done'); $('#mergeNote').textContent='Resolved · '+text+'.'; $$('.opts button', m).forEach(function(b){ b.classList.toggle('chosen', b.getAttribute('data-pick')===pick); });
+    toast('Combined ✨', text);
+  }
+  function simulateEdit(){
+    var latest=EVENTS.filter(function(e){return e.thing==='gear';}).sort(function(a,b){return b.v-a.v;})[0];
+    addEvent({ thing:'gear', actor:'you', verb:'edited', title:'Edited while '+(state.offline?'offline':'online'), v:latest.v+1, parent:latest.id, sync:state.offline?'local':'synced', device:'iPhone',
+      changes:[{k:'block · checklist', b:'3 items', a:'4 items'},{k:'item', b:null, a:'"Charge the label printer"'}], msg: state.offline?{who:'sys', text:'Saved on this device · will sync when you reconnect'}:null });
+    toast(state.offline?'Saved on this device 💾':'Saved and synced ☁️', state.offline?'No connection — it is safe here and queued to sync.':'Written locally first, then to your account.');
+  }
+  function reconnect(){
+    state.offline=false; $('#offline').setAttribute('aria-checked','false');
+    var n=0; EVENTS.forEach(function(e){ if (e.sync==='local' && e.thing==='gear'){ e.sync='synced'; n++; } });
+    renderAll(); toast('Back online ☁️', n+' change'+(n===1?'':'s')+' synced to your account. The button variation stays private until you send it.');
+  }
+
+  // ---------- events ----------
+  $$('[data-scope]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); state.scope=b.getAttribute('data-scope'); state.day=null; renderAll(); }); });
+  $$('[data-view]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-view]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); state.view=b.getAttribute('data-view'); renderTimeline(); }); });
+  $('#filters').addEventListener('click', function(e){
+    var b=e.target.closest('.chip'); if (!b) return;
+    var f=b.getAttribute('data-f'), v=b.getAttribute('data-v'); var on=b.getAttribute('aria-pressed')!=='true';
+    b.setAttribute('aria-pressed', on?'true':'false'); state.filters[f][v]=on; if (!on) delete state.filters[f][v];
+    renderTimeline();
+  });
+  $('#q').addEventListener('input', function(e){ state.q=e.target.value.trim(); renderTimeline(); });
+  $('#bars').addEventListener('click', function(e){
+    var b=e.target.closest('button'); if (!b) return; var key=b.getAttribute('data-day');
+    state.day = state.day===key ? null : key; renderBars(); renderTimeline();
+    var g=$('.day[data-day="'+key+'"]'); if (g){ g.scrollIntoView({behavior:'smooth', block:'start'}); $('#scrubhint').textContent='Jumped to '+b.getAttribute('data-tip'); }
+    else $('#scrubhint').textContent='No recorded changes on '+b.getAttribute('data-tip').split(' · ')[0];
+  });
+  $('#timeline').addEventListener('click', function(e){
+    var act=e.target.closest('[data-act]'); var row=e.target.closest('.ev'); if (!row) return; var id=parseInt(row.getAttribute('data-id'),10); var ev=findEv(id);
+    if (act){ var a=act.getAttribute('data-act'); e.stopPropagation();
+      if (a==='restore') return restore(ev);
+      if (a==='compare'){ openDetail(id); state.compare=true; renderDetail(); return; }
+      if (a==='preview'){ openDetail(id); toast('Previewing v'+ev.v+' of '+thingTitleAt(ev), 'Read-only snapshot as of '+fmtTime(ev.at)+' · nothing changed.'); return; }
+    }
+    openDetail(id);
+  });
+  $('#timeline').addEventListener('keydown', function(e){ if (e.key==='Enter' || e.key===' '){ var row=e.target.closest('.ev'); if (row){ e.preventDefault(); openDetail(parseInt(row.getAttribute('data-id'),10)); } } });
+  $('#detail').addEventListener('click', function(e){
+    if (e.target.closest('#closeDetail')) return closeDetail();
+    var tab=e.target.closest('[data-tab]'); if (tab){ state.tab=tab.getAttribute('data-tab'); renderDetail(); return; }
+    var act=e.target.closest('[data-act]'); if (!act) return; var a=act.getAttribute('data-act'), ev=findEv(state.sel);
+    if (a==='restore') restore(ev);
+    else if (a==='undo') undo(ev);
+    else if (a==='variation') variation(ev);
+    else if (a==='compare'){ state.compare=!state.compare; renderDetail(); }
+    else if (a==='review'){ $('#merge').classList.add('open'); $('#versions').scrollIntoView({behavior:'smooth', block:'start'}); }
+    else if (a==='preview') toast('Previewing Ana\'s version', 'Read-only · your variation is untouched.');
+    else if (a==='note'){ var ta=$('#detail textarea'); var txt=ta&&ta.value.trim(); if (txt){ ev.msg={who:'you', text:txt}; renderAll(); toast('Note saved', 'It travels with the change, on every device.'); } else toast('Write a note first', 'A sentence is plenty.'); }
+    else if (a==='askLopu'){ ev.msg={who:'lopu', text:'This changed '+ev.changes.map(function(c){return c.k;}).join(', ')+' on '+thingTitleAt(ev)+'. Say "undo that" if you want it back.'}; renderAll(); toast('Lopu explained it 🦄', 'Explanations are saved as the change\'s message.'); }
+    else if (a==='pin') toast('Named "v'+ev.v+' · keep this"', 'Named versions survive automatic retention.');
+    else if (a==='export') toast('Exporting v'+ev.v, 'A portable JSON snapshot of this version, through the normal export path.');
+  });
+  $('#backdrop').addEventListener('click', closeDetail);
+  document.addEventListener('keydown', function(e){ if (e.key==='Escape') closeDetail(); });
+  $('#openFromEditor').addEventListener('click', function(){ state.scope='gear'; $$('[data-scope]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-scope')==='gear'?'true':'false'); }); renderAll(); openDetail(13); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); });
+  $('#openFromPost').addEventListener('click', function(){ state.scope='all'; state.filters.kind={post:true}; $$('[data-f="kind"]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-v')==='post'?'true':'false'); }); renderAll(); openDetail(2); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); });
+  $$('.graph .node').forEach(function(n){ n.addEventListener('click', function(){ openDetail(parseInt(n.getAttribute('data-ev'),10)); $('#browser').scrollIntoView({behavior:'smooth', block:'start'}); }); });
+  $('#btnReview').addEventListener('click', function(){ $('#merge').classList.add('open'); });
+  $('#btnVariation').addEventListener('click', function(){ variation(findEv(13)); });
+  $('#btnPull').addEventListener('click', function(){ toast('You are up to date', 'Nothing new from Ana since 4:09 pm — that one still needs review.'); });
+  $('#btnPush').addEventListener('click', function(){ var r=EVENTS.some(function(e){return e.sync==='review';}); if (r){ $('#merge').classList.add('open'); toast('Review first 👀', 'One property was changed on both sides. Combine it, then send.'); } else { EVENTS.forEach(function(e){ if (e.lane) e.sync='synced'; }); renderAll(); toast('Changes sent ⬆️', 'Your variation is now the shared version. The old one stays in history.'); } });
+  $$('#merge .opts button').forEach(function(b){ b.addEventListener('click', function(){ resolveReview(b.getAttribute('data-pick')); }); });
+  $('#offline').addEventListener('click', function(){ state.offline=!state.offline; this.setAttribute('aria-checked', state.offline?'true':'false'); renderSync(); if (state.offline) toast('Offline mode', 'Edits keep saving locally. Reconnect to sync.'); });
+  $('#simEdit').addEventListener('click', simulateEdit);
+  $('#simReconnect').addEventListener('click', reconnect);
+  $('#msgToggle').addEventListener('click', function(){ state.showMsgs=!state.showMsgs; this.setAttribute('aria-checked', state.showMsgs?'true':'false'); renderTimeline(); renderDetail(); });
+  $$('[data-toggle]').forEach(function(t){ if (t.id==='msgToggle') return; t.addEventListener('click', function(){ t.setAttribute('aria-checked', t.getAttribute('aria-checked')==='true'?'false':'true'); }); });
+  $$('[data-keep]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-keep]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); }); });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
