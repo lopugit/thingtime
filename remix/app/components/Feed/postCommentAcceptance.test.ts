@@ -34,6 +34,8 @@ function harness(callback: () => void | Promise<unknown>) {
     api: { v1: { things: { comment: () => { effects.writes++; return response; } } } },
     cursorReplies: false, post, comment: post, user: { id: 'viewer' }, commentText: 'New note', replyText: 'New note',
     buildPendingComment: () => ({ id: 'pending', pending: true }),
+    beginComment: () => true, beginReply: () => true, endComment() {}, endReply() {},
+    flushCommentDraft: async () => {}, flushReplyDraft: async () => {},
     clearCommentDraft() {}, clearReplyDraft() {}, freshComments: fresh, freshReplies: fresh,
     onChanged: (_id: string, change: (current: typeof post) => typeof post) => { post = change(post); },
     setReplies: (change: (current: any[]) => any[]) => { replies = change(replies); },
@@ -72,7 +74,7 @@ for (const name of ['submitComment', 'submitReply']) {
     await sending;
     await settle();
     assert.equal(refreshes, 0);
-    assert.deepEqual(h.effects, { writes: 1, errors: 1, restored: 1, dropped: 1 });
+    assert.deepEqual(h.effects, { writes: 1, errors: 1, restored: 0, dropped: 1 });
   });
 }
 

@@ -1,3 +1,7 @@
+import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { DraftSaveStatus } from '~/drafts/DraftPicker';
+import { restoreSchemaFormDraft, schemaFormValue } from '~/drafts/schemaFormDraft';
 import { GENERIC_NATIVE_SCHEMA_KINDS, schemaThingCreateInput } from '~/schemas/schemaCopies';
 import React from 'react';
 import {
@@ -98,16 +102,11 @@ type LeafInputProps = {
   onChange: (next: unknown) => void;
 };
 
-// Invalid drafts stay visible, and NaN fails the shared JSON validator so
-// submitting cannot silently discard a malformed optional JSON field.
+// Keep source text in the parent draft, including incomplete JSON. The form
+// converts it to typed values only when validating or publishing.
 const JsonInput = ({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) => {
-  const [draft, setDraft] = React.useState(() => value === undefined ? '' : JSON.stringify(value, null, 2));
-  React.useEffect(() => { if (!Number.isNaN(value)) setDraft(value === undefined ? '' : JSON.stringify(value, null, 2)); }, [value]);
-  return <Textarea aria-label="JSON value" value={draft} fontFamily="mono" minH="100px" onChange={event => {
-    const text = event.target.value; setDraft(text);
-    if (!text.trim()) { onChange(undefined); return; }
-    try { onChange(JSON.parse(text)); } catch { onChange(Number.NaN); }
-  }} />;
+  return <Textarea aria-label="JSON value" value={typeof value === 'string' ? value : ''} fontFamily="mono" minH="100px"
+    onChange={event => onChange(event.target.value || undefined)} />;
 };
 
 const LeafInput = ({ field, value, onChange }: LeafInputProps) => {
@@ -339,13 +338,20 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
   const [value, setValue] = React.useState<Record<string, unknown>>({});
   const [publishing, setPublishing] = React.useState(false);
   const [touched, setTouched] = React.useState(false);
+  const user = useCurrentUser();
+  const draft = useAccountDraft({ actor: user?.id, surface: 'schema', context: `schema-form:${source.id}`,
+    onRestore: saved => setValue(restoreSchemaFormDraft(saved.snapshot, source.fields)) });
+  const captureDraft = draft.capture;
+ React.useEffect(() => { if (!publishing) captureDraft({ name: `${source.name} draft`.slice(0, 160), surface: 'schema', context: `schema-form:${source.id}`,
+    snapshot: JSON.stringify({ version: 2, value }), attachmentIds: [] }, Object.keys(value).length > 0); }, [value, source.id, source.name, publishing, captureDraft]);
 
   const handleChange = React.useCallback((path: string[], next: unknown) => {
     setTouched(true);
     setValue((prev) => setPath(prev, path, next));
   }, []);
 
-  const validation = React.useMemo(() => validateValueAgainstFields(source.fields, value), [source.fields, value]);
+  const normalizedValue = React.useMemo(() => schemaFormValue(source.fields, value), [source.fields, value]);
+  const validation = React.useMemo(() => validateValueAgainstFields(source.fields, normalizedValue), [source.fields, normalizedValue]);
 
   const publish = async () => {
     setTouched(true);
@@ -355,7 +361,8 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
     }
     setPublishing(true);
     try {
-      const resp: any = await api.v1.things.create(schemaThingCreateInput(source, value));
+      await draft.flush();
+      const resp: any = await api.v1.things.create(schemaThingCreateInput(source, normalizedValue));
       if (!resp?.ok) throw resp;
       // only link to /search when SearchPage can actually resolve the schema
       // — non-searchable builtin kinds (share/save/user/…) would dead-end on
@@ -366,6 +373,7 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
         duration: 8000,
         ...(searchableSchemaSource(source) ? { link: { label: 'Find it on /search', href: schemaSearchPath(source) } } : {})
       });
+      await draft.clear().catch(() => {});
       if (resetOnCreate) {
         setValue({});
         setTouched(false);
@@ -381,6 +389,7 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
   if (source.origin === 'builtin' && !GENERIC_NATIVE_SCHEMA_KINDS.has(source.id)) return <Text fontSize="sm">Copy and extend this schema to create your own Things. Thingtime manages system records through their dedicated features.</Text>;
   return (
     <Flex direction="column" gap={3}>
+      <DraftSaveStatus status={draft.status} error={draft.error} retry={draft.retry} />
       {source.description && (
         <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
           {source.description}

@@ -4197,6 +4197,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'draft',
   TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND,
   'post-discovery',
   ...CHAT_ARCHIVE_THINGTIME,
@@ -4398,6 +4399,10 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+  { id: 'draft', version: 1, kind: 'crystal', collection: null, title: 'Draft or template',
+    summary: 'Private account-backed editing snapshots and reusable templates.',
+    detail: 'Owner-only, quota-accounted drafts, version-checked through the drafts API. Each is an atomic Thing; files are relational attachment children. Generic CRUD, feeds and search cannot publish drafts.',
+    createdVia: '/api/v1/drafts', fields: [], example: {} },
 	{ id: TIMELINE_SNAPSHOT_PART_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline snapshot part',
 		summary: 'One bounded private fragment of a retained large version.',
 		detail: 'The shared canonical part record lives in secure BinData. parentId and targetId reference its immutable event; scalar side and ordinal identify its position. Each part is a separate atomic Thing, with no accumulating arrays. The parent event accounts for retained customer bytes exactly once. Only the canonical content transaction writes parts; generic reads and writes are refused.',
