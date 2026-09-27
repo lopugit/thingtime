@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTimelineComponentReader } from './service';
+import { createTimelineComponentReader, readRecordedComponentEntries } from './service';
 import { captureComponentBindings } from '../../../timeline/componentBindings';
 import { eventFixture, entryFixture } from '../../../timeline/testFixtures';
 const base = eventFixture('page');
@@ -60,4 +60,18 @@ test('an unavailable page does not query dependency metadata or borrow source co
 		entries: async () => []
 	});
 	assert.equal(await read(base.ownerId, 'foreign'), null);
+});
+
+
+test('combined component reads preflight all unique records before bounded payload batches', async () => {
+ const events = Array.from({ length: 260 }, (_, index) => captureComponentBindings(base, { [`ref-${index}`]: null }, [], () => `capture-${index}`).events[0]);
+ const wanted = events.map(event => ({ thingId: event.thingId, eventId: event.id }));
+ const reads: string[][] = []; let metadataReads = 0;
+ const collection = { find: () => { metadataReads++; return { toArray: async () => events.map(() => ({ timelineEntryBytes: 1000 })) }; } };
+ const reader = async (_things: any, _owner: string, ids: string[]) => { reads.push(ids); return events.filter(event => ids.includes(event.id)).map(event => entryFixture(event)); };
+ await assert.rejects(readRecordedComponentEntries(collection, base.ownerId, wanted, reader, 100_000), /too large/);
+ assert.equal(reads.length, 0);
+ const result = await readRecordedComponentEntries(collection, base.ownerId, [...wanted, wanted[0]], reader, 300_000);
+ assert.equal(result.length, 260); assert.deepEqual(reads.map(batch => batch.length), [128, 128, 4]); assert.equal(metadataReads, 2);
+ await assert.rejects(readRecordedComponentEntries(collection, base.ownerId, wanted, async () => events.map(event => entryFixture({ ...event, ownerId: 'other' })), 300_000), /incomplete/);
 });

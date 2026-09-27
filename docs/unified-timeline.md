@@ -713,3 +713,49 @@ external runtime outputs, immutable media copies, theme selection, component-awa
 restore/merge and streaming over-limit previews remain open. A page-content
 restore/merge still goes through the ordinary live writer and records the
 components resolved at that new commit; it does not rewrite component Things.
+
+
+## Recorded components in named-branch merges — 2026-09-28
+
+Named-branch merge review now includes direct recorded component definitions.
+The shared `timeline/componentMerge.ts` compares definitions atomically by
+content, so equivalent captures with different event IDs agree. Independent
+changes combine; overlapping definitions require **Keep current** or **Use this
+version**. Missing capture history is distinct from a captured unavailable ref
+and is never treated as a deletion or replaced with current live definitions.
+Removed page refs drop their links; new refs take the version that references
+them. Folder-only revisions inherit the nearest content revision's captures.
+
+`api.timeline` 1.11.0 extends the existing `preview-branch-merge` command with
+optional `componentChoices`. Updated clients send an empty map to opt in.
+A legacy caller may compare versions without dependencies; retained dependencies
+return 409 requiring an updated client. Unknown dependency families refuse
+explicitly until their merge rules exist. The transient response carries bounded
+base/current/incoming maps and deduplicated canonical capture entries, never a
+new durable format or an embedded growing history list. The server validates
+owner/target identity, preflights retained byte metadata, and reads at most 360
+unique captures in batches of 128, within the aggregate 4 MiB/200,000-node
+preview budget. Current/incoming page contents and choices are checked again by
+the client before review.
+
+The review resolves page conflicts before component conflicts, then renders
+**Preview current branch**, **Preview this version**, and **Preview merge result**
+with the recorded definitions. Actions and live source runtimes remain inert.
+Saving caches selected canonical entries before enqueuing the existing two-parent
+merge event and revision-fenced branch command. IndexedDB and the remote retain
+identical event/link schemas in the private Timeline folder; cache eviction,
+retry identity and stale-push recovery use the existing synchronization path.
+The published page and referenced component Things are unchanged.
+
+Acceptance: the guarded real HTTP suite combines independent definitions,
+requires overlap choices, checks exact uploads/lost-reply retries and stale
+heads, and proves later live edits do not rewrite captured definitions. Browser
+checks cover current/incoming/result previews, no Action execution, offline save
+and reload with selected definitions, reconnect to exactly revision 2, unchanged
+published content, and sign-out. Mobile labels/controls wrap without overflow.
+Screenshots: [saved desktop preview](../PRs/assets/timeline-component-merge/saved-preview-desktop.png)
+and [offline mobile preview](../PRs/assets/timeline-component-merge/offline-preview-mobile.png).
+
+Still open: dependency-aware published restore/merge; nested Schema, Action,
+theme and media versions; generic folder-version preview inheritance; streamed
+comparisons above the current limits; and the remaining acceptance-ledger items.

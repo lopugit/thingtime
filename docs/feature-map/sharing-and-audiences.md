@@ -75,3 +75,10 @@ readable definition is a private point-in-time copy after source revocation;
 subsequent captures reevaluate access. `test:timeline:components` checks both
 retention and refused guessed private refs. Historical previews do not execute
 Actions or live data; they do not grant access to linked media or nested sources.
+
+
+Named-branch merge previews read only that owner's retained capture records,
+validate exact linked event/Thing identities, and never resolve current components
+as a historical fallback. Choosing a definition changes the private branch event's
+links, not live sharing or the source component. Preview Actions and sources
+stay inert. The ordinary owner/source fences apply to comparison and upload.

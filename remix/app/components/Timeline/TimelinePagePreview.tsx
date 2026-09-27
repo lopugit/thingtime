@@ -4,8 +4,8 @@ import type { TimelineEvent } from '../../timeline/contract';
 import { useCapturedComponents } from '../../timeline/useCapturedComponents';
 import { useTimelineSession } from '../../timeline/TimelineProvider';
 import { useApi } from '../../hooks/useApi';
-import { buildComponentsByRef, WebpageBlocksRenderer, type ComponentsByRef } from '../Builder/WebpageBlocksRenderer';
-import { NativeControlsEnabled } from '../Builder/NativeComponentControls';
+import { buildComponentsByRef, type ComponentsByRef } from '../Builder/WebpageBlocksRenderer';
+import { TimelinePageCanvas } from './TimelinePageCanvas';
 import { sanitizeWebpageBlocks } from '../../schemas/registry';
 
 export function TimelinePagePreview({ event }: { event: TimelineEvent }) {
@@ -90,30 +90,7 @@ function PagePreview({ event, blocks }: { event: TimelineEvent; blocks: unknown 
 					{error || history.error}
 				</Text>
 			) : null}
-			<Box
-				borderWidth="1px"
-				borderColor="var(--tt-border)"
-				borderRadius="lg"
-				p={3}
-				overflow="auto"
-				maxH="520px"
-				onClickCapture={(e) => {
-					e.preventDefault();
-					e.stopPropagation();
-				}}
-				onSubmitCapture={(e) => {
-					e.preventDefault();
-					e.stopPropagation();
-				}}
-			>
-				<NativeControlsEnabled.Provider value={false}>
-					<WebpageBlocksRenderer
-						blocks={sanitized.blocks as any}
-						componentsByRef={mode === 'current' ? current ?? {} : history.components}
-						interactive={false}
-					/>
-				</NativeControlsEnabled.Provider>
-			</Box>
+			<TimelinePageCanvas blocks={sanitized.blocks} components={mode === 'current' ? current ?? {} : history.components} />
 		</Box>
 	);
 }

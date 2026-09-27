@@ -233,3 +233,10 @@ preflight. Device drafts use the same event/link records and outbox. The visual
 branch adapter defaults to recorded definitions, with an explicit current preview.
 Run `test:timeline:components` on the guarded local replica set; see the recorded
 component section in [Unified Timeline](../unified-timeline.md).
+
+
+Named-branch component merges use `timeline/componentMerge.ts` plus the existing
+`TimelineBranchMerge.tsx` and shared inert `TimelinePageCanvas.tsx`. Selected
+canonical captures are cached before the merge event and guarded branch push.
+Transient comparison maps never become parent-document history arrays. See
+`test:timeline:component-merge` and the Unified Timeline acceptance notes.
