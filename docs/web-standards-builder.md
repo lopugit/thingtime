@@ -819,3 +819,52 @@ static offsets with live boundaries adjusted by the browser. Both capability
 manifests and the client negotiate `api.actions-run` 1.31.0. See the
 [DOM ranges standard](https://dom.spec.whatwg.org/#ranges) and
 [HTML contextual-fragment algorithm](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#dom-range-createcontextualfragment).
+
+## Native Web Animation programs
+
+111 more catalogue entries contain editable native animation programs. Each saved
+Component includes its keyframe arrays or property-indexed objects, timing JSON,
+preview time, ID, native operations, asynchronous callbacks and result projection.
+The same `tt-web-platform` runtime executes a newly authored program or a saved
+Component reference; no animation-specific Component renderer is introduced.
+
+`animationPolicy.ts` registers Animation, KeyframeEffect, DocumentTimeline and
+AnimationPlaybackEvent constructors and receiver members. This includes native
+KeyframeEffect copying, playback controls, effect/timeline changes, timing and
+computed-keyframe records, ready/finished promises, finish/cancel/remove handlers,
+and scoped Element/Document/ShadowRoot animation queries. The existing worker
+callback transport carries the authored handler function and restores its native
+animation receiver as `this` (including opaque handle identity). Registered promise
+reads await the browser result and are refused in synchronous DOM batches.
+
+The program selects its owned surface before construction; target and effect
+receivers are checked against that surface. Native allocation is capped at 32
+objects, keyframes at 64, properties per frame at 32, and total keyframe values at
+512. Dictionary keys and scalar sizes are validated before native conversion.
+The shared DOM input/handle budgets, two-second execution deadline and opaque
+network-denying runtime CSP still apply. Stop and normal completion cancel every
+tracked animation and fence late callbacks/promises. The recipe explicitly
+commits sampled element styles before completion; pseudo-element samples report
+computed styles because native commitStyles refuses those targets.
+
+Unsupported native members stay explicit. Examples probe both exposed accessors
+and actual behavior: a browser that ignores getAnimations' pseudoElement option
+must report unsupported instead of appearing to filter successfully. The optional
+iterationComposite field is checked before invoking constructors so ignored
+options cannot masquerade as implemented behavior. Event.isTrusted is read from
+its unforgeable own native accessor, preserving trusted browser events versus
+constructed events. Group/Sequence effects, animation triggers, scroll/view
+attachment ranges and remaining Level 2 additions are still separate work.
+
+Both origin manifests and the client require `api.actions-run` 1.32.0. The
+canonical catalogue/save Actions, private Component API and storage schema are
+unchanged. Test `animationBoundaryFixtures.ts` in a native browser as well as the
+unit/contract suites: it checks exact interpolation, independent copied timing,
+trusted finish/cancel/remove events, shadow queries, native exceptions, foreign
+receivers, allocation limits and asynchronous batch refusal.
+
+Sources: [published Web Animations](https://www.w3.org/TR/web-animations-1/),
+[current Level 1 draft](https://drafts.csswg.org/web-animations-1/), and
+[Level 2 additions](https://drafts.csswg.org/web-animations-2/). Inventory source
+status is retained; an editable example does not imply cross-browser support or
+that a draft feature has reached Recommendation status.

@@ -1,3 +1,4 @@
+import { ANIMATION_CONSTRUCTORS, ANIMATION_STATIC, ANIMATION_GLOBALS } from './animationPolicy';
 import { RANGE_CONSTRUCTORS } from './rangePolicy';
 import { OBSERVER_CONSTRUCTORS } from './observerPolicy';
 import { LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS } from './layoutPolicy';
@@ -45,6 +46,7 @@ test('every catalogue DOM request names a member the receiver policy registers',
 					'Path2D',
 					'ImageData',
 					...Object.keys(RANGE_CONSTRUCTORS),
+					...Object.keys(ANIMATION_CONSTRUCTORS),
 					...Object.keys(TYPED_CSS_CONSTRUCTORS),
 					...Object.keys(CSSOM_CONSTRUCTORS),
 					...Object.keys(LAYOUT_CONSTRUCTORS),
@@ -54,11 +56,18 @@ test('every catalogue DOM request names a member the receiver policy registers',
 			continue;
 		}
 		if (action === 'static') {
-			assert.ok([...Object.values(TYPED_CSS_STATIC), ...Object.values(CSSOM_STATIC), ...Object.values(LAYOUT_STATIC)].some((p) => key in p));
+			assert.ok(
+				[
+					...Object.values(TYPED_CSS_STATIC),
+					...Object.values(CSSOM_STATIC),
+					...Object.values(LAYOUT_STATIC),
+					...Object.values(ANIMATION_STATIC)
+				].some((p) => key in p)
+			);
 			continue;
 		}
 		if (action === 'global') {
-			assert.ok(Object.values(LAYOUT_GLOBALS).some((v) => v.split(' ').includes(key)));
+			assert.ok([...Object.values(LAYOUT_GLOBALS), ...Object.values(ANIMATION_GLOBALS)].some((v) => v.split(' ').includes(key)));
 			continue;
 		}
 		const registry = ['get', 'constant'].includes(action) ? reads : action === 'set' ? writes : calls;
