@@ -244,6 +244,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),
   'v1/network-probe/download': () => import('../../../app/routes/api/v1/network-probe/download/_download'),
   'v1/network-probe/upload': () => import('../../../app/routes/api/v1/network-probe/upload/_upload'),
+  'v1/settings/lopu-prompt': () => import('../../../app/routes/api/v1/settings/lopu-prompt/_lopu-prompt'),
   'v1/settings/lopu-chat-defaults': () => import('../../../app/routes/api/v1/settings/lopu-chat-defaults/_lopu-chat-defaults'),
   'v1/settings/lopu-access': () => import('../../../app/routes/api/v1/settings/lopu-access/_lopu-access'),
   'v1/settings/pr-conflict-auto-resolver-model-waterfall': () =>

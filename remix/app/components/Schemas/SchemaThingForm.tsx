@@ -1,3 +1,4 @@
+import { GENERIC_NATIVE_SCHEMA_KINDS, schemaThingCreateInput } from '~/schemas/schemaCopies';
 import React from 'react';
 import {
   Box,
@@ -10,7 +11,8 @@ import {
   ModalOverlay,
   Select,
   Switch,
-  Text
+  Text,
+  Textarea
 } from '@chakra-ui/react';
 import { Plus, Trash2, X } from 'lucide-react';
 
@@ -96,8 +98,21 @@ type LeafInputProps = {
   onChange: (next: unknown) => void;
 };
 
+// Invalid drafts stay visible, and NaN fails the shared JSON validator so
+// submitting cannot silently discard a malformed optional JSON field.
+const JsonInput = ({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) => {
+  const [draft, setDraft] = React.useState(() => value === undefined ? '' : JSON.stringify(value, null, 2));
+  React.useEffect(() => { if (!Number.isNaN(value)) setDraft(value === undefined ? '' : JSON.stringify(value, null, 2)); }, [value]);
+  return <Textarea aria-label="JSON value" value={draft} fontFamily="mono" minH="100px" onChange={event => {
+    const text = event.target.value; setDraft(text);
+    if (!text.trim()) { onChange(undefined); return; }
+    try { onChange(JSON.parse(text)); } catch { onChange(Number.NaN); }
+  }} />;
+};
+
 const LeafInput = ({ field, value, onChange }: LeafInputProps) => {
   switch (field.type) {
+    case 'json': return <JsonInput value={value} onChange={onChange} />;
     case 'boolean':
       return <Switch isChecked={value === true} onChange={(event) => onChange(event.target.checked)} size="sm" />;
     case 'enum':
@@ -340,17 +355,7 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
     }
     setPublishing(true);
     try {
-      // the scope/provenance tags spread LAST so no user field can clobber
-      // them (top-level fields named schema/schemaId are also rejected at
-      // author time); schemaId pins usage counts to this exact schema thing
-      const resp: any = await api.v1.things.create({
-        thingtime: ['data'],
-        crystal: {
-          ...value,
-          schema: source.name,
-          ...(source.origin === 'community' ? { schemaId: source.id } : {})
-        }
-      });
+      const resp: any = await api.v1.things.create(schemaThingCreateInput(source, value));
       if (!resp?.ok) throw resp;
       // only link to /search when SearchPage can actually resolve the schema
       // — non-searchable builtin kinds (share/save/user/…) would dead-end on
@@ -373,6 +378,7 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
     }
   };
 
+  if (source.origin === 'builtin' && !GENERIC_NATIVE_SCHEMA_KINDS.has(source.id)) return <Text fontSize="sm">Copy and extend this schema to create your own Things. Thingtime manages system records through their dedicated features.</Text>;
   return (
     <Flex direction="column" gap={3}>
       {source.description && (

@@ -40,6 +40,50 @@ local `timeline-rs` replica set at `127.0.0.1:20337`; it creates fixtures throug
 the app API. Never use a shared or production database for these checks.
 See [the implementation contract and open delivery gates](docs/unified-timeline.md).
 
+### Public schemas, uploaded files and Lopu instructions
+
+Every built-in schema (root Thing, content kinds and database collections) is
+published as a Thingtime-owned public Schema Thing at `schema-<id>`. Browse
+`/schemas`, open a schema and choose **Copy and extend** to save an independent
+Schema in your Things. Copies retain nested fields and render templates; open
+record fields use bounded JSON. `forkOf` records the source. Editing a copy
+never changes the platform definition or another person's schema. Native write
+permissions, protected kinds and specialized validation continue to apply.
+
+After deploying a fork, an administrator should dry-run and then run
+**backfill-user-storage-accounting** in Admin migrations. That fenced migration
+also refreshes the public schema catalog; do not run a standalone schema seed
+around active storage ledgers. Existing identities, posts and ownership remain
+in place. No new environment variable is needed for schemas or prompt settings.
+
+**Settings → Lopu** shows the shared base prompt and saves a private list of
+custom instructions with individual enable switches. **Settings → Admin → Lopu
+base prompt** edits the shared public guidance. Set the normal server
+`ADMIN_USERNAMES=<your-admin-username>` on your fork, and use its normal MongoDB
+configuration. The base prompt is public: keep credentials in Secure Vault.
+Changes apply to the next AI reply and newly started direct voice sessions.
+Chat, voice, musings and recording analysis share this guidance; surface rules
+and server-enforced permissions remain in effect. Simultaneous edits report a
+conflict and offer reload rather than overwriting someone else's changes.
+
+Lopu can save an owned chat attachment as an independent private file Thing,
+optionally file it in an owned folder, and use its ID/content URL in another
+Thing's properties. The original chat remains intact; deleting it does not
+delete the saved copy. This requires the existing private-upload approval and
+quota, and the existing object-storage configuration. Private URLs retain their
+access checks when placed in a public Thing. Public sharing remains explicit.
+
+For isolated acceptance, start a loopback MongoDB replica set and a PM2-managed
+web stack with `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:<port>/thingtime?replicaSet=<name>`,
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<absolute-test-directory>` and
+`LOPU_CHAT_PROVIDER=test`. Create a disposable account with `seed-fixture.mjs`,
+then set `ADMIN_USERNAMES=<fixture-username>` in both the app and test process.
+From `remix/`, run `node --import tsx scripts/verify-schema-files.ts
+.fixtures/<fixture>.json`. It refuses non-loopback databases/APIs, exercises the
+real multipart upload and Lopu tool paths, verifies private bytes after chat
+deletion, and creates an upload form for browser acceptance. The local storage
+adapter tests the lifecycle without claiming a live S3 or model-provider test.
+
 ### Builder service workspaces
 
 Insert **Service workspace** from the builder block menu. Its native

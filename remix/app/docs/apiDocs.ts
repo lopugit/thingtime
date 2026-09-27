@@ -3144,6 +3144,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'settings-lopu-prompt', group: 'settings', title: 'Lopu base prompt and personal instructions',
+    endpoint: '/api/v1/settings/lopu-prompt', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    summary: 'Read the public base prompt, manage your private instruction checklist, or edit the base prompt as an admin.',
+    detail: 'GET returns base {basePrompt, revision} and the authenticated account’s personal {instructions, revision}; anonymous readers get no personal instructions. POST scope personal accepts up to 30 {id,text,enabled} entries (2000 characters each, 16000 total). POST scope base is admin-only and accepts basePrompt (16000 characters maximum). Both require the revision from GET (null before the first save); stale edits return 409. Preferences apply to the next AI-generated Lopu reply, including chat, voice and musings. Task-specific prompts, tool contracts and permissions still apply. Canned messages do not call a model.',
+    auth: { mode: 'optional', description: 'Public base prompt; private instructions are session-owned. Editing the base requires an administrator.' },
+    methods: ['GET', 'POST'],
+    steps: ['GET the current settings and revisions.', 'POST scope personal with instructions and personal.revision, or scope base with basePrompt and base.revision as an admin.', 'On 409 reload and reconcile before saving.'],
+    requestExamples: [{ name: 'Read prompt settings', description: 'Load the base and your private checklist.', method: 'GET' }, { name: 'Save an instruction', description: 'First personal save.', method: 'POST', body: { scope: 'personal', revision: null, instructions: [{ id: 'concise', text: 'Keep answers brief.', enabled: true }] } }],
+    responseExamples: [{ status: 200, description: 'Saved private checklist.', body: { ok: true, personal: { revision: 'new-revision', instructions: [{ id: 'concise', text: 'Keep answers brief.', enabled: true }] } } }]
+  }),
+  endpoint({
     id: 'settings-lopu-chat-defaults',
     group: 'settings',
     title: 'Lopu chat defaults',
@@ -4696,11 +4707,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.16.1',
-    featureVersion: '1.16.1',
+    contractVersion: '1.17.1',
+    featureVersion: '1.17.1',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
-      'Authorized tool writes retain AI provenance in the shared Timeline, including nested Actions and server-hosted browser flows. Each tool invocation groups its committed changes through relational operation links; refusal or an unexecuted step creates no successful-change event. ' +
+      'Version 1.17 composes the current shared base prompt with enabled personal instructions for each request. get_schema and create_schema can inspect and extend every public built-in or visible user Schema; create_data validates the selected schema. save_attachment saves an independent owner-private copy of an authorized chat attachment and returns its stable ID and content URL for Thing properties, with optional owned-folder placement. Existing tool authorization and confirmation checks still apply. ' +
+      'Canonical Thing writes from authorized tools retain AI provenance in the shared Timeline, including nested Actions and server-hosted browser flows. Each tool invocation groups its committed changes through relational operation links; refusal or an unexecuted step creates no successful-change event. ' +
       'Version 1.16.0 preserves context.page dirty, ready and updatedAt metadata when blocks are omitted. Missing blocks are never an empty page: clean saved pages are resolved through the authorized API; dirty, unknown or still-loading omitted drafts refuse mutation. Continuations preserve these fences. ' +
       'Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
       'Version 1.14.2 corrects packaged Claude runtime availability for server-managed Vercel Workflow replies. It uses the existing shared OAuth credential selection and preserves model settings, tool permissions, cancellation and continuation rules; the public request and event shapes are unchanged. ' +
@@ -4957,13 +4969,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Pick a Secure Vault connection whose kind lists a realtime model (GET /api/v1/ai/models → vaultProviders[].realtimeModels).',
 			'POST its providerId with an optional model, effort and textResponse.',
-			'Open the returned webSocketUrl with the ephemeral token as the client secret; it expires after five minutes and is single-session.'
+			'Version 1.2.0 returns instructions composed from the shared base, voice guidance and enabled private instructions. Send it unchanged in session.update; start a new session after editing settings. Open the returned webSocketUrl with the ephemeral token as the client secret; it expires after five minutes and is single-session.'
 		],
 		requestExamples: [
 			{ name: 'Start direct voice', description: 'The stored provider token stays server-side.', method: 'POST', body: { providerId: '<vault-provider-id>', model: 'grok-voice-latest', effort: 'none', textResponse: false } }
 		],
 		responseExamples: [
-			{ status: 200, description: 'The short-lived realtime session.', body: { ok: true, session: { provider: 'xai', model: 'grok-voice-latest', token: '<ephemeral-token>', expiresAt: 1800000000, webSocketUrl: 'wss://api.x.ai/v1/realtime?model=grok-voice-latest', effort: 'none', textResponse: false } } },
+			{ status: 200, description: 'The short-lived realtime session.', body: { ok: true, session: { provider: 'xai', model: 'grok-voice-latest', token: '<ephemeral-token>', expiresAt: 1800000000, webSocketUrl: 'wss://api.x.ai/v1/realtime?model=grok-voice-latest', effort: 'none', textResponse: false, instructions: 'Shared base prompt, voice guidance and enabled personal instructions.' } } },
 			{ status: 400, description: 'The connection is not the caller’s, its kind has no realtime model, or the model/effort is not eligible.', body: { ok: false, error: 'Direct voice needs a provider with realtime speech (xAI Grok Voice) — this connection has none.' } },
 			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
 		],
@@ -12515,6 +12527,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'schemas',
     title: 'Thingtime Schemas',
     endpoint: '/api/v1/schemas',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     summary: 'Returns every Thingtime Schema — the root thing schema, crystal sub-schemas, and collection schemas.',
     detail:
       'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /docs/schemas; published community schemas live at /schemas.',
@@ -12525,7 +12539,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET'],
     steps: [
       'GET with no parameters for every schema plus collectionVersions.',
-      'GET ?id=post (or comment, reaction, share, thing, ...) for one schema.',
+      'GET ?id=post (or comment, reaction, share, thing, ...) for one schema. All schemas return a copy payload with editable fields, optional preview and forkOf provenance; POST it to /api/v1/things to save your own schema.',
       'Crystal schemas are the ids a thing may carry in its thingtime array.',
       'Handle 404 for unknown schema ids.'
     ],

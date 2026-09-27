@@ -1,3 +1,5 @@
+import { getLopuPromptSettings } from '../settings/lopuPromptSettings';
+import { composeLopuSurfacePrompt } from './promptSettingsCore';
 import { createClaudeOAuthClient } from '../ai/claudeOAuth';
 import OpenAI, { toFile } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
@@ -131,6 +133,7 @@ export const transcribeRecordingAudio = async (
 
 export const analyzeRecording = async (transcript: string, beforeSend?: () => Promise<void>, ownerId?: string) => {
 	const preferences = await getAiPreferredModelWaterfall();
+  const system = composeLopuSurfacePrompt(await getLopuPromptSettings(ownerId), RECORDING_INSIGHTS_PROMPT);
 	const attempt = async (connection: LopuVaultProviderRecord | undefined, signal?: AbortSignal) => {
 		if (connection?.provider === 'anthropic') {
 			const choice = resolveAiPreferredAnthropicChoice(preferences, process.env.LOPU_CLAUDE_MODEL || 'claude-sonnet-4-6');
@@ -139,7 +142,7 @@ export const analyzeRecording = async (transcript: string, beforeSend?: () => Pr
 				{
 					model: connection.model || choice.model,
 					max_tokens: 6000,
-					system: RECORDING_INSIGHTS_PROMPT,
+					system,
 					messages: [{ role: 'user', content: transcript }]
 				},
 				{ signal }
@@ -164,7 +167,7 @@ export const analyzeRecording = async (transcript: string, beforeSend?: () => Pr
 				max_completion_tokens: 6000,
 				response_format: { type: 'json_object' },
 				messages: [
-					{ role: 'system', content: RECORDING_INSIGHTS_PROMPT },
+					{ role: 'system', content: system },
 					{ role: 'user', content: transcript }
 				]
 			},

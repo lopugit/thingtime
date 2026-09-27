@@ -19,28 +19,37 @@ retry token: external effects must never be replayed to repair missing history.
 
 ## Validation
 
+Validation after integrating main `b96507b4` (schema copies, durable attachment
+saves and Lopu prompt settings), preserving the earlier XPath integration:
+
 - Full Vite/Nitro/Vercel build and changed-file lint passed.
-- Timeline: 62 passed. Actions: 156 passed, one existing skip. Lopu: 169 + 151
-  passed. After integrating main `c25edbf3`, capability tests: 90 passed;
-  Web Standards: 157 passed, one existing skip.
+- Full `test:unit` passed: 4,123 passing test summaries, zero failures. Relevant
+  suites include Timeline 62; Actions 156 with one existing skip; Lopu 176 + 152;
+  Lopu UI 221; capability manifests 90; schemas 259; attachments 9 + 280; Web
+  Standards 157 with one existing skip.
 - Disposable replica-set HTTP regression passed nested Action updates and
   deletion, partial failure, attempted provenance forgery, subsequent API
   isolation and browser preparation, alongside existing CRUD, draft, restore,
-  merge, branch and large-version checks. It creates fixtures through the API.
+  merge, branch and large-version checks. Fixtures use the real API.
+- The manual Action HTTP suite passed all 100 checks. Its old prototype-input
+  assertion assumed the preexisting null-prototype accumulator discarded an
+  explicit key. The corrected check verifies the supplied boolean survives;
+  an additional omitted-key request verifies no inherited prototype leaks.
 - Browser History showed API/Action labels and the exact nested field change.
-- The full remote unit run caught an additional Lopu UI assertion still pinned
-  to reply version 1.16.0. Its advertised-version expectation now matches 1.16.1;
-  all 221 Lopu UI tests and the changed-file lint pass. Final remote CI still
-  must validate the updated head.
-- The initial warning-only typecheck ratchet reported 91 existing diagnostics
-  versus baseline 89, with none in changed files. This is not a clean typecheck
-  claim. Required remote checks must pass on the final head before merge.
+  Live AI-provider execution remains separate acceptance work; the tool tests
+  exercise the actual provider-loop entry point with mocked dependencies.
+- A previous remote run caught Lopu UI version assertions pinned to 1.16.0.
+  Both manifests and every asserted reply version now agree on 1.17.1. Final
+  required remote CI must validate the updated head before merge.
+- The warning-only typecheck ratchet remains at 91 existing diagnostics versus
+  baseline 89, with none in this increment's changed files. This is not a clean
+  typecheck claim.
 - Graphify structural output is refreshed with the merged source. Fresh Markdown
   semantic extraction is not claimed.
 
-The merge preserves main's XPath support and publishes Actions **1.34.1** and
-Lopu replies **1.16.1**. The user explicitly authorized tested increments into
-`main`; use a normal merge commit and verify the deployed commit afterward.
+The merge publishes Actions **1.34.1** and Lopu replies **1.17.1**. The user
+explicitly authorized tested increments into `main`; use a normal merge commit
+and verify the deployed commit afterward.
 
 ## Remaining scope
 

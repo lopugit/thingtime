@@ -62,3 +62,17 @@ test('only executed AI tools carry trusted provenance; inputs cannot replace the
   assert.equal(provenance.length, before);
   assert.equal(timelineMutationContext('owner'), null);
 });
+
+test('saving attachments and extending schemas require approval and are denied in scheduled work', async () => {
+  for (const call of [
+    { id: 'save', name: 'save_attachment', input: { id: 'photo' } },
+    { id: 'copy', name: 'create_schema', input: { name: 'Product', extends: 'post', fields: [] } }
+  ]) {
+    const events: any[] = [];
+    const ctx = createLopuToolContext(viewer, {}, event => events.push(event));
+    assert.equal((await runLopuTool(call, ctx)).needsConfirmation, true);
+    assert.equal(events.filter(event => event.type === 'confirm').length, 1);
+    const scheduled = createLopuToolContext(viewer, {}, () => {}, { readOnly: true, readAccessMode: async () => 'full' });
+    assert.equal((await runLopuTool(call, scheduled)).ok, false);
+  }
+});
