@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Lopu Mac/browser dictation waits five seconds
+  before sending the current message draft. Settings → Lopu → Voice transcription
+  and the voice gear share a custom 1–120 second delay. Chat settings adds
+  **Hear me out**: keep listening and ask “Send now?” every ten seconds of silence,
+  with no automatic send. Manual Stop retains the draft; stale timers and rejected
+  sends cannot lose text. Removed the Mac dictation capture's fixed 1.5-second cutoff.
+  See [PR #961 details](../PRs/961-codex-voice-silence-settings--configurable-dictation-silence-and-hear-me-out.md).
+
 - 2026-09-27 — **Codex (AI)**: Canonical Thing changes from server Actions and
   Lopu tools now retain trusted origin and group nested writes through the
   existing relational Timeline operation links. Concurrent calls stay isolated;

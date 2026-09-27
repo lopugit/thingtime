@@ -47,6 +47,11 @@ saves and Lopu prompt settings), preserving the earlier XPath integration:
 - Graphify structural output is refreshed with the merged source. Fresh Markdown
   semantic extraction is not claimed.
 
+Main then advanced to `a857d3a4` with voice silence settings. The integration
+keeps those changes, and the affected Lopu UI suite (232 tests) and Timeline
+suite (62 tests) pass. Required remote checks must validate the final combined
+head.
+
 The merge publishes Actions **1.34.1** and Lopu replies **1.17.1**. The user
 explicitly authorized tested increments into `main`; use a normal merge commit
 and verify the deployed commit afterward.

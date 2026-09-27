@@ -1,4 +1,5 @@
 import React from 'react';
+import { DEFAULT_DICTATION_SILENCE_SECONDS, normalizeDictationSilenceSeconds } from './dictationSilence';
 
 import { useThingtime } from '../Thingtime/useThingtime';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -39,6 +40,8 @@ export interface LopuSettings {
 	confirmDeletes: boolean;
 	// Enter sends, Shift+Enter adds a newline (false: Enter is a newline)
 	enterSends: boolean;
+	dictationSilenceSeconds: number;
+	hearMeOut: boolean;
 	// model / effort / speed preference; null = follow the catalog defaults
 	model: string | null;
 	effort: string | null;
@@ -77,6 +80,8 @@ export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
 	applyPatches: true,
 	confirmDeletes: true,
 	enterSends: true,
+	dictationSilenceSeconds: DEFAULT_DICTATION_SILENCE_SECONDS,
+	hearMeOut: false,
 	model: null,
 	effort: null,
 	speed: null,
@@ -129,6 +134,8 @@ export const normalizeLopuSettings = (raw: unknown): LopuSettings => {
 		applyPatches: boolOr(source.applyPatches, LOPU_SETTINGS_DEFAULTS.applyPatches),
 		confirmDeletes: boolOr(source.confirmDeletes, LOPU_SETTINGS_DEFAULTS.confirmDeletes),
 		enterSends: boolOr(source.enterSends, LOPU_SETTINGS_DEFAULTS.enterSends),
+		dictationSilenceSeconds: normalizeDictationSilenceSeconds(source.dictationSilenceSeconds),
+		hearMeOut: boolOr(source.hearMeOut, false),
 		model: idOrNull(source.model),
 		effort: idOrNull(source.effort),
 		speed: normalizeLopuSpeed(source.speed),
@@ -427,6 +434,9 @@ export const useLopuSettings = () => {
 		[setLopuSetting]
 	);
 
+	const setHearMeOut = React.useCallback((value: boolean) => setLopuSetting('hearMeOut', !!value), [setLopuSetting]);
+	const setDictationSilenceSeconds = React.useCallback((value: number) => setLopuSetting('dictationSilenceSeconds', normalizeDictationSilenceSeconds(value)), [setLopuSetting]);
+
 	// Effort tiers and fast mode are per-model, so a model change carries its
 	// own effort/speed (or clears them back to the catalog default).
 	const setModelChoice = React.useCallback(
@@ -502,6 +512,8 @@ export const useLopuSettings = () => {
 		setApplyPatches,
 		setConfirmDeletes,
 		setEnterSends,
+		setHearMeOut,
+		setDictationSilenceSeconds,
 		setModelChoice,
 		setEffort,
 		setSpeed,

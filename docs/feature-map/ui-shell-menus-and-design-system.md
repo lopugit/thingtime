@@ -81,6 +81,17 @@ browser acceptance also checks reload and repeated search through the renderer.
   with synthetic speech/HTTP: live composer revisions, stop/resume, edits,
   mode switches, stale callbacks, recognition failure and rejected-send recovery.
   `composerDictation.test.ts` covers draft merging and the shared input limit.
+  `dictationSilence.ts` owns a logical recording's configurable five-second send
+  window and ten-second Hear me out reminder, surviving native recognizer
+  restarts. Desktop speech bridge 1.1.0 uses continuous native capture for the
+  composer while retaining the legacy/private-page utterance boundary.
+  `LopuDictationSettings` shares controls across Settings → Lopu and
+  the voice gear; chat settings exposes the same Hear me out preference.
+  Timers submit the current composer draft through `externalSubmitDraftRef`,
+  never cached recognition text. Stop/edit/owner/chat/mode changes cancel them.
+  Hear me out uses Mac/browser device dictation; native iOS recording refuses
+  this mode instead of silently auto-sending. Dedicated Transcribe/Direct voice
+  retain their flows while it is off.
 - `npm --prefix remix run test:nav`, `test:lopu-ui`, `test:things` (menu
   models), `test:feed` (card contracts). Menu/layout behaviour is verified in a
   live browser at desktop and 375 px widths (`TESTING.md` "Shared page shell",

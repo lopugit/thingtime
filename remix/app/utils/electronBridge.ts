@@ -257,7 +257,7 @@ export type DesktopSpeechEvent = {
 
 export type ThingtimeDesktopBridge = {
 	speechRecognitionVersion?: string;
-	startSpeechRecognition?: (request: { sessionId: string; lang: string }) => Promise<{ ok: true }>;
+	startSpeechRecognition?: (request: { sessionId: string; lang: string; continuous?: boolean }) => Promise<{ ok: true }>;
 	stopSpeechRecognition?: (request: { sessionId: string }) => Promise<{ ok: true }>;
 	onSpeechRecognition?: (callback: (event: DesktopSpeechEvent) => void) => () => void;
 	discoverAiSources?: () => Promise<{ sources: ThingtimeAiDesktopSource[] }>;
