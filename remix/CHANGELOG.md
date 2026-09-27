@@ -81,6 +81,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   custom data-source selection. Identical saves add no event; deleting at the
   storage ceiling retains the prior version. Timeline 1.5.0 and themes/delete
   1.1.0; dedicated restore, selection history and legacy coverage remain open.
+  [PR #970 details](../PRs/970-timeline-theme-history-record-saved-theme-changes-in-shared-history.md).
 
 - 2026-09-27 — **Codex (AI)**: Timeline quota acceptance uses synthetic accounts
   and the normal admin API on a guarded disposable replica. At the exact limit,
