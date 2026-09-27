@@ -1,5 +1,10 @@
 # API endpoints and capabilities
 
+Timeline 1.9.0 adds direct private `branchId` + `thingId` lookup on the same
+route; the shared client/sync path validates identity and caches canonical
+branch/head records without consuming queued pushes. See
+[the Timeline contract](../unified-timeline.md).
+
 Timeline 1.6.0 accepts explicit `storage=home` on the existing route while
 `ownerId`/`dataPlane` remain authorization and identity fences. The scoped home
 context applies to discovery, paging, drafts, exact versions, branches and

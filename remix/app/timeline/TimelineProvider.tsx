@@ -116,6 +116,7 @@ export function TimelineProvider({ children }: { children: React.ReactNode }) {
 			push: async (event, signal) => (await apiRef.current.v1.timeline.push(scope, event, { signal })).entry,
 			page: (request, signal) => apiRef.current.v1.timeline.page(scope, request, { signal }),
 			branch: (command, signal) => apiRef.current.v1.timeline.branch(scope, command, { signal }),
+			branchHead: (branchId, thingId, signal) => apiRef.current.v1.timeline.branchHead(scope, branchId, thingId, { signal }),
 			entry: async (eventId, signal) => (await apiRef.current.v1.timeline.entry(scope, eventId, { signal })).entry,
 			branches: (thingId, before, signal) => apiRef.current.v1.timeline.branches(scope, thingId, before, { signal })
 		}, branches);

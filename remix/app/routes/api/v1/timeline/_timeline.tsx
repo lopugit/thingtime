@@ -5,8 +5,8 @@ import { StorageMutationError } from '~/api/utils/storage/storageCore';
 import { getTimelinePage, getTimelineEntry, pushClientTimelineEvent, timelineDiscovery, validateClientTimelineEvent } from '~/api/utils/timeline/service';
 import { TIMELINE_EVENT_MAX_BYTES, TIMELINE_PAGE_SIZE } from '~/timeline/contract';
 import { handleVersionRequest, parseVersionRequest } from '~/api/utils/timeline/versions';
-import { handleBranchRequest, getTimelineBranches } from '~/api/utils/timeline/branches';
-import { parseTimelineBranchCommand } from '~/timeline/branches';
+import { handleBranchRequest, getTimelineBranches, getTimelineBranch } from '~/api/utils/timeline/branches';
+import { parseTimelineBranchCommand, parseTimelineBranchLookup } from '~/timeline/branches';
 import { runWithHomeMongoEndpoint } from '~/api/utils/mongodb/endpoint';
 import { parseBranchMergeRequest } from '~/timeline/branchMerge';
 import { parseBranchCheckoutRequest } from '~/timeline/branchCheckout';
@@ -15,7 +15,7 @@ import { previewBranchMerge } from '~/api/utils/timeline/branchMerge';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
-const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, entry: getTimelineEntry, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
+const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, entry: getTimelineEntry, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
 
 export function createTimelineHandlers(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
@@ -35,6 +35,17 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		const auth = await authorize(request);
 		if (auth instanceof Response) return auth;
 		const thingId = auth.url.searchParams.get('thingId');
+		if (auth.url.searchParams.has('branchId')) {
+			const params = auth.url.searchParams;
+			let lookup;
+			try {
+				const allowed = ['ownerId', 'dataPlane', 'storage', 'branchId', 'thingId'];
+				if (['ownerId', 'dataPlane', 'branchId', 'thingId'].some(key => params.getAll(key).length !== 1) || [...params.keys()].some(key => !allowed.includes(key))) throw new Error('Ambiguous branch lookup');
+				lookup = parseTimelineBranchLookup({ branchId: params.get('branchId'), thingId });
+			} catch { return response({ ok: false, error: 'Invalid Timeline branch lookup' }, 400); }
+			const entry = await deps.branchHead(auth.user.id, lookup.branchId, lookup.thingId);
+			return entry ? response({ ok: true, ...entry }) : response({ ok: false, error: 'Branch not found' }, 404);
+		}
 		if (auth.url.searchParams.has('eventId')) {
 			const eventId = auth.url.searchParams.get('eventId')!;
 			const validId = (value: string) => /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(value);

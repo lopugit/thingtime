@@ -9490,3 +9490,21 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Run the broader native regression audit after changing the shared bridge and
   worker error transport. Verify both 1.35.0 manifests, unchanged opaque sandbox
   policy and exact runtime/deployment identity on preview and production.
+
+
+### Direct Timeline branch lookup (2026-09-28)
+
+- On the disposable replica set, run `test:timeline:branch-merge` and
+  `test:timeline:home-scope` with the guarded `TIMELINE_TEST_BASE`. Lookup must
+  return the exact named branch/Thing head, reflect its next accepted push,
+  leave published content/history untouched, and feed an exact checkout.
+- Query a missing membership, another signed-in account, stale account/source,
+  duplicate selectors and mixed page/version selectors. Expect 404, 404, 409,
+  and 400 respectively; anonymous reads return 401 and rate limits fail closed.
+- Create the same branch and Thing ids in home and a custom database with
+  different names/versions. Concurrent explicit-home and selected reads must
+  remain separate and leave the surrounding selection unchanged.
+- `test:timeline` additionally covers two exact owner-scoped storage lookups,
+  canonical public projection, a cold local branch cache, queued push retention,
+  delayed-reply revision protection and cancellation after an identity change.
+  No visual Builder behavior is introduced by this increment.
