@@ -36,7 +36,12 @@ export function runPlatformWorker(
 			try {
 				if (!dom) throw new Error('This execution context has no document');
 				const result = dom(event.data);
-				worker.postMessage({ type: 'tt-platform-dom-result', id: event.data.id, ok: true, result });
+				const reply = (value: unknown) => {
+					if (!done) worker.postMessage({ type: 'tt-platform-dom-result', id: event.data.id, ok: true, result: value });
+				};
+				if (result instanceof Promise)
+					void result.then(reply, (error) => finish(false, error instanceof Error ? error.message : 'Invalid DOM operation'));
+				else reply(result);
 			} catch (error) {
 				// Protocol and budget errors terminate the run; malformed requests must
 				// not keep an unbounded error/retry loop alive on the frame thread.

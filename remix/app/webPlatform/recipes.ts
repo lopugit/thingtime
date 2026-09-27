@@ -1,3 +1,4 @@
+import { cssomRecipe } from './cssomFixtures';
 import { typedCSSRecipe } from './typedCSSFixtures';
 import { cssFunctionRecipe } from './cssFunctionFixtures';
 import { svgFilterRecipe } from './svgFilterFixtures';
@@ -407,6 +408,8 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const cssom = cssomRecipe(feature);
+	if (cssom) return cssom;
 	const typed = typedCSSRecipe(feature);
 	if (typed) return typed;
 	if (feature.language === 'html') return htmlRecipe(feature);
