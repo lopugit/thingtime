@@ -29,7 +29,7 @@ async function assertSelfContained(root) {
 	}
 }
 
-for (const required of [helperExecutable, bridgeExecutable, helperIcon, helperInfoPlist, runtimePath, manifestPath]) {
+for (const required of [helperExecutable, bridgeExecutable, path.join(helperApp, 'Contents', 'MacOS', 'ThingtimeSpeech'), helperIcon, helperInfoPlist, runtimePath, manifestPath]) {
 	await access(required);
 }
 await assertSelfContained(nativeRoot);

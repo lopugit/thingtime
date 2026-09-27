@@ -5621,6 +5621,16 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
+      allow Speech Recognition and Microphone, and speak a synthetic test phrase.
+      One transcript reaches the selected chat/model without Chromium's `network`
+      error; the mic pauses during the reply. Stop during a permission prompt,
+      during capture, and immediately after an interim result: no late turn sends.
+      Reload/close/switch account or chat: capture stops and no transcript crosses
+      the boundary. Denied permissions show the relevant macOS settings category.
+      Confirm browser speech and direct-provider voice remain available.
+
+
 - [ ] Refresh Recovery and compare its published-release count with GitHub, including
       prereleases and older pages. Desktop and Recovery rows must arrive as one
       snapshot; a later-page rate limit keeps the previous complete list visible.
