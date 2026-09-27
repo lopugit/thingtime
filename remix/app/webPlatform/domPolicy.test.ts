@@ -1,3 +1,4 @@
+import { LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS } from './layoutPolicy';
 import { CSSOM_CONSTRUCTORS, CSSOM_STATIC } from './cssomPolicy';
 import { TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC } from './typedCSSPolicy';
 import assert from 'node:assert/strict';
@@ -32,11 +33,23 @@ test('every catalogue DOM request names a member the receiver policy registers',
 			continue;
 		}
 		if (action === 'construct') {
-			assert.ok(['Path2D', 'ImageData', ...Object.keys(TYPED_CSS_CONSTRUCTORS), ...Object.keys(CSSOM_CONSTRUCTORS)].includes(key));
+			assert.ok(
+				[
+					'Path2D',
+					'ImageData',
+					...Object.keys(TYPED_CSS_CONSTRUCTORS),
+					...Object.keys(CSSOM_CONSTRUCTORS),
+					...Object.keys(LAYOUT_CONSTRUCTORS)
+				].includes(key)
+			);
 			continue;
 		}
 		if (action === 'static') {
-			assert.ok([...Object.values(TYPED_CSS_STATIC), ...Object.values(CSSOM_STATIC)].some((p) => key in p));
+			assert.ok([...Object.values(TYPED_CSS_STATIC), ...Object.values(CSSOM_STATIC), ...Object.values(LAYOUT_STATIC)].some((p) => key in p));
+			continue;
+		}
+		if (action === 'global') {
+			assert.ok(Object.values(LAYOUT_GLOBALS).some((v) => v.split(' ').includes(key)));
 			continue;
 		}
 		const registry = ['get', 'constant'].includes(action) ? reads : action === 'set' ? writes : calls;

@@ -1,3 +1,4 @@
+import { layoutRecipe } from './layoutFixtures';
 import { cssomRecipe } from './cssomFixtures';
 import { typedCSSRecipe } from './typedCSSFixtures';
 import { cssFunctionRecipe } from './cssFunctionFixtures';
@@ -408,6 +409,8 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const layout = layoutRecipe(feature);
+	if (layout) return layout;
 	const cssom = cssomRecipe(feature);
 	if (cssom) return cssom;
 	const typed = typedCSSRecipe(feature);

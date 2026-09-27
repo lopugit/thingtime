@@ -8977,3 +8977,28 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Re-run Typed OM, CSS, SVG/filter, Canvas, DOM and form browser regressions;
   match runtime digest, restrictive CSP and both actions-run 1.28 manifests on
   exact preview/main deployments before calling production @lopu delivered.
+
+
+### Web standards: layout and Geometry (2026-09-27)
+
+- Run all 130 CSSOM View and 19 remaining Geometry examples with default and
+  edited inputs. Compare native rectangles, scroll positions, caret hits, range
+  rectangles, quad points/bounds, matrix values and media-query matching.
+  Read-only screen metrics and iframe move/resize restrictions stay explicit.
+- Await native scroll completion, including engines returning an interrupted
+  dictionary. Stop/deadline must discard late results. Native WebIDL mixin
+  accessors may live on unnamed prototype layers: capture registered names
+  through the native chain without reading shadowing instance properties.
+- Run layoutBoundaryFixtures: refuse runtime/parent/global escapes, outside
+  hit-test nodes, foreign shadow roots, malformed options, unbounded geometry
+  and unrelated surface mutations. An initial Range cannot expose its runtime
+  document. Owned shadow-root contents support scoped caret testing.
+- Observe real mouse/viewport events; dispatch an explicitly synthetic media
+  query event and verify isTrusted=false. Remove the exact legacy callback,
+  dispatch again and verify no further receipt; Stop releases handlers.
+- Round-trip edited programs through the catalogue Action and private Things.
+  Save/reload/run a scroll Component, reuse its reference on another page, and
+  verify native offsets, anonymous 404, Stop/fresh Run and desktop/390px layout.
+- Run existing CSSOM/Typed OM/CSS/SVG/filter/Canvas/DOM/form regressions. Match
+  preview/main source SHA, runtime digest, restrictive CSP and both actions-run
+  1.29.0 manifests before production @lopu delivery.
