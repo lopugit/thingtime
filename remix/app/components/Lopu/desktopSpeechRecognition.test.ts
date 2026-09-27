@@ -5,7 +5,7 @@ import type { DesktopSpeechEvent, ThingtimeDesktopBridge } from '../../utils/ele
 
 function fixture() {
 	let listener: ((event: DesktopSpeechEvent) => void) | null = null;
-	let request: { sessionId: string; lang: string };
+	let request: { sessionId: string; lang: string; continuous?: boolean };
 	let rejectStart: (error: Error) => void;
 	const stopped: string[] = [];
 	const bridge: ThingtimeDesktopBridge = {
@@ -22,6 +22,8 @@ test('Mac desktop never selects the broken Chromium speech service, including ol
 	try {
 		const f = fixture();
 		globalThis.window = { thingtimeDesktop: f.bridge, webkitSpeechRecognition: class {} } as any;
+		assert.equal(speechRecognitionCtor(), DesktopSpeechRecognition);
+		f.bridge.speechRecognitionVersion = '1.1.0';
 		assert.equal(speechRecognitionCtor(), DesktopSpeechRecognition);
 		delete f.bridge.speechRecognitionVersion;
 		assert.equal(speechRecognitionCtor(), null);
@@ -51,4 +53,15 @@ test('events from another capture cannot send a turn or end the current capture'
 	recognition.onresult = recognition.onend = () => assert.fail('foreign capture'); recognition.start();
 	f.listener!({ sessionId: 'other', type: 'final', text: 'private' }); f.listener!({ sessionId: 'other', type: 'end' });
 	assert.ok(f.listener); recognition.abort();
+});
+
+
+test('new desktop builds keep dictation continuous while legacy/private-page utterances retain their boundary', () => {
+    for (const version of ['1.0.0', '1.1.0']) for (const continuous of [true, false]) {
+        const f = fixture(); f.bridge.speechRecognitionVersion = version;
+        const recognition = new DesktopSpeechRecognition(f.bridge); recognition.continuous = continuous;
+        recognition.start();
+        assert.equal(f.request.continuous, version === '1.1.0' ? continuous : undefined);
+        recognition.abort();
+    }
 });

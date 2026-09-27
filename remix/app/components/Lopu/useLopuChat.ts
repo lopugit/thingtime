@@ -161,8 +161,8 @@ export type UseLopuChat = {
 	// id → label / name lookups for status lines
 	modelLabels: Record<string, string>;
 	providerNames: Record<string, string>;
-	preferences: { applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean };
-	setPreferences: (patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean }>) => void;
+	preferences: { applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean };
+	setPreferences: (patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean }>) => void;
 	contextLabel: string | null;
 	undoPatch: (toolId: string) => boolean;
 	canUndoPatch: (toolId: string) => boolean;
@@ -186,7 +186,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const messenger = useMessengerApi();
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const { settings: prefs, setModelChoice, setEnterSends, setApplyPatches, setConfirmDeletes, setManagement } = useLopuSettings();
+	const { settings: prefs, setModelChoice, setEnterSends, setApplyPatches, setConfirmDeletes, setManagement, setHearMeOut } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
 	const activeLabel = useActiveDraftLabel();
@@ -340,12 +340,13 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	);
 
 	const setPreferences = React.useCallback(
-		(patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean }>) => {
+		(patch: Partial<{ applyPatches: boolean; enterSends: boolean; confirmDeletes: boolean; hearMeOut: boolean }>) => {
+			if (typeof patch.hearMeOut === 'boolean') setHearMeOut(patch.hearMeOut);
 			if (typeof patch.enterSends === 'boolean') setEnterSends(patch.enterSends);
 			if (typeof patch.applyPatches === 'boolean') setApplyPatches(patch.applyPatches);
 			if (typeof patch.confirmDeletes === 'boolean') setConfirmDeletes(patch.confirmDeletes);
 		},
-		[setEnterSends, setApplyPatches, setConfirmDeletes]
+		[setEnterSends, setApplyPatches, setConfirmDeletes, setHearMeOut]
 	);
 
 	const selectChat = React.useCallback((chatId: string | null) => selectLopuChat(chatId), []);
@@ -387,7 +388,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		setSettings,
 		modelLabels,
 		providerNames,
-		preferences: { applyPatches, enterSends: prefs.enterSends, confirmDeletes: prefs.confirmDeletes },
+		preferences: { applyPatches, enterSends: prefs.enterSends, confirmDeletes: prefs.confirmDeletes, hearMeOut: prefs.hearMeOut },
 		setPreferences,
 		contextLabel,
 		undoPatch: undoLopuPatch,

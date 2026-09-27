@@ -10,11 +10,14 @@ final class SpeechCapture {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
+    private let continuous: Bool
     private var silenceTimer: Timer?
     private var deadline: Timer?
     private var latest = ""
     private var finished = false
     private var tapped = false
+
+    init(continuous: Bool) { self.continuous = continuous }
 
     func emit(_ event: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: event) else { return }
@@ -76,9 +79,13 @@ final class SpeechCapture {
                     if text != self.latest {
                         self.latest = text
                         self.emit(["type": "partial", "text": text])
-                        self.silenceTimer?.invalidate()
-                        self.silenceTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { _ in
-                            self.finish(sendTranscript: true)
+                        // The composer owns pauses for continuous dictation.
+                        // Keep the dedicated private-page/legacy utterance path.
+                        if !self.continuous {
+                            self.silenceTimer?.invalidate()
+                            self.silenceTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { _ in
+                                self.finish(sendTranscript: true)
+                            }
                         }
                     }
                     if result.isFinal { self.finish(sendTranscript: true); return }
@@ -102,7 +109,9 @@ final class SpeechCapture {
 let locale = CommandLine.arguments.dropFirst().first ?? "en-US"
 guard locale.range(of: "^[A-Za-z]{2,8}([-_][A-Za-z0-9]{1,8}){0,3}$", options: .regularExpression) != nil else { exit(2) }
 signal(SIGPIPE, SIG_IGN)
-let capture = SpeechCapture()
+guard CommandLine.arguments.count <= 3,
+      CommandLine.arguments.count < 3 || CommandLine.arguments[2] == "continuous" else { exit(2) }
+let capture = SpeechCapture(continuous: CommandLine.arguments.count == 3)
 // Closing the parent's pipe (including an Electron crash) releases the mic.
 DispatchQueue.global().async {
     _ = FileHandle.standardInput.readData(ofLength: 1)
