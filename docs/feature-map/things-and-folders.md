@@ -16,6 +16,9 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Portable transfer (export plan, ZIP/JSON bundles, import) | `app/api/utils/things/exportTransfer.ts`, `importTransfer.ts`, `app/utils/thingTransfer/*` (client: `browser.ts`, `archive.ts`) |
 | Kind schemas and protected kinds | `app/schemas/registry.ts` (`PROTECTED_THINGTIME`, `folderSchema`, `isProtectedThingtime`) |
 | Indexes | `app/api/utils/mongodb/collections.ts` `ensureIndexes()` (central registry; new indexes are rare, evidence-backed exceptions) |
+| Shared event/link records, IndexedDB relational queue/index, bounded cache, draft recorder and account sync | `app/timeline/` (`records.ts` and `branches.ts` are the identical local/remote durable schemas) |
+| Transactional history recording, protected binary event Things and paging | `app/api/utils/timeline/` |
+| Shared History modal and managed Timeline folder | `app/components/Timeline/TimelineHost.tsx` |
 
 ## Authorization helper
 
@@ -71,6 +74,10 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
   transfers".
 - Realistic local data: `node remix/scripts/seed-fixture.mjs create` makes a
   folder holding a post with stored files.
+- `test:timeline` covers the shared schema, two IndexedDB connections, draft
+  recovery pointers, retries, byte-bounded paging, private envelopes, branch command reload/concurrency, event-before-command ordering, and route
+  authority. `test:timeline:integration` uses HTTP-only fixtures on the explicitly
+  disposable local replica set described in [Unified Timeline](../unified-timeline.md).
 
 ## Remote and stored files
 
@@ -143,6 +150,13 @@ Thing kind, collection or persistence path is involved. See
 callbacks and native operations are complete saved Component data; existing
 catalogue/save Actions and private Thing serialization remain canonical. See
 [native animation programs](../web-standards-builder.md#native-web-animation-programs).
+
+
+Timeline large-version retention uses `timeline/snapshotParts.ts` as the shared
+part/reference contract and `api/utils/timeline/snapshotParts.ts` for atomic
+storage and checked reconstruction. Each part is its own protected Thing; event
+headers stay bounded and carry no part-id arrays. The event accounts for original
+retained bytes; part envelopes are control storage.
 
 `ariaFixtures.ts` supplies 53 editable ARIA programs. Role/value inputs, selectors,
 relationships and projections persist in ordinary Components through the canonical

@@ -59,6 +59,10 @@ export type LopuChatStopReason =
 // operate on what the user actually sees; `source: 'user'` means the viewer
 // owns the doc and a patch may be persisted (with expectedUpdatedAt).
 export type LopuChatPageContext = {
+  // Missing blocks never mean an empty page. Dirty/unknown omitted drafts
+  // must not be replaced with the saved page during a tool mutation.
+  dirty?: boolean;
+  ready?: boolean;
   id?: string;
   source?: 'user' | 'system';
   pageKey?: string;

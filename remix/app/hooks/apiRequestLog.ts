@@ -109,11 +109,12 @@ export const redactUrl = (url: string): string => {
 
 export const recordApiCall = (entry: Omit<ApiLogEntry, 'id' | 'body'> & { body?: unknown }): void => {
 	try {
+		const history = new URL(entry.url, 'https://thingtime.invalid').pathname === '/api/v1/timeline';
 		const stored: ApiLogEntry = {
 			...entry,
 			id: nextId++,
-			url: redactUrl(entry.url),
-			body: entry.body === undefined ? undefined : redactSensitive(entry.body)
+			url: history ? '/api/v1/timeline' : redactUrl(entry.url),
+			body: history || entry.body === undefined ? undefined : redactSensitive(entry.body)
 		};
 		entries = [stored, ...entries].slice(0, MAX_API_LOG_ENTRIES);
 		listeners.forEach((listener) => {

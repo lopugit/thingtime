@@ -1,5 +1,49 @@
 # TESTING.md — per-area manual test checklists
 
+## Unified Timeline
+
+- [ ] Upgrade an earlier local Timeline cache with pending edits and a released
+  draft. Pending work survives; the released draft does not reappear. Revisions
+  and links are independent records. Missing links fail visibly without deleting
+  pending work; cache eviction removes only that cached event's local links.
+- [ ] Open History from Things, Builder and a Component definition. Changes
+  made through the API appear without opening an editor; older pages load on
+  demand. The private Timeline folder never offers rename/move/share/delete.
+- [ ] Edit a block/prop/definition, reload before Save and recover the exact
+  draft. Type before Timeline discovery finishes, retry a failed IndexedDB
+  write, and reconnect after going offline: original event ids and parent
+  order survive. A failed capture cannot later report a successful flush.
+- [ ] Save while another edit lands; the newer edit remains dirty and pinned
+  for recovery. A background refresh must preserve the draft's original
+  version fence as well as its content, so the next save cannot overwrite an
+  unseen remote change. Switch account/data source during each async step.
+  Repeat while an AI save completes: only an exact content acknowledgment
+  clears a dirty editor. Late or metadata-only saves cannot erase new typing
+  or an intentional empty page; a new Thing cannot inherit another Thing's head.
+- [ ] Preview and restore an earlier version; a new event appears and later
+  history remains available. Retry the same request after losing its response;
+  it must return the original receipt. Changing its payload must fail.
+- [ ] Merge independent fields and overlapping edits, missing vs null,
+  reordered arrays, and two-parent histories. Choose each overlap explicitly;
+  inspect the resulting comparison before applying. A changed live head,
+  missing ancestor, foreign Thing or ambiguous merge base must refuse safely.
+- [ ] At desktop and 375px, history lists, version comparisons, draft recovery
+  and action controls remain readable and reachable without horizontal overflow.
+- [ ] Create a named branch from a selected version, reload, pull it, and view
+  its exact version after the event cache has been evicted. Push a descendant;
+  published content stays unchanged. Attach another Thing through the API and
+  verify each membership has an independent head and shares branch metadata.
+- [ ] Queue a branch while another edit upload is in flight. Its selected
+  local version must upload first; deferred work must say waiting to sync.
+  Lose a push response and retry with the same identity. Race two pushes:
+  one wins, the other remains actionable without claiming history reads failed.
+  A refused push can be cancelled while keeping its version; an uncertain
+  outcome cannot be discarded. Test wrong-account and generic CRUD access.
+- [ ] Send Lopu a saved page whose block context exceeds the message budget,
+  a dirty omitted draft, an unready editor and an explicitly empty page. The
+  saved clean page is loaded with its real blocks; missing/unready drafts
+  never become an empty replacement, including after continuation/resume.
+
 ## Editable record app primitives
 
 - [ ] Planner controls: switch day/week, dates, filters and 5/10/15/20/infinite
@@ -9102,6 +9146,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   the broader DOM/CSS/SVG/observer/range native audit; lint, build and typecheck.
   Verify both 1.32.0 manifests, exact deployed source and runtime hash in preview
   and production before claiming delivery. Clean up disposable local fixtures.
+
+
+### Timeline large Thing regression
+
+- Grow a valid data Thing past 2 MiB through requests below the ordinary body cap.
+  It must still shrink, update, restore supported content and delete successfully.
+- Verify full retained reconstruction, including escaped text and Unicode crossing
+  part boundaries. Missing/altered/foreign parts must refuse reconstruction.
+- History pages stay within their response budget; no part payload or credential
+  is exposed by generic Things reads/search. Generic part edits/deletes refuse.
+- Account bytes include retained large content exactly once. Deletion transfers
+  the same logical bytes into history rather than charging the part envelopes.
 
 ### Web standards: native ARIA object programs (2026-09-27)
 

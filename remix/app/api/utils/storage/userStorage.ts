@@ -353,6 +353,20 @@ export const applyUserStorageDelta = async (ownerId: string, deltaBytes: number,
   await markUserStorageNeedsReconcile(ownerId, session, now);
 };
 
+/** Only the Timeline deletion recorder calls this, after the canonical delete
+ * refunded the exact removed payload in the SAME transaction. It moves those
+ * bytes into retained history without admitting new customer content. Existing
+ * overage must not block cleanup. Unknown ledgers remain fenced for reconcile. */
+export const retainDeletedThingStorage = async (ownerId: string, bytes: number, session: any): Promise<void> => {
+  if (!session || !Number.isSafeInteger(bytes) || bytes < 0) throw new StorageMutationError(500, 'storage_invariant', 'Invalid retained deletion storage');
+  if (!bytes) return;
+  const result = await (await getThingsCollection()).updateOne({
+    ...readyUserStorageMatch(ownerId),
+    $expr: { $and: [safeWholeNumberExpression('$crystal.storageUsedBytes'), { $lte: [{ $add: ['$crystal.storageUsedBytes', bytes] }, Number.MAX_SAFE_INTEGER] }] }
+  } as any, { $inc: { 'crystal.storageUsedBytes': bytes }, $set: { 'crystal.storageUpdatedAt': new Date() } }, { session });
+  if (!result.matchedCount) await markUserStorageNeedsReconcile(ownerId, session);
+};
+
 // Recovery path for a delete whose persisted byte stamp cannot be trusted.
 // Touching the same subscription row in the delete transaction serializes it
 // against reconciliation even when it was already initializing/non-ready.

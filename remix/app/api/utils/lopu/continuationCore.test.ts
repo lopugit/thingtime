@@ -16,7 +16,7 @@ test('recovery strips stale drafts, attachments and page references', () => {
 		pages: [{ url: '/old' }],
 		page: { id: 'page', blocks: [{ private: 'old draft' }], source: 'thing' }
 	});
-	assert.deepEqual(context, { route: '/build', viewport: 'mobile', page: { id: 'page', source: 'thing', pageKey: undefined, siteRoute: undefined } });
+	assert.deepEqual(context, { route: '/build', viewport: 'mobile', page: { id: 'page', source: 'thing', pageKey: undefined, siteRoute: undefined, updatedAt: undefined, dirty: undefined, ready: undefined } });
 	assert.equal(continuationContext({ page: { blocks: ['unsaved'] } }).page, undefined);
 });
 test('only explicit persisted safe boundaries allow automatic recovery', () => {

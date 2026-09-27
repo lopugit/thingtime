@@ -780,8 +780,9 @@ export const describeActiveDraft = (): { page: NonNullable<LopuReplyContext['pag
 	}
 	if (!draft || !page) return null;
 	const label = (typeof draft.name === 'string' && draft.name) || page.pageKey || page.siteRoute || 'this page';
-	// the reply body caps context.page.blocks at 48KB — past that the server
-	// resolves the page by id instead of the live draft
+	// Past the request budget, preserve dirty/readiness/base-version metadata.
+	// Only a known clean saved page can be resolved by id; an omitted dirty
+	// draft must never become an empty page or a saved-state replacement.
 	let blocks: WebpageBlock[] | undefined = page.blocks;
 	try {
 		if (blocks && JSON.stringify(blocks).length > LOPU_CONTEXT_BLOCKS_MAX_CHARS) blocks = undefined;

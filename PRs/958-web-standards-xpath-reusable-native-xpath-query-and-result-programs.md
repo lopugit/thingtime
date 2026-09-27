@@ -25,6 +25,8 @@ The tested Chromium maps unknown unsigned-short result types to ANY_TYPE. Runtim
 syntax/tree/work limits are documented separately from standard semantics.
 
 Both origin manifests and client Actions negotiate actions-run 1.34.0.
+Current main Timeline changes are integrated; unrelated Timeline contracts and
+capabilities remain intact.
 
 ## Validation
 

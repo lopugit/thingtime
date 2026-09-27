@@ -1,3 +1,4 @@
+import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
 import { isManagedLibraryThing } from './thingsCore';
 import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -130,6 +131,12 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 };
 
 export const ThingsPage = () => {
+  const [params] = useSearchParams();
+  const folder = params.get('folder');
+  return folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} /> : <ThingsPageContents />;
+};
+
+const ThingsPageContents = () => {
   const [params] = useSearchParams();
   return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage />;
 };
@@ -1071,6 +1078,7 @@ const ThingsLibraryPage = () => {
     (thing: ThingsThing, action: ThingsItemAction) => {
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
+        case 'history': openThingHistory(thing.id); break;
         case 'download':
           setExportIds(group.map((entry) => entry.id));
           break;
@@ -1228,6 +1236,7 @@ const ThingsLibraryPage = () => {
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
+        case 'history': openThingHistory(menuThing.id); break;
         case 'download':
           onItemAction(menuThing, 'download');
           break;

@@ -14,8 +14,9 @@ export const continuationContext = (context: any) =>
 		? {
 				route: context.route,
 				viewport: context.viewport,
-				...(context.page?.id
-					? { page: { id: context.page.id, source: context.page.source, pageKey: context.page.pageKey, siteRoute: context.page.siteRoute } }
+				...(context.page?.id || context.page?.dirty === true || context.page?.ready === false
+					? { page: { id: context.page.id, source: context.page.source, pageKey: context.page.pageKey, siteRoute: context.page.siteRoute,
+						updatedAt: context.page.updatedAt, dirty: context.page.dirty, ready: context.page.ready } }
 					: {})
 		  }
 		: undefined;
