@@ -4206,3 +4206,13 @@ serve public built client files inside the browser test while keeping API calls
 on that local stack. An optional `TT_STANDARDS_TEST_SESSION_FILE` must be an
 ignored, private file belonging to that same local origin; never use production
 credentials for these fixture writes.
+
+### macOS voice input setup
+
+The desktop app's Lopu microphone uses Apple's Speech framework through the
+bundled signed helper; no cloud API key or private dashboard configuration is
+needed for standard device transcription. Build and install using the
+[Electron workflow](electron/README.md), then press the microphone and allow
+Microphone and Speech Recognition when macOS asks. Re-enable denied access in
+System Settings → Privacy & Security. On-device recognition is preferred where
+the language supports it; Apple's service may be used otherwise.

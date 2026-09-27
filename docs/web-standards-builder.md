@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 3,729 have interactive recipes (302 HTML, 1,059 CSS, 890
-JavaScript and 1,478 Web API entries); the rest are
+editable program. 4,409 have interactive recipes (302 HTML, 1,196 CSS, 890
+JavaScript and 2,021 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -680,3 +680,142 @@ Examples follow the indexed definitions and preserve their source status.
 [Easing 2](https://www.w3.org/TR/css-easing-2/) are separate modules, with mixed
 publication maturity and browser implementation. A worked, editable unsupported
 example does not establish browser support or W3C Recommendation status.
+
+## Native CSS Typed OM programs
+
+The `CSS Typed OM Level 1` family has editable programs for all 249 indexed
+entries: unit factories and conversion, numeric operations and dimensional
+records, math values, transforms and matrices, keywords and custom-property
+fallbacks, inline/computed/rule style maps, and the draft colour object APIs.
+These are ordinary Component program data. Browser support is checked through
+native operations; absent colour constructors remain explicitly unsupported.
+The latest published specification is <https://www.w3.org/TR/css-typed-om-1/>;
+individual catalogue entries retain their source and publication-status labels.
+
+`dom` expressions add a `static` operation for registered CSS factories and
+parsers. `construct`, `get`, `set` and `call` use the existing run-owned receiver
+bridge. `typedCSSPolicy.ts` defines the native member and argument contracts;
+`typedCSSFixtures.ts` composes saved editable programs, including their output
+serialization. The runtime has no catalogue IDs or example-specific dispatch.
+For example, a program can construct a CSSUnitValue, set its `value`, and pass
+that same handle to an element's `attributeStyleMap.set` before reading the
+native `computedStyleMap` result. Transform examples apply their authored values
+to the displayed sample, and map examples show before/after values.
+
+Handles remain scoped to one opaque frame run. CSS input text is limited to
+2,048 characters, input lists to 32 entries, and numbers to finite magnitudes
+of at most 32,768. Expression composition has per-value and per-run budgets to
+reject repeated multiplication before native expansion. Existing request,
+handle, input-work and result budgets remain in force. Native CSSNumericType
+results use a fixed field projection. Constructed stylesheets expose bounded
+style rules and rule maps. The CSSOM extension below adds grouped rules and
+scoped shadow-root adoption. No runtime document, network access or CSP
+permission is added. Computed maps retain their native read-only contract.
+
+`api.actions-run` 1.27.0 advertises these additive operations in both manifests
+and client negotiation. `typedCSSTestCases.ts` supplies a second input set for
+all 249 programs; `typedCSSBoundaryFixtures.ts` covers native conversions,
+map writes, read-only refusals, handle isolation and resource limits. Run these
+in a rendered browser: unit compilation alone cannot prove native support or
+that edited inputs change the observed result.
+
+
+## Native CSS Object Model programs
+
+All 102 indexed entries sourced from [CSSOM Level 1](https://drafts.csswg.org/cssom-1/)
+have editable Component programs. They cover declarations, property values and
+priorities, stylesheet construction and replacement, style/grouping/import/page/
+margin/namespace rules, rule and sheet lists, media queries, scoped adopted
+stylesheets, `CSS.escape` and `getComputedStyle`. The catalogue preserves the
+specification's draft status; browser availability is reported separately.
+
+`cssomFixtures.ts` contains the authored programs and their observation logic.
+`cssomPolicy.ts` registers generic native contracts in the existing DOM bridge;
+`cssomSupport.ts` checks arguments before dispatch. A detached Document can own
+style elements and expose its native sheets. Open shadow roots may be attached
+only to owned sample elements, and adopted sheets remain inside that run's
+opaque frame. The runtime Document and Window object are never returned.
+Only the registered Window.getComputedStyle operation uses the native window.
+No new endpoint, storage model, network grant or CSP allowance is introduced.
+
+CSS text is bounded to 4,096 characters, stylesheet trees to 32 rules and eight
+levels, and adoption to eight owned sheets. Existing request, receiver and
+input-work limits still apply. `replace` awaits its native Promise within the
+same worker deadline; Stop discards late replies. Computed declarations retain
+native read-only exceptions. CSSRule.cssText's specified no-op setter is shown
+as unchanged, imported sheet access can report the native SecurityError, and
+unimplemented page descriptors or ignored baseURL options report unsupported.
+
+Both manifests and client negotiation advertise `api.actions-run` 1.28.0.
+Every program has default and edited native checks, and 20 boundary fixtures
+cover real CSS results, async replacement, ownership and resource limits.
+Programs persist through the canonical private Component and save Action path.
+
+## Native observer programs
+
+The 81 indexed MutationObserver, ResizeObserver and IntersectionObserver entries
+are ordinary editable Component programs. Their callbacks, record projections,
+DOM mutations and observation options are stored as program objects. Builders
+can change these objects, save a private Component, and reference it from another
+page. No observer-specific component renderer or parallel persistence path is
+introduced.
+
+`observerFixtures.ts` authors the data; `observerPolicy.ts` and
+`observerSupport.ts` register bounded native receivers in the existing bridge.
+A `dom-callback` expression registers an authored worker function, preserving
+native record and observer identity through run-owned handles. A `dom` operation
+with `action: "batch"` executes up to 16 registered get/set/call commands in one
+native task, so MutationObserver queue draining can happen before delivery.
+Commands use the normal ownership and argument checks. Async operations and
+nested batches are rejected before dispatch; an error stops subsequent commands
+without rolling back earlier writes.
+
+MutationObservers can use an owned detached document. Resize/intersection
+observers require the active opaque preview surface. Roots and targets must
+belong to the current run; the runtime document and parent page remain
+unavailable. Each run allows 16 observers, 32 targets per observer, 32 registered
+callbacks, 64 callback deliveries and 64 records per delivery. Observer options
+use closed dictionaries with bounded thresholds, margins and filters.
+
+Callbacks share the existing two-second program deadline. Completion, errors and
+Stop disconnect every observer and discard late deliveries. These examples
+capture observations during a run; they do not create persistent background
+subscriptions. Native unsupported fields and the not-yet-exposed
+IntersectionObserverEntry constructor report browser availability explicitly.
+
+Both capability manifests and the client negotiate `api.actions-run` 1.30.0.
+Default and edited programs, queue semantics, old values, callback identity,
+unobserve/disconnect, ownership and resource limits have dedicated checks.
+Primary sources are the [DOM Living Standard](https://dom.spec.whatwg.org/#interface-mutationobserver),
+[Resize Observer](https://www.w3.org/TR/resize-observer/) and
+[Intersection Observer](https://www.w3.org/TR/intersection-observer/).
+
+## Native live and static ranges
+
+Forty additional Range, AbstractRange, StaticRange and StaticRangeInit entries
+now have editable Component programs in `rangeFixtures.ts`. Boundary choices,
+text edits, cloning, extraction, wrapping, comparison and result projections
+are ordinary saved program objects. Existing active-surface Range geometry
+recipes remain unchanged. The separate Selection API is still requires-context.
+
+`rangePolicy.ts` registers native members; `rangeSupport.ts` validates bounded
+fragment input and the four-field StaticRangeInit dictionary. Ranges use
+run-owned nodes and handles. Relative boundary setters check the parent before
+dispatch, and every range read/operation checks its current endpoints. Native
+constructors initially point at their realm document; initialize them with an
+owned node before reading. Concrete native prototype chains provide boundary
+accessors even when an engine inserts an unnamed WebIDL mixin layer.
+
+Document mutations operate on the existing detached-document context and render
+through its checked projection. Active-surface programs retain range reads and
+boundary operations; tree mutations remain unavailable there. Contextual
+fragments accept up to 4,096 characters and 128 basic HTML opening/closing tags,
+without attributes, resources, scripts, comments, custom elements or foreign
+content. Tokens are checked before native parsing. This is a bounded fragment
+input vocabulary, not unrestricted HTML parsing. Native errors remain catchable.
+
+Static range examples insert text after taking a snapshot and compare unchanged
+static offsets with live boundaries adjusted by the browser. Both capability
+manifests and the client negotiate `api.actions-run` 1.31.0. See the
+[DOM ranges standard](https://dom.spec.whatwg.org/#ranges) and
+[HTML contextual-fragment algorithm](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#dom-range-createcontextualfragment).

@@ -1,3 +1,4 @@
+import { speechRecognitionCtor } from './desktopSpeechRecognition';
 import { aiTaskFetch } from './aiTasks.client';
 import React from 'react';
 import { Box, Button, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
@@ -129,7 +130,7 @@ const RECOGNITION_RESTART_MS = 250;
 
 const speechLang = () => (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
 
-const webRecognitionCtor = () => (typeof window === 'undefined' ? null : window.SpeechRecognition || window.webkitSpeechRecognition || null);
+const webRecognitionCtor = speechRecognitionCtor;
 
 // the reply text the surface hands back should never be read aloud when it
 // carries nothing but whitespace
@@ -151,6 +152,8 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const [busy, setBusy] = React.useState<'thinking' | 'speaking' | null>(null);
 	const [interim, setInterim] = React.useState('');
 	const [items, setItems] = React.useState<LopuVoiceItem[]>([]);
+	// Recognition failures describe the current capture, not conversation history.
+	const [recognitionError, setRecognitionError] = React.useState<LopuVoiceItem | null>(null);
 	const [nativeReady, setNativeReady] = React.useState(false);
 	const [webSupported, setWebSupported] = React.useState(false);
 	const captureOwner = React.useSyncExternalStore(subscribeLopuStore, () => getLopuStoreSnapshot().userId, () => null);
@@ -332,7 +335,10 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		recognition.continuous = true;
 		recognition.interimResults = true;
 		recognition.lang = speechLang();
+		const recognitionOwner = getLopuStoreSnapshot().userId;
+		const recognitionChat = optionsRef.current.chatId ?? null;
 		recognition.onresult = (event: any) => {
+			if (recognitionRef.current !== recognition || !activeRef.current || recognitionOwner !== getLopuStoreSnapshot().userId || recognitionChat !== (optionsRef.current.chatId ?? null)) return;
 			let preview = '';
 			for (let index = event.resultIndex; index < event.results.length; index += 1) {
 				const text = event.results[index]?.[0]?.transcript || '';
@@ -342,14 +348,15 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			setInterim(preview);
 		};
 		recognition.onerror = (event: any) => {
+			if (recognitionRef.current !== recognition) return;
 			const code = typeof event?.error === 'string' ? event.error : '';
 			// silence and transient hiccups: onend restarts the session
 			if (code === 'aborted' || code === 'no-speech') return;
-			recognitionRef.current = null;
+			stopRecognition();
 			activeRef.current = false;
 			setActive(false);
 			setInterim('');
-			pushItem({ role: 'assistant', text: `Microphone unavailable${code ? ` (${code})` : ''}. Type to Lopu instead.`, error: true });
+			setRecognitionError({ id: newId('voice-error'), at: Date.now(), role: 'assistant', text: typeof event.message === 'string' ? event.message : `Voice input unavailable${code ? ` (${code})` : ''}. Try again or type to Lopu.`, error: true });
 		};
 		recognition.onend = () => {
 			if (recognitionRef.current !== recognition) return;
@@ -370,7 +377,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			return false;
 		}
 		return true;
-	}, [pushItem]);
+	}, [stopRecognition]);
 	startRecognitionRef.current = startRecognition;
 
 	// ——— turns ——————————————————————————————————————————————————————————————
@@ -709,7 +716,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		if (!startRecognition()) {
 			lopu({
 				title: 'No microphone here 🎙️',
-				description: 'This browser does not offer speech recognition — type to Lopu below, or use the Thingtime iOS app.',
+				description: 'Speech recognition is unavailable here. If you are using Thingtime for Mac, install the latest app update, then try again. You can also type to Lopu.',
 				status: 'info',
 				duration: 8000
 			});
@@ -721,6 +728,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 
 	const start = React.useCallback(() => {
 		if (activeRef.current) return;
+		setRecognitionError(null);
 		const current = optionsRef.current;
 		const wantsDirect = current.directVoice === true && !current.transcribe;
 		const bridge = getNativeBridge();
@@ -811,7 +819,10 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		abortLopuTurn();
 	}, [cancelSpeech]);
 
-	const clearItems = React.useCallback(() => setItems([]), []);
+	const clearItems = React.useCallback(() => {
+		setItems([]);
+		setRecognitionError(null);
+	}, []);
 	const previousConversation = React.useRef({ ownerId: captureOwner, chatId: options.chatId ?? null });
 	React.useEffect(() => {
 		const previous = previousConversation.current;
@@ -819,13 +830,14 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		previousConversation.current = { ownerId: captureOwner, chatId };
 		const ownerChanged = previous.ownerId !== captureOwner;
 		const chatChanged = previous.chatId !== chatId;
+		if (ownerChanged || chatChanged) setRecognitionError(null);
 		// The first successful capture assigns a canonical ID to the current
 		// new chat. That is not a user switching to another conversation.
 		const assignedCurrentVoiceChat = previous.chatId === null && chatId !== null && (!directChatRef.current || directChatRef.current.chatId === chatId);
 		if (ownerChanged || (chatChanged && !assignedCurrentVoiceChat)) {
-			stop(); setItems([]); directChatRef.current = null;
+			stop(); clearItems(); directChatRef.current = null;
 		}
-	}, [captureOwner, options.chatId, stop]);
+	}, [captureOwner, options.chatId, stop, clearItems]);
 
 	// leaving the surface ends the session: microphone, speech, native audio,
 	// the realtime socket
@@ -849,7 +861,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		direct,
 		phase: busy ?? (active ? 'listening' : 'idle'),
 		interim,
-		items,
+		items: recognitionError ? [...items, recognitionError] : items,
 		sessionId: sessionIdRef.current,
 		start,
 		stop,

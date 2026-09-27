@@ -182,3 +182,29 @@ transport adds primitive IDL constants without constructor handles. Native bbox
 option probes distinguish ignored options from implemented behavior. Both
 manifests and the client advance together; storage, endpoints and CSP remain
 unchanged. See the SVG section of the Web standards guide and native checklist.
+
+CSS Typed OM programs add `api.actions-run` 1.27.0 for registered native CSS
+factories/parsers, constructors, arithmetic, transforms and scoped style maps.
+The existing opaque receiver bridge and catalogue/save Action contracts remain
+canonical. See [native CSS Typed OM programs](../web-standards-builder.md#native-css-typed-om-programs).
+
+
+CSSOM programs add `api.actions-run` 1.28.0 for native declarations, bounded
+stylesheet/rule receivers, scoped adopted sheets and awaited replacement.
+`cssomPolicy.ts`/`cssomSupport.ts` define generic contracts; `cssomFixtures.ts`
+contains reusable program data. Worker Stop/deadline handling fences late
+native Promise replies. The canonical catalogue and private Component save
+contracts are unchanged. See [CSSOM programs](../web-standards-builder.md#native-css-object-model-programs).
+
+Observer programs add `api.actions-run` 1.30.0. Saved `dom-callback` expressions
+carry authored functions through the existing worker transport; synchronous
+`dom` batches preserve native mutation queue semantics. Observer targets,
+options, receivers and callback delivery are bounded and run-owned. Completion
+and Stop disconnect native observers without extending the shared deadline.
+The catalogue, save Action and private Component contracts remain canonical.
+See [observer programs](../web-standards-builder.md#native-observer-programs).
+
+Range programs require `api.actions-run` 1.31.0. Forty additional saved programs
+use owned live/static ranges, native boundary/mutation methods and bounded
+contextual fragments through the existing DOM bridge. See
+[live and static ranges](../web-standards-builder.md#native-live-and-static-ranges).

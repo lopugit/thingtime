@@ -928,6 +928,17 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] On Mac, listen silently across at least two native no-input retry cycles
+      (15 seconds), then speak: silence must not show a red service error or
+      send a message, and the spoken phrase must send exactly once. Stop ends
+      capture/retries. An interrupted helper still reports a real error, and
+      retry clears it without removing conversation messages.
+- [ ] After a microphone permission or recognition failure, retry voice input:
+      the previous recognition error disappears immediately, a successful
+      transcript sends normally, and existing messages/turn failures remain.
+      Repeat a failed retry and switch chats; errors must not accumulate or
+      leak into another conversation. On Mac, interrupt a disposable native
+      capture to exercise recovery without resetting OS permissions.
 - [ ] With iOS build 29 and private uploads approved, finish a voice segment:
       `/things` contains one playable owner-private M4A recording and Files
       retains the original CAF/TXT. Open the saved notice at desktop and 390px;
@@ -5621,6 +5632,16 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
+      allow Speech Recognition and Microphone, and speak a synthetic test phrase.
+      One transcript reaches the selected chat/model without Chromium's `network`
+      error; the mic pauses during the reply. Stop during a permission prompt,
+      during capture, and immediately after an interim result: no late turn sends.
+      Reload/close/switch account or chat: capture stops and no transcript crosses
+      the boundary. Denied permissions show the relevant macOS settings category.
+      Confirm browser speech and direct-provider voice remain available.
+
+
 - [ ] Refresh Recovery and compare its published-release count with GitHub, including
       prereleases and older pages. Desktop and Recovery rows must arrive as one
       snapshot; a later-page rate limit keeps the previous complete list visible.
@@ -8937,3 +8958,117 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   frame removal and fresh Run. Run prior SVG/filter/Canvas/DOM/form regressions.
 - Match exact preview/production source, runtime digest, restrictive CSP and both
   actions-run 1.26.0 manifests before production @lopu verification.
+
+### Web standards: CSS Typed OM
+
+- Run all 249 Typed OM programs with their default and edited input sets; verify
+  the native value/selected member changes where supported. Missing colour APIs
+  must report unsupported rather than a fabricated result. Exercise real unit
+  conversion, dimensional records, matrix output and visible transforms.
+- Run `typedCSSBoundaryFixtures.ts`: one-inch conversion yields 96px, scoped
+  map writes affect the sample, constructed rule maps remain editable, computed
+  maps refuse writes, and foreign handles, static namespace escapes, invalid
+  input types, stylesheet imports and excessive expression composition fail.
+- Native style-map iteration must fit the existing request budget; declared-map
+  iteration demonstrates its real entries without traversing every computed
+  property. Re-run CSS/function, SVG/filter, Canvas, DOM and form regressions.
+- Save an edited transform through Builder, open its private Component, fully
+  reload and run it. Verify the authored amount survives and the computed
+  transform matches it. Check anonymous API denial, Stop/fresh Run, desktop and
+  narrow preview rendering. Keep the program editable and reusable on another
+  Builder page through normal Component references.
+
+
+### Web standards: CSS Object Model
+
+- Run all 102 CSSOM programs with default and edited inputs. Compare native
+  declaration values/priorities, rule lists and computed styles. CSSRule.cssText
+  remains its specified no-op; imported sheets can raise native SecurityError.
+  Missing page descriptors and ignored baseURL options report unsupported.
+- Run cssomBoundaryFixtures: awaited replace returns its native sheet, grouping
+  rules retain parent identity, adopted sheets affect the owned sample, computed
+  declarations reject writes, and escaped selectors find their actual element.
+  Refuse foreign sheets, runtime-document access through a shadow host, root
+  attachment outside the owned sample, closed roots, excessive nested/cumulative
+  rules, text and adopted sheets. Window.open and constructor escape stay closed.
+- The complete authored adoption recipe must compute 120px/180px for its
+  default/edited inputs; outer sample styles must not override shadow styles.
+- Stop or deadline during pending native replacement must prevent late replies
+  from reviving the worker. A native rejection ends cleanly with one cleanup.
+- Round-trip edited CSSOM programs through the catalogue Action and private
+  Thing APIs. Save an edited adopted stylesheet in the workbench, fully reload
+  and run the saved Component, reuse it on a separate Builder page, check the
+  computed width, anonymous 404, Stop/fresh Run and desktop/390px overflow.
+- Re-run Typed OM, CSS, SVG/filter, Canvas, DOM and form browser regressions;
+  match runtime digest, restrictive CSP and both actions-run 1.28 manifests on
+  exact preview/main deployments before calling production @lopu delivered.
+
+
+### Web standards: layout and Geometry (2026-09-27)
+
+- Run all 130 CSSOM View and 19 remaining Geometry examples with default and
+  edited inputs. Compare native rectangles, scroll positions, caret hits, range
+  rectangles, quad points/bounds, matrix values and media-query matching.
+  Read-only screen metrics and iframe move/resize restrictions stay explicit.
+- Await native scroll completion, including engines returning an interrupted
+  dictionary. Stop/deadline must discard late results. Native WebIDL mixin
+  accessors may live on unnamed prototype layers: capture registered names
+  through the native chain without reading shadowing instance properties.
+- Run layoutBoundaryFixtures: refuse runtime/parent/global escapes, outside
+  hit-test nodes, foreign shadow roots, malformed options, unbounded geometry
+  and unrelated surface mutations. An initial Range cannot expose its runtime
+  document. Owned shadow-root contents support scoped caret testing.
+- Observe real mouse/viewport events; dispatch an explicitly synthetic media
+  query event and verify isTrusted=false. Remove the exact legacy callback,
+  dispatch again and verify no further receipt; Stop releases handlers.
+- Round-trip edited programs through the catalogue Action and private Things.
+  Save/reload/run a scroll Component, reuse its reference on another page, and
+  verify native offsets, anonymous 404, Stop/fresh Run and desktop/390px layout.
+- Run existing CSSOM/Typed OM/CSS/SVG/filter/Canvas/DOM/form regressions. Match
+  preview/main source SHA, runtime digest, restrictive CSP and both actions-run
+  1.29.0 manifests before production @lopu delivery.
+
+### Web standards: native observer programs (2026-09-27)
+
+- Run all 81 Mutation/Resize/Intersection Observer programs with default and
+  edited options. Verify actual native callback records, projected fields and
+  changed output. An unavailable IntersectionObserverEntry constructor or
+  callback field reports unsupported, never a fabricated successful result.
+- Run observerBoundaryFixtures: takeRecords drains five queued mutations before
+  callback delivery; disconnect clears the next queue; oldValue and receiver
+  identity match the native records. Resize/intersection unobserve/disconnect
+  must suppress later changes. Resize box selection responds to border changes.
+- Reject foreign targets/roots, unregistered callbacks, observer/callback
+  allocation overflow, invalid options, nested batches and async operations in
+  a synchronous batch. A rejected async command must not have been invoked.
+  Callback exceptions end the run; Stop/deadline disconnect resources, discard
+  late callbacks and keep the outer app responsive.
+- Round-trip edited programs through the catalogue Action and private Things
+  API. Save in the actual workbench, reopen, fully reload and run the saved
+  Component, then reference it from a second private page. Verify anonymous
+  404, Stop/fresh Run, and desktop/390px layout without horizontal overflow.
+- Run existing native DOM/form/Canvas/SVG/CSS/Typed OM/CSSOM/layout regressions,
+  compiler/protocol and capability tests. Both manifests and the client require
+  actions-run 1.30.0. Verify the built runtime hash and deployed commit before
+  claiming preview or production delivery.
+
+### Web standards: native range programs (2026-09-27)
+
+- Run all 40 added live/static range recipes with default and edited input.
+  Observe actual native text, cloned/extracted fragments, wrapper markup,
+  comparisons, boundary nodes and offsets. Static offsets stay fixed while
+  a live range follows inserted text. Preserve existing surface geometry demos.
+- Run rangeBoundaryFixtures: native IndexSizeError stays catchable; cloned
+  ranges remain independent; extraction moves text. Reject initial runtime
+  document access, selecting the surface root's parent, surface tree edits,
+  foreign handles and unknown StaticRangeInit fields. Concrete prototype-chain
+  getters must work when AbstractRange has no own boundary accessors.
+- Reject fragment scripts, resources, attributes, foreign content, malformed
+  tags and token/text overflow before native parsing. Escaped markup remains
+  inert text. Reuse the existing worker deadline, node/work/handle budgets.
+- Round-trip edited programs through the catalogue Action and private Things.
+  Save/reload/run in the actual workbench, reference the saved Component from
+  another private page, check anonymous 404, Stop/fresh Run and 390px overflow.
+- Run compiler, capability, schema, Action, Component and page tests; native
+  DOM/layout regressions; build/typecheck. Verify both actions-run 1.31.0
+  manifests, deployed source SHA and runtime digest before production delivery.

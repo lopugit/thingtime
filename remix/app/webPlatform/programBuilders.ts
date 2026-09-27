@@ -53,6 +53,21 @@ export const defaultPattern = (target: unknown, value: unknown) => ({ op: 'defau
 export const domConstruct = (key: string, args: unknown[] = []) => awaited({ op: 'dom', action: 'construct', key, args });
 
 export const domSurface = () => awaited({ op: 'dom', action: 'surface' });
+/** Register an authored worker function for a bounded asynchronous native callback. */
+export const domCallback = (value: unknown) => ({ op: 'dom-callback', value });
+export const domGlobal = (namespace: string, key: string) => awaited({ op: 'dom', action: 'global', target: namespace, key });
 
 /** Read a registered primitive Web IDL constant without exposing a constructor. */
 export const domConstant = (interfaceName: string, key: string) => awaited({ op: 'dom', action: 'constant', target: interfaceName, key });
+
+/** Invoke a registered native CSS factory or parser without exposing a global object. */
+export const domStatic = (namespace: string, key: string, args: unknown[] = []) =>
+	awaited({ op: 'dom', action: 'static', target: namespace, key, args });
+
+/** Member operations in one native task; failures do not roll back earlier writes. */
+export const domBatch = (commands: { action: 'get' | 'set' | 'call'; target: unknown; key: string; args?: unknown[] }[]) =>
+	awaited({
+		op: 'dom',
+		action: 'batch',
+		args: [array(...commands.map((c) => object({ action: c.action, target: c.target, key: c.key, args: array(...(c.args || [])) })))]
+	});

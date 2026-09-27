@@ -120,3 +120,39 @@ test('DOM policy failures end execution and release resources once', () => {
 	assert.equal(messages.length, 1);
 	assert.equal(cleaned, 1);
 });
+
+test('asynchronous native DOM results are fenced by stop, timeout and rejection', async (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	for (const mode of ['reply', 'stop', 'timeout', 'reject']) {
+		const messages: unknown[] = [],
+			results: unknown[] = [];
+		let cleanups = 0,
+			resolve!: (v: unknown) => void,
+			reject!: (e: Error) => void;
+		const pending = new Promise((yes, no) => {
+			resolve = yes;
+			reject = no;
+		});
+		const worker: any = { onmessage: null, onerror: null, terminate: () => {}, postMessage: (value: unknown) => messages.push(value) };
+		const stop = runPlatformWorker(
+			worker,
+			{},
+			(ok, result) => results.push({ ok, result }),
+			() => cleanups++,
+			() => pending
+		);
+		worker.onmessage({ data: { type: 'tt-platform-worker-ready' } });
+		worker.onmessage({ data: { type: 'tt-platform-dom', id: 1 } });
+		assert.equal(messages.length, 1, 'native result is awaited');
+		if (mode === 'stop') stop();
+		if (mode === 'timeout') t.mock.timers.tick(2000);
+		if (mode === 'reject') reject(new Error('native failure'));
+		else resolve({ value: 42 });
+		await Promise.resolve();
+		await Promise.resolve();
+		assert.equal(messages.length, mode === 'reply' ? 2 : 1, 'late replies cannot revive a stopped worker');
+		if (mode === 'reject') assert.deepEqual(results, [{ ok: false, result: 'native failure' }]);
+		stop();
+		assert.equal(cleanups, 1);
+	}
+});

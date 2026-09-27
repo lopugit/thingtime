@@ -68,6 +68,34 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
+  editable boundaries, native document edits and bounded contextual fragments.
+  Check owned endpoints and concrete native getters; negotiate actions-run 1.31.0.
+  See [PR #950](../PRs/950-codex-web-standards-ranges--add-reusable-live-and-static-range-programs.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Add 81 reusable observer programs with database-authored callbacks, native records, scoped targets and synchronous mutation batches. Disconnect on completion/Stop, preserve unsupported results in callbacks, and negotiate actions-run 1.30.0. See [PR #949](../PRs/949-codex-web-standards-observers--add-reusable-observer-programs-and-database-authored-callbacks.md).
+- 2026-09-27 — **Codex (AI)**: Recover from the Mac speech recognizer's observed
+  empty-input retry during silence. Keep listening without a false service
+  error, while preserving errors from failed captures that contain speech and
+  from unrelated service failures.
+- 2026-09-27 — **Codex (AI)**: Clear stale microphone/recognition errors when
+  retrying Lopu voice input. Capture errors no longer linger as conversation
+  history after permission is granted and a voice message sends successfully.
+
+- 2026-09-27 — **Codex (AI)**: Add 149 reusable layout/Geometry programs with scoped browser metrics, hit tests, native scroll completion, quad/range measurements and removable media-query listeners. Preserve native mixin accessors and private Component save/reuse. See [PR #944](../PRs/944-codex-web-standards-layout--add-reusable-layout-and-geometry-standards-programs.md).
+
+- 2026-09-27: Fix Mac Lopu voice input reporting `Microphone unavailable (network)`
+  by routing standard desktop transcription through a signed Apple Speech helper.
+  Preserve the existing chat/model flow, stop capture at lifecycle boundaries,
+  and show actionable microphone/speech permission errors. See [PR #945 notes](../PRs/945-codex-mac-voice-input--fix-mac-lopu-voice-input-with-native-speech-recognition.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Add 102 reusable CSSOM programs, bounded native stylesheet/declaration receivers, scoped adoption and cancellable async replacement. Fix sample CSS masking adopted widths; verify private save/reload/reuse and native browser behavior. See [PR #943](../PRs/943-codex-web-standards-cssom--add-reusable-cssom-programs-and-native-stylesheet-editing.md).
+
+- 2026-09-27: Add reusable CSS Typed OM programs for 249 catalogue entries, with native unit/math/transform/style-map receivers, bounded CSS factories and actions-run 1.27.0 negotiation. See [PR #942](../PRs/942-codex-web-standards-typed-css--add-reusable-css-typed-om-programs-and-native-style-maps.md) for native/API validation and delivery evidence.
+
+
 - 2026-09-27 — **Codex (AI)**: Reusable CSS function comparisons cover 180
   catalogue entries (137 newly interactive), including maths, colour, transforms,
   shapes, grids, easing, counters and anchors. Scoped CSS probes distinguish

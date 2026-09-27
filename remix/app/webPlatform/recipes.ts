@@ -1,3 +1,8 @@
+import { rangeRecipe } from './rangeFixtures';
+import { observerRecipe } from './observerFixtures';
+import { layoutRecipe } from './layoutFixtures';
+import { cssomRecipe } from './cssomFixtures';
+import { typedCSSRecipe } from './typedCSSFixtures';
 import { cssFunctionRecipe } from './cssFunctionFixtures';
 import { svgFilterRecipe } from './svgFilterFixtures';
 import { svgRecipe } from './svgFixtures';
@@ -406,6 +411,16 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const range = rangeRecipe(feature);
+	if (range) return range;
+	const observer = observerRecipe(feature);
+	if (observer) return observer;
+	const layout = layoutRecipe(feature);
+	if (layout) return layout;
+	const cssom = cssomRecipe(feature);
+	if (cssom) return cssom;
+	const typed = typedCSSRecipe(feature);
+	if (typed) return typed;
 	if (feature.language === 'html') return htmlRecipe(feature);
 	if (feature.language === 'css') return cssRecipe(feature);
 	if (feature.language === 'javascript') return javascriptRecipe(feature);
