@@ -1,4 +1,5 @@
 import { useLopuVisualViewport } from './useLopuVisualViewport';
+import { LopuDictationSettings } from './LopuDictationSettings';
 import React from 'react';
 import { Box, Button, Center, Flex, Select, Switch, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
@@ -392,6 +393,8 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 				<Switch isChecked={settings.enterSends} onChange={(event) => setEnterSends(event.target.checked)} aria-label="Enter sends the message" />,
 				'Enter sends your message and Shift+Enter adds a line'
 			)}
+			<Text fontSize="sm" fontWeight={600} pt={4}>Voice transcription</Text>
+			<LopuDictationSettings renderRow={renderRow} />
 			{renderRow(
 				'Spoken replies',
 				<Switch isChecked={settings.spokenReplies} onChange={(event) => setSpokenReplies(event.target.checked)} aria-label="Spoken replies" />,
