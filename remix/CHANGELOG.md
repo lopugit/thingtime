@@ -68,6 +68,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Recover from the Mac speech recognizer's observed
+  empty-input retry during silence. Keep listening without a false service
+  error, while preserving errors from failed captures that contain speech and
+  from unrelated service failures.
 - 2026-09-27 — **Codex (AI)**: Clear stale microphone/recognition errors when
   retrying Lopu voice input. Capture errors no longer linger as conversation
   history after permission is granted and a voice message sends successfully.
