@@ -469,6 +469,9 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
             media: attachedContent.media,
             history,
             readReferences: loaded.ok ? loaded.readReferences : undefined,
+            checkpointResults: input.continueFromRequestId
+              ? await (await import('~/api/utils/lopu/backgroundTasks')).readCheckpointToolResults(request, chatId, input.continueFromRequestId)
+              : undefined,
             choice,
             vaultProvider,
             context: input.context,

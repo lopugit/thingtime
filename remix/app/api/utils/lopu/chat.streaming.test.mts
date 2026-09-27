@@ -1297,3 +1297,22 @@ test('Action failure recovery data reaches the next model hop', async () => {
  await collect(turn('Run', 'claude-opus-5', { deps: { runTool: async () => ({ ok: false, error: 'Action failed', data }) } }));
  assert.deepEqual(JSON.parse(anthropicRequests[1].body.messages.at(-1).content[0].content).data, data);
 });
+
+test('a checkpointed Action result reaches the resumed provider without rerunning the Action', async () => {
+ const { checkpointToolResults } = await import('./checkpointResults');
+ process.env.VERCEL = '1';
+ let clock = 0, runs = 0;
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'run-once', name: 'run_action', inputChunks: ['{"action":"planner"}'] }], stopReason: 'tool_use' });
+ const { outcome, events } = await collect(turn('Inspect planner', 'claude-opus-5', { deps: { now: () => clock += 65000, runTool: async () => {
+  runs++; return { ok: true, summary: 'Ran planner', data: { result: { days: [{ today: true, records: [] }] } } };
+ } } }));
+ assert.equal(outcome.stopReason, 'checkpoint');
+ const checkpointResults = checkpointToolResults([...events, { type: 'done', continuationSafe: true, stopReason: outcome.stopReason }].map(event => JSON.stringify(event)).join('\n'));
+ delete process.env.VERCEL;
+ anthropicPlans.push({ blocks: [{ type: 'text', text: 'The saved result shows today has no visits.' }] });
+ await collect(turn('Continue', 'claude-opus-5', { checkpointResults, deps: { runTool: async () => { throw new Error('Completed Action replayed'); } } }));
+ const prompt = anthropicRequests.at(-1)!.body.messages.at(-1).content;
+ assert.match(prompt, /Completed tool results from the exact interrupted reply/);
+ assert.deepEqual(JSON.parse(prompt.split('\n').at(-1))[0].data.result.days, [{ today: true, records: [] }]);
+ assert.equal(runs, 1);
+});

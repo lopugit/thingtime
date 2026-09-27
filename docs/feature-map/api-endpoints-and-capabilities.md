@@ -56,7 +56,10 @@ last output and acknowledges completion. Uncertain work never replays. The
 `readContext.ts` retains up to 16 private JSON-page locators in assistant message
 `secure` BinData. `loadLopuHistory` returns them only after chat membership checks;
 `restoreReadContext` rereads exact revisions through `get_thing` before any provider
-disclosure. Reply 1.19.1 also repairs tool-protocol stalls without replaying displayed
+disclosure. Reply 1.19.2 reuses the existing private background transcript for up to eight
+completed tool results on an exact verified continuation (`checkpointResults.ts`
+and `backgroundTasks.ts`); no Action is replayed. `aiTasks.client.test.mts` covers
+terminal output polling and account/deployment boundaries. Reply 1.19.1 repairs tool-protocol stalls without replaying displayed
 JSON or mutations. Canonical `test:lopu` includes workflow/admission and reload/account-switch
 regressions; `test:lopu-ui` covers presentation and client state.
 

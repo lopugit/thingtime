@@ -132,7 +132,11 @@ System-kind rules (never bypass):
   conversation. Output is bounded secure BinData (2 MiB), never generic content
   or search data. Output access lasts seven days, with lazy byte removal and a
   retained small operation marker. Reads recheck chat access. The 260-second
-  execution deadline exposes stale work without replay. No new collection/index.
+  execution deadline exposes stale work without replay. A verified continuation
+  may reuse up to eight completed tool results (64 KiB) from that exact private
+  transcript after owner, conversation, deployment, retention and terminal-boundary
+  checks. This restores historical evidence, never calls, grants or live authority.
+  No new collection/index.
 
 - First-party Lopu assistant messages may carry up to 16 read locators in
   root `secure` BinData (20 KiB decode bound, 24-hour restore window). They contain

@@ -8,6 +8,7 @@ import { getCurrentUser } from '../auth/getCurrentUser';
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { enforceRateLimit, rateLimitedResponseInit } from '../rateLimit/enforce';
 import { getLopuChat, persistLopuUserTurn } from '../messenger/lopuChats';
+import { checkpointToolResults } from './checkpointResults';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import {
 	AI_TASK_HEADER,
@@ -37,6 +38,24 @@ export const taskViewer = async (request: Request) => {
 	return user;
 };
 const textOf = (row: any): string => (row.secure instanceof Binary ? Buffer.from(row.secure.value()).toString('utf8') : '');
+
+// Only the reply route's verified continuation calls this. Reuse the existing
+// private task transcript: no duplicate result store, generic message exposure,
+// provider credentials, confirmation events or tool execution during recovery.
+export const readCheckpointToolResults = async (request: Request, chatId: string, requestId: string) => {
+  if (!validAiTaskRequestId(requestId)) return [];
+  const user = await taskViewer(request);
+  if (!user || (await getLopuChat(user.id, chatId)).ok === false) return [];
+  const scope = await scopeFor(request);
+  const things = await getHomeThingsCollection();
+  const row = await things.findOne({ ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: scope,
+    shareId: taskIdFor(user.id, scope, requestId), targetId: chatId,
+    'crystal.path': '/api/v1/lopu/chats/reply', 'crystal.requestId': requestId,
+    'crystal.status': { $ne: 'running' }, 'crystal.outputExpired': false, outputExpiresAt: { $gt: new Date() }
+  }, { projection: { secure: 1 } });
+  if (!(row?.secure instanceof Binary) || row.secure.length() > AI_TASK_MAX_BYTES) return [];
+  return checkpointToolResults(textOf(row));
+};
 export const publicBackgroundTask = (row: any): AiBackgroundTask => ({
 	id: row.shareId,
 	requestId: row.crystal.requestId,

@@ -13,6 +13,7 @@ const match = (row: any, filter: any) =>
 		if (value && typeof value === 'object' && '$exists' in value) return (actual !== undefined) === value.$exists;
 		if (value && typeof value === 'object' && '$ne' in value) return actual !== value.$ne;
 		if (value && typeof value === 'object' && '$lt' in value) return actual < value.$lt;
+    if (value && typeof value === 'object' && '$gt' in value) return actual > value.$gt;
 		return Array.isArray(actual) ? actual.includes(value) : actual === value;
 	});
 const patch = (row: any, update: any) => {
@@ -65,7 +66,7 @@ mock.module('./continuationAdmission.server', {namedExports: {admitLopuWorkflow:
  if (admissionMode !== 'okay') throw new Error('Admission write failed');
  return {ok:true};
 }}});
-const { startBackgroundTask, executeBackgroundTask, readBackgroundTasks, stopBackgroundTask } = await import('./backgroundTasks');
+const { startBackgroundTask, executeBackgroundTask, readBackgroundTasks, stopBackgroundTask, readCheckpointToolResults } = await import('./backgroundTasks');
 beforeEach(() => {
 	chatAccessible = true; admissionMode='okay'; beforeUpdate=null;
 	rows.length = 0;
@@ -427,4 +428,28 @@ test('Stop in the reserved-before-child-insert gap prevents the delayed handler 
  const child=rows.find(row=>row.crystal.requestId==='delayed-child');
  assert.equal(child.crystal.status,'stopped'); assert.ok(child.workerFinishedAt);
  assert.equal(root.crystal.workflowStatus,'stopped'); assert.equal(root.uniqueKeys,undefined);
+});
+
+test('continuation tool output stays bound to the exact account, chat, request and deployment', async () => {
+ const events = [
+  { type: 'meta', chatId: 'chat' },
+  { type: 'tool_use', id: 'action', name: 'run_action', input: { action: 'planner' } },
+  { type: 'tool_result', id: 'action', name: 'run_action', ok: true, summary: 'Ran planner', data: { result: { today: true } } },
+  { type: 'done', continuationSafe: true, stopReason: 'checkpoint' }
+ ];
+ await startBackgroundTask(request('saved'), async () => new Response(events.map(event => JSON.stringify(event)).join('\n') + '\n', { headers: { 'Content-Type': 'application/x-ndjson' } }));
+ await Promise.all(pending);
+ const readResults = (chat = 'chat', id = 'saved', req = request('next')) => readCheckpointToolResults(req, chat, id);
+ assert.equal((await readResults()).length, 1);
+ assert.deepEqual(await readResults('another-chat'), []);
+ assert.deepEqual(await readResults('chat', 'another-request'), []);
+ assert.deepEqual(await readResults('chat', 'saved', new Request('https://another.test/api/v1/lopu/chats/reply')), []);
+ const endpoint = new Request(request('next')); endpoint.headers.set('x-test-endpoint', 'another');
+ assert.deepEqual(await readResults('chat', 'saved', endpoint), []);
+ user = { id: 'other', accountKind: 'user' };
+ assert.deepEqual(await readResults(), []);
+ user = { id: 'owner', accountKind: 'user' }; chatAccessible = false;
+ assert.deepEqual(await readResults(), []);
+ chatAccessible = true; rows[0].outputExpiresAt = new Date(0);
+ assert.deepEqual(await readResults(), []);
 });
