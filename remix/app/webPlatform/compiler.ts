@@ -5,9 +5,19 @@ const identifier = (value: unknown) => {
 	if (
 		typeof value !== 'string' ||
 		!/^[A-Za-z_][A-Za-z0-9_]{0,60}$/.test(value) ||
-		['eval', 'Function', 'AsyncFunction', 'GeneratorFunction', 'importScripts', 'self', 'globalThis', 'postMessage', 'close', '__ttDom'].includes(
-			value
-		)
+		[
+			'eval',
+			'Function',
+			'AsyncFunction',
+			'GeneratorFunction',
+			'importScripts',
+			'self',
+			'globalThis',
+			'postMessage',
+			'close',
+			'__ttDom',
+			'__ttDomCallback'
+		].includes(value)
 	)
 		throw new Error('Use a supported identifier');
 	return value;
@@ -218,14 +228,19 @@ export function compilePlatformProgram(raw: unknown): string {
 				return n.map(e).join(',');
 			};
 		switch (node.op) {
+			case 'dom-callback':
+				return `__ttDomCallback(${e(node.value)})`;
 			case 'dom':
-				if (!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global'].includes(node.action))
+				if (!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global', 'batch'].includes(node.action))
 					throw new Error('Unsupported DOM action');
-				if (!['document', 'surface'].includes(node.action) && (typeof node.key !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,60}$/.test(node.key)))
+				if (
+					!['document', 'surface', 'batch'].includes(node.action) &&
+					(typeof node.key !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,60}$/.test(node.key))
+				)
 					throw new Error('Expected a DOM member name');
-				return `__ttDom(${quoted(node.action)},${['document', 'surface', 'construct'].includes(node.action) ? 'null' : e(node.target)},${quoted(
-					node.key || ''
-				)},[${args(node.args || [])}])`;
+				return `__ttDom(${quoted(node.action)},${
+					['document', 'surface', 'construct', 'batch'].includes(node.action) ? 'null' : e(node.target)
+				},${quoted(node.key || '')},[${args(node.args || [])}])`;
 			case 'this':
 				return 'this';
 			case 'new-target':
