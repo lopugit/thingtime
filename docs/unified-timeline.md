@@ -1,7 +1,8 @@
 # Unified Timeline
 
-Implementation in progress on `codex/unified-timeline`. This is the accepted
-2026-09-27 product contract, not a claim that the feature has shipped.
+Implementation continues from the foundation merged to `main` in PR #956.
+This is the accepted 2026-09-27 product contract; the acceptance ledger below
+tracks the full scope beyond that delivered foundation.
 
 The server retains the complete account timeline, including mutations made
 through APIs, Actions and AI. Clients persist their own changes before sending
@@ -88,6 +89,31 @@ retain feed/search membership and viewport state. They should adopt the shared
 contract rather than create another synchronization system.
 
 ## Implementation evidence — 2026-09-27 (in progress)
+
+Server Action and Lopu tool executors now establish trusted, account-scoped
+provenance for canonical Thing mutations. Each invocation has one operation id;
+every committed step has its own event and relational operation link. Nested
+Actions retain the initiating source, so an AI-invoked Action is attributed to
+AI. Server-hosted browser Actions keep that context through their ordinary API
+dispatcher. Concurrent invocations and unrelated actors cannot inherit it;
+headers, tool input and authored program fields cannot establish it. Existing
+local/remote schemas are unchanged. A partial Action failure retains history
+for its committed steps, without inventing events for refused steps. This
+operation id groups writes; it is not an execution retry or replay token.
+
+Preparing a browser Action does not claim execution. Requests made later by an
+ordinary browser client remain API-originated until a verified execution
+receipt protocol is implemented. Complete Action outcome history, including
+read-only runs and external effects, remains open; the bounded legacy Action
+run log is not the full Timeline. No protected inputs, credentials, traces or
+provider results are added to generic content snapshots.
+
+This increment passed 62 Timeline tests, the Action and Lopu suites, both
+capability manifests and the disposable HTTP replica-set regression. Browser
+History showed API and Action origins together and compared a nested Action's
+exact field change. The full Vite/Nitro/Vercel build passed. The warning-only
+typecheck ratchet remains at the existing 91 diagnostics versus its 89 baseline,
+with none in this increment's changed files; this is not a clean typecheck claim.
 
 The branch currently records ordinary owned Thing creates, updates and deletes
 in their content transaction. The account's Timeline folder contains separate

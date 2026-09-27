@@ -4717,12 +4717,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.18.0',
-    featureVersion: '1.18.0',
+    contractVersion: '1.18.1',
+    featureVersion: '1.18.1',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
       'Version 1.18.0 adds lossless get_thing crystal inspection. Optional path is a JSON Pointer relative to the authorized public crystal (empty means the whole crystal); offset defaults to zero. crystalRead returns path, revision (SHA-256 of the selected JSON), offset, nextOffset, totalChars, complete and a JSON text chunk of at most 4000 UTF-16 characters. Follow nextOffset with the same path and revision, concatenate chunks before parsing, and restart at zero on revision mismatch. Every page rechecks access. Default reads remain bounded summaries with an inspection hint when content is omitted. Service-workspace select validation errors list exact allowed values. ' +
       'Version 1.17 composes the current shared base prompt with enabled personal instructions for each request. get_schema and create_schema can inspect and extend every public built-in or visible user Schema; create_data validates the selected schema. save_attachment saves an independent owner-private copy of an authorized chat attachment and returns its stable ID and content URL for Thing properties, with optional owned-folder placement. Existing tool authorization and confirmation checks still apply. ' +
+      'Canonical Thing writes from authorized tools retain AI provenance in the shared Timeline, including nested Actions and server-hosted browser flows. Each tool invocation groups its committed changes through relational operation links; refusal or an unexecuted step creates no successful-change event. ' +
       'Version 1.16.0 preserves context.page dirty, ready and updatedAt metadata when blocks are omitted. Missing blocks are never an empty page: clean saved pages are resolved through the authorized API; dirty, unknown or still-loading omitted drafts refuse mutation. Continuations preserve these fences. ' +
       'Chat accessMode: "ask" (default) requires a Confirm card for every Action run and tool that changes things; "full" runs them without prompts. The setting is owner-only, first-party-only, stored per chat, and rechecked during execution. Full access never bypasses account ACLs, quotas, Action limits or scheduled read-only restrictions. Browser Actions use the canonical Thingtime data APIs without exposing credentials; identity, admin, credentials and chat permission routes are not delegable. On reply, accessMode is accepted only for new chats; update existing chats through the settings endpoint so stale replies cannot re-grant access. ' +
       'Version 1.14.2 corrects packaged Claude runtime availability for server-managed Vercel Workflow replies. It uses the existing shared OAuth credential selection and preserves model settings, tool permissions, cancellation and continuation rules; the public request and event shapes are unchanged. ' +
@@ -12787,13 +12788,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'actions-run',
     // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
-    featureVersion: '1.34.0',
-    contractVersion: '1.34.0',
+    featureVersion: '1.34.1',
+    contractVersion: '1.34.1',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
+      'Server-executed Thing writes retain trusted Action provenance and share an operation id across nested steps. AI-initiated Actions retain AI provenance; preparing a browser program records no successful mutation. Client-supplied source/actor/operation fields cannot claim server provenance. ' +
       'XPath programs reuse owned detached documents, compiled expressions, native result types and Node or data-backed namespace resolvers. Synchronous work is bounded by expression and actual tree complexity; scalar queries cannot inspect the surrounding runtime. Native node identity, snapshot and iterator semantics are preserved. ' +
       'ARIA programs edit native nullable properties and owned element relationships, preserve frozen reference-list identity, and compare property assignment with content-attribute reflection. Browser support remains explicit; saved programs contain all inputs, relationships and projections. ' +
       'Layout programs read bounded Window metrics and owned Element, Range, CaretPosition and geometry receivers. Document hit tests exclude runtime nodes; scrollingElement is a metrics-only projection. Scrolling awaits native completion. Saved event bindings support media queries, VisualViewport handlers and exact callback removal. ' +

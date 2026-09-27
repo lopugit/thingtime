@@ -86,6 +86,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   sends cannot lose text. Removed the Mac dictation capture's fixed 1.5-second cutoff.
   See [PR #961 details](../PRs/961-codex-voice-silence-settings--configurable-dictation-silence-and-hear-me-out.md).
 
+- 2026-09-27 — **Codex (AI)**: Canonical Thing changes from server Actions and
+  Lopu tools now retain trusted origin and group nested writes through the
+  existing relational Timeline operation links. Concurrent calls stay isolated;
+  partial failures record only committed edits, and browser preparation claims
+  no execution. Shared local/remote record schemas remain unchanged. Complete
+  Action outcomes and ordinary browser execution receipts remain in progress.
+  [PR #959 details](../PRs/959-timeline-mutation-coverage-preserve-action-and-ai-provenance-in-thing-history.md).
 
 - 2026-09-27 — **Codex (AI)**: Reviewed PR #954 against current main, preserved Lopu Ask/Full permissions with prompt settings, validated all 100 public schema definitions, and fixed concurrent attachment-save rollback deleting a completed file. Full unit suite, 902 API checks, real-byte acceptance, settings isolation/concurrency, production web build and iOS simulator build pass; no added TypeScript diagnostics. [QA details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
 

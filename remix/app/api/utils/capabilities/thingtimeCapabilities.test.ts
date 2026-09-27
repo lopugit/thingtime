@@ -80,7 +80,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     assert.equal(manifest.features[feature]?.version, '1.2.0');
   }
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.4.0');
-	assert.equal(manifest.features['api.actions-run']?.version, '1.34.0');
+	assert.equal(manifest.features['api.actions-run']?.version, '1.34.1');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.7.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.11.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.15.0');
@@ -257,7 +257,7 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   // and reply 1.4.0 = the in-flight cap (429 LOPU_TURN_IN_FLIGHT past three billed turns at once)
   assert.equal(manifest.features['api.lopu-chats']?.version, '1.6.0');
   assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.5.0');
-  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.18.0');
+  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.18.1');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
@@ -269,7 +269,7 @@ test('historical Lopu receipts advertise a compatible reply patch on both manife
     thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version,
     createApiCapabilitiesManifest().features['api.lopu-chats-reply']
   ]) {
-    assert.equal(version, '1.18.0');
+    assert.equal(version, '1.18.1');
     assert.equal(capabilitySatisfies(version, '1.6.0'), true);
     assert.equal(capabilitySatisfies(version, '1.6.1'), true);
     assert.equal(capabilitySatisfies('1.6.0', '1.6.1'), false);
@@ -409,7 +409,7 @@ test('functional demo capabilities advertise compatible catalog and install cont
 
 test('native animation programs require compatible playback lifecycle support', () => {
   for (const manifest of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://animation.test').features).map(([key, value]) => [key, value.version]))]) {
-    assert.equal(manifest['api.actions-run'], '1.34.0');
+    assert.equal(manifest['api.actions-run'], '1.34.1');
   }
   for (const version of ['1.32.0', '1.32.1', '1.33.0']) assert.equal(capabilitySatisfies(version, '1.32.0'), true);
   for (const version of ['', '1.31.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.32.0'), false);
@@ -417,7 +417,7 @@ test('native animation programs require compatible playback lifecycle support', 
 
 test('XPath programs require owned synchronous query support', () => {
   const current = createApiCapabilitiesManifest().features['api.actions-run'];
-  assert.equal(current, '1.34.0');
+  assert.equal(current, '1.34.1');
   assert.equal(capabilitySatisfies(current, '1.34.0'), true);
   for (const version of ['', '1.33.0', '1.33.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.34.0'), false);
 });
