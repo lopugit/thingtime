@@ -25,7 +25,13 @@ with the original identity; a conflicting push preserves both versions.
 **Merge selected version…** compares with a named branch, asks you to choose
 any overlapping fields, then saves the reviewed two-parent version locally and
 queues its branch push. A stale push keeps that version in History. Published
-content stays unchanged; direct branch checkout/editing remains in progress.
+content stays unchanged. **Edit branch** opens historical fields; **Open in Builder**
+opens block-based pages in the usual visual editor. Branch text, props, layout
+and page metadata use the same device-first draft events and guarded branch
+pushes. Recover drafts after reload; queued or conflicting pushes stay in History.
+Preview currently uses visible current components with live Actions paused;
+exact historical dependencies and AI branch editing remain open. Visual checkout
+requires Timeline 1.9.0 and webpages-resolve 1.5.0, with no schema migration.
 Named-branch comparison requires `api.timeline` 1.7.0 and a connection. Once
 reviewed, the local event and push survive reload/offline in the same existing
 stores, with no schema migration or additional setup.
@@ -64,6 +70,10 @@ also checks atomic theme-save refusal and retained deletion at the ceiling.
 `test:timeline:home-scope` creates a second database on that guarded replica and
 checks concurrent history isolation, exact versions, branches and home restore
 under a custom selection, matching live Thing ids and stale read/write refusal.
+`test:timeline:visual-branch` uses the same guard for a visual page/branch
+fixture and batched component permission checks. Optionally set
+`TIMELINE_TEST_FIXTURE_PATH` to a private temporary JSON file for browser testing;
+it contains disposable sign-in credentials and must stay untracked.
 `test:timeline:branch-merge` uses the same guard for named-branch comparisons,
 canonical merged-event uploads, explicit conflicts, exact retries and stale-push
 retention. Set `TIMELINE_TEST_FIXTURE_PATH` to a private temporary file only when

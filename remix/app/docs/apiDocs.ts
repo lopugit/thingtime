@@ -13009,13 +13009,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.4.0',
-    featureVersion: '1.4.0',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     detail:
+      'In 1.5.0, authenticated POST with ownerId and dataPlane in the query and {blocks} in the body resolves current components for an unsaved or branch draft. It uses the ordinary 120-block/8-level/48-KiB sanitized block limits, a 192-KiB request cap and 4-MiB response cap. Returns {ok,components,refs}; it reads no live page, grants no inherited audience from caller-supplied blocks and writes nothing. Recheck the scope before adopting results. These are current component definitions, not a historical dependency checkout. All POST replies are private/no-store. ' +
       'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
       'component things by componentKey or shareId, container blocks lay children out, text blocks carry short ' +
       'copy, and native blocks mark where a built-in Thingtime screen sits on a site page. This endpoint resolves ' +
@@ -13034,7 +13035,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       mode: 'optional',
       description: 'Anonymous callers resolve public pages, hidden standalone pages by their exact canonical id, and seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
     },
-    methods: ['GET'],
+    methods: ['GET', 'POST'],
     steps: [
       'GET with exactly one of id=<shareId>, path=</route>, or global=1.',
       'Read page (null when no doc matches a path/global lookup) and source ("user" | "system").',

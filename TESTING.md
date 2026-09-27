@@ -2,6 +2,25 @@
 
 ## Unified Timeline
 
+- [ ] Open a named page branch in Builder on desktop and at 390px. Edit text,
+  component args and page metadata; Save twice without reopening. Each save
+  advances one branch revision. Click Save directly from the first inline text
+  edit (without blur/Tab): the button stays reachable and saves that final text
+  plus any metadata. Exact-ID reads confirm the published page
+  is unchanged. Plain field editing still opens and saves under StrictMode.
+- [ ] Reload before Save, recover the branch draft while Timeline/component
+  reads are blocked, Save offline, reload again, reconnect and open History.
+  The queued push advances once; Open in Builder reopens the accepted version.
+  Cached components remain visible. Stale pushes freeze editing and retain the
+  local version. Discard cannot race a new edit or save.
+- [ ] On branch View and an authored mode=run link, click an Action control: no
+  Action request or live source runtime may execute. Branch links with another
+  owner/source, and logout, hide private content immediately. Non-page branches
+  explain that their fields must be edited through Edit branch.
+- [ ] Run `test:timeline:visual-branch` on the guarded disposable replica set.
+  Guessed private component refs must not inherit an audience from caller blocks;
+  malformed scopes and oversized drafts refuse with private/no-store responses.
+
 - [ ] At 390px, branch names take a complete row above the wrapping controls;
   adding Edit branch must not squeeze names into a vertical column.
 - [ ] History → Branches → Edit branch: change a field, verify the device-saved

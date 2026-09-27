@@ -215,3 +215,11 @@ queue. `timeline/branchCheckout.ts` owns the bounded transient checkout contract
 `api/utils/timeline/branchCheckout.ts` reconstructs private historical content.
 `test:timeline:branch-merge` also checks real checkout, edit, retry and divergent
 push preservation. The visual Builder still edits the published Thing.
+
+
+Visual branch checkout uses `Builder/BranchWebpage.tsx`,
+`useBranchWebpageDraft.ts` and `branchWebpageCore.ts` over the same
+`timeline/branchWorkingCopy.ts` / `useTimelineBranchDraft.ts` field-editor model.
+`LiveWebpageView` accepts either adapter; a branch never mounts the published
+writer or AI save bridge. Draft/cache/outbox schemas are unchanged. See
+[visual named-branch editing](../unified-timeline.md#visual-named-branch-editing--2026-09-28).

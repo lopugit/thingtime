@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: Named page branches open in the visual Builder,
+  sharing durable draft events and revision-checked saves with the field editor.
+  Offline recovery, one-click inline saves, stale-push preservation and scoped
+  current-component previews keep published content unchanged. Validated on
+  desktop/390px, disposable HTTP, full unit/build and baseline TypeScript checks.
+  [PR #977](../PRs/977-timeline-visual-branches-edit-named-timeline-branches-in-the-visual-builder.md).
+
 - 2026-09-28 — **Codex (AI)**: Direct private named-branch lookup for cold
   editors, with account/database fences and canonical cache adoption that
   preserves queued pushes. Timeline 1.9.0; existing schemas and indexes.
