@@ -5,214 +5,117 @@ import test from 'node:test';
 import { isProtectedThingtime, PROTECTED_THINGTIME, projectBuiltinSchemaCrystal, thingtimeSchemas, validateThingtimeCrystal } from './registry.ts';
 
 // The congruence alarm for builtin-schema seeding (seed-builtin-schemas in
-// api/utils/migrations/migrations.ts): every builtin crystal schema must
+// api/utils/migrations/migrations.ts): every builtin schema must
 // project onto the schema-thing grammar AND clear validateThingtimeCrystal
 // (['schema']) — the exact write gate user-published schemas pass. If the
 // registry or the grammar evolves apart, this fails HERE instead of seeding an
 // invalid thing (or silently dropping a builtin from the seed).
 
-const crystalSchemas = thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
+const crystalSchemas = thingtimeSchemas;
 
 const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fields as Array<{ name: string }>).map((field) => field.name);
 
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
-// a new registry field should appear (or be knowingly dropped as a record/
-// reserved name) and the pin updated in the same change.
+// a new registry field should appear (except a reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
-	'timeline-event': ['name'], // Value-free label; history is in a protected envelope.
-	'timeline-branch': ['name'],
-	'timeline-branch-head': [],
-	'timeline-snapshot-part': [],
-	'timeline-link': [], // Relationship payload and index identities are server-owned.
-	// Protected operational state has no user-editable schema fields.
-	'lopu-background-task': [],
-	'lopu-recording-settings': [],
-	'lopu-recording-job': [],
-	'lopu-recording-reminder': [],
-	'lopu-reminder': [],
-	attachment: ['name', 'filenamePreview', 'title', 'description', 'size', 'contentType', 'mediaKind', 'detectedContentType'],
-  post: ['type', 'text', 'images', 'listing', 'title', 'subspaceId', 'flairId'], // thing + richText: records → dropped
-  comment: ['text'],
-  reaction: ['emoji'],
-  share: [], // marker schema — the thingtime tag is the payload
-  data: [], // '*' is a record; 'schema' is a reserved top-level name
-  // Owner-editable relational run notes, distinct from protected scheduler control state.
-  'scheduled-task-run': ['title', 'chatId', 'scheduledAt', 'status', 'notificationStatus'],
-  schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
-  // args + savedArgs + render: records → dropped
-  component: ['name', 'description', 'library', 'category', 'componentKey', 'familyKey', 'version', 'forkOf', 'previewBg'],
-  // blocks: record → dropped
-  webpage: ['name', 'description', 'pageKey', 'siteRoute', 'version', 'forkOf', 'previewBg'],
-  // inputs + steps + capabilities + limits: records → dropped
-  action: ['name', 'description', 'runtime', 'actionKey', 'category', 'version', 'forkOf'],
-  // inputs + result + trace: records → dropped
-  'action-run': ['status', 'startedAt', 'durationMs', 'opsUsed', 'depthUsed', 'childActionsUsed', 'error'],
-  'post-discovery': ['authorId', 'linkKeyDigest', 'anonymousId', 'ipAddress'],
-  save: [], // marker schema
-  vote: ['optionIndex', 'voteKey'],
-  updown: ['direction', 'updownKey'],
-  // rules + flairs + userFlairs: records → dropped; branding is a closed object → mirrored
-  subspace: ['slug', 'name', 'description', 'access', 'nsfw', 'userFlairSelfAssign', 'allowCustomUserFlair', 'branding'],
-  // userFlair is a closed object → mirrored
-  'subspace-member': ['memberKey', 'role', 'approved', 'banned', 'banReason', 'banUntil', 'left', 'pending', 'approvalRequested', 'userFlair'],
-  'subspace-modlog': ['action', 'postId', 'userId', 'reason'], // detail: record → dropped
-  'subspace-tombstone': ['slug', 'subspaceId', 'previousOwnerId', 'deletedAt'],
-  'subspace-report': ['postId', 'commentId', 'reason', 'note', 'status', 'resolution', 'resolvedById', 'resolvedAt', 'reportKey'],
-  folder: ['name', 'icon', 'description'],
-  app: [
-    'clientId',
-    'name',
-    'origins',
-    'nativeRedirectUris',
-    'subscriptionTier',
-    'subscriptionTierVersionId',
-    'subscriptionTierVersion',
-    'storageAllowanceBytes',
-    'storageAllowanceOverrideBytes',
-    'storageUsedBytes',
-    'userStorageAllowanceBytes',
-    'storageAccountingVersion'
-  ],
-  'app-data': ['appId', 'key'], // value: record → dropped
-  'subscription-tier': [
-    'quotaKind',
-    'tierId',
-    'version',
-    'status',
-    'title',
-    'tagline',
-    'emoji',
-    'bannerImageUrl',
-    'sortOrder',
-    'metered',
-    'currency',
-    'discountFormulaVersion',
-    'sourceVersionId',
-    'createdBy',
-    'updatedBy',
-    'publishedAt',
-    'archivedAt'
-  ], // pricing/inclusions/quotas: records → dropped
-	subscription: [
-		'quotaKind',
-		'subjectType',
-		'subjectId',
-		'tier',
-		'tierVersionId',
-		'tierVersion',
-		'note',
-		'updatedBy',
-		'storageUsedBytes',
-		'storageAccountingVersion',
-		'storageLedgerStatus',
-		'storageReconciledAt'
-	], // snapshots/overrides: records → dropped
-  'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
-	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
-  'error-log': ['source', 'message', 'provider', 'status', 'code', 'requestId', 'route', 'method', 'providerType', 'providerRequestId', 'retryAfter', 'attempt'],
-	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
-  'ci-repository': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-automation': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-feature': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-feature-stack': ['title', 'repository', 'autoDecideBranches', 'revision', 'status', 'archived', 'createdBy', 'updatedBy', 'lastDispatchId', 'lastRunAt'],
-  'ci-feature-stack-entry': ['repository', 'revision', 'entryType', 'position', 'prNumber', 'branch'],
-  'ci-branch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-pull-request': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-workflow-run': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-deployment': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-preview': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-preview-policy': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-stack-chat-message': ['repository', 'runId', 'actorId', 'question', 'answer', 'status', 'attempts', 'lease', 'completedLease', 'leaseUntil', 'runAttempt'],
-  'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
-  'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
-  friend: ['status', 'friendKey'],
-  notification: ['type', 'actorId', 'actorName', 'actorUsername', 'postId', 'preview', 'title', 'delivery', 'richText', 'image', 'detail', 'href', 'outcome'],
-  'push-device': ['platform', 'environment', 'topic'],
-  passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
-  'passkey-app-link': ['linkKey', 'appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
-  'account-invite': ['status', 'amountMicros'],
-  'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
-  // Lopu model catalog — every field is scalar or string[], so all project
-  'ai-model': ['modelId', 'label', 'provider', 'efforts', 'speeds', 'family', 'enabled', 'sortOrder', 'contextWindow', 'notes'],
-  // Lopu credits + usage accounting (api/utils/lopu/accounting.ts) — scalars only, so all project
-  'lopu-account': [
-    'balanceMicros',
-    'lifetimeCostMicros',
-    'lifetimeInputTokens',
-    'lifetimeOutputTokens',
-    'turns',
-    'monthKey',
-    'monthCostMicros',
-    'monthTurns',
-    'starterGranted',
-    'starterMicros',
-    'lowBalanceNotifiedAt',
-    'inflight',
-    'inflightSince',
-    'appliedIds'
-  ],
-  'lopu-usage': ['chatId', 'requestId', 'surface', 'provider', 'providerLabel', 'model', 'billing', 'inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'costMicros', 'priced', 'estimated', 'debitedMicros', 'toolCalls', 'hops', 'durationMs'],
-  'lopu-credit': ['entry', 'amountMicros', 'balanceAfterMicros', 'reason', 'actorId', 'usageId', 'requestId', 'requestStatus', 'note', 'resolvedAt', 'resolvedBy', 'grantedMicros'],
-	'ai-connection': [
-		'sourceType',
-		'provider',
-		'sourceId',
-		'deviceId',
-		'connectorId',
-		'label',
-		'connectors',
-		'capabilities',
-		'status',
-		'readOnly',
-		'lastSyncAt'
-	],
-  community: ['name', 'description'],
-  'community-member': ['memberKey', 'role'],
-  'community-invite': ['inviteCode', 'uses', 'maxUses', 'expiresAt', 'revoked'],
-  'chat-section': ['name', 'order'],
-  chat: ['name', 'topic', 'chatType', 'communityId', 'sectionId', 'channelVisibility', 'dmKey'],
-  'chat-member': ['memberKey', 'role', 'nickname', 'state', 'requestOrigin', 'lastReadMessageId', 'lastReadAt', 'muted'],
-  'chat-message': ['text', 'threadRootId', 'replyToId', 'editedAt', 'deletedAt', 'systemType'],
-	device: ['deviceKey', 'name', 'platform', 'model', 'osVersion', 'appVersion', 'capabilities', 'pairedAt'],
-	'device-state': ['deviceStateKey', 'revision', 'stateHash', 'snapshotHash', 'observedAt'], // state: record → dropped
-	'device-connector': ['deviceConnectorKey', 'revision', 'connectorHash'], // connector: record → dropped
-	'device-command': [
-		'deviceCommandKey',
-		'requestId',
-		'kind',
-		'requiresApproval',
-		'approvalState',
-		'status',
-		'controlBytes',
-		'inputTextHash',
-		'inputRedactedAt',
-		'expiresAt'
-	], // input: record → dropped
-	'device-command-event': [
-		'deviceEventKey',
-		'deviceControlEventScopeKey',
-		'liveControlEventScopeKey',
-		'retainedBytes',
-		'liveEventSequenceKey',
-		'liveEventHash',
-		'liveActivityHash',
-		'eventType',
-		'resourceId',
-		'revision',
-		'expiresAt'
-	], // payload: record → dropped
-	'device-ai-live-state': ['deviceAiLiveStateKey', 'connectorId', 'sessionId', 'lastSequence', 'lastObservedAt'],
-	'device-approval': ['deviceApprovalKey', 'commandId', 'requestId', 'kind', 'prompt', 'status'],
-	'device-screen-session': ['deviceScreenKey', 'requestId', 'status', 'viewOnly', 'startedAt', 'endedAt'],
-  'custom-emoji': ['name', 'emojiKey', 'image', 'animated'],
-  follow: ['followKey'],
-  user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
-  theme: ['name'], // theme: record → dropped
-  'feed-algorithm': ['name', 'emoji', 'parentId', 'description', 'listed', 'eventCount', 'lastTrainedAt', 'shared'], // weights: record → dropped
-  waitlist: [] // marker schema — email lives in the secure root field
+  "lopu-background-task": [],
+  "lopu-recording-settings": [],
+  "lopu-recording-job": [],
+  "lopu-recording-reminder": [],
+  "lopu-reminder": [],
+  "thing": ["shareId", "schemaVersion", "thingtime", "geo", "extended", "ownerId", "sourceDeviceId", "acl", "targetId", "tags", "sizeBytes", "storageClass", "storageAccountingVersion", "attachmentEnvelopeVersion", "attachmentState", "objectSizeBytes", "objectKey", "objectVersionId", "attachmentRequestFingerprint", "attachmentPurpose", "attachmentProfileSlot", "subspacePrivate", "attachmentFinalizationLeaseId", "attachmentPartsIssuedAt", "attachmentObjectlessDelete", "attachmentMpuEmptyVerifiedAt", "uploadId", "attachmentExpiresAt", "expiresAt", "avatarAttachmentId", "bannerAttachmentId", "iconAttachmentId", "subspaceMediaDeleting", "emojiAttachmentId", "createdAt", "updatedAt"],
+  "post": ["type", "text", "richText", "images", "listing", "thing", "title", "subspaceId", "flairId"],
+  "attachment": ["name", "filenamePreview", "title", "description", "size", "contentType", "mediaKind", "detectedContentType"],
+  "comment": ["text"],
+  "reaction": ["emoji"],
+  "share": [],
+  "data": [],
+  "scheduled-task-run": ["title", "chatId", "scheduledAt", "status", "notificationStatus"],
+  "schema": ["name", "description", "fields", "forkOf", "render"],
+  "component": ["name", "description", "library", "category", "source", "componentKey", "familyKey", "version", "forkOf", "previewBg", "args", "savedArgs", "render"],
+  "webpage": ["name", "description", "pageKey", "siteRoute", "version", "forkOf", "previewBg", "blocks"],
+  "action": ["name", "description", "runtime", "actionKey", "category", "version", "forkOf", "inputs", "steps", "capabilities", "limits"],
+  "action-run": ["status", "startedAt", "durationMs", "opsUsed", "depthUsed", "childActionsUsed", "error", "inputs", "result", "trace"],
+  "post-discovery": ["authorId", "linkKeyDigest", "anonymousId", "ipAddress"],
+  "save": [],
+  "vote": ["optionIndex", "voteKey"],
+  "updown": ["direction", "updownKey"],
+  "subspace": ["slug", "name", "description", "access", "nsfw", "rules", "flairs", "userFlairs", "removalReasons", "userFlairSelfAssign", "allowCustomUserFlair", "branding"],
+  "subspace-member": ["memberKey", "role", "approved", "banned", "banReason", "banUntil", "left", "pending", "approvalRequested", "userFlair"],
+  "subspace-modlog": ["action", "postId", "userId", "reason", "detail"],
+  "subspace-tombstone": ["slug", "subspaceId", "previousOwnerId", "deletedAt"],
+  "subspace-report": ["postId", "commentId", "reason", "note", "status", "resolution", "resolvedById", "resolvedAt", "reportKey"],
+  "folder": ["name", "icon", "description"],
+  "app": ["clientId", "name", "origins", "nativeRedirectUris", "subscriptionTier", "subscriptionTierVersionId", "subscriptionTierVersion", "storageAllowanceBytes", "storageAllowanceOverrideBytes", "storageUsedBytes", "userStorageAllowanceBytes", "storageAccountingVersion"],
+  "app-data": ["appId", "key", "value"],
+  "subscription-tier": ["quotaKind", "tierId", "version", "status", "title", "tagline", "emoji", "bannerImageUrl", "sortOrder", "metered", "currency", "prices", "discountOverrides", "discounts", "discountFormulaVersion", "inclusions", "quotas", "sourceVersionId", "createdBy", "updatedBy", "publishedAt", "archivedAt"],
+  "subscription": ["quotaKind", "subjectType", "subjectId", "tier", "tierVersionId", "tierVersion", "tierQuotas", "overrides", "note", "updatedBy", "storageUsedBytes", "storageAccountingVersion", "storageLedgerStatus", "storageReconciledAt"],
+  "account-link": ["linkKind", "userId", "targetId", "role", "createdBy"],
+  "app-storage": ["quotaKind", "appId", "usedBytes", "storageAllowanceBytes"],
+  "service-quota": ["quotaKind", "quotaVersion", "key", "policy", "dayKey", "dailyUsed", "permitIds", "releasedIds"],
+  "migration-diagnostic": ["diagnosticVersion", "migrationId", "mode", "status", "outcome", "summary", "capturedAt"],
+  "error-log": ["source", "message", "provider", "status", "code", "requestId", "route", "method", "providerType", "providerRequestId", "retryAfter", "attempt"],
+  "ai-model": ["modelId", "label", "provider", "efforts", "speeds", "family", "enabled", "sortOrder", "contextWindow", "notes"],
+  "account-invite": ["status", "amountMicros"],
+  "lopu-account": ["balanceMicros", "lifetimeCostMicros", "lifetimeInputTokens", "lifetimeOutputTokens", "turns", "monthKey", "monthCostMicros", "monthTurns", "starterGranted", "starterMicros", "lowBalanceNotifiedAt", "inflight", "inflightSince", "appliedIds"],
+  "lopu-usage": ["chatId", "requestId", "surface", "provider", "providerLabel", "model", "billing", "inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens", "costMicros", "priced", "estimated", "debitedMicros", "toolCalls", "hops", "durationMs"],
+  "lopu-credit": ["entry", "amountMicros", "balanceAfterMicros", "reason", "actorId", "usageId", "requestId", "requestStatus", "note", "resolvedAt", "resolvedBy", "grantedMicros"],
+  "ci-repository": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-automation": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-feature": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-feature-stack": ["title", "repository", "autoDecideBranches", "revision", "status", "archived", "createdBy", "updatedBy", "lastDispatchId", "lastRunAt"],
+  "ci-feature-stack-entry": ["repository", "revision", "entryType", "position", "prNumber", "branch"],
+  "ci-branch": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-pull-request": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-workflow-run": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-deployment": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-preview": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-preview-policy": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-stack-chat-message": ["repository", "runId", "actorId", "question", "answer", "status", "attempts", "lease", "completedLease", "leaseUntil", "runAttempt"],
+  "ci-dispatch": ["provider", "repository", "externalId", "entityKey", "title", "status", "url", "sourceUpdatedAt"],
+  "ci-event": ["provider", "repository", "deliveryId", "eventType", "action", "actor", "statusFrom", "statusTo", "occurredAt", "data"],
+  "friend": ["status", "friendKey"],
+  "notification": ["type", "actorId", "actorName", "actorUsername", "postId", "preview", "title", "delivery", "richText", "image", "detail", "href", "outcome"],
+  "push-device": ["platform", "environment", "topic"],
+  "passkey": ["nickname", "description", "providerName", "aaguid", "deviceType", "backedUp", "transports", "lastUsedAt", "lastUsedOrigin", "revokedAt"],
+  "passkey-app-link": ["linkKey", "appKey", "appName", "firstUsedAt", "lastUsedAt", "usageCount"],
+  "community": ["name", "description"],
+  "community-member": ["memberKey", "role"],
+  "community-invite": ["inviteCode", "uses", "maxUses", "expiresAt", "revoked"],
+  "chat-section": ["name", "order"],
+  "chat": ["name", "topic", "chatType", "communityId", "sectionId", "channelVisibility", "dmKey"],
+  "chat-member": ["memberKey", "role", "nickname", "state", "requestOrigin", "lastReadMessageId", "lastReadAt", "muted"],
+  "chat-message": ["text", "threadRootId", "replyToId", "editedAt", "deletedAt", "systemType", "systemMeta"],
+  "ai-connection": ["sourceType", "provider", "sourceId", "deviceId", "connectorId", "label", "connectors", "capabilities", "status", "readOnly", "lastSyncAt"],
+  "device": ["deviceKey", "name", "platform", "model", "osVersion", "appVersion", "capabilities", "pairedAt"],
+  "device-state": ["deviceStateKey", "revision", "stateHash", "snapshotHash", "state", "observedAt"],
+  "device-connector": ["deviceConnectorKey", "revision", "connectorHash", "connector"],
+  "device-command": ["deviceCommandKey", "requestId", "kind", "input", "requiresApproval", "approvalState", "status", "controlBytes", "inputTextHash", "inputRedactedAt", "expiresAt"],
+  "device-command-event": ["deviceEventKey", "deviceControlEventScopeKey", "liveControlEventScopeKey", "retainedBytes", "liveEventSequenceKey", "liveEventHash", "liveActivityHash", "eventType", "resourceId", "revision", "payload", "expiresAt"],
+  "device-ai-live-state": ["deviceAiLiveStateKey", "connectorId", "sessionId", "lastSequence", "lastObservedAt"],
+  "device-approval": ["deviceApprovalKey", "commandId", "requestId", "kind", "prompt", "status"],
+  "device-screen-session": ["deviceScreenKey", "requestId", "status", "viewOnly", "startedAt", "endedAt"],
+  "custom-emoji": ["name", "emojiKey", "image", "animated"],
+  "follow": ["followKey"],
+  "user": ["username", "ttid", "displayName", "bio", "avatarUrl", "bannerUrl"],
+  "theme": ["name", "theme"],
+  "feed-algorithm": ["name", "emoji", "parentId", "description", "listed", "weights", "eventCount", "lastTrainedAt", "shared"],
+  "waitlist": [],
+  "session": ["jti", "userId", "type", "purpose", "expiresAt", "revokedAt", "meta", "schemaVersion", "createdAt"],
+  "email-verification": ["token", "userId", "email", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
+  "password-reset": ["token", "userId", "email", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
+  "auth-otp": ["challenge", "userId", "purpose", "codeHash", "attempts", "expiresAt", "consumedAt", "schemaVersion", "createdAt"],
+  "email-message": ["provider", "stream", "templateKey", "status", "from", "replyTo", "to", "subject", "html", "text", "sensitive", "metadata", "tags", "providerMessageId", "suppressedRecipients", "schemaVersion", "createdAt", "updatedAt"],
+  "rate-limit": ["key", "expiresAt", "count", "schemaVersion"],
+  "deployment-peer": ["origin", "signingPublicKey", "firstSeenAt", "lastSeenAt", "expiresAt", "syncCursor", "schemaVersion"],
+  "admin-integration-secret": ["id", "label", "cipherText", "iv", "tag", "createdAt", "updatedAt", "schemaVersion"],
+  "admin-integration-endpoint": ["id", "origin", "secretId", "allowedPathPrefixes", "allowRead", "writeMode", "schemaVersion"],
+  "admin-integration-claim": ["endpointId", "resourceKey", "createdAt", "expiresAt", "schemaVersion"],
+  "admin-integration-audit": ["id", "endpointId", "operation", "path", "status", "outcome", "createdAt", "expiresAt", "schemaVersion"],
+  "lopu-credential": ["id", "name", "credentialType", "cipherText", "iv", "tag", "priority", "enabled", "createdAt", "updatedAt", "schemaVersion"],
 };
 
-test('the builtin crystal-schema set matches the pinned projection table', () => {
+test('all builtin schema kinds matches the pinned projection table', () => {
   assert.deepEqual(crystalSchemas.map((schema) => schema.id).sort(), Object.keys(EXPECTED_PROJECTED_FIELDS).sort());
 });
 

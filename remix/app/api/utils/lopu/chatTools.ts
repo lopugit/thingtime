@@ -40,10 +40,14 @@ import {
   deriveActionEffects,
   MAX_COMPONENT_KEY_CHARS,
   MAX_SCHEMA_NAME_CHARS,
+  SCHEMA_FIELD_TYPES,
   sanitizeActionCrystal,
   validateThingtimeCrystal,
+  validateValueAgainstFields,
+  type SchemaThingField,
   WEBPAGE_BLOCK_TYPES
 } from '~/schemas/registry';
+import { builtinSchemaCopySource, extendSchemaCopy, schemaThingCreateInput } from '~/schemas/schemaCopies';
 import { summarizeBehaviourSuite } from '~/schemas/behaviourSuites';
 // registers the app suites (pokeworld/starsalign) so install_suite and
 // list_demos see the whole catalog even when this is the first server module
@@ -73,6 +77,8 @@ export const LOPU_TOOL_NAMES = [
   'set_reminder_enabled',
   'search_things',
   'get_thing',
+  'get_schema',
+  'save_attachment',
   'list_my_things',
   'create_component',
   'update_component',
@@ -118,7 +124,7 @@ export type LopuToolDefinition = {
   mutates?: boolean;
 };
 
-const LIST_MY_THINGS_KINDS = ['webpage', 'component', 'action', 'schema', 'data'] as const;
+const LIST_MY_THINGS_KINDS = ['webpage', 'component', 'action', 'schema', 'data', 'post', 'attachment', 'folder'] as const;
 type ListMyThingsKind = (typeof LIST_MY_THINGS_KINDS)[number];
 
 const BLOCK_SCHEMA_DESCRIPTION =
@@ -198,8 +204,19 @@ export const LOPU_TOOL_DEFINITIONS: readonly LopuToolDefinition[] = [
     inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } }
   },
   {
+    name: 'get_schema',
+    description: 'Read a public built-in schema (for example post or schema-post), or a visible community schema by Thing id. Returns editable fields and render to copy and extend.',
+    inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } }
+  },
+  {
+    name: 'save_attachment',
+    description: 'Save an independent private file Thing from an uploaded attachment owned by the viewer (including chat photos). Returns an attachment id and content URL usable in create_data/update_thing properties. Copies real bytes through upload approval, quotas and moderation; keeps the original chat intact. Optional folderId places the saved file in an owned folder. This does not make the file public.',
+    mutates: true,
+    inputSchema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, folderId: { type: 'string' } } }
+  },
+  {
     name: 'list_my_things',
-    description: 'List the viewer’s own things of one kind (newest first): webpage, component, action, schema or data.',
+    description: 'List the viewer’s own things of one kind (newest first): webpage, component, action, schema, data, post, attachment or folder.',
     inputSchema: {
       type: 'object',
       required: ['kind'],
@@ -356,7 +373,7 @@ export const LOPU_TOOL_DEFINITIONS: readonly LopuToolDefinition[] = [
   },
   {
     name: 'create_schema',
-    description: 'Create a schema thing: { name, description?, fields: [{ name, type: string|text|number|boolean|date|enum|string[]|object|array, required?, values?, min?, max?, maxLength? }] }.',
+    description: `Create a private schema Thing, optionally copying and extending a visible schema with extends (built-in post/schema-post or a schema Thing id). The copy retains fields and render; supplied fields add/override by name. { name, description?, extends?, fields: [{ name, type: ${SCHEMA_FIELD_TYPES.join('|')}, required?, values?, min?, max?, maxLength?, children?, items? }], render? }. Text fields use string. Copies are independent snapshots.`,
     mutates: true,
     inputSchema: {
       type: 'object',
@@ -364,6 +381,8 @@ export const LOPU_TOOL_DEFINITIONS: readonly LopuToolDefinition[] = [
       properties: {
         name: { type: 'string' },
         description: { type: 'string' },
+        extends: { type: 'string', description: 'Built-in schema name or source schema Thing id to copy and extend.' },
+        render: { type: 'object', additionalProperties: true },
         fields: { type: 'array', items: { type: 'object', additionalProperties: true, required: ['name', 'type'] } }
       }
     }
@@ -776,8 +795,25 @@ export const validateLopuToolInput = (name: string, raw: unknown): LopuToolValid
       if (isError(schemaName)) return fail(schemaName.error);
       const description = optionalString(input.description, 'description', 500);
       if (isError(description)) return fail(description.error);
-      if (!Array.isArray(input.fields) || !input.fields.length) return fail('fields must be a non-empty list of { name, type, ... }');
-      return { ok: true, input: { name: schemaName, description, fields: input.fields } };
+      const source = input.extends === undefined ? undefined : thingId(input.extends, 'extends');
+      if (source && isError(source)) return fail(source.error);
+      const render = optionalObject(input.render, 'render');
+      if (isError(render)) return fail(render.error);
+      if (!Array.isArray(input.fields)) return fail('fields must be a list of { name, type, ... }; use [] to copy unchanged');
+      const validated = validateThingtimeCrystal(['schema'], { name: schemaName, fields: input.fields, ...(render ? { render } : {}) });
+      if (validated.ok === false) return fail(validated.error);
+      return { ok: true, input: { name: schemaName, description, fields: validated.crystal.fields, ...(source ? { extends: source } : {}), ...(render ? { render } : {}) } };
+    }
+    case 'get_schema': {
+      const id = thingId(input.id);
+      return isError(id) ? fail(id.error) : { ok: true, input: { id } };
+    }
+    case 'save_attachment': {
+      const id = thingId(input.id);
+      if (isError(id)) return fail(id.error);
+      const folderId = input.folderId === undefined ? undefined : thingId(input.folderId, 'folderId');
+      if (folderId && isError(folderId)) return fail(folderId.error);
+      return { ok: true, input: { id, ...(folderId ? { folderId } : {}) } };
     }
     case 'create_data': {
       const schema = requiredString(input.schema, 'schema', 128);
@@ -820,7 +856,7 @@ export const validateLopuToolInput = (name: string, raw: unknown): LopuToolValid
 
 // needsConfirmation: the call stopped for the user's approval — a `confirm`
 // event for the same call id carries the grant the client hands back
-export type LopuToolResult = { ok: true; summary: string; data?: unknown } | { ok: false; error: string; needsConfirmation?: true };
+export type LopuToolResult = { ok: true; summary: string; data?: unknown } | { ok: false; error: string; needsConfirmation?: true; data?: unknown };
 
 export type LopuToolEvent = Extract<LopuChatStreamEvent, { type: 'patch' | 'thing' | 'navigate' | 'confirm' }>;
 
@@ -1474,10 +1510,26 @@ const runInstallSuite = async (deps: ServerDeps, ctx: LopuToolContext, input: { 
   };
 };
 
-const runCreateSchema = async (deps: ServerDeps, ctx: LopuToolContext, callId: string, input: { name: string; description?: string; fields: unknown[] }): Promise<LopuToolResult> => {
+const readSchemaSource = async (deps: ServerDeps, ctx: LopuToolContext, id: string) => {
+  const builtin = builtinSchemaCopySource(id);
+  if (builtin) return builtin;
+  const result = await deps.things.getThing(ctx.viewer, id);
+  if (!result.ok || !result.thing.thingtime.includes('schema')) return null;
+  return { id: result.thing.id, crystal: result.thing.crystal };
+};
+
+const runCreateSchema = async (deps: ServerDeps, ctx: LopuToolContext, callId: string, input: { name: string; description?: string; fields: unknown[]; extends?: string; render?: Record<string, unknown> }): Promise<LopuToolResult> => {
+  let crystal: Record<string, unknown> = { name: input.name, description: input.description || '', fields: input.fields, ...(input.render ? { render: input.render } : {}) };
+  if (input.extends) {
+    const source = await readSchemaSource(deps, ctx, input.extends);
+    if (!source) return { ok: false, error: 'The source schema is unavailable to this account.' };
+    const copied = extendSchemaCopy(source, input);
+    if (copied.ok === false) return { ok: false, error: copied.error };
+    crystal = copied.crystal;
+  }
   const created = await deps.things.createThing(
     ctx.viewer.id,
-    { thingtime: ['schema'], crystal: { name: input.name, description: input.description || '', fields: input.fields }, acl: [ACL_OWNER] },
+    { thingtime: ['schema'], crystal, acl: [ACL_OWNER] },
     ctx.viewer
   );
   if (created.ok === false) return { ok: false, error: failText(created) };
@@ -1490,28 +1542,38 @@ const runCreateSchema = async (deps: ServerDeps, ctx: LopuToolContext, callId: s
 const runCreateData = async (deps: ServerDeps, ctx: LopuToolContext, callId: string, input: { schema: string; values: Record<string, unknown>; public: boolean }): Promise<LopuToolResult> => {
   let schemaId: string | null = null;
   let schemaName = input.schema;
-  const byId = /[$\s]/.test(input.schema) ? null : await deps.things.getThing(ctx.viewer, input.schema);
+  const builtin = builtinSchemaCopySource(input.schema);
+  let fields: SchemaThingField[] | null = builtin ? builtin.crystal.fields as SchemaThingField[] : null;
+  const byId = builtin || /[$\s]/.test(input.schema) ? null : await deps.things.getThing(ctx.viewer, input.schema);
   if (byId && byId.ok !== false && (byId.thing as PublicThingLike).thingtime.includes('schema')) {
     schemaId = byId.thing.id;
     schemaName = nameOf(byId.thing as PublicThingLike) || schemaName;
-  } else {
+    fields = byId.thing.crystal.fields as SchemaThingField[];
+  } else if (!builtin) {
     const own = await deps.things.listThings(ctx.viewer, { thingtime: ['schema'], limit: MAX_LOPU_LIST_LIMIT });
     if (own.ok !== false) {
       const match = own.things.find((thing) => nameOf(thing as PublicThingLike).toLowerCase() === input.schema.toLowerCase());
       if (match) {
         schemaId = match.id;
         schemaName = nameOf(match as PublicThingLike);
+        fields = match.crystal.fields as SchemaThingField[];
       }
     }
   }
-  const crystal: Record<string, unknown> = { ...input.values, schema: schemaName, ...(schemaId ? { schemaId } : {}) };
-  const created = await deps.things.createThing(ctx.viewer.id, { thingtime: ['data'], crystal, acl: [input.public ? ACL_ALL : ACL_OWNER] }, ctx.viewer);
+  if (!fields) return { ok: false, error: 'No visible matching schema was found. Create or copy the schema successfully before creating its data.' };
+  const values = validateValueAgainstFields(fields, input.values);
+  if (!values.ok) return { ok: false, error: values.issues.map(issue => `${issue.path}: ${issue.message}`).slice(0, 3).join('; ') };
+  if (builtin) schemaName = String(builtin.crystal.name);
+  let payload: ReturnType<typeof schemaThingCreateInput>;
+  try { payload = schemaThingCreateInput({ origin: builtin ? 'builtin' : 'community', id: builtin ? builtin.id.slice('schema-'.length) : schemaId!, name: schemaName }, input.values); }
+  catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Copy the schema first.' }; }
+  const created = await deps.things.createThing(ctx.viewer.id, { ...payload, acl: [input.public ? ACL_ALL : ACL_OWNER] }, ctx.viewer);
   if (created.ok === false) return { ok: false, error: failText(created) };
   const thing = (await deps.things.toPublicThings([created.doc], ctx.viewer))[0] as PublicThingLike;
   emitThing(ctx, callId, thing);
   return {
     ok: true,
-    summary: `Created a "${schemaName}" data thing — id ${thing.id}${schemaId ? '' : ' (no matching schema thing found; stamped by name only)'}`,
+    summary: `Created a "${schemaName}" thing — id ${thing.id}`,
     data: { thing: boundThing(thing, 6 * 1024), schemaId }
   };
 };
@@ -1594,6 +1656,37 @@ export const runLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Pro
     }
     const deps = await loadServerDeps();
     switch (call.name as LopuToolName) {
+      case 'get_schema': {
+        const source = await readSchemaSource(deps, ctx, input.id);
+        return source
+          ? { ok: true, summary: `Schema ${source.crystal.name}`, data: boundToolData(source) }
+          : { ok: false, error: 'The schema is unavailable to this account.' };
+      }
+      case 'save_attachment': return withPageLock(ctx, async () => {
+        if (!ctx.requestScope) return { ok: false, error: 'Attachment save identity is unavailable. Please send a new message.' };
+        if (input.folderId) {
+          const folder = await deps.things.getThing(ctx.viewer, input.folderId);
+          if (!folder.ok || folder.thing.author?.id !== ctx.viewer.id || !folder.thing.thingtime.includes('folder'))
+            return { ok: false, error: 'Choose a folder owned by this account.' };
+        }
+        const { copySharedAttachment } = await import('../attachments/attachments');
+        const requestId = `lopu-file-${stableInputHash([ctx.viewer.id, ctx.requestScope, input.id])}`;
+        const saved = await copySharedAttachment(ctx.viewer, input.id, undefined, 'file', requestId);
+        if (saved.ok === false) return { ok: false, error: saved.error };
+        const data = { id: saved.id, url: `/api/v1/attachments/content?id=${encodeURIComponent(saved.id)}`, attachment: saved.attachment, private: true };
+        if (input.folderId) {
+          try {
+            // The dedicated writer re-reads and fences both records in one
+            // transaction. Moderation can update a just-completed file before
+            // placement; do not pass a stale pre-finalization version.
+            const { moveManagedContent } = await import('../things/managedPlacement');
+            await moveManagedContent(ctx.viewer.id, saved.id, input.folderId);
+          } catch {
+            return { ok: false, error: 'The private file was saved, but could not be placed in that folder.', data };
+          }
+        }
+        return { ok: true, summary: 'Saved a private file Thing. Use its URL and id in the requested Thing properties; the original chat attachment is preserved.', data };
+      });
       case 'list_thing_comments': {
         const result = await deps.things.listThings(ctx.viewer, { targetId: input.id, thingtime: ['comment'], cursor: input.cursor, limit: input.limit });
         if (result.ok === false) return { ok: false, error: failText(result) };

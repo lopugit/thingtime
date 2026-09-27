@@ -6,7 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { toAttachmentPublicMetadata } from './attachmentCore';
 
 type CopyDependencies = {
-	canCopy: (ownerId: string) => Promise<boolean>;
+	canCopy: (ownerId: string, purpose?: 'post' | 'comment' | 'file') => Promise<boolean>;
 	read: (viewer: AttachmentAccessViewer, id: unknown) => Promise<AttachmentResult<{ doc: AttachmentDoc }>>;
 	start: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ upload: Record<string, unknown> }>>;
 	complete: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ attachment: Record<string, unknown> }>>;
@@ -23,7 +23,7 @@ type CopyDependencies = {
 // object key, upload id or owner identity. The normal upload lifecycle owns
 // quota, finalization, moderation, version verification and deletion refunds.
 export const copyStoredAttachment = async (
-	deps: CopyDependencies, viewer: AttachmentAccessViewer, id: unknown, signal?: AbortSignal, purpose: 'post' | 'comment' = 'post'
+	deps: CopyDependencies, viewer: AttachmentAccessViewer, id: unknown, signal?: AbortSignal, purpose: 'post' | 'comment' | 'file' = 'post', requestId?: string
 ): Promise<AttachmentResult<{ id: string; attachment: Record<string, unknown> }>> => {
 	if (!viewer?.id) return { ok: false, status: 401, error: 'Sign in to copy files' };
 	let cleanupId: string | undefined;
@@ -38,28 +38,34 @@ export const copyStoredAttachment = async (
 		if (abort.signal.aborted) throw new Error('Copy timed out');
 		// Internal service calls do not pass through the upload HTTP adapter.
 		// Preserve its public-upload approval boundary before reserving anything.
-		if (!await deps.canCopy(viewer.id)) return { ok: false, status: 403, error: 'File copying requires a user account approved for public uploads' };
+		if (!await deps.canCopy(viewer.id, purpose)) return { ok: false, status: 403, error: `File copying requires an account approved for ${purpose === 'file' ? 'private' : 'public'} uploads` };
 		const initial = await deps.read(viewer, id);
 		if (initial.ok === false) return initial;
 		const source = initial.doc;
+		const sourcePurpose = source.attachmentPurpose || 'post';
+		const privateFileCopy = purpose === 'file';
 		// Post and comment copies retain their exact content purpose; other
 		// purpose-specific attachments cannot be replayed onto a general app.
 		// An admin review permission also must not republish blocked bytes.
-		if ((source.attachmentPurpose || 'post') !== purpose || source.moderation?.status === 'blocked' || source.moderation?.status === 'pending') return missing();
+		if ((privateFileCopy
+			? source.ownerId !== viewer.id || !['post', 'comment', 'message', 'file', 'recording'].includes(sourcePurpose)
+			: sourcePurpose !== purpose) || source.moderation?.status === 'blocked' || source.moderation?.status === 'pending') return missing();
 		const linked = source.attachmentLinked === true;
+		// A URL is not stored bytes. Keep URL fallback semantics explicit.
+		if (privateFileCopy && linked) return { ok: false, status: 400, error: 'This attachment is a link. Reuse its URL instead of saving a file copy.' };
 		if (!linked && (!source.objectVersionId || source.objectVersionId === 'null')) return missing();
 		// A linked copy preserves a URL, not its bytes. It cannot re-moderate a
 		// flagged external object, so never turn that flag into a skipped verdict.
 		if (linked && (source.objectSizeBytes !== 0 || source.moderation?.status === 'nsfw')) return missing();
 		const stillReadable = async () => {
 			if (abort.signal.aborted) throw new Error('Copy timed out');
-			if (!await deps.canCopy(viewer.id)) throw new Error('Copy permission changed');
+			if (!await deps.canCopy(viewer.id, purpose)) throw new Error('Copy permission changed');
 			const fresh = await deps.read(viewer, source.shareId);
 			if (!fresh.ok || fresh.doc.ownerId !== source.ownerId || fresh.doc.objectKey !== source.objectKey ||
 				fresh.doc.objectVersionId !== source.objectVersionId || fresh.doc.objectSizeBytes !== source.objectSizeBytes ||
 				(fresh.doc.attachmentLinked === true) !== linked ||
 				(linked && (!isDeepStrictEqual(fresh.doc.crystal, source.crystal) || fresh.doc.moderation?.status === 'nsfw')) ||
-				(fresh.doc.attachmentPurpose || 'post') !== purpose ||
+				(fresh.doc.attachmentPurpose || 'post') !== sourcePurpose ||
 				fresh.doc.moderation?.status === 'blocked' || fresh.doc.moderation?.status === 'pending') throw new Error('Copy source changed');
 		};
 		if (linked) {
@@ -74,12 +80,21 @@ export const copyStoredAttachment = async (
 			await stillReadable();
 			return { ok: true, id: cleanupId, attachment: { ...crystal, id: cleanupId } };
 		}
-		cleanupId = deps.uuid();
+		cleanupId = requestId || deps.uuid();
 		const started = await deps.start(viewer.id, { requestId: cleanupId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose });
 		if (!started.ok) throw started;
 		if (typeof started.upload.id !== 'string') throw new Error('Copy upload is unavailable');
 		cleanupId = started.upload.id;
 		const destination = await deps.store.getOwned(viewer.id, cleanupId);
+		// The upload service checks the exact owner/request metadata before
+		// returning ready. A lost tool receipt can safely return that same file.
+		if (privateFileCopy && started.upload.state === 'ready' && destination?.ownerId === viewer.id &&
+			destination.attachmentPurpose === 'file' && destination.attachmentState === 'ready' && !destination.targetId) {
+			cleanupId = undefined; // an existing durable file is never rollback data
+			await stillReadable();
+			const attachment = toAttachmentPublicMetadata(destination.shareId, destination.crystal);
+			return attachment ? { ok: true, id: destination.shareId, attachment } : missing();
+		}
 		if (!destination || destination.ownerId !== viewer.id || destination.attachmentState !== 'pending' || !destination.uploadId ||
 			destination.objectSizeBytes !== source.objectSizeBytes || destination.targetId || !source.objectVersionId ||
 			(destination.attachmentPurpose || 'post') !== purpose ||
