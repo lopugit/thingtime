@@ -126,7 +126,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   candidate inputs without execution. Invalid inputs fail before confirmation;
   partial failures retain their run identity and recovery guidance. Newly
   authored workspace Actions expose canonical choices, numeric bounds and
-  reference hints. Existing installed apps and their data are preserved.
+  reference hints. Existing installed apps and their data are preserved. See
+  [PR #964 validation](../PRs/964-lopu-action-guidance-inspect-action-contracts-and-recover-from-errors.md).
 
 
 - 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
