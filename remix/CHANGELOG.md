@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: Direct private named-branch lookup for cold
+  editors, with account/database fences and canonical cache adoption that
+  preserves queued pushes. Timeline 1.9.0; existing schemas and indexes.
+  [PR #976](../PRs/976-timeline-branch-lookup-resolve-named-timeline-branches-directly-with-scoped-reads.md).
+
 - 2026-09-28 — **Codex (AI)**: Named Timeline branches can open their exact
   historical content in the shared field editor. Device-first drafts survive
   reload, resume offline, and push through the existing revision-fenced queue;
