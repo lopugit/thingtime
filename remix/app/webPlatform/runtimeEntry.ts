@@ -7,10 +7,11 @@ import { inspectPlatformInterface } from './interfaceProbe';
 import { createPlatformDOMBridge } from './domBridge';
 import { canvasArgument, CANVAS_LIMITS } from './canvasSupport';
 import { SVG_NAMESPACE, SVG_LIMITS, svgTag, svgAttribute } from './svgSupport';
-import { bindLiveDOMEvent, nativeDOMMethod, platformEventReceipt, UnsupportedDOMFeature } from './liveDOM';
+import { LIVE_DOM_EVENTS, bindLiveDOMEvent, nativeDOMMethod, platformEventReceipt, UnsupportedDOMFeature } from './liveDOM';
 import { localPlatformResource } from './mediaPolicy';
 import { readMediaProperty, writeMediaProperty, mediaReceipt, mediaMethodResult } from './liveMedia';
 import { resolveDOMScalar } from './liveDOM';
+import { layoutArgument } from './layoutSupport';
 import type { PlatformNode } from './types';
 // Form controls may shadow instance methods while their parent is being built.
 const appendNode = Node.prototype.appendChild;
@@ -147,8 +148,23 @@ addEventListener('message', (event) => {
 				reportDOM(true, { ...(value && typeof value === 'object' ? value : {}), events: [...observed] });
 			}, 0);
 		};
+		const mediaQueries = new Map<string, MediaQueryList>();
+		const resolveTarget = (raw: string): EventTarget | null => {
+			const selector = substitute(raw);
+			if (selector === '$visualViewport') {
+				if (!window.visualViewport) throw new UnsupportedDOMFeature('This browser does not expose VisualViewport');
+				return window.visualViewport;
+			}
+			if (selector.startsWith('$media:')) {
+				const query = selector.slice(7);
+				if (query.length > 2048 || (mediaQueries.size >= 32 && !mediaQueries.has(query))) throw new Error('Media query budget exceeded');
+				if (!mediaQueries.has(query)) mediaQueries.set(query, window.matchMedia(query));
+				return mediaQueries.get(query)!;
+			}
+			return root.querySelector(selector);
+		};
 		for (const operation of program.dom || []) {
-			const element = root.querySelector(operation.target);
+			const element = resolveTarget(operation.target);
 			if (!element) throw new Error(`No element matches ${operation.target}`);
 			const execute = (event?: Event) => {
 				if (!domState.active) return false;
@@ -172,7 +188,26 @@ addEventListener('message', (event) => {
 					}
 					// Even a refused newer command owns the latest outcome.
 					const sequence = ++commandState.sequence;
+					if (operation.property && !(element instanceof Element)) throw new Error('Media properties require an element');
 					const args = (operation.args || []).map((value) => {
+						if (value && typeof value === 'object' && (value as { op?: string }).op === 'event') {
+							const event = value as { op: string; interface: string; type: string; init: unknown };
+							if (
+								operation.method !== 'dispatchEvent' ||
+								Object.keys(event).some((k) => !['op', 'interface', 'type', 'init'].includes(k)) ||
+								!['MediaQueryListEvent', 'MouseEvent', 'Event'].includes(event.interface) ||
+								!LIVE_DOM_EVENTS.has(event.type)
+							)
+								throw new Error('Unregistered native event descriptor');
+							const init = layoutArgument(event.init || {}, 'layout-event', () => {
+								throw new Error('Event receivers are not exposed');
+							}) as EventInit;
+							const ctor = { Event, MouseEvent, MediaQueryListEvent: window.MediaQueryListEvent }[
+								event.interface as 'Event' | 'MouseEvent' | 'MediaQueryListEvent'
+							];
+							if (!ctor) throw new UnsupportedDOMFeature('This browser does not expose ' + event.interface);
+							return new ctor(event.type, init);
+						}
 						if (value && typeof value === 'object' && !Array.isArray(value) && (value as { op?: unknown }).op === 'element') {
 							const selector = (value as { selector?: unknown }).selector;
 							if (Object.keys(value).length !== 2 || typeof selector !== 'string' || !selector || selector.length > 500)
@@ -183,7 +218,7 @@ addEventListener('message', (event) => {
 						}
 						return typeof value === 'string' ? substitute(value) : value;
 					});
-					if (operation.method === 'setAttribute' && element.namespaceURI === SVG_NAMESPACE)
+					if (operation.method === 'setAttribute' && element instanceof Element && element.namespaceURI === SVG_NAMESPACE)
 						svgAttribute(element.localName, String(args[0]), String(args[1]));
 					if (operation.method === 'setAttribute' && element instanceof HTMLCanvasElement && /^(width|height)$/i.test(String(args[0])))
 						canvasArgument(Number(args[1]), 'canvas-size', () => {
@@ -193,8 +228,8 @@ addEventListener('message', (event) => {
 						throw new Error('Attribute is not writable by this control');
 					const result = operation.property
 						? Object.prototype.hasOwnProperty.call(operation, 'value')
-							? writeMediaProperty(element, operation.property, resolveDOMScalar(operation.value, input))
-							: readMediaProperty(element, operation.property)
+							? writeMediaProperty(element as Element, operation.property, resolveDOMScalar(operation.value, input))
+							: readMediaProperty(element as Element, operation.property)
 						: nativeDOMMethod(element, operation.method!)(...args);
 					if (!domState.active) return false;
 					const outcome = {
@@ -238,9 +273,21 @@ addEventListener('message', (event) => {
 			};
 			if (operation.event) {
 				const [selector, eventName] = operation.event.split('|');
-				const trigger = root.querySelector(selector);
+				const trigger = resolveTarget(selector);
 				if (!trigger) throw new Error('Invalid event binding');
-				unbind.push(bindLiveDOMEvent(trigger, eventName, operation, input, execute));
+				const remove = bindLiveDOMEvent(trigger, eventName, operation, input, execute);
+				unbind.push(remove);
+				if (operation.removeOn) {
+					const [removeSelector, removeEvent] = operation.removeOn.split('|');
+					const remover = root.querySelector(removeSelector);
+					if (!remover) throw new Error('Invalid listener removal trigger');
+					unbind.push(
+						bindLiveDOMEvent(remover, removeEvent, { target: removeSelector }, input, () => {
+							remove();
+							reportDOM(true, { listener: 'removed', events: [...observed] });
+						})
+					);
+				}
 			} else immediate.push(execute);
 		}
 		// Observers are ready even when declared after an immediate operation.
