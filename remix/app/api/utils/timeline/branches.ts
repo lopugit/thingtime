@@ -113,4 +113,5 @@ export function createBranchService(overrides: Partial<typeof dependencies> = {}
 	};
 }
 export const handleBranchRequest = createBranchService();
+export const getTimelineBranch = async (ownerId: string, branchId: string, thingId: string) => readTimelineBranchEntry(await getThingsCollection(), ownerId, branchId, thingId);
 export const getTimelineBranches = async (ownerId: string, thingId: string, before: number | null, limit: number) => readTimelineBranches(await getThingsCollection(), ownerId, thingId, before, limit);

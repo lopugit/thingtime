@@ -158,3 +158,36 @@ test('branch acknowledgment releases its saved draft pin after reload while pres
   await backend.close();
  }
 });
+
+
+test('exact branch pulls populate an empty cache without consuming pending commands or rewinding newer heads', async () => {
+ const backend = new IndexedDbTimelineBackend(new IDBFactory());
+ const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend);
+ const queued = { ...command, command: 'advance-branch' as const, expectedRevision: 2, eventId: 'local-edit', name: null };
+ await branches.enqueue(queued);
+ let response = member('page', 2); const calls: string[][] = [];
+ const sync = new TimelineSync(store, { push: async () => { throw new Error('Read must not push'); }, page: async () => { throw new Error('Read must not scan'); },
+  branchHead: async (id, thingId) => { calls.push([id, thingId]); return response; }
+ }, branches);
+ assert.deepEqual(await sync.branchHead(branchId, 'page'), member('page', 2));
+ assert.deepEqual(await branches.forThing('page'), [member('page', 2)]);
+ assert.deepEqual(await branches.pending(), [queued]); assert.deepEqual(await store.forThing('page'), []);
+ await branches.accept([member('page', 3)]); await sync.branchHead(branchId, 'page');
+ assert.deepEqual(await branches.forThing('page'), [member('page', 3)]);
+ response = member('other'); await assert.rejects(sync.branchHead(branchId, 'page'), /another/);
+ response = { ...member(), branch: { ...member().branch, ownerId: 'other' }, head: { ...member().head, ownerId: 'other' } };
+ await assert.rejects(sync.branchHead(branchId, 'page'), /another/);
+ await assert.rejects(sync.branchHead('main', 'page'), /Invalid/);
+ assert.equal(calls.length, 4); assert.deepEqual(await branches.pending(), [queued]);
+ await backend.close();
+});
+
+test('an account/source change stops an in-flight exact branch read before cache adoption', async () => {
+ const backend = new IndexedDbTimelineBackend(new IDBFactory()); const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend);
+ let complete!: (value: ReturnType<typeof member>) => void; let signal: AbortSignal | undefined;
+ const sync = new TimelineSync(store, { push: async () => { throw new Error('unused'); }, page: async () => { throw new Error('unused'); },
+  branchHead: async (_id, _thing, requestSignal) => { signal = requestSignal; return new Promise(resolve => { complete = resolve; }); }
+ }, branches);
+ const pending = sync.branchHead(branchId, 'page'); sync.stop(); assert.equal(signal?.aborted, true); complete(member());
+ await assert.rejects(pending, /stopped/); assert.deepEqual(await branches.forThing('page'), []); await backend.close();
+});

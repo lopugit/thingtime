@@ -61,12 +61,24 @@ const branch = await call(`/api/v1/timeline?${homeQuery}`, { command: 'create-br
 assert.equal(branch.data.ok, true, branch.data.error);
 assert.equal((await call(`/api/v1/timeline?${homeQuery}&thingId=${thingId}&branches=1`, undefined, true)).data.branches.length, 1);
 assert.equal((await call(`/api/v1/timeline?${customQuery}&thingId=${thingId}&branches=1`, undefined, true)).data.branches.length, 0);
+// Identical branch and Thing identities remain independent in each database.
+const lookup = (query: string) => call(`/api/v1/timeline?${query}&branchId=${branchId}&thingId=${thingId}`, undefined, true);
+assert.equal((await lookup(homeQuery)).data.branch.name, 'Home experiment');
+assert.equal((await lookup(customQuery)).response.status, 404);
+assert.equal((await call(`/api/v1/timeline?${customQuery}`, { command: 'create-branch', operationId: randomUUID(), branchId, thingId, eventId: sameId, expectedRevision: 0, name: 'Custom experiment' }, true)).data.ok, true);
+await Promise.all(Array.from({ length: 8 }, async (_, i) => {
+ const found = await lookup(i % 2 ? homeQuery : customQuery);
+ assert.equal(found.response.status, 200); assert.equal(found.data.branch.name, i % 2 ? 'Home experiment' : 'Custom experiment');
+ assert.equal(found.data.head.eventId, i % 2 ? baseVersion.id : sameId);
+}));
+assert.equal((await lookup(`ownerId=${ownerId}&dataPlane=home`)).response.status, 409);
+assert.equal((await lookup(`${customQuery}&storage=home`)).response.status, 409);
 const preview = await call(`/api/v1/timeline?${homeQuery}`, { command: 'preview-version', mode: 'restore', eventId: baseVersion.id }, true);
 assert.equal(preview.data.ok, true, preview.data.error);
 const apply = await call(`/api/v1/timeline?${homeQuery}`, { command: 'apply-version', mode: 'restore', eventId: baseVersion.id, expectedHeadId: preview.data.preview.expectedHeadId, operationId: randomUUID(), choices: {} }, true);
 assert.equal(apply.data.ok, true, apply.data.error);
 assert.equal((await call(`/api/v1/things?id=${thingId}`)).data.thing.timelineHeadId, apply.data.entry.event.id);
-assert.equal((await page(customQuery)).length, 1, 'Home restore cannot change selected-database history');
+assert.equal((await page(customQuery)).length, 2, 'Home restore cannot change selected-database history');
 for (const query of [`ownerId=${ownerId}&dataPlane=home`, `${customQuery}&storage=home`, homeQuery.replace(ownerId, 'another-account')]) {
 	assert.equal((await call(`/api/v1/timeline?${query}&thingId=${thingId}`, undefined, true)).response.status, 409);
 }

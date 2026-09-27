@@ -603,3 +603,28 @@ This increment provides field editing for supported `thing-content` versions.
 Visual Builder branch switching, rich-text source editing, exact historical
 component dependency rendering, managed/protected content adapters, deleted Thing
 recovery and versions above the current preview limit remain open.
+
+
+### Direct named branch lookup — 2026-09-28
+
+`api.timeline` 1.9.0 adds `GET /api/v1/timeline` with `ownerId`, `dataPlane`,
+`branchId` and `thingId`, plus optional `storage=home|selected`. The response is
+`{ok,branch,head}` using the existing canonical branch and per-Thing head records.
+This supplies a cold editor with a named branch pointer without downloading the
+branch directory or relying on a bounded local cache. It reads two owner-scoped,
+exact record identities through the existing collection/index paths. Missing
+membership returns 404; duplicate or mixed lookup/page/version selectors return
+400. Account and data-plane preconditions remain enforced before storage reads.
+
+The client negotiates 1.9.0 and checks the returned account, branch and Thing.
+`TimelineSync.branchHead` accepts the pointer into the existing bounded cache
+without acknowledging any queued command or changing version content. A delayed
+reply cannot rewind a newer cached revision, and stopped account/source sessions
+cannot adopt their in-flight reply. Checkout still requires the returned exact
+head and revision: a concurrent push between lookup and checkout returns 409.
+
+This is a prerequisite for visual Builder branch loading. It adds no Builder
+branch switcher or runtime behavior, persistent schema, collection, index,
+IndexedDB migration, configuration or environment variable. Named branch field
+editing continues through the existing History interface. The broader remaining
+scope above stays open.

@@ -13,6 +13,7 @@ export type TimelineBranchCommand = {
 };
 export type TimelineBranchResult = { ok: true; branch: TimelineBranch; head: TimelineBranchHead; entry: TimelineEntry };
 export type TimelineBranchPage = { branches: TimelineBranchEntry[]; nextBefore: number | null };
+export type TimelineBranchLookup = { branchId: string; thingId: string };
 export const timelineBranchHeadId = (branchId: string, thingId: string) => `${branchId}/thing/${thingId}`;
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(value);
 const uuid = (value: unknown): boolean => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value);
@@ -39,6 +40,18 @@ export function parseTimelineBranchEntry(input: TimelineBranchEntry): TimelineBr
 	const branch = parseTimelineBranch(input?.branch); const head = parseTimelineBranchHead(input?.head);
 	if (head.ownerId !== branch.ownerId || head.branchId !== branch.id) throw new Error('Timeline branch does not match its head');
 	return { branch, head };
+}
+/** A transient lookup, not another durable branch or history format. */
+export function parseTimelineBranchLookup(input: unknown): TimelineBranchLookup {
+	const value = record(input, ['branchId', 'thingId']);
+	if (!branchId(value.branchId) || !identifier(value.thingId)) throw new Error('Invalid Timeline branch lookup');
+	return value as TimelineBranchLookup;
+}
+export function parseTimelineBranchLookupResult(input: TimelineBranchEntry, ownerId: string, lookup: TimelineBranchLookup): TimelineBranchEntry {
+	const expected = parseTimelineBranchLookup(lookup);
+	const entry = parseTimelineBranchEntry(input);
+	if (entry.branch.ownerId !== ownerId || entry.branch.id !== expected.branchId || entry.head.thingId !== expected.thingId) throw new Error('Server returned another branch or Thing');
+	return entry;
 }
 export function parseTimelineBranchCommand(input: unknown): TimelineBranchCommand {
 	const value = record(input, ['command', 'operationId', 'branchId', 'thingId', 'eventId', 'expectedRevision', 'name']);

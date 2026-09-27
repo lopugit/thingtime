@@ -2,7 +2,7 @@ import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
 import { draftRequest } from '~/drafts/draftClient';
 import type { BranchMergeRequest } from '../timeline/branchMerge';
-import type { TimelineBranchCommand } from '../timeline/branches';
+import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import type { TimelineEvent } from '~/timeline/contract';
 import type { TimelinePageRequest } from '~/timeline/sync';
@@ -105,6 +105,12 @@ export function useApi() {
   const v1 = {
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     timeline: {
+      branchHead: useCallback(async (scope: { ownerId: string; dataPlane: string }, branchId: string, thingId: string, options?: { signal?: AbortSignal }) => {
+        const lookup = parseTimelineBranchLookup({ branchId, thingId });
+        await requireThingtimeCapability('api.timeline', '1.9.0');
+        const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...lookup })}`, options);
+        return parseTimelineBranchLookupResult(result, scope.ownerId, lookup);
+      }, []),
       checkoutBranch: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: BranchCheckoutRequest, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', '1.8.0');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });

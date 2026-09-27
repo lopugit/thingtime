@@ -82,6 +82,9 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
   transfers".
 - Realistic local data: `node remix/scripts/seed-fixture.mjs create` makes a
   folder holding a post with stored files.
+- Direct named branch lookup uses `TimelineSync.branchHead` and the existing
+  private Timeline route (`api.timeline` 1.9.0); it is independent of branch
+  paging. The branch-merge and home-scope HTTP checks cover this read path.
 - `test:timeline` covers the shared schema, two IndexedDB connections, draft
   recovery pointers, retries, byte-bounded paging, private envelopes, branch command reload/concurrency, event-before-command ordering, and route
   authority. `test:timeline:integration` uses HTTP-only fixtures on the explicitly
