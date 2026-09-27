@@ -19,18 +19,25 @@ retry token: external effects must never be replayed to repair missing history.
 
 ## Validation
 
-Validation after integrating main `b96507b4` (schema copies, durable attachment
-saves and Lopu prompt settings), preserving the earlier XPath integration:
+The final integration includes main `22ccb0b5`: lossless Lopu Thing inspection,
+voice silence settings, schema copies, attachment saves, personal prompt settings
+and XPath support are preserved. Actions advertises **1.34.1** and Lopu replies
+**1.18.1**. The trusted executor wrapper still surrounds the existing tool
+validation and permission checks.
 
-- Full Vite/Nitro/Vercel build and changed-file lint passed.
-- Full `test:unit` passed: 4,123 passing test summaries, zero failures. Relevant
-  suites include Timeline 62; Actions 156 with one existing skip; Lopu 176 + 152;
-  Lopu UI 221; capability manifests 90; schemas 259; attachments 9 + 280; Web
-  Standards 157 with one existing skip.
-- Disposable replica-set HTTP regression passed nested Action updates and
+- Full Vite/Nitro/Vercel build and changed-file lint passed on the combined source
+  (lint has one existing no-script-url warning in the page-context test).
+- Latest combined suites: Timeline 62; Actions 156 with one existing skip;
+  Lopu 179 + 153; Lopu UI 232; capability manifests 90; chat streaming 54;
+  schemas 260. All passed.
+- The full unit suite passed on the preceding combined source (4,123 passing
+  summaries, zero failures). GitHub's required build/unit and API checks also
+  passed for the preceding head. All required checks must pass for the final
+  exact head before merging; earlier green checks do not satisfy that gate.
+- Disposable replica-set HTTP regression covers nested Action updates and
   deletion, partial failure, attempted provenance forgery, subsequent API
-  isolation and browser preparation, alongside existing CRUD, draft, restore,
-  merge, branch and large-version checks. Fixtures use the real API.
+  isolation and browser preparation, alongside CRUD, draft, restore, merge,
+  branch and large-version checks. Fixtures use the real API.
 - The manual Action HTTP suite passed all 100 checks. Its old prototype-input
   assertion assumed the preexisting null-prototype accumulator discarded an
   explicit key. The corrected check verifies the supplied boolean survives;
@@ -38,23 +45,14 @@ saves and Lopu prompt settings), preserving the earlier XPath integration:
 - Browser History showed API/Action labels and the exact nested field change.
   Live AI-provider execution remains separate acceptance work; the tool tests
   exercise the actual provider-loop entry point with mocked dependencies.
-- A previous remote run caught Lopu UI version assertions pinned to 1.16.0.
-  Both manifests and every asserted reply version now agree on 1.17.1. Final
-  required remote CI must validate the updated head before merge.
-- The warning-only typecheck ratchet remains at 91 existing diagnostics versus
-  baseline 89, with none in this increment's changed files. This is not a clean
-  typecheck claim.
+- The last warning-only typecheck comparison reported 91 existing diagnostics
+  versus baseline 89, with none in this increment's changed files. This is not
+  a clean typecheck claim. The baseline is unchanged.
 - Graphify structural output is refreshed with the merged source. Fresh Markdown
   semantic extraction is not claimed.
 
-Main then advanced to `a857d3a4` with voice silence settings. The integration
-keeps those changes, and the affected Lopu UI suite (232 tests) and Timeline
-suite (62 tests) pass. Required remote checks must validate the final combined
-head.
-
-The merge publishes Actions **1.34.1** and Lopu replies **1.17.1**. The user
-explicitly authorized tested increments into `main`; use a normal merge commit
-and verify the deployed commit afterward.
+The user explicitly authorized tested increments into `main`; use a normal
+merge commit and verify the deployed commit afterward.
 
 ## Remaining scope
 
