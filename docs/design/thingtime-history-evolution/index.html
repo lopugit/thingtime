@@ -817,7 +817,6 @@
   $('#strip').addEventListener('scroll', function(){ if (state.mode==='cards') syncMini(); }, {passive:true});
   $$('[data-mode]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-mode]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); state.mode=b.getAttribute('data-mode'); render(); applySelection(true); }); });
   $$('[data-spacing]').forEach(function(b){ b.addEventListener('click', function(){ $$('[data-spacing]').forEach(function(x){ x.setAttribute('aria-pressed','false'); }); b.setAttribute('aria-pressed','true'); state.spacing=b.getAttribute('data-spacing'); render(); applySelection(true); }); });
-  $$('[data-view]').forEach(function(b){ b.addEventListener('click', function(){ var v=b.getAttribute('data-view'); if (v==='evolution') return; window.location.href='../thingtime-history-timeline/index.html'+(v==='versions'?'#versions':''); }); });
   $('#content').addEventListener('click', function(e){ var el=e.target.closest('.frame, .moment, .node, .lbl, .vcard, .mlbl'); if (!el) return; var lane=el.getAttribute('data-lane'), idx=parseInt(el.getAttribute('data-idx'),10); var s=stopAt(lane, idx);
     if (state.compare && s && !s.moment){ if (state.cmp.length>=2) state.cmp=[]; state.cmp.push({lane:lane, idx:idx}); applySelection(false); renderCompare(); if (state.cmp.length===2) toast('Comparing', 'Two versions side by side — read-only.'); return; }
     select(lane, idx, false); });
