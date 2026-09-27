@@ -7433,6 +7433,20 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       sessions cannot change access, and an Action cannot update chat permissions.
       Stale existing-chat reply bodies must not re-grant Full access.
 
+- [ ] Lopu read continuity: read a 24k+ JSON value across several hosted
+      checkpoints and verify the next provider request receives all previous
+      pages without model-issued rereads. Resume after reload; deny foreign chat
+      access, revoked Thing access and mixed revisions. Confirm raw JSON/grants
+      never enter public history or private locator storage. Run the disposable
+      Lopu Action QA for real protected-message persistence and readback.
+- [ ] Tool-protocol recovery: split `json tt-tool` / `tt-tool json` fences at
+      every character; run exactly one complete call. Ordinary JSON examples,
+      result fences, malformed/truncated inputs and Stop must not execute tools.
+      A native provider that prints a tool call receives at most two corrective
+      hops; repeated failure stays recoverable, never falsely completed. Pending
+      confirmation must not trigger corrective execution. Verify failure run IDs
+      and recovery hints reach the next model hop.
+
 - [ ] `test:api-capabilities` must run both the API-docs and origin-scoped
       manifest suites; when merging independently versioned features, verify
       every asserted version against the combined registry rather than leaving

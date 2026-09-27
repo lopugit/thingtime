@@ -1,3 +1,5 @@
+import { Binary } from 'mongodb';
+import { normalizeReadReferences, type LopuReadReference } from '../lopu/readContext';
 import { lopuAccessMode, type LopuAccessMode } from '../lopu/accessMode';
 // Lopu conversations — the assistant's chats, stored as messenger rows.
 //
@@ -126,7 +128,7 @@ export type DeleteLopuChatResult = Fail | { ok: true };
 // `message` is the first (usually only) row; `messages` lists every segment.
 export type LopuUserTurnResult = Fail | { ok: true; message: PublicChatMessage; messages: PublicChatMessage[]; existing?: boolean };
 export type LopuAssistantTurnResult = Fail | { ok: true; messages: PublicChatMessage[]; existing?: boolean };
-export type LoadLopuHistoryResult = Fail | { ok: true; history: LopuHistoryTurn[]; chars: number; truncated: boolean; attachmentIds?: string[] };
+export type LoadLopuHistoryResult = Fail | { ok: true; history: LopuHistoryTurn[]; chars: number; truncated: boolean; attachmentIds?: string[]; readReferences?: LopuReadReference[] };
 
 export const EMPTY_LOPU_SETTINGS: LopuChatSettings = Object.freeze({ model: null, effort: null, speed: null, providerId: null });
 
@@ -696,7 +698,7 @@ export const splitLopuAssistantSegments = (text: string, toolCalls: unknown) => 
 // chat's lastMessage preview and bumps crystal.lopu.turns / lastModel.
 export const persistLopuAssistantTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean; requireExactReplay?: boolean }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean; requireExactReplay?: boolean; readReferences?: LopuReadReference[] }
 ): Promise<LopuAssistantTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -720,10 +722,12 @@ export const persistLopuAssistantTurn = async (
       toolReceiptOffset: part.toolReceiptOffset,
 			...(index === 0 ? {} : { usage: undefined })
 		});
-		return messageRow(viewerId, chat.shareId, lopuAssistantMessageShareId(viewerId, requestId, index), part.text, new Date(base.getTime() + index), {
+		const row = messageRow(viewerId, chat.shareId, lopuAssistantMessageShareId(viewerId, requestId, index), part.text, new Date(base.getTime() + index), {
 			externalSource: lopuAssistantSource(requestId, index, parts.length),
 			lopu
 		});
+    if (index === 0) Object.assign(row, { secure: new Binary(Buffer.from(JSON.stringify({ lopuReadReferences: normalizeReadReferences(input.readReferences) }))) });
+    return row;
 	});
 	const model = typeof meta.model === 'string' && meta.model.trim() ? meta.model.trim().slice(0, 128) : null;
 	const things = await getThingsCollection();
@@ -763,6 +767,12 @@ export const persistLopuAssistantTurn = async (
 	return { ok: true, messages: projected.messages };
 };
 
+// Bounded owner-private locators expire independently of the chat transcript.
+export function decodeLopuReadReferences(row: any, now = Date.now()): LopuReadReference[] {
+  if (!(row?.secure instanceof Binary) || row.secure.length() > 20_000 || !(new Date(row.createdAt).getTime() >= now - 86_400_000)) return [];
+  try { return normalizeReadReferences(JSON.parse(Buffer.from(row.secure.value()).toString('utf8')).lopuReadReferences); } catch { return []; }
+}
+
 // The transcript the model sees: the newest `limit` turns, oldest first,
 // capped at LOPU_HISTORY_MAX_CHARS. Reads the main list only (threads and
 // system rows never reach the model).
@@ -790,7 +800,13 @@ export const loadLopuHistory = async (viewerId: string, chatId: unknown, opts: {
 		{ thingtime: 'attachment', targetId: { $in: messageIds }, attachmentPurpose: 'message', attachmentState: 'ready' } as any,
 		{ projection: { shareId: 1 } }
 	).sort({ createdAt: -1 }).limit(10).toArray() : [];
-	return { ok: true, ...folded, ...(attachments.length ? { attachmentIds: attachments.map(row => String(row.shareId)) } : {}) };
+  // Only the newest first-party assistant's private locators, scoped to this
+  // owner/chat. No imported messages, old results, grants or caller payloads.
+  const latest = rows.find(row => row.ownerId === viewerId && historyRole(row as LopuHistoryRow) === 'assistant' && row.crystal?.externalSource?.access === 'lopu' && row.crystal?.externalSource?.provider === 'lopu' && row.crystal?.lopu?.segmentIndex === 0);
+  const privateRow = latest ? await things.findOne({ shareId: latest.shareId, ownerId: viewerId, targetId: chat.shareId, thingtime: 'chat-message', 'crystal.deletedAt': null } as any, { projection: { secure: 1, createdAt: 1 } }) : null;
+  const readReferences = decodeLopuReadReferences(privateRow);
+
+	return { ok: true, ...folded, readReferences, ...(attachments.length ? { attachmentIds: attachments.map(row => String(row.shareId)) } : {}) };
 };
 
 /** Only the latest persisted assistant boundary can authorize recovery. */

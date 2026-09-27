@@ -53,7 +53,11 @@ continuation metadata and local/server management. `continuationWorkflow.server.
 `backgroundTasks.ts` retain a conversation claim until the executor saves its
 last output and acknowledges completion. Uncertain work never replays. The
 `api.lopu-live-activity` 1.0.0 route registers one aggregate native chat activity.
-Canonical `test:lopu` includes workflow/admission and reload/account-switch
+`readContext.ts` retains up to 16 private JSON-page locators in assistant message
+`secure` BinData. `loadLopuHistory` returns them only after chat membership checks;
+`restoreReadContext` rereads exact revisions through `get_thing` before any provider
+disclosure. Reply 1.19.1 also repairs tool-protocol stalls without replaying displayed
+JSON or mutations. Canonical `test:lopu` includes workflow/admission and reload/account-switch
 regressions; `test:lopu-ui` covers presentation and client state.
 
 Thing discussions, linked references and metadata rename require `api.things`

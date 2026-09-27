@@ -1,3 +1,5 @@
+import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
+import { looksLikeUnexecutedToolCall } from './toolTextParser';
 import type { LopuPromptSettings } from './promptSettingsCore';
 import { anthropicMediaContent, isLopuImage, openAiMediaContent, type LopuMedia } from './chatMedia';
 import { recordErrorLog } from '../errors/errorLogs';
@@ -156,6 +158,7 @@ export type LopuChatDependencies = {
 };
 
 export type LopuChatTurnInput = {
+  readReferences?: LopuReadReference[];
   readAccessMode?: LopuToolContext['readAccessMode'];
   resolveActionActor?: LopuToolContext['resolveActionActor'];
   readNotes?: () => Promise<string[]>;
@@ -254,7 +257,7 @@ const normaliseHistory = (history: LopuChatHistoryTurn[] | undefined): LopuChatH
 const toolResultPayload = (result: LopuProviderToolResult): Record<string, unknown> =>
   result.ok
     ? { ok: true, summary: result.summary, ...(result.data !== undefined ? { data: result.data } : {}) }
-    : { ok: false, error: result.error || result.summary };
+    : { ok: false, error: result.error || result.summary, ...(result.data !== undefined ? { data: result.data } : {}) };
 
 const boundedJson = (value: unknown, fallback: unknown): string => {
   let json = '';
@@ -871,6 +874,8 @@ async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStre
 // the tool loop
 
 type TurnState = {
+  awaitingConfirmation?: boolean;
+  readReferences: LopuReadReference[];
   text: string;
   toolCalls: LopuToolCallSummary[];
   usage: LopuChatUsage;
@@ -880,7 +885,7 @@ type TurnState = {
   error?: string;
 };
 
-const newTurnState = (): TurnState => ({ text: '', toolCalls: [], usage: { inputTokens: 0, outputTokens: 0 }, hops: 0, toolExecutions: 0, stopReason: 'end_turn' });
+const newTurnState = (): TurnState => ({ readReferences: [], text: '', toolCalls: [], usage: { inputTokens: 0, outputTokens: 0 }, hops: 0, toolExecutions: 0, stopReason: 'end_turn' });
 
 // A tiny async channel: tool executors push events while the loop drains
 // them in arrival order, so patches paint the moment a tool finishes even
@@ -940,6 +945,8 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
   let pending: LopuToolCall[] = [];
   let feed: LopuProviderHopInput | undefined;
   let wireChars = 0;
+  let hopText = '';
+  let protocolRepairs = 0;
 
   for (;;) {
     if (signal?.aborted) {
@@ -956,6 +963,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
     wireChars += JSON.stringify(event).length;
     switch (event.type) {
       case 'text':
+        hopText += event.text;
         state.text += event.text;
         yield { type: 'delta', text: event.text };
         break;
@@ -977,7 +985,18 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
         if (event.usage) state.usage = { ...event.usage };
         if (event.stopReason === 'max_tokens') state.stopReason = 'max_tokens';
         if (event.stopReason !== 'tool_use' || !pending.length) {
-          const notes = event.stopReason === 'end_turn' ? await options.readNotes?.() : undefined;
+          const notes = event.stopReason === 'end_turn' ? await options.readNotes?.() ?? [] : [];
+          if (event.stopReason === 'end_turn' && !pending.length && options.toolsAllowed && !state.awaitingConfirmation && looksLikeUnexecutedToolCall(hopText)) {
+            if (++protocolRepairs > 2) {
+              state.stopReason = 'error';
+              state.error = 'The provider repeatedly printed a tool request without invoking it. No displayed request was executed.';
+              yield { type: 'error', message: state.error, retryable: true };
+              await provider.return();
+              return;
+            }
+            notes.push('Your last reply printed a tool request as ordinary text. It did not execute. If the task still requires that tool, invoke it using the configured tool protocol with complete JSON arguments, then use its result to continue. Do not claim the action completed or replay actions with existing success receipts. If you were explaining an example, finish the explanation without emitting another tool-request example.');
+          }
+          hopText = '';
           if (notes?.length) feed = { results: [], finalHop: false, notes };
           // Resume with notes only after the current provider request finishes.
           if (pending.length) {
@@ -993,6 +1012,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
           break;
         }
 
+        hopText = '';
         const toRun = pending;
         pending = [];
 
@@ -1002,7 +1022,9 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
         const runs = Promise.allSettled(
           toRun.map(async (call) => {
             const result = await deps.runTool(call, ctx);
+            if (result.ok === false && result.needsConfirmation) state.awaitingConfirmation = true;
             state.toolExecutions += 1;
+            state.readReferences = rememberReadReference(state.readReferences, call, result);
             state.toolCalls.push({
               name: call.name,
               ok: result.ok,
@@ -1012,7 +1034,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
             });
             const entry: LopuProviderToolResult = result.ok === true
               ? { id: call.id, name: call.name, ok: true, summary: result.summary, ...(result.data !== undefined ? { data: boundToolData(result.data) } : {}) }
-              : { id: call.id, name: call.name, ok: false, summary: result.error, error: result.error };
+              : { id: call.id, name: call.name, ok: false, summary: result.error, error: result.error, ...(result.data !== undefined ? { data: boundToolData(result.data) } : {}) };
             results.push(entry);
             channel.push({
               type: 'tool_result',
@@ -1020,7 +1042,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
               name: call.name,
               ok: entry.ok,
               summary: entry.summary,
-              ...(entry.ok && entry.data !== undefined ? { data: entry.data } : {}),
+              ...(entry.data !== undefined ? { data: entry.data } : {}),
               ...(result.ok === false && result.needsConfirmation ? { needsConfirmation: true } : {})
             });
           })
@@ -1133,6 +1155,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     usage: state.usage,
     hops: state.hops,
     toolCalls: state.toolCalls,
+    readReferences: state.readReferences,
     stopReason: state.stopReason,
     ...(state.error ? { error: state.error } : {})
   });
@@ -1149,6 +1172,10 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
       approved,
       mint: (action) => deps.mintConfirmation({ userId: input.viewer.id, chatId: input.chatId, action })
     });
+
+  const restored = await restoreReadContext(input.readReferences, deps.runTool, makeContext());
+  const providerText = input.text + restored.text;
+  const newState = () => ({ ...newTurnState(), readReferences: normalizeReadReferences(restored.references) });
 
   let promptSettings: LopuPromptSettings | undefined;
   const readPromptSettings = async () => promptSettings ??= await deps.getPromptSettings(input.viewer.id);
@@ -1170,7 +1197,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
       effort: entry.effort ?? null,
       speed: 'normal'
     });
-    const state = newTurnState();
+    const state = newState();
     const vaultFailure = async function* (model: string | null, error: unknown): AsyncGenerator<LopuChatStreamEvent, LopuChatTurnOutcome> {
       const message = friendlyVaultProviderError(entry.name, model, error);
       console.error(`[lopu] vault provider "${entry.name}" failed before replying:`, (error as any)?.message || error);
@@ -1198,8 +1225,8 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     const options = vaultClientOptions(config);
     const provider =
       config.transport === 'anthropic'
-        ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, media: input.media, signal: input.signal })
-        : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: input.text, media: input.media, toolMode: config.toolProtocol, signal: input.signal });
+        ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: providerText, media: input.media, signal: input.signal })
+        : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: providerText, media: input.media, toolMode: config.toolProtocol, signal: input.signal });
     const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
 
     let first: IteratorResult<LopuChatStreamEvent, void>;
@@ -1235,7 +1262,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   // --- deterministic scripted provider ---------------------------------
   if (lopuChatProviderMode() === 'test') {
     const ctx = makeContext();
-    const state = newTurnState();
+    const state = newState();
     const provider = createLopuTestProvider({ userText: input.text, activePage: ctx.activePage, paceMs: deps.testPaceMs });
     yield meta('test', explicit, 'test');
     try {
@@ -1260,7 +1287,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   }
 
   if (!attempts.length) {
-    const state = newTurnState();
+    const state = newState();
     yield meta('fallback', null);
     state.text = yield* streamFallbackReply('unconfigured', deps.fallbackPaceMs);
     state.stopReason = 'fallback';
@@ -1270,14 +1297,14 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   let lastError: unknown = null;
   for (const attempt of attempts) {
     const ctx = makeContext();
-    const state = newTurnState();
+    const state = newState();
     const toolMode = lopuOpenAiToolMode();
     const toolProtocol: LopuToolProtocol = attempt.provider === 'openai' && toolMode === 'text' ? 'text' : 'native';
     const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode(), promptSettings: await readPromptSettings() });
     const provider =
       attempt.provider === 'claude'
-        ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, media: input.media, signal: input.signal })
-        : openAiProvider({ client: deps.createOpenAi(), choice: attempt.choice, systemText: prompt.text, history, text: input.text, media: input.media, toolMode, signal: input.signal });
+        ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: providerText, media: input.media, signal: input.signal })
+        : openAiProvider({ client: deps.createOpenAi(), choice: attempt.choice, systemText: prompt.text, history, text: providerText, media: input.media, toolMode, signal: input.signal });
     const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
 
     // Pull the first event inside the try so a provider failing before any
@@ -1320,7 +1347,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   }
 
   // every provider failed before saying anything — never leave the user empty-handed
-  const state = newTurnState();
+  const state = newState();
   yield meta('fallback', null);
   if (explicit) {
     state.text = 'The selected model could not complete this reply. The provider could not process the request; please try again. Your model selection has been kept.';

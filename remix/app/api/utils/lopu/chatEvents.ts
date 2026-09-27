@@ -1,3 +1,4 @@
+import type { LopuReadReference } from './readContext';
 import type { LopuPageReference } from '~/utils/lopuPageContext';
 import type { LopuToolLink } from '~/utils/lopuLinks';
 // The Lopu chat wire protocol — one JSON object per NDJSON line, streamed by
@@ -153,6 +154,8 @@ export type LopuChatTurnOutcome = {
   // model hops the turn took (the accounting row records it)
   hops?: number;
   toolCalls: LopuToolCallSummary[];
+  // Server-only locators; never included in wire metadata or message projections.
+  readReferences?: LopuReadReference[];
   stopReason: LopuChatStopReason;
   error?: string;
 };

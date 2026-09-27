@@ -152,3 +152,42 @@ test('token exhaustion retains partial text and never executes truncated tool ar
  assert.match((result.content[0] as any).text, /Here is the plan/);
  assert.deepEqual(result.usage, usage);
 });
+
+for (const label of ['json tt-tool', 'tt-tool json', '\tjson\t tt-tool  ', 'TT-TOOL']) {
+ test(`OAuth adapts the ${JSON.stringify(label)} tool fence even at single-character chunk boundaries`, async () => {
+  const client = createClaudeOAuthClient({ token, run: async function* () {
+   for (const text of `Reading.\n\`\`\`${label}\n{"name":"get_thing","input":{"id":"planner","path":"/render","offset":8000,"revision":"${'a'.repeat(64)}"}}\n\`\`\``) yield { text };
+   yield { usage };
+  } });
+  const result = await client.messages.stream({ model: 'claude-opus-5', max_tokens: 100,
+   tools: [{ name: 'get_thing', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: 'Continue' }] }).finalMessage();
+  assert.equal(result.stop_reason, 'tool_use');
+  const tools = result.content.filter(block => block.type === 'tool_use');
+  assert.equal(tools.length, 1);
+  assert.equal((tools[0] as any).input.offset, 8000);
+  assert.equal((result.content[0] as any).text.trim(), 'Reading.');
+ });
+}
+
+test('ordinary JSON examples and tool-result fences never become executable tools', async () => {
+ for (const label of ['json', 'tt-tool-result', 'json tt-tool-result']) {
+  const output = `\`\`\`${label}\n{"name":"echo","input":{"text":"example"}}\n\`\`\``;
+  const client = createClaudeOAuthClient({ token, run: async function* () { for (const text of output) yield { text }; yield { usage }; } });
+  const result = await client.messages.stream({ model: 'claude-opus-5', max_tokens: 100,
+   tools: [{ name: 'echo', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: 'Explain' }] }).finalMessage();
+  assert.equal(result.stop_reason, 'end_turn');
+  assert.equal(result.content.some(block => block.type === 'tool_use'), false);
+  assert.equal((result.content[0] as any).text, output);
+ }
+});
+
+test('backticks in JSON string arguments are data, including across split chunks', async () => {
+ const input = { text: '```json\n{"label":"quoted"}\n```' };
+ const client = createClaudeOAuthClient({ token, run: async function* () {
+  for (const text of '```json tt-tool\n' + JSON.stringify({ name: 'echo', input }) + '\n```') yield { text };
+  yield { usage };
+ } });
+ const result = await client.messages.stream({ model: 'claude-opus-5', max_tokens: 100,
+  tools: [{ name: 'echo', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: 'Echo source' }] }).finalMessage();
+ assert.deepEqual((result.content[1] as any).input, input);
+});
