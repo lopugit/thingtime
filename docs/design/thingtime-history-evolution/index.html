@@ -506,7 +506,7 @@
         '<div class="tokens"><span'+hot('colourName')+'>'+esc(st.colourName)+'</span><span'+hot('radius')+'>'+st.radius+'px</span><span'+hot('weight')+'>'+st.weight+'</span></div></div>';
     }
     if (t.kind==='data') return '<div class="rec"><div class="rh">💎 '+esc(st.name)+'</div>'+st.fields.map(function(f){ return '<div class="fr"><span>'+esc(f)+'</span><i></i></div>'; }).join('')+'</div>';
-    return '<div class="postmini"><div class="pm-h"><span class="av">NF</span><b>Lopu</b><span class="aud">'+esc(st.audience)+'</span></div><div class="pm-t">'+esc(st.text)+'</div><div class="pm-f">❤️ '+st.reactions+' · 💬 '+st.comments+'</div></div>';
+    return '<div class="postmini"><div class="pm-h"><span class="av">NF</span><b>You</b><span class="aud">'+esc(st.audience)+'</span></div><div class="pm-t">'+esc(st.text)+'</div><div class="pm-f">❤️ '+st.reactions+' · 💬 '+st.comments+'</div></div>';
   }
   function prevFrameOf(lane, idx){
     var t=thing();
@@ -783,7 +783,10 @@
   }
   function variation(s){
     var t=thing(); if (!t.variation) t.variation={ name:'try something', from: typeof s.v==='number'? s.v : 1, stops:[] };
-    var nv={ v:'var', at:new Date(TODAY.getTime()+ (t.stops.length+2)*60000), actor:'you', verb:'created', label:'Started a variation', sync:'local', device:'Mac', state:JSON.parse(JSON.stringify(s.state)), changes:[{k:'variation', b:null, a:'"'+t.variation.name+'" · from v'+s.v}], msg:{who:'sys', text:'A private branch from v'+s.v+'. Send changes when it is ready.'} };
+    // Every renderer prints the version as 'v'+s.v, so the variation stop needs
+    // the seeded lane's "N·var" shape — a bare 'var' reads as "vvar" on the card,
+    // in the detail heading, in compare and in the aria-label.
+    var nv={ v:(typeof s.v==='number'? s.v : frames().length)+1+'·var', at:new Date(TODAY.getTime()+ (t.stops.length+2)*60000), actor:'you', verb:'created', label:'Started a variation', sync:'local', device:'Mac', state:JSON.parse(JSON.stringify(s.state)), changes:[{k:'variation', b:null, a:'"'+t.variation.name+'" · from v'+s.v}], msg:{who:'sys', text:'A private branch from v'+s.v+'. Send changes when it is ready.'} };
     t.variation.stops.push(nv); state.selLane='var'; state.sel=t.variation.stops.length-1; render(); applySelection(true);
     toast('Variation started 🌱', 'Private until you send it. The shared line is untouched.');
   }
