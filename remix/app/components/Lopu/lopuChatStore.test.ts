@@ -710,3 +710,62 @@ test('new invite-gated chats can change management without an available model', 
  }
  resetLopuStoreForTests();
 });
+
+test('chat access is per chat and new/legacy chats always start in Ask', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('owner');
+  const { client, calls } = fakeClient({ chats: [
+    { id: 'full-chat', lopu: { accessMode: 'full' } }, { id: 'legacy-chat', lopu: {} }
+  ] });
+  bindLopuApi(client); await loadLopuChats();
+  selectLopuChat('full-chat'); assert.equal(getLopuStoreSnapshot().settings.accessMode, 'full');
+  selectLopuChat('legacy-chat'); assert.equal(getLopuStoreSnapshot().settings.accessMode, 'ask');
+  selectLopuChat('full-chat'); selectLopuChat(null); assert.equal(getLopuStoreSnapshot().settings.accessMode, 'ask');
+  selectLopuChat('full-chat'); setLopuSettings({ accessMode: 'ask' });
+  await sendLopuMessage('hello');
+  assert.deepEqual(calls.find(call => call.name === 'chats.update')?.args, { chatId: 'full-chat', accessMode: 'ask' });
+  assert.equal('accessMode' in (calls.find(call => call.name === 'reply')!.args as any), false, 'reply cannot re-grant a stale mode');
+});
+
+test('permission writes serialize, block Send until saved, and failures restore the confirmed mode', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('owner');
+  const { client, calls } = fakeClient({ chats: [{ id: 'chat', lopu: { accessMode: 'ask' } }] });
+  bindLopuApi(client); await loadLopuChats(); selectLopuChat('chat');
+  let finish!: (value: any) => void;
+  client.chats.update = () => new Promise(resolve => { finish = resolve; });
+  setLopuSettings({ accessMode: 'full' }); await flush();
+  const sending = sendLopuMessage('hello'); await flush();
+  assert.equal(calls.some(call => call.name === 'reply'), false);
+  finish({ ok: false, error: 'Cannot save' });
+  assert.equal((await sending).ok, false);
+  assert.equal(getLopuStoreSnapshot().settings.accessMode, 'ask');
+  assert.equal(calls.some(call => call.name === 'reply'), false);
+});
+
+
+test('chat refresh preserves the access choice for an unsent new chat', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('new-chat-owner');
+  const { client } = fakeClient(); bindLopuApi(client);
+  setLopuSettings({ accessMode: 'full' });
+  await loadLopuChats();
+  assert.equal(getLopuStoreSnapshot().settings.accessMode, 'full');
+});
+
+
+test('rapid access changes preserve the last server-confirmed mode and await the latest save', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('rapid-owner');
+  const { client, calls } = fakeClient({ chats: [{ id: 'chat', lopu: { accessMode: 'ask' } }] });
+  bindLopuApi(client); await loadLopuChats(); selectLopuChat('chat');
+  const pending: ((value: any) => void)[] = [];
+  client.chats.update = () => new Promise(resolve => pending.push(resolve));
+  setLopuSettings({ accessMode: 'full' }); await flush();
+  const send = sendLopuMessage('hello');
+  setLopuSettings({ accessMode: 'ask' });
+  pending[0]({ ok: true }); await flush();
+  assert.equal(calls.some(call => call.name === 'reply'), false);
+  pending[1]({ ok: false, error: 'Unavailable' });
+  assert.equal((await send).ok, false);
+  assert.equal(getLopuStoreSnapshot().settings.accessMode, 'full');
+  client.chats.update = async () => ({ ok: true });
+  setLopuSettings({ accessMode: 'full' }); // Same selected mode retries a failed save.
+  assert.equal((await sendLopuMessage('retry')).ok, true);
+});

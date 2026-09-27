@@ -98,3 +98,13 @@ Vite/Nitro/Vercel build and compiled capability endpoint (api.timeline 1.2.0)
 pass on the main base. Changed configured TypeScript lint has no errors; raw
 TypeScript still reports 91 existing diagnostics, none in changed files. The
 PR body carries the final head and broader check limitations.
+
+
+## Main integration after PR #953
+
+Main advanced to `4874f3cb4` while the checkpoint was being verified. Its Lopu
+Action access controls are preserved alongside Timeline's omitted-page guards.
+Both changes had independently selected reply version 1.15.0, so the combined
+contract is 1.16.0; page-context clients require that version while ordinary
+Action-enabled chat requires 1.15.0. Registry and capability regression tests
+cover both changes. Graph conflicts use one complete snapshot before refresh.
