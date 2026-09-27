@@ -311,7 +311,10 @@
   .arr { color:var(--tt-faint); font-size:22px; text-align:center; }
   .sim { margin-top:16px; background:var(--tt-card); border:1px solid var(--tt-border); border-radius:16px; padding:16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .sim .lab { font-family:var(--tt-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--tt-muted); width:100%; }
-  .toggle { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--tt-ink); cursor:pointer; user-select:none; }
+  /* These switches are <button>s, so the UA's own border/background would draw
+     a grey bevelled box around the pill unless it is reset here. */
+  .toggle { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--tt-ink); cursor:pointer; user-select:none;
+    background:none; border:0; padding:0; }
   .toggle .sw { width:38px; height:22px; border-radius:999px; background:#d9d9de; position:relative; transition:background .16s ease; }
   .toggle .sw::after { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .16s ease; }
   .toggle[aria-checked="true"] .sw { background:var(--tt-rainbow-3); }
@@ -784,10 +787,13 @@
     var local=EVENTS.filter(function(e){return e.sync==='local';}).length, review=EVENTS.filter(function(e){return e.sync==='review';}).length;
     var queued=EVENTS.filter(function(e){return e.sync==='local' && !e.lane;}).length, privateVars=local-queued;
     var pill=$('#syncpill'); pill.className='syncpill'+(state.offline?' local':(review?' review':''));
-    var t = state.offline ? 'Offline · '+local+' waiting to sync' : (review ? review+' change'+(review===1?' needs':'s need')+' review' : 'Synced'+(local?' · '+local+' saved on this device':''));
+    // Only the queue actually syncs: a private variation is "saved on this
+    // device" but never "waiting to sync", so counting it as queued would
+    // promise a drain that reconnecting deliberately does not perform.
+    var t = state.offline ? 'Offline · '+queued+' waiting to sync' : (review ? review+' change'+(review===1?' needs':'s need')+' review' : 'Synced'+(local?' · '+local+' saved on this device':''));
     $('#synctext').textContent=t;
     var stat;
-    if (state.offline) stat='Offline · '+local+' change'+(local===1?'':'s')+' queued locally';
+    if (state.offline) stat='Offline · '+queued+' change'+(queued===1?'':'s')+' queued locally'+(privateVars?' · '+privateVars+' variation'+(privateVars===1?'':'s')+' private until sent':'');
     else if (queued) stat='Online · '+queued+' saved on this device · sync pending';
     else if (privateVars) stat='Online · sync queue empty · '+privateVars+' variation'+(privateVars===1?'':'s')+' private until sent';
     else stat='Online · sync queue empty';
@@ -876,11 +882,18 @@
     toast(state.offline?'Saved on this device 💾':'Saved and synced ☁️', state.offline?'No connection — it is safe here and queued to sync.':'Written locally first, then to your account.');
   }
   function reconnect(){
+    // The same button is "Sync now" while already online, so do not claim the
+    // connection came back when it never went away.
+    var wasOffline=state.offline;
     state.offline=false; $('#offline').setAttribute('aria-checked','false');
     // Everything queued syncs, whatever Thing it is on; only variations (lanes)
     // stay private until they are sent, so the queue can always actually drain.
     var n=0; EVENTS.forEach(function(e){ if (e.sync==='local' && !e.lane){ e.sync='synced'; n++; } });
-    renderAll(); toast('Back online ☁️', n+' change'+(n===1?'':'s')+' synced to your account. The button variation stays private until you send it.');
+    // Variations may already have been sent, so only mention the ones still private.
+    var priv=EVENTS.filter(function(e){ return e.lane && e.sync==='local'; }).length;
+    renderAll();
+    toast(wasOffline?'Back online ☁️':'Synced ☁️',
+      n+' change'+(n===1?'':'s')+' synced to your account.'+(priv?' '+(priv===1?'The variation stays':priv+' variations stay')+' private until you send '+(priv===1?'it':'them')+'.':''));
   }
 
   // ---------- events ----------
@@ -908,7 +921,14 @@
     }
     openDetail(id);
   });
-  $('#timeline').addEventListener('keydown', function(e){ if (e.key==='Enter' || e.key===' '){ var row=e.target.closest('.ev'); if (row){ e.preventDefault(); openDetail(parseInt(row.getAttribute('data-id'),10)); } } });
+  $('#timeline').addEventListener('keydown', function(e){
+    if (e.key!=='Enter' && e.key!==' ') return;
+    // The row is a role="button" that CONTAINS real buttons (Preview/Compare/
+    // Restore). Cancelling the key here would swallow their native activation,
+    // so a keyboard user could never reach the row actions — let them through.
+    if (e.target.closest('[data-act]')) return;
+    var row=e.target.closest('.ev'); if (row){ e.preventDefault(); openDetail(parseInt(row.getAttribute('data-id'),10)); }
+  });
   $('#detail').addEventListener('click', function(e){
     if (e.target.closest('#closeDetail')) return closeDetail();
     var tab=e.target.closest('[data-tab]'); if (tab){ state.tab=tab.getAttribute('data-tab'); renderDetail(); return; }
