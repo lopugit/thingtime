@@ -73,6 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Action preserves its output without rerunning it. Account, chat, deployment,
   retention and completion checks remain required. Expired task outputs stop
   repeated polling. Reply capability 1.19.2.
+  [PR #969 details](../PRs/969-lopu-checkpoint-tool-results-preserve-completed-tool-results-when-lopu-resumes.md).
 
 - 2026-09-27 — **Codex (AI)**: Things display-name edits for themes, algorithms,
   emoji and chat archives now appear in shared History. Strict title-only
