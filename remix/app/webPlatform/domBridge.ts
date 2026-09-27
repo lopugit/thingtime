@@ -1,3 +1,5 @@
+import { RANGE_CONSTRUCTORS, RANGE_RECEIVER_POLICY, RANGE_INITIALIZERS, type RangeArg } from './rangePolicy';
+import { rangeHTML, rangeInit } from './rangeSupport';
 import { OBSERVER_CONSTRUCTORS, OBSERVER_RECEIVER_POLICY, type ObserverArg } from './observerPolicy';
 import { observerArgument, OBSERVER_LIMITS } from './observerSupport';
 import type { DOMCallback } from './workerLifecycle';
@@ -19,6 +21,7 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| RangeArg
 	| ObserverArg
 	| LayoutArg
 	| CSSOMArg
@@ -96,6 +99,7 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 	...TYPED_CSS_RECEIVER_POLICY,
 	...CSSOM_RECEIVER_POLICY,
 	...LAYOUT_RECEIVER_POLICY,
+	...RANGE_RECEIVER_POLICY,
 	DOMMatrix: { ...SVG_RECEIVER_POLICY.DOMMatrix, calls: { ...SVG_RECEIVER_POLICY.DOMMatrix.calls, setMatrixValue: call(['css-text']) } },
 	HTMLElement: { reads: 'attributeStyleMap style offsetHeight offsetLeft offsetParent offsetTop offsetWidth scrollParent' },
 	SVGElement: { ...SVG_RECEIVER_POLICY.SVGElement, reads: SVG_RECEIVER_POLICY.SVGElement.reads + ' attributeStyleMap style' },
@@ -132,6 +136,7 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 			createTextNode: mutate(['text']),
 			createComment: mutate(['text']),
 			createDocumentFragment: mutate(),
+			createRange: call(),
 			createAttribute: mutate(['attribute']),
 			importNode: mutate(['node', 'boolean'], { min: 1 }),
 			adoptNode: mutate(['node'])
@@ -231,7 +236,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 	const scope = surfaceDocument.defaultView!.crypto.randomUUID();
 	const objects = new Map<string, Entry>();
 	const shadowRoots = new Set<ShadowRoot>();
-	const constructors = { ...TYPED_CSS_CONSTRUCTORS, ...CSSOM_CONSTRUCTORS, ...LAYOUT_CONSTRUCTORS, ...OBSERVER_CONSTRUCTORS };
+	const constructors = { ...TYPED_CSS_CONSTRUCTORS, ...CSSOM_CONSTRUCTORS, ...LAYOUT_CONSTRUCTORS, ...OBSERVER_CONSTRUCTORS, ...RANGE_CONSTRUCTORS };
 	const observers = new Map<object, { type: string; targets: Set<object> }>();
 	let callbackCount = 0;
 	const statics = {
@@ -436,6 +441,12 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		const documentBody = body(doc);
 		replaceChildren(surface, ...Array.from(documentBody ? childNodes(documentBody) : []).map((node) => importNode(surfaceDocument, node, true)));
 	};
+	const inspectRange = (range: object) => {
+		// Chromium puts these accessors on an unnamed prototype between Range
+		// and AbstractRange. Capture from the concrete native receiver chain.
+		const type = belongs(range, 'Range') ? 'Range' : 'StaticRange';
+		for (const key of ['startContainer', 'endContainer']) inspectTree(reader<Node>(type, key)(range));
+	};
 	const encode = (value: unknown, depth = 0): unknown => {
 		if (depth > 8) throw new Error('DOM result exceeds its depth budget');
 		if (value === undefined) return undefined;
@@ -458,6 +469,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		let type: string | undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(RANGE_RECEIVER_POLICY),
 			...Object.keys(OBSERVER_RECEIVER_POLICY),
 			...Object.keys(LAYOUT_RECEIVER_POLICY),
 			...Object.keys(CSSOM_RECEIVER_POLICY),
@@ -506,6 +518,29 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		return target;
 	};
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule === 'range-html') return rangeHTML(value);
+		if (rule === 'range-init')
+			return rangeInit(
+				value,
+				(raw) => argument(raw, 'range-node') as object,
+				(raw) => argument(raw, 'number')
+			);
+		if (rule === 'range-receiver') {
+			const range = receiverType(value, 'Range');
+			inspectRange(range);
+			return range;
+		}
+		if (rule === 'range-node' || rule === 'range-relative-node') {
+			const node = receiverType(value, 'Node');
+			inspectTree(node as Node);
+			// Relative boundary setters select the node's parent. In surface mode
+			// this must never turn the program root into a range on the runtime UI.
+			if (rule === 'range-relative-node') {
+				const parent = reader<Node | null>('Node', 'parentNode')(node);
+				if (parent) inspectTree(parent);
+			}
+			return node;
+		}
 		if (rule === 'observer-callback') {
 			const token = value as { $callback?: number };
 			if (
@@ -697,6 +732,8 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 					? registry && Object.prototype.hasOwnProperty.call(registry, request.key) && registry[request.key]
 					: (constructors as Record<string, Method>)[request.key];
 				if (!shape || (!isStatic && request.target !== null)) throw new Error('Unregistered CSS native operation');
+				if (!isStatic && Object.prototype.hasOwnProperty.call(RANGE_CONSTRUCTORS, request.key) && !context)
+					throw new Error('Ranges require an owned document context');
 				const observerConstructor = !isStatic && Object.prototype.hasOwnProperty.call(OBSERVER_CONSTRUCTORS, request.key);
 				if (observerConstructor && (!context || (request.key !== 'MutationObserver' && context !== 'surface')))
 					throw new Error('Observers require their owned document context');
@@ -809,6 +846,9 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 				}
 			}
 			const target = receiver(request.target).value;
+			// A native new Range() initially points at the realm document. Permit
+			// an owned boundary initializer before reading or operating on it.
+			if (belongs(target, 'AbstractRange') && !(request.action === 'call' && RANGE_INITIALIZERS.has(request.key))) inspectRange(target);
 			let descriptor: PropertyDescriptor | undefined,
 				namedCSSProperty = false,
 				policy: Method | undefined,
@@ -1012,6 +1052,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 			}
 			const complete = (result: unknown) => {
 				if (stopped) throw new Error('DOM run has ended');
+				if (belongs(target, 'AbstractRange')) inspectRange(target);
 				if (cssContainer && (policy?.mutates || request.action === 'set')) cssRuleCount(cssContainer);
 				if (request.key === 'attachShadow' && result) shadowRoots.add(result as ShadowRoot);
 				if (policy?.iterable) {
