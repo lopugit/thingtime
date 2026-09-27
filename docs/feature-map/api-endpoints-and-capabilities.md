@@ -62,6 +62,17 @@ must reject main's earlier 1.23.0/1.7.0 workspace-only contracts for those featu
 
 ## Verify
 
+Timeline is registered at `/api/v1/timeline` with `api.timeline` 1.2.0. Its
+route handles private discovery, paging, immutable draft upload and explicit
+version preview/apply commands, exact version reads, and named branch create/push/pull. Branch commands use an immutable operation id and per-Thing head revision; divergence refuses without changing published content. Shared formats and the client queue live in
+`app/timeline`; storage, transaction integration and merge ancestry live in
+`app/api/utils/timeline`. `test:timeline` and its opt-in replica-set integration
+cover the contract. See [Unified Timeline](../unified-timeline.md).
+
+Lopu page contexts require `api.lopu-chats-reply` 1.16.0: dirty/ready flags and
+omitted blocks survive transport and continuation. Missing blocks are never an
+empty page; only known-clean saved pages may fetch their persisted tree.
+
 - `npm --prefix remix run test:api-capabilities` — every `routeModules` key
   appears on the manifest, versions parse.
 - Built server smoke: the discovery endpoint must return JSON with the selected
@@ -219,6 +230,10 @@ together. See [native animation programs](../web-standards-builder.md#native-web
 
 See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
 private draft API, editor recovery, account isolation and independent media copies.
+ARIA object programs add `api.actions-run` 1.33.0. `ariaPolicy.ts` adds bounded
+nullable Element reflection and owned relationships; the existing worker bridge
+preserves native frozen-list and element identity. Catalogue inputs/projections
+remain saved data. See [native ARIA programs](../web-standards-builder.md#native-aria-object-programs).
 
 
 ## Lopu Action access

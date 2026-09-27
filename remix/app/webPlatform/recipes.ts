@@ -1,3 +1,4 @@
+import { ariaRecipe } from './ariaFixtures';
 import { animationRecipe } from './animationFixtures';
 import { rangeRecipe } from './rangeFixtures';
 import { observerRecipe } from './observerFixtures';
@@ -412,6 +413,8 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const aria = ariaRecipe(feature);
+	if (aria) return aria;
 	const animation = animationRecipe(feature);
 	if (animation) return animation;
 	const range = rangeRecipe(feature);

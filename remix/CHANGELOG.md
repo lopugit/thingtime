@@ -73,6 +73,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   templates with independent media, revision-safe recovery and scoped local
   workspaces. Added real local API/transaction/media verification and setup
   guidance. See [PR #957 details](../PRs/957-codex-account-drafts-autosave-account-drafts-and-add-reusable-post-templates.md).
+- 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
+  event and relationship records, durable draft recovery, private relational event/link Things and transactional
+  ordinary Thing history. Shared History now previews restores and three-way
+  merges with explicit conflict choices and idempotent, version-fenced commits.
+  Named branches now use separate branch/Thing head records, durable local
+  commands, private exact-version reads, and transactional forward-only pushes.
+  Concurrent/deferred pushes preserve versions and show per-branch outcomes.
+  Large versions retain separate snapshot parts, so history cannot strand later
+  edits or deletion; the real API grow/shrink/restore/delete regression passes.
+  IndexedDB upgrades pending work to atomic relationship records; server ancestry
+  uses exact parent links and existing shared indexes. Lopu preserves missing/dirty page context instead of treating it as an empty
+  page. Disposable replica-set and browser evidence, limits and outstanding
+  delivery gates: [PR #956 notes](../PRs/956-unified-timeline-add-relational-timeline-history-and-durable-branch-synchronization.md) and [implementation contract](../docs/unified-timeline.md).
+
+- 2026-09-27 — **Codex (AI)**: Add 53 reusable ARIA object programs with native nullable reflection, owned element relationships and frozen-list identity; negotiate Actions 1.33.0. Make animation stages grow to keep both tiles visible. Validate production output and retain the managed loopback dev stack; see [PR #955 details](../PRs/955-web-standards-aria-reusable-native-aria-object-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Lopu can execute saved browser and server Actions
   from chat. Per-chat **Ask before running** and **Full access** controls gate

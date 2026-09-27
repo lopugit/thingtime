@@ -868,3 +868,43 @@ Sources: [published Web Animations](https://www.w3.org/TR/web-animations-1/),
 [Level 2 additions](https://drafts.csswg.org/web-animations-2/). Inventory source
 status is retained; an editable example does not imply cross-browser support or
 that a draft feature has reached Recommendation status.
+
+## Native ARIA object programs
+
+All 53 catalogued ARIAMixin entries have editable programs: nullable string
+properties, role, the active-descendant element, and seven element-reference
+lists. Each saved Component holds the document, role/value inputs, selectors,
+content attributes, native assignments and result projections. It compares
+property assignment with content-attribute reflection and can clear the property
+with null. These examples demonstrate reflection; complete accessible widgets
+also require appropriate semantics and keyboard interaction.
+
+`ariaPolicy.ts` registers bounded native Element accessors. Strings accept null
+or at most 4096 characters; lists accept null or at most 64 owned Element handles.
+Every reference is checked before native assignment. Reference writes require
+the active owned surface because detached DOM cloning would lose explicit
+relationships in the visible projection. Surface attribute mutations are limited
+to role/aria-* names. Existing ownership checks reject runtime/foreign nodes,
+and the shared worker deadline, request/handle limits and sandbox CSP remain.
+
+Native FrozenArray results retain their frozen state, cached array identity and
+contained element identity across worker messages. Snapshots remain unchanged
+when an attribute resets a relationship. Up to 128 distinct native frozen arrays
+may be transported per run. Ordinary mutable array results remain mutable.
+Unimplemented native properties produce explicit unsupported results, including
+ariaOwnsElements in the validated browser. The published inventory's draft/status
+metadata is retained; coverage does not imply universal browser support.
+
+The catalogue Action contract and client minimum are `api.actions-run` 1.33.0.
+Canonical installation, private Component persistence and reuse on another page
+continue through the existing suite, Action, Component and Webpage contracts.
+`ariaBoundaryFixtures.ts` checks null versus empty lists, string false versus
+null, native relationship resets, cached/frozen object identity, shadow ancestry,
+wrong/stale handles, allocation limits and refusal of unrelated surface writes.
+
+The animation example now uses content-driven stage height with a minimum, so
+both tiles remain visible when text wraps. Existing saved definitions are not
+silently rewritten.
+
+Sources: [ARIA IDL interfaces](https://w3c.github.io/aria/#idl-interface) and
+[HTML attribute reflection](https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflecting-content-attributes-in-idl-attributes).

@@ -142,6 +142,8 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },
   'notifications.read': { limit: 60, windowMs: 60_000, enabled: true },
   'notifications.record': { limit: 120, windowMs: 60_000, enabled: true },
+  'timeline.read': { limit: 240, windowMs: 60_000, enabled: true },
+  'timeline.write': { limit: 240, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.devices': { limit: 30, windowMs: 60_000, enabled: true },
   // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so

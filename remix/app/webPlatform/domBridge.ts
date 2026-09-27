@@ -1,3 +1,4 @@
+import { ARIA_ELEMENT, ariaArgument, type ARIAArg } from './ariaPolicy';
 import {
 	ANIMATION_CONSTRUCTORS,
 	ANIMATION_ELEMENT_CALLS,
@@ -30,6 +31,7 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| ARIAArg
 	| AnimationArg
 	| RangeArg
 	| ObserverArg
@@ -155,9 +157,9 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 		}
 	},
 	Element: {
-		reads: `namespaceURI prefix localName tagName id className classList attributes innerHTML outerHTML shadowRoot ${parentReads} ${childReads} ${LAYOUT_ELEMENT.reads}`,
-		writes: 'id className ' + LAYOUT_ELEMENT.writes,
-		writeArgs: LAYOUT_ELEMENT.writeArgs,
+		reads: `namespaceURI prefix localName tagName id className classList attributes innerHTML outerHTML shadowRoot ${parentReads} ${childReads} ${LAYOUT_ELEMENT.reads} ${ARIA_ELEMENT.reads}`,
+		writes: 'id className ' + LAYOUT_ELEMENT.writes + ' ' + ARIA_ELEMENT.writes,
+		writeArgs: { ...LAYOUT_ELEMENT.writeArgs, ...ARIA_ELEMENT.writeArgs },
 		calls: {
 			...LAYOUT_ELEMENT.calls,
 			...ANIMATION_ELEMENT_CALLS,
@@ -298,6 +300,8 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		return cost;
 	};
 	const ids = new WeakMap<object, string>();
+	const frozenArrays = new WeakMap<object, string>();
+	let frozenArrayCount = 0;
 	const owners = new WeakMap<object, Node>();
 	const valueKeys = new WeakMap<object, string>();
 	const allocated = new WeakSet<object>();
@@ -517,7 +521,15 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		}
 		if (Array.isArray(value)) {
 			if (value.length > 600) throw new Error('DOM result exceeds its item budget');
-			return value.map((item) => encode(item, depth + 1));
+			const items = value.map((item) => encode(item, depth + 1));
+			if (!Object.isFrozen(value)) return items;
+			let id = frozenArrays.get(value);
+			if (!id) {
+				if (++frozenArrayCount > 128) throw new Error('Frozen DOM array budget exceeded');
+				id = `${scope}:array:${frozenArrayCount}`;
+				frozenArrays.set(value, id);
+			}
+			return { $domArray: id, items };
 		}
 		if (typeof value === 'function' && callbackTokens.has(value)) return callbackTokens.get(value);
 		if (!value || typeof value !== 'object') throw new Error('This DOM result is not exposed');
@@ -575,6 +587,12 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		return target;
 	};
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule.startsWith('aria-'))
+			return ariaArgument(value, rule, (raw) => {
+				const target = receiverType(raw, 'Element');
+				inspectTree(target as Node);
+				return target;
+			});
 		if (rule === 'range-html') return rangeHTML(value);
 		if (rule === 'range-init')
 			return rangeInit(
@@ -1008,7 +1026,18 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 				!Object.prototype.hasOwnProperty.call(CSSOM_RECEIVER_POLICY, resolvedInterface) &&
 				!Object.prototype.hasOwnProperty.call(ANIMATION_RECEIVER_POLICY, resolvedInterface) &&
 				!(request.action === 'call' && request.key === 'replaceChildren' && shadowRoots.has(target as ShadowRoot)) &&
-				!(resolvedInterface === 'Element' && request.action === 'set' && LAYOUT_ELEMENT.writes!.split(' ').includes(request.key)) &&
+				!(
+					resolvedInterface === 'Element' &&
+					request.action === 'set' &&
+					(LAYOUT_ELEMENT.writes + ' ' + ARIA_ELEMENT.writes).split(' ').includes(request.key)
+				) &&
+				!(
+					resolvedInterface === 'Element' &&
+					request.action === 'call' &&
+					['setAttribute', 'removeAttribute', 'toggleAttribute'].includes(request.key) &&
+					typeof request.args[0] === 'string' &&
+					/^(role|aria-[a-z-]+)$/i.test(request.args[0])
+				) &&
 				request.key !== 'attachShadow'
 			)
 				throw new Error('Surface tree mutation is not registered; use authored document nodes');
@@ -1031,6 +1060,8 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 			if (request.key === 'attachShadow' && (context !== 'surface' || target === surface || !insideSurface(target as Node) || shadowRoots.size >= 8))
 				throw new Error('Shadow roots require a bounded program-owned surface element');
 			if (request.action === 'set' && request.key === 'textContent' && belongs(target, 'HTMLStyleElement')) cssomText(request.args[0]);
+			if (request.action === 'set' && ['aria-element', 'aria-elements'].includes(writeRule) && context !== 'surface')
+				throw new Error('ARIA element relationships require the owned surface context');
 			const rules = policy?.args || (request.action === 'set' ? [writeRule] : []);
 			let args: unknown[] | undefined;
 			if (policy?.overloads) {
