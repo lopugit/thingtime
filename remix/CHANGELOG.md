@@ -75,6 +75,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   repeated polling. Reply capability 1.19.2.
   [PR #969 details](../PRs/969-lopu-checkpoint-tool-results-preserve-completed-tool-results-when-lopu-resumes.md).
 
+- 2026-09-27 — **Codex (AI)**: Saved theme creation, token/visibility updates
+  and deletion now record approved token versions in shared History. Content,
+  head and storage commit together in the home database, including under a
+  custom data-source selection. Identical saves add no event; deleting at the
+  storage ceiling retains the prior version. Timeline 1.5.0 and themes/delete
+  1.1.0; dedicated restore, selection history and legacy coverage remain open.
+
 - 2026-09-27 — **Codex (AI)**: Timeline quota acceptance uses synthetic accounts
   and the normal admin API on a guarded disposable replica. At the exact limit,
   reads, folder organization and deletion retain history; refused edits/restores
