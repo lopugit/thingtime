@@ -126,6 +126,8 @@ export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
 	sandboxExpiresAt: 1,
 	sizeBytes: 1,
 	storageAccountingVersion: 1,
+	timelineEnvelopeVersion: 1,
+	secure: 1,
 	updatedAt: 1,
 	attachmentEnvelopeVersion: 1,
 	attachmentState: 1,

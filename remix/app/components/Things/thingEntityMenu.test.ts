@@ -19,7 +19,7 @@ test('menu geometry keeps tall menus and scrollbar edges reachable without offse
 });
 
 test('entity schemas inherit canonical verbs while extending their own sections', () => {
-  const menu = buildThingEntityMenu({ open: true, inspect: true, 'copy-link': true, rename: true, edit: true, share: true, delete: true, 'send-to-lopu': true },
+  const menu = buildThingEntityMenu({ open: true, inspect: true, history: true, 'copy-link': true, rename: true, edit: true, share: true, delete: true, 'send-to-lopu': true },
     [{ id: 'extension', actions: [{ id: 'flair', command: 'flair', label: 'Flair', icon: '🏷️' }] }]);
   const actions = menu.sections.flatMap(section => section.actions);
   for (const base of Object.values(THING_ACTIONS)) assert.deepEqual(actions.find(action => action.id === base.id), base);
@@ -36,6 +36,10 @@ test('Drive right-click and touch menus inherit the same model and retain bulk s
   }
   const bulk = buildThingsItemMenu({ thing, ownerId: 'owner', actCount: 3, clipboardCount: 0 });
   assert.ok(!bulk.sections.flatMap(section => section.actions).some(action => action.command === 'send-to-lopu'));
+  assert.ok(menu.sections.flatMap(section => section.actions).some(action => action.command === 'history'));
+  assert.ok(!bulk.sections.flatMap(section => section.actions).some(action => action.command === 'history'));
+  const other = buildThingsItemMenu({ thing, ownerId: 'another-user', actCount: 1, clipboardCount: 0 });
+  assert.ok(!other.sections.flatMap(section => section.actions).some(action => action.command === 'history'));
   const views = readFileSync(new URL('./ThingsViews.tsx', import.meta.url), 'utf8');
   assert.match(views, /buildThingsItemMenu\(/); assert.doesNotMatch(views, /<MenuList/);
   for (const file of ['../Feed/PostCard.tsx', '../Lopu/RecordingAutomationPage.tsx']) {
@@ -60,4 +64,9 @@ test('archive menus offer portable copy/cut/download without live sharing or gen
   const commands = menu.sections.flatMap(section => section.actions).map(action => action.command);
   for (const command of ['copy', 'cut', 'download', 'move']) assert.ok(commands.includes(command));
   for (const command of ['share', 'edit', 'duplicate', 'delete', 'preview', 'inspect']) assert.ok(!commands.includes(command));
+});
+
+test('the managed Timeline folder offers opening and linking, not ordinary folder mutations', () => {
+  const menu = buildThingsItemMenu({ thing: { id: 'timeline-folder-owner', thingtime: ['folder'], author: { id: 'owner' } } as any, ownerId: 'owner', actCount: 1, clipboardCount: 0 });
+  assert.deepEqual(menu.sections.flatMap(section => section.actions).map(action => action.command), ['open', 'copy-link']);
 });

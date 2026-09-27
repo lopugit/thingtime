@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 4,409 have interactive recipes (302 HTML, 1,196 CSS, 890
-JavaScript and 2,021 Web API entries); the rest are
+editable program. 4,873 have interactive recipes (302 HTML, 1,196 CSS, 890
+JavaScript and 2,485 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -750,3 +750,200 @@ Both manifests and client negotiation advertise `api.actions-run` 1.28.0.
 Every program has default and edited native checks, and 20 boundary fixtures
 cover real CSS results, async replacement, ownership and resource limits.
 Programs persist through the canonical private Component and save Action path.
+
+## Native observer programs
+
+The 81 indexed MutationObserver, ResizeObserver and IntersectionObserver entries
+are ordinary editable Component programs. Their callbacks, record projections,
+DOM mutations and observation options are stored as program objects. Builders
+can change these objects, save a private Component, and reference it from another
+page. No observer-specific component renderer or parallel persistence path is
+introduced.
+
+`observerFixtures.ts` authors the data; `observerPolicy.ts` and
+`observerSupport.ts` register bounded native receivers in the existing bridge.
+A `dom-callback` expression registers an authored worker function, preserving
+native record and observer identity through run-owned handles. A `dom` operation
+with `action: "batch"` executes up to 16 registered get/set/call commands in one
+native task, so MutationObserver queue draining can happen before delivery.
+Commands use the normal ownership and argument checks. Async operations and
+nested batches are rejected before dispatch; an error stops subsequent commands
+without rolling back earlier writes.
+
+MutationObservers can use an owned detached document. Resize/intersection
+observers require the active opaque preview surface. Roots and targets must
+belong to the current run; the runtime document and parent page remain
+unavailable. Each run allows 16 observers, 32 targets per observer, 32 registered
+callbacks, 64 callback deliveries and 64 records per delivery. Observer options
+use closed dictionaries with bounded thresholds, margins and filters.
+
+Callbacks share the existing two-second program deadline. Completion, errors and
+Stop disconnect every observer and discard late deliveries. These examples
+capture observations during a run; they do not create persistent background
+subscriptions. Native unsupported fields and the not-yet-exposed
+IntersectionObserverEntry constructor report browser availability explicitly.
+
+Both capability manifests and the client negotiate `api.actions-run` 1.30.0.
+Default and edited programs, queue semantics, old values, callback identity,
+unobserve/disconnect, ownership and resource limits have dedicated checks.
+Primary sources are the [DOM Living Standard](https://dom.spec.whatwg.org/#interface-mutationobserver),
+[Resize Observer](https://www.w3.org/TR/resize-observer/) and
+[Intersection Observer](https://www.w3.org/TR/intersection-observer/).
+
+## Native live and static ranges
+
+Forty additional Range, AbstractRange, StaticRange and StaticRangeInit entries
+now have editable Component programs in `rangeFixtures.ts`. Boundary choices,
+text edits, cloning, extraction, wrapping, comparison and result projections
+are ordinary saved program objects. Existing active-surface Range geometry
+recipes remain unchanged. The separate Selection API is still requires-context.
+
+`rangePolicy.ts` registers native members; `rangeSupport.ts` validates bounded
+fragment input and the four-field StaticRangeInit dictionary. Ranges use
+run-owned nodes and handles. Relative boundary setters check the parent before
+dispatch, and every range read/operation checks its current endpoints. Native
+constructors initially point at their realm document; initialize them with an
+owned node before reading. Concrete native prototype chains provide boundary
+accessors even when an engine inserts an unnamed WebIDL mixin layer.
+
+Document mutations operate on the existing detached-document context and render
+through its checked projection. Active-surface programs retain range reads and
+boundary operations; tree mutations remain unavailable there. Contextual
+fragments accept up to 4,096 characters and 128 basic HTML opening/closing tags,
+without attributes, resources, scripts, comments, custom elements or foreign
+content. Tokens are checked before native parsing. This is a bounded fragment
+input vocabulary, not unrestricted HTML parsing. Native errors remain catchable.
+
+Static range examples insert text after taking a snapshot and compare unchanged
+static offsets with live boundaries adjusted by the browser. Both capability
+manifests and the client negotiate `api.actions-run` 1.31.0. See the
+[DOM ranges standard](https://dom.spec.whatwg.org/#ranges) and
+[HTML contextual-fragment algorithm](https://html.spec.whatwg.org/multipage/dynamic-markup-insertion.html#dom-range-createcontextualfragment).
+
+## Native Web Animation programs
+
+111 more catalogue entries contain editable native animation programs. Each saved
+Component includes its keyframe arrays or property-indexed objects, timing JSON,
+preview time, ID, native operations, asynchronous callbacks and result projection.
+The same `tt-web-platform` runtime executes a newly authored program or a saved
+Component reference; no animation-specific Component renderer is introduced.
+
+`animationPolicy.ts` registers Animation, KeyframeEffect, DocumentTimeline and
+AnimationPlaybackEvent constructors and receiver members. This includes native
+KeyframeEffect copying, playback controls, effect/timeline changes, timing and
+computed-keyframe records, ready/finished promises, finish/cancel/remove handlers,
+and scoped Element/Document/ShadowRoot animation queries. The existing worker
+callback transport carries the authored handler function and restores its native
+animation receiver as `this` (including opaque handle identity). Registered promise
+reads await the browser result and are refused in synchronous DOM batches.
+
+The program selects its owned surface before construction; target and effect
+receivers are checked against that surface. Native allocation is capped at 32
+objects, keyframes at 64, properties per frame at 32, and total keyframe values at
+512. Dictionary keys and scalar sizes are validated before native conversion.
+The shared DOM input/handle budgets, two-second execution deadline and opaque
+network-denying runtime CSP still apply. Stop and normal completion cancel every
+tracked animation and fence late callbacks/promises. The recipe explicitly
+commits sampled element styles before completion; pseudo-element samples report
+computed styles because native commitStyles refuses those targets.
+
+Unsupported native members stay explicit. Examples probe both exposed accessors
+and actual behavior: a browser that ignores getAnimations' pseudoElement option
+must report unsupported instead of appearing to filter successfully. The optional
+iterationComposite field is checked before invoking constructors so ignored
+options cannot masquerade as implemented behavior. Event.isTrusted is read from
+its unforgeable own native accessor, preserving trusted browser events versus
+constructed events. Group/Sequence effects, animation triggers, scroll/view
+attachment ranges and remaining Level 2 additions are still separate work.
+
+Both origin manifests and the client require `api.actions-run` 1.32.0. The
+canonical catalogue/save Actions, private Component API and storage schema are
+unchanged. Test `animationBoundaryFixtures.ts` in a native browser as well as the
+unit/contract suites: it checks exact interpolation, independent copied timing,
+trusted finish/cancel/remove events, shadow queries, native exceptions, foreign
+receivers, allocation limits and asynchronous batch refusal.
+
+Sources: [published Web Animations](https://www.w3.org/TR/web-animations-1/),
+[current Level 1 draft](https://drafts.csswg.org/web-animations-1/), and
+[Level 2 additions](https://drafts.csswg.org/web-animations-2/). Inventory source
+status is retained; an editable example does not imply cross-browser support or
+that a draft feature has reached Recommendation status.
+
+## Native ARIA object programs
+
+All 53 catalogued ARIAMixin entries have editable programs: nullable string
+properties, role, the active-descendant element, and seven element-reference
+lists. Each saved Component holds the document, role/value inputs, selectors,
+content attributes, native assignments and result projections. It compares
+property assignment with content-attribute reflection and can clear the property
+with null. These examples demonstrate reflection; complete accessible widgets
+also require appropriate semantics and keyboard interaction.
+
+`ariaPolicy.ts` registers bounded native Element accessors. Strings accept null
+or at most 4096 characters; lists accept null or at most 64 owned Element handles.
+Every reference is checked before native assignment. Reference writes require
+the active owned surface because detached DOM cloning would lose explicit
+relationships in the visible projection. Surface attribute mutations are limited
+to role/aria-* names. Existing ownership checks reject runtime/foreign nodes,
+and the shared worker deadline, request/handle limits and sandbox CSP remain.
+
+Native FrozenArray results retain their frozen state, cached array identity and
+contained element identity across worker messages. Snapshots remain unchanged
+when an attribute resets a relationship. Up to 128 distinct native frozen arrays
+may be transported per run. Ordinary mutable array results remain mutable.
+Unimplemented native properties produce explicit unsupported results, including
+ariaOwnsElements in the validated browser. The published inventory's draft/status
+metadata is retained; coverage does not imply universal browser support.
+
+The catalogue Action contract and client minimum are `api.actions-run` 1.33.0.
+Canonical installation, private Component persistence and reuse on another page
+continue through the existing suite, Action, Component and Webpage contracts.
+`ariaBoundaryFixtures.ts` checks null versus empty lists, string false versus
+null, native relationship resets, cached/frozen object identity, shadow ancestry,
+wrong/stale handles, allocation limits and refusal of unrelated surface writes.
+
+The animation example now uses content-driven stage height with a minimum, so
+both tiles remain visible when text wraps. Existing saved definitions are not
+silently rewritten.
+
+Sources: [ARIA IDL interfaces](https://w3c.github.io/aria/#idl-interface) and
+[HTML attribute reflection](https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflecting-content-attributes-in-idl-attributes).
+
+## Native XPath object programs
+
+Thirty XPath catalogue entries now produce editable saved programs for
+`XPathEvaluator`, `XPathEvaluatorBase`, `XPathExpression`, `XPathResult` and
+`XPathNSResolver`. The authored tree, expression, context selector, namespace
+map, native result type, iteration/snapshot projection and mutation are ordinary
+Component program data. `Document.evaluate` and a constructed evaluator share
+the same policy; compiled expressions can be evaluated repeatedly with an
+optional owned result argument. The bridge preserves actual native return values,
+errors, node identity, snapshot retention and iterator invalidation.
+
+Queries require the owned detached document. Even scalar queries are refused
+in surface mode: checking returned Nodes alone cannot prevent a scalar query
+from reading ancestors outside the program. Native Node namespace resolvers
+retain identity (`createNSResolver(node)` returns that node). Alternatively,
+a saved map of at most 16 prefixes to URI strings supplies a bounded synchronous
+callback interface. Ordinary worker callbacks remain asynchronous and are not
+accepted as synchronous resolvers. Nullable Node namespace lookup inputs are
+preserved. Live native handles are run-local; the complete program that creates
+and composes them is what persists in the database.
+
+Main-thread XPath cannot be interrupted by the worker deadline. Before calling
+the native parser/evaluator, the runtime bounds expressions to 512 characters
+and 64 tokens, parentheses to depth 8, and refuses nested predicates and path
+traversal inside predicates. Evaluation counts the whole owned document plus
+any disconnected context tree, at most 128 nodes/attributes and 1,024 text and
+attribute characters. A conservative syntax/tree/text work estimate caps each
+evaluation at 16 million units and a run at 64 million; compiled expressions
+spend that same budget every time. These are implementation limits, not XPath
+standard limits. Existing native DOM and two-second execution budgets also apply.
+
+Actions negotiate `api.actions-run` 1.34.0. No dedicated XPath Component renderer,
+new storage endpoint or external configuration is required. The
+[DOM Living Standard XPath interfaces](https://dom.spec.whatwg.org/#xpath) were
+checked on 27 September 2026 (standard last updated 24 September). DOM's XPath
+algorithms remain incompletely specified; browser behavior is exposed rather
+than emulated. For example, the tested Chromium maps an unknown unsigned-short
+result type to its ANY_TYPE behavior.

@@ -13,6 +13,8 @@ import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+import { TimelineHost } from './components/Timeline/TimelineHost';
+import { TimelineProvider } from './timeline/TimelineProvider';
 import { DevKit } from './components/DevKit/DevKit';
 import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
@@ -130,6 +132,8 @@ export default function App() {
         html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
       `}</style>
       <ThingtimeProvider key={rootData.user?.id || 'guest'}>
+        <TimelineProvider>
+        {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
         <VisualSettingsHost />
         <LopuPageTracker />
         <ThemeHost />
@@ -170,6 +174,7 @@ export default function App() {
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
         {!isStandalonePage ? <ConfettiCanvas /> : null}
         {mounted && !isStandalonePage ? <EasterEggs /> : null}
+        </TimelineProvider>
       </ThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}

@@ -68,6 +68,60 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
+  event and relationship records, durable draft recovery, private relational event/link Things and transactional
+  ordinary Thing history. Shared History now previews restores and three-way
+  merges with explicit conflict choices and idempotent, version-fenced commits.
+  Named branches now use separate branch/Thing head records, durable local
+  commands, private exact-version reads, and transactional forward-only pushes.
+  Concurrent/deferred pushes preserve versions and show per-branch outcomes.
+  Large versions retain separate snapshot parts, so history cannot strand later
+  edits or deletion; the real API grow/shrink/restore/delete regression passes.
+  IndexedDB upgrades pending work to atomic relationship records; server ancestry
+  uses exact parent links and existing shared indexes. Lopu preserves missing/dirty page context instead of treating it as an empty
+  page. Disposable replica-set and browser evidence, limits and outstanding
+  delivery gates: [PR #956 notes](../PRs/956-unified-timeline-add-relational-timeline-history-and-durable-branch-synchronization.md) and [implementation contract](../docs/unified-timeline.md).
+
+- 2026-09-27 — **Codex (AI)**: Add 53 reusable ARIA object programs with native nullable reflection, owned element relationships and frozen-list identity; negotiate Actions 1.33.0. Make animation stages grow to keep both tiles visible. Validate production output and retain the managed loopback dev stack; see [PR #955 details](../PRs/955-web-standards-aria-reusable-native-aria-object-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu can execute saved browser and server Actions
+  from chat. Per-chat **Ask before running** and **Full access** controls gate
+  mutations, persist safely across chat/account changes, and retain existing
+  Action, account and storage boundaries. The internal host shares canonical
+  data routes with Nitro and works in durable workflows. See
+  [execution contract](../docs/lopu-action-access.md) and
+  [PR #953 validation](../PRs/953-codex-lopu-workspace-actions--allow-lopu-actions-with-per-chat-access.md).
+
+- 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
+  message field. Stop keeps partial words, recording again appends, and explicit
+  Send uses the ordinary composer with late-result and rejected-send protection.
+  See [PR #952](../PRs/952-codex-voice-composer-draft--keep-voice-transcription-in-the-editable-message-draft.md) for behavior and validation.
+
+- 2026-09-27 — **Codex (AI)**: Web Standards adds 111 editable native animation
+  programs with saved keyframes/timing, playback promises and callbacks, scoped
+  receivers and cleanup. Both manifests/client negotiate actions-run 1.32.0.
+  Browser validation includes native interpolation, keyframe copying and ignored
+  option detection. See the [animation guide](../docs/web-standards-builder.md#native-web-animation-programs) and [PR #951 details](../PRs/951-web-standards-animations-reusable-web-animations-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
+  editable boundaries, native document edits and bounded contextual fragments.
+  Check owned endpoints and concrete native getters; negotiate actions-run 1.31.0.
+  See [PR #950](../PRs/950-codex-web-standards-ranges--add-reusable-live-and-static-range-programs.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Add 81 reusable observer programs with database-authored callbacks, native records, scoped targets and synchronous mutation batches. Disconnect on completion/Stop, preserve unsupported results in callbacks, and negotiate actions-run 1.30.0. See [PR #949](../PRs/949-codex-web-standards-observers--add-reusable-observer-programs-and-database-authored-callbacks.md).
+- 2026-09-27 — **Codex (AI)**: Recover from the Mac speech recognizer's observed
+  empty-input retry during silence. Keep listening without a false service
+  error, while preserving errors from failed captures that contain speech and
+  from unrelated service failures.
+- 2026-09-27 — **Codex (AI)**: Clear stale microphone/recognition errors when
+  retrying Lopu voice input. Capture errors no longer linger as conversation
+  history after permission is granted and a voice message sends successfully.
+
+- 2026-09-27 — **Codex (AI)**: Add 149 reusable layout/Geometry programs with scoped browser metrics, hit tests, native scroll completion, quad/range measurements and removable media-query listeners. Preserve native mixin accessors and private Component save/reuse. See [PR #944](../PRs/944-codex-web-standards-layout--add-reusable-layout-and-geometry-standards-programs.md).
+
 - 2026-09-27: Fix Mac Lopu voice input reporting `Microphone unavailable (network)`
   by routing standard desktop transcription through a signed Apple Speech helper.
   Preserve the existing chat/model flow, stop capture at lifecycle boundaries,

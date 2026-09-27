@@ -13,6 +13,9 @@ import {
 } from '../Lopu/lopuBuildBridge';
 import { buildComponentsByRef, type ComponentsByRef, type ComponentThingLike } from './WebpageBlocksRenderer';
 import type { WebpageBlock, WebpageCrystal } from './webpageBlocks';
+import { useTimelineDraft } from '~/timeline/useTimelineDraft';
+import type { TimelineEvent } from '~/timeline/contract';
+import { useTimelineSession } from '~/timeline/TimelineProvider';
 
 // Data layer for webpage surfaces: resolve a page (+ its referenced
 // components) through GET /api/v1/webpages/resolve, hold an editable block
@@ -28,7 +31,7 @@ export type WebpageTarget =
 	| { kind: 'global' };
 
 export type ResolvedWebpage = {
-	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string } | null;
+	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string; timelineHeadId?: string } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
 };
@@ -105,6 +108,14 @@ export const isStaleWebpageLanding = (
 ): boolean =>
 	!!saved && !!landing && landing.id === saved.id && typeof landing.updatedAt === 'string' && landing.updatedAt < saved.updatedAt;
 
+/** An external save has no authority over edits made after its input snapshot.
+ * Only an exact content acknowledgment can clear a dirty editor. */
+export const canAdoptSavedWebpage = (dirty: boolean, blocks: WebpageBlock[], thing: LopuSavedThingLike): boolean => {
+	if (!dirty) return true;
+	const saved = thing?.crystal?.blocks;
+	return Array.isArray(saved) && JSON.stringify(saved) === JSON.stringify(blocks);
+};
+
 // Fold a saved webpage thing into the resolved page: the save is the viewer's
 // own row (source 'user'), fields the save does not carry are kept.
 export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSavedThingLike): ResolvedWebpage | null => {
@@ -125,13 +136,14 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 				? undefined
 				: prev?.page?.linkKey;
 	const author = thing?.author && typeof thing.author === 'object' ? thing.author : prev?.page?.author;
+	const timelineHeadId = typeof thing.timelineHeadId === 'string' ? thing.timelineHeadId : id === prev?.page?.id ? prev.page.timelineHeadId : undefined;
 	// Drop the previous linkKey from the carried-over base: `linkKey` above has
 	// already decided whether it survives (a save that carries an acl is the
 	// authoritative sharing state, so a key it omits was revoked). Spreading
 	// `{ linkKey: undefined }` over the base would clear it too, but it also
 	// materialises an own `linkKey` key, which deepStrictEqual reports as a
 	// difference from an unshared page that never had one.
-	const { linkKey: _supersededLinkKey, ...carried } = prev?.page || {};
+	const { linkKey: _supersededLinkKey, timelineHeadId: _supersededHead, ...carried } = prev?.page || {};
 	return {
 		page: {
 			...carried,
@@ -139,6 +151,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 			crystal,
 			...(author !== undefined ? { author } : {}),
 			...(updatedAt ? { updatedAt } : {}),
+			...(timelineHeadId ? { timelineHeadId } : {}),
 			...(acl ? { acl } : {}),
 			...(linkKey ? { linkKey } : {})
 		},
@@ -148,6 +161,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 };
 
 export type UseWebpageDraft = {
+	history?: { error: string; saving: boolean; recoverable: TimelineEvent[]; recover: (event: TimelineEvent) => Promise<void>; dismiss: (event: TimelineEvent) => Promise<void> };
 	loading: boolean;
 	error: boolean;
 	resolved: ResolvedWebpage | null;
@@ -158,9 +172,8 @@ export type UseWebpageDraft = {
 	// make a just-inserted component renderable without a refetch
 	addComponent: (ref: string, component: ComponentThingLike | null) => void;
 	ensureComponent: (ref: string) => Promise<void>;
-	// adopt a save made elsewhere (Lopu's persisted patch/create): clears
-	// dirty, updates the resolved page (updatedAt/crystal/acl) and, when the
-	// saved thing carries blocks, converges the draft on them
+	// Adopt an external save in a clean editor or when it acknowledges the exact
+	// dirty content. Divergent local edits retain their content and version fence.
 	markSaved: (thing: LopuSavedThingLike) => void;
 	save: (options?: { name?: string; acl?: string[] }) => Promise<{ ok: boolean; id?: string; thing?: Record<string, any>; error?: string }>;
 	// discard the viewer's personalised site doc (site targets only)
@@ -172,9 +185,11 @@ export type UseWebpageDraft = {
 export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpageDraftOptions): UseWebpageDraft => {
 	const api = useApi();
 	const user = useCurrentUser();
+	const timelineSession = useTimelineSession();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const editableOption = options?.editable;
+	const historyEditable = editableOption ?? !(typeof window !== 'undefined' && isReadOnlyWebpageViewerRoute(window.location.pathname));
 
 	const [resolved, setResolved] = React.useState<ResolvedWebpage | null>(null);
 	const [loading, setLoading] = React.useState(!!target);
@@ -183,9 +198,14 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	const [dirty, setDirty] = React.useState(false);
 	const [extraComponents, setExtraComponents] = React.useState<ComponentsByRef>({});
 	const [refreshTick, setRefreshTick] = React.useState(0);
+	const history = useTimelineDraft(user?.id && historyEditable ? resolved?.page?.id ?? null : null, 'webpage-draft', resolved?.page?.timelineHeadId ?? null);
+	const historyRef = React.useRef(history); historyRef.current = history;
+	const blocksRef = React.useRef(blocks); blocksRef.current = blocks;
+	const resolvedRef = React.useRef(resolved); resolvedRef.current = resolved;
+	const draftSnapshot = (value: WebpageBlock[]) => ({ crystal: { ...(resolvedRef.current?.page?.crystal ?? {}), blocks: value }, baseUpdatedAt: resolvedRef.current?.page?.updatedAt ?? null });
 
 	const targetKey = target ? JSON.stringify(target) : null;
-	const scopeKey = JSON.stringify([targetKey, user?.id || null]);
+	const scopeKey = JSON.stringify([targetKey, user?.id || null, timelineSession.identity]);
 	const scopeRef = React.useRef(scopeKey);
 	scopeRef.current = scopeKey;
 	const [stateScope, setStateScope] = React.useState(scopeKey);
@@ -203,6 +223,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	// the live handle registered with the Lopu build bridge (created once)
 	const handleRef = React.useRef<LopuDraftHandle | null>(null);
 	const generationRef = React.useRef(0);
+	const editRevisionRef = React.useRef(0);
 
 	// Reset before children commit, not in an effect after a stale private page
 	// has already painted under another user, target or hidden-link key.
@@ -244,15 +265,17 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				setLoading(false);
 				return;
 			}
-			setResolved(data);
 			const targetChanged = appliedTargetRef.current !== targetKey;
 			appliedTargetRef.current = targetKey;
 			if (!data?.page || targetChanged || !dirtyRef.current) {
+				setResolved(data);
 				setBlocksState((data?.page?.crystal?.blocks as WebpageBlock[]) || []);
 				setDirty(false);
 				dirtyRef.current = false;
+				setExtraComponents({});
 			}
-			setExtraComponents({});
+			// A dirty draft retains both its content AND its original save fence.
+			// Adopting a newer updatedAt alone would authorize a silent overwrite.
 			setLoading(false);
 		})();
 		return () => {
@@ -260,14 +283,25 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 		};
 	}, [targetKey, scopeKey, refreshTick]);
 
+	React.useEffect(() => {
+		const applied = (event: Event) => {
+			if ((event as CustomEvent).detail?.thingId === resolvedRef.current?.page?.id) setRefreshTick(value => value + 1);
+		};
+		window.addEventListener('thingtime:timeline-applied', applied);
+		return () => window.removeEventListener('thingtime:timeline-applied', applied);
+	}, []);
+
 	const setBlocks = React.useCallback((next: WebpageBlock[]) => {
 		if (scopeRef.current !== scopeKey) return;
+		editRevisionRef.current++;
+		if (user?.id && resolvedRef.current?.page && historyEditable) void historyRef.current.record(draftSnapshot(blocksRef.current), draftSnapshot(next), 'Edit page').catch(() => {});
+		blocksRef.current = next;
 		setBlocksState(next);
 		setDirty(true);
 		dirtyRef.current = true;
 		// an edit makes this the draft Lopu's 'active' patches go to
 		if (handleRef.current) focusWebpageDraft(handleRef.current);
-	}, [scopeKey]);
+	}, [scopeKey, historyEditable]);
 
 	const componentsByRef = React.useMemo(
 		() => ({ ...(resolved?.componentsByRef || {}), ...extraComponents }),
@@ -322,6 +356,8 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 		async (options?: { name?: string; acl?: string[] }) => {
 			if (scopeRef.current !== scopeKey) return { ok: false, error: 'Page or account changed' };
 			const generation = generationRef.current;
+			const editRevision = editRevisionRef.current;
+			const draftHistory = historyRef.current;
 			if (!targetKey) return { ok: false, error: 'Nothing to save' };
 			const target = JSON.parse(targetKey) as WebpageTarget;
 			const page = resolved?.page || null;
@@ -347,6 +383,8 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
+				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;
+				if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while preparing the save.' };
 				if (resolved?.source === 'user' && page) {
 					const resp: any = await apiRef.current.v1.things.update({
 						id: page.id,
@@ -357,9 +395,9 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 						...(options?.acl ? { acl: options.acl } : {})
 					});
 					if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
+					await draftHistory.release(draftEventId);
 					if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while saving. Reopen the saved page to continue.' };
-					setDirty(false);
-					dirtyRef.current = false;
+					if (editRevision === editRevisionRef.current) { setDirty(false); dirtyRef.current = false; }
 					const nextUpdatedAt = typeof resp?.thing?.updatedAt === 'string' ? resp.thing.updatedAt : page.updatedAt;
 					const nextAcl = Array.isArray(resp?.thing?.acl) ? (resp.thing.acl as string[]) : page.acl;
 					const nextLinkKey = typeof resp?.thing?.linkKey === 'string' ? resp.thing.linkKey : undefined;
@@ -371,6 +409,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 									...prev.page!,
 									crystal,
 									updatedAt: nextUpdatedAt,
+									timelineHeadId: resp?.thing?.timelineHeadId ?? page.timelineHeadId,
 									acl: nextAcl,
 									...(nextLinkKey ? { linkKey: nextLinkKey } : { linkKey: undefined })
 								}
@@ -388,10 +427,10 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 					acl: options?.acl || [ACL_OWNER]
 				});
 				if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
+				await draftHistory.release(draftEventId);
 				if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while saving. Find the saved page in your Things.' };
 				const id = resp?.thing?.id || resp?.id;
-				setDirty(false);
-				dirtyRef.current = false;
+				if (editRevision === editRevisionRef.current) { setDirty(false); dirtyRef.current = false; }
 				// re-resolve so source flips to 'user' and future saves update in place
 				setRefreshTick((tick) => tick + 1);
 				announceSave(crystal);
@@ -400,7 +439,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				return { ok: false, error: err?.error || err?.message || 'Save failed' };
 			}
 		},
-		[targetKey, resolved, blocks, scopeKey]
+		[targetKey, resolved, blocks, scopeKey, historyEditable]
 	);
 
 	const resetToDefault = React.useCallback(async () => {
@@ -425,20 +464,32 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 
 	const discardDraft = React.useCallback(() => {
 		if (scopeRef.current !== scopeKey) return;
-		setBlocksState((resolved?.page?.crystal?.blocks as WebpageBlock[]) || []);
+		const next = (resolved?.page?.crystal?.blocks as WebpageBlock[]) || [];
+		const draftHistory = historyRef.current;
+		if (resolved?.page && user?.id && historyEditable) void draftHistory.record(draftSnapshot(blocksRef.current), draftSnapshot(next), 'Discard local draft').then(id => draftHistory.release(id)).catch(() => {});
+		editRevisionRef.current++;
+		blocksRef.current = next;
+		setBlocksState(next);
 		setDirty(false);
 		dirtyRef.current = false;
-	}, [resolved, scopeKey]);
+		setRefreshTick(tick => tick + 1);
+	}, [resolved, scopeKey, historyEditable]);
 
 	const refresh = React.useCallback(() => setRefreshTick((tick) => tick + 1), []);
 
-	// A save that happened elsewhere (Lopu persisted a patch or created this
-	// page): the saved thing is the truth — adopt its blocks (ids the server
-	// rewrote included), its updatedAt (so the next manual save's
-	// expectedUpdatedAt matches) and clear dirty. The bridge announces the
-	// thingtime:webpage-saved event itself.
+	// External saves may arrive after further typing or out of order. Preserve
+	// divergent drafts and their original save fence; History holds both versions.
 	const markSaved = React.useCallback((thing: LopuSavedThingLike) => {
 		if (scopeRef.current !== scopeKey) return;
+		const current = resolvedRef.current?.page;
+		const latest = current?.updatedAt ? { id: current.id, updatedAt: current.updatedAt } : savedRef.current;
+		if (isStaleWebpageLanding(latest, thing) || !canAdoptSavedWebpage(dirtyRef.current, blocksRef.current, thing)) return;
+		// flush captures the exact authored id synchronously. Later edits cannot
+		// be released by this acknowledgment, including while IndexedDB is busy.
+		if (dirtyRef.current && current && user?.id && historyEditable) {
+			const captured = historyRef.current;
+			void captured.flush().then(id => captured.release(id)).catch(() => {});
+		}
 		const id = typeof thing?.id === 'string' && thing.id ? thing.id : null;
 		const updatedAt = typeof thing?.updatedAt === 'string' ? thing.updatedAt : null;
 		if (id && updatedAt) savedRef.current = { id, updatedAt };
@@ -446,21 +497,23 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 			thing?.crystal && Array.isArray((thing.crystal as { blocks?: unknown }).blocks)
 				? ((thing.crystal as unknown as WebpageCrystal).blocks as WebpageBlock[])
 				: null;
-		if (savedBlocks) setBlocksState(savedBlocks);
+		if (savedBlocks) { blocksRef.current = savedBlocks; setBlocksState(savedBlocks); }
 		setDirty(false);
 		dirtyRef.current = false;
-		setResolved((prev) => mergeSavedWebpage(prev, thing));
-	}, [scopeKey]);
+		const next = mergeSavedWebpage(resolvedRef.current, thing);
+		resolvedRef.current = next; setResolved(next);
+	}, [scopeKey, historyEditable]);
 
 	// ——— Lopu build bridge registration ————————————————————————————————
 	// One LIVE handle per mount: getters read the latest state through refs,
 	// so the registry never sees a stale tree; the methods are the stable
 	// callbacks above. Editability and the target are fixed per registration.
-	const stateRef = React.useRef({ resolved, blocks, dirty, componentsByRef });
-	stateRef.current = { resolved, blocks, dirty, componentsByRef };
+	const stateRef = React.useRef({ resolved, blocks, dirty, componentsByRef, loading, error });
+	stateRef.current = { resolved, blocks, dirty, componentsByRef, loading, error };
 	const metaRef = React.useRef<{ editable: boolean; target: WebpageTarget | null }>({ editable: true, target: null });
 	const handle = React.useMemo<LopuDraftHandle>(
 		() => ({
+			get ready() { return !!stateRef.current.resolved || !stateRef.current.loading && !stateRef.current.error; },
 			get id() {
 				return stateRef.current.resolved?.page?.id ?? null;
 			},
@@ -521,6 +574,16 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	}, [resolved, dirty]);
 
 	return {
+		history: {
+			error: history.error, saving: history.saving, recoverable: history.recoverable,
+			dismiss: history.dismissRecovery,
+			recover: async event => {
+				const value = event.after?.value as any;
+				if (event.after?.adapter !== 'webpage-draft' || !Array.isArray(value?.crystal?.blocks)) throw new Error('This draft cannot be opened in the page editor.');
+				if (value.baseUpdatedAt !== (resolvedRef.current?.page?.updatedAt ?? null)) throw new Error('The saved page changed since this draft. Open History to compare before merging it.');
+				setBlocks(value.crystal.blocks); await historyRef.current.flush(); await historyRef.current.dismissRecovery(event);
+			}
+		},
 		loading,
 		error,
 		resolved,

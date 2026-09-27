@@ -1,3 +1,22 @@
+import { XPATH_CALLS, XPATH_CONSTRUCTORS, XPATH_RECEIVER_POLICY, type XPathArg } from './xpathPolicy';
+import { xpathExpression, xpathResolver, xpathCost, XPATH_LIMITS } from './xpathSupport';
+import { ARIA_ELEMENT, ariaArgument, type ARIAArg } from './ariaPolicy';
+import {
+	ANIMATION_CONSTRUCTORS,
+	ANIMATION_ELEMENT_CALLS,
+	ANIMATION_GLOBALS,
+	ANIMATION_STATIC,
+	ANIMATION_RECEIVER_POLICY,
+	type AnimationArg
+} from './animationPolicy';
+import { animationArgument, animationRecord, ANIMATION_LIMITS } from './animationSupport';
+import { RANGE_CONSTRUCTORS, RANGE_RECEIVER_POLICY, RANGE_INITIALIZERS, type RangeArg } from './rangePolicy';
+import { rangeHTML, rangeInit } from './rangeSupport';
+import { OBSERVER_CONSTRUCTORS, OBSERVER_RECEIVER_POLICY, type ObserverArg } from './observerPolicy';
+import { observerArgument, OBSERVER_LIMITS } from './observerSupport';
+import type { DOMCallback } from './workerLifecycle';
+import { LAYOUT_RECEIVER_POLICY, LAYOUT_ELEMENT, LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS, type LayoutArg } from './layoutPolicy';
+import { layoutArgument, layoutQuadJSON, layoutScrollResult } from './layoutSupport';
 import { CSSOM_RECEIVER_POLICY, CSSOM_CONSTRUCTORS, CSSOM_STATIC, CSSOM_PROPERTIES, type CSSOMArg } from './cssomPolicy';
 import { cssomArgument, cssomText, CSSOM_LIMITS } from './cssomSupport';
 import { TYPED_CSS_RECEIVER_POLICY, TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC, type TypedCSSArg } from './typedCSSPolicy';
@@ -14,6 +33,12 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| XPathArg
+	| ARIAArg
+	| AnimationArg
+	| RangeArg
+	| ObserverArg
+	| LayoutArg
 	| CSSOMArg
 	| TypedCSSArg
 	| 'svg-matrix'
@@ -48,6 +73,7 @@ export type Arg =
 	| 'canvas-path'
 	| 'canvas-image-data'
 	| 'canvas-fill'
+	| 'nullable-text'
 	| 'text'
 	| 'selector'
 	| 'tag'
@@ -82,12 +108,19 @@ const parentReads = 'children firstElementChild lastElementChild childElementCou
 const childReads = 'previousElementSibling nextElementSibling';
 const iteration = { keys: call([], { iterable: true }), values: call([], { iterable: true }), entries: call([], { iterable: true }) };
 export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
+	...XPATH_RECEIVER_POLICY,
+	...OBSERVER_RECEIVER_POLICY,
 	...HTML_FORM_RECEIVER_POLICY,
 	...CANVAS_RECEIVER_POLICY,
 	...SVG_RECEIVER_POLICY,
 	...TYPED_CSS_RECEIVER_POLICY,
 	...CSSOM_RECEIVER_POLICY,
-	HTMLElement: { reads: 'attributeStyleMap style' },
+	...LAYOUT_RECEIVER_POLICY,
+	...RANGE_RECEIVER_POLICY,
+	...ANIMATION_RECEIVER_POLICY,
+	ShadowRoot: { ...CSSOM_RECEIVER_POLICY.ShadowRoot, calls: { ...CSSOM_RECEIVER_POLICY.ShadowRoot.calls, ...ANIMATION_STATIC.Document } },
+	DOMMatrix: { ...SVG_RECEIVER_POLICY.DOMMatrix, calls: { ...SVG_RECEIVER_POLICY.DOMMatrix.calls, setMatrixValue: call(['css-text']) } },
+	HTMLElement: { reads: 'attributeStyleMap style offsetHeight offsetLeft offsetParent offsetTop offsetWidth scrollParent' },
 	SVGElement: { ...SVG_RECEIVER_POLICY.SVGElement, reads: SVG_RECEIVER_POLICY.SVGElement.reads + ' attributeStyleMap style' },
 	Node: {
 		reads:
@@ -102,9 +135,9 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 			isSameNode: call(['nullable-node']),
 			compareDocumentPosition: call(['node']),
 			contains: call(['nullable-node']),
-			lookupPrefix: call(['text']),
-			lookupNamespaceURI: call(['text']),
-			isDefaultNamespace: call(['text']),
+			lookupPrefix: call(['nullable-text']),
+			lookupNamespaceURI: call(['nullable-text']),
+			isDefaultNamespace: call(['nullable-text']),
 			appendChild: mutate(['node']),
 			insertBefore: mutate(['node', 'nullable-node']),
 			removeChild: mutate(['node']),
@@ -114,6 +147,7 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 	Document: {
 		reads: `URL documentURI compatMode characterSet charset inputEncoding contentType doctype documentElement body head styleSheets ${parentReads}`,
 		calls: {
+			...XPATH_CALLS,
 			...parentCalls,
 			getElementById: call(['text']),
 			getElementsByTagName: call(['text']),
@@ -122,15 +156,19 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 			createTextNode: mutate(['text']),
 			createComment: mutate(['text']),
 			createDocumentFragment: mutate(),
+			createRange: call(),
 			createAttribute: mutate(['attribute']),
 			importNode: mutate(['node', 'boolean'], { min: 1 }),
 			adoptNode: mutate(['node'])
 		}
 	},
 	Element: {
-		reads: `namespaceURI prefix localName tagName id className classList attributes innerHTML outerHTML shadowRoot ${parentReads} ${childReads}`,
-		writes: 'id className',
+		reads: `namespaceURI prefix localName tagName id className classList attributes innerHTML outerHTML shadowRoot ${parentReads} ${childReads} ${LAYOUT_ELEMENT.reads} ${ARIA_ELEMENT.reads}`,
+		writes: 'id className ' + LAYOUT_ELEMENT.writes + ' ' + ARIA_ELEMENT.writes,
+		writeArgs: { ...LAYOUT_ELEMENT.writeArgs, ...ARIA_ELEMENT.writeArgs },
 		calls: {
+			...LAYOUT_ELEMENT.calls,
+			...ANIMATION_ELEMENT_CALLS,
 			...parentCalls,
 			computedStyleMap: call(),
 			attachShadow: call(['cssom-shadow'], { mutates: true }),
@@ -211,7 +249,7 @@ type Captured = {
 	writes: Map<string, PropertyDescriptor>;
 	calls: Map<string, { descriptor: PropertyDescriptor; policy: Method }>;
 };
-export function createPlatformDOMBridge(surface: Element) {
+export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMCallback) {
 	const surfaceDocument = surface.ownerDocument;
 	const realm = surfaceDocument.defaultView! as unknown as Record<string, { prototype: object }>;
 	const doc = surfaceDocument.implementation.createHTMLDocument('Thingtime DOM program');
@@ -219,8 +257,32 @@ export function createPlatformDOMBridge(surface: Element) {
 	const scope = surfaceDocument.defaultView!.crypto.randomUUID();
 	const objects = new Map<string, Entry>();
 	const shadowRoots = new Set<ShadowRoot>();
-	const constructors = { ...TYPED_CSS_CONSTRUCTORS, ...CSSOM_CONSTRUCTORS };
-	const statics = { ...TYPED_CSS_STATIC, ...CSSOM_STATIC, CSS: { ...TYPED_CSS_STATIC.CSS, ...CSSOM_STATIC.CSS } };
+	const constructors = {
+		...XPATH_CONSTRUCTORS,
+		...TYPED_CSS_CONSTRUCTORS,
+		...CSSOM_CONSTRUCTORS,
+		...LAYOUT_CONSTRUCTORS,
+		...OBSERVER_CONSTRUCTORS,
+		...RANGE_CONSTRUCTORS,
+		...ANIMATION_CONSTRUCTORS
+	};
+	const xpathExpressions = new WeakMap<object, ReturnType<typeof xpathExpression>>();
+	let xpathWork = 0;
+	const animations = new Set<object>();
+	const animationObjects = new WeakSet<object>();
+	const callbackTokens = new WeakMap<object, unknown>();
+	let animationCount = 0;
+	const globals = { ...LAYOUT_GLOBALS, Document: LAYOUT_GLOBALS.Document + ' ' + ANIMATION_GLOBALS.Document };
+	const observers = new Map<object, { type: string; targets: Set<object> }>();
+	let callbackCount = 0;
+	const statics = {
+		...TYPED_CSS_STATIC,
+		...CSSOM_STATIC,
+		...LAYOUT_STATIC,
+		Document: { ...LAYOUT_STATIC.Document, ...ANIMATION_STATIC.Document },
+		Window: { ...CSSOM_STATIC.Window, ...LAYOUT_STATIC.Window },
+		CSS: { ...TYPED_CSS_STATIC.CSS, ...CSSOM_STATIC.CSS }
+	};
 	const cssCosts = new WeakMap<object, number>();
 	let cssWork = 0;
 	const cssCost = (value: unknown, depth = 0): number => {
@@ -247,6 +309,8 @@ export function createPlatformDOMBridge(surface: Element) {
 		return cost;
 	};
 	const ids = new WeakMap<object, string>();
+	const frozenArrays = new WeakMap<object, string>();
+	let frozenArrayCount = 0;
 	const owners = new WeakMap<object, Node>();
 	const valueKeys = new WeakMap<object, string>();
 	const allocated = new WeakSet<object>();
@@ -261,6 +325,7 @@ export function createPlatformDOMBridge(surface: Element) {
 	};
 	let allocationCount = 0,
 		requestCount = 0,
+		messageCount = 0,
 		work = 0,
 		stopped = false;
 	const captured = new Map<string, Captured>();
@@ -273,7 +338,12 @@ export function createPlatformDOMBridge(surface: Element) {
 					.split(' ')
 					.filter(Boolean)
 					.flatMap((key) => {
-						const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
+						// WebIDL mixins may insert unnamed native prototype layers (for
+						// example Range's node-valued accessors). Capture only registered
+						// names from the native chain; never inspect receiver instances.
+						let descriptor: PropertyDescriptor | undefined;
+						for (let proto: object | null = prototype; proto && !descriptor; proto = Object.getPrototypeOf(proto))
+							descriptor = Object.getOwnPropertyDescriptor(proto, key);
 						return descriptor ? [[key, descriptor] as const] : [];
 					})
 			);
@@ -410,6 +480,40 @@ export function createPlatformDOMBridge(surface: Element) {
 		const documentBody = body(doc);
 		replaceChildren(surface, ...Array.from(documentBody ? childNodes(documentBody) : []).map((node) => importNode(surfaceDocument, node, true)));
 	};
+	const inspectRange = (range: object) => {
+		// Chromium puts these accessors on an unnamed prototype between Range
+		// and AbstractRange. Capture from the concrete native receiver chain.
+		const type = belongs(range, 'Range') ? 'Range' : 'StaticRange';
+		for (const key of ['startContainer', 'endContainer']) inspectTree(reader<Node>(type, key)(range));
+	};
+	const inspectAnimation = (value: object) => {
+		if (belongs(value, 'Animation')) {
+			const effect = reader<object | null>('Animation', 'effect')(value);
+			if (effect) inspectAnimation(effect);
+		} else if (belongs(value, 'KeyframeEffect')) {
+			const target = reader<Node | null>('KeyframeEffect', 'target')(value);
+			if (target) inspectTree(target);
+		}
+	};
+	const unsupportedAnimationOptions = (options: unknown) =>
+		options &&
+		typeof options === 'object' &&
+		Object.prototype.hasOwnProperty.call(options, 'iterationComposite') &&
+		!captured.get('KeyframeEffect')?.reads.has('iterationComposite')
+			? { error: { name: 'UnsupportedDOMMember', message: 'This browser does not expose KeyframeEffect.iterationComposite' } }
+			: undefined;
+	const trackAnimation = (value: object) => {
+		inspectAnimation(value);
+		if (!animationObjects.has(value)) {
+			if (++animationCount > ANIMATION_LIMITS.objects) throw new Error('Animation allocation budget exceeded');
+			animationObjects.add(value);
+		}
+		if (belongs(value, 'Animation') && !animations.has(value)) {
+			animations.add(value);
+			// Observe rejection without changing the promise returned to authored code.
+			reader<Promise<unknown>>('Animation', 'finished')(value).catch(() => {});
+		}
+	};
 	const encode = (value: unknown, depth = 0): unknown => {
 		if (depth > 8) throw new Error('DOM result exceeds its depth budget');
 		if (value === undefined) return undefined;
@@ -426,12 +530,26 @@ export function createPlatformDOMBridge(surface: Element) {
 		}
 		if (Array.isArray(value)) {
 			if (value.length > 600) throw new Error('DOM result exceeds its item budget');
-			return value.map((item) => encode(item, depth + 1));
+			const items = value.map((item) => encode(item, depth + 1));
+			if (!Object.isFrozen(value)) return items;
+			let id = frozenArrays.get(value);
+			if (!id) {
+				if (++frozenArrayCount > 128) throw new Error('Frozen DOM array budget exceeded');
+				id = `${scope}:array:${frozenArrayCount}`;
+				frozenArrays.set(value, id);
+			}
+			return { $domArray: id, items };
 		}
+		if (typeof value === 'function' && callbackTokens.has(value)) return callbackTokens.get(value);
 		if (!value || typeof value !== 'object') throw new Error('This DOM result is not exposed');
 		let type: string | undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(XPATH_RECEIVER_POLICY),
+			...Object.keys(ANIMATION_RECEIVER_POLICY),
+			...Object.keys(RANGE_RECEIVER_POLICY),
+			...Object.keys(OBSERVER_RECEIVER_POLICY),
+			...Object.keys(LAYOUT_RECEIVER_POLICY),
 			...Object.keys(CSSOM_RECEIVER_POLICY),
 			...Object.keys(TYPED_CSS_RECEIVER_POLICY),
 			...Object.keys(HTML_FORM_RECEIVER_POLICY),
@@ -455,6 +573,7 @@ export function createPlatformDOMBridge(surface: Element) {
 			}
 		if (!type) throw new Error('This DOM receiver type is not exposed: ' + Object.prototype.toString.call(value));
 		if (belongs(value, 'Node')) inspectTree(value as Node);
+		if (belongs(value, 'Animation') || belongs(value, 'AnimationEffect')) trackAnimation(value);
 		let id = ids.get(value);
 		if (!id) {
 			if (objects.size >= 800) throw new Error('DOM handle budget exceeded');
@@ -477,7 +596,125 @@ export function createPlatformDOMBridge(surface: Element) {
 		if (!types.split('|').some((type) => belongs(target, type))) throw new Error('Wrong Canvas receiver type');
 		return target;
 	};
+	const ownedXPathNode = (raw: unknown) => {
+		if (context !== 'detached') throw new Error('XPath requires the owned detached document');
+		const node = receiverType(raw, 'Node') as Node;
+		inspectTree(node);
+		return node;
+	};
+	const reserveXPath = (expression: ReturnType<typeof xpathExpression>, contextNode: Node) => {
+		let nodes = 0,
+			text = 0;
+		const count = (node: Node) => {
+			nodes++;
+			if (nodeType(node) === 1)
+				for (const attr of Array.from(attributes(node))) {
+					nodes++;
+					text += attrName(attr).length + attrValue(attr).length;
+				}
+			else if ([2, 3, 4, 7, 8].includes(nodeType(node))) text += (textContent(node) || '').length;
+			if (nodes > XPATH_LIMITS.nodes || text > XPATH_LIMITS.treeText) throw new Error('XPath input tree budget exceeded');
+			for (const child of Array.from(childNodes(node))) count(child);
+		};
+		// Absolute paths can reach the entire owned document. Disconnected nodes
+		// also need counting because they need not appear beneath that document.
+		count(doc);
+		if (rootNode(contextNode) !== doc) count(rootNode(contextNode));
+		xpathWork += xpathCost(expression.tokens, nodes, text, expression.text.length);
+		if (xpathWork > XPATH_LIMITS.totalWork) throw new Error('XPath total work budget exceeded');
+	};
+
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule === 'nullable-text' && value === null) return null;
+		if (rule === 'xpath-expression') return xpathExpression(value).text;
+		if (rule === 'xpath-node') return ownedXPathNode(value);
+		if (rule === 'xpath-result') return value === null ? null : receiverType(value, 'XPathResult');
+		if (rule === 'xpath-type') {
+			if (!Number.isInteger(value) || Number(value) < 0 || Number(value) > 65535) throw new Error('Expected an unsigned short XPath result type');
+			return value;
+		}
+		if (rule === 'xpath-resolver') {
+			if (context !== 'detached') throw new Error('XPath requires the owned detached document');
+			if (value === null) return null;
+			if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, '$dom')) return ownedXPathNode(value);
+			return xpathResolver(value);
+		}
+		if (rule.startsWith('aria-'))
+			return ariaArgument(value, rule, (raw) => {
+				const target = receiverType(raw, 'Element');
+				inspectTree(target as Node);
+				return target;
+			});
+		if (rule === 'range-html') return rangeHTML(value);
+		if (rule === 'range-init')
+			return rangeInit(
+				value,
+				(raw) => argument(raw, 'range-node') as object,
+				(raw) => argument(raw, 'number')
+			);
+		if (rule === 'range-receiver') {
+			const range = receiverType(value, 'Range');
+			inspectRange(range);
+			return range;
+		}
+		if (rule === 'range-node' || rule === 'range-relative-node') {
+			const node = receiverType(value, 'Node');
+			inspectTree(node as Node);
+			// Relative boundary setters select the node's parent. In surface mode
+			// this must never turn the program root into a range on the runtime UI.
+			if (rule === 'range-relative-node') {
+				const parent = reader<Node | null>('Node', 'parentNode')(node);
+				if (parent) inspectTree(parent);
+			}
+			return node;
+		}
+		if (rule === 'animation-callback' && value === null) return null;
+		if (rule === 'observer-callback' || rule === 'animation-callback') {
+			const token = value as { $callback?: number };
+			if (
+				!deliverCallback ||
+				!value ||
+				typeof value !== 'object' ||
+				Array.isArray(value) ||
+				Object.keys(value).length !== 1 ||
+				!Object.prototype.hasOwnProperty.call(value, '$callback') ||
+				!Number.isSafeInteger(token.$callback) ||
+				token.$callback! < 1 ||
+				token.$callback! > 32
+			)
+				throw new Error('Expected a registered worker callback');
+			const callback = function (this: object, records: unknown[], observer: object) {
+				if (stopped) return;
+				try {
+					if (++callbackCount > OBSERVER_LIMITS.callbacks || (rule === 'observer-callback' && records.length > OBSERVER_LIMITS.records))
+						throw new Error('Observer callback budget exceeded');
+					deliverCallback(
+						token.$callback!,
+						encode(rule === 'animation-callback' ? [records] : [records, observer]) as unknown[],
+						undefined,
+						rule === 'animation-callback' ? encode(this) : undefined
+					);
+				} catch (error) {
+					deliverCallback(token.$callback!, [], String((error as Error).message).slice(0, 500));
+				}
+			};
+			callbackTokens.set(callback, value);
+			return callback;
+		}
+		if (rule.startsWith('animation-'))
+			return animationArgument(value, rule, (raw, types) => {
+				const target = receiverType(raw, types);
+				if (belongs(target, 'Node')) inspectTree(target as Node);
+				else inspectAnimation(target);
+				return target;
+			});
+		if (rule.startsWith('observer-'))
+			return observerArgument(value, rule, (raw, types) => {
+				const target = receiverType(raw, types);
+				inspectTree(target as Node);
+				return target;
+			});
+		if (rule.startsWith('layout-')) return layoutArgument(value, rule, receiverType);
 		if (rule.startsWith('cssom-')) return cssomArgument(value, rule, receiverType);
 		if (rule.startsWith('css-')) return typedCSSArgument(value, rule, receiverType);
 		if (rule.startsWith('svg-')) return svgArgument(value, rule, receiverType);
@@ -509,31 +746,68 @@ export function createPlatformDOMBridge(surface: Element) {
 		if (rule === 'attribute') return attribute(value);
 		return value;
 	};
-	return {
+	const bridge = {
 		stop: () => {
 			stopped = true;
+			for (const animation of animations) {
+				reader<Promise<unknown>>('Animation', 'finished')(animation).catch(() => {});
+				method<void>('Animation', 'cancel')(animation);
+			}
+			animations.clear();
+			for (const [observer, { type }] of observers) method<void>(type, 'disconnect')(observer);
+			observers.clear();
 			objects.clear();
 			if (context !== 'surface') for (const canvas of canvases) canvas.width = 0;
 			canvases.clear();
 		},
-		request: (
-			raw: unknown
-		): { value?: unknown; error?: { name: string; message: string } } | Promise<{ value?: unknown; error?: { name: string; message: string } }> => {
+		request: function execute(
+			raw: unknown,
+			nested = false
+		): { value?: unknown; error?: { name: string; message: string } } | Promise<{ value?: unknown; error?: { name: string; message: string } }> {
 			if (stopped) throw new Error('DOM run has ended');
 			if (++requestCount > 256) throw new Error('DOM request budget exceeded');
+			if (!nested) messageCount++;
 			if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).length !== 6) throw new Error('Invalid DOM request');
 			const request = raw as { type: string; id: number; action: string; target: unknown; key: string; args: unknown[] };
 			if (
 				request.type !== 'tt-platform-dom' ||
 				!Number.isSafeInteger(request.id) ||
-				request.id !== requestCount ||
-				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static'].includes(request.action) ||
+				request.id !== messageCount ||
+				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global', 'batch'].includes(request.action) ||
 				typeof request.key !== 'string' ||
 				request.key.length > 60 ||
 				!Array.isArray(request.args) ||
 				request.args.length > 9
 			)
 				throw new Error('Invalid DOM request envelope');
+			if (request.action === 'batch') {
+				if (
+					nested ||
+					request.target !== null ||
+					request.key ||
+					request.args.length !== 1 ||
+					!Array.isArray(request.args[0]) ||
+					!request.args[0].length ||
+					request.args[0].length > 16
+				)
+					throw new Error('Expected a bounded synchronous DOM batch');
+				const values: unknown[] = [];
+				for (const command of request.args[0]) {
+					if (
+						!command ||
+						typeof command !== 'object' ||
+						Array.isArray(command) ||
+						Object.keys(command).sort().join(',') !== 'action,args,key,target' ||
+						!['get', 'set', 'call'].includes(command.action)
+					)
+						throw new Error('Only synchronous member operations are allowed in a DOM batch');
+					const result = execute({ ...command, type: 'tt-platform-dom', id: messageCount }, true);
+					if (result instanceof Promise) throw new Error('Asynchronous DOM operations cannot run in a synchronous batch');
+					if (result.error) return result;
+					values.push(result.value);
+				}
+				return { value: values };
+			}
 			if (request.action === 'document' || request.action === 'surface') {
 				if (request.target !== null || request.key || request.args.length) throw new Error('Invalid document request');
 				const selected = request.action === 'surface' ? 'surface' : 'detached';
@@ -560,6 +834,40 @@ export function createPlatformDOMBridge(surface: Element) {
 					throw new Error('Expected a primitive DOM constant');
 				return { value: encode(descriptor.value) };
 			}
+			if (request.action === 'global') {
+				const name = request.target;
+				if (
+					context !== 'surface' ||
+					typeof name !== 'string' ||
+					!Object.prototype.hasOwnProperty.call(globals, name) ||
+					!globals[name].split(' ').includes(request.key) ||
+					request.args.length
+				)
+					throw new Error('Unregistered layout global read');
+				const owner = name === 'Window' ? surfaceDocument.defaultView! : surfaceDocument;
+				let descriptor: PropertyDescriptor | undefined;
+				for (let proto: object | null = owner; proto && !descriptor; proto = Object.getPrototypeOf(proto))
+					descriptor = Object.getOwnPropertyDescriptor(proto, request.key);
+				if (!descriptor) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose ${name}.${request.key}` } };
+				const value = descriptor.get ? descriptor.get.call(owner) : descriptor.value;
+				// The document root is outside the authored surface. Expose only its
+				// native scroll metrics, never a receiver that can navigate the tree.
+				if (name === 'Document' && request.key !== 'timeline')
+					return {
+						value: value
+							? {
+									nodeName: reader<string>('Node', 'nodeName')(value),
+									...Object.fromEntries(
+										['scrollTop', 'scrollLeft', 'scrollWidth', 'scrollHeight', 'clientWidth', 'clientHeight'].map((k) => [
+											k,
+											reader<number>('Element', k)(value)
+										])
+									)
+							  }
+							: null
+					};
+				return { value: encode(value) };
+			}
 			if (request.action === 'static' || (request.action === 'construct' && Object.prototype.hasOwnProperty.call(constructors, request.key))) {
 				const isStatic = request.action === 'static';
 				const namespace = request.target;
@@ -571,9 +879,35 @@ export function createPlatformDOMBridge(surface: Element) {
 					? registry && Object.prototype.hasOwnProperty.call(registry, request.key) && registry[request.key]
 					: (constructors as Record<string, Method>)[request.key];
 				if (!shape || (!isStatic && request.target !== null)) throw new Error('Unregistered CSS native operation');
+				if (!isStatic && Object.prototype.hasOwnProperty.call(RANGE_CONSTRUCTORS, request.key) && !context)
+					throw new Error('Ranges require an owned document context');
+				if (!isStatic && request.key === 'XPathEvaluator' && context !== 'detached') throw new Error('XPath requires the owned detached document');
+				const animationConstructor = !isStatic && Object.prototype.hasOwnProperty.call(ANIMATION_CONSTRUCTORS, request.key);
+				if (animationConstructor && context !== 'surface') throw new Error('Animations require the owned surface context');
+				if (animationConstructor && animationCount >= ANIMATION_LIMITS.objects) throw new Error('Animation allocation budget exceeded');
+				const observerConstructor = !isStatic && Object.prototype.hasOwnProperty.call(OBSERVER_CONSTRUCTORS, request.key);
+				if (observerConstructor && (!context || (request.key !== 'MutationObserver' && context !== 'surface')))
+					throw new Error('Observers require their owned document context');
+				if (observerConstructor && observers.size >= OBSERVER_LIMITS.observers) throw new Error('Observer allocation budget exceeded');
+				const unsupportedOptions = request.key === 'KeyframeEffect' ? unsupportedAnimationOptions(request.args[2]) : undefined;
+				if (unsupportedOptions) return unsupportedOptions;
 				const args = typedCSSArguments(shape, request.args, argument);
-				const owner = isStatic ? (namespace === 'Window' ? surfaceDocument.defaultView : realm[String(namespace)]) : undefined;
-				const native = isStatic ? owner && Object.getOwnPropertyDescriptor(owner, request.key)?.value : realm[request.key];
+				if (isStatic && ['Document', 'Window'].includes(String(namespace)) && context !== 'surface')
+					throw new Error('Layout operations require the active surface');
+				const owner = isStatic
+					? namespace === 'Window'
+						? surfaceDocument.defaultView
+						: namespace === 'Document'
+						? surfaceDocument
+						: realm[String(namespace)]
+					: undefined;
+				const native = isStatic
+					? owner &&
+					  (
+							Object.getOwnPropertyDescriptor(owner, request.key) ||
+							(namespace === 'Document' ? Object.getOwnPropertyDescriptor(realm.Document.prototype, request.key) : undefined)
+					  )?.value
+					: realm[request.key];
 				if (typeof native !== 'function')
 					return {
 						error: { name: 'UnsupportedDOMMember', message: `This browser does not expose ${isStatic ? namespace + '.' : ''}${request.key}` }
@@ -582,10 +916,49 @@ export function createPlatformDOMBridge(surface: Element) {
 				work += JSON.stringify(request.args).length;
 				if (work > 65536) throw new Error('DOM input work budget exceeded');
 				try {
-					const value = isStatic ? Reflect.apply(native, owner, args) : Reflect.construct(native, args);
+					let value = isStatic ? Reflect.apply(native, owner, args) : Reflect.construct(native, args);
+					if (observerConstructor && request.key !== 'IntersectionObserverEntry')
+						observers.set(value as object, { type: request.key, targets: new Set() });
+					if (animationConstructor && value && typeof value === 'object') trackAnimation(value);
+					if (namespace === 'Document') {
+						if (request.key === 'getAnimations')
+							value = (value as object[]).filter((animation) => {
+								const effect = reader<object | null>('Animation', 'effect')(animation);
+								const target = effect && belongs(effect, 'KeyframeEffect') ? reader<Node | null>('KeyframeEffect', 'target')(effect) : null;
+								return target && insideSurface(target);
+							});
+						if (request.key === 'elementFromPoint' && value && !insideSurface(value as Node)) value = null;
+						if (request.key === 'elementsFromPoint') value = (value as Node[]).filter((node) => insideSurface(node));
+						if (
+							request.key === 'caretPositionFromPoint' &&
+							value &&
+							!insideSurface(reader<Node>('CaretPosition', 'offsetNode')(value as object) as Node)
+						)
+							value = null;
+					}
 					if (value && typeof value === 'object') cssCosts.set(value, cost);
+					if (shape.awaitResult)
+						return Promise.resolve(value).then(
+							(result) => {
+								if (stopped) throw new Error('DOM run has ended');
+								return { value: layoutScrollResult(result) };
+							},
+							(error) => ({ error: { name: String(error?.name || 'DOMException'), message: String(error?.message || error).slice(0, 500) } })
+						);
 					return { value: encode(value) };
 				} catch (error) {
+					if (
+						observerConstructor &&
+						request.key === 'IntersectionObserverEntry' &&
+						(error as Error).name === 'TypeError' &&
+						/Illegal constructor/.test((error as Error).message)
+					)
+						return {
+							error: {
+								name: 'UnsupportedDOMMember',
+								message: 'This browser exposes IntersectionObserverEntry records but not their standard constructor.'
+							}
+						};
 					return { error: { name: (error as Error).name, message: String((error as Error).message).slice(0, 500) } };
 				}
 			}
@@ -633,6 +1006,10 @@ export function createPlatformDOMBridge(surface: Element) {
 				}
 			}
 			const target = receiver(request.target).value;
+			if (belongs(target, 'Animation') || belongs(target, 'AnimationEffect')) inspectAnimation(target);
+			// A native new Range() initially points at the realm document. Permit
+			// an owned boundary initializer before reading or operating on it.
+			if (belongs(target, 'AbstractRange') && !(request.action === 'call' && RANGE_INITIALIZERS.has(request.key))) inspectRange(target);
 			let descriptor: PropertyDescriptor | undefined,
 				namedCSSProperty = false,
 				policy: Method | undefined,
@@ -675,10 +1052,24 @@ export function createPlatformDOMBridge(surface: Element) {
 					writeRule = 'cssom-text';
 				}
 			}
+			// Event.isTrusted is an unforgeable own native accessor, not a prototype member.
+			if (
+				!descriptor &&
+				registered &&
+				request.action === 'get' &&
+				request.key === 'isTrusted' &&
+				realm.Event &&
+				Object.prototype.isPrototypeOf.call(realm.Event.prototype, target)
+			) {
+				const own = Object.getOwnPropertyDescriptor(target, request.key);
+				if (own?.get && own.configurable === false) descriptor = own;
+			}
 			if (!descriptor) {
 				if (registered) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose DOM member ${request.key}` } };
 				throw new Error(`DOM member ${request.key} is not registered for this receiver`);
 			}
+			const animationPromise = request.action === 'get' && belongs(target, 'Animation') && ['ready', 'finished'].includes(request.key);
+			if (nested && (policy?.awaitResult || animationPromise)) throw new Error('Asynchronous DOM operations cannot run in a synchronous batch');
 			if (
 				context === 'surface' &&
 				(policy?.mutates || request.action === 'set') &&
@@ -686,9 +1077,28 @@ export function createPlatformDOMBridge(surface: Element) {
 				!Object.prototype.hasOwnProperty.call(SVG_RECEIVER_POLICY, resolvedInterface) &&
 				!Object.prototype.hasOwnProperty.call(TYPED_CSS_RECEIVER_POLICY, resolvedInterface) &&
 				!Object.prototype.hasOwnProperty.call(CSSOM_RECEIVER_POLICY, resolvedInterface) &&
+				!Object.prototype.hasOwnProperty.call(ANIMATION_RECEIVER_POLICY, resolvedInterface) &&
+				!(request.action === 'call' && request.key === 'replaceChildren' && shadowRoots.has(target as ShadowRoot)) &&
+				!(
+					resolvedInterface === 'Element' &&
+					request.action === 'set' &&
+					(LAYOUT_ELEMENT.writes + ' ' + ARIA_ELEMENT.writes).split(' ').includes(request.key)
+				) &&
+				!(
+					resolvedInterface === 'Element' &&
+					request.action === 'call' &&
+					['setAttribute', 'removeAttribute', 'toggleAttribute'].includes(request.key) &&
+					typeof request.args[0] === 'string' &&
+					/^(role|aria-[a-z-]+)$/i.test(request.args[0])
+				) &&
 				request.key !== 'attachShadow'
 			)
 				throw new Error('Surface tree mutation is not registered; use authored document nodes');
+			if (Object.prototype.hasOwnProperty.call(ANIMATION_ELEMENT_CALLS, request.key) && context !== 'surface')
+				throw new Error('Animations require the owned surface context');
+			const unsupportedOptions = request.key === 'animate' ? unsupportedAnimationOptions(request.args[1]) : undefined;
+			if (unsupportedOptions) return unsupportedOptions;
+			if (request.key === 'animate' && animationCount >= ANIMATION_LIMITS.objects) throw new Error('Animation allocation budget exceeded');
 			if (resolvedInterface === 'HTMLCanvasElement' && request.key === 'getContext' && context !== 'surface')
 				throw new Error('Canvas drawing requires the active surface context');
 			if (belongs(target, 'SVGAnimatedString')) {
@@ -703,6 +1113,8 @@ export function createPlatformDOMBridge(surface: Element) {
 			if (request.key === 'attachShadow' && (context !== 'surface' || target === surface || !insideSurface(target as Node) || shadowRoots.size >= 8))
 				throw new Error('Shadow roots require a bounded program-owned surface element');
 			if (request.action === 'set' && request.key === 'textContent' && belongs(target, 'HTMLStyleElement')) cssomText(request.args[0]);
+			if (request.action === 'set' && ['aria-element', 'aria-elements'].includes(writeRule) && context !== 'surface')
+				throw new Error('ARIA element relationships require the owned surface context');
 			const rules = policy?.args || (request.action === 'set' ? [writeRule] : []);
 			let args: unknown[] | undefined;
 			if (policy?.overloads) {
@@ -722,6 +1134,20 @@ export function createPlatformDOMBridge(surface: Element) {
 				args = request.args.map((value, index) => argument(value, rules[Math.min(index, rules.length - 1)]));
 			}
 
+			const xpathCall =
+				request.action === 'call' &&
+				(belongs(target, 'XPathEvaluator') ||
+					belongs(target, 'XPathExpression') ||
+					(belongs(target, 'Document') && Object.prototype.hasOwnProperty.call(XPATH_CALLS, request.key)));
+			let xpathSource: ReturnType<typeof xpathExpression> | undefined;
+			if (xpathCall) {
+				if (context !== 'detached') throw new Error('XPath requires the owned detached document');
+				if (request.key !== 'createNSResolver') {
+					xpathSource = belongs(target, 'XPathExpression') ? xpathExpressions.get(target) : xpathExpression(args[0]);
+					if (!xpathSource) throw new Error('XPath expression is not owned by this run');
+					if (request.key === 'evaluate') reserveXPath(xpathSource, args[belongs(target, 'XPathExpression') ? 0 : 1] as Node);
+				}
+			}
 			const svgOwner = owners.get(target);
 			const filterOwner = belongs(target, 'Node') ? (target as Node) : svgOwner;
 			if (
@@ -801,6 +1227,14 @@ export function createPlatformDOMBridge(surface: Element) {
 				if (cssRuleCount(cssContainer) + added > CSSOM_LIMITS.rules) throw new Error('CSS rule budget exceeded');
 			}
 
+			const observerState = observers.get(target);
+			if (
+				observerState &&
+				request.key === 'observe' &&
+				!observerState.targets.has(args[0] as object) &&
+				observerState.targets.size >= OBSERVER_LIMITS.targets
+			)
+				throw new Error('Observer target budget exceeded');
 			let result: unknown;
 			try {
 				if (request.action === 'get') result = descriptor.get ? descriptor.get.call(target) : descriptor.value;
@@ -812,6 +1246,11 @@ export function createPlatformDOMBridge(surface: Element) {
 					}
 					result = args[0];
 				} else result = descriptor.value.apply(target, args);
+				if (observerState) {
+					if (request.key === 'observe') observerState.targets.add(args[0] as object);
+					if (request.key === 'unobserve') observerState.targets.delete(args[0] as object);
+					if (request.key === 'disconnect') observerState.targets.clear();
+				}
 			} catch (error) {
 				// Actual DOM errors remain catchable in authored worker programs.
 				return {
@@ -820,7 +1259,9 @@ export function createPlatformDOMBridge(surface: Element) {
 			}
 			const complete = (result: unknown) => {
 				if (stopped) throw new Error('DOM run has ended');
+				if (belongs(target, 'AbstractRange')) inspectRange(target);
 				if (cssContainer && (policy?.mutates || request.action === 'set')) cssRuleCount(cssContainer);
+				if (xpathCall && request.key === 'createExpression' && result && xpathSource) xpathExpressions.set(result as object, xpathSource);
 				if (request.key === 'attachShadow' && result) shadowRoots.add(result as ShadowRoot);
 				if (policy?.iterable) {
 					const items: unknown[] = [];
@@ -839,11 +1280,20 @@ export function createPlatformDOMBridge(surface: Element) {
 					owners.set(result, owner);
 					valueKeys.set(result, belongs(target, 'Node') ? request.key : valueKeys.get(target) || request.key);
 				}
+				// Offset ancestors can be outside the program. Preserve null instead
+				// of leaking the runtime's body or document through a layout read.
+				if (['offsetParent', 'scrollParent'].includes(request.key) && result && !insideSurface(result as Node)) result = null;
 				const value =
-					request.key === 'getContextAttributes' && belongs(target, 'CanvasRenderingContext2D')
+					resolvedInterface === 'Element' && /^scroll(?:To|By|IntoView)?$/.test(request.key)
+						? layoutScrollResult(result)
+						: request.key === 'toJSON' && belongs(target, 'DOMQuad')
+						? layoutQuadJSON(result)
+						: request.key === 'getContextAttributes' && belongs(target, 'CanvasRenderingContext2D')
 						? canvasContextAttributes(result)
 						: request.key === 'type' && belongs(target, 'CSSNumericValue')
 						? typedCSSNumericType(result)
+						: belongs(target, 'AnimationEffect') && ['getTiming', 'getComputedTiming', 'getKeyframes'].includes(request.key)
+						? animationRecord(result)
 						: encode(result);
 				if (policy?.mutates || request.action === 'set') {
 					// Collections retain their originating node, even after that subtree
@@ -853,11 +1303,12 @@ export function createPlatformDOMBridge(surface: Element) {
 				}
 				return { value };
 			};
-			if (policy?.awaitResult)
+			if (policy?.awaitResult || animationPromise)
 				return Promise.resolve(result).then(complete, (error) => ({
 					error: { name: String(error?.name || 'DOMException'), message: String(error?.message || error).slice(0, 500) }
 				}));
 			return complete(result);
 		}
 	};
+	return { stop: bridge.stop, request: (raw: unknown) => bridge.request(raw) };
 }

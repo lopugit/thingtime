@@ -113,6 +113,7 @@ const ThingPreviewBox = ({
 // opens its own page — thingsCore.thingLink); 'preview' is the explicit
 // quick-look modal. Rename applies to kinds whose crystal carries a name.
 export type ThingsItemAction =
+  | 'history'
   | 'send-to-lopu'
   | 'open'
   | 'preview'

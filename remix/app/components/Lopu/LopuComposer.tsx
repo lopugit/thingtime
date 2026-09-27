@@ -1,7 +1,8 @@
 import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
+import { LOPU_MAX_MESSAGE_CHARS } from './composerDictation';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
 import React from 'react';
-import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Select, Text, Textarea } from '@chakra-ui/react';
 import { ArrowUp, ChevronDown, Settings2, Square } from 'lucide-react';
 
 import { DRAWER_POPUP_Z, useIsMobileViewport } from '../Nav/Drawer/useDrawer';
@@ -18,7 +19,7 @@ import { LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuPopoverSx, lop
 // action on the rainbow: send, or stop while Lopu streams.
 
 const MAX_TEXTAREA_HEIGHT = 168;
-export const LOPU_MAX_MESSAGE_CHARS = 8000;
+export { LOPU_MAX_MESSAGE_CHARS } from './composerDictation';
 
 export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boolean; confirmDeletes: boolean };
 
@@ -315,7 +316,8 @@ export const LopuComposer = ({
 					sx={{ '&:focus, &:focus-visible': { boxShadow: 'none', outline: 'none' } }}
 				/>
 				<Flex align="center" flexWrap="wrap" gap={1.5} px={compact ? 1.5 : 2} pb={compact ? 1.5 : 2} pt={0.5} minW={0}>
-					<LopuModelPicker
+					<Button size="xs" variant="ghost" borderRadius="full" aria-label="Chat access mode" onClick={() => onSettingsChange({ accessMode: settings.accessMode === 'full' ? 'ask' : 'full' })} title="Change access for this chat">{settings.accessMode === 'full' ? 'Full access' : 'Ask before running'}</Button>
+          <LopuModelPicker
 						models={models}
 						vaultProviders={vaultProviders}
 						vault={vault}
@@ -417,6 +419,13 @@ export const LopuComposer = ({
 												/>
 											</>
 										) : null}
+          <Box py={1.5}>
+            <Text fontSize={LOPU_UI.fontSmall} fontWeight={600} color={LOPU_UI.ink}>Chat access</Text>
+            <Select aria-label="Chat access" size="sm" width="100%" mt={1} borderRadius="full" value={settings.accessMode || 'ask'} onChange={event => onSettingsChange({ accessMode: event.target.value as 'ask' | 'full' })}>
+              <option value="ask">Ask before running</option><option value="full">Full access</option>
+            </Select>
+            <Text fontSize="11px" color={LOPU_UI.muted} mt={1} lineHeight="1.3">{settings.accessMode === 'full' ? 'Lopu can run Actions and change things without asking in this chat.' : 'Lopu asks before running Actions or changing things in this chat.'}</Text>
+          </Box>
           <SettingsRow label="Vercel chat management" hint="Server continues saved work after this page closes" control={<LopuToggle checked={settings.management === 'server'} onChange={value => onSettingsChange({ management: value ? 'server' : 'client' })} label="Vercel chat management" />} />
 										{settingsContent ? (
 											<Box borderTop={preferences ? LOPU_UI.border : undefined} pt={preferences ? 2 : 0} mt={preferences ? 1 : 0}>

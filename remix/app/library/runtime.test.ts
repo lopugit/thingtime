@@ -1,3 +1,5 @@
+import { routeModules } from '../../server/routes/api/[...]';
+import { actionDataRoutes } from '../../server/utils/actionDataRoutes';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { LibraryExample } from './types';
@@ -49,8 +51,8 @@ test('manifest registers the origin-scoped library route and rejects incompatibl
 	assert.ok(manifest.operations.some((x) => x.path === '/api/v1/library/request' && x.methods.includes('POST')));
 	for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 	for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
-	const routes = readFileSync(new URL('../../server/routes/api/[...].ts', import.meta.url), 'utf8');
-	assert.ok(routes.includes("'v1/library/request'"));
+	assert.equal(typeof routeModules['v1/library/request'], 'function');
+	assert.equal(routeModules['v1/library/request'], actionDataRoutes['v1/library/request']);
 });
 
 test('reusable Things carry only sample inputs and a curated identifier', () => {

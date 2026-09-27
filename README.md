@@ -2,6 +2,44 @@
 
 https://thingtime.com
 
+### Unified Timeline (implementation in progress)
+
+Large retained Timeline versions are split into protected relational snapshot
+parts so history cannot strand edits/deletion of an existing large Thing. No
+additional collection, index, secret or configuration is needed. Complete large
+preview and streamed restoration are still listed in the Timeline acceptance
+ledger.
+
+The shared History panel records ordinary Thing revisions and editor drafts in
+the account's private **Timeline** folder. Local IndexedDB keeps authored edits
+and a bounded cache; the database keeps the complete accepted history. Preview
+a restore or merge before applying it; restores append a version and merges ask
+for explicit choices where both sides changed the same field.
+Events and relationship links use identical relational records locally and
+remotely. Each revision/link is a separate document, with bounded history pages
+assembled on demand; Things and branches do not collect growing history arrays.
+In per-Thing History, **Branches** creates a named alternative from the selected
+version, pulls branch updates, and pushes another selected version. Each
+branch/Thing head is its own document. Pending commands survive reload and retry
+with the original identity; a conflicting push preserves both versions.
+Direct branch editing and merging into a named branch remain in progress.
+
+Forks need the existing transaction-capable Mongo replica set and completed
+storage-accounting migrations. Timeline uses the normal `getThingsCollection()`
+data plane and requires no extra credentials, provider account or collection.
+The browser needs IndexedDB on a stable origin for reload/offline recovery.
+Database version 5 adds individual branch, head and command stores while
+preserving the earlier relational event/link migration and pending drafts.
+Account, origin and custom Mongo data source each have separate local queues.
+History is private and available only to full account credentials.
+
+Run `npm --prefix remix run test:timeline` for the focused suite. The opt-in HTTP
+suite uses `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> npm --prefix
+remix run test:timeline:integration`. It refuses any database except the disposable
+local `timeline-rs` replica set at `127.0.0.1:20337`; it creates fixtures through
+the app API. Never use a shared or production database for these checks.
+See [the implementation contract and open delivery gates](docs/unified-timeline.md).
+
 ### Builder service workspaces
 
 Insert **Service workspace** from the builder block menu. Its native
@@ -4216,3 +4254,28 @@ needed for standard device transcription. Build and install using the
 Microphone and Speech Recognition when macOS asks. Re-enable denied access in
 System Settings → Privacy & Security. On-device recognition is preferred where
 the language supports it; Apple's service may be used otherwise.
+
+
+### Lopu Action access QA
+
+Lopu's per-chat Ask/Full modes require no new deployment secret. Existing
+first-party sessions, Mongo transactions and the Lopu provider setup still
+apply. For an isolated verification without model billing:
+
+1. Start a disposable loopback Mongo replica at port `22563`, replica set
+   `lopuActions`, with a new empty dbpath. Do not point this check at shared data.
+2. Use the canonical PM2 app definition with an isolated process name and
+   `TT_WEB_PORT=22560`, `TT_HMR_PORT=22561`, `TT_API_PORT=22562`.
+   Set `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:22563/?replicaSet=lopuActions`
+   and a fresh local-only `JWT_SECRET` on both the app and script; unset
+   `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` for this disposable stack. No production
+   credentials or provider keys are required.
+3. From `remix/`, run `TT_LOPU_ACTIONS_LOCAL=1 node --import tsx
+   scripts/verify-lopu-actions.mts` with the same Mongo/JWT environment.
+   The script refuses any other Mongo URI, creates synthetic accounts and data,
+   and revokes its login at completion. Stop the named QA PM2 processes afterward.
+4. Open `/scripts/lopu-actions.browser.html` on the QA Vite origin for the
+   production composer's isolated desktop/phone fixture.
+
+This checks runtime and storage behavior, not live provider reasoning or
+production gear migration. See [Lopu Action access](docs/lopu-action-access.md).

@@ -96,6 +96,27 @@ test('repeated handles retain receiver identity and undefined native returns sta
 	assert.deepEqual(voidResult.results, [{ ok: true, result: '[undefined]' }]);
 });
 
+test('native FrozenArray transport preserves cached array and contained receiver identity', async () => {
+	const handle = { $dom: 'run:element', type: 'Element' };
+	const list = { $domArray: 'run:array:1', items: [handle] };
+	const result = await run(
+		[
+			declare('a', domDocument()),
+			declare('b', domDocument()),
+			...returns(
+				array(
+					{ op: 'binary', operator: '===', left: variable('a'), right: variable('b') },
+					{ op: 'binary', operator: '===', left: get(variable('a'), 0), right: get(variable('b'), 0) },
+					method(global('Object'), 'isFrozen', [variable('a')]),
+					method(global('Reflect'), 'set', [variable('a'), '0', null])
+				)
+			)
+		],
+		() => ({ value: list })
+	);
+	assert.deepEqual(result.results, [{ ok: true, result: [true, true, true, false] }]);
+});
+
 test('a refused DOM request leaves the frame-side request numbering intact', async () => {
 	// The bridge accepts a request only when its id equals its own request count,
 	// so a refused request must not consume an id. Exceeding the concurrency

@@ -1,3 +1,8 @@
+import { XPATH_CONSTRUCTORS } from './xpathPolicy';
+import { ANIMATION_CONSTRUCTORS, ANIMATION_STATIC, ANIMATION_GLOBALS } from './animationPolicy';
+import { RANGE_CONSTRUCTORS } from './rangePolicy';
+import { OBSERVER_CONSTRUCTORS } from './observerPolicy';
+import { LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS } from './layoutPolicy';
 import { CSSOM_CONSTRUCTORS, CSSOM_STATIC } from './cssomPolicy';
 import { TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC } from './typedCSSPolicy';
 import assert from 'node:assert/strict';
@@ -21,22 +26,50 @@ test('every catalogue DOM request names a member the receiver policy registers',
 		if (!value || typeof value !== 'object') return;
 		const node = value as { op?: unknown; action?: unknown; key?: unknown };
 		if (node.op === 'dom') requested.set(`${node.action}:${node.key || ''}`, id);
+		if (node.op === 'object' && Array.isArray((value as any).entries)) {
+			const command = Object.fromEntries((value as any).entries);
+			if (['get', 'set', 'call'].includes(command.action) && 'target' in command && 'args' in command)
+				requested.set(`${command.action}:${command.key}`, id);
+		}
 		for (const item of Object.values(value)) collect(item, id);
 	};
 	for (const f of WEB_FEATURES) collect(featureRecipe(f).program.steps, f.id);
 	assert.ok(requested.size > 40, `expected broad DOM coverage, saw ${requested.size} distinct operations`);
 	for (const [request, id] of requested) {
 		const [action, key] = request.split(':');
-		if (['document', 'surface'].includes(action)) {
+		if (['document', 'surface', 'batch'].includes(action)) {
 			assert.equal(key, '', `${id}: a document request carries no member name`);
 			continue;
 		}
 		if (action === 'construct') {
-			assert.ok(['Path2D', 'ImageData', ...Object.keys(TYPED_CSS_CONSTRUCTORS), ...Object.keys(CSSOM_CONSTRUCTORS)].includes(key));
+			assert.ok(
+				[
+					'Path2D',
+					...Object.keys(XPATH_CONSTRUCTORS),
+					'ImageData',
+					...Object.keys(RANGE_CONSTRUCTORS),
+					...Object.keys(ANIMATION_CONSTRUCTORS),
+					...Object.keys(TYPED_CSS_CONSTRUCTORS),
+					...Object.keys(CSSOM_CONSTRUCTORS),
+					...Object.keys(LAYOUT_CONSTRUCTORS),
+					...Object.keys(OBSERVER_CONSTRUCTORS)
+				].includes(key)
+			);
 			continue;
 		}
 		if (action === 'static') {
-			assert.ok([...Object.values(TYPED_CSS_STATIC), ...Object.values(CSSOM_STATIC)].some((p) => key in p));
+			assert.ok(
+				[
+					...Object.values(TYPED_CSS_STATIC),
+					...Object.values(CSSOM_STATIC),
+					...Object.values(LAYOUT_STATIC),
+					...Object.values(ANIMATION_STATIC)
+				].some((p) => key in p)
+			);
+			continue;
+		}
+		if (action === 'global') {
+			assert.ok([...Object.values(LAYOUT_GLOBALS), ...Object.values(ANIMATION_GLOBALS)].some((v) => v.split(' ').includes(key)));
 			continue;
 		}
 		const registry = ['get', 'constant'].includes(action) ? reads : action === 'set' ? writes : calls;

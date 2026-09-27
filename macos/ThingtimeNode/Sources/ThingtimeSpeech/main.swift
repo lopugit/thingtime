@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import Speech
+import ThingtimeSpeechCore
 
 // One utterance per process. Only the owning Electron window receives text;
 // no audio files, provider credentials, or persistent recording are created.
@@ -83,8 +84,7 @@ final class SpeechCapture {
                     if result.isFinal { self.finish(sendTranscript: true); return }
                 }
                 if let error {
-                    let code = (error as NSError).code
-                    self.finish(error: code == 1110 ? "no-speech" : "service-unavailable")
+                    self.finish(error: recognitionFailureCode(error as NSError, hasTranscript: !self.latest.isEmpty))
                 }
             }
         }

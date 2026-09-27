@@ -1,3 +1,9 @@
+import { xpathRecipe } from './xpathFixtures';
+import { ariaRecipe } from './ariaFixtures';
+import { animationRecipe } from './animationFixtures';
+import { rangeRecipe } from './rangeFixtures';
+import { observerRecipe } from './observerFixtures';
+import { layoutRecipe } from './layoutFixtures';
 import { cssomRecipe } from './cssomFixtures';
 import { typedCSSRecipe } from './typedCSSFixtures';
 import { cssFunctionRecipe } from './cssFunctionFixtures';
@@ -408,6 +414,18 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const xpath = xpathRecipe(feature);
+	if (xpath) return xpath;
+	const aria = ariaRecipe(feature);
+	if (aria) return aria;
+	const animation = animationRecipe(feature);
+	if (animation) return animation;
+	const range = rangeRecipe(feature);
+	if (range) return range;
+	const observer = observerRecipe(feature);
+	if (observer) return observer;
+	const layout = layoutRecipe(feature);
+	if (layout) return layout;
 	const cssom = cssomRecipe(feature);
 	if (cssom) return cssom;
 	const typed = typedCSSRecipe(feature);
