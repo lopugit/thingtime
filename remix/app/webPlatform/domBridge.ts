@@ -1,3 +1,5 @@
+import { XPATH_CALLS, XPATH_CONSTRUCTORS, XPATH_RECEIVER_POLICY, type XPathArg } from './xpathPolicy';
+import { xpathExpression, xpathResolver, xpathCost, XPATH_LIMITS } from './xpathSupport';
 import { ARIA_ELEMENT, ariaArgument, type ARIAArg } from './ariaPolicy';
 import {
 	ANIMATION_CONSTRUCTORS,
@@ -31,6 +33,7 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| XPathArg
 	| ARIAArg
 	| AnimationArg
 	| RangeArg
@@ -70,6 +73,7 @@ export type Arg =
 	| 'canvas-path'
 	| 'canvas-image-data'
 	| 'canvas-fill'
+	| 'nullable-text'
 	| 'text'
 	| 'selector'
 	| 'tag'
@@ -104,6 +108,7 @@ const parentReads = 'children firstElementChild lastElementChild childElementCou
 const childReads = 'previousElementSibling nextElementSibling';
 const iteration = { keys: call([], { iterable: true }), values: call([], { iterable: true }), entries: call([], { iterable: true }) };
 export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
+	...XPATH_RECEIVER_POLICY,
 	...OBSERVER_RECEIVER_POLICY,
 	...HTML_FORM_RECEIVER_POLICY,
 	...CANVAS_RECEIVER_POLICY,
@@ -130,9 +135,9 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 			isSameNode: call(['nullable-node']),
 			compareDocumentPosition: call(['node']),
 			contains: call(['nullable-node']),
-			lookupPrefix: call(['text']),
-			lookupNamespaceURI: call(['text']),
-			isDefaultNamespace: call(['text']),
+			lookupPrefix: call(['nullable-text']),
+			lookupNamespaceURI: call(['nullable-text']),
+			isDefaultNamespace: call(['nullable-text']),
 			appendChild: mutate(['node']),
 			insertBefore: mutate(['node', 'nullable-node']),
 			removeChild: mutate(['node']),
@@ -142,6 +147,7 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 	Document: {
 		reads: `URL documentURI compatMode characterSet charset inputEncoding contentType doctype documentElement body head styleSheets ${parentReads}`,
 		calls: {
+			...XPATH_CALLS,
 			...parentCalls,
 			getElementById: call(['text']),
 			getElementsByTagName: call(['text']),
@@ -252,6 +258,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 	const objects = new Map<string, Entry>();
 	const shadowRoots = new Set<ShadowRoot>();
 	const constructors = {
+		...XPATH_CONSTRUCTORS,
 		...TYPED_CSS_CONSTRUCTORS,
 		...CSSOM_CONSTRUCTORS,
 		...LAYOUT_CONSTRUCTORS,
@@ -259,6 +266,8 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		...RANGE_CONSTRUCTORS,
 		...ANIMATION_CONSTRUCTORS
 	};
+	const xpathExpressions = new WeakMap<object, ReturnType<typeof xpathExpression>>();
+	let xpathWork = 0;
 	const animations = new Set<object>();
 	const animationObjects = new WeakSet<object>();
 	const callbackTokens = new WeakMap<object, unknown>();
@@ -536,6 +545,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		let type: string | undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(XPATH_RECEIVER_POLICY),
 			...Object.keys(ANIMATION_RECEIVER_POLICY),
 			...Object.keys(RANGE_RECEIVER_POLICY),
 			...Object.keys(OBSERVER_RECEIVER_POLICY),
@@ -586,7 +596,49 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 		if (!types.split('|').some((type) => belongs(target, type))) throw new Error('Wrong Canvas receiver type');
 		return target;
 	};
+	const ownedXPathNode = (raw: unknown) => {
+		if (context !== 'detached') throw new Error('XPath requires the owned detached document');
+		const node = receiverType(raw, 'Node') as Node;
+		inspectTree(node);
+		return node;
+	};
+	const reserveXPath = (expression: ReturnType<typeof xpathExpression>, contextNode: Node) => {
+		let nodes = 0,
+			text = 0;
+		const count = (node: Node) => {
+			nodes++;
+			if (nodeType(node) === 1)
+				for (const attr of Array.from(attributes(node))) {
+					nodes++;
+					text += attrName(attr).length + attrValue(attr).length;
+				}
+			else if ([2, 3, 4, 7, 8].includes(nodeType(node))) text += (textContent(node) || '').length;
+			if (nodes > XPATH_LIMITS.nodes || text > XPATH_LIMITS.treeText) throw new Error('XPath input tree budget exceeded');
+			for (const child of Array.from(childNodes(node))) count(child);
+		};
+		// Absolute paths can reach the entire owned document. Disconnected nodes
+		// also need counting because they need not appear beneath that document.
+		count(doc);
+		if (rootNode(contextNode) !== doc) count(rootNode(contextNode));
+		xpathWork += xpathCost(expression.tokens, nodes, text, expression.text.length);
+		if (xpathWork > XPATH_LIMITS.totalWork) throw new Error('XPath total work budget exceeded');
+	};
+
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule === 'nullable-text' && value === null) return null;
+		if (rule === 'xpath-expression') return xpathExpression(value).text;
+		if (rule === 'xpath-node') return ownedXPathNode(value);
+		if (rule === 'xpath-result') return value === null ? null : receiverType(value, 'XPathResult');
+		if (rule === 'xpath-type') {
+			if (!Number.isInteger(value) || Number(value) < 0 || Number(value) > 65535) throw new Error('Expected an unsigned short XPath result type');
+			return value;
+		}
+		if (rule === 'xpath-resolver') {
+			if (context !== 'detached') throw new Error('XPath requires the owned detached document');
+			if (value === null) return null;
+			if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, '$dom')) return ownedXPathNode(value);
+			return xpathResolver(value);
+		}
 		if (rule.startsWith('aria-'))
 			return ariaArgument(value, rule, (raw) => {
 				const target = receiverType(raw, 'Element');
@@ -829,6 +881,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 				if (!shape || (!isStatic && request.target !== null)) throw new Error('Unregistered CSS native operation');
 				if (!isStatic && Object.prototype.hasOwnProperty.call(RANGE_CONSTRUCTORS, request.key) && !context)
 					throw new Error('Ranges require an owned document context');
+				if (!isStatic && request.key === 'XPathEvaluator' && context !== 'detached') throw new Error('XPath requires the owned detached document');
 				const animationConstructor = !isStatic && Object.prototype.hasOwnProperty.call(ANIMATION_CONSTRUCTORS, request.key);
 				if (animationConstructor && context !== 'surface') throw new Error('Animations require the owned surface context');
 				if (animationConstructor && animationCount >= ANIMATION_LIMITS.objects) throw new Error('Animation allocation budget exceeded');
@@ -1081,6 +1134,20 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 				args = request.args.map((value, index) => argument(value, rules[Math.min(index, rules.length - 1)]));
 			}
 
+			const xpathCall =
+				request.action === 'call' &&
+				(belongs(target, 'XPathEvaluator') ||
+					belongs(target, 'XPathExpression') ||
+					(belongs(target, 'Document') && Object.prototype.hasOwnProperty.call(XPATH_CALLS, request.key)));
+			let xpathSource: ReturnType<typeof xpathExpression> | undefined;
+			if (xpathCall) {
+				if (context !== 'detached') throw new Error('XPath requires the owned detached document');
+				if (request.key !== 'createNSResolver') {
+					xpathSource = belongs(target, 'XPathExpression') ? xpathExpressions.get(target) : xpathExpression(args[0]);
+					if (!xpathSource) throw new Error('XPath expression is not owned by this run');
+					if (request.key === 'evaluate') reserveXPath(xpathSource, args[belongs(target, 'XPathExpression') ? 0 : 1] as Node);
+				}
+			}
 			const svgOwner = owners.get(target);
 			const filterOwner = belongs(target, 'Node') ? (target as Node) : svgOwner;
 			if (
@@ -1194,6 +1261,7 @@ export function createPlatformDOMBridge(surface: Element, deliverCallback?: DOMC
 				if (stopped) throw new Error('DOM run has ended');
 				if (belongs(target, 'AbstractRange')) inspectRange(target);
 				if (cssContainer && (policy?.mutates || request.action === 'set')) cssRuleCount(cssContainer);
+				if (xpathCall && request.key === 'createExpression' && result && xpathSource) xpathExpressions.set(result as object, xpathSource);
 				if (request.key === 'attachShadow' && result) shadowRoots.add(result as ShadowRoot);
 				if (policy?.iterable) {
 					const items: unknown[] = [];

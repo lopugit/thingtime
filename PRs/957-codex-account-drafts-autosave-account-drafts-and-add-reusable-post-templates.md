@@ -30,7 +30,31 @@ discarding that copy leaves the template intact.
   The legacy device workspace is retained and copied once to the first opening
   account, without automatically uploading it on hydration.
 
-## Validation
+## Validation — 2026-09-27
+
+Integrated current main's Timeline, ARIA and XPath changes before release. The
+Definition editor retains both account recovery and Timeline recording. Browser
+testing found that a recovered old definition could otherwise inherit the latest
+server timestamp and overwrite newer content. Draft snapshots now retain their
+original timestamp, stale/unknown bases cannot publish, and selecting the latest
+saved version first preserves recovered text in History. Four regression tests
+cover restore, stale-save rejection, server conflicts and backup failure.
+
+- Full unit run after Timeline integration: 4,086 pass, eight expected skips,
+  zero failures. The draft suite including the four new regression tests passes
+  14/14. Initial missing `fake-indexeddb` was resolved through the existing
+  worktree dependency setup before rerunning the full suite.
+- Production build and Vercel output verification pass with the recovery fix.
+- Full local real API suite: 901/902 pass. The sole failure,
+  `webpages-demos-library-components`, finds a pre-existing partially seeded demo
+  catalog (five of nine references resolve; four form components are absent).
+  No draft endpoint failed, and the clean-database CI suite remains the release
+  check for this environment-dependent catalog assertion.
+- Browser/API checks additionally cover invalid definition JSON recovery,
+  concurrent definition changes, History backup before selecting the current
+  version, fresh editing/publication afterward, unfinished schema field recovery,
+  schema publication/retirement, schema form reloads, and comment reload,
+  publication and draft retirement.
 
 - 223 focused draft, autosave, Thing-provider, feed and schema projection tests pass.
 - Editor suite: 98 pass, one expected browser-only skip. Capability suite: 87 pass.
@@ -46,7 +70,7 @@ discarding that copy leaves the template intact.
   API checks also pass for conflict-copy recovery with media. The shared Thing
   editor loads an account draft, saves fresh typing to the account API, and
   retains that value after browser reload.
-- Raw TypeScript checks on both the branch and unchanged current `develop` each
+- Raw TypeScript checks on both the branch and main (`50863f13c`) each
   report 91 errors. Their normalized diagnostic sets are identical; this change
   adds no TypeScript errors. The tracked ratchet baseline remains unchanged.
 - The PM2 daemon stopped responding to its list command, and the old local
@@ -61,7 +85,8 @@ sessions, the transaction-capable home Mongo database, and the documented upload
 storage/approval setup for media. See the [feature map](../docs/feature-map/account-drafts-and-templates.md),
 [README](../README.md) and [manual checklist](../TESTING.md#account-drafts-and-reusable-post-templates).
 
-This branch targets `develop`. It does not merge or deploy to production.
+The release PR targets `main`; CI and deployment status are tracked on the linked
+PR. No new secrets or data migrations are required.
 
 ## Browser evidence
 
@@ -72,3 +97,7 @@ Desktop picker at 1265 CSS pixels, with a working draft and reusable template:
 Narrow mobile layout (300 CSS pixels at the browser's existing zoom):
 
 ![Mobile drafts and templates](assets/957/drafts-mobile.png)
+
+A recovered definition cannot overwrite a newer saved version:
+
+![Stale definition draft preserved with publication disabled](assets/957/definition-stale-draft.png)

@@ -35,6 +35,12 @@ on. Account changes also scope the local Thing workspace and BroadcastChannel.
 The old device workspace is copied once to the first opening account, retained
 in the old key, and is never uploaded merely by hydration.
 
+Definition snapshots retain the original `baseUpdatedAt`. Restoring a draft
+against a newer saved definition (or restoring a legacy draft without a known
+base) preserves its text and blocks publication. Selecting the latest saved
+version first retains the recovered source in Timeline, then retires the account
+draft. A failed Timeline backup leaves the account draft intact.
+
 Template creation and use both copy through the canonical attachment service,
 including upload approval, authorization, moderation, quota and cleanup. Only
 working drafts can donate media to published posts. Templates keep independent

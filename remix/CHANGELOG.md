@@ -71,8 +71,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-27 — **Codex (AI)**: Private account autosave for post/comment, Thing,
   definition and schema editors; shared draft/template picker, reusable post
   templates with independent media, revision-safe recovery and scoped local
-  workspaces. Added real local API/transaction/media verification and setup
-  guidance. See [PR #957 details](../PRs/957-codex-account-drafts-autosave-account-drafts-and-add-reusable-post-templates.md).
+  workspaces. Preserve original definition versions during recovery so stale
+  drafts cannot overwrite newer saved content; retain recovered text in History.
+  Verified full unit, production output, real API/media and browser recovery
+  flows against current main. See [PR #957 details](../PRs/957-codex-account-drafts-autosave-account-drafts-and-add-reusable-post-templates.md).
+
+- 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
+
 - 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
   event and relationship records, durable draft recovery, private relational event/link Things and transactional
   ordinary Thing history. Shared History now previews restores and three-way
