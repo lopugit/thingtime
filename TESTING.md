@@ -928,14 +928,26 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] Standard Mac/browser dictation writes partial and final words directly
+      into Message Lopu, with no separate transcript preview or automatic send.
+      Begin with typed text; stop mid-phrase, edit, resume, and switch Chat ↔ Voice:
+      preserve the draft and append new speech without repeating revised words.
+      A recognizer restart/failure retains the draft. Typing and explicit Send
+      stop capture; late callbacks cannot overwrite edits or refill a sent draft.
+      Rejected sends restore the text. With Spoken replies on, stop playback
+      and send again: cancellation cannot hang the turn queue or start the mic.
+      Run `scripts/lopu-dictation.browser.html`
+      in page/compact layouts at desktop and 390px, then verify real speech in
+      the signed installed Mac app. Private-page Transcribe and Direct voice
+      keep their existing dedicated flows.
 - [ ] On Mac, listen silently across at least two native no-input retry cycles
       (15 seconds), then speak: silence must not show a red service error or
-      send a message, and the spoken phrase must send exactly once. Stop ends
+      send a message; the phrase fills the draft and explicit Send sends once. Stop ends
       capture/retries. An interrupted helper still reports a real error, and
       retry clears it without removing conversation messages.
 - [ ] After a microphone permission or recognition failure, retry voice input:
       the previous recognition error disappears immediately, a successful
-      transcript sends normally, and existing messages/turn failures remain.
+      transcript fills the draft, and existing messages/turn failures remain.
       Repeat a failed retry and switch chats; errors must not accumulate or
       leak into another conversation. On Mac, interrupt a disposable native
       capture to exercise recovery without resetting OS permissions.
@@ -5634,8 +5646,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 - [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
       allow Speech Recognition and Microphone, and speak a synthetic test phrase.
-      One transcript reaches the selected chat/model without Chromium's `network`
-      error; the mic pauses during the reply. Stop during a permission prompt,
+      The live transcript fills the message field without Chromium's `network`
+      error; explicit Send reaches the selected chat/model and stops the mic.
+      Stop during a permission prompt,
       during capture, and immediately after an interim result: no late turn sends.
       Reload/close/switch account or chat: capture stops and no transcript crosses
       the boundary. Denied permissions show the relevant macOS settings category.
@@ -7403,14 +7416,14 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   a 72dvh sheet (drag handle, Escape/scrim close), the composer sits above
   the safe area, nothing scrolls horizontally or hides under the nav.
 - Voice mode (`/lopu/voice`, or the floating window's mic): the same column
-  with the text composer folded away and the voice deck below it — gear ·
+  with the shared text composer and the voice deck below it — gear ·
   64px mic (idle card / listening rainbow pulse / thinking spinner / speaking
-  breathe) · Stop while Lopu replies — plus a single rounded "Or type to
-  Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
-  included). With no SpeechRecognition (the in-app Browser pane) the mic
+  breathe) · Stop while Lopu replies. Standard Mac/browser recognition fills
+  the editable Message Lopu draft; stopping retains it and Enter/Send submits
+  a normal chat turn (the same brain, tools included). With no SpeechRecognition
+  (the in-app Browser pane) the mic
   click toasts "No microphone here" and the typed path still works; with a
-  mic, listening pauses for the whole turn and for Lopu's speech (never its
-  own voice back), then resumes. The gear popover (never a full-width card)
+  mic, typing or sending stops capture. The gear popover (never a full-width card)
   holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
   vault provider whose kind lists a realtime model — the hint reads the
   reason otherwise; a realtime-model select when it lists several) and the

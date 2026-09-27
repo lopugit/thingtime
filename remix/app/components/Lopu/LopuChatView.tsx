@@ -1,4 +1,5 @@
 import { LopuMessageQueue } from './LopuMessageQueue';
+import { composerDraftReducer, EMPTY_COMPOSER_DRAFT, type ComposerTranscript } from './composerDictation';
 import { LopuPageAttachments } from './LopuPageAttachments';
 import { useLopuCurrentPage } from './useLopuPages';
 import { useLopuContextProvider } from './useLopuChat';
@@ -475,6 +476,13 @@ export type LopuChatViewVariant = 'page' | 'pane' | 'window';
 
 export type LopuChatViewProps = {
 	externalSendRef?: React.MutableRefObject<((text: string) => Promise<SendLopuResult | undefined>) | null>;
+	externalDictationRef?: React.MutableRefObject<((transcript: ComposerTranscript) => void) | null>;
+	// Freeze capture before editing or submitting so late speech cannot replace
+	// an edit or refill a draft that has already been sent.
+	onDraftInteraction?: () => void;
+	// Voice mode may read the reply aloud, while externalSendRef still points
+	// to the ordinary submission path (attachments, rejection recovery, etc.).
+	onSendDraft?: (text: string) => Promise<void>;
 	// a specific conversation (null = fresh); undefined follows the shared store
 	chatId?: string | null;
 	onChatChange?: (chatId: string | null) => void;
@@ -504,6 +512,9 @@ export type LopuChatViewProps = {
 
 export const LopuChatView = ({
 	externalSendRef,
+	externalDictationRef,
+	onDraftInteraction,
+	onSendDraft,
 	chatId,
 	onChatChange,
 	variant,
@@ -532,13 +543,21 @@ export const LopuChatView = ({
 		return { ...base, pages: lopuPageReferences([...(base.pages || []), ...selectedPages]) };
 	}, [context, defaultContext, selectedPages]);
 	const chat = useLopuChat({ chatId, context: pageContext, applyPatches });
-	const [draft, setDraft] = React.useState('');
+	const [composerDraft, dispatchDraft] = React.useReducer(composerDraftReducer, EMPTY_COMPOSER_DRAFT);
+	const draft = composerDraft.text;
+	const setDraft = React.useCallback((value: React.SetStateAction<string>) => dispatchDraft({ type: 'edit', value }), []);
+	React.useLayoutEffect(() => {
+		if (!externalDictationRef) return;
+		const receive = (transcript: ComposerTranscript) => dispatchDraft({ type: 'dictate', transcript });
+		externalDictationRef.current = receive;
+		return () => { if (externalDictationRef.current === receive) externalDictationRef.current = null; };
+	}, [externalDictationRef]);
 	const [attachmentsExpanded, setAttachmentsExpanded] = React.useState(false);
 	const [uploads, setUploads] = React.useState(EMPTY_LOPU_ATTACHMENTS);
 	const [selectedThings, setSelectedThings] = React.useState<LopuSelectedThing[]>([]);
 	const uploadsRef = React.useRef<AttachmentComposerHandle>(null);
 	const [attachmentRevision, setAttachmentRevision] = React.useState(0);
-	React.useEffect(() => { setDraft(''); setSelectedPages([]); setAttachmentsExpanded(false); setSelectedThings([]); setUploads(EMPTY_LOPU_ATTACHMENTS); setAttachmentRevision(value => value + 1); }, [chat.viewer.id]);
+	React.useEffect(() => { setDraft(''); setSelectedPages([]); setAttachmentsExpanded(false); setSelectedThings([]); setUploads(EMPTY_LOPU_ATTACHMENTS); setAttachmentRevision(value => value + 1); }, [chat.viewer.id, setDraft]);
 	const scrollRef = React.useRef<HTMLDivElement | null>(null);
 	const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
 	const stickRef = React.useRef(true);
@@ -588,6 +607,7 @@ export const LopuChatView = ({
 	const submit = React.useCallback(
 		async (text: string, mode: 'send' | 'queue' | 'server' | 'client' = 'send') => {
 			if (uploads.blocking || submittingRef.current) return;
+			onDraftInteraction?.();
    submittingRef.current = true; setSubmitting(true); setComposerError(null);
 			const ownerId = chat.viewer.id;
    const targetChatId = chat.chatId;
@@ -628,12 +648,16 @@ export const LopuChatView = ({
 			focusInput();
 			return result;
 		},
-		[chat, focusInput, uploads, selectedThings, attachmentsExpanded]
+		[chat, focusInput, uploads, selectedThings, attachmentsExpanded, onDraftInteraction, setDraft]
 	);
-	const send = React.useCallback(async (text: string) => { await submit(text); }, [submit]);
+	const send = React.useCallback(async (text: string) => {
+		if (onSendDraft) await onSendDraft(text);
+		else await submit(text);
+	}, [onSendDraft, submit]);
  const enqueue = React.useCallback(async (text: string) => { setComposerError(null); await submit(text, 'queue'); }, [submit]);
  const sendNow = React.useCallback(async (text: string) => {
   if (noteSending) return;
+  onDraftInteraction?.();
   const owner = chat.viewer.id;
   const retry = noteRetry.current;
   const note = retry?.text === text && retry.chatId === chat.chatId && retry.owner === owner ? retry : { text, id: crypto.randomUUID(), chatId: chat.chatId, owner };
@@ -645,7 +669,7 @@ export const LopuChatView = ({
    if (!result.active) setComposerError('Note saved. Lopu will see it in the next reply.');
   } catch (error) { if (ownerRef.current === owner && noteChatRef.current === note.chatId) setComposerError(error instanceof Error ? error.message : 'Could not send the note.'); }
   finally { if (ownerRef.current === owner && noteChatRef.current === note.chatId) setNoteSending(false); }
- }, [chat, noteSending]);
+ }, [chat, noteSending, onDraftInteraction, setDraft]);
 
 	React.useLayoutEffect(() => {
 		if (!externalSendRef) return;
@@ -838,7 +862,7 @@ export const LopuChatView = ({
 						attachments={<><LopuPageAttachments owner={chat.viewer.id} current={currentPage} selected={selectedPages} onChange={setSelectedPages} disabled={submitting} /><LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} expanded={attachmentsExpanded} onExpandedChange={setAttachmentsExpanded} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={submitting} /></>}
 						onAttachFiles={files => { if (uploadsRef.current?.addFiles(files)) setAttachmentsExpanded(true); }}
 						value={draft}
-						onChange={setDraft}
+						onChange={value => { onDraftInteraction?.(); setDraft(value); }}
 						onSend={send}
       onQueue={chat.chatId ? enqueue : undefined}
       queuePending={!chat.queue.paused && chat.queue.items.some(item => item.chatId === chat.chatId)}
