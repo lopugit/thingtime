@@ -1,3 +1,5 @@
+import { LAYOUT_RECEIVER_POLICY, LAYOUT_ELEMENT, LAYOUT_CONSTRUCTORS, LAYOUT_STATIC, LAYOUT_GLOBALS, type LayoutArg } from './layoutPolicy';
+import { layoutArgument, layoutQuadJSON, layoutScrollResult } from './layoutSupport';
 import { CSSOM_RECEIVER_POLICY, CSSOM_CONSTRUCTORS, CSSOM_STATIC, CSSOM_PROPERTIES, type CSSOMArg } from './cssomPolicy';
 import { cssomArgument, cssomText, CSSOM_LIMITS } from './cssomSupport';
 import { TYPED_CSS_RECEIVER_POLICY, TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC, type TypedCSSArg } from './typedCSSPolicy';
@@ -14,6 +16,7 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| LayoutArg
 	| CSSOMArg
 	| TypedCSSArg
 	| 'svg-matrix'
@@ -87,7 +90,9 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 	...SVG_RECEIVER_POLICY,
 	...TYPED_CSS_RECEIVER_POLICY,
 	...CSSOM_RECEIVER_POLICY,
-	HTMLElement: { reads: 'attributeStyleMap style' },
+	...LAYOUT_RECEIVER_POLICY,
+	DOMMatrix: { ...SVG_RECEIVER_POLICY.DOMMatrix, calls: { ...SVG_RECEIVER_POLICY.DOMMatrix.calls, setMatrixValue: call(['css-text']) } },
+	HTMLElement: { reads: 'attributeStyleMap style offsetHeight offsetLeft offsetParent offsetTop offsetWidth scrollParent' },
 	SVGElement: { ...SVG_RECEIVER_POLICY.SVGElement, reads: SVG_RECEIVER_POLICY.SVGElement.reads + ' attributeStyleMap style' },
 	Node: {
 		reads:
@@ -128,9 +133,11 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 		}
 	},
 	Element: {
-		reads: `namespaceURI prefix localName tagName id className classList attributes innerHTML outerHTML shadowRoot ${parentReads} ${childReads}`,
-		writes: 'id className',
+		reads: `namespaceURI prefix localName tagName id className classList attributes innerHTML outerHTML shadowRoot ${parentReads} ${childReads} ${LAYOUT_ELEMENT.reads}`,
+		writes: 'id className ' + LAYOUT_ELEMENT.writes,
+		writeArgs: LAYOUT_ELEMENT.writeArgs,
 		calls: {
+			...LAYOUT_ELEMENT.calls,
 			...parentCalls,
 			computedStyleMap: call(),
 			attachShadow: call(['cssom-shadow'], { mutates: true }),
@@ -219,8 +226,14 @@ export function createPlatformDOMBridge(surface: Element) {
 	const scope = surfaceDocument.defaultView!.crypto.randomUUID();
 	const objects = new Map<string, Entry>();
 	const shadowRoots = new Set<ShadowRoot>();
-	const constructors = { ...TYPED_CSS_CONSTRUCTORS, ...CSSOM_CONSTRUCTORS };
-	const statics = { ...TYPED_CSS_STATIC, ...CSSOM_STATIC, CSS: { ...TYPED_CSS_STATIC.CSS, ...CSSOM_STATIC.CSS } };
+	const constructors = { ...TYPED_CSS_CONSTRUCTORS, ...CSSOM_CONSTRUCTORS, ...LAYOUT_CONSTRUCTORS };
+	const statics = {
+		...TYPED_CSS_STATIC,
+		...CSSOM_STATIC,
+		...LAYOUT_STATIC,
+		Window: { ...CSSOM_STATIC.Window, ...LAYOUT_STATIC.Window },
+		CSS: { ...TYPED_CSS_STATIC.CSS, ...CSSOM_STATIC.CSS }
+	};
 	const cssCosts = new WeakMap<object, number>();
 	let cssWork = 0;
 	const cssCost = (value: unknown, depth = 0): number => {
@@ -273,7 +286,12 @@ export function createPlatformDOMBridge(surface: Element) {
 					.split(' ')
 					.filter(Boolean)
 					.flatMap((key) => {
-						const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
+						// WebIDL mixins may insert unnamed native prototype layers (for
+						// example Range's node-valued accessors). Capture only registered
+						// names from the native chain; never inspect receiver instances.
+						let descriptor: PropertyDescriptor | undefined;
+						for (let proto: object | null = prototype; proto && !descriptor; proto = Object.getPrototypeOf(proto))
+							descriptor = Object.getOwnPropertyDescriptor(proto, key);
 						return descriptor ? [[key, descriptor] as const] : [];
 					})
 			);
@@ -432,6 +450,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		let type: string | undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(LAYOUT_RECEIVER_POLICY),
 			...Object.keys(CSSOM_RECEIVER_POLICY),
 			...Object.keys(TYPED_CSS_RECEIVER_POLICY),
 			...Object.keys(HTML_FORM_RECEIVER_POLICY),
@@ -478,6 +497,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		return target;
 	};
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule.startsWith('layout-')) return layoutArgument(value, rule, receiverType);
 		if (rule.startsWith('cssom-')) return cssomArgument(value, rule, receiverType);
 		if (rule.startsWith('css-')) return typedCSSArgument(value, rule, receiverType);
 		if (rule.startsWith('svg-')) return svgArgument(value, rule, receiverType);
@@ -527,7 +547,7 @@ export function createPlatformDOMBridge(surface: Element) {
 				request.type !== 'tt-platform-dom' ||
 				!Number.isSafeInteger(request.id) ||
 				request.id !== requestCount ||
-				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static'].includes(request.action) ||
+				!['document', 'surface', 'get', 'set', 'call', 'construct', 'constant', 'static', 'global'].includes(request.action) ||
 				typeof request.key !== 'string' ||
 				request.key.length > 60 ||
 				!Array.isArray(request.args) ||
@@ -560,6 +580,40 @@ export function createPlatformDOMBridge(surface: Element) {
 					throw new Error('Expected a primitive DOM constant');
 				return { value: encode(descriptor.value) };
 			}
+			if (request.action === 'global') {
+				const name = request.target;
+				if (
+					context !== 'surface' ||
+					typeof name !== 'string' ||
+					!Object.prototype.hasOwnProperty.call(LAYOUT_GLOBALS, name) ||
+					!LAYOUT_GLOBALS[name].split(' ').includes(request.key) ||
+					request.args.length
+				)
+					throw new Error('Unregistered layout global read');
+				const owner = name === 'Window' ? surfaceDocument.defaultView! : surfaceDocument;
+				let descriptor: PropertyDescriptor | undefined;
+				for (let proto: object | null = owner; proto && !descriptor; proto = Object.getPrototypeOf(proto))
+					descriptor = Object.getOwnPropertyDescriptor(proto, request.key);
+				if (!descriptor) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose ${name}.${request.key}` } };
+				const value = descriptor.get ? descriptor.get.call(owner) : descriptor.value;
+				// The document root is outside the authored surface. Expose only its
+				// native scroll metrics, never a receiver that can navigate the tree.
+				if (name === 'Document')
+					return {
+						value: value
+							? {
+									nodeName: reader<string>('Node', 'nodeName')(value),
+									...Object.fromEntries(
+										['scrollTop', 'scrollLeft', 'scrollWidth', 'scrollHeight', 'clientWidth', 'clientHeight'].map((k) => [
+											k,
+											reader<number>('Element', k)(value)
+										])
+									)
+							  }
+							: null
+					};
+				return { value: encode(value) };
+			}
 			if (request.action === 'static' || (request.action === 'construct' && Object.prototype.hasOwnProperty.call(constructors, request.key))) {
 				const isStatic = request.action === 'static';
 				const namespace = request.target;
@@ -572,8 +626,22 @@ export function createPlatformDOMBridge(surface: Element) {
 					: (constructors as Record<string, Method>)[request.key];
 				if (!shape || (!isStatic && request.target !== null)) throw new Error('Unregistered CSS native operation');
 				const args = typedCSSArguments(shape, request.args, argument);
-				const owner = isStatic ? (namespace === 'Window' ? surfaceDocument.defaultView : realm[String(namespace)]) : undefined;
-				const native = isStatic ? owner && Object.getOwnPropertyDescriptor(owner, request.key)?.value : realm[request.key];
+				if (isStatic && ['Document', 'Window'].includes(String(namespace)) && context !== 'surface')
+					throw new Error('Layout operations require the active surface');
+				const owner = isStatic
+					? namespace === 'Window'
+						? surfaceDocument.defaultView
+						: namespace === 'Document'
+						? surfaceDocument
+						: realm[String(namespace)]
+					: undefined;
+				const native = isStatic
+					? owner &&
+					  (
+							Object.getOwnPropertyDescriptor(owner, request.key) ||
+							(namespace === 'Document' ? Object.getOwnPropertyDescriptor(realm.Document.prototype, request.key) : undefined)
+					  )?.value
+					: realm[request.key];
 				if (typeof native !== 'function')
 					return {
 						error: { name: 'UnsupportedDOMMember', message: `This browser does not expose ${isStatic ? namespace + '.' : ''}${request.key}` }
@@ -582,8 +650,26 @@ export function createPlatformDOMBridge(surface: Element) {
 				work += JSON.stringify(request.args).length;
 				if (work > 65536) throw new Error('DOM input work budget exceeded');
 				try {
-					const value = isStatic ? Reflect.apply(native, owner, args) : Reflect.construct(native, args);
+					let value = isStatic ? Reflect.apply(native, owner, args) : Reflect.construct(native, args);
+					if (namespace === 'Document') {
+						if (request.key === 'elementFromPoint' && value && !insideSurface(value as Node)) value = null;
+						if (request.key === 'elementsFromPoint') value = (value as Node[]).filter((node) => insideSurface(node));
+						if (
+							request.key === 'caretPositionFromPoint' &&
+							value &&
+							!insideSurface(reader<Node>('CaretPosition', 'offsetNode')(value as object) as Node)
+						)
+							value = null;
+					}
 					if (value && typeof value === 'object') cssCosts.set(value, cost);
+					if (shape.awaitResult)
+						return Promise.resolve(value).then(
+							(result) => {
+								if (stopped) throw new Error('DOM run has ended');
+								return { value: layoutScrollResult(result) };
+							},
+							(error) => ({ error: { name: String(error?.name || 'DOMException'), message: String(error?.message || error).slice(0, 500) } })
+						);
 					return { value: encode(value) };
 				} catch (error) {
 					return { error: { name: (error as Error).name, message: String((error as Error).message).slice(0, 500) } };
@@ -686,6 +772,8 @@ export function createPlatformDOMBridge(surface: Element) {
 				!Object.prototype.hasOwnProperty.call(SVG_RECEIVER_POLICY, resolvedInterface) &&
 				!Object.prototype.hasOwnProperty.call(TYPED_CSS_RECEIVER_POLICY, resolvedInterface) &&
 				!Object.prototype.hasOwnProperty.call(CSSOM_RECEIVER_POLICY, resolvedInterface) &&
+				!(request.action === 'call' && request.key === 'replaceChildren' && shadowRoots.has(target as ShadowRoot)) &&
+				!(resolvedInterface === 'Element' && request.action === 'set' && LAYOUT_ELEMENT.writes!.split(' ').includes(request.key)) &&
 				request.key !== 'attachShadow'
 			)
 				throw new Error('Surface tree mutation is not registered; use authored document nodes');
@@ -839,8 +927,15 @@ export function createPlatformDOMBridge(surface: Element) {
 					owners.set(result, owner);
 					valueKeys.set(result, belongs(target, 'Node') ? request.key : valueKeys.get(target) || request.key);
 				}
+				// Offset ancestors can be outside the program. Preserve null instead
+				// of leaking the runtime's body or document through a layout read.
+				if (['offsetParent', 'scrollParent'].includes(request.key) && result && !insideSurface(result as Node)) result = null;
 				const value =
-					request.key === 'getContextAttributes' && belongs(target, 'CanvasRenderingContext2D')
+					resolvedInterface === 'Element' && /^scroll(?:To|By|IntoView)?$/.test(request.key)
+						? layoutScrollResult(result)
+						: request.key === 'toJSON' && belongs(target, 'DOMQuad')
+						? layoutQuadJSON(result)
+						: request.key === 'getContextAttributes' && belongs(target, 'CanvasRenderingContext2D')
 						? canvasContextAttributes(result)
 						: request.key === 'type' && belongs(target, 'CSSNumericValue')
 						? typedCSSNumericType(result)
