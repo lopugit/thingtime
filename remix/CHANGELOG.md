@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-28 — **Codex (AI)**: Home history is accessible while a custom database
+  stays selected. Saved themes expose History; Timeline offers Home account and
+  Selected database views. Shared connection leases prevent duplicate home
+  uploads and keep each database's pending edits/cache separate. Explicit scoped
+  API routing covers branches and restore with existing account/source fences;
+  Timeline 1.6.0. Opening Timeline also closes the History modal.
+
 - 2026-09-27 — **Codex (AI)**: Lopu continuations recover completed tool results
   from their exact private background transcript, so a checkpoint after an
   Action preserves its output without rerunning it. Account, chat, deployment,

@@ -133,7 +133,7 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 export const ThingsPage = () => {
   const [params] = useSearchParams();
   const folder = params.get('folder');
-  return folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} /> : <ThingsPageContents />;
+  return folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents />;
 };
 
 const ThingsPageContents = () => {
@@ -1078,7 +1078,7 @@ const ThingsLibraryPage = () => {
     (thing: ThingsThing, action: ThingsItemAction) => {
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
-        case 'history': openThingHistory(thing.id); break;
+        case 'history': openThingHistory(thing.id, thing.thingtime); break;
         case 'download':
           setExportIds(group.map((entry) => entry.id));
           break;
@@ -1236,7 +1236,7 @@ const ThingsLibraryPage = () => {
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
-        case 'history': openThingHistory(menuThing.id); break;
+        case 'history': openThingHistory(menuThing.id, menuThing.thingtime); break;
         case 'download':
           onItemAction(menuThing, 'download');
           break;

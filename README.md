@@ -33,6 +33,12 @@ preserving the earlier relational event/link migration and pending drafts.
 Account, origin and custom Mongo data source each have separate local queues.
 History is private and available only to full account credentials.
 
+`api.timeline` 1.6.0 adds explicit home-history access while a custom database is
+selected. Saved themes have a **History** button, and the Timeline folder lets
+you choose **Home account** or **Selected database** without changing the active
+database. Both use the same records and scope-keyed IndexedDB stores; sessions
+that resolve to home share one upload queue. No additional runtime setup is needed.
+
 Saved theme creation, token/visibility edits and deletion also use this shared
 history (`api.timeline` 1.5.0, `api.themes` / `api.themes-delete` 1.1.0). The
 approved token snapshots remain private even for public themes and commit with
@@ -49,6 +55,10 @@ the app API. Never use a shared or production database for these checks.
 `test:timeline:themes` uses the same guard for theme creation, unchanged saves,
 rename/move/edit ancestry, privacy and retained deletion. The quota suite below
 also checks atomic theme-save refusal and retained deletion at the ceiling.
+`test:timeline:home-scope` creates a second database on that guarded replica and
+checks concurrent history isolation, exact versions, branches and home restore
+under a custom selection. Its private fixture file contains only synthetic local
+credentials; remove it after browser acceptance.
 
 For quota acceptance, use that same disposable replica and a dedicated local
 dev-server process. Run the following once with a new private fixture path:

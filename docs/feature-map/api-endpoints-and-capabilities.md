@@ -1,5 +1,10 @@
 # API endpoints and capabilities
 
+Timeline 1.6.0 accepts explicit `storage=home` on the existing route while
+`ownerId`/`dataPlane` remain authorization and identity fences. The scoped home
+context applies to discovery, paging, drafts, exact versions, branches and
+restoration without changing the surrounding request's database selection.
+
 Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
 `api.timeline` 1.5.0. The dedicated home writer records approved token versions
 and retained deletion in its content transaction; no new endpoint or collection

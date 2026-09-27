@@ -7,8 +7,9 @@ import { TIMELINE_EVENT_MAX_BYTES, TIMELINE_PAGE_SIZE } from '~/timeline/contrac
 import { handleVersionRequest, parseVersionRequest } from '~/api/utils/timeline/versions';
 import { handleBranchRequest, getTimelineBranches } from '~/api/utils/timeline/branches';
 import { parseTimelineBranchCommand } from '~/timeline/branches';
+import { runWithHomeMongoEndpoint } from '~/api/utils/mongodb/endpoint';
 
-const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
 const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, entry: getTimelineEntry, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branches: getTimelineBranches };
 
@@ -81,7 +82,14 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 			throw error;
 		}
 	};
-	return { loader, action };
+	// storage selects the location explicitly; dataPlane remains an independent
+	// expected-identity fence. A stale selected-plane request never opts into home.
+	const scoped = (handler: typeof loader) => (args: { request: Request }) => {
+		const choices = new URL(args.request.url).searchParams.getAll('storage');
+		if (choices.length > 1 || choices.some(value => !['home', 'selected'].includes(value))) return Promise.resolve(response({ ok: false, error: 'Invalid Timeline storage' }, 400));
+		return choices[0] === 'home' ? runWithHomeMongoEndpoint(() => handler(args)) : handler(args);
+	};
+	return { loader: scoped(loader), action: scoped(action) };
 }
 
 export const { loader, action } = createTimelineHandlers();
