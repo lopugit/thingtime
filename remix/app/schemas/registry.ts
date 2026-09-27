@@ -5851,7 +5851,7 @@ const sanitizeWebpageBlock = (
 	return { ok: true, block };
 };
 
-const sanitizeWebpageBlocks = (input: unknown): { ok: true; blocks: Record<string, unknown>[] } | Fail => {
+export const sanitizeWebpageBlocks = (input: unknown): { ok: true; blocks: Record<string, unknown>[] } | Fail => {
 	if (!Array.isArray(input)) return fail(400, 'Webpage blocks must be a list');
 	const state = { nodes: 0, ids: new Set<string>() };
 	const blocks: Record<string, unknown>[] = [];

@@ -37,3 +37,6 @@ export const loader = async ({ request }: { request: Request }) => {
 	}
 	return json(result);
 };
+
+// Read-only component resolution for an unsaved/branch block draft.
+export { resolveDraftComponentsAction as action } from '~/api/utils/webpages/componentPreview';

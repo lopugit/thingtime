@@ -310,3 +310,10 @@ Timeline 1.8.0 adds read-only `checkout-branch` on the registered Timeline route
 The exact branch revision and head are required. A transient materialized snapshot
 accompanies the unchanged canonical entry; ordinary client events and branch
 commands remain the only branch-edit writes. See the Unified Timeline contract.
+
+
+`api.webpages-resolve` 1.5.0 adds bounded private POST component previews on the
+existing registered resolve route. `webpages/componentPreview.ts` accepts only
+blocks plus exact account/source query scope, then reuses the viewer-only batch
+resolver without page/root grants. Both manifests, client negotiation, unit
+checks and guarded `test:timeline:visual-branch` cover it. GET is unchanged.

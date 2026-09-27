@@ -1,3 +1,4 @@
+import { BranchWebpage } from './BranchWebpage';
 import { libraryBuilderHref } from '~/library/builderLinks';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
@@ -339,6 +340,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 export const BuilderPage = () => {
 	const [searchParams] = useSearchParams();
 	const pageId = searchParams.get('page');
+	if (searchParams.has('branchId')) return <BranchWebpage pageId={pageId || ''} />;
 	if (!pageId) return <PagesList />;
 	if (pageId === '__global__') return <BuilderCanvas pageId={pageId} />;
 	return <LiveWebpage builderPageId={pageId} />;

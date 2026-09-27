@@ -12,7 +12,7 @@ import { isSafeCssText } from '../Kinds/safeUrl';
 import { PageShell } from '../Layout/PageShell';
 import { WebpageBlocksRenderer, type BuilderChrome } from './WebpageBlocksRenderer';
 import { installSuite, installSuiteOnServer, suiteKeyFromActionKey, suiteKeyOfPage } from './installSuite';
-import { useWebpageDraft } from './useWebpage';
+import { useWebpageDraft, type UseWebpageDraft } from './useWebpage';
 import { WebpageRuntimeProvider } from './webpageRuntime';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { mapCssMediaUrls } from '../Sharing/renderMediaCore';
@@ -47,13 +47,21 @@ const SharedPageSurface = ({ background, ...props }: React.ComponentProps<typeof
 };
 
 export default function LiveWebpage({ builderPageId }: { builderPageId?: string } = {}) {
+ const params = useParams(); const [searchParams] = useSearchParams();
+ const id = builderPageId || params.id; const linkKey = (searchParams.get('key') || '').trim();
+ const runMode = useLocation().pathname.startsWith('/t/') || ['run', 'visit'].includes(searchParams.get('mode') || '');
+ const draft = useWebpageDraft(React.useMemo(() => id ? { kind: 'id' as const, id, ...(linkKey ? { key: linkKey } : {}) } : null, [id, linkKey]), { editable: !runMode });
+ return <LiveWebpageView builderPageId={builderPageId} draft={draft} />;
+}
+
+export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: string; draft: UseWebpageDraft }) {
 	const params = useParams();
 	const id = builderPageId || params.id;
 	const [searchParams, setSearchParams] = useSearchParams();
 	const requestedMode = searchParams.get('mode') || (builderPageId ? 'edit' : null);
 	const standalone = useLocation().pathname.startsWith('/t/');
 	const rootData = useRouteLoaderData('root') as { titlePrefix?: string } | undefined;
-	const runMode = standalone || requestedMode === 'run' || requestedMode === 'visit';
+	const runMode = !draft.branch && (standalone || requestedMode === 'run' || requestedMode === 'visit');
 	const linkKey = (searchParams.get('key') || '').trim();
 	const user = useCurrentUser();
 	const api = useApi();
@@ -61,10 +69,7 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 	apiRef.current = api;
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const draft = useWebpageDraft(
-		React.useMemo(() => (id ? { kind: 'id' as const, id, ...(linkKey ? { key: linkKey } : {}) } : null), [id, linkKey]),
-		{ editable: !runMode }
-	);
+
 	const [viewport, setViewport] = React.useState<BuilderViewportSize>(() =>
 		requestedMode === 'container' ? { width: 960, height: 0, presentation: 'container' } : null
 	);
@@ -267,7 +272,7 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 
 	return (
 		<WebpageRuntimeProvider
-			enabled={usesPageRuntime(editorMode)}
+			enabled={!draft.branch && usesPageRuntime(editorMode)}
 			key={`${page?.id || ''}:${user?.id || ''}:${linkKey}`}
 			pageId={page?.id || null}
 			shared={shared}
@@ -275,9 +280,9 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 			pageKey={typeof page?.crystal?.pageKey === 'string' ? page.crystal.pageKey : null}
 			suiteKey={suiteKey}
 			source={draft.resolved?.source || null}
-			onInstall={isSeeded ? onInstall : page && !isOwner ? copy.requestCopy : undefined}
+			onInstall={draft.branch ? undefined : isSeeded ? onInstall : page && !isOwner ? copy.requestCopy : undefined}
 		>
-			{copy.dialog}
+			{!draft.branch && copy.dialog}
 			<SharedPageSurface
 				flexDirection="column"
 				width="100%"
@@ -290,6 +295,7 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 				whiteSpace="normal"
 			>
 				<Box width="100%" minWidth={0} boxSizing="border-box" flex="1">
+					{draft.branch ? <Flex role="status" px={4} py={2} gap={2} wrap="wrap" bg="var(--tt-surface)"><Text fontWeight="600" overflowWrap="anywhere">Branch: {draft.branch.name}</Text><Text fontSize="sm">Preview uses current components. Live actions are paused.</Text></Flex> : null}
 					{draft.error && (
 						<Flex
 							role="alert"
@@ -320,13 +326,13 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 							data-builder-mode={editorMode || (runMode ? 'run' : 'view')}
 						>
 							<WebpageBlocksRenderer
-								renderNative={builderPageId ? (key) => (getNativeSection(key) ? <NativeSectionView sectionKey={key} /> : null) : undefined}
+								renderNative={builderPageId && !draft.branch ? (key) => (getNativeSection(key) ? <NativeSectionView sectionKey={key} /> : null) : undefined}
 								seamless={!runMode}
 								blocks={draft.blocks}
 								componentsByRef={draft.componentsByRef}
-								chrome={editorMode ? editorChrome : null}
-								interactive={interactive && usesPageRuntime(editorMode)}
-								onTtActionUnowned={isSeeded ? onUnowned : undefined}
+								chrome={editorMode && !draft.branch?.locked ? editorChrome : null}
+								interactive={!draft.branch && interactive && usesPageRuntime(editorMode)}
+								onTtActionUnowned={!draft.branch && isSeeded ? onUnowned : undefined}
 							/>
 						</Box>
 					</BuilderViewport>

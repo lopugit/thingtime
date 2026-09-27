@@ -161,6 +161,7 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 };
 
 export type UseWebpageDraft = {
+	branch?: { id: string; name: string; locked: boolean; notice: string; canRefresh: () => boolean; updateMetadata: (patch: { name?: string; acl?: string[] }) => void };
 	history?: { error: string; saving: boolean; recoverable: TimelineEvent[]; recover: (event: TimelineEvent) => Promise<void>; dismiss: (event: TimelineEvent) => Promise<void> };
 	loading: boolean;
 	error: boolean;
