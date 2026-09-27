@@ -134,6 +134,13 @@ System-kind rules (never bypass):
   retained small operation marker. Reads recheck chat access. The 260-second
   execution deadline exposes stale work without replay. No new collection/index.
 
+- First-party Lopu assistant messages may carry up to 16 read locators in
+  root `secure` BinData (20 KiB decode bound, 24-hour restore window). They contain
+  only Thing ID, crystal pointer, offset and revision, never results or grants.
+  The protected messenger writer accounts for these bytes; ordinary message
+  projections omit them. Restore requires current membership and fresh Thing
+  authorization/revision checks. No new collection or index.
+
 - Private state lives under root `secure` as a single **BinData blob** (the
   search wildcard text index tokenizes string _fields_ only, so a binary blob
   is entirely unsearchable — no field inside it can ever leak via `q=<value>`),

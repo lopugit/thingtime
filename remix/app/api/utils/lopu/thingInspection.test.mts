@@ -30,3 +30,25 @@ test('get_thing provides an actionable inspection hint and reauthorizes each pag
   assert.match((revoked as any).error, /Access denied/);
   assert.deepEqual(reads, Array.from({ length: 4 }, () => ({ viewer, id: 'form' })));
 });
+
+test('restored pages run through the real get_thing validator and fresh viewer authorization', async () => {
+ const { restoreReadContext, rememberReadReference } = await import('./readContext');
+ allowed = true;
+ const ctx = createLopuToolContext({ id: 'owner', username: 'owner' }, {}, () => {});
+ const call = { id: 'read', name: 'get_thing', input: { id: 'form', path: '/render', offset: 0 } };
+ const initial = await runLopuTool(call, ctx);
+ const refs = rememberReadReference([], call, initial);
+ const fresh = await restoreReadContext(refs, runLopuTool, ctx);
+ assert.equal(fresh.references.length, 1);
+ assert.match(fresh.text, /Equipment|Tool/);
+ allowed = false;
+ const revoked = await restoreReadContext(refs, runLopuTool, ctx);
+ assert.equal(revoked.references.length, 0);
+ assert.doesNotMatch(revoked.text, /Equipment|Battery/);
+ allowed = true;
+ thing.crystal.render.children[0].text = 'changed';
+ const changed = await restoreReadContext(refs, runLopuTool, ctx);
+ assert.equal(changed.references.length, 0);
+ assert.doesNotMatch(changed.text, /Battery/);
+ assert.match(changed.text, /changed/);
+});

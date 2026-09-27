@@ -8,28 +8,34 @@ export type TtToolTextParser = {
 	rawText: () => string;
 };
 
-const FENCE_OPEN = /```[ \t]*tt-tool[ \t]*\r?\n?/;
-const FENCE_MARKERS = ['```tt-tool', '``` tt-tool'];
-
+// Accept the two common language-label variants, but never ordinary JSON
+// examples or tt-tool-result fences. Wait for the full opening line so split
+// chunks cannot turn "tt-tool-result" into an executable "tt-tool" prefix.
+const FENCE_OPEN = /```[ \t]*(?:json[ \t]+tt-tool|tt-tool(?:[ \t]+json)?)[ \t]*(?:\r?\n|(?=\{))/i;
+const FENCE_LABELS = ['tt-tool', 'json tt-tool', 'tt-tool json'];
 const partialMarkerSuffix = (buffer: string): number => {
-	let longest = 0;
-	for (const marker of FENCE_MARKERS) {
-		const max = Math.min(marker.length - 1, buffer.length);
-		for (let length = max; length > 0; length--) {
-			if (marker.startsWith(buffer.slice(buffer.length - length))) {
-				longest = Math.max(longest, length);
-				break;
-			}
-		}
-	}
-	return longest;
+  const start = buffer.lastIndexOf('```');
+  if (start >= 0) {
+    const suffix = buffer.slice(start + 3);
+    const label = suffix.replace(/[ \t]+/g, ' ').trimStart().toLowerCase();
+    if (suffix.length <= 64 && !suffix.includes('\n') && FENCE_LABELS.some(candidate => candidate.startsWith(label) || candidate === label.trimEnd())) return buffer.length - start;
+  }
+  return buffer.endsWith('``') ? 2 : buffer.endsWith('`') ? 1 : 0;
 };
+
+// A native-tool provider can accidentally print the text protocol (or an
+// ordinary JSON fence). Request a corrected hop; never execute displayed text.
+export function looksLikeUnexecutedToolCall(text: string): boolean {
+  return /```[^\n]{0,64}\r?\n\s*\{\s*"(?:name|tool|tool_name)"\s*:\s*"[^"\n]{1,80}"\s*,\s*"(?:input|arguments|args|parameters)"\s*:/.test(text);
+}
 
 export const createTtToolTextParser = (options: { nextId: () => string; mode: 'execute' | 'drop'; strict?: boolean }): TtToolTextParser => {
 	let buffer = '';
 	let raw = '';
 	let state: 'text' | 'fence' = 'text';
 	let body = '';
+  let inString = false;
+  let escaped = false;
 	let current: { id: string; name: string | null; started: boolean; inputEmitted: number } | null = null;
 	const calls: Array<{ id: string; name: string; input: unknown }> = [];
 
@@ -73,11 +79,11 @@ export const createTtToolTextParser = (options: { nextId: () => string; mode: 'e
 			body = '';
 			return out;
 		}
-		if (options.strict) {
+		if (options.strict !== false) {
 			try {
 				JSON.parse(body);
 			} catch {
-				throw new Error('Claude returned incomplete tool arguments.');
+				throw new Error('The provider returned incomplete tool arguments.');
 			}
 		}
 		let parsed = parsePartialJson(body);
@@ -101,12 +107,14 @@ export const createTtToolTextParser = (options: { nextId: () => string; mode: 'e
 		const inputCandidate = [value.input, value.arguments, value.args, value.parameters, value.params, value.function?.arguments].find(
 			(entry) => entry !== undefined && entry !== null
 		);
+		if (options.strict !== false && (!nameCandidate || inputCandidate === undefined || inputCandidate === null || Array.isArray(inputCandidate) || !['object', 'string'].includes(typeof inputCandidate))) throw new Error('The provider returned an invalid tool envelope.');
 		const input =
 			inputCandidate && typeof inputCandidate === 'object'
 				? inputCandidate
 				: typeof inputCandidate === 'string'
 				? (() => {
-						const inner = parsePartialJson(inputCandidate).value;
+						const inner = options.strict !== false ? JSON.parse(inputCandidate) : parsePartialJson(inputCandidate).value;
+						if (options.strict !== false && (!inner || typeof inner !== 'object' || Array.isArray(inner))) throw new Error('The provider returned invalid tool arguments.');
 						return inner && typeof inner === 'object' ? inner : {};
 				  })()
 				: {};
@@ -130,6 +138,8 @@ export const createTtToolTextParser = (options: { nextId: () => string; mode: 'e
 					buffer = buffer.slice(match.index + match[0].length);
 					state = 'fence';
 					body = '';
+          inString = false;
+          escaped = false;
 					current = { id: options.nextId(), name: null, started: false, inputEmitted: 0 };
 					continue;
 				}
@@ -139,7 +149,18 @@ export const createTtToolTextParser = (options: { nextId: () => string; mode: 'e
 				buffer = buffer.slice(buffer.length - hold);
 				return out;
 			}
-			const close = buffer.indexOf('```');
+      // Backticks inside complete JSON strings are data (for example source
+      // code being saved by an Action), never a Markdown closing delimiter.
+      let close = -1;
+      for (let index = 0; index < buffer.length; index++) {
+        const char = buffer[index];
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (char === '\\') escaped = true;
+          else if (char === '"') inString = false;
+        } else if (char === '"') inString = true;
+        else if (buffer.startsWith('```', index)) { close = index; break; }
+      }
 			if (close === -1) {
 				// hold back a possible partial closing marker
 				const hold = buffer.endsWith('``') ? 2 : buffer.endsWith('`') ? 1 : 0;

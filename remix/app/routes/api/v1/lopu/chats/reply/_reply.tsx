@@ -468,6 +468,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
             text: input.text + lopuReferenceContext(references) + attachedContent.text,
             media: attachedContent.media,
             history,
+            readReferences: loaded.ok ? loaded.readReferences : undefined,
             choice,
             vaultProvider,
             context: input.context,
@@ -531,6 +532,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
               chatId: persistedChatId,
               requestId: input.requestId,
               text,
+              readReferences: outcome?.readReferences,
               lopu: {
                 model: outcome?.model ?? choice?.model ?? null,
                 effort: outcome?.effort ?? choice?.effort ?? null,
