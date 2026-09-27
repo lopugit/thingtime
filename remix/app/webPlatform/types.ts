@@ -67,6 +67,14 @@ export type PlatformProgram = {
 	/** Omit method to observe a real event. A top-level {op: 'element', selector}
 	 * argument references an element inside this program's rendered surface. */
 	dom?: PlatformDOMBinding[];
-	probe?: { kind: 'element' | 'attribute' | 'css' | 'selector' | 'interface'; name: string; value?: string; target?: string };
+	probe?: {
+		kind: 'element' | 'attribute' | 'css' | 'selector' | 'interface';
+		name: string;
+		value?: string;
+		target?: string;
+		/** CSS probes can observe a pseudo-element and a separate control. */
+		pseudoElement?: string;
+		compareTarget?: string;
+	};
 };
 export type Recipe = { program: PlatformProgram; coverage: 'interactive' | 'inspection' | 'requires-context'; note: string };

@@ -1,3 +1,4 @@
+import { validateCSSProbe } from './cssProbe';
 import type { PlatformProgram } from './types';
 import { validateLiveDOMBinding } from './liveDOM';
 const identifier = (value: unknown) => {
@@ -64,6 +65,7 @@ export function validatePlatformProgram(raw: unknown): PlatformProgram {
 	if ((p.parameters?.length || 0) > 16 || (p.steps?.length || 0) > 100 || (p.dom?.length || 0) > 40)
 		throw new Error('Program exceeds its operation budget');
 	for (const operation of p.dom || []) validateLiveDOMBinding(operation);
+	if (p.probe?.kind === 'css') validateCSSProbe(p.probe);
 	const parameterNames = new Set<string>();
 	for (const param of p.parameters || []) {
 		identifier(param.name);

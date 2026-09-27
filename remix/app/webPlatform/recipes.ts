@@ -1,3 +1,4 @@
+import { cssFunctionRecipe } from './cssFunctionFixtures';
 import { svgFilterRecipe } from './svgFilterFixtures';
 import { svgRecipe } from './svgFixtures';
 import { canvasRecipe } from './canvasFixtures';
@@ -321,6 +322,8 @@ function htmlRecipe(f: Feature): Recipe {
 	);
 }
 function cssRecipe(f: Feature): Recipe {
+	const worked = cssFunctionRecipe(f);
+	if (worked) return worked;
 	const p = base(f);
 	p.document = fixture();
 	p.styles = [...baseStyles];
@@ -361,40 +364,6 @@ function cssRecipe(f: Feature): Recipe {
 	if (f.kind === 'at-rule' && rules[f.name]) {
 		p.parameters = [parameter('rule', 'Rule', rules[f.name])];
 		p.styles.push({ rule: '[[rule]]' });
-		return recipe(p);
-	}
-	const values: Record<string, [string, string]> = {
-		'calc()': ['width', 'calc(100% - 30px)'],
-		'min()': ['width', 'min(90%, 350px)'],
-		'max()': ['padding', 'max(8px, 2vw)'],
-		'clamp()': ['font-size', 'clamp(14px, 5vw, 30px)'],
-		'var()': ['color', 'var(--accent, rebeccapurple)'],
-		'rgb()': ['color', 'rgb(100 50 200 / 0.8)'],
-		'hsl()': ['color', 'hsl(270 70% 45%)'],
-		'hwb()': ['color', 'hwb(270 20% 10%)'],
-		'lab()': ['color', 'lab(50% 30 -40)'],
-		'lch()': ['color', 'lch(50% 60 280)'],
-		'oklab()': ['color', 'oklab(60% 0.1 -0.1)'],
-		'oklch()': ['color', 'oklch(65% 0.2 300)'],
-		'color()': ['color', 'color(display-p3 0.4 0.2 0.9)'],
-		'color-mix()': ['color', 'color-mix(in oklch, rebeccapurple 60%, teal)'],
-		'linear-gradient()': ['background', 'linear-gradient(120deg, lavender, pink)'],
-		'radial-gradient()': ['background', 'radial-gradient(circle, lavender, pink)'],
-		'conic-gradient()': ['background', 'conic-gradient(lavender, pink, lavender)'],
-		'translate()': ['transform', 'translate(20px, 10px)'],
-		'rotate()': ['transform', 'rotate(4deg)'],
-		'scale()': ['transform', 'scale(0.9)'],
-		'blur()': ['filter', 'blur(1px)'],
-		'circle()': ['clip-path', 'circle(45%)'],
-		'inset()': ['clip-path', 'inset(4% round 20px)'],
-		'repeat()': ['grid-template-columns', 'repeat(3, 1fr)'],
-		'minmax()': ['grid-template-columns', 'repeat(2, minmax(80px, 1fr))']
-	};
-	if (values[f.name]) {
-		const [property, value] = values[f.name];
-		p.parameters = [parameter('value', 'Value', value)];
-		p.styles.push({ selector: '#sample', declarations: { [property]: '[[value]]', ...(property.startsWith('grid') ? { display: 'grid' } : {}) } });
-		p.probe = { kind: 'css', name: property, value: '[[value]]' };
 		return recipe(p);
 	}
 	p.parameters = [
