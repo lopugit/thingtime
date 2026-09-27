@@ -642,3 +642,41 @@ constants, plus feImage.crossOrigin. That does not turn them into fake results.
 The [published Filter Effects Level 1](https://www.w3.org/TR/filter-effects-1/)
 is a Working Draft dated 18 December 2018; the inventory retains its source status.
 These examples do not imply complete Web API coverage or Recommendation status.
+
+## Reusable CSS function comparisons
+
+106 distinct functions have concrete editable declaration contexts, covering
+180 catalogue entries across function and published-value records. This adds
+137 interactive entries and upgrades 43 existing examples, for 4,058/18,798
+interactive entries (CSS 1,196). Matching published aliases share the worked
+context; paged-media `element()` does not reuse the image function. The 14,740
+remaining entries retain their existing coverage labels.
+
+Maths, colours, gradients/images, filters, transforms, shapes, grids, easing,
+counters, environment variables, sibling counting, attributes and anchor
+positioning are ordinary Component document/style/input data. Two rendered
+samples compare the control with the edited declaration. Easing uses a paused
+animation with editable delay, 3D transformations have perspective, generated
+counters use real nested scopes, and anchors have a named layout receiver.
+Image examples use authored gradients/DOM sources without network access.
+
+The generic CSS probe accepts a scoped target, optional comparison target and a
+closed set of pseudo-elements. It reports the substituted property/value,
+`CSS.supports` result, computed values and explicitly labelled originating
+Element rectangles. Accepted syntax is `syntax-accepted`, not proof that a
+substitution, cascade or rendering effect succeeded. Computed counter content
+may retain functional notation; pseudo-element geometry is not invented.
+Probe fields are bounded before and after parameter substitution. The existing
+opaque frame, CSP, program size and storage/Action boundaries are unchanged.
+Both capability manifests and client negotiation use actions-run 1.26.0.
+
+Examples follow the indexed definitions and preserve their source status.
+[Values 4](https://www.w3.org/TR/css-values-4/),
+[Values 5](https://www.w3.org/TR/css-values-5/),
+[Color 5](https://www.w3.org/TR/css-color-5/),
+[Images 4](https://www.w3.org/TR/css-images-4/),
+[Transforms 2](https://www.w3.org/TR/css-transforms-2/),
+[Shapes 1](https://www.w3.org/TR/css-shapes-1/) and
+[Easing 2](https://www.w3.org/TR/css-easing-2/) are separate modules, with mixed
+publication maturity and browser implementation. A worked, editable unsupported
+example does not establish browser support or W3C Recommendation status.

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Reusable CSS function comparisons cover 180
+  catalogue entries (137 newly interactive), including maths, colour, transforms,
+  shapes, grids, easing, counters and anchors. Scoped CSS probes distinguish
+  syntax acceptance from native computed results and compare a control sample.
+  Edited programs retain the existing private Component/Action save path;
+  actions-run 1.26.0 advertises the additive contract.
+
 - 2026-09-27 — **Codex (AI)**: Added 192 reusable SVG filter programs with visible
   original/filtered drawings, typed native values and private Component saving.
   Shared filter/PNG budgets preserve the existing isolated runtime; literal SVG
