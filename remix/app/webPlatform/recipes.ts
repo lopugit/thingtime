@@ -1,3 +1,4 @@
+import { xpathRecipe } from './xpathFixtures';
 import { ariaRecipe } from './ariaFixtures';
 import { animationRecipe } from './animationFixtures';
 import { rangeRecipe } from './rangeFixtures';
@@ -413,6 +414,8 @@ function webApiRecipe(f: Feature): Recipe {
 }
 
 export function featureRecipe(feature: Feature): Recipe {
+	const xpath = xpathRecipe(feature);
+	if (xpath) return xpath;
 	const aria = ariaRecipe(feature);
 	if (aria) return aria;
 	const animation = animationRecipe(feature);

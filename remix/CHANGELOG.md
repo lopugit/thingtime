@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See the [XPath guide](../docs/web-standards-builder.md#native-xpath-object-programs).
+
 - 2026-09-27 — **Codex (AI)**: Add 53 reusable ARIA object programs with native nullable reflection, owned element relationships and frozen-list identity; negotiate Actions 1.33.0. Make animation stages grow to keep both tiles visible. Validate production output and retain the managed loopback dev stack; see [PR #955 details](../PRs/955-web-standards-aria-reusable-native-aria-object-programs.md).
 
 - 2026-09-27 — **Codex (AI)**: Lopu can execute saved browser and server Actions
