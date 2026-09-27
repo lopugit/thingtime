@@ -26,6 +26,55 @@ test('style rules reject scope escape, resource loads, injection and viewport po
 	const rule = (selector: string, declarations: Record<string, string>) => [{ selector, declarations }];
 	for (const selector of ['.x} body{', ':has(body)', '@import', '.x/* comment */'])
 		assert.equal(componentStyleRules(rule(selector, { color: 'red' }), 'safe'), '');
+	// A leading sibling combinator would reach the app element rendered next to
+	// this instance instead of staying inside its own subtree.
+	for (const selector of ['+ *', '+ .chrome', '.a, + .chrome', '~ .chrome'])
+		assert.equal(componentStyleRules(rule(selector, { display: 'none' }), 'safe'), '');
+	// A child combinator still selects inside the instance, and a sibling
+	// combinator between two authored nodes stays contained.
+	assert.equal(componentStyleRules(rule('> *', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) > *{color:red}');
+	assert.equal(componentStyleRules(rule('.a + .b', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) .a + .b{color:red}');
+	// An unbalanced delimiter must not reach the stylesheet: the CSS parser
+	// consumes `(` and `[` as blocks, so it would swallow this rule's body and
+	// every later rule in the same instance the way `/*` would.
+	for (const selector of ['.a(', '.a[', '.a)', '.a]', ':is(.a', '.a:not(', '.a(]', '.a) , (.b'])
+		assert.equal(componentStyleRules(rule(selector, { color: 'red' }), 'safe'), '');
+	assert.equal(
+		componentStyleRules([{ selector: '.a(', declarations: { color: 'red' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// An unterminated string swallows the stylesheet exactly like an unbalanced
+	// bracket: the CSS parser runs the string to the end of the line, taking this
+	// rule's body with it, so the prelude then consumes the next rule's block.
+	for (const selector of ['.a"', ".a'", '[a="]', "[a=']", '[a="b]', '.a" , .b'])
+		assert.equal(componentStyleRules(rule(selector, { color: 'red' }), 'safe'), '');
+	assert.equal(
+		componentStyleRules([{ selector: '.a"', declarations: { color: 'red' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// A newline ends a CSS string even when its closing quote arrives, so a
+	// balanced-looking `[title="a\nb"]` breaks the stylesheet exactly like the
+	// unterminated `[title="a`: Chrome drops this rule and the next one with it.
+	for (const selector of ['[title="a\nb"]', "[title='a\nb']", '[title="a\rb"]', '[title="a\fb"]', '.a"\n"'])
+		assert.equal(componentStyleRules(rule(selector, { color: 'red' }), 'safe'), '');
+	assert.equal(
+		componentStyleRules(
+			[{ selector: '[title="a\nb"]', declarations: { color: 'red' } }, { selector: '.b', declarations: { color: 'green' } }],
+			'safe'
+		),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// A delimiter inside a terminated string is data rather than structure, so it
+	// neither opens a block nor unbalances the selector around it.
+	assert.equal(componentStyleRules(rule('[title="]"]', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) [title="]"]{color:red}');
+	assert.equal(componentStyleRules(rule('[title="("]', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) [title="("]{color:red}');
+	// Only a top-level comma separates the selector list, so a nested argument
+	// list keeps one namespace prefix on its own compound.
+	assert.equal(componentStyleRules(rule(':is(.a, .b) .c', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) :is(.a, .b) .c{color:red}');
+	assert.equal(componentStyleRules(rule('[title="a,b"]', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) [title="a,b"]{color:red}');
+	// A combinator nested in an argument list needs no guard: the prefix still
+	// constrains the subject element to this instance's subtree.
+	assert.equal(componentStyleRules(rule(':is(.a, + .chrome)', { color: 'red' }), 'safe'), ':where([data-tt-style="safe"]) :is(.a, + .chrome){color:red}');
 	for (const value of [
 		'url(https://example.test/pixel)',
 		'URL (x)',
@@ -40,6 +89,33 @@ test('style rules reject scope escape, resource loads, injection and viewport po
 	assert.equal(
 		componentStyleRules([{ selector: '.a', declarations: { color: 'red/*' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
 		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// A declaration value left holding an open string consumes the closing `}` and
+	// hides the rules authored after it just like a comment delimiter.
+	for (const value of ['"', "'", 'a"b', '"a\nb"', "'a\rb'"]) assert.equal(componentStyleRules(rule('.x', { content: value }), 'safe'), '');
+	assert.equal(
+		componentStyleRules([{ selector: '.a', declarations: { content: '"' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// Balanced quotes stay legal: `content` and `font-family` need them.
+	assert.match(
+		componentStyleRules(rule('.x', { content: '"→"', 'font-family': '"Helvetica Neue", serif' }), 'safe'),
+		/content:"→";font-family:"Helvetica Neue", serif/
+	);
+	// An unbalanced delimiter in a value consumes the closing `}` exactly like an
+	// open string, because the CSS parser ends a `(` or `[` block at its matching
+	// closer or the end of the stylesheet and never at `}`.
+	for (const value of ['rgb(0,0,0', 'a[b', 'calc(1px + (2px', 'rgb(0,0,0)]', 'var(--a))'])
+		assert.equal(componentStyleRules(rule('.x', { color: value }), 'safe'), '');
+	assert.equal(
+		componentStyleRules([{ selector: '.a', declarations: { color: 'rgb(0,0,0' } }, { selector: '.b', declarations: { color: 'green' } }], 'safe'),
+		'\n:where([data-tt-style="safe"]) .b{color:green}'
+	);
+	// Balanced functions stay legal, and a delimiter inside a terminated string is
+	// data: real values need `var()`, `calc()` and a quoted `(`.
+	assert.match(
+		componentStyleRules(rule('.x', { color: 'var(--app-ink, #18392d)', width: 'calc(100% - 24px)', content: '"("' }), 'safe'),
+		/color:var\(--app-ink, #18392d\);width:calc\(100% - 24px\);content:"\("/
 	);
 	assert.match(componentStyleRules(rule('.x', { font: '12px/1.5 serif', 'aspect-ratio': '16 / 9' }), 'safe'), /font:12px\/1\.5 serif;aspect-ratio:16 \/ 9/);
 	assert.equal(componentStyleRules(rule('.x', { position: 'fixed', 'z-index': '99999' }), 'safe'), '');
