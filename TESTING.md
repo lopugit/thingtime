@@ -972,6 +972,29 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] Standard Mac/browser dictation writes partial and final words directly
+      into Message Lopu, with no separate transcript preview or automatic send.
+      Begin with typed text; stop mid-phrase, edit, resume, and switch Chat ↔ Voice:
+      preserve the draft and append new speech without repeating revised words.
+      A recognizer restart/failure retains the draft. Typing and explicit Send
+      stop capture; late callbacks cannot overwrite edits or refill a sent draft.
+      Rejected sends restore the text. With Spoken replies on, stop playback
+      and send again: cancellation cannot hang the turn queue or start the mic.
+      Run `scripts/lopu-dictation.browser.html`
+      in page/compact layouts at desktop and 390px, then verify real speech in
+      the signed installed Mac app. Private-page Transcribe and Direct voice
+      keep their existing dedicated flows.
+- [ ] On Mac, listen silently across at least two native no-input retry cycles
+      (15 seconds), then speak: silence must not show a red service error or
+      send a message; the phrase fills the draft and explicit Send sends once. Stop ends
+      capture/retries. An interrupted helper still reports a real error, and
+      retry clears it without removing conversation messages.
+- [ ] After a microphone permission or recognition failure, retry voice input:
+      the previous recognition error disappears immediately, a successful
+      transcript fills the draft, and existing messages/turn failures remain.
+      Repeat a failed retry and switch chats; errors must not accumulate or
+      leak into another conversation. On Mac, interrupt a disposable native
+      capture to exercise recovery without resetting OS permissions.
 - [ ] With iOS build 29 and private uploads approved, finish a voice segment:
       `/things` contains one playable owner-private M4A recording and Files
       retains the original CAF/TXT. Open the saved notice at desktop and 390px;
@@ -5667,8 +5690,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 - [ ] Mac Lopu voice input: in the installed signed app, press the microphone,
       allow Speech Recognition and Microphone, and speak a synthetic test phrase.
-      One transcript reaches the selected chat/model without Chromium's `network`
-      error; the mic pauses during the reply. Stop during a permission prompt,
+      The live transcript fills the message field without Chromium's `network`
+      error; explicit Send reaches the selected chat/model and stops the mic.
+      Stop during a permission prompt,
       during capture, and immediately after an interim result: no late turn sends.
       Reload/close/switch account or chat: capture stops and no transcript crosses
       the boundary. Denied permissions show the relevant macOS settings category.
@@ -7436,14 +7460,14 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   a 72dvh sheet (drag handle, Escape/scrim close), the composer sits above
   the safe area, nothing scrolls horizontally or hides under the nav.
 - Voice mode (`/lopu/voice`, or the floating window's mic): the same column
-  with the text composer folded away and the voice deck below it — gear ·
+  with the shared text composer and the voice deck below it — gear ·
   64px mic (idle card / listening rainbow pulse / thinking spinner / speaking
-  breathe) · Stop while Lopu replies — plus a single rounded "Or type to
-  Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
-  included). With no SpeechRecognition (the in-app Browser pane) the mic
+  breathe) · Stop while Lopu replies. Standard Mac/browser recognition fills
+  the editable Message Lopu draft; stopping retains it and Enter/Send submits
+  a normal chat turn (the same brain, tools included). With no SpeechRecognition
+  (the in-app Browser pane) the mic
   click toasts "No microphone here" and the typed path still works; with a
-  mic, listening pauses for the whole turn and for Lopu's speech (never its
-  own voice back), then resumes. The gear popover (never a full-width card)
+  mic, typing or sending stops capture. The gear popover (never a full-width card)
   holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
   vault provider whose kind lists a realtime model — the hint reads the
   reason otherwise; a realtime-model select when it lists several) and the
@@ -9015,3 +9039,98 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Re-run Typed OM, CSS, SVG/filter, Canvas, DOM and form browser regressions;
   match runtime digest, restrictive CSP and both actions-run 1.28 manifests on
   exact preview/main deployments before calling production @lopu delivered.
+
+
+### Web standards: layout and Geometry (2026-09-27)
+
+- Run all 130 CSSOM View and 19 remaining Geometry examples with default and
+  edited inputs. Compare native rectangles, scroll positions, caret hits, range
+  rectangles, quad points/bounds, matrix values and media-query matching.
+  Read-only screen metrics and iframe move/resize restrictions stay explicit.
+- Await native scroll completion, including engines returning an interrupted
+  dictionary. Stop/deadline must discard late results. Native WebIDL mixin
+  accessors may live on unnamed prototype layers: capture registered names
+  through the native chain without reading shadowing instance properties.
+- Run layoutBoundaryFixtures: refuse runtime/parent/global escapes, outside
+  hit-test nodes, foreign shadow roots, malformed options, unbounded geometry
+  and unrelated surface mutations. An initial Range cannot expose its runtime
+  document. Owned shadow-root contents support scoped caret testing.
+- Observe real mouse/viewport events; dispatch an explicitly synthetic media
+  query event and verify isTrusted=false. Remove the exact legacy callback,
+  dispatch again and verify no further receipt; Stop releases handlers.
+- Round-trip edited programs through the catalogue Action and private Things.
+  Save/reload/run a scroll Component, reuse its reference on another page, and
+  verify native offsets, anonymous 404, Stop/fresh Run and desktop/390px layout.
+- Run existing CSSOM/Typed OM/CSS/SVG/filter/Canvas/DOM/form regressions. Match
+  preview/main source SHA, runtime digest, restrictive CSP and both actions-run
+  1.29.0 manifests before production @lopu delivery.
+
+### Web standards: native observer programs (2026-09-27)
+
+- Run all 81 Mutation/Resize/Intersection Observer programs with default and
+  edited options. Verify actual native callback records, projected fields and
+  changed output. An unavailable IntersectionObserverEntry constructor or
+  callback field reports unsupported, never a fabricated successful result.
+- Run observerBoundaryFixtures: takeRecords drains five queued mutations before
+  callback delivery; disconnect clears the next queue; oldValue and receiver
+  identity match the native records. Resize/intersection unobserve/disconnect
+  must suppress later changes. Resize box selection responds to border changes.
+- Reject foreign targets/roots, unregistered callbacks, observer/callback
+  allocation overflow, invalid options, nested batches and async operations in
+  a synchronous batch. A rejected async command must not have been invoked.
+  Callback exceptions end the run; Stop/deadline disconnect resources, discard
+  late callbacks and keep the outer app responsive.
+- Round-trip edited programs through the catalogue Action and private Things
+  API. Save in the actual workbench, reopen, fully reload and run the saved
+  Component, then reference it from a second private page. Verify anonymous
+  404, Stop/fresh Run, and desktop/390px layout without horizontal overflow.
+- Run existing native DOM/form/Canvas/SVG/CSS/Typed OM/CSSOM/layout regressions,
+  compiler/protocol and capability tests. Both manifests and the client require
+  actions-run 1.30.0. Verify the built runtime hash and deployed commit before
+  claiming preview or production delivery.
+
+### Web standards: native range programs (2026-09-27)
+
+- Run all 40 added live/static range recipes with default and edited input.
+  Observe actual native text, cloned/extracted fragments, wrapper markup,
+  comparisons, boundary nodes and offsets. Static offsets stay fixed while
+  a live range follows inserted text. Preserve existing surface geometry demos.
+- Run rangeBoundaryFixtures: native IndexSizeError stays catchable; cloned
+  ranges remain independent; extraction moves text. Reject initial runtime
+  document access, selecting the surface root's parent, surface tree edits,
+  foreign handles and unknown StaticRangeInit fields. Concrete prototype-chain
+  getters must work when AbstractRange has no own boundary accessors.
+- Reject fragment scripts, resources, attributes, foreign content, malformed
+  tags and token/text overflow before native parsing. Escaped markup remains
+  inert text. Reuse the existing worker deadline, node/work/handle budgets.
+- Round-trip edited programs through the catalogue Action and private Things.
+  Save/reload/run in the actual workbench, reference the saved Component from
+  another private page, check anonymous 404, Stop/fresh Run and 390px overflow.
+- Run compiler, capability, schema, Action, Component and page tests; native
+  DOM/layout regressions; build/typecheck. Verify both actions-run 1.31.0
+  manifests, deployed source SHA and runtime digest before production delivery.
+
+### Web standards: native animation programs (2026-09-27)
+
+- Run all 111 animation programs with default and edited keyframes/timing. Check
+  real interpolation and computed styles, playback state, ready/finished
+  promises, changing targets/timelines, native keyframe copies and query results.
+- Run animationBoundaryFixtures. Check exact half-way interpolation, clone
+  timing independence, trusted finish/cancel/remove events, native handler `this`
+  identity and shadow queries.
+  Actual native keyframe errors remain catchable. Refuse foreign effect/target/
+  timeline handles, unsupported option fields, excess objects/keyframes/values,
+  forged callbacks and asynchronous reads in synchronous DOM batches.
+- Detect ignored getAnimations pseudoElement filters with a real pseudo-effect;
+  report unsupported instead of presenting an unfiltered result as a success.
+  Draft iterationComposite/startTime support must remain honestly reported.
+  Native Event.isTrusted own accessors must distinguish constructed from trusted
+  playback events. Pseudo-element samples must not invoke commitStyles.
+- Edit JSON inputs and save in Builder. Fully reload the private Component,
+  run its edited definition, reference it from a second private page and confirm
+  the same native result. Verify anonymous reads return 404, Stop removes its
+  frame, a fresh Run works, and 390px editing/results do not overflow the page.
+- Run platform/compiler, capability, schema, Action, Component and page tests;
+  the broader DOM/CSS/SVG/observer/range native audit; lint, build and typecheck.
+  Verify both 1.32.0 manifests, exact deployed source and runtime hash in preview
+  and production before claiming delivery. Clean up disposable local fixtures.

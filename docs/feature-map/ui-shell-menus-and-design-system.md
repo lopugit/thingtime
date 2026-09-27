@@ -77,6 +77,10 @@ browser acceptance also checks reload and repeated search through the renderer.
 
 ## Tests
 
+- `scripts/lopu-dictation.browser.html` exercises the real Lopu voice surface
+  with synthetic speech/HTTP: live composer revisions, stop/resume, edits,
+  mode switches, stale callbacks, recognition failure and rejected-send recovery.
+  `composerDictation.test.ts` covers draft merging and the shared input limit.
 - `npm --prefix remix run test:nav`, `test:lopu-ui`, `test:things` (menu
   models), `test:feed` (card contracts). Menu/layout behaviour is verified in a
   live browser at desktop and 375 px widths (`TESTING.md` "Shared page shell",

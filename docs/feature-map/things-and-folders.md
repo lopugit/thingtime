@@ -140,3 +140,13 @@ bounded native member calls through worker messages; `domProtocol.test.ts` and
 `workerLifecycle.test.ts` cover that transport and lifecycle. Programs remain
 ordinary saved Component data. See the detached-context limits and browser
 acceptance checklist in the runtime documentation and `TESTING.md`.
+
+`rangeFixtures.ts` adds editable live/static range programs. Boundary inputs,
+operations and projections survive ordinary Component serialization; no new
+Thing kind, collection or persistence path is involved. See
+[live and static ranges](../web-standards-builder.md#native-live-and-static-ranges).
+
+`animationFixtures.ts` authors 111 reusable animation programs. Keyframes, timing,
+callbacks and native operations are complete saved Component data; existing
+catalogue/save Actions and private Thing serialization remain canonical. See
+[native animation programs](../web-standards-builder.md#native-web-animation-programs).

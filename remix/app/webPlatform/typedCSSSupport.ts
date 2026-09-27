@@ -78,10 +78,21 @@ export function typedCSSArgument(value: unknown, rule: string, receiver: Receive
 	throw new Error('Unregistered CSS argument');
 }
 export function typedCSSArguments(
-	shape: { args: Arg[]; min?: number; rest?: boolean },
+	shape: { args: Arg[]; min?: number; rest?: boolean; overloads?: Arg[][] },
 	values: unknown[],
 	convert: (value: unknown, rule: Arg) => unknown
 ) {
+	if (shape.overloads) {
+		let failure: unknown = new Error('Invalid native constructor overload');
+		for (const args of shape.overloads.filter((args) => args.length === values.length)) {
+			try {
+				return values.map((value, i) => convert(value, args[i]));
+			} catch (error) {
+				failure = error;
+			}
+		}
+		throw failure;
+	}
 	if (values.length < (shape.min ?? shape.args.length) || (!shape.rest && values.length > shape.args.length))
 		throw new Error('Invalid CSS argument count');
 	return values.map((v, i) => convert(v, shape.args[Math.min(i, shape.args.length - 1)]));

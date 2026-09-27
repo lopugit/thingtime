@@ -3,6 +3,7 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import type { PlatformBooleanInput, PlatformDOMBinding } from './types';
 /** Shared native backing for data-authored DOM bindings. No catalogue IDs here. */
 export const LIVE_DOM_METHODS = new Set([
+	'dispatchEvent',
 	'play',
 	'pause',
 	'load',
@@ -197,6 +198,14 @@ export function platformEventReceipt(event: Event) {
 			'buttons',
 			'clientX',
 			'clientY',
+			'offsetX',
+			'offsetY',
+			'pageX',
+			'pageY',
+			'x',
+			'y',
+			'matches',
+			'media',
 			'movementX',
 			'movementY',
 			'detail',
@@ -253,7 +262,7 @@ export function validateLiveDOMBinding(operation: unknown) {
 	if (!operation || typeof operation !== 'object' || Array.isArray(operation)) throw new Error('Expected a DOM binding');
 	const op = operation as PlatformDOMBinding;
 	const selector = (value: unknown) => typeof value === 'string' && value.length > 0 && value.length <= 500;
-	const allowed = new Set(['target', 'event', 'method', 'property', 'value', 'args', 'label', 'binding', 'options', ...boolKeys]);
+	const allowed = new Set(['target', 'event', 'method', 'property', 'value', 'args', 'label', 'binding', 'options', 'removeOn', ...boolKeys]);
 	if (Object.keys(op).some((key) => !allowed.has(key))) throw new Error('Unknown DOM binding field');
 	if (!selector(op.target)) throw new Error('Expected a bounded DOM target selector');
 	if (op.label !== undefined && (typeof op.label !== 'string' || op.label.length > 100)) throw new Error('Expected a bounded binding label');
@@ -263,6 +272,12 @@ export function validateLiveDOMBinding(operation: unknown) {
 		if (typeof op.event !== 'string') throw new Error('Invalid event binding');
 		const parts = op.event.split('|');
 		if (parts.length !== 2 || !selector(parts[0]) || !LIVE_DOM_EVENTS.has(parts[1])) throw new Error('Invalid event binding');
+	}
+	if (op.removeOn !== undefined) {
+		if (!op.event || typeof op.removeOn !== 'string') throw new Error('Listener removal requires an event binding');
+		const parts = op.removeOn.split('|');
+		if (parts.length !== 2 || !selector(parts[0]) || parts[0].startsWith('$') || !LIVE_DOM_EVENTS.has(parts[1]))
+			throw new Error('Invalid listener removal trigger');
 	}
 	if (op.property !== undefined) {
 		if (typeof op.property !== 'string' || !MEDIA_PROPERTIES.has(op.property) || op.method !== undefined || op.args !== undefined)
@@ -274,7 +289,9 @@ export function validateLiveDOMBinding(operation: unknown) {
 	}
 	if (op.method === undefined && op.property === undefined && (op.event === undefined || op.args !== undefined))
 		throw new Error('Event observations need an event and no arguments');
-	if (op.binding !== undefined && !['listener', 'handler'].includes(op.binding)) throw new Error('Unknown event binding mode');
+	if (op.binding !== undefined && !['listener', 'handler', 'legacy'].includes(op.binding)) throw new Error('Unknown event binding mode');
+	if (op.binding === 'legacy' && (!op.event?.startsWith('$media:') || !op.event.endsWith('|change')))
+		throw new Error('Legacy listeners require a media-query change event');
 	if (op.event === undefined && (op.binding !== undefined || op.options !== undefined || boolKeys.some((key) => op[key] !== undefined)))
 		throw new Error('Event controls require an event');
 	for (const key of boolKeys) validateBoolean(op[key]);
@@ -285,6 +302,7 @@ export function validateLiveDOMBinding(operation: unknown) {
 			typeof op.options !== 'object' ||
 			Array.isArray(op.options) ||
 			op.binding === 'handler' ||
+			op.binding === 'legacy' ||
 			Object.keys(op.options).some((key) => !['capture', 'once', 'passive'].includes(key))
 		)
 			throw new Error('Expected listener options');
@@ -325,6 +343,17 @@ export function bindLiveDOMEvent(
 			active = false;
 			// Do not remove a later replacement bound to the same native property.
 			if (descriptor.get!.call(target) === listener) descriptor.set!.call(target, null);
+		};
+	}
+	if (operation.binding === 'legacy') {
+		const add = nativeDescriptor(target, 'addListener')?.value;
+		const remove = nativeDescriptor(target, 'removeListener')?.value;
+		if (eventName !== 'change' || typeof add !== 'function' || typeof remove !== 'function')
+			throw new UnsupportedDOMFeature('This browser does not expose legacy media-query listeners');
+		Reflect.apply(add, target, [listener]);
+		return () => {
+			active = false;
+			Reflect.apply(remove, target, [listener]);
 		};
 	}
 	const options = Object.fromEntries(Object.entries(operation.options || {}).map(([key, value]) => [key, resolveDOMBoolean(value, input)]));
