@@ -1,3 +1,4 @@
+import { CSSOM_CONSTRUCTORS, CSSOM_STATIC } from './cssomPolicy';
 import { TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC } from './typedCSSPolicy';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -31,11 +32,11 @@ test('every catalogue DOM request names a member the receiver policy registers',
 			continue;
 		}
 		if (action === 'construct') {
-			assert.ok(['Path2D', 'ImageData', ...Object.keys(TYPED_CSS_CONSTRUCTORS)].includes(key));
+			assert.ok(['Path2D', 'ImageData', ...Object.keys(TYPED_CSS_CONSTRUCTORS), ...Object.keys(CSSOM_CONSTRUCTORS)].includes(key));
 			continue;
 		}
 		if (action === 'static') {
-			assert.ok(Object.values(TYPED_CSS_STATIC).some((p) => key in p));
+			assert.ok([...Object.values(TYPED_CSS_STATIC), ...Object.values(CSSOM_STATIC)].some((p) => key in p));
 			continue;
 		}
 		const registry = ['get', 'constant'].includes(action) ? reads : action === 'set' ? writes : calls;
@@ -52,7 +53,7 @@ test('registered DOM members fit the compiler and bridge request envelope', () =
 		const method = Object.keys(policy.calls || {});
 		for (const key of [...read, ...write, ...method]) {
 			// compiler.ts gates node.key with this pattern; domBridge caps key length at 60.
-			assert.match(key, /^[A-Za-z_][A-Za-z0-9_]{0,60}$/, `${name}.${key}`);
+			assert.match(key, /^[A-Za-z_][A-Za-z0-9_-]{0,60}$/, `${name}.${key}`);
 		}
 		assert.equal(new Set(read).size, read.length, `${name} repeats a readable member`);
 		for (const key of write) assert.ok(read.includes(key), `${name}.${key} is writable but not readable`);

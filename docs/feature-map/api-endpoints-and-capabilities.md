@@ -187,3 +187,11 @@ CSS Typed OM programs add `api.actions-run` 1.27.0 for registered native CSS
 factories/parsers, constructors, arithmetic, transforms and scoped style maps.
 The existing opaque receiver bridge and catalogue/save Action contracts remain
 canonical. See [native CSS Typed OM programs](../web-standards-builder.md#native-css-typed-om-programs).
+
+
+CSSOM programs add `api.actions-run` 1.28.0 for native declarations, bounded
+stylesheet/rule receivers, scoped adopted sheets and awaited replacement.
+`cssomPolicy.ts`/`cssomSupport.ts` define generic contracts; `cssomFixtures.ts`
+contains reusable program data. Worker Stop/deadline handling fences late
+native Promise replies. The canonical catalogue and private Component save
+contracts are unchanged. See [CSSOM programs](../web-standards-builder.md#native-css-object-model-programs).

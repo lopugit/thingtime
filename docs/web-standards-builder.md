@@ -22,8 +22,8 @@ specification clauses retain explicit labels. They are not all completed
 standards or callable APIs.
 
 The initial snapshot has 18,798 entries. Each has a source reference and an
-editable program. 3,729 have interactive recipes (302 HTML, 1,059 CSS, 890
-JavaScript and 1,478 Web API entries); the rest are
+editable program. 4,409 have interactive recipes (302 HTML, 1,196 CSS, 890
+JavaScript and 2,021 Web API entries); the rest are
 `inspection` or `requires-context`. These categories are unfinished demo
 coverage, not proof of full platform coverage. Browser availability is checked
 at runtime, independently of standards status. Some generated method examples
@@ -708,8 +708,8 @@ of at most 32,768. Expression composition has per-value and per-run budgets to
 reject repeated multiplication before native expansion. Existing request,
 handle, input-work and result budgets remain in force. Native CSSNumericType
 results use a fixed field projection. Constructed stylesheets expose bounded
-style rules and rule maps without attaching to a document; at-rules and escapes
-are rejected. No runtime document, stylesheet adoption, network access or CSP
+style rules and rule maps. The CSSOM extension below adds grouped rules and
+scoped shadow-root adoption. No runtime document, network access or CSP
 permission is added. Computed maps retain their native read-only contract.
 
 `api.actions-run` 1.27.0 advertises these additive operations in both manifests
@@ -718,3 +718,35 @@ all 249 programs; `typedCSSBoundaryFixtures.ts` covers native conversions,
 map writes, read-only refusals, handle isolation and resource limits. Run these
 in a rendered browser: unit compilation alone cannot prove native support or
 that edited inputs change the observed result.
+
+
+## Native CSS Object Model programs
+
+All 102 indexed entries sourced from [CSSOM Level 1](https://drafts.csswg.org/cssom-1/)
+have editable Component programs. They cover declarations, property values and
+priorities, stylesheet construction and replacement, style/grouping/import/page/
+margin/namespace rules, rule and sheet lists, media queries, scoped adopted
+stylesheets, `CSS.escape` and `getComputedStyle`. The catalogue preserves the
+specification's draft status; browser availability is reported separately.
+
+`cssomFixtures.ts` contains the authored programs and their observation logic.
+`cssomPolicy.ts` registers generic native contracts in the existing DOM bridge;
+`cssomSupport.ts` checks arguments before dispatch. A detached Document can own
+style elements and expose its native sheets. Open shadow roots may be attached
+only to owned sample elements, and adopted sheets remain inside that run's
+opaque frame. The runtime Document and Window object are never returned.
+Only the registered Window.getComputedStyle operation uses the native window.
+No new endpoint, storage model, network grant or CSP allowance is introduced.
+
+CSS text is bounded to 4,096 characters, stylesheet trees to 32 rules and eight
+levels, and adoption to eight owned sheets. Existing request, receiver and
+input-work limits still apply. `replace` awaits its native Promise within the
+same worker deadline; Stop discards late replies. Computed declarations retain
+native read-only exceptions. CSSRule.cssText's specified no-op setter is shown
+as unchanged, imported sheet access can report the native SecurityError, and
+unimplemented page descriptors or ignored baseURL options report unsupported.
+
+Both manifests and client negotiation advertise `api.actions-run` 1.28.0.
+Every program has default and edited native checks, and 20 boundary fixtures
+cover real CSS results, async replacement, ownership and resource limits.
+Programs persist through the canonical private Component and save Action path.

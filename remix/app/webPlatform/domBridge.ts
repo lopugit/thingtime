@@ -1,3 +1,5 @@
+import { CSSOM_RECEIVER_POLICY, CSSOM_CONSTRUCTORS, CSSOM_STATIC, CSSOM_PROPERTIES, type CSSOMArg } from './cssomPolicy';
+import { cssomArgument, cssomText, CSSOM_LIMITS } from './cssomSupport';
 import { TYPED_CSS_RECEIVER_POLICY, TYPED_CSS_CONSTRUCTORS, TYPED_CSS_STATIC, type TypedCSSArg } from './typedCSSPolicy';
 import { typedCSSArgument, typedCSSArguments, typedCSSNumericType, TYPED_CSS_LIMITS } from './typedCSSSupport';
 import { SVG_FILTER_TAGS, svgFilterValue, svgFilterNumbers } from './svgFilterSupport';
@@ -12,6 +14,7 @@ import { HTML_FORM_RECEIVER_POLICY } from './htmlFormPolicy';
 import { CANVAS_RECEIVER_POLICY } from './canvasPolicy';
 import { canvasArgument, canvasContextAttributes, CANVAS_LIMITS } from './canvasSupport';
 export type Arg =
+	| CSSOMArg
 	| TypedCSSArg
 	| 'svg-matrix'
 	| 'svg-number'
@@ -57,7 +60,7 @@ export type Arg =
 	| 'nullable-node'
 	| 'node-or-text'
 	| 'node-or-index';
-type Method = { args: Arg[]; overloads?: Arg[][]; min?: number; rest?: boolean; mutates?: boolean; iterable?: boolean };
+type Method = { args: Arg[]; overloads?: Arg[][]; min?: number; rest?: boolean; mutates?: boolean; iterable?: boolean; awaitResult?: boolean };
 export type Policy = { reads: string; writes?: string; writeArgs?: Record<string, Arg>; calls?: Record<string, Method> };
 const call = (args: Arg[] = [], options: Omit<Method, 'args'> = {}): Method => ({ args, ...options });
 const mutate = (args: Arg[] = [], options: Omit<Method, 'args'> = {}) => call(args, { ...options, mutates: true });
@@ -83,8 +86,9 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 	...CANVAS_RECEIVER_POLICY,
 	...SVG_RECEIVER_POLICY,
 	...TYPED_CSS_RECEIVER_POLICY,
-	HTMLElement: { reads: 'attributeStyleMap' },
-	SVGElement: { ...SVG_RECEIVER_POLICY.SVGElement, reads: SVG_RECEIVER_POLICY.SVGElement.reads + ' attributeStyleMap' },
+	...CSSOM_RECEIVER_POLICY,
+	HTMLElement: { reads: 'attributeStyleMap style' },
+	SVGElement: { ...SVG_RECEIVER_POLICY.SVGElement, reads: SVG_RECEIVER_POLICY.SVGElement.reads + ' attributeStyleMap style' },
 	Node: {
 		reads:
 			'nodeType nodeName baseURI isConnected ownerDocument parentNode parentElement childNodes firstChild lastChild previousSibling nextSibling nodeValue textContent ELEMENT_NODE ATTRIBUTE_NODE TEXT_NODE CDATA_SECTION_NODE ENTITY_REFERENCE_NODE ENTITY_NODE PROCESSING_INSTRUCTION_NODE COMMENT_NODE DOCUMENT_NODE DOCUMENT_TYPE_NODE DOCUMENT_FRAGMENT_NODE NOTATION_NODE DOCUMENT_POSITION_DISCONNECTED DOCUMENT_POSITION_PRECEDING DOCUMENT_POSITION_FOLLOWING DOCUMENT_POSITION_CONTAINS DOCUMENT_POSITION_CONTAINED_BY DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC',
@@ -108,7 +112,7 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 		}
 	},
 	Document: {
-		reads: `URL documentURI compatMode characterSet charset inputEncoding contentType doctype documentElement body head ${parentReads}`,
+		reads: `URL documentURI compatMode characterSet charset inputEncoding contentType doctype documentElement body head styleSheets ${parentReads}`,
 		calls: {
 			...parentCalls,
 			getElementById: call(['text']),
@@ -124,11 +128,12 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 		}
 	},
 	Element: {
-		reads: `namespaceURI prefix localName tagName id className classList attributes innerHTML outerHTML ${parentReads} ${childReads}`,
+		reads: `namespaceURI prefix localName tagName id className classList attributes innerHTML outerHTML shadowRoot ${parentReads} ${childReads}`,
 		writes: 'id className',
 		calls: {
 			...parentCalls,
 			computedStyleMap: call(),
+			attachShadow: call(['cssom-shadow'], { mutates: true }),
 			...childCalls,
 			matches: call(['selector']),
 			closest: call(['selector']),
@@ -187,7 +192,7 @@ export const DOM_RECEIVER_POLICY: Record<string, Policy> = {
 	}
 };
 
-const forbiddenTags = new Set('script style link meta base iframe frame frameset embed object svg math template'.split(' '));
+const forbiddenTags = new Set('script link meta base iframe frame frameset embed object svg math template'.split(' '));
 function tag(value: unknown): string {
 	if (typeof value !== 'string' || !/^[a-z][a-z0-9]{0,40}$/.test(value) || forbiddenTags.has(value))
 		throw new Error('Use a local HTML element without an embedded resource or browsing context');
@@ -213,6 +218,9 @@ export function createPlatformDOMBridge(surface: Element) {
 	let context: 'detached' | 'surface' | undefined;
 	const scope = surfaceDocument.defaultView!.crypto.randomUUID();
 	const objects = new Map<string, Entry>();
+	const shadowRoots = new Set<ShadowRoot>();
+	const constructors = { ...TYPED_CSS_CONSTRUCTORS, ...CSSOM_CONSTRUCTORS };
+	const statics = { ...TYPED_CSS_STATIC, ...CSSOM_STATIC, CSS: { ...TYPED_CSS_STATIC.CSS, ...CSSOM_STATIC.CSS } };
 	const cssCosts = new WeakMap<object, number>();
 	let cssWork = 0;
 	const cssCost = (value: unknown, depth = 0): number => {
@@ -321,6 +329,24 @@ export function createPlatformDOMBridge(surface: Element) {
 	const importNode = method<Node>('Document', 'importNode');
 	const appendChild = method<Node>('Node', 'appendChild');
 	const replaceChildren = method<void>('Element', 'replaceChildren');
+	const cssRuleCount = (container: object, depth = 0): number => {
+		if (depth > CSSOM_LIMITS.depth) throw new Error('CSSOM rule depth budget exceeded');
+		const rules = reader<CSSRuleList>(belongs(container, 'CSSStyleSheet') ? 'CSSStyleSheet' : 'CSSGroupingRule', 'cssRules')(container);
+		const length = reader<number>('CSSRuleList', 'length')(rules);
+		if (length > CSSOM_LIMITS.rules) throw new Error('CSSOM rule budget exceeded');
+		let count = length;
+		for (let i = 0; i < length; i++) {
+			const rule = method<CSSRule>('CSSRuleList', 'item')(rules, i);
+			if (belongs(rule, 'CSSGroupingRule')) count += cssRuleCount(rule, depth + 1);
+			if (count > CSSOM_LIMITS.rules) throw new Error('CSSOM rule budget exceeded');
+		}
+		return count;
+	};
+	const insideSurface = (node: Node): boolean => {
+		if (contains(surface, node)) return true;
+		const root = rootNode(node);
+		return shadowRoots.has(root as ShadowRoot) && contains(surface, reader<Node>('ShadowRoot', 'host')(root));
+	};
 	const inspectTree = (node: Node, depth = 0) => {
 		if (depth > 40) throw new Error('DOM tree exceeds its depth budget');
 		if (!allocated.has(node)) {
@@ -328,7 +354,7 @@ export function createPlatformDOMBridge(surface: Element) {
 			if (++allocationCount > 600) throw new Error('DOM node allocation budget exceeded');
 		}
 		if (context === 'surface') {
-			if (node === surfaceDocument || ownerDocument(node) !== surfaceDocument || (connected(node) && !contains(surface, node)))
+			if (node === surfaceDocument || ownerDocument(node) !== surfaceDocument || (connected(node) && !insideSurface(node)))
 				throw new Error('DOM receiver is outside this program surface');
 		} else if (node !== doc && ownerDocument(node) !== doc) throw new Error('DOM receiver belongs to another document');
 		if (belongs(node, 'HTMLCanvasElement')) {
@@ -350,6 +376,11 @@ export function createPlatformDOMBridge(surface: Element) {
 				if (!Number.isFinite(value) || value < 0 || value > SVG_LIMITS.edge) throw new Error('SVG viewport exceeds its dimension limit');
 			}
 
+		if (belongs(node, 'HTMLStyleElement')) {
+			cssomText(textContent(node) || '');
+			const sheet = reader<CSSStyleSheet | null>('HTMLStyleElement', 'sheet')(node);
+			if (sheet) cssRuleCount(sheet);
+		}
 		if (nodeType(node) === 1) {
 			const svg = namespace(node) === SVG_NAMESPACE;
 			if (svg) {
@@ -401,6 +432,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		let type: string | undefined;
 		// Most specific interface first; CharacterData/Node describe base types.
 		for (const name of [
+			...Object.keys(CSSOM_RECEIVER_POLICY),
 			...Object.keys(TYPED_CSS_RECEIVER_POLICY),
 			...Object.keys(HTML_FORM_RECEIVER_POLICY),
 			...Object.keys(CANVAS_RECEIVER_POLICY),
@@ -446,6 +478,7 @@ export function createPlatformDOMBridge(surface: Element) {
 		return target;
 	};
 	const argument = (value: unknown, rule: Arg): unknown => {
+		if (rule.startsWith('cssom-')) return cssomArgument(value, rule, receiverType);
 		if (rule.startsWith('css-')) return typedCSSArgument(value, rule, receiverType);
 		if (rule.startsWith('svg-')) return svgArgument(value, rule, receiverType);
 		if (rule.startsWith('canvas-') || rule.startsWith('pixel-')) return canvasArgument(value, rule, receiverType);
@@ -483,7 +516,9 @@ export function createPlatformDOMBridge(surface: Element) {
 			if (context !== 'surface') for (const canvas of canvases) canvas.width = 0;
 			canvases.clear();
 		},
-		request: (raw: unknown): { value?: unknown; error?: { name: string; message: string } } => {
+		request: (
+			raw: unknown
+		): { value?: unknown; error?: { name: string; message: string } } | Promise<{ value?: unknown; error?: { name: string; message: string } }> => {
 			if (stopped) throw new Error('DOM run has ended');
 			if (++requestCount > 256) throw new Error('DOM request budget exceeded');
 			if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).length !== 6) throw new Error('Invalid DOM request');
@@ -525,22 +560,19 @@ export function createPlatformDOMBridge(surface: Element) {
 					throw new Error('Expected a primitive DOM constant');
 				return { value: encode(descriptor.value) };
 			}
-			if (
-				request.action === 'static' ||
-				(request.action === 'construct' && Object.prototype.hasOwnProperty.call(TYPED_CSS_CONSTRUCTORS, request.key))
-			) {
+			if (request.action === 'static' || (request.action === 'construct' && Object.prototype.hasOwnProperty.call(constructors, request.key))) {
 				const isStatic = request.action === 'static';
 				const namespace = request.target;
 				const registry =
-					isStatic && typeof namespace === 'string' && Object.prototype.hasOwnProperty.call(TYPED_CSS_STATIC, namespace)
-						? TYPED_CSS_STATIC[namespace]
+					isStatic && typeof namespace === 'string' && Object.prototype.hasOwnProperty.call(statics, namespace)
+						? (statics as Record<string, Record<string, Method>>)[namespace]
 						: undefined;
 				const shape = isStatic
 					? registry && Object.prototype.hasOwnProperty.call(registry, request.key) && registry[request.key]
-					: TYPED_CSS_CONSTRUCTORS[request.key];
+					: (constructors as Record<string, Method>)[request.key];
 				if (!shape || (!isStatic && request.target !== null)) throw new Error('Unregistered CSS native operation');
 				const args = typedCSSArguments(shape, request.args, argument);
-				const owner = isStatic ? realm[String(namespace)] : undefined;
+				const owner = isStatic ? (namespace === 'Window' ? surfaceDocument.defaultView : realm[String(namespace)]) : undefined;
 				const native = isStatic ? owner && Object.getOwnPropertyDescriptor(owner, request.key)?.value : realm[request.key];
 				if (typeof native !== 'function')
 					return {
@@ -602,6 +634,7 @@ export function createPlatformDOMBridge(surface: Element) {
 			}
 			const target = receiver(request.target).value;
 			let descriptor: PropertyDescriptor | undefined,
+				namedCSSProperty = false,
 				policy: Method | undefined,
 				writeRule: Arg = 'text',
 				registered = false,
@@ -629,6 +662,19 @@ export function createPlatformDOMBridge(surface: Element) {
 					}
 				}
 			}
+			if (
+				!descriptor &&
+				CSSOM_PROPERTIES.includes(request.key) &&
+				belongs(target, 'CSSStyleDeclaration') &&
+				['get', 'set'].includes(request.action)
+			) {
+				descriptor = Object.getOwnPropertyDescriptor(target, request.key);
+				if (descriptor) {
+					namedCSSProperty = true;
+					resolvedInterface = 'CSSStyleDeclaration';
+					writeRule = 'cssom-text';
+				}
+			}
 			if (!descriptor) {
 				if (registered) return { error: { name: 'UnsupportedDOMMember', message: `This browser does not expose DOM member ${request.key}` } };
 				throw new Error(`DOM member ${request.key} is not registered for this receiver`);
@@ -638,7 +684,9 @@ export function createPlatformDOMBridge(surface: Element) {
 				(policy?.mutates || request.action === 'set') &&
 				!Object.prototype.hasOwnProperty.call(CANVAS_RECEIVER_POLICY, resolvedInterface) &&
 				!Object.prototype.hasOwnProperty.call(SVG_RECEIVER_POLICY, resolvedInterface) &&
-				!Object.prototype.hasOwnProperty.call(TYPED_CSS_RECEIVER_POLICY, resolvedInterface)
+				!Object.prototype.hasOwnProperty.call(TYPED_CSS_RECEIVER_POLICY, resolvedInterface) &&
+				!Object.prototype.hasOwnProperty.call(CSSOM_RECEIVER_POLICY, resolvedInterface) &&
+				request.key !== 'attachShadow'
 			)
 				throw new Error('Surface tree mutation is not registered; use authored document nodes');
 			if (resolvedInterface === 'HTMLCanvasElement' && request.key === 'getContext' && context !== 'surface')
@@ -652,6 +700,9 @@ export function createPlatformDOMBridge(surface: Element) {
 				)
 					writeRule = property === 'href' && owner && localName(owner) === 'feImage' ? 'svg-filter-image' : 'svg-text';
 			}
+			if (request.key === 'attachShadow' && (context !== 'surface' || target === surface || !insideSurface(target as Node) || shadowRoots.size >= 8))
+				throw new Error('Shadow roots require a bounded program-owned surface element');
+			if (request.action === 'set' && request.key === 'textContent' && belongs(target, 'HTMLStyleElement')) cssomText(request.args[0]);
 			const rules = policy?.args || (request.action === 'set' ? [writeRule] : []);
 			let args: unknown[] | undefined;
 			if (policy?.overloads) {
@@ -735,14 +786,30 @@ export function createPlatformDOMBridge(surface: Element) {
 			const cssCost = typedCSS
 				? reserveCSS(request.args, target, belongs(target, 'CSSNumericValue') && ['mul', 'div', 'toSum'].includes(request.key))
 				: 0;
-			if (belongs(target, 'CSSStyleSheet') && request.key === 'insertRule' && reader<CSSRuleList>('CSSStyleSheet', 'cssRules')(target).length >= 32)
-				throw new Error('CSS rule budget exceeded');
+			const cssContainer = belongs(target, 'CSSStyleSheet')
+				? target
+				: belongs(target, 'CSSRule')
+				? reader<CSSStyleSheet | null>('CSSRule', 'parentStyleSheet')(target)
+				: undefined;
+			if (cssContainer && ['insertRule', 'addRule'].includes(request.key)) {
+				const added = Math.max(
+					1,
+					String(args[0])
+						.match(/[{}]/g)
+						?.filter((c) => c === '{').length || 0
+				);
+				if (cssRuleCount(cssContainer) + added > CSSOM_LIMITS.rules) throw new Error('CSS rule budget exceeded');
+			}
+
 			let result: unknown;
 			try {
 				if (request.action === 'get') result = descriptor.get ? descriptor.get.call(target) : descriptor.value;
 				else if (request.action === 'set') {
-					if (!descriptor.set) throw new Error('DOM property is read-only');
-					descriptor.set.call(target, args[0]);
+					if (namedCSSProperty && descriptor.writable) Reflect.set(target, request.key, args[0]);
+					else {
+						if (!descriptor.set) throw new Error('DOM property is read-only');
+						descriptor.set.call(target, args[0]);
+					}
 					result = args[0];
 				} else result = descriptor.value.apply(target, args);
 			} catch (error) {
@@ -751,36 +818,46 @@ export function createPlatformDOMBridge(surface: Element) {
 					error: { name: error instanceof Error ? error.name : 'DOMException', message: String((error as Error)?.message || error).slice(0, 500) }
 				};
 			}
-			if (policy?.iterable) {
-				const items: unknown[] = [];
-				for (const item of result as Iterable<unknown>) {
-					if (items.length >= 600) throw new Error('DOM iterable budget exceeded');
-					items.push(item);
+			const complete = (result: unknown) => {
+				if (stopped) throw new Error('DOM run has ended');
+				if (cssContainer && (policy?.mutates || request.action === 'set')) cssRuleCount(cssContainer);
+				if (request.key === 'attachShadow' && result) shadowRoots.add(result as ShadowRoot);
+				if (policy?.iterable) {
+					const items: unknown[] = [];
+					for (const item of result as Iterable<unknown>) {
+						if (items.length >= 600) throw new Error('DOM iterable budget exceeded');
+						items.push(item);
+					}
+					result = items;
 				}
-				result = items;
-			}
-			if (result && typeof result === 'object' && typedCSS) {
-				cssCosts.set(result, cssCost);
-				if (Array.isArray(result)) for (const item of result) if (item && typeof item === 'object') cssCosts.set(item, cssCost);
-			}
-			const owner = belongs(target, 'Node') ? (target as Node) : owners.get(target);
-			if (result && typeof result === 'object' && !Array.isArray(result) && owner) {
-				owners.set(result, owner);
-				valueKeys.set(result, belongs(target, 'Node') ? request.key : valueKeys.get(target) || request.key);
-			}
-			const value =
-				request.key === 'getContextAttributes' && belongs(target, 'CanvasRenderingContext2D')
-					? canvasContextAttributes(result)
-					: request.key === 'type' && belongs(target, 'CSSNumericValue')
-					? typedCSSNumericType(result)
-					: encode(result);
-			if (policy?.mutates || request.action === 'set') {
-				// Collections retain their originating node, even after that subtree
-				// is detached. Indirect option allocations still spend the node budget.
-				if (owner) inspectTree(context === 'surface' ? owner : rootNode(owner));
-				if (context !== 'surface') publish();
-			}
-			return { value };
+				if (result && typeof result === 'object' && typedCSS) {
+					cssCosts.set(result, cssCost);
+					if (Array.isArray(result)) for (const item of result) if (item && typeof item === 'object') cssCosts.set(item, cssCost);
+				}
+				const owner = belongs(target, 'Node') ? (target as Node) : owners.get(target);
+				if (result && typeof result === 'object' && !Array.isArray(result) && owner) {
+					owners.set(result, owner);
+					valueKeys.set(result, belongs(target, 'Node') ? request.key : valueKeys.get(target) || request.key);
+				}
+				const value =
+					request.key === 'getContextAttributes' && belongs(target, 'CanvasRenderingContext2D')
+						? canvasContextAttributes(result)
+						: request.key === 'type' && belongs(target, 'CSSNumericValue')
+						? typedCSSNumericType(result)
+						: encode(result);
+				if (policy?.mutates || request.action === 'set') {
+					// Collections retain their originating node, even after that subtree
+					// is detached. Indirect option allocations still spend the node budget.
+					if (owner) inspectTree(context === 'surface' ? owner : rootNode(owner));
+					if (context !== 'surface') publish();
+				}
+				return { value };
+			};
+			if (policy?.awaitResult)
+				return Promise.resolve(result).then(complete, (error) => ({
+					error: { name: String(error?.name || 'DOMException'), message: String(error?.message || error).slice(0, 500) }
+				}));
+			return complete(result);
 		}
 	};
 }
