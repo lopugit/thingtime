@@ -55,3 +55,12 @@ proves the host connected.
 - Local admin bootstrap recipe: register a throwaway user, add its username to
   `ADMIN_USERNAMES` in `remix/.env`, restart the dev stack.
 - `TESTING.md`: the auth, passkey, account switcher and admin sections.
+
+
+Lopu browser Actions bind a revalidated first-party user resolver to the exact
+synthetic Request through `internalRequestActor.ts`. `getCurrentUser` and
+`resolveThingsActor` accept this server-only identity without credentials.
+Only `actions/internalActionRequest.ts` installs it, for canonical data routes;
+control-plane and reveal APIs are excluded. `test:lopu` includes host isolation,
+revocation and first-party-only permission-route tests. See
+[Lopu chat access](../lopu-action-access.md).

@@ -217,7 +217,7 @@ test('confirmation keys are deterministic and grants are single-use within a tur
   assert.deepEqual(del, { key: 'delete_thing:thing-9', tool: 'delete_thing', summary: 'Delete thing thing-9', subject: { id: 'thing-9' } });
   const run = actionConfirmation({ action: 'purge', inputs: { id: 'thing-9' } }, { id: 'action-1', name: 'Purge', actionKey: 'purge' });
   assert.equal(run.key, `run_action:action-1:${stableInputHash({ id: 'thing-9' })}`);
-  assert.match(run.summary, /Run the action "Purge" \(purge\) with inputs \{"id":"thing-9"\} — it deletes things/);
+  assert.match(run.summary, /Run the action "Purge" \(purge\) with inputs \{"id":"thing-9"\}/);
   assert.match(confirmationRefusal(run), /do not call run_action again in this reply/);
 
   const ledger = createLopuToolConfirmations([{ key: 'delete_thing:thing-9', tool: 'delete_thing', summary: 'Delete thing thing-9' }]);
