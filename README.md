@@ -21,6 +21,18 @@ remote timeline. No extra credentials, collection, index or migration is needed.
 Run `TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix
 run test:timeline:related` against the guarded local replica described below.
 
+**Recover deleted Things** in History (`api.timeline` 1.14.0): select a saved
+version or its deletion, review the result, then choose **Recover Thing privately**.
+The original ID/link returns with a new private version; deletion and later history
+stay intact. A surviving owned folder is kept, otherwise recovery uses Things root.
+Recorded page components become private copies. Protected records, attached
+interactions, folder children and external files/effects need their own recovery
+flows. Large previews remain subject to the existing response budget.
+No new collection, index, secret or migration is required. Run
+`TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
+test:timeline:recovery` on the guarded replica. Published heads use the existing
+atomic branch/head format under Timeline; they are not editable variations.
+
 Large retained Timeline versions are split into protected relational snapshot
 parts so history cannot strand edits/deletion of an existing large Thing. No
 additional collection, index, secret or configuration is needed. Complete large

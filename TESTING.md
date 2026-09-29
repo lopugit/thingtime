@@ -2,6 +2,25 @@
 
 ## Unified Timeline
 
+- [ ] Delete an owned public Thing, then recover its deletion or an earlier saved
+  version from History. Desktop and 390px must show **Recover Thing privately**,
+  the absent current state and an inert result preview. Recovery keeps the
+  original ID, private audience and every prior version after reload/sign-out.
+- [ ] Change a component, folder placement or deletion head after preview;
+  require a fresh review. Two simultaneous recoveries have one winner; retrying
+  that exact operation returns its original receipt. A lost folder defaults to
+  Things root only after preview. Existing private foreign IDs cannot be reused.
+- [ ] Recover a page with two recorded component copies; force the second copy
+  to conflict and verify no first copy, recovered page, event/head or storage
+  charge survives. Delete at full quota without creating new captures; recovery
+  must still pay for new content and refuse atomically when the account is full.
+- [ ] Published pointers survive deletion, ignore client drafts and exact older
+  retries, and use the same local/remote branch records. They never appear as
+  pushable variations. Legacy histories without pointers use bounded reads;
+  protected/attached records and missing deletion evidence refuse safely.
+  Run `test:timeline:recovery`, `test:timeline`, the guarded core/component/branch
+  regressions and `test:timeline:quota` with its isolated synthetic admin fixture.
+
 - [ ] Open an owned saved page's **Page + related** history. Its Components,
   Actions, Data and Schemas appear in List/Cards/Line/Frames at desktop and 390px;
   scope controls wrap without page overflow. Shared authors' private history

@@ -7,6 +7,13 @@ import { appendTimelineEvent, readTimelineEntries } from './repository.ts';
 /** Definitions and page revision commit atomically. Reuse unchanged bindings
  * from the preceding version; never read another account's private Timeline. */
 export async function recordPageComponentBindings(things: any, session: any, before: any, after: any, event: TimelineEvent) {
+	if (!after && before?.thingtime?.includes('webpage') && before.timelineHeadId) {
+		const prior = (await readTimelineEntries(things, event.ownerId, [before.timelineHeadId], session))[0];
+		if (!prior || prior.event.thingId !== event.thingId) throw new Error("The deleted page's saved version is unavailable");
+		// Keep the saved version's existing captures without charging new content
+		// during deletion, including when the account is at its storage ceiling.
+		return { ...event, dependencies: prior.event.dependencies };
+	}
 	if (!after?.thingtime?.includes('webpage')) return event;
 	const resolved = await resolvePageComponentCapture(things, session, after);
 	const byId = new Map(resolved.components.map((component) => [component.id, component]));

@@ -50,14 +50,14 @@ export async function storeTimelineSnapshotParts(things: any, parts: TimelineSna
  }
 }
 
-export async function readTimelineSnapshot(things: any, ownerId: string, eventId: string, side: TimelineSnapshotSide, snapshot: TimelineSnapshot | null): Promise<TimelineSnapshot | null> {
+export async function readTimelineSnapshot(things: any, ownerId: string, eventId: string, side: TimelineSnapshotSide, snapshot: TimelineSnapshot | null, session?: any): Promise<TimelineSnapshot | null> {
  if (snapshot?.adapter !== TIMELINE_SNAPSHOT_PARTS_ADAPTER) return snapshot;
  const reference = parseTimelineSnapshotReference(snapshot.value);
  if (snapshot.version !== 1 || reference.eventId !== eventId || reference.side !== side) throw new Error('Timeline snapshot reference does not match its event');
  const pieces: string[] = [];
  for (let offset = 0; offset < reference.partCount; offset += 64) {
   const ids = Array.from({ length: Math.min(64, reference.partCount - offset) }, (_, index) => timelineSnapshotPartId(eventId, side, offset + index));
-  const docs = await things.find({ ownerId, thingtime: TIMELINE_SNAPSHOT_PART_KIND, shareId: { $in: ids.map(id => timelineSnapshotPartThingId(ownerId, id)) } }).toArray();
+  const docs = await things.find({ ownerId, thingtime: TIMELINE_SNAPSHOT_PART_KIND, shareId: { $in: ids.map(id => timelineSnapshotPartThingId(ownerId, id)) } }, session ? { session } : {}).toArray();
   if (docs.length !== ids.length) throw new Error('Timeline snapshot parts are unavailable');
   const parts = new Map(docs.map((doc: any) => { const part = unpackPart(doc); return [part.id, part]; }));
   for (const id of ids) {

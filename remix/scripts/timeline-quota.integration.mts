@@ -138,6 +138,50 @@ assert.equal((await request('/api/v1/things', { id: thing.id }, 'DELETE')).respo
 assert.deepEqual(await history(thing.id), deletedHistory, 'A repeated delete adds no event or accounting');
 assert.equal((await usage()).usedBytes, baseline);
 
+// Private recovery must pay for the new content and revision without consuming
+// the retained deletion. No success receipt/head may survive a quota refusal.
+const recoveryQuery = { command: 'preview-version', mode: 'restore', recover: true, eventId: deletedHistory[0].event.id };
+const recoveryPreview = await version(recoveryQuery);
+assert.equal(recoveryPreview.response.status, 200, recoveryPreview.data.error);
+assert.equal(recoveryPreview.data.preview.current, null);
+const recoveryCommand = { ...recoveryQuery, command: 'apply-version', expectedHeadId: recoveryPreview.data.preview.expectedHeadId, expectedRecovery: recoveryPreview.data.preview.recoveryFingerprint, operationId: randomUUID() };
+assert.equal((await version(recoveryCommand)).response.status, 507);
+assert.equal((await request(`/api/v1/things?id=${thing.id}`)).response.status, 404);
+assert.deepEqual(await history(thing.id), deletedHistory);
+assert.equal((await usage()).usedBytes, baseline);
+await allowance(baseline + 1_000_000);
+const recovered = await version(recoveryCommand);
+assert.equal(recovered.response.status, 200, recovered.data.error);
+assert.equal((await read(thing.id)).id, thing.id);
+assert.deepEqual((await read(thing.id)).acl, ['tt:user']);
+assert.equal((await history(thing.id)).length, deletedHistory.length + 1);
+assert.ok((await usage()).usedBytes > baseline);
+assert.deepEqual((await version(recoveryCommand)).data, recovered.data);
+
+// Page deletion reuses saved capture links at full quota, even after a shared
+// definition changes. Recovery/copy creation still has ordinary admission checks.
+const component = await request('/api/v1/things', { thingtime: ['component'], crystal: { name: 'Quota card', componentKey: `quota-${ownerId}`, version: 1, render: { tag: 'section', children: 'Recorded card' } }, visibility: 'private' });
+assert.equal(component.data.ok, true, component.data.error);
+const page = await request('/api/v1/things', { thingtime: ['webpage'], crystal: { name: 'Quota page', blocks: [{ type: 'component', id: 'card', component: component.data.thing.id }] }, visibility: 'private' });
+assert.equal(page.data.ok, true, page.data.error);
+const pageHistory = await history(page.data.thing.id);
+assert.equal((await request('/api/v1/things', { id: component.data.thing.id, crystal: { ...component.data.thing.crystal, render: { tag: 'section', children: 'Current card' } } }, 'PATCH')).data.ok, true);
+const pageBytes = (await usage()).usedBytes;
+await allowance(pageBytes);
+assert.equal((await request('/api/v1/things', { id: page.data.thing.id }, 'DELETE')).data.ok, true);
+const pageDeletion = (await history(page.data.thing.id))[0];
+assert.deepEqual(pageDeletion.event.dependencies, pageHistory[0].event.dependencies);
+assert.equal((await usage()).usedBytes, pageBytes);
+const pageQuery = { command: 'preview-version', mode: 'restore', recover: true, eventId: pageDeletion.event.id, componentMode: 'recorded', componentChoices: {} };
+const pagePreview = await version(pageQuery);
+assert.equal(pagePreview.response.status, 200, pagePreview.data.error);
+assert.equal(pagePreview.data.preview.components.copyCount, 1);
+const pageCommand = { ...pageQuery, command: 'apply-version', expectedHeadId: pagePreview.data.preview.expectedHeadId, expectedRecovery: pagePreview.data.preview.recoveryFingerprint, expectedComponents: pagePreview.data.preview.components.fingerprint, operationId: randomUUID() };
+assert.equal((await version(pageCommand)).response.status, 507);
+assert.equal((await request(`/api/v1/things?id=${page.data.thing.id}`)).response.status, 404);
+assert.equal((await history(page.data.thing.id)).length, 2);
+assert.equal((await usage()).usedBytes, pageBytes);
+
 // Dedicated protected theme writes use the same home ledger and timeline.
 await allowance(baseline + 1_000_000);
 const theme = await request('/api/v1/themes', { name: 'Quota theme', theme: { colors: { accent: '#123456' } }, visibility: 'private' });
@@ -159,4 +203,4 @@ assert.equal((await usage()).usedBytes, themeBytes);
 assert.equal((await request('/api/v1/themes/delete', { id: themeId })).response.status, 404);
 assert.deepEqual(await history(themeId), themeDeleted); assert.equal((await usage()).usedBytes, themeBytes);
 
-console.log(JSON.stringify({ ok: true, checks: ['normal-admin-entitlement-api', 'self-upgrade-refused', 'exact-ceiling-atomic-growth-refusal', 'retained-shrink-refusal', 'restore-preview-readable-at-ceiling', 'restore-refusal-atomic', 'below-usage-downgrade-refused-without-data-loss', 'at-ceiling-folder-move-and-drain', 'at-ceiling-delete-retains-exact-before', 'delete-retry-does-not-double-count', 'theme-at-ceiling-atomic-save-refusal', 'theme-at-ceiling-delete-and-retry'], baselineBytes: baseline }));
+console.log(JSON.stringify({ ok: true, checks: ['normal-admin-entitlement-api', 'self-upgrade-refused', 'exact-ceiling-atomic-growth-refusal', 'retained-shrink-refusal', 'restore-preview-readable-at-ceiling', 'restore-refusal-atomic', 'below-usage-downgrade-refused-without-data-loss', 'at-ceiling-folder-move-and-drain', 'at-ceiling-delete-retains-exact-before', 'delete-retry-does-not-double-count', 'private-recovery-quota-refusal-and-retry', 'page-delete-retains-captures-at-quota', 'page-recovery-copy-quota-refusal', 'theme-at-ceiling-atomic-save-refusal', 'theme-at-ceiling-delete-and-retry'], baselineBytes: baseline }));
