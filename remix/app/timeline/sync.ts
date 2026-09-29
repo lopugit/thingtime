@@ -1,10 +1,12 @@
 import { parseTimelineEntry, TIMELINE_PAGE_SIZE, type TimelineEntry, type TimelineEvent } from './contract.ts';
 import type { TimelineLocalStore } from './localStore.ts';
 import type { TimelineBranchStore } from './branchStore.ts';
+import { parseRelatedTimelineScope, timelineRelatedId, timelineRelatedRevision, type RelatedTimelineScope } from './relatedHistory.ts';
 import { parseTimelineBranchEntry, parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchEntry, type TimelineBranchCommand, type TimelineBranchResult, type TimelineBranchPage } from './branches.ts';
 
-export type TimelinePageRequest = { thingId: string | null; before: number | null; after: number | null; limit: number };
-export type TimelinePage = { entries: TimelineEntry[]; nextBefore: number | null; nextAfter: number | null };
+export type TimelineCursor = { before?: number; after?: number; related?: true; relatedRevision?: string };
+export type TimelinePageRequest = { thingId: string | null; before: number | null; after: number | null; limit: number; related?: true; relatedRevision?: string };
+export type TimelinePage = { entries: TimelineEntry[]; nextBefore: number | null; nextAfter: number | null; related?: RelatedTimelineScope; reset?: true };
 /** The queue persisted a definitive command outcome. History reads remain
  * healthy; the owning branch control presents the actionable refusal. */
 export class TimelineBranchCommandRefusal extends Error {}
@@ -112,28 +114,34 @@ export class TimelineSync {
 		if (entry.event.id !== eventId) throw new Error('Server returned a different version');
 		await this.store.accept([entry]); return entry;
 	}
-	page(thingId: string | null, cursor: { before?: number; after?: number } = {}): Promise<TimelinePage> {
-		const key = JSON.stringify([thingId, cursor.before ?? null, cursor.after ?? null]);
+	page(thingId: string | null, cursor: TimelineCursor = {}): Promise<TimelinePage> {
+		const key = JSON.stringify([thingId, cursor.before ?? null, cursor.after ?? null, cursor.related ?? false, cursor.relatedRevision ?? null]);
 		const current = this.pages.get(key);
 		if (current) return current;
 		const next = this.readPage(thingId, cursor).finally(() => this.pages.delete(key));
 		this.pages.set(key, next); return next;
 	}
-	private async readPage(thingId: string | null, cursor: { before?: number; after?: number } = {}): Promise<TimelinePage> {
+	private async readPage(thingId: string | null, cursor: TimelineCursor = {}): Promise<TimelinePage> {
 		this.assertActive();
+		if (cursor.related && (!timelineRelatedId(thingId) || ((cursor.before !== undefined || cursor.after !== undefined) && !cursor.relatedRevision)) ||
+			(cursor.relatedRevision !== undefined && (!cursor.related || !timelineRelatedRevision(cursor.relatedRevision)))) throw new Error('Invalid related history cursor');
 		if (cursor.before !== undefined && cursor.after !== undefined) throw new Error('Choose one Timeline paging direction');
 		for (const position of [cursor.before, cursor.after]) if (position !== undefined && (!Number.isSafeInteger(position) || position < 1)) throw new Error('Invalid Timeline cursor');
-		const response = await this.transport.page({ thingId, before: cursor.before ?? null, after: cursor.after ?? null, limit: TIMELINE_PAGE_SIZE }, this.controller.signal);
+		const response = await this.transport.page({ thingId, before: cursor.before ?? null, after: cursor.after ?? null, limit: TIMELINE_PAGE_SIZE, ...(cursor.related ? { related: true, ...(cursor.relatedRevision ? { relatedRevision: cursor.relatedRevision } : {}) } : {}) }, this.controller.signal);
 		this.assertActive();
+		const related = cursor.related ? parseRelatedTimelineScope(response.related, thingId!) : undefined;
+		const changed = !!related && cursor.relatedRevision !== undefined && related.revision !== cursor.relatedRevision;
+		if (response.reset !== undefined && response.reset !== true || (response.reset === true) !== changed || (!related && response.related !== undefined)) throw new Error('Invalid related history continuation');
+		const paging = response.reset ? {} : cursor;
 		if (!Array.isArray(response.entries) || response.entries.length > TIMELINE_PAGE_SIZE) throw new Error('Invalid Timeline page');
 		const entries = response.entries.map(parseTimelineEntry);
 		const seen = new Set<number>();
 		let previous: number | null = null;
 		for (const entry of entries) {
 			const position = entry.receipt.position;
-			if ((thingId !== null && entry.event.thingId !== thingId) || seen.has(position) ||
-				(cursor.before !== undefined && position >= cursor.before) || (cursor.after !== undefined && position <= cursor.after) ||
-				(previous !== null && (cursor.after !== undefined ? position <= previous : position >= previous))) throw new Error('Invalid Timeline page order');
+			if ((related ? !related.thingIds.includes(entry.event.thingId) : thingId !== null && entry.event.thingId !== thingId) || seen.has(position) ||
+				(paging.before !== undefined && position >= paging.before) || (paging.after !== undefined && position <= paging.after) ||
+				(previous !== null && (paging.after !== undefined ? position <= previous : position >= previous))) throw new Error('Invalid Timeline page order');
 			seen.add(position);
 			previous = position;
 		}
@@ -141,10 +149,10 @@ export class TimelineSync {
 			const position = response[key];
 			if (position !== null && (!Number.isSafeInteger(position) || position < 1 || !seen.has(position))) throw new Error('Invalid Timeline continuation');
 		}
-		if (cursor.after !== undefined ? response.nextBefore !== null : response.nextAfter !== null) throw new Error('Invalid Timeline continuation direction');
-		const next = cursor.after !== undefined ? response.nextAfter : response.nextBefore;
+		if (paging.after !== undefined ? response.nextBefore !== null : response.nextAfter !== null) throw new Error('Invalid Timeline continuation direction');
+		const next = paging.after !== undefined ? response.nextAfter : response.nextBefore;
 		if (next !== null && next !== previous) throw new Error('Timeline continuation would skip events');
 		await this.store.accept(entries);
-		return { entries, nextBefore: response.nextBefore, nextAfter: response.nextAfter };
+		return { entries, nextBefore: response.nextBefore, nextAfter: response.nextAfter, ...(related ? { related } : {}), ...(response.reset ? { reset: true } : {}) };
 	}
 }

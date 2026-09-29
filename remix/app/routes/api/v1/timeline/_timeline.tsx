@@ -12,10 +12,12 @@ import { parseBranchMergeRequest } from '~/timeline/branchMerge';
 import { parseBranchCheckoutRequest } from '~/timeline/branchCheckout';
 import { checkoutTimelineBranch } from '~/api/utils/timeline/branchCheckout';
 import { previewBranchMerge } from '~/api/utils/timeline/branchMerge';
+import { getRelatedTimelinePage } from '~/api/utils/timeline/relatedHistory';
+import { timelineRelatedId, timelineRelatedRevision } from '~/timeline/relatedHistory';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
-const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
+const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
 
 export function createTimelineHandlers(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
@@ -35,6 +37,26 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		const auth = await authorize(request);
 		if (auth instanceof Response) return auth;
 		const thingId = auth.url.searchParams.get('thingId');
+		if (auth.url.searchParams.has('related') || auth.url.searchParams.has('relatedRevision')) {
+			const params = auth.url.searchParams;
+			const allowed = ['ownerId', 'dataPlane', 'storage', 'thingId', 'related', 'relatedRevision', 'before', 'after', 'limit'];
+			const before = params.has('before') ? Number(params.get('before')) : null;
+			const after = params.has('after') ? Number(params.get('after')) : null;
+			const limit = params.has('limit') ? Number(params.get('limit')) : TIMELINE_PAGE_SIZE;
+			const revision = params.get('relatedRevision');
+			if (params.get('related') !== '1' || !timelineRelatedId(thingId) || !params.has('dataPlane') ||
+				[...params.keys()].some(key => !allowed.includes(key) || params.getAll(key).length !== 1) ||
+				(revision !== null && !timelineRelatedRevision(revision)) || ((before !== null || after !== null) && !revision) ||
+				(before !== null && after !== null) || [before, after].some(value => value !== null && (!Number.isSafeInteger(value) || value < 1 || !Number.isFinite(new Date(value).getTime()))) ||
+				!Number.isSafeInteger(limit) || limit < 1 || limit > TIMELINE_PAGE_SIZE)
+				return response({ ok: false, error: 'Invalid related history request' }, 400);
+			try {
+				return response({ ok: true, ...await deps.relatedPage(auth.user.id, { thingId, before, after, limit, related: true, ...(revision ? { relatedRevision: revision } : {}) }) });
+			} catch (error) {
+				if (error instanceof StorageMutationError) return response({ ok: false, error: error.message, code: error.code }, error.status);
+				throw error;
+			}
+		}
 		if (auth.url.searchParams.has('components')) {
 			const params = auth.url.searchParams;
 			const allowed = ['ownerId', 'dataPlane', 'storage', 'eventId', 'components'];

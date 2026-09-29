@@ -78,6 +78,7 @@ export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineB
 			request.onsuccess = () => {
 				for (const metadata of request.result as TimelineLocalIndex[]) {
 					if (selection?.status && metadata.status !== selection.status) continue;
+					if (selection?.thingIds && !selection.thingIds.includes(metadata.thingId)) continue;
 					const read = payloads.get([scope, metadata.id]);
 					const related = links.index('event').getAll([scope, metadata.id]);
 					let waiting = 2;

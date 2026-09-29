@@ -1,5 +1,11 @@
 # API endpoints and capabilities
 
+Timeline 1.13.0 adds `related=1` with an owned webpage `thingId` to the existing
+GET route. Cursor reads require `relatedRevision`; changed current-composition
+membership returns `reset: true`. Shared definitions never expose another author's
+private event graph. See `api/utils/timeline/relatedHistory.ts`,
+`test:timeline:related` and [the Timeline contract](../unified-timeline.md).
+
 Timeline 1.9.0 adds direct private `branchId` + `thingId` lookup on the same
 route; the shared client/sync path validates identity and caches canonical
 branch/head records without consuming queued pushes. See

@@ -12,7 +12,7 @@ export type LocalTimelineRow = {
 /** Small, atomically maintained index. Quota checks and pruning never load all
  * snapshot payloads or rewrite them just to touch an access timestamp. */
 export type TimelineLocalIndex = Omit<LocalTimelineRow, 'event'> & { id: string; thingId: string; occurredAt: string };
-export type TimelineLocalSelection = { thingId?: string; status?: 'pending' | 'accepted'; draftKey?: string };
+export type TimelineLocalSelection = { thingId?: string; thingIds?: string[]; status?: 'pending' | 'accepted'; draftKey?: string };
 export type TimelineLocalTransaction = { put: LocalTimelineRow[]; remove: string[]; touch?: { id: string; accessedAt: number; draftKey?: string | null }[] };
 export interface TimelineLocalBackend {
 	read(scope: string, selection?: TimelineLocalSelection): Promise<LocalTimelineRow[]>;
@@ -118,7 +118,14 @@ export class TimelineLocalStore {
 		return ordered;
 	}
 	async forThing(thingId: string | null): Promise<LocalTimelineRow[]> {
-		const result = await this.read(thingId === null ? undefined : { thingId });
+		return this.forSelection(thingId === null ? undefined : { thingId });
+	}
+	async forThings(thingIds: string[]): Promise<LocalTimelineRow[]> {
+		if (!thingIds.length || thingIds.length > 128 || new Set(thingIds).size !== thingIds.length || thingIds.some(id => !id || id.length > 200)) throw new Error('Invalid Timeline view targets');
+		return this.forSelection({ thingIds });
+	}
+	private async forSelection(selection?: TimelineLocalSelection): Promise<LocalTimelineRow[]> {
+		const result = await this.read(selection);
 		await this.change([], () => ({ put: [], remove: [], touch: result.map(row => ({ id: row.event.id, accessedAt: this.now() })) }));
 		return result.sort((a, b) => (b.receipt?.position ?? Number.MAX_SAFE_INTEGER) - (a.receipt?.position ?? Number.MAX_SAFE_INTEGER) || b.event.occurredAt.localeCompare(a.event.occurredAt));
 	}
