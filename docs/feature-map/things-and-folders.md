@@ -257,3 +257,11 @@ The History browser is available at `/history` and in the Things navigation.
 canonical cached records. It shares TimelineHost's version details and commands.
 [Design mapping](../timeline-design-integration.md) records the source concept,
 loaded-window filter boundary and remaining features.
+
+Page + related History (`api.timeline` 1.13.0) uses
+`api/utils/timeline/relatedHistory.ts` and the existing authorized composition
+resolver. It merges only owned source histories with one bounded target query;
+`timeline/relatedHistory.ts` validates the cursor membership projection and
+`relatedHistoryCache.ts` stores eight disposable scoped hints. UI and canonical
+IndexedDB records are shared. See `test:timeline:related`, `test:timeline`, and
+[the design limits](../timeline-design-integration.md#page--related--2026-09-30).

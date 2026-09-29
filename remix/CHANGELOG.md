@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-30 — **Codex (AI)**: Fable's Page + related scope now combines a saved
+  page's owned Component, Action, Data and Schema histories in the shared browser.
+  Current membership is authorized and bounded; shared authors' histories remain
+  private, changed references reset paging, and cached canonical events survive
+  failed refreshes. Timeline 1.13.0; no schema/index migration. Details in the
+  [PR #984](../PRs/984-codex-timeline-related-history-show-a-page-and-its-related-things-in-one-timeline-history.md).
+
+
 - 2026-09-29 — **Codex (AI)**: History browser and recorded component restore
   validation details: [PR #983](../PRs/983-codex-timeline-published-components-bring-timeline-designs-to-life-and-restore-recorded-components.md).
 

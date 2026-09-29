@@ -11,7 +11,7 @@ it does not merge the concept's older `develop` baseline or fictional records.
 | Design | Implementation |
 | --- | --- |
 | One History browser | `/history`, the Timeline folder and Thing History use `TimelinePanel`, `TimelineEventBrowser`, `useThingTimeline` and the existing scoped connection pool. Things navigation links to History. |
-| Scope × Look | Everything and This Thing; List, Cards, Line and Frames share selection and detail. Global route filters are in the URL; the contextual modal keeps its state locally. |
+| Scope × Look | Everything, This Thing and Page + related; List, Cards, Line and Frames share selection and detail. Global route filters are in the URL; the contextual modal keeps its state locally. |
 | Historical cards | Titles, kinds, field summaries and change chips derive only from retained snapshots. Deleted events show the previous content. Unknown/compact/split content is not replaced with today's Thing. |
 | Horizontal evolution | Oldest accepted event first; alternating Cards/Line labels, Frames summaries, bounded time/even spacing, dashed variation rows, progress spine, viewport minimap, scrub slider, explicit Play/Pause and arrow/Home/End navigation. |
 | Contextual details | Desktop side panel and mobile bottom sheet use the existing Chakra modal/layer primitives. Before/after data, ancestry, inert recorded page preview, restore and merge remain the same actions in all looks. |
@@ -25,11 +25,30 @@ The shared canonical event and relationship record formats are unchanged.
 Nothing appends an accumulating array to the target Thing. All presentation
 maps are bounded, transient projections of the existing relational graph.
 
+## Page + related — 2026-09-30
+
+An owned saved page can show its current composition's source histories together.
+The existing composition resolver authorizes the bounded graph, including literal
+Component → Action → Data → Schema references. Only the current account's Things
+enter the history query; readable shared definitions do not grant their authors'
+private history. A count explains excluded shared Things without exposing their IDs.
+
+All events use the same canonical formats, receipt ordering, four looks, details,
+local cache and account sync. The repository batches selected event headers,
+payloads and relational links instead of issuing a history request per Thing.
+Composition traversal retains its existing bounded reference lookups. Membership
+is a bounded query projection, not a new persistent relationship or embedded event
+list. Cursor requests carry its revision; additions/removals restart paging and
+filter the displayed cache immediately, preserving separately retained histories.
+
+The scope is the **current saved composition**, not every Thing ever linked to the
+page. Dynamically calculated references and foreign authors' histories are excluded.
+Deleted/unavailable roots cannot open this scope; This Thing still offers retained
+history. Page variations accept page versions only, even while a related component
+is selected. The UI scope is optional and persisted in the global History URL.
+
 ## Remaining design work, not claimed as delivered
 
-- Page + related requires an authorized, batched relationship-history query;
-  it must include relevant source Things rather than treat private render
-  captures as the source owner's history.
 - Search, kind/source/change/sync filters and the 30-day density strip currently
   describe the **loaded window**, explicitly labelled in the UI. Remote full
   history search and date seeking need server pagination/index support.

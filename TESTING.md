@@ -2,6 +2,20 @@
 
 ## Unified Timeline
 
+- [ ] Open an owned saved page's **Page + related** history. Its Components,
+  Actions, Data and Schemas appear in List/Cards/Line/Frames at desktop and 390px;
+  scope controls wrap without page overflow. Shared authors' private history
+  and unrelated Things stay absent. Reload preserves scope/look and cached rows.
+- [ ] Edit a dependency through the API with History open: its event appears on
+  the next visible poll. Link an older Thing: reset paging includes its older
+  history. Remove a reference: old members disappear from the view without
+  deleting their own history. Block refresh: cached rows remain. Reject/delete
+  the root: clear that scope rather than flashing previously authorized rows.
+- [ ] Select a component in a page's related stream: the page's variation controls
+  cannot send/create/merge from that component version. Run `test:timeline:related`
+  on the guarded replica, `test:timeline` and the capability contract tests.
+
+
 - [ ] Open `/history` and a Thing's History. Switch Everything / This Thing and
   List / Cards / Line / Frames; selection and recorded details stay consistent.
   Reload the global URL with kind/source/change/sync/search/day filters and

@@ -175,12 +175,13 @@ export async function appendTimelineEvent(
 	return entry;
 }
 
-export async function readTimelinePage(things: any, ownerId: string, request: TimelinePageRequest): Promise<TimelinePage> {
+export async function readTimelinePage(things: any, ownerId: string, request: TimelinePageRequest, relatedIds?: string[]): Promise<TimelinePage> {
+	if (relatedIds && (!request.thingId || !relatedIds.includes(request.thingId) || relatedIds.length > 128 || new Set(relatedIds).size !== relatedIds.length || relatedIds.some(id => !id || id.length > 200))) throw new Error('Invalid related Timeline targets');
 	if (!ownerId || (request.thingId !== null && !request.thingId) || (request.before !== null && request.after !== null) || !Number.isInteger(request.limit) || request.limit < 1 || request.limit > TIMELINE_PAGE_SIZE) throw new Error('Invalid Timeline page request');
 	for (const cursor of [request.before, request.after]) if (cursor !== null && (!Number.isSafeInteger(cursor) || cursor < 1 || !Number.isFinite(new Date(cursor).getTime()))) throw new Error('Invalid Timeline cursor');
 	const ascending = request.after !== null;
 	const headers = await things.find({
-		ownerId, ...(request.thingId === null ? {} : { targetId: request.thingId }), thingtime: TIMELINE_EVENT_KIND,
+		ownerId, ...(relatedIds ? { targetId: { $in: relatedIds } } : request.thingId === null ? {} : { targetId: request.thingId }), thingtime: TIMELINE_EVENT_KIND,
 		...(request.before !== null ? { createdAt: { $lt: new Date(request.before) } } : {}),
 		...(request.after !== null ? { createdAt: { $gt: new Date(request.after) } } : {})
 	// Positions are unique within an account; no tie-break is needed. Sorting

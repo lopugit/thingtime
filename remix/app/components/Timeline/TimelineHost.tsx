@@ -48,7 +48,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 		setFilters(next);
 		if (urlState) setParams(writeHistoryFilters(params, next), { replace: true, preventScrollReset: true });
 	};
-	const timeline = useThingTimeline(filters.thingId || null);
+	const timeline = useThingTimeline(filters.thingId || null, true, filters.related);
 	const session = useTimelineSession();
 	const dataPlane = useDataPlane();
 	const api = useApi();
@@ -260,6 +260,13 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 			{timeline.error ? (
 				<Text role="status" fontSize="sm" color="var(--tt-muted)">
 					{timeline.error} {timeline.rows.length ? 'Your cached changes are still here.' : ''}
+				</Text>
+			) : null}
+			{filters.related ? (
+				<Text fontSize="sm" color="var(--tt-muted)">
+					Changes to this page and your Things used by its current saved composition, including Components, Actions, Data and Schemas.
+					{timeline.related ? ` ${timeline.related.thingIds.length} owned Things included.` : ' Related Things are refreshed when online.'}
+					{timeline.related?.sharedCount ? ` ${timeline.related.sharedCount} shared Things are used here; their authors' private histories stay private.` : ''}
 				</Text>
 			) : null}
 			{filters.thingId ? <TimelineBranches key={timeline.identity} thingId={filters.thingId} selected={selected} onSelect={setSelected} /> : null}
