@@ -929,3 +929,44 @@ desktop/mobile checks. `test:timeline:action-outcomes` uses only real account,
 Thing, Action, Timeline and optional admin-entitlement APIs. Broader acceptance
 still includes browser receipts, external delivery, other protected writers,
 retention controls and remaining Fable design work.
+
+## Known Action outcome recovery — 2026-09-30
+
+Timeline 1.16.0 / Actions 1.37.0 retain a known completion after its immediate
+append cannot be acknowledged. The response contains a bounded `history.recovery`
+bundle: `{formatVersion:1,event,dataPlane,proof}`. `event` is the exact canonical
+immutable event already attempted, with identical local/server event and relation
+records. The proof is delivery metadata, never a second history or execution
+record. The shared local row stores it atomically beside the normalized event and
+individual links; its bytes count toward the existing 64 MiB / 2000 pending limit.
+Accepted receipts discard the proof and enter the normal bounded cache.
+
+A configured authentication key signs the canonical event digest with a distinct
+content-proof type/purpose, issuer and audience derived from the public database
+host, actual database name and data plane. Credentials are never hashed into this
+audience. Proofs have no expiry and contain no session subject/session ID. The
+known development fallback and short legacy secrets cannot sign or verify them.
+Removing a trusted signing key can make pending proofs unverifiable; original
+local outcomes remain retained and unrelated drafts can still sync. Fork setup
+and this operational limit are documented in README.
+
+`recover-action-outcome` on the existing Timeline POST requires full account
+credentials, matching owner/data-plane, exact valid proof and the original
+admission. It appends through the normal metered transaction and idempotent
+identity check. It never loads or executes the current Action. Concurrent/lost
+acknowledgement retries return one receipt and one storage charge. Shared runs,
+browser preparation and client drafts cannot mint server outcomes.
+
+The first-party Action client captures account, origin and database before the
+request. A late result is retained only under that original scope before any
+viewer change can display it. Persistence failure preserves the actual execution
+result with an explicit local-retention warning. A saved local result appears in
+all four History looks with the ordinary Saved on this device badge; reload/focus/reconnection
+uses the same verified connection and outbox. Network failures preserve pending
+work. Definitive proof/admission refusals retain that event and dependent work
+without indefinitely blocking independent drafts or branch commands.
+
+This reconciles **known responses received by a retaining client**. It cannot
+recover a response lost before the client receives the bundle, infer a process
+crash's execution result, retain browser execution evidence or finish external
+side effects. Those broader requirements remain open; no Action is replayed.

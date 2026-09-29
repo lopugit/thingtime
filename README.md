@@ -10,18 +10,40 @@ The browser requires the existing Timeline replica-set setup below; no new
 secret or account-specific setup is needed. Filters currently cover the loaded
 history window. [Design integration and limits](docs/timeline-design-integration.md).
 
-**Server Action activity** uses the same private Timeline (`api.timeline` 1.15.0,
-`api.actions-run` 1.36.0). Accepted runs and redacted outcomes appear in all four
+**Server Action activity** uses the same private Timeline (`api.timeline` 1.16.0,
+`api.actions-run` 1.37.0). Accepted runs and redacted outcomes appear in all four
 History looks, including read-only runs. The Action inspector links to History;
 its recent input/result/trace details remain a bounded debug cache. The display
 name and numeric execution metadata are retained, never raw inputs, outputs or
 errors. Admission must save before steps run. If completion cannot be saved,
 the result explicitly reports incomplete history; do not rerun to repair it.
+A server-sealed completion is retained in the same browser outbox and retried
+after reload/reconnection. API clients retain `history.recovery` and POST
+`{command:"recover-action-outcome",recovery}` to the scoped Timeline endpoint.
+Recovery preserves the original event, obeys quota and never runs the Action.
 Browser preparation and shared read-only runs do not write account outcomes.
 No new collection, index, secret or migration is required. Run
 `TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
 test:timeline:action-outcomes`; optionally use the same synthetic
 `TIMELINE_TEST_ADMIN_FIXTURE` setup below for quota coverage.
+
+**Recovery signing setup for forks:** use the existing ES256 `JWT_PRIVATE_KEY`
+and matching `JWT_PUBLIC_KEY` authentication configuration, or a private,
+cryptographically random `JWT_SECRET` of at least 32 UTF-8 bytes. Set these in
+ignored local environment files or your deployment secret manager; placeholder
+values are `JWT_PRIVATE_KEY=<PEM private key>` / `JWT_PUBLIC_KEY=<PEM public key>`
+or `JWT_SECRET=<private random secret>`. Set a stable `JWT_ISSUER` for each trust
+domain. Recovery refuses the known development fallback. Without configured
+keys, ordinary admission/outcome writes still work; failed completion cannot
+produce a recoverable proof and remains explicitly incomplete. The disposable
+quota test also needs configured keys in its server process.
+
+Proofs bind the exact immutable event, issuer and public database location, have
+no expiry, and are not session credentials. Removing the signing key invalidates
+unacknowledged proofs made with it; already committed history is unaffected.
+An unverifiable local outcome stays retained with an error while unrelated edits
+can still sync. A lost execution response or process interruption before a result
+was produced cannot be reconstructed or rerun automatically.
 
 **Page + related** gathers a saved page and your connected Components, Actions,
 Data and Schemas into the same History browser (`api.timeline` 1.13.0). It follows
