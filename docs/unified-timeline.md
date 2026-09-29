@@ -759,3 +759,62 @@ and [offline mobile preview](../PRs/assets/timeline-component-merge/offline-prev
 Still open: dependency-aware published restore/merge; nested Schema, Action,
 theme and media versions; generic folder-version preview inheritance; streamed
 comparisons above the current limits; and the remaining acceptance-ledger items.
+
+
+## Published component restore and merge — 2026-09-29
+
+History → Restore/Merge now reviews direct component definitions alongside page
+content. Recorded components are the default. Applying creates ordinary private
+Component Things with new shareIds and componentKeys and rewrites only actual
+page references. Other pages retain their shared components. Component copies,
+the page write, storage accounting, and their canonical Timeline records commit
+in one transaction; failed or stale operations leave no partial copies. These
+are the existing event/link formats in the private Timeline folder on both
+local and remote stores, not an embedded version list or a second history store.
+
+The comparison uses current rendered definitions, including standalone API
+component edits, against the recorded base and incoming versions. A fingerprint
+is checked again inside the content transaction. Stable page-block identities
+keep incoming changes visible after restoration changed component reference IDs.
+If one shared result ref would need several distinct definitions, separate the
+page refs before merging. Page conflicts are reviewed before component choices.
+An exact apply retry returns its original receipt and cannot change intent.
+
+Known historical unavailability becomes an inactive ordinary placeholder
+Component, so future live resolution cannot fill the historical gap. Unrecorded
+legacy definitions remain explicitly incomplete and require another version or
+the explicit Current shared components choice. Non-webpage Things keep arbitrary
+fields named blocks as data. Existing large-part restoration remains supported;
+published previews have a separate 16 MiB/800,000-node aggregate limit for the
+three independently bounded snapshots. Canonical event limits stay unchanged.
+
+`api.timeline` 1.12.0 adds componentMode, componentChoices and expectedComponents
+to the existing version commands. Opted-in previews include thingtime plus
+bounded component comparison maps; these maps are transient. The client validates
+the whole response and receipt identities. Older clients cannot silently drop
+recorded page components. The shared inert preview pauses Actions and live data.
+
+Validation uses `test:timeline:published-components` on the guarded disposable
+replica. It covers independent copies, key isolation, exact retries, stale
+standalone component edits, recorded absence, missing history, copying a copy,
+merging a later branch into copies, concurrent applies with one winner, and a
+second-copy failure rolling back the first copy, page, events and storage bytes.
+Desktop/mobile browser acceptance applies a restore and a reviewed merge and
+checks the actual page plus the unaffected shared source.
+
+Still open: nested Schema/Action/theme/media versions and binary copying;
+full dependency graphs and branch ref-rebinding ergonomics; generic folder
+preview inheritance; durable offline restore-command recovery; deleted-Thing
+recovery; previews beyond the bounded content limits; retention controls; and
+the remaining original acceptance ledger. This increment does not complete the
+universal Timeline goal.
+
+
+### Fable 5.1 browser integration (2026-09-29)
+
+The `/history` route, Timeline folder and contextual History now share the
+Scope/Look browser based on PR #947. The implementation uses existing canonical
+records, receipt states, scoped cache/remote paging and version commands.
+See [the design integration ledger](timeline-design-integration.md) for the
+implemented behavior and explicit remaining work; a matching look does not
+mean the concept's simulated retention, notes or selective undo have shipped.

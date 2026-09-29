@@ -1,3 +1,4 @@
+import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
 import { draftRequest } from '~/drafts/draftClient';
@@ -155,8 +156,8 @@ export function useApi() {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
         return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
-      version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: { command: 'preview-version' | 'apply-version'; mode: 'restore' | 'merge'; eventId: string; expectedHeadId?: string; operationId?: string; choices?: Record<string, 'current' | 'incoming'> }) => {
-        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
+      version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: VersionRequest) => {
+        await requireThingtimeCapability('api.timeline', request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
       }, [asyncFetcher])
     },
