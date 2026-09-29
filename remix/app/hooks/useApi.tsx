@@ -149,8 +149,8 @@ export function useApi() {
         return getJson(`/api/v1/timeline${toQuery({ ownerId, ...(options?.storage === 'home' ? { storage: 'home' } : {}) })}`, { ...options, expectedDataPlane });
       }, []),
       page: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: TimelinePageRequest, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
-        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...request, ...(request.thingId === null ? { history: 1 } : {}) })}`, options);
+        await requireThingtimeCapability('api.timeline', request.related ? '1.13.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');
+        return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), ...request, ...(request.related ? { related: 1 } : {}), ...(request.thingId === null ? { history: 1 } : {}) })}`, options);
       }, []),
       push: useCallback(async (scope: { ownerId: string; dataPlane: string }, event: TimelineEvent, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.0.0');

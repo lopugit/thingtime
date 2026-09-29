@@ -8,6 +8,7 @@ export type HistoryLook = (typeof HISTORY_LOOKS)[number];
 export type HistoryFilters = {
 	look: HistoryLook;
 	thingId: string;
+	related: boolean;
 	kind: string;
 	source: string;
 	operation: string;
@@ -28,6 +29,7 @@ export function readHistoryFilters(params: URLSearchParams, initialThing = ''): 
 	return {
 		look: (choice(params.get('look'), HISTORY_LOOKS) || 'list') as HistoryLook,
 		thingId: /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(target) ? target : '',
+		related: params.get('scope') === 'related' && /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(target),
 		kind: choice(params.get('kind'), ['webpage', 'component', 'data', 'post', 'file', 'folder', 'action', 'schema', 'theme']),
 		source: choice(params.get('source'), ['client', 'api', 'action', 'ai', 'system']),
 		operation: choice(params.get('operation'), ['create', 'update', 'delete', 'restore', 'merge', 'effect']),
@@ -43,6 +45,7 @@ export function writeHistoryFilters(params: URLSearchParams, state: HistoryFilte
 	for (const [key, value] of Object.entries({
 		look: state.look === 'list' ? '' : state.look,
 		thing: state.thingId,
+		scope: state.related && state.thingId ? 'related' : '',
 		kind: state.kind,
 		source: state.source,
 		operation: state.operation,

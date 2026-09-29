@@ -213,3 +213,22 @@ test('recorded component batch requires one exact owner/source/event and refuses
  h.state.owner = ''; assert.equal((await read()).status, 401);
  assert.equal(h.calls.filter(item => item[0] === 'components').length, 2);
 });
+
+test('related history refuses ambiguous selectors and missing cursor membership before resolving dependencies', async () => {
+ const calls: any[] = []; let owner = 'user-1';
+ const handlers = createTimelineHandlers({ user: async () => owner ? ({ id: owner } as any) : null,
+  discovery: id => ({ ownerId: id, dataPlane: 'home', folderId: 'timeline' }), limit: async () => ({ allowed: true } as any),
+  relatedPage: async (...args) => { calls.push(args); return { entries: [], nextBefore: null, nextAfter: null, related: { rootId: 'page', thingIds: ['page'], revision: 'a'.repeat(64), sharedCount: 0 } }; }
+ });
+ const query = 'ownerId=user-1&dataPlane=home&thingId=page&related=1';
+ const read = (suffix = '') => handlers.loader({ request: request('GET', query + suffix) });
+ const first = await read(); assert.equal(first.status, 200); assert.equal(first.headers.get('cache-control'), 'private, no-store');
+ for (const suffix of ['&history=1', '&eventId=x', '&components=1', '&branches=1', '&branchId=x', '&related=1', '&thingIds=foreign', '&before=10', '&relatedRevision=bad', '&limit=41', '&after=NaN']) assert.equal((await read(suffix)).status, 400, suffix);
+ assert.equal(calls.length, 1);
+ const revision = 'a'.repeat(64);
+ assert.equal((await read(`&after=10&relatedRevision=${revision}`)).status, 200);
+ assert.equal(calls[1][1].relatedRevision, revision);
+ owner = 'other'; assert.equal((await read()).status, 409);
+ owner = ''; assert.equal((await read()).status, 401);
+ assert.equal(calls.length, 2);
+});

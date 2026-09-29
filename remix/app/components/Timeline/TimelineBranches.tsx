@@ -74,7 +74,7 @@ export function TimelineBranches({ thingId, selected, onSelect }: { thingId: str
 		} catch (failure: any) { if (alive.current) setError(failure?.error || failure?.message || 'Could not load this version.'); }
 		finally { working.current = false; if (alive.current) setBusy(false); }
 	};
-	const candidate = selected?.after && selected.mode !== 'effect' ? selected : null;
+	const candidate = selected?.thingId === thingId && selected.after && selected.mode !== 'effect' ? selected : null;
 	return <Box borderWidth="1px" borderColor="var(--tt-border)" borderRadius="xl" p={3}>
 		<Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? 'Hide variations' : 'Try a variation'}</Button>
 		{open ? <Box mt={3}>

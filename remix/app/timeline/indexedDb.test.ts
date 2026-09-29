@@ -135,3 +135,16 @@ test('a corrected bounded draft can save after a rejected oversized capture', as
  await recorder.capture(snapshot({ source: '' }), snapshot({ source: '{}' }), 'Corrected');
  await recorder.flush(); assert.equal(saved.length, 1); assert.equal(saved[0].label, 'Corrected');
 });
+
+test('related views select only matching event headers and retain canonical rows through reload', async () => {
+ const factory = new IDBFactory(); const backend = new IndexedDbTimelineBackend(factory);
+ const store = new TimelineLocalStore(scope, backend);
+ await store.accept([entryFixture(eventFixture('page'), 3), entryFixture(eventFixture('component', { thingId: 'component' }), 2), entryFixture(eventFixture('unrelated', { thingId: 'other' }), 1)]);
+ await store.enqueue(eventFixture('draft', { thingId: 'component' }));
+ await backend.close();
+ const reopened = new IndexedDbTimelineBackend(factory); const current = new TimelineLocalStore(scope, reopened);
+ assert.deepEqual((await current.forThings(['page-1', 'component'])).map(row => row.event.id), ['draft', 'page', 'component']);
+ await current.prune(0, 0);
+ assert.deepEqual((await current.forThings(['page-1', 'component'])).map(row => row.event.id), ['draft']);
+ await reopened.close();
+});

@@ -10,6 +10,17 @@ The browser requires the existing Timeline replica-set setup below; no new
 secret or account-specific setup is needed. Filters currently cover the loaded
 history window. [Design integration and limits](docs/timeline-design-integration.md).
 
+**Page + related** gathers a saved page and your connected Components, Actions,
+Data and Schemas into the same History browser (`api.timeline` 1.13.0). It follows
+the current saved composition, up to 128 Things; shared authors' histories stay
+private. Membership refreshes with the visible history, and changing a reference
+restarts paging so older edits on newly linked Things are not skipped. The
+account/origin/database-scoped local cache retains at most eight membership
+hints; canonical events still use the existing bounded IndexedDB cache and
+remote timeline. No extra credentials, collection, index or migration is needed.
+Run `TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix
+run test:timeline:related` against the guarded local replica described below.
+
 Large retained Timeline versions are split into protected relational snapshot
 parts so history cannot strand edits/deletion of an existing large Thing. No
 additional collection, index, secret or configuration is needed. Complete large

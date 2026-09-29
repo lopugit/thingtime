@@ -250,3 +250,20 @@ test('large snapshot parts preserve escaped text and surrogate boundaries exactl
  await storeTimelineSnapshotParts(h.things, prepared.parts, h.session, now);
  assert.deepEqual(await readTimelineSnapshot(h.things, source.ownerId, prepared.event.id, 'after', prepared.event.after), thingContentSnapshot(source));
 });
+
+test('one related-history query pages canonical events across targets with account isolation', async () => {
+ const h = harness();
+ const first = await h.append(eventFixture('a', { thingId: 'component' }));
+ const page = await h.append(eventFixture('b'));
+ await h.append(eventFixture('unrelated', { thingId: 'other' }));
+ await h.append(eventFixture('foreign', { ownerId: 'user-2', actorId: 'user-2', thingId: 'component' }));
+ const query = { thingId: 'page-1', before: null, after: null, limit: 1 };
+ const latest = await readTimelinePage(h.things, 'user-1', query, ['page-1', 'component']);
+ assert.deepEqual(latest.entries.map(entry => entry.event.id), ['b']);
+ const older = await readTimelinePage(h.things, 'user-1', { ...query, before: latest.nextBefore }, ['page-1', 'component']);
+ assert.deepEqual(older.entries.map(entry => entry.event.id), ['a']);
+ assert.equal(older.nextBefore, null);
+ const newer = await readTimelinePage(h.things, 'user-1', { ...query, after: first.receipt.position }, ['page-1', 'component']);
+ assert.equal(newer.entries[0].event.id, page.event.id);
+ await assert.rejects(readTimelinePage(h.things, 'user-1', query, ['component']), /targets/);
+});

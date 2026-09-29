@@ -818,3 +818,29 @@ records, receipt states, scoped cache/remote paging and version commands.
 See [the design integration ledger](timeline-design-integration.md) for the
 implemented behavior and explicit remaining work; a matching look does not
 mean the concept's simulated retention, notes or selective undo have shipped.
+
+## Page and related history — 2026-09-30
+
+Timeline 1.13.0 adds `GET /api/v1/timeline?ownerId=…&dataPlane=…&thingId=…&related=1`.
+The root must be an owned saved webpage. The existing shared-composition resolver
+rechecks its bounded current graph; only owned source Things enter the merged
+history query. Foreign readable definitions contribute only an excluded count.
+Canonical event/link/receipt records, protected Timeline folder, transactional
+writers and local/remote formats are unchanged. No new index or collection.
+
+The response adds a validated `related` projection (root ID, at most 128 owned
+Thing IDs, membership revision and shared count; at most 32 KiB). Events retain the
+existing page byte budget and 40-entry limit. `before`/`after` require the previous
+`relatedRevision`; changed membership returns the latest page with `reset: true`.
+This prevents an older event on a newly linked Thing being skipped by a newer
+cursor. The client checks scope, reset semantics, receipt ordering and continuation
+before caching canonical entries. An eight-entry account/origin/database-scoped
+membership cache seeds the bounded IndexedDB query on reopen. Polling is active
+only while History is visible. A refused root clears the displayed related cache;
+removed members disappear from the view without deleting their own history.
+
+This is current-composition browsing, not temporal graph reconstruction or a
+subscription to runtime-calculated references. The real HTTP acceptance script
+`test:timeline:related` covers five Thing types, shared author privacy, exact
+canonical records, paging, API edits, added/removed membership, account/database
+fences and strict query validation on the disposable replica.
