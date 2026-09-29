@@ -265,3 +265,12 @@ resolver. It merges only owned source histories with one bounded target query;
 `relatedHistoryCache.ts` stores eight disposable scoped hints. UI and canonical
 IndexedDB records are shared. See `test:timeline:related`, `test:timeline`, and
 [the design limits](../timeline-design-integration.md#page--related--2026-09-30).
+
+Deleted Thing recovery (`api.timeline` 1.14.0) uses `deletedThing.ts` for trusted
+deletion/absence checks, `publishedHead.ts` for the reserved canonical main head,
+and the existing `versions.ts` service for preview and atomic create-after-delete.
+`branchEnvelope.ts` shares Mongo envelopes with named branches; local IndexedDB
+uses the same branch/head schemas. `TimelineVersionActions` reviews private
+recovery and the original ID. Existing component-copy, quota and receipt paths
+remain shared. Run `test:timeline:recovery`; see the acceptance boundaries in
+[Unified Timeline](../unified-timeline.md#deleted-thing-recovery--2026-09-30).
