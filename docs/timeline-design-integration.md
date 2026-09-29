@@ -81,3 +81,14 @@ Recovery does not recreate folder children, external files, credential grants or
 external effects. Protected records and attached interactions need their dedicated
 writers. Older histories without Published pointers are checked through bounded
 pages (2048 events / 16 MiB), with incomplete histories refused rather than guessed.
+
+
+## Server Action activity — 2026-09-30
+
+All four looks now render canonical server Action admission/outcome events as
+activity. Cards use the captured Action display name; Frames expose bounded
+status/duration/operation fields. Desktop details and mobile sheets explain
+partial failure and unconfirmed completion. Outcomes offer no compare/restore/
+replay control. The Action inspector opens the same History panel, distinguishes
+its bounded debug cache, and surfaces an incomplete-history response beside the
+actual execution result. Shared runs and browser preparation remain ephemeral.

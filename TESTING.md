@@ -6930,6 +6930,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
 
+- [ ] Server Action Timeline: run read-only, successful mutating and partially
+      failing programs. Admission/outcome effects share trusted operation IDs
+      with committed changes, retain no raw inputs/results/errors/traces, and
+      do not move the Action content head. Invoker-only history survives Action
+      deletion; shared runs and browser preparation create no outcome events.
+      At full quota, admission refuses before execution. If only admission fits,
+      preserve the actual result and show incomplete History without rerunning.
+      Run `test:timeline:action-outcomes` on the guarded disposable replica; use
+      the synthetic admin fixture for quota checks. In all four History looks at
+      desktop/390px, verify named activity, mobile Activity details, no restore/
+      replay controls, inspector History navigation and logout redaction.
+
 - [ ] Browser Actions: create a request program in the full editor, reject
       malformed JSON/undeclared endpoints, run through the browser, and verify
       the actual record and private ACL. A preparation response creates no

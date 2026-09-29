@@ -1,3 +1,4 @@
+import { readActionOutcome, actionOutcomeDescription } from '../../timeline/actionOutcome';
 import { TimelineEventBrowser } from './TimelineEventBrowser';
 import { readHistoryFilters, writeHistoryFilters, historyComparison, type HistoryFilters } from '../../timeline/browserModel';
 import { COMPONENT_BINDING_PREFIX } from '../../timeline/componentBindings';
@@ -64,9 +65,10 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 	const compareFrom = comparison?.identity === timeline.identity ? comparison.event : null;
 	const comparisonResult = React.useMemo(() => (selected && compareFrom ? historyComparison(compareFrom, selected) : null), [selected, compareFrom]);
 	const [showData, setShowData] = React.useState(false);
+	const outcome = selected ? readActionOutcome(selected) : null;
 	const largeVersion = selected?.before?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER || selected?.after?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER;
 	const changes = React.useMemo(
-		() => (selected && !largeVersion ? timelineDisplayChanges(selected.before, selected.after) : []),
+		() => (selected && selected.mode !== 'effect' && !largeVersion ? timelineDisplayChanges(selected.before, selected.after) : []),
 		[selected, largeVersion]
 	);
 
@@ -82,23 +84,44 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 				</Button>
 			</Flex>
 			<Text fontSize="xs" color="var(--tt-muted)" mb={4}>
-				{selected.branchId === 'main' ? 'Saved version' : 'Private variation'} · {date(selected.occurredAt)} · {sourceLabel(selected)}
+				{selected.mode === 'effect' ? 'Activity' : selected.branchId === 'main' ? 'Saved version' : 'Private variation'} · {date(selected.occurredAt)}{' '}
+				· {sourceLabel(selected)}
 			</Text>
 			<Text fontSize="xs" color="var(--tt-muted)" mb={3}>
-				{selected.parentIds.length
+				{outcome
+					? `Run began ${date(outcome.startedAt)}`
+					: selected.parentIds.length
 					? `${selected.parentIds.length === 2 ? 'Combined from' : 'Continues from'} ${selected.parentIds.map((id) => id.slice(0, 12)).join(' + ')}`
 					: 'First recorded moment'}{' '}
-				· {selected.mode === 'draft' ? 'Private draft' : selected.operation}
+				{!outcome ? `· ${selected.mode === 'draft' ? 'Private draft' : selected.operation}` : ''}
 			</Text>
 			{largeVersion ? (
 				<Text fontSize="sm" mb={3}>
 					The complete data for this large version is retained in your account. Full preview is not available here yet.
 				</Text>
 			) : null}
+			{outcome ? (
+				<Box mb={3} data-testid="timeline-action-outcome">
+					<Text fontSize="sm">{actionOutcomeDescription(outcome)}</Text>
+					{outcome.durationMs !== null ? (
+						<Text fontSize="sm" mt={2}>
+							{outcome.durationMs} ms · {outcome.opsUsed} operations · {outcome.childActionsUsed} child Actions
+						</Text>
+					) : null}
+					<Text fontSize="xs" mt={2} overflowWrap="anywhere">
+						Run: {outcome.runId}
+					</Text>
+					<Text fontSize="xs" mt={2} color="var(--tt-muted)">
+						Inputs, results and error details are omitted from this receipt. This activity cannot be restored or replayed.
+					</Text>
+				</Box>
+			) : null}
 			<Flex gap={2} wrap="wrap" mb={3}>
-				<Button size="sm" variant="outline" onClick={() => setComparison({ identity: timeline.identity, event: selected })}>
-					Compare from this version
-				</Button>
+				{selected.mode !== 'effect' ? (
+					<Button size="sm" variant="outline" onClick={() => setComparison({ identity: timeline.identity, event: selected })}>
+						Compare from this version
+					</Button>
+				) : null}
 				{compareFrom ? (
 					<Button size="sm" variant="ghost" onClick={() => setComparison(null)}>
 						Clear comparison
@@ -164,10 +187,10 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 				{showData ? 'Hide data' : 'View data'}
 			</Button>
 			{showData
-				? (['before', 'after'] as const).map((side) => (
+				? (outcome ? (['after'] as const) : (['before', 'after'] as const)).map((side) => (
 						<Box key={side} mb={4}>
 							<Text fontWeight="600" fontSize="sm" mb={2}>
-								{side === 'before' ? 'Before' : 'After'}
+								{outcome ? 'Execution receipt' : side === 'before' ? 'Before' : 'After'}
 							</Text>
 							<Box
 								as="pre"
@@ -266,7 +289,9 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 				<Text fontSize="sm" color="var(--tt-muted)">
 					Changes to this page and your Things used by its current saved composition, including Components, Actions, Data and Schemas.
 					{timeline.related ? ` ${timeline.related.thingIds.length} owned Things included.` : ' Related Things are refreshed when online.'}
-					{timeline.related?.sharedCount ? ` ${timeline.related.sharedCount} shared Things are used here; their authors' private histories stay private.` : ''}
+					{timeline.related?.sharedCount
+						? ` ${timeline.related.sharedCount} shared Things are used here; their authors' private histories stay private.`
+						: ''}
 				</Text>
 			) : null}
 			{filters.thingId ? <TimelineBranches key={timeline.identity} thingId={filters.thingId} selected={selected} onSelect={setSelected} /> : null}
@@ -284,13 +309,15 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 						ready={timeline.ready}
 					/>
 				</Box>
-				<HistoryDetails onClose={() => setSelected(null)}>{selected ? detail : null}</HistoryDetails>
+				<HistoryDetails activity={selected?.mode === 'effect'} onClose={() => setSelected(null)}>
+					{selected ? detail : null}
+				</HistoryDetails>
 			</Flex>
 		</Flex>
 	);
 }
 
-function HistoryDetails({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function HistoryDetails({ children, onClose, activity }: { children: React.ReactNode; onClose: () => void; activity: boolean }) {
 	const [mobile] = useMediaQuery('(max-width: 820px)');
 	if (!children) return null;
 	if (mobile)
@@ -298,14 +325,14 @@ function HistoryDetails({ children, onClose }: { children: React.ReactNode; onCl
 			<Modal isOpen onClose={onClose} scrollBehavior="inside" motionPreset="none">
 				<ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
 				<ModalContent
-					aria-label="Version details"
+					aria-label={activity ? 'Activity details' : 'Version details'}
 					maxW="100%"
 					maxH="80dvh"
 					mb={0}
 					borderBottomRadius={0}
 					containerProps={{ zIndex: DRAWER_MODAL_Z, alignItems: 'flex-end' }}
 				>
-					<ModalHeader>Version details</ModalHeader>
+					<ModalHeader>{activity ? 'Activity details' : 'Version details'}</ModalHeader>
 					<ModalCloseButton />
 					<ModalBody px={2} pb={4}>
 						{children}
@@ -316,7 +343,7 @@ function HistoryDetails({ children, onClose }: { children: React.ReactNode; onCl
 	return (
 		<Box
 			as="aside"
-			aria-label="Version details"
+			aria-label={activity ? 'Activity details' : 'Version details'}
 			flex="1"
 			minW={0}
 			position="sticky"

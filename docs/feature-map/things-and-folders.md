@@ -1,5 +1,13 @@
 # Things and folders
 
+Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
+shared `timeline/actionOutcome.ts`, called from the canonical server executor.
+They retain safe effect receipts in the existing Timeline, never a new history
+store or growing array. `api.actions-run` 1.36.0 and `api.timeline` 1.15.0 publish
+this contract; the first-party client negotiates it. `test:timeline:action-outcomes`
+checks real replica APIs, optional quota, privacy and partial failures. See
+[the Timeline ledger](../unified-timeline.md) for incomplete-receipt boundaries.
+
 Everything is a Thing in one logical `things` collection (physical `things_v2`,
 always through `getThingsCollection()` / `getHomeThingsCollection()`, never a
 raw name). Folders are `folder` Things; containment is the child's `folderId`
