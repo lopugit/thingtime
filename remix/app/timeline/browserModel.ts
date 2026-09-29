@@ -1,3 +1,4 @@
+import { readActionOutcome } from './actionOutcome.ts';
 import type { TimelineEvent, TimelineSnapshot } from './contract.ts';
 import type { LocalTimelineRow } from './localStore.ts';
 import { timelineDisplayChanges, timelineChangeLabel, timelineValueLabel } from './changes.ts';
@@ -97,18 +98,30 @@ export function historyDayLabel(key: string) {
 }
 export function historyCard(row: LocalTimelineRow) {
 	const { event } = row;
+	const outcome = readActionOutcome(event);
 	const content = historyContent(event.after ?? event.before);
 	const crystal = content?.crystal;
-	const title = text(crystal?.title || crystal?.name) || (event.after?.adapter === 'folder-placement' ? 'Moved Thing' : 'Thing');
-	const kind = content?.kinds[0] ?? '';
+	const title =
+		(outcome?.actionName ?? '') || text(crystal?.title || crystal?.name) || (event.after?.adapter === 'folder-placement' ? 'Moved Thing' : 'Thing');
+	const kind = outcome ? 'action' : content?.kinds[0] ?? '';
 	const large = [event.before, event.after].some((snapshot) => snapshot?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER);
-	const changes = large ? [] : timelineDisplayChanges(event.before, event.after);
+	const changes = large || event.mode === 'effect' ? [] : timelineDisplayChanges(event.before, event.after);
 	const chips = changes.slice(0, 3).map((change) => ({
 		label: timelineChangeLabel(change.path),
 		before: timelineValueLabel(change.before, change.path).slice(0, 80),
 		after: timelineValueLabel(change.after, change.path).slice(0, 80)
 	}));
-	const fields = crystal
+	const fields = outcome
+		? [
+				{ name: 'Run', value: outcome.status === 'started' ? 'Accepted' : outcome.status === 'ok' ? 'Finished' : 'Stopped with an error' },
+				...(outcome.durationMs === null
+					? []
+					: [
+							{ name: 'Duration', value: `${outcome.durationMs} ms` },
+							{ name: 'Operations', value: String(outcome.opsUsed) }
+					  ])
+		  ]
+		: crystal
 		? Object.entries(crystal)
 				.filter(([key, value]) => !['title', 'name'].includes(key) && ['string', 'number', 'boolean'].includes(typeof value))
 				.slice(0, 3)
@@ -118,14 +131,14 @@ export function historyCard(row: LocalTimelineRow) {
 		row,
 		title,
 		kind,
-		kinds: content?.kinds ?? [],
+		kinds: outcome ? ['action'] : content?.kinds ?? [],
 		chips,
 		fields,
 		changeCount: changes.length,
 		large,
 		day: historyDay(historyDate(event)),
 		source: historySource(event),
-		removed: event.after === null,
+		removed: event.operation === 'delete',
 		excerpt: text(crystal?.description || crystal?.text || crystal?.body),
 		blockCount: kind === 'webpage' && Array.isArray(crystal?.blocks) ? crystal.blocks.length : null
 	};
