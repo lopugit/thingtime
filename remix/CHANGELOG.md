@@ -68,6 +68,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-29 — **Codex (AI)**: History browser and recorded component restore
+  validation details: [PR #983](../PRs/983-codex-timeline-published-components-bring-timeline-designs-to-life-and-restore-recorded-components.md).
+
 - 2026-09-29: Integrate the working History browser from Fable 5.1's PR #947:
   shared List/Cards/Line/Frames, recorded cards and property changes, URL filters,
   desktop details/mobile sheet, read-only comparisons and friendly variation
