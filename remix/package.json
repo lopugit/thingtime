@@ -127,6 +127,7 @@
     "test:drafts": "node --import tsx --test app/drafts/*.test.ts",
     "verify:drafts": "node scripts/verify-account-drafts.mjs",
     "test:timeline": "node --import tsx --test app/timeline/*.test.ts app/api/utils/timeline/*.test.ts app/routes/api/v1/timeline/*.test.ts",
+    "test:timeline:published-components": "node --import tsx scripts/timeline-published-components.integration.mts",
     "test:timeline:component-merge": "node --import tsx scripts/timeline-component-merge.integration.mts",
     "test:timeline:components": "node --import tsx scripts/timeline-components.integration.mts",
     "test:timeline:visual-branch": "node --import tsx scripts/timeline-visual-branch.integration.mts",

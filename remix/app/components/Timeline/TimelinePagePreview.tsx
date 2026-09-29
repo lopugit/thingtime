@@ -10,7 +10,9 @@ import { sanitizeWebpageBlocks } from '../../schemas/registry';
 
 export function TimelinePagePreview({ event }: { event: TimelineEvent }) {
 	const value = event.after?.value as any;
-	const valid = ['thing-content', 'webpage-draft'].includes(event.after?.adapter ?? '') && Array.isArray(value?.crystal?.blocks);
+	const valid =
+		(event.after?.adapter === 'webpage-draft' || (event.after?.adapter === 'thing-content' && value?.thingtime?.includes('webpage'))) &&
+		Array.isArray(value?.crystal?.blocks);
 	const [open, setOpen] = React.useState(false);
 	if (!valid) return null;
 	return (

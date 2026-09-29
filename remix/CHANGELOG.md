@@ -68,6 +68,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-29: Integrate the working History browser from Fable 5.1's PR #947:
+  shared List/Cards/Line/Frames, recorded cards and property changes, URL filters,
+  desktop details/mobile sheet, read-only comparisons and friendly variation
+  controls over the existing Timeline core. Search/density are explicitly
+  limited to loaded history. [Design mapping and remaining work](../docs/timeline-design-integration.md).
+
+
+- 2026-09-29 — **Codex (AI)**: Published Timeline restore/merge now reviews
+  recorded component definitions and creates private copies for the page in the
+  same transaction as its content, history and storage accounting. Shared pages
+  stay unchanged; stale component previews refuse, known absence stays explicit,
+  and merges follow stable block identities after copying. Desktop/390px review
+  and guarded API rollback/concurrency checks cover the flow. See
+  [the implementation and remaining work](../docs/unified-timeline.md#published-component-restore-and-merge--2026-09-29).
+
 - 2026-09-28 — **Codex (AI)**: Named-branch merges preserve recorded component
   definitions, combine independent changes and ask for overlapping choices.
   Inert previews show current/incoming/result versions; offline save/reload

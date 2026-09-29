@@ -1368,7 +1368,12 @@ type CreateThingResult = Fail | { ok: true; doc: ThingDoc; rootSubspaceId?: stri
 // opening their protected fields to generic client input. Hooks run after the
 // insert and before commit; throwing rolls back the content row and its ledger
 // charge together.
+/** Trusted API-utils composition only; never accepted from HTTP input. The
+ * enclosing writer owns commit/retry and runs effects after successful commit. */
+export type ThingWriteTransaction = { session: any; afterCommit: (effect: () => Promise<void>) => void };
 export type CreateThingHooks = {
+	transaction?: ThingWriteTransaction;
+	timelineCapture?: ThingMutationCapture;
 	postAttachments?: { hasAny: boolean; hasVisual: boolean };
 	afterInsert?: (doc: ThingDoc, session: any) => Promise<void>;
 	sourceDeviceId?: string;
@@ -1431,6 +1436,7 @@ export const createThing = async (
 	app: AppLens = null,
 	hooks: CreateThingHooks = {}
 ): Promise<CreateThingResult> => {
+  if (hooks.transaction && (!hooks.transaction.session?.inTransaction() || app?.sandbox)) throw new Error('A composed Thing write requires the active content transaction');
   const asOwner = viewer && viewer.id === ownerId ? viewer : { id: ownerId };
 	const validated = validateThingtimeCrystal(input.thingtime, input.crystal, {
 		postAttachments: hooks.postAttachments
@@ -1700,10 +1706,10 @@ export const createThing = async (
 		}
 	}
 
-	const timelineCapture = ownerId !== 'system' && !app?.sandbox ? newThingMutationCapture(viewer?.id ?? ownerId) : null;
+	const timelineCapture = ownerId !== 'system' && !app?.sandbox ? hooks.timelineCapture ?? newThingMutationCapture(viewer?.id ?? ownerId) : null;
   try {
-		if (billable || registeredApp || target || doc.folderId || hooks.afterInsert || timelineCapture) {
-			await withMongoTransaction(async (session) => {
+		if (billable || registeredApp || target || doc.folderId || hooks.afterInsert || timelineCapture || hooks.transaction) {
+			const write = async (session: any) => {
 				if (doc.folderId) await lockFolderDestination(things, ownerId, doc.folderId, session, isFolderThing(doc) ? doc.shareId : undefined);
 				if (billable) await applyUserStorageDelta(ownerId, sizeBytes, session);
 				if (registeredApp) await applyAppStorageDeltaTransaction(registeredApp, sizeBytes, session);
@@ -1716,7 +1722,9 @@ export const createThing = async (
 						throw new StorageMutationError(409, 'storage_conflict', 'The target changed while this thing was being created — try again');
 					}
 				}
-			});
+			};
+			if (hooks.transaction) await write(hooks.transaction.session);
+			else await withMongoTransaction(write);
 		} else {
     await things.insertOne(doc as any);
 			if (target) {
@@ -1752,6 +1760,7 @@ export const createThing = async (
     throw err;
   }
 
+	const afterCommit = async () => {
 	// Post-insert moderation plan (pure helper, unit-tested):
 	//   notify     — born-blocked docs are invisible everywhere, so followers
 	//                are never notified about content they can't open
@@ -1785,6 +1794,9 @@ export const createThing = async (
 	} else if (moderationPlan.queueAsync) {
 		queueTextModeration(doc.shareId);
 	}
+  };
+  if (hooks.transaction) hooks.transaction.afterCommit(afterCommit);
+  else await afterCommit();
   return { ok: true, doc, ...(rootSubspaceId !== undefined ? { rootSubspaceId } : {}) };
 };
 
@@ -5245,7 +5257,7 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; timeline?: { expectedHeadId: string; capture: ThingMutationCapture } } = {},
+  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
@@ -5563,9 +5575,13 @@ export const updateThing = async (
     : {};
   const timelineCapture = doc.ownerId !== 'system' && !storageScope?.sandbox ? options.timeline?.capture ?? newThingMutationCapture(viewer.id) : null;
   let writeResult;
+  let afterCommit: (() => Promise<void>)[] = [];
   try {
 		if (wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture) {
 			await withMongoTransaction(async (session) => {
+        // A retry owns a fresh effect list; aborted attempts cannot notify.
+        afterCommit = [];
+        await options.timeline?.beforeCommit?.({ session, afterCommit: effect => afterCommit.push(effect) });
 				if (hasFolderChange) await lockFolderDestination(things, viewer.id, nextFolderId, session, isFolderThing(doc) ? doc.shareId : undefined);
 				if (accountDelta !== 0) await applyUserStorageDelta(doc.ownerId, accountDelta, session);
 				if (registeredStorageScope && appDelta !== 0) {
@@ -5613,6 +5629,7 @@ export const updateThing = async (
   }
 	if (storageScope?.sandbox && appDelta < 0) await refundAppStorage(storageScope, -appDelta);
 
+  for (const effect of afterCommit) await effect();
   const updated = { ...doc, ...set } as ThingDoc;
   delete (updated as any).kind;
   delete (updated as any).type;

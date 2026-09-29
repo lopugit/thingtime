@@ -2,6 +2,43 @@
 
 ## Unified Timeline
 
+- [ ] Open `/history` and a Thing's History. Switch Everything / This Thing and
+  List / Cards / Line / Frames; selection and recorded details stay consistent.
+  Reload the global URL with kind/source/change/sync/search/day filters and
+  verify the same scope. Counts/search describe loaded history only.
+- [ ] At desktop and 390px, check non-overlapping alternating cards/labels,
+  horizontal scrolling contained inside the strip, the minimap window, scrub
+  slider, arrow/Home/End navigation, Play/Pause and reduced-motion behavior.
+  On mobile selection opens a scrollable bottom sheet; Close/Escape restores
+  access to the strip. No page-level horizontal overflow.
+- [ ] Compare two versions of one Thing, including a variation. Comparison must
+  be read-only; another Thing or unsupported compact content must refuse with
+  a clear explanation. Recorded titles never become today's title. Stable page
+  block IDs expose prop changes; ordinary data called blocks stays data.
+- [ ] Preview recorded components from every look. Actions remain inert. Try a
+  variation / Get latest changes / Send selected version / Review and combine
+  use the same queued commands as the prior branch UI. Sign out or change
+  account/data source and all private cards, details and comparisons disappear.
+
+- [ ] Restore a page whose shared component changed through the API. Review
+  recorded/current/result previews at desktop and 390px. Apply: the page uses
+  its reviewed private copy; another page keeps the original shared key and
+  current definition. Reload and verify exact Thing/capture readback.
+- [ ] Merge an independent branch after a restore changed component IDs. Stable
+  block identities must surface the incoming component change for review, not
+  silently drop it. Choose a side and verify the rendered saved result.
+- [ ] A component edit after preview must return 409 even without a page edit.
+  An exact retry returns one receipt. Concurrent applies yield one winner with
+  no orphan copies. A failure during the second insert rolls back the first
+  insert, page, history and storage accounting.
+- [ ] A recorded unavailable ref becomes an inactive placeholder even if its
+  original ref now resolves. Missing legacy capture history requires explicit
+  current components or another version. Literal data fields named blocks never
+  become page references. A large split snapshot must still restore intact.
+- [ ] Run `test:timeline:published-components`, `test:timeline:integration`,
+  `test:timeline:component-merge` and `test:timeline`. Preview Actions remain
+  inactive; sign-out and account/source changes hide private comparisons.
+
 - [ ] Merge named page branches with independent component changes, overlapping
   definitions, absent legacy captures, captured unavailable refs, removed/added
   refs and folder-only ancestry. Independent definitions combine; overlaps need
