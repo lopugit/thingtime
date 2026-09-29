@@ -13,7 +13,7 @@ export function TimelinePublishedPagePreview({
 	componentMode: 'recorded' | 'current';
 }) {
 	const [side, setSide] = React.useState<'current' | 'incoming' | 'result' | null>(null);
-	if (!preview.thingtime.includes('webpage') || !preview.components || !Array.isArray((preview.result.value as any)?.crystal?.blocks)) return null;
+	if (!preview.thingtime?.includes('webpage') || !preview.components || !Array.isArray((preview.result.value as any)?.crystal?.blocks)) return null;
 	const unresolved = !!(preview.conflicts.length || preview.components.conflicts.length);
 	const selected = side === 'result' && unresolved ? 'current' : side;
 	return (
@@ -25,7 +25,7 @@ export function TimelinePublishedPagePreview({
 						size="sm"
 						variant={selected === key ? 'solid' : 'outline'}
 						aria-pressed={selected === key}
-						isDisabled={key === 'result' && unresolved}
+						isDisabled={(key === 'current' && preview.current === null) || (key === 'result' && unresolved)}
 						onClick={() => setSide(selected === key ? null : key)}
 					>
 						{key === 'current' ? 'Preview current page' : key === 'incoming' ? 'Preview this version' : 'Preview result'}

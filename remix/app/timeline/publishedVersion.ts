@@ -17,6 +17,9 @@ export type VersionRequest = {
 	componentMode?: 'recorded' | 'current';
 	componentChoices?: VersionChoices;
 	expectedComponents?: string;
+	/** Explicit client support for a private create-after-deletion recovery. */
+	recover?: true;
+	expectedRecovery?: string;
 };
 export type PublishedComponents = {
 	current: ComponentDefinitionVersion;
@@ -33,7 +36,9 @@ export type PublishedVersionPreview = {
 	thingId: string;
 	mode: VersionRequest['mode'];
 	expectedHeadId: string;
-	current: TimelineSnapshot;
+	current: TimelineSnapshot | null;
+	recovery?: true;
+	recoveryFingerprint?: string;
 	incoming: TimelineSnapshot;
 	result: TimelineSnapshot;
 	baseEventId: string | null;
@@ -64,7 +69,9 @@ export function parseVersionRequest(input: unknown): VersionRequest {
 					'choices',
 					'componentMode',
 					'componentChoices',
-					'expectedComponents'
+					'expectedComponents',
+					'recover',
+					'expectedRecovery'
 				].includes(key)
 		) ||
 		!['preview-version', 'apply-version'].includes(value.command) ||
@@ -74,6 +81,9 @@ export function parseVersionRequest(input: unknown): VersionRequest {
 		throw new Error('Invalid version request.');
 	if (value.command === 'apply-version' && (!id(value.expectedHeadId) || !uuid(value.operationId)))
 		throw new Error('Applying a version requires its preview head and a UUID operation id.');
+	if (value.recover !== undefined && (value.recover !== true || value.mode !== 'restore')) throw new Error('Invalid recovery request.');
+	if (value.expectedRecovery !== undefined && (!value.recover || value.command !== 'apply-version' || !digest(value.expectedRecovery)))
+		throw new Error('Invalid recovery preview identity.');
 	if (value.choices !== undefined && !choices(value.choices)) throw new Error('Invalid version choices.');
 	if (value.componentMode !== undefined && !['recorded', 'current'].includes(value.componentMode)) throw new Error('Invalid component mode.');
 	if (
@@ -127,6 +137,7 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 			'result',
 			'baseEventId',
 			'conflicts',
+			...(value?.current === null ? ['recovery', 'recoveryFingerprint'] : []),
 			...(request.componentMode ? ['thingtime', 'components'] : [])
 		]) ||
 		value.eventId !== eventId ||
@@ -136,7 +147,18 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 		(value.baseEventId !== null && !id(value.baseEventId))
 	)
 		throw new Error('This comparison belongs to another version.');
+	if (
+		value.current === null &&
+		(value.recovery !== true ||
+			!digest(value.recoveryFingerprint) ||
+			!request.recover ||
+			request.mode !== 'restore' ||
+			value.baseEventId !== null ||
+			value.conflicts?.length)
+	)
+		throw new Error('Invalid deleted Thing preview.');
 	for (const side of ['current', 'incoming', 'result']) {
+		if (side === 'current' && value.current === null) continue;
 		if (
 			!keys(value[side], ['adapter', 'version', 'value']) ||
 			value[side].adapter !== 'thing-content' ||
@@ -146,6 +168,7 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 			throw new Error('Invalid version content.');
 		versionContent(value[side]);
 	}
+	if (value.recovery && JSON.stringify(value.result.value.acl) !== JSON.stringify(['tt:user'])) throw new Error('Recovered Things must be private.');
 	checkConflicts(value.conflicts);
 	if (request.componentMode) {
 		if (
