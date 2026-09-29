@@ -163,32 +163,51 @@ The gaps this epic actually closes:
   storage usage with export and **Clear history…**; per-Thing **Pause** from
   the ⋯ menu.
 
-## Data and API contract (to settle in M3)
+## Data and API contract (already merged — audit in M3, do not redesign)
 
-- One owner-private, protected `history-event` Thing per settled change,
-  linked by root `targetId` to the changed Thing, carrying: client event id
-  (idempotency), parent event id, capture time, device/session id, actor kind
-  (owner, Lopu, app, collaborator, system), verb, bounded property diffs
-  (`{ path, before, after }`), an optional bounded message with redaction, the
-  target's version label, and sync metadata. Never an embedded array on the
-  target. Reuse the general Thing indexes; a new index is an evidence-backed
-  exception.
-- Endpoints (register in the route file, `remix/server/routes/api/[...].ts`,
-  and `apiDocs.ts`; bump semantic versions on both manifests; add rate keys):
-  batched idempotent **record**, cursor-paged **list** (scope, filters, before
-  cursor), **restore** (appends a version), **name/pin**. Clients negotiate a
-  small requirement map before persisting.
+The Unified Timeline landed this shape on `develop` and `main` before this
+epic's M3. Read it before touching storage; extending it is the job, and a
+second event kind, route or sync queue is out of scope.
+
+- One owner-private, protected Thing per settled change, kind
+  **`timeline-event`** (`TIMELINE_EVENT_KIND`, `remix/app/timeline/contract.ts`)
+  with **`timeline-link`** for reverse links, linked by root `targetId` to the
+  changed Thing and filed under the private Timeline folder
+  (`api/utils/timeline/repository.ts`). It rides the shared
+  `ownerId`/`thingtime`/`targetId`/`createdAt` indexes, bounds each event at
+  `TIMELINE_EVENT_MAX_BYTES`, validates every envelope against its payload on
+  read, and appends in the same transaction as the content mutation and its
+  storage accounting (`recordMutation.ts`). There is no embedded array on the
+  target. A new index remains an evidence-backed exception.
+- Endpoints ship at **`/api/v1/timeline`**
+  (`app/routes/api/v1/timeline/_timeline.tsx`), with `timeline.read` /
+  `timeline.write` already in `api/utils/rateLimit/config.ts`:
+  - `GET` — cursor-paged **list** (`thingId`, `before`/`after`, `limit`).
+  - `POST` event — idempotent **record** (client event id).
+  - `POST { command: 'preview-version' | 'apply-version', mode: 'restore' |
+    'merge' }` — **restore** and **review-and-combine**, with
+    `expectedHeadId` concurrency, `operationId` idempotency, `choices`, and a
+    `conflicts` count rather than an overwrite (`versions.ts`).
+  - `POST { command: 'create-branch' | 'advance-branch' }` — variations
+    (`branches.ts`).
+- Genuinely remaining for M3: **named/pinned** versions, the truthful
+  saved-on-this-device → synced → needs-review projection the concept shows,
+  export/delete coverage for history, and confirming the semantic capability
+  versions on both manifests and `apiDocs.ts` describe the above.
 - Storage class, retention defaults and quota accounting are owner decisions
-  (see the baseline's open questions).
+  (see the baseline's open questions; `docs/unified-timeline.md` already
+  settles part of it).
 
 ## Delivery shape
 
 1. M0 — design concept (this item's first slice, delivered).
 2. M1 — persist the editor journal locally; reload restores it.
 3. M2 — `history` verb + contextual panel with preview, restore, undo.
-4. M3 — `history-event` Things, record/list/restore endpoints, sync queue.
+4. M3 — audit the merged `timeline-event` Things, `/api/v1/timeline` and sync
+   queue; add named/pinned versions, truthful sync pills, export/delete cover.
 5. M4 — `/history` timeline browser on the notifications list engine.
-6. M5 — named versions, variations, pull/push, review and combine.
+6. M5 — the friendly vocabulary (Try a variation, Get latest changes, Send
+   changes, Review and combine) over the merged branch/version primitives.
 7. M6 — non-editor writers emit events; retention/storage settings; hand-off
    to collaboration.
 

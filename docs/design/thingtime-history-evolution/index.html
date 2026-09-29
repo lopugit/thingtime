@@ -388,7 +388,7 @@
   </section>
 
   <div class="foot">
-    Rendering as-of is the whole trick: a <code>history-event</code> carries the property diffs, so the client folds them forward from the
+    Rendering as-of is the whole trick: a <code>timeline-event</code> carries the property diffs, so the client folds them forward from the
     Thing's first version to produce each frame — cheap for pages, Components and records, and honest when a dependency's version is unknown
     (the frame says so instead of guessing). Real-time spacing uses true positions along the line and spreads only the nodes that would collide,
     so the axis stays proportional everywhere else. Entry points are unchanged: the ⋯ menu <code>history</code> verb, the editor's Changes control and

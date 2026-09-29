@@ -71,9 +71,15 @@ changes**, **Review and combine**, **Send changes** — over real ancestry.
    card "Edited" chips open the same scoped panel.
 6. **Sync is not publish.** Syncing a private draft or variation never widens
    its audience.
-7. **Relational, bounded, idempotent.** One protected `history-event` Thing per
-   settled change, linked by `targetId`; batched, idempotent recording; bounded
-   payloads with quota-aware degradation.
+7. **Relational, bounded, idempotent.** One protected Thing per settled
+   change, linked by `targetId`; batched, idempotent recording; bounded
+   payloads with quota-aware degradation. This is the **merged** shape, not a
+   new one: the kind is `timeline-event` (`TIMELINE_EVENT_KIND` in
+   [`remix/app/timeline/contract.ts`](../remix/app/timeline/contract.ts)) with
+   `timeline-link` for reverse links, written by
+   [`api/utils/timeline/repository.ts`](../remix/app/api/utils/timeline/repository.ts)
+   under the private Timeline folder. Never introduce a `history-event` kind
+   beside it.
 
 ## Milestones
 
@@ -84,7 +90,7 @@ changes**, **Review and combine**, **Send changes** — over real ancestry.
 | M2 | **Contextual History panel parity** — the `history` verb and a working panel already ship (`TimelineHost.tsx`, wired from `PersistedThingMenu`, `ThingsPage`, `SeamlessPageEditor`, `ThingDefinitionEditor`). Remaining: the editor Changes control and PostCard "Edited" chips open that same panel, and it gains as-of Thing cards, property-change chips and contextual messages instead of a JSON preview. | Desktop and 390px browser checks; restore never removes a row; conflicts reported, not overwritten. | Partly done on `develop`/`main` — extend, do not rebuild |
 | M3 | **Close the sync gaps** — protected event Things keyed by `targetId`, transactional server recording, cursor listing and the sync queue already exist (`api/utils/timeline/recordMutation.ts`, `/api/v1/timeline`, `app/timeline/sync.ts`). Remaining: confirm semantic capability versions on both manifests, the truthful "saved on this device" → "synced" → "needs review" pills the concept shows, and that export/delete flows include history. | Real-API tests on a disposable replica set; offline → reconnect converges without duplicates; export and delete flows include history. | Partly done on `develop`/`main` — audit first |
 | M4 | **Timeline browser `/history`** — scope, URL filters, day grouping, density scrubber, cache-first paint, messages (owner notes, Lopu, apps, system), and the **Evolution** view (one Thing left to right: line look with true-time spacing, frames look with as-of renders, scrub/play/compare). | `TESTING.md` checklist; no loading flash with cached rows; screen-reader operation of rows and panel. | Planned |
-| M5 | **Versions** — named/pinned versions, variations (private branches), Get latest changes, Send changes, Review and combine (property-level three-way merge). | Merge keeps both branches; dependent Component versions restore with the page or the UI says they cannot. | Planned |
+| M5 | **Versions** — the server primitives are already merged: `apply-version`/`preview-version` with `mode: 'restore' \| 'merge'`, `expectedHeadId` concurrency, `operationId` idempotency, `choices` and a `conflicts` count (`api/utils/timeline/versions.ts`), plus `create-branch`/`advance-branch` (`branches.ts`). Remaining: named/pinned versions, and the friendly vocabulary — Try a variation, Get latest changes, Send changes, Review and combine — over those primitives. | Merge keeps both branches; dependent Component versions restore with the page or the UI says they cannot. | Partly done on `develop`/`main` — extend, do not rebuild |
 | M6 | **Expansion** — non-editor writers (bulk, share, Lopu tools, apps) record events; retention and storage settings; collaboration hand-off. | Every generic writer emits or explicitly opts out; quota degradation tested. | Planned |
 
 ## Metrics and experiments

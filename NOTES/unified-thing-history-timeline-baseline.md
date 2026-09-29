@@ -83,7 +83,7 @@ current Thing envelope stores.
 1. **Granularity.** Which settled changes become events for non-editor
    writes (generic `PATCH`, bulk moves, share changes, Lopu tool patches)? The
    editor journal already coalesces typing; server writes need an equivalent.
-2. **Storage class and quota.** Are `history-event` rows `content` (billable,
+2. **Storage class and quota.** Are `timeline-event` rows `content` (billable,
    counted against the account ledger) or `control`? Retention defaults and
    per-Thing pause change the answer. *Partly settled already:*
    [`docs/unified-timeline.md`](../docs/unified-timeline.md) makes each event a

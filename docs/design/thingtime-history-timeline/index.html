@@ -624,7 +624,7 @@
     <div class="states">
       <div class="state"><span class="pill local"><i></i>Saved on this device</span><h3>Durable immediately</h3><p>Written to the local log before the request leaves. Survives a crash; lost only if the device is.</p></div>
       <div class="arr">→</div>
-      <div class="state"><span class="pill"><i></i>Synced to your account</span><h3>Protected history Things</h3><p>Each event becomes an owner-private <span style="font-family:var(--tt-mono);font-size:12px">history-event</span> linked to its target. Other devices get it on next open.</p></div>
+      <div class="state"><span class="pill"><i></i>Synced to your account</span><h3>Protected history Things</h3><p>Each event becomes an owner-private <span style="font-family:var(--tt-mono);font-size:12px">timeline-event</span> linked to its target. Other devices get it on next open.</p></div>
       <div class="arr">→</div>
       <div class="state"><span class="pill review"><i></i>Needs review</span><h3>Honest conflicts</h3><p>Two sides changed one property: both branches are kept and the row asks you to <b>Review and combine</b>.</p></div>
     </div>
@@ -655,7 +655,7 @@
     Hooks into what already exists: the editor journal (<code>editorHistory.ts</code> — branching events with parent, time and property diffs; today in memory)
     becomes the durable local log; the <code>/notifications</code> history page pattern (cursor paging, URL filters, cache-first paint) is the list engine;
     the <code>history</code> verb joins <code>THING_ACTIONS</code> so <code>PersistedThingMenu</code> shows it everywhere; toasts route through <code>useLopu()</code>.
-    <div class="row">Data: one owner-private <code>history-event</code> Thing per settled change, linked by <code>targetId</code>, never an embedded array; local IndexedDB log + sync queue; restore and undo append events (nothing is rewritten); conflicts keep both branches and ask.</div>
+    <div class="row">Data: one owner-private <code>timeline-event</code> Thing per settled change (the merged Unified Timeline kind), linked by <code>targetId</code>, never an embedded array; local IndexedDB log + sync queue; restore and undo append events (nothing is rewritten); conflicts keep both branches and ask.</div>
     <div class="row">Motion respects <code>prefers-reduced-motion</code> / the theme's <code>general.motion</code> gate. Fictional data throughout.</div>
   </div>
 </div>
