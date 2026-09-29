@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, parseTimelineBranch, parseTimelineBranchHead, parseTimelineBranchCommand, timelineBranchHeadId, type TimelineBranch, type TimelineBranchHead, type TimelineBranchCommand, type TimelineBranchResult, type TimelineBranchPage } from '../../../timeline/branches.ts';
 import { parseTimelineEvent, type TimelineEntry } from '../../../timeline/contract.ts';
-import { binaryBytes, fromBin, toBin } from '../auth/binary.ts';
+import { timelineBranchThingId, timelineBranchHeadThingId, branchFromDoc, branchHeadFromDoc, readTimelineBranchHead, packTimelineBranchRecord as pack } from './branchEnvelope.ts';
 import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
@@ -10,32 +10,10 @@ import { StorageMutationError, thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VE
 import { appendTimelineEvent, readTimelineEntries, readTimelineNodes, timelineFolderId } from './repository.ts';
 import { loadVersionGraph } from './versions.ts';
 
+export { timelineBranchThingId, timelineBranchHeadThingId, branchFromDoc, branchHeadFromDoc, readTimelineBranchHead } from './branchEnvelope.ts';
+
 const digest = (parts: unknown) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
-export const timelineBranchThingId = (ownerId: string, branchId: string) => `timeline-branch-${digest([ownerId, branchId])}`;
-export const timelineBranchHeadThingId = (ownerId: string, branchId: string, thingId: string) => `timeline-branch-head-${digest([ownerId, branchId, thingId])}`;
 const refuse = (status: number, message: string): never => { throw new StorageMutationError(status, status === 409 ? 'storage_conflict' : 'storage_invariant', message); };
-const unpack = (doc: any, kind: string) => {
-	const bytes = binaryBytes(doc?.secure);
-	if (!doc?.thingtime?.includes(kind) || doc.timelineBranchVersion !== 1 || bytes === null || bytes < 1 || bytes > 4096) throw new Error('Invalid Timeline branch envelope');
-	return JSON.parse(fromBin(doc.secure));
-};
-const pack = (record: TimelineBranch | TimelineBranchHead) => ({ timelineBranchVersion: 1, secure: toBin(JSON.stringify(record)) });
-export const branchFromDoc = (doc: any): TimelineBranch => {
-	const branch = parseTimelineBranch(unpack(doc, TIMELINE_BRANCH_KIND));
-	if (doc.ownerId !== branch.ownerId || doc.shareId !== timelineBranchThingId(branch.ownerId, branch.id) || doc.crystal?.name !== branch.name) throw new Error('Timeline branch envelope does not match its record');
-	return branch;
-};
-export const branchHeadFromDoc = (doc: any): TimelineBranchHead => {
-	const head = parseTimelineBranchHead(unpack(doc, TIMELINE_BRANCH_HEAD_KIND));
-	if (doc.ownerId !== head.ownerId || doc.shareId !== timelineBranchHeadThingId(head.ownerId, head.branchId, head.thingId) || doc.targetId !== head.thingId || doc.parentId !== timelineBranchThingId(head.ownerId, head.branchId) || doc.branchRevision !== head.revision) throw new Error('Timeline branch head envelope does not match its record');
-	return head;
-};
-
-export async function readTimelineBranchHead(things: any, ownerId: string, branchId: string, thingId: string, session?: any): Promise<TimelineBranchHead | null> {
-	const doc = await things.findOne({ ownerId, thingtime: TIMELINE_BRANCH_HEAD_KIND, shareId: timelineBranchHeadThingId(ownerId, branchId, thingId) }, session ? { session } : {});
-	return doc ? branchHeadFromDoc(doc) : null;
-}
-
 export async function readTimelineBranchEntry(things: any, ownerId: string, branchId: string, thingId: string) {
 	const [doc, head] = await Promise.all([
 		things.findOne({ ownerId, thingtime: TIMELINE_BRANCH_KIND, shareId: timelineBranchThingId(ownerId, branchId) }),
@@ -46,7 +24,7 @@ export async function readTimelineBranchEntry(things: any, ownerId: string, bran
 
 export async function readTimelineBranches(things: any, ownerId: string, thingId: string, before: number | null = null, limit = 40): Promise<TimelineBranchPage> {
 	if (!ownerId || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(thingId) || !Number.isInteger(limit) || limit < 1 || limit > 40 || (before !== null && (!Number.isSafeInteger(before) || before < 1 || !Number.isFinite(new Date(before).getTime())))) refuse(400, 'Invalid branch page request.');
-	const docs = await things.find({ ownerId, thingtime: TIMELINE_BRANCH_HEAD_KIND, targetId: thingId, ...(before !== null ? { createdAt: { $lt: new Date(before) } } : {}) }).sort({ createdAt: -1 }).limit(limit + 1).toArray();
+	const docs = await things.find({ ownerId, thingtime: TIMELINE_BRANCH_HEAD_KIND, targetId: thingId, parentId: { $ne: timelineBranchThingId(ownerId, 'main') }, ...(before !== null ? { createdAt: { $lt: new Date(before) } } : {}) }).sort({ createdAt: -1 }).limit(limit + 1).toArray();
 	const selected = docs.slice(0, limit); const heads = selected.map(branchHeadFromDoc);
 	const branches = heads.length ? await things.find({ ownerId, thingtime: TIMELINE_BRANCH_KIND, shareId: { $in: heads.map(head => timelineBranchThingId(ownerId, head.branchId)) } }).toArray() : [];
 	const byId = new Map<string, TimelineBranch>(branches.map((doc: any) => { const branch = branchFromDoc(doc); return [branch.id, branch]; }));

@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-30 — **Codex (AI)**: History can recover deleted ordinary Things at
+  their original links as new private versions, with recorded component copies,
+  reviewed folder placement and all prior history retained. Canonical Published
+  branch heads survive deletion; stale/concurrent requests and failed copies
+  refuse atomically. Timeline 1.14.0; no new collection/index/secret. Desktop and
+  mobile recovery use the shared Fable History details. [Scope and remaining
+  work](../docs/unified-timeline.md#deleted-thing-recovery--2026-09-30).
+
 - 2026-09-30 — **Codex (AI)**: Fable's Page + related scope now combines a saved
   page's owned Component, Action, Data and Schema histories in the shared browser.
   Current membership is authorized and bounded; shared authors' histories remain

@@ -19,6 +19,7 @@ it does not merge the concept's older `develop` baseline or fictional records.
 | Property changes | Stable page block IDs expose component argument edits and order changes for presentation; ordinary arrays remain atomic in the merge contract. Ambiguous/large trees fall back to bounded structural summaries. |
 | Friendly variations | Try a variation, Get latest changes, Send selected version and Review and combine wrap the existing durable branch commands, conflict handling and Builder editing. |
 | Honest sync | Row badges distinguish local pending events from server-receipted events. Existing account/origin/database partitioning, local outbox and remote paging/polling are unchanged. |
+| Recover a deleted Thing | Review the absent current state, original link, private audience and recorded component copies; recovery appends a new canonical create event and preserves every prior moment. |
 | Restore the rendered version | Recorded direct components are copied privately for the restored page in the same transaction as the page revision; current shared components are an explicit alternative. Preview/apply fingerprints reject standalone component changes and conflicts preserve both histories. |
 
 The shared canonical event and relationship record formats are unchanged.
@@ -63,7 +64,20 @@ is selected. The UI scope is optional and persisted in the global History URL.
   dependency retention and transactional commands. The concept's simulated
   controls are not copied into the product.
 - Compare with the live present, compact ancestry reconstruction, nested
-  dependencies and per-entry recovery remain on the unified Timeline ledger.
+  dependencies and dedicated protected/attached-item recovery remain on the unified Timeline ledger.
 
 These are extensions of the same system, not separate histories or queues.
 The broader acceptance ledger remains in [unified-timeline.md](unified-timeline.md).
+
+## Deleted Thing recovery — 2026-09-30
+
+The shared detail panel can recover an ordinary deleted Thing from its deletion
+or an earlier version. Desktop details and the mobile sheet show private recovery,
+with the current-page preview disabled while the Thing is absent. The result
+preview stays inert. The original link and retained history survive recovery;
+recorded direct Components use the existing private-copy behavior.
+
+Recovery does not recreate folder children, external files, credential grants or
+external effects. Protected records and attached interactions need their dedicated
+writers. Older histories without Published pointers are checked through bounded
+pages (2048 events / 16 MiB), with incomplete histories refused rather than guessed.

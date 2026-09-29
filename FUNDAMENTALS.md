@@ -247,6 +247,13 @@ records. A transaction appends the branch-operation event and moves its head
 together. Branch creation/push never silently changes the live Thing. Protected
 branch kinds cannot be read or edited through generic Thing routes.
 
+The reserved `main` / `Published` branch uses those same canonical records.
+Trusted committed main revisions advance one per-Thing head in the content
+transaction, including deletions. The pointer survives the Thing; browser drafts
+and branch effects cannot advance it. Named-branch commands exclude `main`.
+Recovery needs a trusted deletion and unoccupied ID, creates a new private version,
+and preserves all prior events. It never restores credentials or external effects.
+
 Every billable Thing has a server-owned `storageClass: "content"`, a versioned
 `storageAccountingVersion`, and `sizeBytes` equal to the UTF-8 byte length of
 exactly `JSON.stringify({ crystal, extended, tags })` after the API has

@@ -191,3 +191,13 @@ test('an account/source change stops an in-flight exact branch read before cache
  const pending = sync.branchHead(branchId, 'page'); sync.stop(); assert.equal(signal?.aborted, true); complete(member());
  await assert.rejects(pending, /stopped/); assert.deepEqual(await branches.forThing('page'), []); await backend.close();
 });
+
+test('Published heads round-trip unchanged through the same local branch store but cannot be pushed as variations', async () => {
+ const factory = new IDBFactory(), backend = new IndexedDbTimelineBackend(factory);
+ const published = parseTimelineBranchEntry({ branch: { ...member().branch, id: 'main', name: 'Published' }, head: { ...member().head, id: timelineBranchHeadId('main', 'page'), branchId: 'main' } });
+ await new TimelineBranchStore(scope, backend).accept([published]); await backend.close();
+ const reopened = new IndexedDbTimelineBackend(factory), store = new TimelineBranchStore(scope, reopened);
+ assert.deepEqual(await store.forThing('page'), [published]);
+ await assert.rejects(store.enqueue({ ...command, branchId: 'main' }), /Invalid Timeline branch/);
+ await reopened.close();
+});

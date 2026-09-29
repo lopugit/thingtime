@@ -138,6 +138,7 @@
     "test:timeline:quota": "node --import tsx scripts/timeline-quota.integration.mts",
     "test:timeline:themes": "node --import tsx scripts/timeline-themes.integration.mts",
     "test:timeline:home-scope": "node --import tsx scripts/timeline-home-scope.integration.mts",
+    "test:timeline:recovery": "node --import tsx scripts/timeline-recovery.integration.mts",
     "test:timeline:related": "node --import tsx scripts/timeline-related.integration.mts"
   },
   "dependencies": {
