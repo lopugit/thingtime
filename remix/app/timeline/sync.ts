@@ -12,6 +12,7 @@ export type TimelinePage = { entries: TimelineEntry[]; nextBefore: number | null
 export class TimelineBranchCommandRefusal extends Error {}
 export interface TimelineTransport {
 	push(event: TimelineEvent, signal: AbortSignal): Promise<TimelineEntry>;
+	recoverOutcome?(event: TimelineEvent, proof: string, signal: AbortSignal): Promise<TimelineEntry>;
 	page(request: TimelinePageRequest, signal: AbortSignal): Promise<TimelinePage>;
 	branch?(command: TimelineBranchCommand, signal: AbortSignal): Promise<TimelineBranchResult>;
 	branches?(thingId: string, before: number | undefined, signal: AbortSignal): Promise<TimelineBranchPage>;
@@ -55,11 +56,25 @@ export class TimelineSync {
 		// an upload may reference an edit that missed this pass's event snapshot;
 		// defer both to the next pass instead of mistaking that version for a 404.
 		const commands = await this.branchStore?.pending() ?? [];
-		// A bounded drain: later edits schedule another pass. One failed/uncertain
-		// reply stops the pass so children never run ahead of an unaccepted parent.
-		for (const event of await this.store.pending()) {
+		const refused = new Set<string>(); let outcomeFailure: unknown;
+		// A bounded drain: later edits schedule another pass. Uncertain replies
+		// stop the pass; definitive recovery refusals retain all dependent work.
+		for (const { event, recoveryProof } of await this.store.pendingWrites()) {
 			this.assertActive();
-			const entry = parseTimelineEntry(await this.transport.push(event, this.controller.signal));
+			if ([...event.parentIds, ...event.dependencies.map(link => link.eventId)].some(id => refused.has(id))) { refused.add(event.id); continue; }
+			if (recoveryProof && !this.transport.recoverOutcome) throw new Error('This server does not support Action history recovery. Your local outcome is preserved.');
+			let entry: TimelineEntry;
+			try {
+				entry = parseTimelineEntry(await (recoveryProof
+					? this.transport.recoverOutcome!(event, recoveryProof, this.controller.signal)
+					: this.transport.push(event, this.controller.signal)));
+			} catch (error: any) {
+				this.assertActive();
+				// A retired signing key or missing admission must not indefinitely
+				// block unrelated edits. Keep the outcome and dependent work intact.
+				if (!recoveryProof || ![400, 404, 409, 413, 422].includes(error?.status)) throw error;
+				refused.add(event.id); outcomeFailure ??= error; continue;
+			}
 			this.assertActive();
 			if (entry.event.id !== event.id) throw new Error('Timeline server acknowledged a different event');
 			await this.store.accept([entry]);
@@ -68,6 +83,7 @@ export class TimelineSync {
 		let branchFailure: unknown;
 		for (const command of commands) {
 			this.assertActive();
+			if (refused.has(command.eventId)) continue;
 			if (!this.transport.branch) throw new Error('This server does not support branch synchronization. Your command is preserved.');
 			let result: TimelineBranchResult;
 			try { result = await this.transport.branch(command, this.controller.signal); }
@@ -89,6 +105,7 @@ export class TimelineSync {
 			accepted++;
 		}
 		if (branchFailure) throw new TimelineBranchCommandRefusal('A branch push needs attention. Its selected version remains in History.');
+		if (outcomeFailure) throw outcomeFailure;
 		return accepted;
 	}
 	branchPage(thingId: string, before?: number): Promise<TimelineBranchPage> {

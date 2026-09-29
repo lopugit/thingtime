@@ -6,6 +6,8 @@ import type { BranchMergeRequest } from '../timeline/branchMerge';
 import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import type { TimelineEvent } from '~/timeline/contract';
+import { retainActionOutcomeRecovery, type ActionOutcomeRecovery } from '~/timeline/actionRecovery';
+import { enqueueActionOutcomeRecovery } from '~/timeline/localBackend.client';
 import type { TimelinePageRequest } from '~/timeline/sync';
 import { announceTimelineScopeChange } from '~/timeline/clientEvents';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
@@ -112,6 +114,10 @@ export function useApi() {
       }, [asyncFetcher])
     },
     timeline: {
+      recoverOutcome: useCallback(async (scope: { ownerId: string; dataPlane: string }, recovery: ActionOutcomeRecovery, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.16.0');
+        return asyncFetcher.submit({ command: 'recover-action-outcome', recovery }, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
       componentBindings: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', '1.10.0');
         return getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, components: 1 })}`, options);
@@ -1540,11 +1546,15 @@ export function useApi() {
       // path in every browser while the API-level battery stayed green.
       run: useCallback(async (args) => {
         const actor = actionActor.current;
-        await requireThingtimeCapability('api.actions-run', '1.36.0');
+        const expectedPlane = planeRef.current;
+        const origin = window.location.origin;
+        await requireThingtimeCapability('api.actions-run', '1.37.0');
         if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
-        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor });
-        if (actionActor.current !== actor) throw new Error('The active account changed. Run the action again.');
-        return finishBrowserAction(response, createBrowserActionHost(() => actionActor.current));
+        const response = await asyncFetcher.submit(buildActionRunBody({ ...args, execution: 'browser' }), { action: '/api/v1/actions/run', expectedActor: actor, expectedDataPlane: expectedPlane });
+        const retained = await retainActionOutcomeRecovery(response, actor, expectedPlane, recovery => enqueueActionOutcomeRecovery(origin, recovery));
+        if (actionActor.current !== actor) throw new Error('The account changed during the Action request. Check History in the original account before running it again.');
+        if (planeRef.current !== expectedPlane) throw new Error('The database changed during the Action request. Check History in the original database before running it again.');
+        return finishBrowserAction(retained, createBrowserActionHost(() => actionActor.current));
       }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])

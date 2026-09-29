@@ -1,7 +1,7 @@
 import React from 'react';
 import { useApi } from '../hooks/useApi';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { IndexedDbTimelineBackend } from './indexedDb';
+import { localTimelineBackend } from './localBackend.client';
 import { TimelineLocalStore } from './localStore';
 import { TimelineBranchStore } from './branchStore';
 import { TimelineSync, TimelineBranchCommandRefusal } from './sync';
@@ -17,8 +17,6 @@ const Context = React.createContext<Session>({ storage: 'selected', identity: ''
 const SelectedContext = Context;
 const ActiveContext = React.createContext<Session | null>(null);
 const HomeContext = React.createContext<Session | null>(null);
-let backend: IndexedDbTimelineBackend | null = null;
-const localBackend = () => backend ??= new IndexedDbTimelineBackend(window.indexedDB);
 const failureMessage = (error: unknown) => error instanceof Error ? error.message : 'Timeline could not connect. Your local changes are preserved.';
 export const timelineAccessFailure = (error: unknown): boolean => [401, 403].includes((error as { status?: number })?.status ?? 0);
 
@@ -110,10 +108,11 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 export function TimelineProvider({ children }: { children: React.ReactNode }) {
 	const api = useApi(); const apiRef = React.useRef(api); apiRef.current = api;
 	const [pool] = React.useState(() => new TimelineConnectionPool((scope, folderId) => {
-		const store = new TimelineLocalStore(scope, localBackend());
-		const branches = new TimelineBranchStore(scope, localBackend());
+		const store = new TimelineLocalStore(scope, localTimelineBackend());
+		const branches = new TimelineBranchStore(scope, localTimelineBackend());
 		const sync = new TimelineSync(store, {
 			push: async (event, signal) => (await apiRef.current.v1.timeline.push(scope, event, { signal })).entry,
+			recoverOutcome: async (event, proof, signal) => (await apiRef.current.v1.timeline.recoverOutcome(scope, { formatVersion: 1, event, dataPlane: scope.dataPlane, proof }, { signal })).entry,
 			page: (request, signal) => apiRef.current.v1.timeline.page(scope, request, { signal }),
 			branch: (command, signal) => apiRef.current.v1.timeline.branch(scope, command, { signal }),
 			branchHead: (branchId, thingId, signal) => apiRef.current.v1.timeline.branchHead(scope, branchId, thingId, { signal }),

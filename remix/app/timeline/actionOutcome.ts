@@ -1,4 +1,5 @@
 import type { TimelineEvent, TimelineSnapshot } from './contract.ts';
+import type { ActionOutcomeRecovery } from './actionRecovery.ts';
 
 /** Only execution metadata. Never retain inputs, result values, step traces,
  * exception text, credentials or external response bodies in this adapter. */
@@ -17,9 +18,17 @@ export type ActionTimelineReport = {
 	status: 'recorded' | 'incomplete';
 	startedEventId: string;
 	outcomeEventId: string | null;
+	recovery?: ActionOutcomeRecovery;
+	/** First-party client projection; never execution evidence. */
+	localRecovery?: 'saved' | 'unavailable';
 };
 export const ACTION_TIMELINE_INCOMPLETE =
 	'The Action ran, but we could not confirm its completion was saved to History. The accepted run is recorded. Check its changes before running it again.';
+export const actionTimelineWarning = (report: ActionTimelineReport) => report.localRecovery === 'saved'
+	? 'The Action ran. Its completion is saved on this device for History sync. Open History to check the latest sync status; you do not need to run the Action again.'
+	: report.localRecovery === 'unavailable'
+	? 'The Action ran, but its completion could not be saved on this device for History sync. The accepted run is recorded. Check its changes before running it again.'
+	: ACTION_TIMELINE_INCOMPLETE;
 const keys = ['actionName', 'runId', 'status', 'startedAt', 'durationMs', 'opsUsed', 'depthUsed', 'childActionsUsed'];
 export function actionOutcomeValue(snapshot: TimelineSnapshot | null): ActionOutcome | null {
 	if (snapshot?.adapter !== ACTION_OUTCOME_ADAPTER || snapshot.version !== 1) return null;
