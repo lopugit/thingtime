@@ -1,6 +1,6 @@
 import React from 'react';
 import { openThingHistory } from '../Timeline/TimelineHost';
-import { ACTION_TIMELINE_INCOMPLETE, type ActionTimelineReport } from '../../timeline/actionOutcome';
+import { actionTimelineWarning, type ActionTimelineReport } from '../../timeline/actionOutcome';
 import { parseActionJson } from '~/schemas/actionJsonInput';
 import { ThingDefinitionEditor } from '../Builder/DefinitionEditor/ThingDefinitionEditor';
 import {
@@ -123,7 +123,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 			setLastRun(response);
 			onRan?.();
 			if (response?.history?.status === 'incomplete') {
-				lopuRef.current({ title: 'Action completion missing from History', description: ACTION_TIMELINE_INCOMPLETE, status: 'warning' });
+				lopuRef.current({ title: 'Action History sync', description: actionTimelineWarning(response.history), status: 'warning' });
 			} else if (response?.status === 'ok') {
 				lopuRef.current({ title: `⚡ ${action.crystal.name || 'Action'} ran ✓`, description: `${response.durationMs}ms · ${response.opsUsed} ops`, status: 'success', duration: 6000 });
 			} else {
@@ -215,7 +215,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 							</Text>
 						) : null}
 					</Flex>
-					{lastRun.history?.status === 'incomplete' ? <Text role="status" fontSize="sm" mt={2}>{ACTION_TIMELINE_INCOMPLETE}</Text> : null}
+					{lastRun.history?.status === 'incomplete' ? <Text role="status" fontSize="sm" mt={2}>{actionTimelineWarning(lastRun.history)}</Text> : null}
 					{lastRun.error ? (
 						<Text color="var(--tt-danger, #e5484d)" fontSize="sm" mt={2} overflowWrap="anywhere">
 							{lastRun.error}

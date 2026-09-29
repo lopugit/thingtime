@@ -92,3 +92,12 @@ partial failure and unconfirmed completion. Outcomes offer no compare/restore/
 replay control. The Action inspector opens the same History panel, distinguishes
 its bounded debug cache, and surfaces an incomplete-history response beside the
 actual execution result. Shared runs and browser preparation remain ephemeral.
+
+## Completion sync recovery — 2026-09-30
+
+The existing honest-sync design now includes unacknowledged server Action
+completions. The inspector distinguishes retained local completion from failed
+local storage. List/Cards/Line/Frames use the same Local/remote receipt state and
+refresh after delivery. Reload/reconnect resends the exact server-sealed event,
+never the Action. Unconfirmed admissions alone still make no completion claim.
+See the unified Timeline ledger for lost-response and signing-key limits.

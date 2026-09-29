@@ -3,9 +3,14 @@
 Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
 shared `timeline/actionOutcome.ts`, called from the canonical server executor.
 They retain safe effect receipts in the existing Timeline, never a new history
-store or growing array. `api.actions-run` 1.36.0 and `api.timeline` 1.15.0 publish
+store or growing array. `api.actions-run` 1.37.0 and `api.timeline` 1.16.0 publish
 this contract; the first-party client negotiates it. `test:timeline:action-outcomes`
-checks real replica APIs, optional quota, privacy and partial failures. See
+checks real replica APIs, optional quota, privacy, partial failures and sealed
+completion recovery. `timeline/actionRecovery.ts` validates delivery bundles;
+`api/utils/timeline/actionRecovery.ts` verifies server proofs and admissions.
+`localBackend.client.ts`, the existing IndexedDB store/sync and `useApi` retain
+and resend the identical canonical event. `auth/jwt.ts` provides a durable
+content seal using configured keys, never the development fallback. See
 [the Timeline ledger](../unified-timeline.md) for incomplete-receipt boundaries.
 
 Everything is a Thing in one logical `things` collection (physical `things_v2`,

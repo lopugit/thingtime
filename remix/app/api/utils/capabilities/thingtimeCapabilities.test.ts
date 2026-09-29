@@ -80,7 +80,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     assert.equal(manifest.features[feature]?.version, '1.2.0');
   }
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.5.0');
-	assert.equal(manifest.features['api.actions-run']?.version, '1.36.0');
+	assert.equal(manifest.features['api.actions-run']?.version, '1.37.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.7.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.11.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.15.0');
@@ -409,7 +409,7 @@ test('functional demo capabilities advertise compatible catalog and install cont
 
 test('native animation programs require compatible playback lifecycle support', () => {
   for (const manifest of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://animation.test').features).map(([key, value]) => [key, value.version]))]) {
-    assert.equal(manifest['api.actions-run'], '1.36.0');
+    assert.equal(manifest['api.actions-run'], '1.37.0');
   }
   for (const version of ['1.32.0', '1.32.1', '1.33.1']) assert.equal(capabilitySatisfies(version, '1.32.0'), true);
   for (const version of ['', '1.31.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.32.0'), false);
@@ -417,7 +417,7 @@ test('native animation programs require compatible playback lifecycle support', 
 
 test('XPath programs require owned synchronous query support', () => {
   const current = createApiCapabilitiesManifest().features['api.actions-run'];
-  assert.equal(current, '1.36.0');
+  assert.equal(current, '1.37.0');
   assert.equal(capabilitySatisfies(current, '1.34.0'), true);
   for (const version of ['', '1.33.1', '1.33.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.34.0'), false);
 });
@@ -427,7 +427,7 @@ test('native traversal requires bounded synchronous callback support on both man
     createApiCapabilitiesManifest().features['api.actions-run'],
     thingtimeCapabilityManifest('https://traversal.test').features['api.actions-run'].version
   ]) {
-    assert.equal(current, '1.36.0');
+    assert.equal(current, '1.37.0');
     assert.equal(capabilitySatisfies(current, '1.35.0'), true);
     for (const old of ['', '1.34.0', '1.34.1', '2.0.0']) assert.equal(capabilitySatisfies(old, '1.35.0'), false);
   }
@@ -436,8 +436,9 @@ test('native traversal requires bounded synchronous callback support on both man
 
 test('server Action outcomes are discoverable in both capability manifests', () => {
   for (const features of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://outcomes.test').features).map(([id, feature]) => [id, feature.version]))]) {
-    assert.equal(features['api.actions-run'], '1.36.0');
-    assert.equal(features['api.timeline'], '1.15.0');
-    assert.equal(capabilitySatisfies('1.35.0', '1.36.0'), false);
+    assert.equal(features['api.actions-run'], '1.37.0');
+    assert.equal(features['api.timeline'], '1.16.0');
+    assert.equal(capabilitySatisfies('1.36.0', '1.37.0'), false);
+    assert.equal(capabilitySatisfies('1.15.0', '1.16.0'), false);
   }
 });
