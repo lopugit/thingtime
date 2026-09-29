@@ -10,6 +10,19 @@ The browser requires the existing Timeline replica-set setup below; no new
 secret or account-specific setup is needed. Filters currently cover the loaded
 history window. [Design integration and limits](docs/timeline-design-integration.md).
 
+**Server Action activity** uses the same private Timeline (`api.timeline` 1.15.0,
+`api.actions-run` 1.36.0). Accepted runs and redacted outcomes appear in all four
+History looks, including read-only runs. The Action inspector links to History;
+its recent input/result/trace details remain a bounded debug cache. The display
+name and numeric execution metadata are retained, never raw inputs, outputs or
+errors. Admission must save before steps run. If completion cannot be saved,
+the result explicitly reports incomplete history; do not rerun to repair it.
+Browser preparation and shared read-only runs do not write account outcomes.
+No new collection, index, secret or migration is required. Run
+`TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
+test:timeline:action-outcomes`; optionally use the same synthetic
+`TIMELINE_TEST_ADMIN_FIXTURE` setup below for quota coverage.
+
 **Page + related** gathers a saved page and your connected Components, Actions,
 Data and Schemas into the same History browser (`api.timeline` 1.13.0). It follows
 the current saved composition, up to 128 Things; shared authors' histories stay

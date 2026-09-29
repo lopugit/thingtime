@@ -1,4 +1,6 @@
 import React from 'react';
+import { openThingHistory } from '../Timeline/TimelineHost';
+import { ACTION_TIMELINE_INCOMPLETE, type ActionTimelineReport } from '../../timeline/actionOutcome';
 import { parseActionJson } from '~/schemas/actionJsonInput';
 import { ThingDefinitionEditor } from '../Builder/DefinitionEditor/ThingDefinitionEditor';
 import {
@@ -49,6 +51,7 @@ const monoLabel = {
 type RunResponse = {
 	ok: boolean;
 	runId?: string;
+	history?: ActionTimelineReport;
 	status?: 'ok' | 'error';
 	result?: unknown;
 	error?: string;
@@ -119,7 +122,9 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 			const response = (await apiRef.current.v1.actions.run({ action: action.id, inputs })) as RunResponse;
 			setLastRun(response);
 			onRan?.();
-			if (response?.status === 'ok') {
+			if (response?.history?.status === 'incomplete') {
+				lopuRef.current({ title: 'Action completion missing from History', description: ACTION_TIMELINE_INCOMPLETE, status: 'warning' });
+			} else if (response?.status === 'ok') {
 				lopuRef.current({ title: `⚡ ${action.crystal.name || 'Action'} ran ✓`, description: `${response.durationMs}ms · ${response.opsUsed} ops`, status: 'success', duration: 6000 });
 			} else {
 				lopuRef.current({ title: 'Run finished with an error 🧯', description: response?.error || undefined, status: 'error' });
@@ -210,6 +215,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 							</Text>
 						) : null}
 					</Flex>
+					{lastRun.history?.status === 'incomplete' ? <Text role="status" fontSize="sm" mt={2}>{ACTION_TIMELINE_INCOMPLETE}</Text> : null}
 					{lastRun.error ? (
 						<Text color="var(--tt-danger, #e5484d)" fontSize="sm" mt={2} overflowWrap="anywhere">
 							{lastRun.error}
@@ -581,8 +587,10 @@ export const ActionDetailPage = () => {
 
 						<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
 							<Text {...monoLabel} mb={2}>
-								Last runs
+								Recent execution details
 							</Text>
+							<Button size="sm" variant="outline" mb={2} onClick={() => openThingHistory(action.id)}>Open History</Button>
+							<Text fontSize="xs" color={MUTED} mb={3}>History keeps saved changes and recorded server outcomes. The details below are a rolling debug window of up to 50 server runs.</Text>
 							{runs.length ? (
 								<Stack spacing={2}>
 									{runs.map((record) => (

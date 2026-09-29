@@ -1,5 +1,13 @@
 # API endpoints and capabilities
 
+Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
+shared `timeline/actionOutcome.ts`, called from the canonical server executor.
+They retain safe effect receipts in the existing Timeline, never a new history
+store or growing array. `api.actions-run` 1.36.0 and `api.timeline` 1.15.0 publish
+this contract; the first-party client negotiates it. `test:timeline:action-outcomes`
+checks real replica APIs, optional quota, privacy and partial failures. See
+[the Timeline ledger](../unified-timeline.md) for incomplete-receipt boundaries.
+
 Timeline 1.13.0 adds `related=1` with an owned webpage `thingId` to the existing
 GET route. Cursor reads require `relatedRevision`; changed current-composition
 membership returns `reset: true`. Shared definitions never expose another author's

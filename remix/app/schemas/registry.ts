@@ -1778,7 +1778,7 @@ const actionSchema: ThingtimeSchema = {
 	}
 };
 
-// Every action invocation lands one protected run record — server-minted by
+// Completed ordinary server invocations attempt one bounded debug record — server-minted by
 // the executor only (a forged run record would falsify the audit trail), so
 // the kind rides PROTECTED_THINGTIME and has no crystal sanitizer on the
 // generic write path.
@@ -1799,7 +1799,8 @@ const actionRunSchema: ThingtimeSchema = {
 		'action contract. Direct create/update/delete through the generic things routes is ' +
 		'refused. Operational telemetry, so the trail is retained rather than kept forever: the ' +
 		`executor keeps the newest ${MAX_ACTION_RUNS_RETAINED} records per action per owner and ` +
-		'prunes older ones after each run, and deleting the action deletes its run records with it.',
+		'prunes older ones after each run, and deleting the action deletes its run records with it. ' +
+		'Canonical Timeline separately retains private admission and redacted outcome events; this bounded record is supplementary debugging data.',
 	fields: [
 		{ name: 'status', type: 'enum', required: true, values: ['ok', 'error'], description: 'Whether the run completed or failed.' },
 		{ name: 'startedAt', type: 'date', required: true, description: 'When the invocation began.' },
