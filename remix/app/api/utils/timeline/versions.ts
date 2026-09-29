@@ -5,7 +5,8 @@ import { copyBoundedJson } from '../../../utils/boundedJson.ts';
 import { PUBLISHED_PREVIEW_MAX_BYTES, parseVersionRequest, type VersionRequest } from '../../../timeline/publishedVersion.ts';
 import type { TimelineEntry, TimelineSnapshot } from '../../../timeline/contract.ts';
 import { mergeVersionValues, versionContent } from '../../../timeline/versions.ts';
-import { getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
+import type { ThingWriteTransaction } from '../things/things';
 import { createThing, findViewableThing, updateThing } from '../things/things';
 import { isProtectedThingtime } from '../../../schemas/registry';
 import { StorageMutationError } from '../storage/storageCore';
@@ -13,6 +14,7 @@ import { readTimelineEntries, readTimelineNodes, type TimelineGraphNode } from '
 import { comparePublishedComponents, liveComponentContext, planPublishedComponentCopies, recordedComponentVersions } from './publishedComponents';
 import { webpageComponentRefs } from '../../../timeline/componentBindings';
 import { newThingMutationCapture, thingContentSnapshot } from './recordMutation.ts';
+import { readDeletedThingState } from './deletedThing.ts';
 export { parseVersionRequest, type VersionRequest } from '../../../timeline/publishedVersion.ts';
 
 const reject = (status: number, message: string): never => {
@@ -144,19 +146,27 @@ export function createVersionContentReader(
 	};
 }
 
-const dependencies = { collection: getThingsCollection, find: findViewableThing, update: updateThing };
+const dependencies = {
+	collection: getThingsCollection,
+	find: findViewableThing,
+	update: updateThing,
+	create: createThing,
+	transaction: withMongoTransaction
+};
 export function createVersionService(overrides: Partial<typeof dependencies> = {}) {
 	const deps = { ...dependencies, ...overrides };
 	return async (ownerId: string, input: VersionRequest) => {
 		const request = parseVersionRequest(input);
 		const things = await deps.collection();
-		const read = (ids: string[]) => readTimelineEntries(things, ownerId, ids);
+		const read = (ids: string[], session?: any) => readTimelineEntries(things, ownerId, ids, session);
 		const signature = createHash('sha256')
 			.update(
 				JSON.stringify({
 					mode: request.mode,
 					eventId: request.eventId,
 					expectedHeadId: request.expectedHeadId ?? null,
+					...(request.recover ? { recover: true } : {}),
+					...(request.expectedRecovery ? { expectedRecovery: request.expectedRecovery } : {}),
 					choices: request.choices ?? {},
 					...(request.componentMode
 						? {
@@ -169,9 +179,9 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 			)
 			.digest('hex');
 		const committedId = request.operationId ? `version-${request.operationId}` : null;
-		const existing = async () => {
+		const existing = async (session?: any) => {
 			if (!committedId) return null;
-			const entry = (await read([committedId]))[0];
+			const entry = (await read([committedId], session))[0];
 			if (
 				entry &&
 				(entry.event.operationId !== signature || entry.event.actorId !== ownerId || entry.event.source !== 'api' || entry.event.mode !== 'revision')
@@ -183,14 +193,34 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		if (prior) return { ok: true as const, entry: prior };
 		const source = (await read([request.eventId]))[0];
 		if (!source) reject(404, 'Version not found.');
-		const doc = await deps.find(source.event.thingId, { id: ownerId });
+		const liveDoc = await deps.find(source.event.thingId, { id: ownerId });
+		const recovery = !liveDoc && request.recover ? await readDeletedThingState(things, ownerId, source.event.thingId) : null;
+		const doc =
+			liveDoc ??
+			(recovery
+				? ({
+						ownerId,
+						shareId: source.event.thingId,
+						thingtime: recovery.thingtime,
+						crystal: {},
+						acl: ['tt:user'],
+						extended: null,
+						tags: [],
+						folderId: null,
+						targetId: null,
+						geo: null
+				  } as any)
+				: null);
 		if (!doc || doc.ownerId !== ownerId || isProtectedThingtime(doc.thingtime ?? [])) reject(404, 'This Thing is not available for version changes.');
-		const headId = (doc as any).timelineHeadId as string;
+		if (!source.event.after && (source.event.operation !== 'delete' || request.mode !== 'restore' || !request.recover))
+			reject(422, 'Choose Restore to recover the content before this deletion.');
+		const headId = recovery?.entry.event.id ?? ((doc as any).timelineHeadId as string);
 		if (!headId) reject(409, 'Save this Thing once before applying an earlier version.');
 		if (request.command === 'apply-version' && headId !== request.expectedHeadId)
 			reject(409, 'Thing changed after the version preview. Refresh and compare again.');
 		const graph =
-			request.mode === 'merge' || !['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(source.event.after?.adapter ?? '')
+			request.mode === 'merge' ||
+			!['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes((source.event.after ?? source.event.before)?.adapter ?? '')
 				? await loadVersionGraph(request.mode === 'merge' ? [source.event.id, headId] : [source.event.id], source.event.thingId, (ids) =>
 						readTimelineNodes(things, ownerId, ids)
 				  )
@@ -201,7 +231,9 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		const contentFor = createVersionContentReader(graph, read, resolved);
 		const currentSnapshot = thingContentSnapshot(doc)!;
 		const current = restorableContent(currentSnapshot);
-		const incoming = await contentFor(source);
+		const incoming = source.event.after
+			? await contentFor(source)
+			: restorableContent(await readTimelineSnapshot(things, ownerId, source.event.id, 'before', source.event.before));
 		const baseContent = base ? await contentFor(base) : null;
 		let merged: ReturnType<typeof mergeVersionValues>;
 		try {
@@ -210,8 +242,34 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 			return reject(422, 'This comparison or its conflict choices are no longer valid. Refresh the comparison before applying it.');
 		}
 		if (request.mode === 'restore' && Object.keys(request.choices ?? {}).length) reject(400, 'Restores do not accept merge choices.');
+		if (recovery) {
+			const folderId =
+				typeof incoming.folderId === 'string' &&
+				(await things.findOne({ shareId: incoming.folderId, ownerId, thingtime: 'folder' }, { projection: { shareId: 1 } }))
+					? incoming.folderId
+					: null;
+			// Recovery never silently republishes deleted content or recreates old
+			// grants. The preview shows the surviving folder (or Things root).
+			merged = { value: { ...incoming, acl: ['tt:user'], folderId }, conflicts: [] };
+		}
 		const snapshot = (value: any): TimelineSnapshot => ({ adapter: 'thing-content', version: 1, value });
-		const componentSources = [source, ...(base ? [base] : [])].map((entry) => versionContentSources(graph, entry).crystalId);
+		const isPage = doc.thingtime?.includes('webpage');
+		const componentSources = await Promise.all(
+			[source, ...(base ? [base] : [])].map(async (entry) => {
+				if (entry.event.after) return versionContentSources(graph, entry).crystalId;
+				if (
+					!isPage ||
+					!webpageComponentRefs((incoming.crystal as any)?.blocks).length ||
+					entry.event.dependencies.length ||
+					!entry.event.parentIds.length
+				)
+					return entry.event.id;
+				const parent = (await read([entry.event.parentIds[0]]))[0];
+				if (!parent || parent.event.thingId !== entry.event.thingId) reject(409, 'The deleted version has incomplete ancestry.');
+				const ancestors = await loadVersionGraph([parent.event.id], entry.event.thingId, (ids) => readTimelineNodes(things, ownerId, ids));
+				return versionContentSources(ancestors, parent).crystalId;
+			})
+		);
 		const providerEntries = await read([...new Set(componentSources)]);
 		if (
 			providerEntries.length !== new Set(componentSources).size ||
@@ -219,7 +277,6 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		)
 			reject(409, 'A component source version is unavailable.');
 		const providers = new Map(providerEntries.map((entry) => [entry.event.id, entry.event]));
-		const isPage = doc.thingtime?.includes('webpage');
 		const refs = isPage ? webpageComponentRefs((merged.value as any).crystal?.blocks) : [];
 		if (!request.componentMode && (refs.length || providerEntries.some((entry) => entry.event.dependencies.length)))
 			reject(409, 'Update this client to review components before applying this version.');
@@ -254,12 +311,20 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 				);
 			}
 		}
+		const recoveryFingerprint = recovery
+			? createHash('sha256')
+					.update(JSON.stringify({ headId, folderId: (merged.value as any).folderId }))
+					.digest('hex')
+			: undefined;
+		if (request.command === 'apply-version' && recovery && request.expectedRecovery !== recoveryFingerprint)
+			reject(409, 'The recovery placement changed. Refresh and review the recovery again.');
 		const preview = {
 			eventId: source.event.id,
 			thingId: source.event.thingId,
 			mode: request.mode,
 			expectedHeadId: headId,
-			current: snapshot(current),
+			current: recovery ? null : snapshot(current),
+			...(recovery ? { recovery: true as const, recoveryFingerprint } : {}),
 			incoming: snapshot(incoming),
 			result: snapshot(merged.value),
 			baseEventId: base?.event.id ?? null,
@@ -284,9 +349,9 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 			...newThingMutationCapture(ownerId, 'api'),
 			id: committedId!,
 			operationId: signature,
-			operation: request.mode,
+			operation: recovery ? ('create' as const) : request.mode,
 			parentIds: [...new Set([headId, source.event.id])],
-			label: request.mode === 'merge' ? 'Merged branch into current version' : 'Restored earlier version'
+			label: recovery ? 'Recovered deleted Thing' : request.mode === 'merge' ? 'Merged branch into current version' : 'Restored earlier version'
 		};
 		const plan =
 			request.componentMode === 'recorded' && refs.length
@@ -301,30 +366,65 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 				label: 'Copied recorded component for restored page'
 			}
 		}));
+		const beforeCommit = async (transaction: ThingWriteTransaction) => {
+			if (components) {
+				const live = await liveComponentContext(things, transaction.session, doc, current, merged.value);
+				if (live.fingerprint !== request.expectedComponents) reject(409, 'A component changed after the preview. Refresh and compare again.');
+			}
+			for (const copy of copies) {
+				const created = await deps.create(
+					ownerId,
+					{ shareId: copy.shareId, thingtime: ['component'], crystal: copy.crystal, visibility: 'private' },
+					{ id: ownerId },
+					null,
+					{ transaction, timelineCapture: copy.capture }
+				);
+				if (created.ok === false) reject(created.status, created.error);
+			}
+		};
+		if (recovery) {
+			let effects: (() => Promise<void>)[] = [];
+			try {
+				const entry = await deps.transaction(async (session) => {
+					effects = [];
+					const replay = await existing(session);
+					if (replay) return replay;
+					const deleted = await readDeletedThingState(things, ownerId, source.event.thingId, session);
+					if (deleted.entry.event.id !== headId) reject(409, 'This Thing changed after the recovery preview. Refresh and compare again.');
+					const transaction = {
+						session,
+						afterCommit: (effect: () => Promise<void>) => {
+							effects.push(effect);
+						}
+					};
+					await beforeCommit(transaction);
+					const created = await deps.create(
+						ownerId,
+						{ ...(plan.content as any), shareId: source.event.thingId, thingtime: recovery.thingtime },
+						{ id: ownerId },
+						null,
+						{ transaction, timelineCapture: capture }
+					);
+					if (created.ok === false) reject(created.status, created.error);
+					const committed = await existing(session);
+					if (!committed) throw new Error('Recovered content is missing its Timeline receipt.');
+					return committed;
+				});
+				for (const effect of effects) await effect();
+				return { ok: true as const, entry };
+			} catch (error) {
+				const completed = await existing();
+				if (completed) return { ok: true as const, entry: completed };
+				throw error;
+			}
+		}
 		const result = await deps.update({ id: ownerId }, source.event.thingId, plan.content as any, {
 			replaceCrystal: true,
 			expectedUpdatedAt: new Date(doc!.updatedAt).toISOString(),
 			timeline: {
 				expectedHeadId: headId,
 				capture,
-				...(components
-					? {
-							beforeCommit: async (transaction) => {
-								const live = await liveComponentContext(things, transaction.session, doc, current, merged.value);
-								if (live.fingerprint !== request.expectedComponents) reject(409, 'A component changed after the preview. Refresh and compare again.');
-								for (const copy of copies) {
-									const created = await createThing(
-										ownerId,
-										{ shareId: copy.shareId, thingtime: ['component'], crystal: copy.crystal, visibility: 'private' },
-										{ id: ownerId },
-										null,
-										{ transaction, timelineCapture: copy.capture }
-									);
-									if (created.ok === false) reject(created.status, created.error);
-								}
-							}
-					  }
-					: {})
+				...(components ? { beforeCommit } : {})
 			}
 		});
 		if (result.ok === false) {

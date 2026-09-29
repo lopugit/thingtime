@@ -844,3 +844,39 @@ subscription to runtime-calculated references. The real HTTP acceptance script
 `test:timeline:related` covers five Thing types, shared author privacy, exact
 canonical records, paging, API edits, added/removed membership, account/database
 fences and strict query validation on the disposable replica.
+
+## Deleted Thing recovery — 2026-09-30
+
+`api.timeline` 1.14.0 adds explicit `recover:true` support to restore preview/apply.
+A missing ordinary Thing requires its latest trusted Published revision to be a
+recorded deletion, and its physical ID must be unoccupied. Client drafts cannot
+establish ownership or deletion. Recovery uses the original ID and trusted deleted
+kinds, but a private audience. The preview keeps a surviving owned folder or shows
+Things root. `expectedHeadId`, `expectedRecovery` and `expectedComponents` fence
+changes to the deletion head, reviewed placement and component definitions.
+
+Recovery commits through canonical Thing create validation, authorization, quota
+and moderation. The new event is `operation:create`, `before:null`, with the deletion
+and selected version as parents; no earlier record changes. Content, private
+component copies, canonical events/links, Published pointers and storage accounting
+share one transaction. Retrying the exact operation UUID returns its original
+receipt. Concurrent recoveries and ID collisions refuse without orphan writes.
+
+Published uses the existing `TimelineBranch` (`main`, `Published`) and one
+`TimelineBranchHead` per Thing beneath Timeline. It retains no growing lists and
+uses the same shared schemas/IndexedDB representation as named variations. Trusted
+committed main revisions advance it atomically; browser drafts, branch effects,
+captures and old idempotent retries cannot move it. Named-branch command grammars
+still exclude `main`, and the variations list excludes Published. Legacy histories
+without a pointer scan at most 2048 events / 16 MiB before refusing safely.
+
+Deletion reuses existing saved component-capture links without generating fresh
+captures or charging extra content, including at quota. Legacy deletion versions
+can inherit their recorded crystal provider. Missing bindings remain explicitly
+missing. A recovery preview cannot borrow an unrecorded current definition unless
+the user explicitly chooses current shared components.
+
+This increment covers ordinary standalone Things and direct page components.
+Protected kinds, target-attached interactions, folder children, external blobs and
+side effects require dedicated recovery flows. Existing large-preview/restore
+budgets still apply. It does not complete the broader acceptance ledger above.

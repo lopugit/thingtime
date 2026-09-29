@@ -22,7 +22,7 @@ export function TimelineVersionComparison({
 	hideCopiedIdentity = false,
 	matchingMessage
 }: {
-	current: TimelineSnapshot;
+	current: TimelineSnapshot | null;
 	result: TimelineSnapshot;
 	conflicts: VersionConflict[];
 	componentLabels?: boolean;
@@ -36,7 +36,7 @@ export function TimelineVersionComparison({
 		const ref = path[0];
 		const componentName = [current, result]
 			.map((snapshot) => {
-				const values = snapshot.value;
+				const values = snapshot?.value;
 				const component =
 					values && typeof values === 'object' && !Array.isArray(values) && Object.prototype.hasOwnProperty.call(values, ref)
 						? (values[ref] as any)

@@ -10,6 +10,7 @@ import { splitTimelineEvent, timelineLinkId, TIMELINE_MAX_LINKS, type TimelineLi
 import { StorageMutationError, thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION } from '../storage/storageCore.ts';
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
+import { recordPublishedTimelineHead } from './publishedHead.ts';
 
 const digest = (parts: string[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 // Leave room for the receipt/page wrapper while staying below the hosting
@@ -172,10 +173,11 @@ export async function appendTimelineEvent(
 		extended: null, tags: [], storageClass: 'control', createdAt: new Date(position), updatedAt: new Date(position), ...packTimelineLink(link)
 	}));
 	await things.insertMany(links, { session });
+	await recordPublishedTimelineHead(things, entry, folderId, session);
 	return entry;
 }
 
-export async function readTimelinePage(things: any, ownerId: string, request: TimelinePageRequest, relatedIds?: string[]): Promise<TimelinePage> {
+export async function readTimelinePage(things: any, ownerId: string, request: TimelinePageRequest, relatedIds?: string[], session?: any): Promise<TimelinePage> {
 	if (relatedIds && (!request.thingId || !relatedIds.includes(request.thingId) || relatedIds.length > 128 || new Set(relatedIds).size !== relatedIds.length || relatedIds.some(id => !id || id.length > 200))) throw new Error('Invalid related Timeline targets');
 	if (!ownerId || (request.thingId !== null && !request.thingId) || (request.before !== null && request.after !== null) || !Number.isInteger(request.limit) || request.limit < 1 || request.limit > TIMELINE_PAGE_SIZE) throw new Error('Invalid Timeline page request');
 	for (const cursor of [request.before, request.after]) if (cursor !== null && (!Number.isSafeInteger(cursor) || cursor < 1 || !Number.isFinite(new Date(cursor).getTime()))) throw new Error('Invalid Timeline cursor');
@@ -186,7 +188,7 @@ export async function readTimelinePage(things: any, ownerId: string, request: Ti
 		...(request.after !== null ? { createdAt: { $gt: new Date(request.after) } } : {})
 	// Positions are unique within an account; no tie-break is needed. Sorting
 	// only by createdAt fits both existing global and per-Thing index directions.
-	}, { projection: { _id: 0, shareId: 1, createdAt: 1, timelineEntryBytes: 1, timelineLinkBytes: 1 } }).sort({ createdAt: ascending ? 1 : -1 }).limit(request.limit + 1).toArray();
+	}, { ...(session ? { session } : {}), projection: { _id: 0, shareId: 1, createdAt: 1, timelineEntryBytes: 1, timelineLinkBytes: 1 } }).sort({ createdAt: ascending ? 1 : -1 }).limit(request.limit + 1).toArray();
 	const ids: string[] = [];
 	let bytes = 128; let readBytes = 128;
 	for (const header of headers.slice(0, request.limit)) {
@@ -200,14 +202,14 @@ export async function readTimelinePage(things: any, ownerId: string, request: Ti
 		ids.push(header.shareId); bytes += size + 1; readBytes += size + linkBytes;
 	}
 	if (headers.length && !ids.length) throw new Error('Invalid Timeline record size');
-	const docs = ids.length ? await things.find({ ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: ids } }).toArray() : [];
+	const docs = ids.length ? await things.find({ ownerId, thingtime: TIMELINE_EVENT_KIND, shareId: { $in: ids } }, session ? { session } : {}).toArray() : [];
 	const byId = new Map<string, any>(docs.map((doc: any) => [doc.shareId, doc]));
 	const ordered = ids.map(id => {
 		const doc = byId.get(id);
 		if (!doc) throw new Error('Timeline changed while loading this page. Refresh and try again.');
 		return doc;
 	});
-	const entries = await entriesFromDocs(things, ownerId, ordered);
+	const entries = await entriesFromDocs(things, ownerId, ordered, session);
 	if (Buffer.byteLength(JSON.stringify(entries)) > TIMELINE_PAGE_MAX_BYTES - 128) throw new Error('Timeline page exceeds its recorded size');
 	const next = headers.length > ids.length ? entries[entries.length - 1].receipt.position : null;
 	return { entries, nextBefore: ascending ? null : next, nextAfter: ascending ? next : null };

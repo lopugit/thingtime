@@ -28,12 +28,12 @@ function record(input: unknown, keys: string[]): Record<string, any> {
 }
 export function parseTimelineBranch(input: unknown): TimelineBranch {
 	const value = record(input, ['formatVersion', 'id', 'ownerId', 'name', 'createdAt']);
-	if (value.formatVersion !== 1 || !branchId(value.id) || !identifier(value.ownerId) || !name(value.name) || !date(value.createdAt)) throw new Error('Invalid Timeline branch');
+	if (value.formatVersion !== 1 || !(branchId(value.id) || (value.id === 'main' && value.name === 'Published')) || !identifier(value.ownerId) || !name(value.name) || !date(value.createdAt)) throw new Error('Invalid Timeline branch');
 	return value as TimelineBranch;
 }
 export function parseTimelineBranchHead(input: unknown): TimelineBranchHead {
 	const value = record(input, ['formatVersion', 'id', 'ownerId', 'branchId', 'thingId', 'eventId', 'revision', 'createdAt', 'updatedAt']);
-	if (value.formatVersion !== 1 || !branchId(value.branchId) || !identifier(value.ownerId) || !identifier(value.thingId) || !identifier(value.eventId) || value.id !== timelineBranchHeadId(value.branchId, value.thingId) || !Number.isSafeInteger(value.revision) || value.revision < 1 || !date(value.createdAt) || !date(value.updatedAt) || value.updatedAt < value.createdAt) throw new Error('Invalid Timeline branch head');
+	if (value.formatVersion !== 1 || !(branchId(value.branchId) || value.branchId === 'main') || !identifier(value.ownerId) || !identifier(value.thingId) || !identifier(value.eventId) || value.id !== timelineBranchHeadId(value.branchId, value.thingId) || !Number.isSafeInteger(value.revision) || value.revision < 1 || !date(value.createdAt) || !date(value.updatedAt) || value.updatedAt < value.createdAt) throw new Error('Invalid Timeline branch head');
 	return value as TimelineBranchHead;
 }
 export function parseTimelineBranchEntry(input: TimelineBranchEntry): TimelineBranchEntry {

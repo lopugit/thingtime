@@ -1,4 +1,5 @@
 import React from 'react';
+import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../timeline/snapshotParts';
 import { Box, Button, Flex, Heading, Select, Text } from '@chakra-ui/react';
 import { useApi } from '../../hooks/useApi';
 import { useTimelineSession } from '../../timeline/TimelineProvider';
@@ -48,6 +49,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 				command: 'preview-version',
 				mode,
 				eventId: event.id,
+				...(mode === 'restore' ? { recover: true as const } : {}),
 				choices: selected,
 				componentMode: selectedMode,
 				componentChoices: selectedComponents
@@ -77,7 +79,9 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 			command: 'apply-version',
 			mode: preview.mode,
 			eventId: event.id,
+			...(preview.mode === 'restore' ? { recover: true as const } : {}),
 			expectedHeadId: preview.expectedHeadId,
+			...(preview.recovery ? { expectedRecovery: preview.recoveryFingerprint } : {}),
 			operationId: crypto.randomUUID(),
 			choices,
 			componentMode,
@@ -112,12 +116,14 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 			if (alive.current) setBusy(false);
 		}
 	};
+	const content = event.after ?? (event.operation === 'delete' ? event.before : null);
 	if (
-		!event.after ||
+		!content ||
 		event.mode === 'effect' ||
-		!['thing-content', 'webpage-draft', 'definition-source', 'folder-placement'].includes(event.after.adapter)
+		!['thing-content', 'webpage-draft', 'definition-source', 'folder-placement', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(content.adapter)
 	)
 		return null;
+
 	const components = preview?.components;
 	const hasComponents = !!components && Object.values({ ...components.current, ...components.incoming, ...components.result }).length > 0;
 	const unresolved = !!(preview?.conflicts.length || components?.conflicts.length);
@@ -134,11 +140,22 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 			) : preview ? (
 				<>
 					<Heading size="sm" mb={2}>
-						{preview.mode === 'merge' ? 'Review and combine' : 'Review restore'}
+						{preview.recovery ? 'Recover deleted Thing' : preview.mode === 'merge' ? 'Review and combine' : 'Review restore'}
 					</Heading>
 					<Text fontSize="sm" color="var(--tt-muted)" mb={3}>
-						This creates a new saved version. Your later history stays available.
+						{preview.recovery
+							? 'This restores the original Thing and link privately. Your deletion and earlier versions stay in History. You can share it again after recovery.'
+							: 'This creates a new saved version. Your later history stays available.'}
 					</Text>
+					{preview.recovery ? (
+						<Text fontSize="sm" color="var(--tt-muted)" mb={3}>
+							{(preview.result.value as any).folderId
+								? 'This Thing will return to the folder recorded in this version.'
+								: (preview.incoming.value as any).folderId
+								? 'The original folder is unavailable. This Thing will return to Things.'
+								: 'This Thing will return to Things.'}
+						</Text>
+					) : null}
 					<TimelineVersionComparison
 						{...preview}
 						choices={choices}
@@ -203,7 +220,13 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 							isDisabled={!!missingChoices || (!unresolved && needsComponents)}
 							onClick={() => void (unresolved ? compare(preview.mode, choices, preview.conflicts.length ? {} : componentChoices) : apply())}
 						>
-							{unresolved ? 'Review choices' : preview.mode === 'merge' ? 'Apply merge' : 'Restore this version'}
+							{unresolved
+								? 'Review choices'
+								: preview.recovery
+								? 'Recover Thing privately'
+								: preview.mode === 'merge'
+								? 'Apply merge'
+								: 'Restore this version'}
 						</Button>
 						<Button
 							size="sm"
@@ -224,9 +247,9 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 			) : (
 				<Flex gap={2} wrap="wrap">
 					<Button size="sm" variant="outline" isLoading={busy} onClick={() => void compare('restore')}>
-						Restore this version…
+						{event.operation === 'delete' ? 'Recover this Thing…' : 'Restore this version…'}
 					</Button>
-					<Button size="sm" variant="ghost" isDisabled={busy} onClick={() => void compare('merge')}>
+					<Button size="sm" variant="ghost" isDisabled={busy || !event.after} onClick={() => void compare('merge')}>
 						Review and combine…
 					</Button>
 				</Flex>

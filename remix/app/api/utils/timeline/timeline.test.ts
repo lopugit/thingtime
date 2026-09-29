@@ -19,7 +19,7 @@ function harness() {
 	let rows: any[] = [];
 	let charge = 0;
 	let full = false;
-	const session = {};
+	const session = { inTransaction: () => true };
 	const match = (row: any, filter: any) => Object.entries(filter).every(([key, value]: any) => {
 		if (value?.$in) return value.$in.includes(row[key]);
 		if (value?.$lt) return row[key] < value.$lt;
@@ -266,4 +266,56 @@ test('one related-history query pages canonical events across targets with accou
  const newer = await readTimelinePage(h.things, 'user-1', { ...query, after: first.receipt.position }, ['page-1', 'component']);
  assert.equal(newer.entries[0].event.id, page.event.id);
  await assert.rejects(readTimelinePage(h.things, 'user-1', query, ['component']), /targets/);
+});
+
+test('Published uses canonical atomic branch records and survives deletion without following drafts or replayed older events', async () => {
+ const { readTimelineBranchHead, branchFromDoc, timelineBranchHeadThingId } = await import('./branchEnvelope.ts');
+ const { readDeletedThingState } = await import('./deletedThing.ts');
+ const h = harness();
+ const content = thingContentSnapshot({ shareId: 'page-1', ownerId: 'user-1', thingtime: ['data'], crystal: { title: 'Saved' } })!;
+ const created = eventFixture('saved', { source: 'api', clientId: null, mode: 'revision', after: content });
+ await h.append(created);
+ const head = await readTimelineBranchHead(h.things, 'user-1', 'main', 'page-1', h.session);
+ assert.equal(head?.eventId, 'saved'); assert.equal(head?.revision, 1);
+ assert.equal(branchFromDoc(h.rows().find(row => row.thingtime.includes('timeline-branch'))).name, 'Published');
+ const deletion = eventFixture('deleted', { source: 'api', clientId: null, mode: 'revision', operation: 'delete', parentIds: ['saved'], before: content, after: null });
+ await h.append(deletion);
+ await h.append(eventFixture('unsaved', { parentIds: ['deleted'], operation: 'update', before: content, after: content }));
+ await h.append(created);
+ const retained = await readTimelineBranchHead(h.things, 'user-1', 'main', 'page-1', h.session);
+ assert.equal(retained?.eventId, 'deleted'); assert.equal(retained?.revision, 2);
+ assert.equal((await readDeletedThingState(h.things, 'user-1', 'page-1', h.session)).entry.event.id, 'deleted');
+ const pointer = h.rows().find(row => row.shareId === timelineBranchHeadThingId('user-1', 'main', 'page-1'));
+ assert.deepEqual(pointer.acl, ['tt:user']); assert.equal(pointer.storageClass, 'control'); assert.equal('eventIds' in pointer, false);
+ // Legacy histories use bounded paged reads and ignore newer browser drafts.
+ h.rows().splice(h.rows().indexOf(pointer), 1);
+ assert.equal((await readDeletedThingState(h.things, 'user-1', 'page-1', h.session)).entry.event.id, 'deleted');
+ // Even an unreadable foreign occupant blocks reuse of its physical id.
+ h.rows().push({ shareId: 'page-1', ownerId: 'other', thingtime: ['data'], acl: ['tt:user'] });
+ await assert.rejects(readDeletedThingState(h.things, 'user-1', 'page-1', h.session), /already present/);
+});
+
+test('failed revision appends leave Published unchanged; browser drafts cannot establish deleted ownership', async () => {
+ const { readTimelineBranchHead } = await import('./branchEnvelope.ts');
+ const { readDeletedThingState } = await import('./deletedThing.ts');
+ const h = harness();
+ const content = thingContentSnapshot({ thingtime: ['data'], crystal: {} })!;
+ await h.append(eventFixture('saved', { source: 'api', clientId: null, mode: 'revision', after: content }));
+ const original = await readTimelineBranchHead(h.things, 'user-1', 'main', 'page-1', h.session);
+ h.fill();
+ await assert.rejects(h.append(eventFixture('failed', { source: 'api', clientId: null, mode: 'revision', parentIds: ['saved'], operation: 'delete', before: content, after: null })), /quota/);
+ assert.deepEqual(await readTimelineBranchHead(h.things, 'user-1', 'main', 'page-1', h.session), original);
+ await assert.rejects(readDeletedThingState(h.things, 'user-1', 'page-1', h.session), /recorded deletion/);
+ const draft = harness();
+ await draft.append(eventFixture('fake-deletion', { operation: 'delete', before: content, after: null }));
+ await assert.rejects(readDeletedThingState(draft.things, 'user-1', 'page-1', draft.session), /recorded deletion/);
+});
+
+test('generic recovery refuses protected and target-attached snapshots', async () => {
+ const { readDeletedThingState } = await import('./deletedThing.ts');
+ for (const change of [{ thingtime: ['user'] }, { thingtime: ['comment'], targetId: 'parent' }]) {
+  const h = harness(), content = thingContentSnapshot({ ...change, crystal: {} })!;
+  await h.append(eventFixture('deleted', { source: 'api', clientId: null, mode: 'revision', operation: 'delete', before: content, after: null }));
+  await assert.rejects(readDeletedThingState(h.things, 'user-1', 'page-1', h.session), /own editor|parent Thing/);
+ }
 });

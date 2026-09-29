@@ -18,7 +18,7 @@ const own = (object: object, key: string) => Object.prototype.hasOwnProperty.cal
 const record = (value: unknown): value is Record<string, any> => !!value && typeof value === 'object' && !Array.isArray(value);
 const keys = (value: unknown, expected: string[]) =>
 	record(value) && Object.keys(value).length === expected.length && expected.every((key) => own(value, key));
-export const componentBlocks = (snapshot: TimelineSnapshot) => (snapshot.value as any)?.crystal?.blocks ?? [];
+export const componentBlocks = (snapshot: TimelineSnapshot | null) => (snapshot?.value as any)?.crystal?.blocks ?? [];
 
 export function componentVersion(event: TimelineEvent, blocks: unknown, entries: TimelineEntry[]): ComponentVersion {
 	const byId = new Map(entries.map((entry) => [entry.event.id, entry.event]));
