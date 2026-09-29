@@ -43,7 +43,7 @@ function SnapshotCard({ card, frame = false }: { card: HistoryCard; frame?: bool
 				<strong>{card.title}</strong>
 			</div>
 			<div className="history-caption">
-				{card.kind || 'Recorded content'} · {card.removed ? 'before removal' : 'as of this version'}
+				{card.kind || 'Recorded content'} · {card.row.event.mode === 'effect' ? 'recorded activity' : card.removed ? 'before removal' : 'as of this version'}
 			</div>
 			{frame ? (
 				<div className="history-fields">

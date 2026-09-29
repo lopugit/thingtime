@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-30 — **Codex (AI)**: Server Actions now save accepted-run and redacted
+  outcome activity in canonical Timeline, including read-only runs. History
+  survives Action deletion; quota failures distinguish refused execution from
+  incomplete completion recording. Fable's four looks and the Action inspector
+  use this shared activity with captured names and no replay/restore controls.
+  Timeline 1.15.0 / Actions 1.36.0; no new collection, index or secret.
+
 - 2026-09-30 — **Codex (AI)**: History can recover deleted ordinary Things at
   their original links as new private versions, with recorded component copies,
   reviewed folder placement and all prior history retained. Canonical Published

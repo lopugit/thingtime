@@ -103,9 +103,10 @@ operation id groups writes; it is not an execution retry or replay token.
 
 Preparing a browser Action does not claim execution. Requests made later by an
 ordinary browser client remain API-originated until a verified execution
-receipt protocol is implemented. Complete Action outcome history, including
-read-only runs and external effects, remains open; the bounded legacy Action
-run log is not the full Timeline. No protected inputs, credentials, traces or
+receipt protocol is implemented. The 2026-09-30 Action outcome increment below
+now covers ordinary server admissions and outcomes, including read-only runs.
+External delivery verification and interrupted completion recovery remain open;
+the bounded legacy Action run log is not the full Timeline. No protected inputs, credentials, traces or
 provider results are added to generic content snapshots.
 
 This increment passed 62 Timeline tests, the Action and Lopu suites, both
@@ -880,3 +881,51 @@ This increment covers ordinary standalone Things and direct page components.
 Protected kinds, target-attached interactions, folder children, external blobs and
 side effects require dedicated recovery flows. Existing large-preview/restore
 budgets still apply. It does not complete the broader acceptance ledger above.
+
+
+## Server Action outcomes — 2026-09-30
+
+Ordinary server Action runs now save an `action-outcome` version-1 effect event
+before execution and another after completion. These are the same canonical
+Timeline event/link/receipt records, stored under the invoking account's Timeline
+folder in the selected data plane. They are metered normally, paged live and
+cached through the existing bounded local store. No separate outcome collection,
+queue, embedded run list, branch head or local schema is introduced.
+
+Admission must commit before any steps execute. A quota/unavailable admission
+returns an explicit did-not-run error. Completion retries the exact immutable
+event up to three times, never the Action. If completion is not acknowledged,
+the response preserves the actual execution result and includes
+`history: {status: "incomplete", startedEventId, outcomeEventId: null}`. A committed
+admission alone never claims success or failure. It may remain after a process
+crash, quota exhaustion or unavailable database; automatic reconciliation of
+those incomplete outcomes is **not** delivered by this increment. A retry whose
+acknowledgement is lost may already exist in remote History.
+
+Snapshots allow only run ID, recorded display name (160 characters maximum),
+status, start time, duration and numeric operation/depth/child counters. Inputs,
+results, traces, error messages, Vault contents and external responses are not
+copied into this adapter. Effects share trusted Action/AI operation IDs with
+committed Thing revisions, but never advance the Action's Published head. Their
+completion-to-admission parent edge is a separate relation. Partial failures
+keep committed revisions and explain that earlier steps may have succeeded.
+
+Shared runs stay anonymous and ephemeral with no author or visitor history.
+Browser preparation is not execution and records no receipt. Deliberately
+invoking a readable foreign Action writes only the invoker's history. Outcomes
+survive Action deletion; the legacy 50-run debug cache keeps its existing prune
+and cascade behavior and is explicitly supplementary. Old cache entries are not
+backfilled into claimed execution evidence.
+
+The Action inspector opens the shared History browser. List/Cards/Line/Frames
+show recorded names and activity metadata; desktop details and mobile sheets
+label activity separately from restorable versions. No outcome can be restored,
+merged or replayed. `api.timeline` is 1.15.0 and `api.actions-run` is 1.36.0 on both
+manifests; the first-party run client negotiates the latter.
+
+Validation: canonical adapter/provenance/retry unit tests, real disposable
+replica API coverage (including quota), existing Action verification, and headed
+desktop/mobile checks. `test:timeline:action-outcomes` uses only real account,
+Thing, Action, Timeline and optional admin-entitlement APIs. Broader acceptance
+still includes browser receipts, external delivery, other protected writers,
+retention controls and remaining Fable design work.

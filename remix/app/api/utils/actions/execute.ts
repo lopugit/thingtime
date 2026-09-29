@@ -6,6 +6,9 @@ import { runLookup } from './lookup';
 import { revealUserVaultValue } from '../lopu/userVault';
 import { randomUUID } from 'node:crypto';
 import { withTimelineMutationContext } from '../timeline/mutationContext';
+import { actionTimelineRecorder } from '../timeline/actionOutcome';
+import type { ActionTimelineReport } from '../../../timeline/actionOutcome';
+import { StorageMutationError } from '../storage/storageCore';
 
 import {
 	ACL_ALL,
@@ -133,6 +136,7 @@ export type RunActionResult =
 			actionId: string;
 			result: unknown;
 			cache?: 'no-store';
+			history?: ActionTimelineReport;
 			error?: string;
 			durationMs: number;
 			opsUsed: number;
@@ -767,9 +771,9 @@ const capBytes = (value: unknown, maxBytes: number): unknown => {
 const writeRunRecord = async (
 	viewer: Viewer,
 	actionId: string,
-	crystal: Record<string, unknown>
+	crystal: Record<string, unknown>,
+	runId: string
 ): Promise<string> => {
-	const runId = `${ACTION_RESERVED_ID_PREFIX}run-${randomUUID()}`;
 	const things = await getThingsCollection();
 	// Direct insert (newThingDoc posture): action-run is PROTECTED, so
 	// createThing refuses it by design. storageClass control = operational
@@ -918,6 +922,15 @@ const executeActionRun = async (
 		return { ok: true, status: 'prepared', execution: 'browser', actionId: program.id, viewer: { id: viewer.id, username: viewer.username }, program: program.crystal, inputs: validated.inputs };
 	}
 
+	const runId = shared ? `shared-run-${randomUUID()}` : `${ACTION_RESERVED_ID_PREFIX}run-${randomUUID()}`;
+	let admission: Awaited<ReturnType<typeof actionTimelineRecorder.begin>> | null = null;
+	if (!shared) {
+		try { admission = await actionTimelineRecorder.begin(viewer.id, program.id, runId, program.name); }
+		catch (error) {
+			return fail(error instanceof StorageMutationError ? error.status : 503,
+				'Action did not run because its History could not be saved. Check account storage and try again.');
+		}
+	}
 	const startedAt = new Date();
 	const budget: ActionBudget = {
 		assertAuthorized: context?.assertAuthorized,
@@ -952,9 +965,14 @@ const executeActionRun = async (
 		errorMessage = (error instanceof Error ? error.message : String(error)).slice(0, MAX_ACTION_RUN_ERROR_CHARS);
 		result = null;
 	}
-	const durationMs = Date.now() - startedAt.getTime();
+	const durationMs = Math.max(0, Date.now() - startedAt.getTime());
+	const history = admission ? await actionTimelineRecorder.finish(admission, {
+		status, durationMs, opsUsed: budget.opsUsed, depthUsed: budget.depthUsed, childActionsUsed: budget.childActionsUsed
+	}) : undefined;
 
-	const runId = shared ? `shared-run-${randomUUID()}` : await writeRunRecord(viewer, program.id, {
+	// The bounded debug cache is supplementary. Canonical Timeline outcomes
+	// survive pruning/deleting this cache and omit its sensitive runtime data.
+	if (!shared) await writeRunRecord(viewer, program.id, {
 		status,
 		startedAt: startedAt.toISOString(),
 		durationMs,
@@ -965,7 +983,7 @@ const executeActionRun = async (
 		inputs: capBytes(validated.inputs, budget.maxInputBytes),
 		result: budget.usedLookup ? { omitted: 'External lookup results are transient' } : capBytes(result, budget.maxResultBytes),
 		trace: budget.trace
-	});
+	}, runId).catch(() => runId);
 
 	// Save every ordinary run, including successful component refreshes.
 	// Quiet delivery never means missing history. Await the non-throwing writer
@@ -990,6 +1008,7 @@ const executeActionRun = async (
 	return {
 		ok: true,
 		runId,
+		...(history ? { history } : {}),
 		status,
 		actionId: program.id,
 		...(budget.usedLookup ? { cache: 'no-store' as const } : {}),
