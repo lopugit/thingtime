@@ -1,6 +1,6 @@
 import { useLopu } from '~/components/Lopu/useLopu';
 import { mediaPageLink } from './mediaGalleryCore';
-import { ProgressiveImage } from './ProgressiveImage';
+import { ZoomableImage } from './ZoomableImage';
 import React from 'react';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, IconButton, Modal, ModalContent, ModalOverlay, Text } from '@chakra-ui/react';
@@ -70,7 +70,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadA
 
 	const pageLink = mediaPageLink(attachment.id, mediaUrl(attachmentContentUrl(attachment.id)));
 	return (
-		<Modal isOpen={isOpen} onClose={onClose} size="full" motionPreset="none" autoFocus={false}>
+		<Modal isOpen={isOpen} onClose={onClose} size="full" motionPreset="none" autoFocus={false} allowPinchZoom>
 			<ModalOverlay background="rgba(10, 10, 14, 0.92)" />
 			<ModalContent background="transparent" boxShadow="none" margin={0} height="100dvh" borderRadius={0} onClick={onClose}>
 				<Flex
@@ -184,19 +184,10 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadA
 								width="100%" height="100%" maxWidth="100%" maxHeight="100%" objectFit="contain"
 								onError={() => setVideoFailed(true)} onClick={(event: React.MouseEvent) => event.stopPropagation()} />
 						) : (
-						<ProgressiveImage
-							width="100%"
-							height="100%"
-							loading="eager"
-							sizes="100vw"
-							key={attachment.id}
+						<ZoomableImage
+							key={`${attachment.id}:${isOpen}`}
 							src={mediaUrl(attachmentMediaSrc(attachment))}
 							alt={attachment.title || attachmentDisplayName(attachment)}
-							maxWidth="100%"
-							maxHeight="100%"
-							objectFit="contain"
-							borderRadius="var(--tt-radius-md, 12px)"
-							onClick={(event: React.MouseEvent) => event.stopPropagation()}
 						/>
 						)}
 						{count > 1 && (
