@@ -75,6 +75,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   failures remain explicit. Timeline 1.16.0 / Actions 1.37.0; configured signing
   keys are required for recovery. Replica quota/tamper/idempotence and headed
   desktop/mobile reload/reconnect checks passed; fork setup is in README.
+  Details: [PR #988](../PRs/988-codex-timeline-outcome-recovery-recover-action-completion-history-without-rerunning-actions.md).
 
 - 2026-09-30 — **Codex (AI)**: Server Actions now save accepted-run and redacted
   outcome activity in canonical Timeline, including read-only runs. History
