@@ -4,6 +4,15 @@ import { Minus, Plus } from 'lucide-react';
 import { ProgressiveImage } from './ProgressiveImage';
 import { boundImageZoom, INITIAL_IMAGE_ZOOM, MAX_IMAGE_ZOOM, zoomImageAt, type ImageBounds, type Point } from './imageZoomCore';
 
+// The lightbox is always dark. Set these on each button because Chakra's
+// ghost variant supplies its own foreground instead of inheriting the toolbar's.
+const zoomControlStyles = {
+	color: 'white',
+	_hover: { color: 'white', background: 'rgba(255,255,255,0.12)', _disabled: { background: 'transparent' } },
+	_active: { color: 'white', background: 'rgba(255,255,255,0.2)' },
+	_focusVisible: { outline: '2px solid white', outlineOffset: '2px', boxShadow: 'none' },
+};
+
 // Mounted per attachment/open session by MediaLightbox. Only this viewport
 // owns touch gestures; video controls and the gallery toolbar stay native.
 export function ZoomableImage({ src, alt }: { src: string; alt: string }) {
@@ -90,9 +99,9 @@ export function ZoomableImage({ src, alt }: { src: string; alt: string }) {
 					style={{ transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`, transformOrigin: 'center' }} />
 			</Box>
 			<Flex justify="center" align="center" gap={1} flexShrink={0} paddingTop={1} color="white">
-				<IconButton aria-label="Zoom out" icon={<Minus size={16} />} variant="ghost" minWidth="44px" height="44px" isDisabled={zoom.scale <= 1} onClick={() => changeScale(zoomRef.current.scale - 0.5)} />
-				<Button aria-label="Reset image zoom" variant="ghost" height="44px" onClick={() => apply(INITIAL_IMAGE_ZOOM)}>{Math.round(zoom.scale * 100)}%</Button>
-				<IconButton aria-label="Zoom in" icon={<Plus size={16} />} variant="ghost" minWidth="44px" height="44px" isDisabled={zoom.scale >= MAX_IMAGE_ZOOM} onClick={() => changeScale(zoomRef.current.scale + 0.5)} />
+				<IconButton aria-label="Zoom out" icon={<Minus size={16} />} variant="ghost" {...zoomControlStyles} minWidth="44px" height="44px" isDisabled={zoom.scale <= 1} onClick={() => changeScale(zoomRef.current.scale - 0.5)} />
+				<Button aria-label="Reset image zoom" variant="ghost" {...zoomControlStyles} height="44px" onClick={() => apply(INITIAL_IMAGE_ZOOM)}>{Math.round(zoom.scale * 100)}%</Button>
+				<IconButton aria-label="Zoom in" icon={<Plus size={16} />} variant="ghost" {...zoomControlStyles} minWidth="44px" height="44px" isDisabled={zoom.scale >= MAX_IMAGE_ZOOM} onClick={() => changeScale(zoomRef.current.scale + 0.5)} />
 			</Flex>
 		</Flex>
 	);

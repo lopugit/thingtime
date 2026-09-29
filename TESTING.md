@@ -2730,6 +2730,12 @@ email whose link points at the attacker.
       reset work with touch and keyboard; desktop double-click toggles zoom.
       Close, download, gallery arrows and video playback remain usable.
 
+- [ ] In both light and dark themes, the lightbox zoom +/- icons and percentage
+      remain clearly visible against the dark overlay at desktop and mobile
+      widths. Hover/press each control and Tab through them: enabled controls
+      keep a white foreground and keyboard focus has a visible white outline;
+      disabled zoom limits remain visibly disabled without a hover fill.
+
 - [ ] Gallery download-all: open the lightbox from a post with two or more
       stored images/videos and confirm a folder-down icon sits between Download
       and Close (absent for single-file galleries); it saves the parent post's
