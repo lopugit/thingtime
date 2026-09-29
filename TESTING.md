@@ -2721,6 +2721,21 @@ email whose link points at the attacker.
 
 ## Media thing pages — masonry, lightbox, `/media/:id`, annotate (`remix/app/components/Attachments/`, `remix/app/routes/media.tsx`)
 
+- [ ] On iPhone (Safari and the app), Android and desktop, open a tall document
+      and a landscape image in the lightbox. Pinch around off-centre text to
+      zoom 1–5×; drag with one finger after lifting the other. Image edges stay
+      bounded, and the page behind stays still. Try cancelling a gesture,
+      rotating the device, switching images/video, and closing/reopening:
+      no stuck drag, stale zoom or accidental close. Zoom +/- and the percentage
+      reset work with touch and keyboard; desktop double-click toggles zoom.
+      Close, download, gallery arrows and video playback remain usable.
+
+- [ ] In both light and dark themes, the lightbox zoom +/- icons and percentage
+      remain clearly visible against the dark overlay at desktop and mobile
+      widths. Hover/press each control and Tab through them: enabled controls
+      keep a white foreground and keyboard focus has a visible white outline;
+      disabled zoom limits remain visibly disabled without a hover fill.
+
 - [ ] Gallery download-all: open the lightbox from a post with two or more
       stored images/videos and confirm a folder-down icon sits between Download
       and Close (absent for single-file galleries); it saves the parent post's
