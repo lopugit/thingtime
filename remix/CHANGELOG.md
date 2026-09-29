@@ -73,7 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   survives Action deletion; quota failures distinguish refused execution from
   incomplete completion recording. Fable's four looks and the Action inspector
   use this shared activity with captured names and no replay/restore controls.
-  Timeline 1.15.0 / Actions 1.36.0; no new collection, index or secret.
+  Timeline 1.15.0 / Actions 1.36.0; no new collection, index or secret. Details:
+  [PR #987](../PRs/987-codex-timeline-action-outcomes-record-server-action-outcomes-in-shared-timeline-history.md).
 
 - 2026-09-30 — **Codex (AI)**: History can recover deleted ordinary Things at
   their original links as new private versions, with recorded component copies,
