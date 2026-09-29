@@ -1,3 +1,4 @@
+import './components/Timeline/timelineBrowser.css';
 import { registerMediaCache } from './utils/mediaCache.client';
 import { CacheProvider } from '@emotion/react';
 import React from 'react';

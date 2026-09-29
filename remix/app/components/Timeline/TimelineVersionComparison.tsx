@@ -19,26 +19,52 @@ export function TimelineVersionComparison({
 	busy,
 	onChoose,
 	componentLabels = false,
+	hideCopiedIdentity = false,
 	matchingMessage
 }: {
 	current: TimelineSnapshot;
 	result: TimelineSnapshot;
 	conflicts: VersionConflict[];
 	componentLabels?: boolean;
+	hideCopiedIdentity?: boolean;
 	matchingMessage?: string;
 	choices: VersionChoices;
 	busy: boolean;
 	onChoose: (key: string, side: 'current' | 'incoming') => void;
 }) {
-	const pathLabel = (path: string[]) =>
-		componentLabels ? `Component “${path[0]}”${path.length > 1 ? ` › ${timelineChangeLabel(path.slice(1))}` : ''}` : timelineChangeLabel(path);
+	const pathLabel = (path: string[]) => {
+		const ref = path[0];
+		const componentName = [current, result]
+			.map((snapshot) => {
+				const values = snapshot.value;
+				const component =
+					values && typeof values === 'object' && !Array.isArray(values) && Object.prototype.hasOwnProperty.call(values, ref)
+						? (values[ref] as any)
+						: null;
+				return typeof component?.crystal?.name === 'string' ? component.crystal.name.trim().slice(0, 120) : '';
+			})
+			.find(Boolean);
+		return componentLabels
+			? `Component “${componentName || ref}”${path.length > 1 ? ` › ${timelineChangeLabel(path.slice(1))}` : ''}`
+			: timelineChangeLabel(path);
+	};
 	const valueLabel = (value: VersionValue) =>
 		componentLabels && !value.present
 			? 'Not recorded'
 			: componentLabels && value.present && value.value === null
 			? 'Unavailable when recorded'
 			: label(value);
-	const changes = React.useMemo(() => timelineChanges(current, result), [current, result]);
+	const changes = React.useMemo(
+		() =>
+			timelineChanges(current, result).filter((change) => {
+				if (!componentLabels || !hideCopiedIdentity) return true;
+				return (
+					!(change.path.length === 2 && change.path[1] === 'id') &&
+					!(change.path.length === 3 && change.path[1] === 'crystal' && ['componentKey', 'forkOf', 'version'].includes(change.path[2]))
+				);
+			}),
+		[current, result, componentLabels, hideCopiedIdentity]
+	);
 	return (
 		<>
 			{conflicts.map((conflict) => {

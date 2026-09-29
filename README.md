@@ -4,6 +4,12 @@ https://thingtime.com
 
 ### Unified Timeline (implementation in progress)
 
+History is available at `/history` and from a Thing's History menu. List, Cards,
+Line and Frames use the same private Timeline records and sync connection.
+The browser requires the existing Timeline replica-set setup below; no new
+secret or account-specific setup is needed. Filters currently cover the loaded
+history window. [Design integration and limits](docs/timeline-design-integration.md).
+
 Large retained Timeline versions are split into protected relational snapshot
 parts so history cannot strand edits/deletion of an existing large Thing. No
 additional collection, index, secret or configuration is needed. Complete large
@@ -93,6 +99,13 @@ browser acceptance needs its synthetic login, and remove it afterward.
 `test:timeline:component-merge` uses the same guard for retained definitions,
 explicit choices, canonical uploads/retries, stale heads and unchanged published
 Things. No new collection, schema migration or private configuration is needed.
+`test:timeline:published-components` uses the same guarded replica for published
+restore/merge, isolated component copies, stale-preview refusal, placeholder
+preservation, exact retries and all-or-nothing storage rollback. The review
+creates private page-specific copies by default; Current shared components is an
+explicit alternative. No additional secret, service, migration or environment
+variable is required. Optional browser fixture files contain synthetic local
+credentials; keep them untracked and remove them after validation.
 The home-scope suite's private fixture file contains only synthetic local
 credentials; remove it after browser acceptance.
 
