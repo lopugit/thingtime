@@ -81,9 +81,13 @@ export function ZoomableImage({ src, alt }: { src: string; alt: string }) {
 					if (event.key === '0') { event.preventDefault(); apply(INITIAL_IMAGE_ZOOM); }
 				}}
 			>
-				<ProgressiveImage src={src} alt={alt} loading="eager" sizes={`${Math.ceil(zoom.scale * 100)}vw`}
+				{/* A pinch or pan rewrites these every pointer frame. Keep the transform in an
+				    inline style so emotion does not insert a fresh CSS rule per frame, and
+				    quantise `sizes` to whole steps so the browser reruns srcset selection a
+				    handful of times per gesture instead of once per frame. */}
+				<ProgressiveImage src={src} alt={alt} loading="eager" sizes={`${Math.ceil(zoom.scale) * 100}vw`}
 					width="100%" height="100%" objectFit="contain" borderRadius="var(--tt-radius-md, 12px)"
-					transform={`translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`} transformOrigin="center" />
+					style={{ transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`, transformOrigin: 'center' }} />
 			</Box>
 			<Flex justify="center" align="center" gap={1} flexShrink={0} paddingTop={1} color="white">
 				<IconButton aria-label="Zoom out" icon={<Minus size={16} />} variant="ghost" minWidth="44px" height="44px" isDisabled={zoom.scale <= 1} onClick={() => changeScale(zoomRef.current.scale - 0.5)} />
