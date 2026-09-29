@@ -1030,7 +1030,13 @@
     var html='<button type="button" class="close" id="closeDetail" aria-label="Close">✕</button>';
     html+='<div class="eyebrow">'+esc(fmtDay(ev.at))+' · '+fmtTime(ev.at)+' · '+esc(ev.device)+'</div>';
     html+=tcard(ev,true);
-    html+='<div class="ancestry"><span>v'+ev.v+'</span>'+(ev.parent?'<span>from v'+(findEv(ev.parent)?findEv(ev.parent).v:'?')+'</span>':'<span>start</span>')+(ev.lane?'<span style="color:#7a3fb0">🌱 darker palette</span>':'')+(ev.restoredFrom?'<span>↩︎ restored v'+restoredFromV(ev)+'</span>':'')+'<span>'+esc(a.label)+'</span></div>';
+    // A moment (a sync receipt) observes the version it arrived at, it does not
+    // create one — its `v` equals its parent's. Printing the version line the
+    // usual way would read "v2 · from v2"; say "at v2" instead.
+    var anc = isMoment(ev)
+      ? '<span>at v'+ev.v+'</span><span>no new version</span>'
+      : '<span>v'+ev.v+'</span>'+(ev.parent?'<span>from v'+(findEv(ev.parent)?findEv(ev.parent).v:'?')+'</span>':'<span>start</span>');
+    html+='<div class="ancestry">'+anc+(ev.lane?'<span style="color:#7a3fb0">🌱 darker palette</span>':'')+(ev.restoredFrom?'<span>↩︎ restored v'+restoredFromV(ev)+'</span>':'')+'<span>'+esc(a.label)+'</span></div>';
     html+='<div class="dtabs" role="tablist"><button type="button" role="tab" data-tab="changes" aria-selected="'+(state.tab==='changes')+'">Changes</button><button type="button" role="tab" data-tab="message" aria-selected="'+(state.tab==='message')+'">Message</button><button type="button" role="tab" data-tab="versions" aria-selected="'+(state.tab==='versions')+'">Versions</button></div>';
     if (state.tab==='changes'){
       html+='<div class="diff">'+ev.changes.map(function(c){
@@ -1048,8 +1054,12 @@
       html+='<div class="msgbox" style="margin-top:10px"><span class="who" style="font-family:var(--tt-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--tt-muted)">Add a note to this change</span><textarea placeholder="Why did this change? Future you will thank you…"></textarea><div class="dbtns" style="margin-top:6px"><button type="button" class="btn small primary" data-act="note">Save note</button><button type="button" class="btn small" data-act="askLopu">Ask Lopu to explain</button></div></div>';
       html+='<div class="note">Messages are part of the event, so they sync with it and appear wherever the change does — timeline, panel, and "Edited" chips.</div>';
     } else {
-      var vs=EVENTS.filter(function(e){return e.thing===ev.thing;}).sort(function(a,b){return a.at-b.at;});
-      html+='<div class="vers">'+vs.map(function(e){ return '<div class="vr'+(e.id===ev.id?' cur':'')+'"><i style="background:'+VERB[e.verb].c+'"></i><span>v'+e.v+' · '+esc(e.title)+'</span><span class="m">'+fmtShort(e.at)+'</span></div>'; }).join('')+'</div>';
+      // Versions only: a moment shares its parent's version, so listing it here
+      // showed the same v twice and contradicted the version count in section 3.
+      // When a moment is selected, mark the version it observed as current.
+      var vs=EVENTS.filter(function(e){return e.thing===ev.thing && !isMoment(e);}).sort(function(a,b){return a.at-b.at;});
+      var curId=isMoment(ev)?ev.parent:ev.id;
+      html+='<div class="vers">'+vs.map(function(e){ return '<div class="vr'+(e.id===curId?' cur':'')+'"><i style="background:'+VERB[e.verb].c+'"></i><span>v'+e.v+' · '+esc(e.title)+'</span><span class="m">'+fmtShort(e.at)+'</span></div>'; }).join('')+'</div>';
       html+='<div class="dbtns"><button type="button" class="btn small" data-act="pin">📌 Name this version</button><button type="button" class="btn small" data-act="export">Export</button></div>';
       html+='<div class="note">Named and pinned versions survive automatic retention; every other version is still here until you delete it.</div>';
     }
