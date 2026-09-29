@@ -73,7 +73,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Current membership is authorized and bounded; shared authors' histories remain
   private, changed references reset paging, and cached canonical events survive
   failed refreshes. Timeline 1.13.0; no schema/index migration. Details in the
-  [design mapping](../docs/timeline-design-integration.md#page--related--2026-09-30).
+  [PR #984](../PRs/984-codex-timeline-related-history-show-a-page-and-its-related-things-in-one-timeline-history.md).
 
 
 - 2026-09-29 — **Codex (AI)**: History browser and recorded component restore
