@@ -14,10 +14,12 @@ import { checkoutTimelineBranch } from '~/api/utils/timeline/branchCheckout';
 import { previewBranchMerge } from '~/api/utils/timeline/branchMerge';
 import { getRelatedTimelinePage } from '~/api/utils/timeline/relatedHistory';
 import { timelineRelatedId, timelineRelatedRevision } from '~/timeline/relatedHistory';
+import { parseActionOutcomeRecoveryCommand } from '~/timeline/actionRecovery';
+import { actionOutcomeRecovery } from '~/api/utils/timeline/actionRecovery';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
-const defaults = { user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
+const defaults = { recoverOutcome: actionOutcomeRecovery.recover, user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
 
 export function createTimelineHandlers(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
@@ -109,11 +111,12 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		const auth = await authorize(request);
 		if (auth instanceof Response) return auth;
 		if (!auth.url.searchParams.has('dataPlane')) return response({ ok: false, error: 'Timeline data source is required' }, 400);
-		let event; let version; let branch; let branchMerge; let branchCheckout;
+		let recovery; let event; let version; let branch; let branchMerge; let branchCheckout;
 		try {
 			const input = await readJsonBody(request, TIMELINE_EVENT_MAX_BYTES);
 			if (input && typeof input === 'object' && Object.prototype.hasOwnProperty.call(input, 'command')) {
-				if ((input as any).command === 'checkout-branch') branchCheckout = parseBranchCheckoutRequest(input);
+				if ((input as any).command === 'recover-action-outcome') recovery = parseActionOutcomeRecoveryCommand(input);
+				else if ((input as any).command === 'checkout-branch') branchCheckout = parseBranchCheckoutRequest(input);
 				else if ((input as any).command === 'preview-branch-merge') branchMerge = parseBranchMergeRequest(input);
 				else if (['create-branch', 'advance-branch'].includes((input as any).command)) branch = parseTimelineBranchCommand(input);
 				else version = parseVersionRequest(input);
@@ -125,6 +128,7 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 			return response({ ok: false, error: 'Invalid Timeline event, version or branch request' }, 400);
 		}
 		try {
+			if (recovery) return response({ ok: true, entry: await deps.recoverOutcome(auth.user.id, recovery) });
 			if (branchCheckout) {
 				const result = await deps.branchCheckout(auth.user.id, branchCheckout);
 				if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This branch is too large to edit in one request.' }, 413);

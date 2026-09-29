@@ -10,6 +10,7 @@ import {
 import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { appendTimelineEvent } from './repository.ts';
 import { timelineMutationContext } from './mutationContext';
+import { actionOutcomeRecovery } from './actionRecovery';
 
 const append = async (event: TimelineEvent) => {
 	const things = await getThingsCollection();
@@ -19,7 +20,7 @@ const append = async (event: TimelineEvent) => {
 /** Server-only admission/completion journal. No request field can supply its
  * provenance. Effects never replace the Action's Published content head.
  * A committed admission survives process failure without claiming completion. */
-export function createActionTimelineRecorder(write = append, now = () => new Date()) {
+export function createActionTimelineRecorder(write = append, now = () => new Date(), seal = actionOutcomeRecovery.seal) {
 	return {
 		async begin(ownerId: string, actionId: string, runId: string, actionName = 'Action') {
 			const context = timelineMutationContext(ownerId);
@@ -94,7 +95,8 @@ export function createActionTimelineRecorder(write = append, now = () => new Dat
 					/* Preserve the actual execution result after bounded retries. */
 				}
 			}
-			return { status: 'incomplete', startedEventId: start.id, outcomeEventId: null };
+			const recovery = await seal(event).catch(() => null);
+			return { status: 'incomplete', startedEventId: start.id, outcomeEventId: null, ...(recovery ? { recovery } : {}) };
 		}
 	};
 }

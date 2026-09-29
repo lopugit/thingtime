@@ -2,6 +2,20 @@
 
 ## Unified Timeline
 
+- [ ] With only admission storage available, run an ordinary server Action.
+  Preserve its actual result and sealed completion. Block recovery requests:
+  desktop and 390px show local retention, and the pending History event survives
+  reload. Restore quota/reconnect: exactly one identical remote receipt appears,
+  its local delivery proof clears, and no second Action request is sent.
+- [ ] Refuse altered event/proof, another owner/database, missing admission,
+  session-token substitution and the known dev signing key. Concurrent recovery
+  retries charge once. A definitive proof refusal retains pending/dependent
+  work while unrelated drafts continue. Unavailable/full IndexedDB reports
+  failed local retention without hiding the actual result. Logout/account/source
+  switches never expose or migrate another scope's pending completion.
+  Run `test:timeline`, `test:api-capabilities`, and `test:timeline:action-outcomes`
+  with the guarded replica, configured private signing key and synthetic admin.
+
 - [ ] Delete an owned public Thing, then recover its deletion or an earlier saved
   version from History. Desktop and 390px must show **Recover Thing privately**,
   the absent current state and an inert result preview. Recovery keeps the

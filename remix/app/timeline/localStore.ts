@@ -2,16 +2,18 @@ import {
 	parseTimelineEntry, parseTimelineEvent, timelineEventText, timelineScopeKey,
 	type TimelineEntry, type TimelineEvent, type TimelineReceipt, type TimelineScope
 } from './contract.ts';
+import { parseActionOutcomeRecovery, type ActionOutcomeRecovery } from './actionRecovery.ts';
 
 /** Queue/view aggregate with local bookkeeping. The durable IndexedDB backend
  * stores its event and individual links using the shared records.ts schemas. */
 export type LocalTimelineRow = {
 	scope: string; event: TimelineEvent; receipt: TimelineReceipt | null;
 	status: 'pending' | 'accepted'; accessedAt: number; bytes: number; draftKey?: string | null;
+	recoveryProof?: string;
 };
 /** Small, atomically maintained index. Quota checks and pruning never load all
  * snapshot payloads or rewrite them just to touch an access timestamp. */
-export type TimelineLocalIndex = Omit<LocalTimelineRow, 'event'> & { id: string; thingId: string; occurredAt: string };
+export type TimelineLocalIndex = Omit<LocalTimelineRow, 'event' | 'recoveryProof'> & { id: string; thingId: string; occurredAt: string };
 export type TimelineLocalSelection = { thingId?: string; thingIds?: string[]; status?: 'pending' | 'accepted'; draftKey?: string };
 export type TimelineLocalTransaction = { put: LocalTimelineRow[]; remove: string[]; touch?: { id: string; accessedAt: number; draftKey?: string | null }[] };
 export interface TimelineLocalBackend {
@@ -35,7 +37,11 @@ export function validateTimelineIndex(index: TimelineLocalIndex, scope: string):
 export function validateTimelineRow(row: LocalTimelineRow, scope: string): LocalTimelineRow {
 	validateTimelineIndex(timelineLocalIndex(row), scope);
 	const event = row.receipt ? parseTimelineEntry({ event: row.event, receipt: row.receipt }).event : parseTimelineEvent(row.event);
-	if (row.bytes !== new TextEncoder().encode(JSON.stringify({ event, receipt: row.receipt })).byteLength) throw new Error('Timeline local record is damaged. Pending changes have been preserved.');
+	if (row.recoveryProof !== undefined) {
+		if (row.status !== 'pending') throw new Error('Accepted Timeline records cannot retain delivery proofs');
+		parseActionOutcomeRecovery({ formatVersion: 1, event, dataPlane: JSON.parse(scope)[1], proof: row.recoveryProof });
+	}
+	if (row.bytes !== rowBytes(event, row.receipt, row.recoveryProof)) throw new Error('Timeline local record is damaged. Pending changes have been preserved.');
 	return { ...row, event };
 }
 const assertIdentity = (existing: LocalTimelineRow | undefined, event: TimelineEvent) => {
@@ -44,9 +50,10 @@ const assertIdentity = (existing: LocalTimelineRow | undefined, event: TimelineE
 const assertOwner = (scope: TimelineScope, event: TimelineEvent) => {
 	if (event.ownerId !== scope.ownerId) throw new Error('Timeline event belongs to another account');
 };
-const rowFor = (scope: string, event: TimelineEvent, receipt: TimelineReceipt | null, now: number): LocalTimelineRow => ({
+const rowBytes = (event: TimelineEvent, receipt: TimelineReceipt | null, recoveryProof?: string) => new TextEncoder().encode(JSON.stringify({ event, receipt, ...(recoveryProof === undefined ? {} : { recoveryProof }) })).byteLength;
+const rowFor = (scope: string, event: TimelineEvent, receipt: TimelineReceipt | null, now: number, recoveryProof?: string): LocalTimelineRow => ({
 	scope, event, receipt, status: receipt ? 'accepted' : 'pending', accessedAt: now,
-	bytes: new TextEncoder().encode(JSON.stringify({ event, receipt })).byteLength
+	bytes: rowBytes(event, receipt, recoveryProof), ...(recoveryProof === undefined ? {} : { recoveryProof })
 });
 
 export class TimelineLocalStore {
@@ -92,6 +99,22 @@ export class TimelineLocalStore {
 		});
 		await this.prune();
 	}
+	/** Server-attested outcomes enter the SAME durable, bounded outbox. Ordinary
+	 * enqueue remains client-only; proof verification is always server-side. */
+	async enqueueRecovery(input: ActionOutcomeRecovery): Promise<void> {
+		const recovery = parseActionOutcomeRecovery(input); const { event, proof } = recovery;
+		assertOwner(this.scope, event);
+		if (recovery.dataPlane !== this.scope.dataPlane) throw new Error('Action history belongs to another database');
+		const row = rowFor(this.key, event, null, this.now(), proof);
+		await this.change([event.id], (index, rows) => {
+			const existing = rows.find(item => item.event.id === event.id); assertIdentity(existing, event);
+			if (existing) return { put: [], remove: [] };
+			const pending = index.filter(item => item.status === 'pending' || item.draftKey);
+			if (pending.length >= TIMELINE_PENDING_MAX_EVENTS || pending.reduce((bytes, item) => bytes + item.bytes, row.bytes) > TIMELINE_PENDING_MAX_BYTES)
+				throw new Error('Timeline local storage is full. Reconnect to sync pending changes.');
+			return { put: [row], remove: [] };
+		});
+	}
 	private async read(selection?: TimelineLocalSelection) {
 		return (await this.backend.read(this.key, selection)).map(row => { const checked = validateTimelineRow(row, this.key); assertOwner(this.scope, checked.event); return checked; });
 	}
@@ -104,6 +127,9 @@ export class TimelineLocalStore {
 	}
 
 	async pending(): Promise<TimelineEvent[]> {
+		return (await this.pendingWrites()).map(row => row.event);
+	}
+	async pendingWrites(): Promise<LocalTimelineRow[]> {
 		const rows = await this.read({ status: 'pending' });
 		const pending = new Map(rows.map(row => [row.event.id, row.event]));
 		const ordered: TimelineEvent[] = []; const visiting = new Set<string>();
@@ -115,7 +141,8 @@ export class TimelineLocalStore {
 			visiting.delete(event.id); pending.delete(event.id); ordered.push(event);
 		};
 		for (const event of [...pending.values()]) visit(event);
-		return ordered;
+		const byId = new Map(rows.map(row => [row.event.id, row]));
+		return ordered.map(event => byId.get(event.id)!);
 	}
 	async forThing(thingId: string | null): Promise<LocalTimelineRow[]> {
 		return this.forSelection(thingId === null ? undefined : { thingId });

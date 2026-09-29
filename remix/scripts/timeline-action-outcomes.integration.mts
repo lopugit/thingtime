@@ -194,8 +194,30 @@ if (process.env.TIMELINE_TEST_ADMIN_FIXTURE) {
 	assert.equal(accepted.length, 2);
 	assert.equal(readActionOutcome(accepted[0].event)?.status, 'started');
 	assert.equal((await usage()).usedBytes, baseline + admissionBytes, 'Exactly one admitted event charged despite bounded completion retries');
+	const recovery = incomplete.data.history.recovery;
+	assert.ok(recovery?.proof, 'Configured signing keys must seal an unacknowledged completion');
+	assert.equal(recovery.event.parentIds[0], accepted[0].event.id);
+	assert.equal(readActionOutcome(recovery.event)?.status, 'ok');
+	const recover = (bundle = recovery, account = owner) => call(account.cookie, `/api/v1/timeline?${query(account)}`, { command: 'recover-action-outcome', recovery: bundle });
+	assert.equal((await recover()).status, 507, 'Recovery obeys normal quota');
+	assert.equal((await recover(recovery, other)).status, 409, 'Another account cannot claim the sealed outcome');
+	for (const event of [{ ...recovery.event, label: 'Forged completion' }, { ...recovery.event, id: randomUUID() }, { ...recovery.event, source: 'ai' }])
+		assert.equal((await recover({ ...recovery, event })).status, 409, 'Any alteration invalidates the content proof');
+	assert.equal((await recover({ ...recovery, proof: 'invalid.proof.signature' })).status, 409);
+	assert.equal((await call('', `/api/v1/timeline?${query()}`, { command: 'recover-action-outcome', recovery })).status, 401);
+	assert.equal((await call(owner.cookie, `/api/v1/timeline?${query()}`, recovery.event)).status, 400, 'Ordinary draft upload still refuses server provenance');
 	await allowance(baseline + 1_000_000);
-	console.log('PASS admission quota refuses before execution; exhausted completion quota preserves actual result with explicit incomplete receipt');
+	const [firstRecovery, repeatedRecovery] = await Promise.all([recover(), recover()]);
+	assert.equal(firstRecovery.status, 200, firstRecovery.data.error); assert.equal(repeatedRecovery.status, 200, repeatedRecovery.data.error);
+	assert.deepEqual(firstRecovery.data.entry, repeatedRecovery.data.entry, 'Concurrent retries return one immutable receipt');
+	assert.deepEqual(firstRecovery.data.entry.event, recovery.event, 'Identical canonical event survives delivery');
+	const recoveredBytes = (await usage()).usedBytes;
+	assert.deepEqual((await recover()).data.entry, firstRecovery.data.entry);
+	assert.equal((await usage()).usedBytes, recoveredBytes, 'Retry is not charged twice');
+	assert.equal((await history(quotaAction.id)).filter(item => readActionOutcome(item.event)?.status === 'started').length, 1, 'Recovery does not run the Action again');
+	assert.equal((await history(quotaAction.id)).filter(item => readActionOutcome(item.event)?.status === 'ok').length, 1);
+	await writeFile('/tmp/thingtime-outcome-recovery-fixture.json', JSON.stringify({ base, ...owner, actionId: quotaAction.id, admissionBytes, recovery, admin: fixture }), { mode: 0o600 });
+	console.log('PASS admission/completion quota, sealed outcome recovery, tampering/account refusal, concurrent idempotence, exact schemas, single storage charge and no Action replay');
 }
 await writeFile(
 	'/tmp/thingtime-outcomes-fixture.json',
