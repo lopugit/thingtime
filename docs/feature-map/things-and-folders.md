@@ -240,3 +240,20 @@ Named-branch component merges use `timeline/componentMerge.ts` plus the existing
 canonical captures are cached before the merge event and guarded branch push.
 Transient comparison maps never become parent-document history arrays. See
 `test:timeline:component-merge` and the Unified Timeline acceptance notes.
+
+Published restoration uses `timeline/publishedVersion.ts` for the shared bounded
+protocol and `api/utils/timeline/publishedComponents.ts` for recorded/live
+comparison and deterministic copy planning. `componentDefinitions.ts` supplies
+the atomic merge and stable block alignment; `TimelineVersionActions.tsx` and
+`TimelinePublishedPagePreview.tsx` share the inert canvas and comparison UI.
+Canonical create/update utilities compose copy inserts, accounting and Timeline
+records in the same transaction, deferring creation effects until commit.
+Run `test:timeline:published-components` on the guarded replica and `test:timeline`.
+
+
+The History browser is available at `/history` and in the Things navigation.
+`TimelineEventBrowser.tsx` is the shared List/Cards/Line/Frames presentation;
+`timeline/browserModel.ts` derives historical labels/filters/coordinates from
+canonical cached records. It shares TimelineHost's version details and commands.
+[Design mapping](../timeline-design-integration.md) records the source concept,
+loaded-window filter boundary and remaining features.

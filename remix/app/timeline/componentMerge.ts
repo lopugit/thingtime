@@ -1,7 +1,8 @@
-import { copyBoundedJson, type JsonValue } from '../utils/boundedJson.ts';
+import type { JsonValue } from '../utils/boundedJson.ts';
+import { mergeComponentDefinitions, type ComponentDefinitionVersion } from './componentDefinitions.ts';
 import { parseTimelineEntry, type TimelineDependency, type TimelineEntry, type TimelineEvent, type TimelineSnapshot } from './contract.ts';
 import { COMPONENT_BINDING_PREFIX, MAX_COMPONENT_BINDINGS, readComponentBinding, webpageComponentRefs } from './componentBindings.ts';
-import type { VersionChoices, VersionConflict, VersionValue } from './versions.ts';
+import type { VersionChoices, VersionValue } from './versions.ts';
 
 /** Bounded comparison transport only. Definitions remain separate canonical
  * events; these maps are never stored on a Thing or Timeline record. */
@@ -102,51 +103,15 @@ export function mergeComponentVersions(context: ComponentMergeContext, result: T
 		if (!binding || event!.thingId !== link.thingId) throw new Error('A recorded component is unavailable.');
 		return { present: true, value: binding.component as JsonValue };
 	};
-	const equal = (left: VersionValue, right: VersionValue) => JSON.stringify(left) === JSON.stringify(right);
-	const conflicts: VersionConflict[] = [];
-	const dependencies: TimelineDependency[] = [];
-	const missing: string[] = [];
-	const used = new Set<string>();
-	const currentValues: Record<string, JsonValue> = Object.create(null);
-	const resultValues: Record<string, JsonValue> = Object.create(null);
-	for (const ref of Object.keys(context.current)) {
-		const value = valueFor(context.current[ref]);
-		if (value.present) currentValues[ref] = value.value;
-	}
-	for (const ref of webpageComponentRefs(componentBlocks(result))) {
-		const hasCurrent = own(context.current, ref);
-		const hasIncoming = own(context.incoming, ref);
-		const a = valueFor(own(context.base, ref) ? context.base[ref] : null);
-		const b = valueFor(hasCurrent ? context.current[ref] : null);
-		const c = valueFor(hasIncoming ? context.incoming[ref] : null);
-		let link: TimelineDependency | null = null;
-		if (!hasCurrent) link = hasIncoming ? context.incoming[ref] : null;
-		else if (!hasIncoming || equal(b, c)) link = context.current[ref];
-		else if (a.present && b.present && c.present && equal(a, b)) link = context.incoming[ref];
-		else if (a.present && b.present && c.present && equal(a, c)) link = context.current[ref];
-		else {
-			const key = JSON.stringify([ref]);
-			const choice = own(context.choices, key) ? context.choices[key] : undefined;
-			if (choice !== undefined) {
-				if (choice !== 'current' && choice !== 'incoming') throw new Error('Invalid component conflict choice.');
-				used.add(key);
-				link = choice === 'current' ? context.current[ref] : context.incoming[ref];
-			} else {
-				conflicts.push({ path: [ref], base: a, current: b, incoming: c });
-				link = context.current[ref];
-			}
-		}
-		const value = valueFor(link);
-		if (link && value.present) {
-			dependencies.push(link);
-			resultValues[ref] = value.value;
-		} else missing.push(ref);
-	}
-	if (Object.keys(context.choices).some((key) => !used.has(key))) throw new Error('Component conflict choices no longer match this version.');
-	const snapshot = (value: Record<string, JsonValue>): TimelineSnapshot => ({
-		adapter: 'component-bindings',
-		version: 1,
-		value: copyBoundedJson(value, { maxBytes: 4 * 1024 * 1024, maxDepth: 90, maxNodes: 200_000, sortKeys: true }, 'Component comparison')
+	const values = (version: ComponentVersion): ComponentDefinitionVersion =>
+		Object.fromEntries(Object.entries(version).map(([ref, link]) => [ref, valueFor(link)]));
+	const merged = mergeComponentDefinitions(
+		{ base: values(context.base), current: values(context.current), incoming: values(context.incoming), choices: context.choices },
+		webpageComponentRefs(componentBlocks(result))
+	);
+	const dependencies = Object.entries(merged.selected).flatMap(([ref, side]) => {
+		const link = own(context[side], ref) ? context[side][ref] : null;
+		return link ? [link] : [];
 	});
-	return { dependencies, conflicts, missing, current: snapshot(currentValues), result: snapshot(resultValues) };
+	return { ...merged, dependencies };
 }
