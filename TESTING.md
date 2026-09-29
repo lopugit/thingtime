@@ -2,7 +2,7 @@
 
 ## History timeline design concept (`docs/design/thingtime-history-timeline/`, `/docs/design`)
 
-Fictional-data design concept for unified Thing history (TODO 50). Nothing is
+Fictional-data design concept for unified Thing history (TODO 56). Nothing is
 persisted; every check is client-side.
 
 - [ ] `/docs/design?entry=thingtime-history-timeline` lists the entry as an App

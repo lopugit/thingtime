@@ -1,4 +1,4 @@
-# 50 — Unified Thing history and the timeline browser 🕰️
+# 56 — Unified Thing history and the timeline browser 🕰️
 
 **Status:** 🟣 Design concept delivered · owner review needed before M1
 

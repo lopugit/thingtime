@@ -24,7 +24,7 @@ closed.
   `docs/design/README.md`).
 - Evidence chain: `NOTES/unified-thing-history-timeline-baseline.md`,
   `PLAN/unified-thing-history-roadmap.md`,
-  `TODO/claude-todo/50-unified-thing-history-and-timeline-browser.md`, index
+  `TODO/claude-todo/56-unified-thing-history-and-timeline-browser.md`, index
   rows in all four trees, and a `TESTING.md` checklist section.
 
 ## Verification
@@ -66,7 +66,7 @@ day scrubber (which now jumps the strip too) and the detail panel; selecting
 a card no longer re-renders the strip. The old "Versions" view is gone —
 variations are dashed lanes inside every look and section 3 explains them.
 The Evolution concept's app bar shows the same Scope/Look dials (Everything,
-Page + related and List link to the timeline concept). TODO 50, TESTING and
+Page + related and List link to the timeline concept). TODO 56, TESTING and
 the gallery notes describe the model.
 
 ## Cards look follow-up — 2026-09-27
@@ -105,7 +105,7 @@ above and below, a quiet date axis).
 - The timeline concept's browser gained the same **Evolution** view in place
   (View → Evolution: Thing picker + line; node click opens the shared detail
   panel; link to the full concept).
-- TODO 50, PLAN M0/M4, the NOTES ledger and `TESTING.md` describe the view.
+- TODO 56, PLAN M0/M4, the NOTES ledger and `TESTING.md` describe the view.
 
 Verification: owner's Chrome at 1440px (line + frames, Gear tracking and
 Primary button with the variation lane, compare v1→v4 = 4 properties, restore

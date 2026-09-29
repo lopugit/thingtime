@@ -25,7 +25,7 @@
   then synced to the account, with restore, undo and variations that only
   ever append versions. Design concept delivered on `/docs/design`
   (`docs/design/thingtime-history-timeline/`); spec and phases:
-  `claude-todo/50-unified-thing-history-and-timeline-browser.md`.
+  `claude-todo/56-unified-thing-history-and-timeline-browser.md`.
 
 1. **~~Make true `hydrateRoot(document, ...)` merge-ready.~~ RESOLVED — obsolete
    (closed 2026-07-21).**
