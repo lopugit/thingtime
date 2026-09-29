@@ -1814,9 +1814,17 @@ function assertAdminLoader(block, label) {
   // fallback was still present — so it threw on every run, on the FIRST of the
   // two loader calls (`merge resolver`). `assertAdminModelRouting` is the last
   // call in `assertWorkflowSource`, which is in turn the last call in
-  // `selfTest`, so the throw was invisible in the summary while silently
-  // skipping the 60 assertions after it: the entire `rebase resolver` loader
-  // check and the whole remainder of `assertAdminModelRouting`.
+  // `selfTest`, so the throw silently skipped every later assertion: the 3
+  // remaining `merge resolver` loader checks, the entire 10-check `rebase
+  // resolver` loader call, and the 59-check remainder of
+  // `assertAdminModelRouting` — 72 in total.
+  //
+  // The failure itself was NOT invisible: `run_contract` in
+  // `control-plane-ci.yml` reports a non-zero contract as `- ⚠️ <label> (exit
+  // N)` with a sanitized 30-line tail and sets `warnings=true`. What the
+  // advisory ⚠️ hid was the coverage cliff behind it, because a first-assertion
+  // throw and a fully passing run are both just one line in that report. Treat
+  // a ⚠️ here as "most of this contract did not run", not as one soft finding.
   assert.match(block, /no model will run/u, `${label}: fails closed with no invented default`);
   assert.ok(
     !block.includes('. + ["default"]'),
