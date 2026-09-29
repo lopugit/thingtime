@@ -198,6 +198,10 @@ export function TimelineEventBrowser({
 	};
 	const targets = React.useMemo(() => [...new Map(cards.map((card) => [card.row.event.thingId, card.title])).entries()], [cards]);
 	const target = filters.thingId || selected?.thingId || initialThingId || targets[0]?.[0] || '';
+	const pageTarget = filters.related ? filters.thingId :
+		cards.find(card => card.row.event.thingId === target && card.kinds.includes('webpage'))?.row.event.thingId ||
+		cards.find(card => card.kinds.includes('webpage'))?.row.event.thingId || '';
+	const shownTargets = filters.related ? targets.filter(([id]) => id === filters.thingId || cards.some(card => card.row.event.thingId === id && card.kinds.includes('webpage'))) : targets;
 	const days = React.useMemo(() => {
 		const counts = new Map<string, number>();
 		for (const card of filterHistoryCards(cards, { ...filters, day: '' })) counts.set(card.day, (counts.get(card.day) ?? 0) + 1);
@@ -218,17 +222,20 @@ export function TimelineEventBrowser({
 		<Box className="history-browser" minW={0}>
 			<Flex className="history-toolbar" gap={3} wrap="wrap" align="center">
 				<Flex role="group" aria-label="History scope" className="history-segment">
-					<Button size="sm" variant="ghost" aria-pressed={!filters.thingId} onClick={() => update({ thingId: '', day: '' })}>
+					<Button size="sm" variant="ghost" aria-pressed={!filters.thingId} onClick={() => update({ thingId: '', related: false, day: '' })}>
 						Everything
 					</Button>
 					<Button
 						size="sm"
 						variant="ghost"
-						aria-pressed={!!filters.thingId}
+						aria-pressed={!!filters.thingId && !filters.related}
 						isDisabled={!target}
-						onClick={() => update({ thingId: target, day: '' })}
+						onClick={() => update({ thingId: selected?.thingId || target, related: false, day: '' })}
 					>
 						This Thing
+					</Button>
+					<Button size="sm" variant="ghost" aria-pressed={filters.related} isDisabled={!pageTarget} onClick={() => update({ thingId: pageTarget, related: true, day: '' })}>
+						Page + related
 					</Button>
 				</Flex>
 				{filters.thingId ? (
@@ -240,7 +247,7 @@ export function TimelineEventBrowser({
 						onChange={(event) => update({ thingId: event.target.value, day: '' })}
 					>
 						{!targets.some(([id]) => id === filters.thingId) ? <option value={filters.thingId}>Selected Thing</option> : null}
-						{targets.map(([id, title]) => (
+						{shownTargets.map(([id, title]) => (
 							<option value={id} key={id}>
 								{title}
 							</option>

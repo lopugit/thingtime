@@ -8,7 +8,7 @@ import { entryFixture, eventFixture } from './testFixtures.ts';
 // reload behavior is covered separately in browser acceptance.
 class MemoryBackend implements TimelineLocalBackend {
 	rows = new Map<string, LocalTimelineRow>();
-	async read(scope: string, selection?: TimelineLocalSelection) { return structuredClone([...this.rows.values()].filter(row => row.scope === scope && (!selection?.thingId || row.event.thingId === selection.thingId) && (!selection?.status || row.status === selection.status) && (!selection?.draftKey || row.draftKey === selection.draftKey))); }
+	async read(scope: string, selection?: TimelineLocalSelection) { return structuredClone([...this.rows.values()].filter(row => row.scope === scope && (!selection?.thingId || row.event.thingId === selection.thingId) && (!selection?.thingIds || selection.thingIds.includes(row.event.thingId)) && (!selection?.status || row.status === selection.status) && (!selection?.draftKey || row.draftKey === selection.draftKey))); }
 	async change(scope: string, ids: string[], update: Parameters<TimelineLocalBackend['change']>[2]) {
 		const rows = structuredClone([...this.rows.values()].filter(row => row.scope === scope));
 		const changes = update(rows.map(timelineLocalIndex), rows.filter(row => ids.includes(row.event.id)));
@@ -154,4 +154,33 @@ test('out-of-scope and skipped/duplicate paging responses do not enter the cache
 		await assert.rejects(sync.page('page-1'));
 	}
 	assert.equal((await local.forThing('page-1')).length, 0);
+});
+
+test('related pages share the canonical cache, fence membership changes, and deduplicate only identical streams', async () => {
+ const local = new TimelineLocalStore(scope, new MemoryBackend());
+ const related = { rootId: 'page-1', thingIds: ['page-1', 'component'], revision: 'a'.repeat(64), sharedCount: 0 };
+ let response: any = { entries: [entryFixture(eventFixture('component-new', { thingId: 'component' }), 20), entryFixture(eventFixture('page-new'), 19)], nextBefore: 19, nextAfter: null, related };
+ let calls = 0;
+ const sync = new TimelineSync(local, { push: async () => { throw new Error('unused'); }, page: async () => { calls++; return response; } });
+ await Promise.all([sync.page('page-1', { related: true }), sync.page('page-1', { related: true })]);
+ assert.equal(calls, 1);
+ assert.deepEqual((await local.forThings(related.thingIds)).map(row => row.event.id), ['component-new', 'page-new']);
+ response = { ...response, related: { ...related, thingIds: ['page-1', 'older'], revision: 'b'.repeat(64) }, entries: [entryFixture(eventFixture('older', { thingId: 'older' }), 5)], nextBefore: null, reset: true };
+ assert.equal((await sync.page('page-1', { related: true, relatedRevision: related.revision, after: 20 })).reset, true);
+ assert.deepEqual((await local.forThings(['page-1', 'older'])).map(row => row.event.id), ['page-new', 'older']);
+ assert.equal((await local.forThing('component')).length, 1, 'Changing a view never removes retained events');
+ const cachedCount = (await local.forThing(null)).length;
+ for (const patch of [
+  { reset: undefined },
+  { related: { ...response.related, rootId: 'foreign' } },
+  { related: { ...response.related, thingIds: ['older'] } },
+  { entries: [entryFixture(eventFixture('unrelated', { thingId: 'other' }), 4)] },
+  { entries: [entryFixture(eventFixture('foreign-owner', { ownerId: 'another' }), 4)] }
+ ]) {
+  const base = response; response = { ...base, ...patch };
+  await assert.rejects(sync.page('page-1', { related: true, relatedRevision: related.revision, after: 20 }));
+  response = base;
+ }
+ assert.equal((await local.forThing(null)).length, cachedCount);
+ await assert.rejects(sync.page('page-1', { related: true, after: 20 }), /cursor/);
 });
