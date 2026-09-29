@@ -30,6 +30,13 @@ persisted; every check is client-side.
       row, and clears the "Needs review" pills. Clicking the other two options
       afterwards does nothing — one review has one resolution, and the card
       keeps showing which option was kept.
+- [ ] Section 3 draws exactly one Thing — the section claims "the same data as
+      the browser above", so every graph node must open the **Primary button**
+      panel (it is the only Thing with a variation and the conflict the merge
+      card describes). The card reads "Primary button · component · 3 versions ·
+      1 variation · v3 now"; the variation label, the merge note and the svg
+      `aria-label` all say the shared starting version is **v2**; and "Try a
+      variation" appends a Primary button variation `from v2`.
 - [ ] Select "Matched the new tokens" on Primary button: the panel's ancestry
       reads `v2 · from v1` and the Versions tab lists that v1 ("Created Primary
       button") — every version the ancestry names is in the list.

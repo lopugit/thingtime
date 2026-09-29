@@ -582,7 +582,7 @@
     changed on both sides, <b>Review and combine</b> shows a calm three-way choice — nothing is overwritten silently. This graph is the same data as the browser above.</p>
     <div class="versions">
       <div class="vtop">
-        <div class="tcard"><div class="ic">📄</div><div class="t"><b>Gear tracking</b><span>page · 4 versions · 1 variation</span></div><span class="v">v4 now</span></div>
+        <div class="tcard"><div class="ic">🧩</div><div class="t"><b>Primary button</b><span>component · 3 versions · 1 variation</span></div><span class="v">v3 now</span></div>
         <div class="sp"></div>
         <button type="button" class="btn small" id="btnVariation">🌱 Try a variation</button>
         <button type="button" class="btn small" id="btnPull">⬇️ Get latest changes</button>
@@ -590,17 +590,20 @@
         <button type="button" class="btn small primary" id="btnPush">⬆️ Send changes</button>
       </div>
       <div class="graph">
-        <svg viewBox="0 0 720 190" role="img" aria-label="Version graph: main lane with four versions, a variation lane branching from version 3">
+        <!-- Primary button is the Thing that actually has the variation (ev12),
+             the conflicting send (ev14) and the merge card below, and both sides
+             of that conflict branch from its v2 (ev6). Drawing any other Thing's
+             lane here would contradict "the same data as the browser above". -->
+        <svg viewBox="0 0 720 190" role="img" aria-label="Version graph for Primary button: main lane with three versions, a variation lane branching from version 2">
           <text class="lane" x="12" y="52">shared · main</text>
           <text class="lane" x="12" y="146">variation · darker palette</text>
-          <line x1="130" y1="60" x2="640" y2="60" stroke="#ececef" stroke-width="3" />
-          <path d="M 470 60 L 520 60 C 548 60, 548 150, 572 150" stroke="#a555e8" stroke-width="2.5" stroke-dasharray="5 4" fill="none" />
-          <line x1="572" y1="150" x2="640" y2="150" stroke="#a555e8" stroke-width="2.5" stroke-dasharray="5 4" />
-          <g class="node" data-ev="3"><circle cx="150" cy="60" r="9" fill="#fff" stroke="#58ca70" stroke-width="3" /><text class="n" x="150" y="36" text-anchor="middle">v1</text><text x="150" y="88" text-anchor="middle">Created</text><text class="n" x="150" y="104" text-anchor="middle">22 Sep · you</text></g>
-          <g class="node" data-ev="4"><circle cx="310" cy="60" r="9" fill="#fff" stroke="#47b5e6" stroke-width="3" /><text class="n" x="310" y="36" text-anchor="middle">v2 · "Lopu's table"</text><text x="310" y="88" text-anchor="middle">+ table, + checklist</text><text class="n" x="310" y="104" text-anchor="middle">22 Sep · Lopu</text></g>
-          <g class="node" data-ev="8"><circle cx="470" cy="60" r="9" fill="#fff" stroke="#ffbc48" stroke-width="3" /><text class="n" x="470" y="36" text-anchor="middle">v3</text><text x="470" y="88" text-anchor="middle">Moved to Workshop</text><text class="n" x="470" y="104" text-anchor="middle">25 Sep · Lopu</text></g>
-          <g class="node" data-ev="13"><circle cx="640" cy="60" r="11" fill="#16161a" stroke="#16161a" stroke-width="3" /><text class="n" x="640" y="36" text-anchor="middle">v4 · now</text><text x="640" y="88" text-anchor="middle">Heading + 1 block</text><text class="n" x="640" y="104" text-anchor="middle">today · you · 💾</text></g>
-          <g class="node" data-ev="12"><circle cx="640" cy="150" r="9" fill="#a555e8" stroke="#a555e8" stroke-width="3" /><text x="640" y="178" text-anchor="middle">Deep green button</text><text class="n" x="560" y="178" text-anchor="middle">from v3</text></g>
+          <line x1="145" y1="60" x2="630" y2="60" stroke="#ececef" stroke-width="3" />
+          <path d="M 390 60 L 450 60 C 492 60, 492 150, 534 150" stroke="#a555e8" stroke-width="2.5" stroke-dasharray="5 4" fill="none" />
+          <line x1="534" y1="150" x2="630" y2="150" stroke="#a555e8" stroke-width="2.5" stroke-dasharray="5 4" />
+          <g class="node" data-ev="15"><circle cx="170" cy="60" r="9" fill="#fff" stroke="#58ca70" stroke-width="3" /><text class="n" x="170" y="36" text-anchor="middle">v1</text><text x="170" y="88" text-anchor="middle">Created</text><text class="n" x="170" y="104" text-anchor="middle">18 Sep · you</text></g>
+          <g class="node" data-ev="6"><circle cx="390" cy="60" r="9" fill="#fff" stroke="#47b5e6" stroke-width="3" /><text class="n" x="390" y="36" text-anchor="middle">v2 · shared start</text><text x="390" y="88" text-anchor="middle">radius, font-weight</text><text class="n" x="390" y="104" text-anchor="middle">24 Sep · Ana</text></g>
+          <g class="node" data-ev="14"><circle cx="630" cy="60" r="11" fill="#16161a" stroke="#16161a" stroke-width="3" /><text class="n" x="630" y="36" text-anchor="middle">v3 · now</text><text x="630" y="88" text-anchor="middle">Forest green</text><text class="n" x="630" y="104" text-anchor="middle">today · Ana · needs review</text></g>
+          <g class="node" data-ev="12"><circle cx="630" cy="150" r="9" fill="#a555e8" stroke="#a555e8" stroke-width="3" /><text x="630" y="178" text-anchor="middle">Deep green button</text><text class="n" x="498" y="178" text-anchor="middle">from v2</text></g>
         </svg>
       </div>
       <div class="merge" id="merge">
@@ -611,7 +614,7 @@
           <button type="button" data-pick="theirs"><b>Keep Ana's</b><span class="sw" style="background:#2f6b2f;display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px"></span><span>Forest green</span></button>
           <button type="button" data-pick="both"><b>Keep both</b><span>as named variations</span></button>
         </div>
-        <div class="note" id="mergeNote">Underneath: a three-way merge from the shared starting version (v3). Property-level, never a text splice.</div>
+        <div class="note" id="mergeNote">Underneath: a three-way merge from the shared starting version (v2). Property-level, never a text splice.</div>
       </div>
     </div>
   </section>
@@ -1198,7 +1201,10 @@
   $('#openFromPost').addEventListener('click', function(){ state.scope='all'; state.filters.kind={post:true}; $$('[data-f="kind"]').forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute('data-v')==='post'?'true':'false'); }); renderAll(); openDetail(2); jumpTo($('#browser')); });
   $$('.graph .node').forEach(function(n){ n.addEventListener('click', function(){ openDetail(parseInt(n.getAttribute('data-ev'),10)); jumpTo($('#browser')); }); });
   $('#btnReview').addEventListener('click', function(){ $('#merge').classList.add('open'); });
-  $('#btnVariation').addEventListener('click', function(){ variation(findEv(13)); });
+  // Section 3's card is Primary button, so its "Try a variation" must branch
+  // that Thing from the shared starting version the graph and merge note name
+  // (v2 · ev6) — the same version ev12 and ev14 branch from.
+  $('#btnVariation').addEventListener('click', function(){ variation(findEv(6)); });
   $('#btnPull').addEventListener('click', function(){ toast('You are up to date', 'Nothing new from Ana since 4:09 pm — that one still needs review.'); });
   $('#btnPush').addEventListener('click', function(){ var r=EVENTS.some(function(e){return e.sync==='review';}); if (r){ $('#merge').classList.add('open'); toast('Review first 👀', 'One property was changed on both sides. Combine it, then send.'); } else { EVENTS.forEach(function(e){ if (e.lane) e.sync='synced'; }); renderAll(); toast('Changes sent ⬆️', 'Your variation is now the shared version. The old one stays in history.'); } });
   $$('#merge .opts button').forEach(function(b){ b.addEventListener('click', function(){ resolveReview(b.getAttribute('data-pick')); }); });
