@@ -147,6 +147,15 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 							? 'This restores the original Thing and link privately. Your deletion and earlier versions stay in History. You can share it again after recovery.'
 							: 'This creates a new saved version. Your later history stays available.'}
 					</Text>
+					{preview.recovery ? (
+						<Text fontSize="sm" color="var(--tt-muted)" mb={3}>
+							{(preview.result.value as any).folderId
+								? 'This Thing will return to the folder recorded in this version.'
+								: (preview.incoming.value as any).folderId
+								? 'The original folder is unavailable. This Thing will return to Things.'
+								: 'This Thing will return to Things.'}
+						</Text>
+					) : null}
 					<TimelineVersionComparison
 						{...preview}
 						choices={choices}
