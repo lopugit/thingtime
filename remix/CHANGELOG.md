@@ -75,7 +75,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   now carry `notes`), a `timeline.explain` rate limit, IndexedDB note cache and
   offline queue, Changes / Message / Versions tabs in the History detail panel,
   message bubbles in List / Cards / Frames with a Messages toggle. Details in
-  [docs/unified-timeline.md](../docs/unified-timeline.md#contextual-notes-and-lopu-explanations--2026-10-13).
+  [docs/unified-timeline.md](../docs/unified-timeline.md#contextual-notes-and-lopu-explanations--2026-10-13)
+  and the PR note
+  [PRs/991-…](../PRs/991-claude-history-browser-integration--unified-timeline-contextual-messages.md)
+  (PR #991).
 
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now
   survive locally and synchronize through the shared Timeline outbox without
