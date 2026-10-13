@@ -45,7 +45,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Temporal agency and humane time-semantics baseline](./temporal-agency-and-humane-time-semantics-baseline.md)                         | Evidence on civil-time scheduling, UTC/viewer-day boundaries, relative labels, expiry authority, DST, clock skew, accessible limits, and one synthetic temporal laboratory | 2026-09-21    |
 | [Unified Thing history and timeline browser baseline](./unified-thing-history-timeline-baseline.md)                                         | Evidence on the in-memory editor journal, current-state-only Things, the notifications list engine, base Thing verbs, local-first primitives, adjacent epics, and the delivered timeline design concept | 2026-09-27    |
 | [Experience checkpoints and the unified Timeline](./experience-checkpoints-and-unified-timeline.md)                                   | Distinguishes durable Thing-change history from feed/search view snapshots and records the shared-sync boundary for TODO 20                                             | 2026-10-02    |
-| [Device-state snapshots and the measurement boundary](./device-state-snapshots-and-measurement-boundary.md)                           | Separates user-requested device status from analytics, defines freshness and sampling questions, and records the unmerged PR #990 evidence limits                         | 2026-10-13    |
+| [Device-state snapshots and the measurement boundary](./device-state-snapshots-and-measurement-boundary.md)                           | Separates user-requested device status from analytics; records merged PR #990, reported installed-app checks, and remaining detailed-reading acceptance gates              | 2026-10-14    |
 
 ## Conventions
 

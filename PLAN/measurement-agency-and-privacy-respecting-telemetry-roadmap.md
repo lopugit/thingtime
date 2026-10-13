@@ -55,10 +55,12 @@ secondary use.
 
 ### Device-state boundary before a hardware-facing rehearsal
 
-The open [PR #990](https://github.com/lopugit/thingtime/pull/990) proposes a
-bounded Mac battery/adapter snapshot with origin capability negotiation. It is
-not yet merged or independently verified on a real installed app. Before
-rehearsing a device surface:
+[PR #990](https://github.com/lopugit/thingtime/pull/990) merged on 2026-10-13
+at 21:41 AEDT with bounded Mac battery/adapter snapshots and origin capability
+negotiation. Its description reports installed-app basic-state and navigation
+checks. Review on 2026-10-14 confirms the merge, not current detailed-field
+rollout or an independent hardware retest. Keep the following gates open before
+claiming the measurement boundary is verified:
 
 - [ ] Map each field to its source, unit, sample time, meaning, user task,
       authorization check, and selected-origin capability.

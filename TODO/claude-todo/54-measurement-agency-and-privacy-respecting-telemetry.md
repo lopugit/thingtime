@@ -58,11 +58,13 @@ collection, experiments, provider exports, or production analytics.
 
 ## Device state is not automatically a measurement signal
 
-The open [PR #990](https://github.com/lopugit/thingtime/pull/990) proposes
-detailed battery and adapter fields on a device surface. Its PR note describes
-a bounded field allowlist and origin capability gate, but the PR remains open
-and its real-device acceptance is still manual. Do not describe that proposal
-as shipped or live-verified. A reading shown to the user for an explicit device
+[PR #990](https://github.com/lopugit/thingtime/pull/990) merged on 2026-10-13
+at 21:41 AEDT, adding detailed battery and adapter fields with a bounded field
+allowlist and origin capability gate. Its description reports installed-app
+checks of basic battery state and device-page navigation. As reviewed on
+2026-10-14, detailed-field rollout and independent OS-value comparison remain
+separate acceptance gates; this garden run did not retest the device. A reading
+shown to the user for an explicit device
 task is functional product state; it does not authorize a second analytics,
 resource-monitoring, personalization, or history purpose. See the
 [device-state boundary note](../../NOTES/device-state-snapshots-and-measurement-boundary.md).

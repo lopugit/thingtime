@@ -1,20 +1,22 @@
 # Device-state snapshots and the measurement boundary
 
-**Reviewed:** 2026-10-13 (Australia/Melbourne)
+**Reviewed:** 2026-10-14 (Australia/Melbourne)
 **Status:** Evidence note and proposed boundary; no production or hardware
 acceptance claim.
 
 ## Why this distinction matters
 
-The open [PR #990](https://github.com/lopugit/thingtime/pull/990) proposes a
+[PR #990](https://github.com/lopugit/thingtime/pull/990) added a
 full Things device page and additional Mac battery/adapter readings. Its PR note
 describes a bounded allowlist, detailed fields gated on the selected origin's
 `api.devices-node-state` capability (1.10.0 or later), and a basic-state
-fallback for older origins. It also says that authenticated browser acceptance
-of live readings remains manual. PR #990 is still open against `main`; this is
-proposal evidence, not proof that the code has merged, deployed, or behaved on a
-real device. The exact reported values and their interpretation must be checked
-against the source on that device before anyone calls them verified.
+fallback for older origins. GitHub confirms it merged into `main` on
+2026-10-13 at 21:41 AEDT (merge commit `ada5c8af74e1320c797be9416caa3e3f86b23e10`).
+Its updated PR description reports signed, installed-app verification of basic
+battery status and full-page navigation. That report is not an independent
+hardware retest by this garden run, nor proof of detailed-field production
+rollout. At the time of that report, production advertised 1.9.0; current
+origin support must be checked again before detailed readings are tested.
 
 This proposal surfaces a useful distinction missing from the wider measurement
 discussion: a user-requested device status read can be functional product state
@@ -57,8 +59,8 @@ owns that separation.
 ## Evidence and acceptance before claiming completion
 
 The PR description reports native bridge, device/API, Things/client, and
-Electron tests, while retaining authenticated live-device acceptance as a
-manual step. That split is appropriate: mocks and builds can validate parsing,
+Electron tests plus installed-app checks of basic state and navigation. Keep
+those reported checks separate from detailed-field acceptance: mocks and builds can validate parsing,
 allowlists, capability fallback, units, and status rendering, but cannot prove
 that a real installed app displays the correct reading or permissions.
 
@@ -68,8 +70,9 @@ reading with an independent operating-system source. Record unavailable fields
 separately. Rehearse stale samples, unsupported origins, permission failure,
 device switch, app background/foreground, and offline recovery. Confirm that a
 refresh produces no analytics event, unrequested network upload, or duplicate
-history record. Keep the rehearsal synthetic until the PR is reviewed and
-qualified owners approve any real-device handling.
+history record. Keep privacy/sampling rehearsals synthetic until qualified
+owners approve any real-device handling. The merge does not complete these
+remaining acceptance gates or approve a new measurement purpose.
 
 ## Related garden work
 
