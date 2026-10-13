@@ -30,7 +30,7 @@ import {
 } from './deviceDrawerLayout';
 import { readDeviceDrawerPreferences, setDeviceDrawerSectionExpanded, setDeviceDrawerWidthPreference } from './deviceDrawerPreferences';
 import type { DeviceDrawerSectionId } from './deviceDrawerPreferences';
-import type { DeviceCommandStatus, DeviceExecutionPermissionMode, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
+import type { DeviceBattery, DeviceCommandStatus, DeviceExecutionPermissionMode, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
 import { WatchDeviceDetails } from './WatchDeviceDetails';
 import { deviceThingsPageHref } from './deviceNavigation';
 
@@ -152,6 +152,7 @@ export type DeviceDetailsDrawerProps = {
 	onClose: () => void;
 	presentation?: 'drawer' | 'page';
 	state: DeviceRuntimeState | null;
+	localBattery?: DeviceBattery | null;
 	now?: number;
 	controlFor?: DeviceControlResolver;
 	onAction?: DeviceActionHandler;
@@ -167,6 +168,7 @@ export const DeviceDetailsDrawer = memo(
 		onClose,
 		presentation = 'drawer',
 		state,
+		localBattery,
 		now = Date.now(),
 		controlFor,
 		onAction,
@@ -434,7 +436,7 @@ export const DeviceDetailsDrawer = memo(
 										chromeYouTube={snapshot?.observed.chromeYouTube}
 										powerTimers={snapshot?.observed.powerTimers}
 										spotify={snapshot?.observed.spotify}
-										battery={snapshot?.observed.battery || null}
+										battery={localBattery || snapshot?.observed.battery || null}
 										bluetoothDevices={snapshot?.observed.bluetoothDevices || []}
 										cameras={snapshot?.observed.cameras || []}
 										controlFor={controlFor}

@@ -6373,9 +6373,23 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       charging or power-source state instead of "Power: Unknown". Expand
       Displays & system hardware and check cycles, capacity, current, power,
       voltage, temperature, time estimates, and adapter rating against the
-      machine's available readings. Missing readings say "Unavailable"; an old
-      server may show the basic battery state until it advertises the detailed
-      battery capability.
+      machine's available readings (for example, allowlisted AppleSmartBattery
+      values from `ioreg`). In the installed app, confirm the paired local Mac
+      shows real non-null cycles, capacity, voltage, and adapter data in both
+      the drawer and full page even when the selected server advertises only
+      the older device-state capability. A reading macOS genuinely omits may
+      say "Unavailable"; a card of all placeholders fails acceptance. On a
+      browser-only older origin, report the rollout dependency instead of
+      claiming detailed battery delivery is complete. Confirm the signed local
+      bridge permits only the battery projection for this path while refusing
+      the full device snapshot.
+- [ ] For iterative Electron work, start `corepack pnpm@10.12.1 --dir electron
+      dev:parallel` while the signed `~/Applications/Thingtime.app` and its
+      managed Node remain running. Confirm the dev window uses a separate
+      profile and loopback port, Node actions are unavailable there, and the
+      installed app and Node PID/registration remain unchanged. Quit dev and
+      confirm its temporary profile and staged web/AI bundles are removed;
+      then build, install, and verify the signed app's real Node path.
 - [ ] Right-click the device in grid, list, and columns views and choose
       **Open device page**. Open the same page with the expand icon beside the
       drawer X. At desktop and 390 CSS px, check the shared sections and their

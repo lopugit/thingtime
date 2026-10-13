@@ -25,6 +25,7 @@ import type { DeviceActionIntent, DeviceControlResolver } from '~/components/Dev
 import type { DeviceActionKind, DeviceRuntimeState } from '~/components/Devices/deviceTypes';
 import { useDeviceStore } from '~/components/Devices/useDeviceStore';
 import { useLocalThingtimeNode } from '~/components/Devices/useLocalThingtimeNode';
+import { mayReadLocalBattery, useLocalDeviceBattery } from '~/components/Devices/useLocalDeviceBattery';
 import { ThingContextMenu } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
 import type { ThingContextMenuAction } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
 import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThingContextMenu';
@@ -190,6 +191,11 @@ const ThingsLibraryPage = () => {
 		[deviceStore.devices]
 	);
 	const localNode = useLocalThingtimeNode(deviceParam, deviceStore.refreshList, deviceStore.loading ? undefined : currentAccountDeviceIds);
+	const localBattery = useLocalDeviceBattery(
+		user?.id,
+		deviceParam,
+		mayReadLocalBattery(deviceParam, currentAccountDeviceIds, localNode.pairedDeviceIds, devicesEnabled, deviceStore.loading)
+	);
 	const serverDeviceControlFor = deviceStore.controlFor;
 	const executeServerDeviceAction = deviceStore.executeAction;
 	const setDevicePermissionMode = deviceStore.setPermissionMode;
@@ -1509,6 +1515,7 @@ const ThingsLibraryPage = () => {
 		<Flex background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingBottom={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 20px)" paddingX={{ base: 3, md: 6 }} width="100%">
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
+				localBattery={localBattery}
 				isOpen
 				onAction={onDeviceAction}
 				onClose={closeDevice}
@@ -1942,6 +1949,7 @@ const ThingsLibraryPage = () => {
 
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
+				localBattery={localBattery}
 				isOpen={Boolean(deviceParam) && !devicePageMode}
 				onAction={onDeviceAction}
 				onClose={closeDevice}

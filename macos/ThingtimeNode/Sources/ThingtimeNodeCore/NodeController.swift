@@ -128,6 +128,7 @@ public actor ThingtimeNodeController {
     private static let readMethods: Set<String> = [
         "node.status",
         "telemetry.snapshot",
+        "telemetry.battery",
         "permissions.preflight",
         "pairing.status",
         "pairing.begin",
@@ -217,6 +218,8 @@ public actor ThingtimeNodeController {
             result = try JSONValue.from(status)
         case "telemetry.snapshot":
             result = try await JSONValue.from(telemetry.snapshot())
+        case "telemetry.battery":
+            result = .object(["battery": try await JSONValue.from(telemetry.batterySnapshot())])
         case "permissions.preflight":
             result = try await JSONValue.from(telemetry.permissionPreflight())
         case "pairing.status":

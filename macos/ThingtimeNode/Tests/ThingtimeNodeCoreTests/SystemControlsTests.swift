@@ -22,6 +22,19 @@ final class SystemControlsTests: XCTestCase {
         XCTAssertFalse(encoded.contains("Serial"))
     }
 
+    func testBatteryAdapterFallsBackToSmartBatteryRegistry() {
+        let basic = BatteryTelemetry(level: 1, isCharging: false, isExternalPower: true, isPreventingIdleSleep: false)
+        let result = SystemBattery.enriched(basic, battery: [
+            "CycleCount": 282, "InstantAmperage": 0,
+            "AdapterDetails": ["Watts": 100, "AdapterVoltage": 20000, "Current": 5000]
+        ], adapter: [:])
+        XCTAssertEqual(result.cycleCount, 282)
+        XCTAssertEqual(result.currentMA, 0)
+        XCTAssertEqual(result.adapterWatts, 100)
+        XCTAssertEqual(result.adapterVoltageMV, 20000)
+        XCTAssertEqual(result.adapterCurrentMA, 5000)
+    }
+
     func testPrinterStringNormalizesSDKOwnershipVariants() {
         let value = "Office printer" as CFString
 

@@ -78,6 +78,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   The shared device page uses context-free layout wrappers so expanding it does
   not trip the app recovery screen. The installed app footer now identifies its
   bundled branch and full commit instead of the selected server's deployment.
+  Follow-up: installed-app QA found the selected production server's older
+  device-state contract left every detailed row empty. The paired local Mac
+  now uses a narrow signed Node battery read in both device views, with an
+  adapter registry fallback and live-value acceptance checks in the project
+  guidance. The broad local snapshot remains blocked by XPC policy. The
+  installed signed app now shows real cycles, capacity, voltage and adapter
+  values matching the Mac's IOKit reading in both device views. The Electron
+  dev command now runs an isolated unsigned app beside the installed app,
+  blocks Node service access, and cleans its profile and staged bundles on exit.
   Details: [PR #990](../PRs/990-codex-mac-battery-monitor-add-detailed-mac-battery-telemetry-and-full-device-things-page.md).
 
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now

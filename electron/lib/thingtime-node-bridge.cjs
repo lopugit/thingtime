@@ -182,7 +182,7 @@ function validateDeviceRequest(value) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Device request must be an object.');
 	}
 	const action = boundedString(value.action, 'Device action', 16);
-	if (action === 'snapshot' || action === 'permissions') return { action };
+	if (action === 'snapshot' || action === 'battery' || action === 'permissions') return { action };
 	if (action !== 'evaluate' && action !== 'execute') {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Device action is not supported.');
 	}
@@ -1230,6 +1230,7 @@ class ThingtimeNodeIntegration {
 	async device(value, { userApproved = false } = {}) {
 		const request = validateDeviceRequest(value);
 		if (request.action === 'snapshot') return this.request('telemetry.snapshot');
+		if (request.action === 'battery') return this.request('telemetry.battery');
 		if (request.action === 'permissions') return this.request('permissions.preflight');
 
 		const telemetry = await this.request('telemetry.snapshot');

@@ -289,6 +289,7 @@ public enum SystemBattery {
     /// can contain serial numbers and opaque firmware data; never publish it whole.
     static func enriched(_ basic: BatteryTelemetry, battery: [String: Any], adapter: [String: Any]) -> BatteryTelemetry {
         let data = battery["BatteryData"] as? [String: Any] ?? [:]
+        let batteryAdapter = battery["AdapterDetails"] as? [String: Any] ?? [:]
         let full = positive(battery, "AppleRawMaxCapacity") ?? positive(data, "FullChargeCapacity")
         let remaining = positive(battery, "AppleRawCurrentCapacity") ?? positive(data, "RemainingCapacity")
         let temperature = number(battery, "Temperature").flatMap { $0 > 0 && $0 < 10_000 ? Double($0) / 100 : nil }
@@ -304,8 +305,9 @@ public enum SystemBattery {
             currentMA: number(battery, "InstantAmperage") ?? number(battery, "Amperage"),
             voltageMV: positive(battery, "Voltage"), temperatureC: temperature,
             timeToEmptyMinutes: timeToEmpty, timeToFullMinutes: timeToFull,
-            adapterWatts: positive(adapter, "Watts"), adapterVoltageMV: positive(adapter, "AdapterVoltage"),
-            adapterCurrentMA: positive(adapter, "Current")
+            adapterWatts: positive(adapter, "Watts") ?? positive(batteryAdapter, "Watts"),
+            adapterVoltageMV: positive(adapter, "AdapterVoltage") ?? positive(batteryAdapter, "AdapterVoltage"),
+            adapterCurrentMA: positive(adapter, "Current") ?? positive(batteryAdapter, "Current")
         )
     }
 

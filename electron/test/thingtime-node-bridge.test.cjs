@@ -254,6 +254,7 @@ test('connector requests are allowlisted, bounded, and command-bound', () => {
 
 test('device mutations require a command id and reject unsupported action kinds', () => {
 	assert.deepEqual(validateDeviceRequest({ action: 'snapshot' }), { action: 'snapshot' });
+	assert.deepEqual(validateDeviceRequest({ action: 'battery' }), { action: 'battery' });
 	assert.deepEqual(
 		validateDeviceRequest({
 			action: 'execute',
@@ -298,6 +299,15 @@ test('device mutations require a command id and reject unsupported action kinds'
 		() => validateDeviceRequest({ action: 'execute', request: { kind: 'application.launch', parameters: { bundleIdentifier: 'com.example.app' } } }),
 		/commandId/u
 	);
+});
+
+test('desktop battery read uses the narrow native bridge method', async () => {
+	const integration = new ThingtimeNodeIntegration({ app: { isPackaged: true }, electronDir: '' });
+	integration.request = async (method) => {
+		assert.equal(method, 'telemetry.battery');
+		return { battery: { cycleCount: 282 } };
+	};
+	assert.deepEqual(await integration.device({ action: 'battery' }), { battery: { cycleCount: 282 } });
 });
 
 test('connector child environment uses an explicit non-secret allowlist', () => {

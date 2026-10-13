@@ -220,7 +220,7 @@ export type ThingtimeNodeConnectorRequest =
 	  };
 
 export type ThingtimeNodeDeviceRequest =
-	| { action: 'snapshot' | 'permissions' }
+	| { action: 'snapshot' | 'battery' | 'permissions' }
 	| {
 			action: 'evaluate' | 'execute';
 			commandId?: string;

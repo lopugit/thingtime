@@ -510,6 +510,12 @@ public final class DeviceTelemetryCollector {
         )
     }
 
+    /// Narrow local bridge read. Do not collect or return the full device
+    /// snapshot just to render battery status in the desktop app.
+    public func batterySnapshot() -> BatteryTelemetry {
+        SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep)
+    }
+
     public func setPreventIdleSleep(_ enabled: Bool) throws {
         try powerAssertions.setPreventingIdleSleep(enabled)
     }

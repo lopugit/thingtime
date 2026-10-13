@@ -23,6 +23,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
 
     private static let onboardingReads: Set<String> = [
         "node.status",
+        "telemetry.battery",
         "permissions.preflight",
         "pairing.status",
         "pairing.begin"

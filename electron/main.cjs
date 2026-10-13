@@ -8,6 +8,15 @@ const { spawn, spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 
 const { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeImage, session } = require('electron');
+const parallelDevMode = !app.isPackaged && process.env.THINGTIME_DESKTOP_PARALLEL_DEV === '1';
+if (parallelDevMode) {
+	const profilePath = process.env.THINGTIME_DESKTOP_DEV_PROFILE;
+	if (!profilePath || !path.isAbsolute(profilePath)) {
+		throw new Error('Parallel development requires an isolated absolute profile path.');
+	}
+	app.setName('Thingtime Dev');
+	app.setPath('userData', profilePath);
+}
 const { checkEndpointCompatibility, compatibilityError, probeEndpointDevices } = require('./lib/endpoint-compatibility.cjs');
 const { prepareAppLocations } = require('./lib/app-locations.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
@@ -897,6 +906,9 @@ function requireTrustedAiBridgeEvent(event) {
 
 function requireMacNode(event) {
 	requireTrustedAiBridgeEvent(event);
+	if (parallelDevMode) {
+		throw new ThingtimeNodeBridgeError('dev_node_unavailable', 'Use the installed signed Thingtime app to test Thingtime Node.');
+	}
 	if (process.platform !== 'darwin') {
 		throw new ThingtimeNodeBridgeError('unsupported_platform', 'Thingtime Node is currently available on macOS only.');
 	}
@@ -952,6 +964,7 @@ function configuredNodeRegistration() {
 let nodeStoppedForSession = false;
 
 async function reconcileConfiguredNode({ startIfStopped } = {}) {
+	if (parallelDevMode) return null;
 	if (process.platform !== 'darwin' || !desktopSettings) return null;
 	if (endpointCompatibility && endpointCompatibility.status !== 'compatible') return thingtimeNode.status();
 	await ensureLocalProjectRegistry(nodeProjectRegistryPath());
@@ -996,6 +1009,9 @@ async function nodeControlService(event, request) {
 }
 
 async function controlConfiguredNode(action) {
+	if (parallelDevMode) {
+		throw new ThingtimeNodeBridgeError('dev_node_unavailable', 'Use the installed signed Thingtime app to control Thingtime Node.');
+	}
 	if (!['start', 'stop', 'restart'].includes(action)) throw new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.');
 	if (action !== 'stop') {
 		const compatibility = await checkSelectedEndpointCompatibility();
