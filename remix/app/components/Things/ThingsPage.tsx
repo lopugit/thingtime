@@ -1506,7 +1506,7 @@ const ThingsLibraryPage = () => {
 	};
 	const searchResultCount = (searchResults || []).length + visibleDevices.length;
 	if (devicePageMode) return (
-		<Flex background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingBottom={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 20px)" paddingX={{ base: 3, md: 6 }}>
+		<Flex background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingBottom={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 20px)" paddingX={{ base: 3, md: 6 }} width="100%">
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
 				isOpen

@@ -6381,7 +6381,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       drawer X. At desktop and 390 CSS px, check the shared sections and their
       expanded states from top to bottom, including battery details, then use
       **Back to Things**. The page must use the drawer's content and controls
-      without a second copy or horizontal overflow. Direct-load the page URL
+      without a second copy or horizontal overflow. At 390px the outer page
+      surface fills the available viewport width, with no blank right strip.
+      Direct-load the page URL
       and use the drawer expand link; neither path may show the session recovery
       screen because drawer-only Chakra components rendered outside a Drawer.
 - [ ] In the exact installed Electron app, open that device drawer and click
