@@ -1,5 +1,78 @@
 # TESTING.md — per-area manual test checklists
 
+## History timeline design concept (`docs/design/thingtime-history-timeline/`, `/docs/design`)
+
+Fictional-data design concept for unified Thing history (TODO 56). Nothing is
+persisted; every check is client-side.
+
+- [ ] `/docs/design?entry=thingtime-history-timeline` lists the entry as an App
+      concept and the preview iframe renders the page; the bundle URL
+      `/docs/design-bundles/thingtime-history-timeline/index.html` renders it
+      standalone with no console errors.
+- [ ] Desktop (≥ 821px): the History browser shows the timeline beside a detail
+      panel; the selected row ("You changed colour on Primary button") is
+      highlighted and the panel shows its before/after diff.
+- [ ] Phone (390px, or the gallery's phone preset): the panel is hidden until a
+      row is tapped, then opens as a bottom sheet with a ✕ close; Escape and the
+      backdrop close it; no horizontal scroll anywhere on the page.
+- [ ] Scope, kind/who/what chips and the search box filter rows; counts on the
+      kind chips follow the scope; an empty result shows the "Nothing recorded
+      matches these filters" state rather than a blank pane.
+- [ ] Clicking a scrubber bar jumps the timeline to that day and highlights the
+      day header; a day with no changes explains that instead of jumping.
+- [ ] Restore / Undo / Try a variation each ADD a row at the top with a system
+      message and a Lopu toast; no existing row disappears.
+- [ ] Section 4: toggle Offline, Make an edit → the new row and the header pill
+      say "Saved on this device"; Reconnect & sync → they turn "Synced" while
+      the button variation stays "Saved on this device".
+- [ ] Section 3: Send changes with a pending review opens the merge card;
+      choosing an option resolves it, adds exactly one "Reviewed and combined"
+      row, and clears the "Needs review" pills. Clicking the other two options
+      afterwards does nothing — one review has one resolution, and the card
+      keeps showing which option was kept.
+- [ ] Section 3 draws exactly one Thing — the section claims "the same data as
+      the browser above", so every graph node must open the **Primary button**
+      panel (it is the only Thing with a variation and the conflict the merge
+      card describes). The card reads "Primary button · component · 3 versions ·
+      1 variation · v3 now"; the variation label, the merge note and the svg
+      `aria-label` all say the shared starting version is **v2**; and "Try a
+      variation" appends a Primary button variation `from v2`.
+- [ ] Select "Matched the new tokens" on Primary button: the panel's ancestry
+      reads `v2 · from v1` and the Versions tab lists that v1 ("Created Primary
+      button") — every version the ancestry names is in the list.
+- [ ] Settings toggles and the retention segmented control respond; "Show
+      messages in the timeline" off hides message bubbles in rows and the panel.
+- [ ] With `prefers-reduced-motion: reduce`, no animation runs and the sheet,
+      toast and rows still appear.
+- [ ] Look → Cards / Line / Frames inside the timeline browser, at every scope:
+      with Everything the horizontal strip carries every Thing's changes (the
+      Thing card of each event), with This Thing a picker row chooses the Thing;
+      Cards alternate above and below a spine that fills to the selected change
+      with a minimap; Line shows alternating labels and day ticks; Frames is a
+      filmstrip with change chips on the connectors; kind/who/what chips, search
+      and the day scrubber still apply; clicking a card, node or label opens the
+      detail panel without the strip jumping; the variation lane appears for
+      Primary button in every look; "Open the Evolution concept" links to the
+      sibling entry. The app bar shows Scope and Look — there is no separate
+      Versions view (section 3 explains variations as lanes).
+- [ ] `/docs/design?entry=thingtime-history-evolution` and the bundle URL
+      `/docs/design-bundles/thingtime-history-evolution/index.html` render with
+      no console errors and open on the Cards look: the Thing's cards as of each
+      version alternate above and below the spine with an edit callout each,
+      no card overlaps a neighbour, the spine fill reaches the selected card,
+      later cards are faded, the minimap shows dots and a viewport window that
+      follows the strip's scroll, and Density → Compact narrows the cards and
+      hides messages. The Thing picker switches Things (Primary button adds a
+      dashed variation row); Look → Line and Frames still work.
+- [ ] Spacing → Real time keeps true positions (crowded same-day edits spread
+      just enough to read) with day ticks; Even spaces versions uniformly.
+- [ ] Scrubber and ←/→ move the selection and scroll it into view; Play steps
+      through versions and stops at the last; Compare marks A and B (across the
+      variation lane too) and lists differing properties; Restore appends a
+      version and the line grows; nothing disappears.
+- [ ] 390px: the strip scrolls horizontally inside the app frame with no page
+      horizontal scroll; labels narrow; the detail and compare panels stack.
+
 ## Unified Timeline
 
 - [ ] With only admission storage available, run an ordinary server Action.
