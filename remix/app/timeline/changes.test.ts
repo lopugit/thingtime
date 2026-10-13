@@ -65,6 +65,20 @@ test('page presentation explains component props by stable block identity while 
 	assert.deepEqual(timelineDisplayChanges(dataA, dataB), timelineChanges(dataA, dataB));
 });
 
+test('the page override expands block changes for restorable preview content that carries no thingtime, and can hold arrays atomic', () => {
+	// Version previews carry only the six restorable keys, so the snapshot alone cannot say this is a page.
+	const a = snapshot({ crystal: { blocks: [{ id: 'hero', type: 'component', args: { color: 'blue' } }, { id: 'footer', type: 'heading', text: 'End' }] }, extended: null, tags: [], geo: null, acl: ['tt:user'], folderId: null });
+	const b = snapshot({ crystal: { blocks: [{ id: 'footer', type: 'heading', text: 'End' }, { id: 'hero', type: 'component', args: { color: 'green' } }] }, extended: null, tags: [], geo: null, acl: ['tt:user'], folderId: null });
+	assert.deepEqual(timelineDisplayChanges(a, b), timelineChanges(a, b));
+	assert.deepEqual(timelineDisplayChanges(a, b, {}), timelineChanges(a, b));
+	assert.deepEqual(timelineDisplayChanges(a, b, { page: false }), timelineChanges(a, b));
+	assert.deepEqual(timelineDisplayChanges(a, b, { page: true }).map((change) => change.path), [['crystal', 'blocks', 'order'], ['crystal', 'blocks', 'hero', 'args', 'color']]);
+	const pageA = snapshot({ ...(a.value as any), thingtime: ['webpage'] }); const pageB = snapshot({ ...(b.value as any), thingtime: ['webpage'] });
+	assert.equal(timelineDisplayChanges(pageA, pageB).length, 2);
+	assert.deepEqual(timelineDisplayChanges(pageA, pageB, { page: false }), timelineChanges(pageA, pageB));
+	assert.deepEqual(timelineDisplayChanges(a, null, { page: true }), timelineChanges(a, null));
+});
+
 test('ambiguous duplicate ids and large block trees keep a bounded structural change', () => {
 	const a = snapshot({
 		thingtime: ['webpage'],

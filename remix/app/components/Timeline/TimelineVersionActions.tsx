@@ -11,6 +11,10 @@ import { TimelineVersionComparison } from './TimelineVersionComparison';
 import { TimelinePublishedPagePreview } from './TimelinePublishedPagePreview';
 import { TIMELINE_CHANGED_EVENT } from '../../timeline/clientEvents';
 
+/** An undo reviews the value from before the change, so the incoming side and
+ * its choice/preview buttons say so; conflict choices stay Keep current / Use the earlier value. */
+const UNDO_LABELS = { incoming: 'Before this change', useIncoming: 'Use the earlier value', previewIncoming: 'Preview before this change' } as const;
+
 /** Mounted by scope/event identity. A retry retains the exact reviewed
  * command; component choices are reviewed after page-content conflicts. */
 export function TimelineVersionActions({ event, onApplied }: { event: TimelineEvent; onApplied: () => void }) {
@@ -21,8 +25,10 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 	const [componentChoices, setComponentChoices] = React.useState<VersionChoices>({});
 	const [componentMode, setComponentMode] = React.useState<'recorded' | 'current'>('recorded');
 	const [busy, setBusy] = React.useState(false);
+	const [loading, setLoading] = React.useState<PublishedVersionPreview['mode'] | null>(null);
 	const [error, setError] = React.useState('');
-	const [saved, setSaved] = React.useState(false);
+	// The applied mode is kept with the receipt: the preview is cleared on apply and undo reads differently from a restore.
+	const [saved, setSaved] = React.useState<PublishedVersionPreview['mode'] | null>(null);
 	const alive = React.useRef(true);
 	const request = React.useRef<VersionRequest | null>(null);
 	const pending = React.useRef(false);
@@ -41,6 +47,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 		if (!connection || pending.current) return;
 		pending.current = true;
 		setBusy(true);
+		setLoading(mode);
 		setError('');
 		request.current = null;
 		try {
@@ -67,7 +74,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 			if (alive.current) setError(failure?.error || failure?.message || 'Could not compare this version.');
 		} finally {
 			pending.current = false;
-			if (alive.current) setBusy(false);
+			if (alive.current) { setBusy(false); setLoading(null); }
 		}
 	};
 	const apply = async () => {
@@ -102,7 +109,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 				throw new Error('This save receipt belongs to another operation.');
 			await connection.store.accept([entry]);
 			if (alive.current) {
-				setSaved(true);
+				setSaved(preview.mode);
 				setPreview(null);
 				onApplied();
 				window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
@@ -135,16 +142,18 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 		<Box mt={4} borderTopWidth="1px" borderColor="var(--tt-border)" pt={4}>
 			{saved ? (
 				<Text role="status" fontSize="sm">
-					Version saved. The previous versions are still in your Timeline.
+					{saved === 'undo' ? 'Undid this change. Every version is still in your Timeline.' : 'Version saved. The previous versions are still in your Timeline.'}
 				</Text>
 			) : preview ? (
 				<>
 					<Heading size="sm" mb={2}>
-						{preview.recovery ? 'Recover deleted Thing' : preview.mode === 'merge' ? 'Review and combine' : 'Review restore'}
+						{preview.recovery ? 'Recover deleted Thing' : preview.mode === 'merge' ? 'Review and combine' : preview.mode === 'undo' ? 'Review undo' : 'Review restore'}
 					</Heading>
 					<Text fontSize="sm" color="var(--tt-muted)" mb={3}>
 						{preview.recovery
 							? 'This restores the original Thing and link privately. Your deletion and earlier versions stay in History. You can share it again after recovery.'
+							: preview.mode === 'undo'
+							? 'Reverts only this change. Later edits to other properties are kept; overlapping edits need a choice. The undo is a new saved version.'
 							: 'This creates a new saved version. Your later history stays available.'}
 					</Text>
 					{preview.recovery ? (
@@ -158,6 +167,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 					) : null}
 					<TimelineVersionComparison
 						{...preview}
+						labels={preview.mode === 'undo' ? UNDO_LABELS : undefined}
 						choices={choices}
 						busy={busy}
 						onChoose={(key, side) => setChoices((previous) => ({ ...previous, [key]: side }))}
@@ -190,6 +200,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 									result={definitionSnapshot(componentValues(components.result))}
 									conflicts={components.conflicts}
 									componentLabels
+									labels={preview.mode === 'undo' ? UNDO_LABELS : undefined}
 									hideCopiedIdentity={componentMode === 'recorded'}
 									choices={componentChoices}
 									busy={busy}
@@ -210,7 +221,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 									Components that were unavailable in this version will be restored as inactive placeholders.
 								</Text>
 							) : null}
-							<TimelinePublishedPagePreview preview={preview} componentMode={componentMode} />
+							<TimelinePublishedPagePreview preview={preview} componentMode={componentMode} labels={preview.mode === 'undo' ? UNDO_LABELS : undefined} />
 						</Box>
 					) : null}
 					<Flex gap={2} wrap="wrap">
@@ -226,6 +237,8 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 								? 'Recover Thing privately'
 								: preview.mode === 'merge'
 								? 'Apply merge'
+								: preview.mode === 'undo'
+								? 'Undo this change'
 								: 'Restore this version'}
 						</Button>
 						<Button
@@ -246,10 +259,16 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 				</>
 			) : (
 				<Flex gap={2} wrap="wrap">
-					<Button size="sm" variant="outline" isLoading={busy} onClick={() => void compare('restore')}>
+					<Button size="sm" variant="outline" isLoading={loading === 'restore'} isDisabled={busy && loading !== 'restore'} onClick={() => void compare('restore', {}, {}, 'recorded')}>
 						{event.operation === 'delete' ? 'Recover this Thing…' : 'Restore this version…'}
 					</Button>
-					<Button size="sm" variant="ghost" isDisabled={busy || !event.after} onClick={() => void compare('merge')}>
+					{event.operation === 'update' && event.mode === 'revision' && event.before && event.after ? (
+						// Undo defaults to current shared components: the recorded default would fork every referenced component into private copies on apply.
+						<Button size="sm" variant="outline" isLoading={loading === 'undo'} isDisabled={busy && loading !== 'undo'} onClick={() => void compare('undo', {}, {}, 'current')}>
+							Undo this change…
+						</Button>
+					) : null}
+					<Button size="sm" variant="ghost" isLoading={loading === 'merge'} isDisabled={(busy && loading !== 'merge') || !event.after} onClick={() => void compare('merge', {}, {}, 'recorded')}>
 						Review and combine…
 					</Button>
 				</Flex>

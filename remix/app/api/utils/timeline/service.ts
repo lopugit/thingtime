@@ -13,6 +13,8 @@ import { mongoDataPlane } from '../mongodb/dataPlane';
 import { appendTimelineEvent, readTimelinePage, readTimelineEntries, timelineEventThingId, timelineFolderId } from './repository.ts';
 
 export { getTimelineNotes } from './notes.ts';
+export { getTimelineVersionNames, handleVersionNameCommand } from './versionNames.ts';
+export { exportTimelineVersion } from './exportVersion.ts';
 
 export const timelineDataPlane = mongoDataPlane;
 
