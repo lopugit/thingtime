@@ -28,7 +28,7 @@ test('related history uses the authorized composition but never reads another au
 		},
 		page: async (_things, owner, query, targets) => {
 			calls.push({ owner, query, targets });
-			return { entries: [], nextBefore: null, nextAfter: null };
+			return { entries: [], nextBefore: null, nextAfter: null, notes: [], names: [] };
 		}
 	});
 	const first = await read('owner', request);

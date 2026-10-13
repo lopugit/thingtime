@@ -546,3 +546,46 @@
 		animation: none;
 	}
 }
+/* 📌 version name. Sits beside the ellipsised title in every look and in the
+   detail heading; the badge keeps its own ellipsis so a long name never
+   pushes the title out of its row. */
+.history-name {
+	display: inline-block;
+	max-width: 100%;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.5;
+	padding: 0 7px;
+	border: 1px solid var(--tt-border);
+	border-radius: 999px;
+	background: var(--tt-surface);
+	color: var(--tt-ink);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	vertical-align: middle;
+}
+.history-snapshot-title .history-name {
+	flex: 0 1 auto;
+	min-width: 48px;
+	max-width: 55%;
+}
+.history-event-label .history-name,
+.history-version-label .history-name,
+h2 .history-name {
+	margin-left: 6px;
+}
+.history-strip.line .history-stop-card > .history-name {
+	align-self: flex-start;
+}
+/* Versions tab rows: a select button and a sibling control strip, never nested. */
+.history-version {
+	border-radius: 10px;
+	min-width: 0;
+}
+.history-version[data-selected='true'] {
+	background: var(--tt-surface);
+}
+.history-version-controls input {
+	min-width: 0;
+}

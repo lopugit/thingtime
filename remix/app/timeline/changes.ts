@@ -28,15 +28,18 @@ export function timelineChanges(before: TimelineSnapshot | null, after: Timeline
 }
 
 /** UI-only expansion of webpage block changes by stable id. Array order still
- * has its own change and the canonical merge/replay contract stays atomic. */
-export function timelineDisplayChanges(before: TimelineSnapshot | null, after: TimelineSnapshot | null): TimelineChange[] {
+ * has its own change and the canonical merge/replay contract stays atomic.
+ * `page` overrides the snapshot test: version previews carry only restorable
+ * content without `thingtime`, so a caller that knows the Thing is a page
+ * (from the preview's own `thingtime`) passes `page: true`. */
+export function timelineDisplayChanges(before: TimelineSnapshot | null, after: TimelineSnapshot | null, options: { page?: boolean } = {}): TimelineChange[] {
 	const changes = timelineChanges(before, after);
 	const isPage = (snapshot: TimelineSnapshot | null) =>
 		snapshot?.adapter === 'webpage-draft' ||
 		(snapshot?.adapter === 'thing-content' &&
 			Array.isArray((snapshot.value as any)?.thingtime) &&
 			(snapshot.value as any).thingtime.includes('webpage'));
-	if (!isPage(before) || !isPage(after)) return changes;
+	if (!(options.page ?? (isPage(before) && isPage(after)))) return changes;
 	return changes.flatMap((change) => {
 		if (
 			JSON.stringify(change.path) !== '["crystal","blocks"]' ||

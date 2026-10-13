@@ -12,6 +12,8 @@ import { applyUserStorageDelta } from '../storage/userStorage';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { recordPublishedTimelineHead } from './publishedHead.ts';
 import { readTimelineNotes } from './notes.ts';
+import { readTimelineVersionNames } from './versionNames.ts';
+import type { TimelineVersionName } from '../../../timeline/versionNames.ts';
 
 const digest = (parts: string[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 // Leave room for the receipt/page wrapper while staying below the hosting
@@ -178,7 +180,7 @@ export async function appendTimelineEvent(
 	return entry;
 }
 
-export async function readTimelinePage(things: any, ownerId: string, request: TimelinePageRequest, relatedIds?: string[], session?: any): Promise<TimelinePage> {
+export async function readTimelinePage(things: any, ownerId: string, request: TimelinePageRequest, relatedIds?: string[], session?: any): Promise<TimelinePage & { names: TimelineVersionName[] }> {
 	if (relatedIds && (!request.thingId || !relatedIds.includes(request.thingId) || relatedIds.length > 128 || new Set(relatedIds).size !== relatedIds.length || relatedIds.some(id => !id || id.length > 200))) throw new Error('Invalid related Timeline targets');
 	if (!ownerId || (request.thingId !== null && !request.thingId) || (request.before !== null && request.after !== null) || !Number.isInteger(request.limit) || request.limit < 1 || request.limit > TIMELINE_PAGE_SIZE) throw new Error('Invalid Timeline page request');
 	for (const cursor of [request.before, request.after]) if (cursor !== null && (!Number.isSafeInteger(cursor) || cursor < 1 || !Number.isFinite(new Date(cursor).getTime()))) throw new Error('Invalid Timeline cursor');
@@ -216,9 +218,15 @@ export async function readTimelinePage(things: any, ownerId: string, request: Ti
 	// their bytes would push a full page past it, the page ends earlier and the
 	// cursor continues from the last kept entry. One entry always fits with its
 	// at most eight bounded notes, which stays under the hosting response limit.
-	const allNotes = await readTimelineNotes(things, ownerId, entries.map(entry => entry.event.id), session);
+	// Version names ride the page the same way: one bounded query, at most one
+	// small record per event, counted against the same byte budget.
+	const [allNotes, allNames] = await Promise.all([
+		readTimelineNotes(things, ownerId, entries.map(entry => entry.event.id), session),
+		readTimelineVersionNames(things, ownerId, entries.map(entry => entry.event.id), session)
+	]);
 	const noteBytes = new Map<string, number>();
 	for (const note of allNotes) noteBytes.set(note.eventId, (noteBytes.get(note.eventId) ?? 0) + Buffer.byteLength(JSON.stringify(note)) + 1);
+	for (const name of allNames) noteBytes.set(name.eventId, (noteBytes.get(name.eventId) ?? 0) + Buffer.byteLength(JSON.stringify(name)) + 1);
 	let kept = 0; let total = 256;
 	for (const entry of entries) {
 		const size = Buffer.byteLength(JSON.stringify(entry)) + 1 + (noteBytes.get(entry.event.id) ?? 0);
@@ -228,6 +236,7 @@ export async function readTimelinePage(things: any, ownerId: string, request: Ti
 	const page = entries.slice(0, kept);
 	const keptIds = new Set(page.map(entry => entry.event.id));
 	const notes = allNotes.filter(note => keptIds.has(note.eventId));
+	const names = allNames.filter(name => keptIds.has(name.eventId));
 	const next = headers.length > ids.length || kept < entries.length ? page[page.length - 1].receipt.position : null;
-	return { entries: page, nextBefore: ascending ? null : next, nextAfter: ascending ? next : null, notes };
+	return { entries: page, nextBefore: ascending ? null : next, nextAfter: ascending ? next : null, notes, names };
 }

@@ -3,6 +3,7 @@ import { Box, Button, Flex, FormControl, FormLabel, Input, Select, Text } from '
 import type { TimelineEvent } from '../../timeline/contract';
 import type { LocalTimelineRow } from '../../timeline/localStore';
 import type { HistoryNoteView } from '../../timeline/notes';
+import type { TimelineVersionName } from '../../timeline/versionNames';
 import { HistoryMessages } from './TimelineMessages';
 import {
 	HISTORY_LOOKS,
@@ -37,12 +38,23 @@ function SyncPill({ card }: { card: HistoryCard }) {
 		</span>
 	);
 }
+/** The 📌 version name, the same in every look and in the detail heading. The
+ * record is a cache from the account; nothing here invents a version number. */
+export function VersionNameBadge({ name }: { name: string }) {
+	return (
+		<span className="history-name" title={`Version name: ${name}`}>
+			<span aria-hidden="true">📌 </span>
+			{name}
+		</span>
+	);
+}
 function SnapshotCard({ card, frame = false }: { card: HistoryCard; frame?: boolean }) {
 	return (
 		<div className={`history-snapshot ${frame ? 'frame' : ''}`}>
 			<div className="history-snapshot-title">
 				<span aria-hidden="true">{Object.prototype.hasOwnProperty.call(icons, card.kind) ? icons[card.kind] : '💎'}</span>
 				<strong>{card.title}</strong>
+				{card.name ? <VersionNameBadge name={card.name} /> : null}
 			</div>
 			<div className="history-caption">
 				{card.kind || 'Recorded content'} · {card.row.event.mode === 'effect' ? 'recorded activity' : card.removed ? 'before removal' : 'as of this version'}
@@ -91,6 +103,7 @@ function ChangeChips({ card }: { card: HistoryCard }) {
 export function TimelineEventBrowser({
 	rows,
 	notes,
+	names,
 	filters,
 	onFilters,
 	selected,
@@ -102,6 +115,7 @@ export function TimelineEventBrowser({
 }: {
 	rows: LocalTimelineRow[];
 	notes: Map<string, HistoryNoteView[]>;
+	names: Map<string, TimelineVersionName>;
 	filters: HistoryFilters;
 	onFilters: (next: HistoryFilters) => void;
 	selected: TimelineEvent | null;
@@ -111,7 +125,7 @@ export function TimelineEventBrowser({
 	hasOlder: boolean;
 	ready: boolean;
 }) {
-	const cards = React.useMemo(() => rows.map((row) => historyCard(row, notes.get(row.event.id))), [rows, notes]);
+	const cards = React.useMemo(() => rows.map((row) => historyCard(row, notes.get(row.event.id), names.get(row.event.id))), [rows, notes, names]);
 	const [visibleCount, setVisibleCount] = React.useState(80);
 	const matches = React.useMemo(() => filterHistoryCards(cards, filters), [cards, filters]);
 	const filtered = React.useMemo(() => matches.slice(0, visibleCount), [matches, visibleCount]);
@@ -515,7 +529,7 @@ export function TimelineEventBrowser({
 												if (element) buttons.current.set(card.row.event.id, element);
 												else buttons.current.delete(card.row.event.id);
 											}}
-											aria-label={`${card.row.event.label} · ${card.title} · ${historyDayLabel(card.day)} ${time(card.row.event)}`}
+											aria-label={`${card.row.event.label} · ${card.title}${card.name ? ` · Version name: ${card.name}` : ''} · ${historyDayLabel(card.day)} ${time(card.row.event)}`}
 											aria-pressed={selected?.id === card.row.event.id}
 											onClick={() => {
 												setPlaying(false);
@@ -528,6 +542,7 @@ export function TimelineEventBrowser({
 													{historyDayLabel(card.day)} · {time(card.row.event)}
 												</span>
 												{filters.look !== 'line' ? <SnapshotCard card={card} frame={filters.look === 'frames'} /> : <strong>{card.title}</strong>}
+												{filters.look === 'line' && card.name ? <VersionNameBadge name={card.name} /> : null}
 												<strong className="history-event-label">{card.row.event.label}</strong>
 												{filters.look !== 'line' ? <ChangeChips card={card} /> : null}
 												{filters.look !== 'line' && filters.messages ? <HistoryMessages card={card} compact /> : null}

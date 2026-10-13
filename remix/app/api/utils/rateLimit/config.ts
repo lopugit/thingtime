@@ -145,6 +145,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'timeline.read': { limit: 240, windowMs: 60_000, enabled: true },
   'timeline.write': { limit: 240, windowMs: 60_000, enabled: true },
   'timeline.explain': { limit: 20, windowMs: 600_000, enabled: true },
+  // version export (GET export=1) resolves one full version plus its notes and
+  // name into a 4 MiB file; bounded separately from ordinary history reads
+  'timeline.export': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.devices': { limit: 30, windowMs: 60_000, enabled: true },
   // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so

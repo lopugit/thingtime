@@ -189,7 +189,7 @@ test('client uploads cannot forge server provenance or another owner, and generi
 	assert.equal(isProtectedThingtime([TIMELINE_LINK_KIND]), true);
 	assert.equal((sanitizeShareId('timeline-forged') as any).ok, false);
 	const doc: any = { shareId: 'event', ownerId: 'user-1', thingtime: [TIMELINE_EVENT_KIND], acl: ['tt:all'] };
-	for (const viewer of [null, { id: 'user-1' }, { id: 'other' }]) for (const kind of [TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND]) assert.equal(canView({ ...doc, thingtime: [kind] }, viewer), false);
+	for (const viewer of [null, { id: 'user-1' }, { id: 'other' }]) for (const kind of [TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_NOTE_KIND, 'timeline-version-name', 'timeline-branch-head']) assert.equal(canView({ ...doc, thingtime: [kind] }, viewer), false);
 });
 
 test('server content projection omits credentials and counters, suppresses bookkeeping-only changes, and preserves baseline content', () => {
