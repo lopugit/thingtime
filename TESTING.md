@@ -6381,7 +6381,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       drawer X. At desktop and 390 CSS px, check the shared sections and their
       expanded states from top to bottom, including battery details, then use
       **Back to Things**. The page must use the drawer's content and controls
-      without a second copy or horizontal overflow.
+      without a second copy or horizontal overflow. Direct-load the page URL
+      and use the drawer expand link; neither path may show the session recovery
+      screen because drawer-only Chakra components rendered outside a Drawer.
 - [ ] In the exact installed Electron app, open that device drawer and click
       its 44px X while it overlaps the native title-bar band. Reopen it and
       confirm the left edge has an always-visible centred grip with a forgiving
@@ -6399,6 +6401,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       bundle must retain its signing identity and designated requirement before
       replacement; verify the installed copy and permission preflights after
       launch. A fresh install uses Apple Development and never ad-hoc signing.
+- [ ] In the installed Electron app's footer, confirm the branch and full commit
+      link match `Contents/Resources/web/metadata.json`, even when the selected
+      Thingtime origin's root data reports a different deployment branch.
 - [ ] In a fresh worktree with no `MCP/node_modules`, run the canonical
       Electron build. It must install the locked MCP dependencies before the
       web build and bundle both desktop helper entry points without a manual

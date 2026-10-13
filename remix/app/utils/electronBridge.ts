@@ -29,6 +29,7 @@ export type ThingtimeDesktopEndpointCompatibility = {
 
 export type ThingtimeDesktopInfo = {
 	appVersion?: string;
+	buildIdentity?: { gitBranch?: string | null; gitCommit?: string | null };
 	contentOrigin?: string | null;
 	currentUrl?: string | null;
 	desktopSettings?: ThingtimeDesktopSettings | null;

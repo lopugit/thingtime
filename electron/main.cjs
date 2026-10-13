@@ -1490,8 +1490,15 @@ async function desktopUploadMenuBarIcon(event) {
 }
 
 function getDesktopInfo() {
+  const buildMetadata = readWebBuildMetadata();
   return {
     appVersion: getCurrentAppVersion(),
+    buildIdentity: {
+      gitBranch: typeof buildMetadata.gitBranch === 'string' ? buildMetadata.gitBranch : null,
+      gitCommit: typeof buildMetadata.gitCommit === 'string' && /^[0-9a-f]{7,40}$/u.test(buildMetadata.gitCommit)
+        ? buildMetadata.gitCommit
+        : null
+    },
     contentOrigin: activeContentOrigin || appOrigin,
     currentUrl: mainWindow?.webContents.getURL() || appOrigin,
 		desktopSettings: desktopSettings?.snapshot() || null,

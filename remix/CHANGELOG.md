@@ -75,6 +75,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   shared with the drawer. Device right-click menus open that page. The local
   Electron build now installs its separately locked MCP helper before building
   in a fresh worktree and preserves an available installed app signing identity.
+  The shared device page uses context-free layout wrappers so expanding it does
+  not trip the app recovery screen. The installed app footer now identifies its
+  bundled branch and full commit instead of the selected server's deployment.
   Details: [PR #990](../PRs/990-codex-mac-battery-monitor-add-detailed-mac-battery-telemetry-and-full-device-things-page.md).
 
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now

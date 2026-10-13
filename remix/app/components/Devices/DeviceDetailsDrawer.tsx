@@ -318,10 +318,13 @@ export const DeviceDetailsDrawer = memo(
 			[persistDrawerWidth]
 		);
 
-		// Both presentations render this exact header and body tree.
+		// Chakra's DrawerHeader and DrawerBody require a Drawer context. Use plain
+		// Boxes for the page while retaining one shared detail tree and layout.
+		const DetailHeader = presentation === 'drawer' ? DrawerHeader : Box;
+		const DetailBody = presentation === 'drawer' ? DrawerBody : Box;
 		const details = (
 			<>
-					<DrawerHeader
+					<DetailHeader
 						borderBottom="1px solid var(--tt-border, #ececef)"
 						paddingBottom={3}
 						paddingLeft={{ base: 4, sm: 5 }}
@@ -348,9 +351,9 @@ export const DeviceDetailsDrawer = memo(
 								Device details
 							</Text>
 						)}
-					</DrawerHeader>
+					</DetailHeader>
 
-					<DrawerBody
+					<DetailBody
 						overflowX="hidden"
 						paddingBottom="calc(28px + env(safe-area-inset-bottom))"
 						paddingLeft={{ base: 4, sm: 5 }}
@@ -646,7 +649,7 @@ export const DeviceDetailsDrawer = memo(
 								)}
 							</>
 						)}
-					</DrawerBody>
+					</DetailBody>
 			</>
 		);
 

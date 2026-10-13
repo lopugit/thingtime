@@ -132,7 +132,7 @@ await writeFile(
 			desktopEndpoints: desktopEndpointMetadata(),
       desktopRelease: desktopReleaseMetadata.version ? desktopReleaseMetadata : null,
       gitBranch: readGitValue(['rev-parse', '--abbrev-ref', 'HEAD']),
-      gitCommit: readGitValue(['rev-parse', '--short', 'HEAD']),
+      gitCommit: readGitValue(['rev-parse', 'HEAD']),
       nitroPreset: 'node_server'
     },
     null,
