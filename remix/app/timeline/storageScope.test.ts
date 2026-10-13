@@ -5,6 +5,7 @@ import { TimelineConnectionPool, timelineConnectionForViewer } from './connectio
 import { IndexedDbTimelineBackend } from './indexedDb.ts';
 import { TimelineLocalStore } from './localStore.ts';
 import { TimelineBranchStore } from './branchStore.ts';
+import { TimelineNoteStore } from './noteStore.ts';
 import { TimelineSync } from './sync.ts';
 import { entryFixture, eventFixture } from './testFixtures.ts';
 import { historyStorageForThing, timelineFolderHref, timelineRequestScope } from './storageScope.ts';
@@ -36,9 +37,9 @@ test('shared home sessions upload once and releasing selected history cannot sto
 	let pushes = 0;
 	let finish!: () => void; const gate = new Promise<void>(resolve => { finish = resolve; });
 	const pool = new TimelineConnectionPool((scope, folderId) => {
-		const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend);
+		const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend); const notes = new TimelineNoteStore(scope, backend);
 		const sync = new TimelineSync(store, { push: async event => { pushes++; await gate; return entryFixture(event); }, page: async () => ({ entries: [], nextBefore: null, nextAfter: null }) }, branches);
-		return { scope, folderId, store, branches, sync };
+		return { scope, folderId, store, branches, notes, sync };
 	});
 	const selected = pool.acquire(home, 'folder'); const account = pool.acquire({ ...home }, 'folder');
 	assert.equal(selected.connection.sync, account.connection.sync);
@@ -59,8 +60,8 @@ test('identical event ids in different databases remain separate through pending
 	const backend = new IndexedDbTimelineBackend(new IDBFactory());
 	const uploads: string[] = [];
 	const pool = new TimelineConnectionPool((scope, folderId) => {
-		const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend);
-		return { scope, folderId, store, branches, sync: new TimelineSync(store, { push: async event => { uploads.push(`${scope.dataPlane}:${event.label}`); return entryFixture(event); }, page: async () => ({ entries: [], nextBefore: null, nextAfter: null }) }, branches) };
+		const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend); const notes = new TimelineNoteStore(scope, backend);
+		return { scope, folderId, store, branches, notes, sync: new TimelineSync(store, { push: async event => { uploads.push(`${scope.dataPlane}:${event.label}`); return entryFixture(event); }, page: async () => ({ entries: [], nextBefore: null, nextAfter: null }) }, branches) };
 	});
 	const account = pool.acquire(home, 'folder'); const custom = pool.acquire({ ...home, dataPlane: 'custom-one' }, 'folder');
 	await account.connection.store.enqueue(eventFixture('same-id', { label: 'Home edit' }));

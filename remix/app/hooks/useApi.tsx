@@ -4,6 +4,7 @@ import { timelineRequestScope, type TimelineStorage } from '../timeline/storageS
 import { draftRequest } from '~/drafts/draftClient';
 import type { BranchMergeRequest } from '../timeline/branchMerge';
 import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
+import type { TimelineNoteCommand } from '../timeline/notes';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import type { TimelineEvent } from '~/timeline/contract';
 import { retainActionOutcomeRecovery, type ActionOutcomeRecovery } from '~/timeline/actionRecovery';
@@ -146,6 +147,10 @@ export function useApi() {
       }, []),
       branch: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineBranchCommand, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      note: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineNoteCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.17.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal; storage?: TimelineStorage }) => {

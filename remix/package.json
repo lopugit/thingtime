@@ -132,6 +132,7 @@
     "test:timeline:components": "node --import tsx scripts/timeline-components.integration.mts",
     "test:timeline:visual-branch": "node --import tsx scripts/timeline-visual-branch.integration.mts",
     "test:timeline:branch-merge": "node --import tsx scripts/timeline-branch-merge.integration.mts",
+    "test:timeline:notes": "node --import tsx scripts/timeline-notes.integration.mts",
     "test:timeline:integration": "node --import tsx scripts/timeline.integration.mts",
     "test:timeline:folders": "node --import tsx scripts/timeline-folders.integration.mts && node --import tsx scripts/timeline-folders-large.integration.mts",
     "test:timeline:library": "node --import tsx scripts/timeline-library.integration.mts",

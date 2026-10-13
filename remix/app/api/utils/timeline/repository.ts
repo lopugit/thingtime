@@ -11,6 +11,7 @@ import { StorageMutationError, thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VE
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { recordPublishedTimelineHead } from './publishedHead.ts';
+import { readTimelineNotes } from './notes.ts';
 
 const digest = (parts: string[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 // Leave room for the receipt/page wrapper while staying below the hosting
@@ -211,6 +212,22 @@ export async function readTimelinePage(things: any, ownerId: string, request: Ti
 	});
 	const entries = await entriesFromDocs(things, ownerId, ordered, session);
 	if (Buffer.byteLength(JSON.stringify(entries)) > TIMELINE_PAGE_MAX_BYTES - 128) throw new Error('Timeline page exceeds its recorded size');
-	const next = headers.length > ids.length ? entries[entries.length - 1].receipt.position : null;
-	return { entries, nextBefore: ascending ? null : next, nextAfter: ascending ? next : null };
+	// Contextual notes ride the same page. They share the page byte budget: when
+	// their bytes would push a full page past it, the page ends earlier and the
+	// cursor continues from the last kept entry. One entry always fits with its
+	// at most eight bounded notes, which stays under the hosting response limit.
+	const allNotes = await readTimelineNotes(things, ownerId, entries.map(entry => entry.event.id), session);
+	const noteBytes = new Map<string, number>();
+	for (const note of allNotes) noteBytes.set(note.eventId, (noteBytes.get(note.eventId) ?? 0) + Buffer.byteLength(JSON.stringify(note)) + 1);
+	let kept = 0; let total = 256;
+	for (const entry of entries) {
+		const size = Buffer.byteLength(JSON.stringify(entry)) + 1 + (noteBytes.get(entry.event.id) ?? 0);
+		if (kept && total + size > TIMELINE_PAGE_MAX_BYTES) break;
+		total += size; kept++;
+	}
+	const page = entries.slice(0, kept);
+	const keptIds = new Set(page.map(entry => entry.event.id));
+	const notes = allNotes.filter(note => keptIds.has(note.eventId));
+	const next = headers.length > ids.length || kept < entries.length ? page[page.length - 1].receipt.position : null;
+	return { entries: page, nextBefore: ascending ? null : next, nextAfter: ascending ? next : null, notes };
 }
