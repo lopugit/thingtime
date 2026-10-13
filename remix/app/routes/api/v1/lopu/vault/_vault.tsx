@@ -15,7 +15,7 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
 export const loader = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: NO_STORE });
-	return json({ ok: true, ...(await listUserVault(user.id)) }, { headers: NO_STORE });
+	return json({ ok: true, ownerId: user.id, ...(await listUserVault(user.id)) }, { headers: NO_STORE });
 };
 
 // Writes: full account only (a guest session must not create vault rows),
@@ -32,6 +32,7 @@ export const action = async ({ request }: { request: Request }) => {
 		return json({ ok: false, error: 'Secure Vault is rate limited.' }, { ...responseInit, headers: { ...responseInit.headers, ...NO_STORE } });
 	}
 	const body = await readJsonBody(request, 40 * 1024);
+  if (body?.expectedOwnerId !== undefined && body.expectedOwnerId !== user.id) return json({ ok: false, error: 'Your Thingtime account changed. Reload before saving.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
 	try {
 		switch (body?.action) {
 			case 'create-group':

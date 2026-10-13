@@ -4,6 +4,11 @@ import { Link, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { PageShell } from '~/components/Layout/PageShell';
+import { AIServiceAccounts } from './AIServiceAccounts';
+import { ServiceCatalog, type Provider } from './ServiceCatalog';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
 
@@ -11,17 +16,6 @@ import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, 
 // RSS, …), manage the linked accounts, and manage AI feed filters. The feeds
 // themselves render at /connections/feed with the native Thingtime
 // comment/reaction overlay.
-
-type Provider = {
-  id: string;
-  name: string;
-  icon: string;
-  auth: 'none' | 'oauth2' | 'credential';
-  contentVisibility: 'public' | 'personal';
-  about: string;
-  configured: boolean;
-  fields: { key: string; label: string; placeholder?: string; help?: string; required?: boolean; secret?: boolean }[];
-};
 
 type FeedFilter = {
   id: string;
@@ -31,11 +25,30 @@ type FeedFilter = {
   enabled: boolean;
 };
 
-const PROVIDERS_CACHE = 'tt-connections-providers';
-const CONNECTIONS_CACHE = 'tt-connections-list';
-const FILTERS_CACHE = 'tt-connections-filters';
-
 export const ConnectionsPage = () => {
+  const user = useCurrentUser();
+  // Account-keyed remount clears forms and fences every pending async result.
+  return (
+    <ConnectionsContent
+      key={`${typeof window === 'undefined' ? '' : window.location.origin}:${user?.id || 'guest'}`}
+      ownerId={user?.accountKind === 'service' ? null : user?.id || null}
+    />
+  );
+};
+
+const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
+  const cacheScope = `${typeof window === 'undefined' ? '' : window.location.origin}:${ownerId || 'guest'}`;
+  const PROVIDERS_CACHE = `tt-connections-providers:v2:${cacheScope}`;
+  const CONNECTIONS_CACHE = `tt-connections-list:v2:${cacheScope}`;
+  const FILTERS_CACHE = `tt-connections-filters:v2:${cacheScope}`;
+  const active = React.useRef(true);
+  const refreshGeneration = React.useRef(0);
+  React.useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const api = useApi();
   const lopu = useLopu();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -45,7 +58,7 @@ export const ConnectionsPage = () => {
   const [providers, setProviders] = React.useState<Provider[]>(() => readLocalCache<Provider[]>(PROVIDERS_CACHE) || []);
   const [connections, setConnections] = React.useState<Connection[]>(() => readLocalCache<Connection[]>(CONNECTIONS_CACHE) || []);
   const [filters, setFilters] = React.useState<FeedFilter[]>(() => readLocalCache<FeedFilter[]>(FILTERS_CACHE) || []);
-  const [signedOut, setSignedOut] = React.useState(false);
+  const [signedOut, setSignedOut] = React.useState(!ownerId);
 
   const [connecting, setConnecting] = React.useState<Provider | null>(null);
   const [fieldValues, setFieldValues] = React.useState<Record<string, string>>({});
@@ -56,29 +69,34 @@ export const ConnectionsPage = () => {
   const [filterAction, setFilterAction] = React.useState<'warn' | 'hide'>('warn');
 
   const refresh = React.useCallback(async () => {
+    const generation = ++refreshGeneration.current;
     try {
       const [providersResp, connectionsResp, filtersResp] = await Promise.all([
         api.v1.connections.providers(),
-        api.v1.connections.list().catch((err: any) => {
+        (ownerId ? api.v1.connections.list() : Promise.resolve({ connections: null })).catch((err: any) => {
           if (err?.status === 401) return { connections: null };
           throw err;
         }),
-        api.v1.connections.filters().catch(() => ({ filters: null }))
+        (ownerId ? api.v1.connections.filters() : Promise.resolve({ filters: null })).catch(() => ({ filters: null }))
       ]);
+      if (!active.current || generation !== refreshGeneration.current) return;
       setProviders(providersResp.providers || []);
       writeLocalCache(PROVIDERS_CACHE, providersResp.providers || []);
-      if (connectionsResp.connections === null) {
+      if (connectionsResp.connections === null || connectionsResp.ownerId !== ownerId) {
         setSignedOut(true);
+        setConnections([]);
+        setFilters([]);
       } else {
         setSignedOut(false);
         setConnections(connectionsResp.connections || []);
         writeLocalCache(CONNECTIONS_CACHE, connectionsResp.connections || []);
       }
-      if (filtersResp.filters !== null) {
+      if (connectionsResp.ownerId === ownerId && filtersResp.ownerId === ownerId && filtersResp.filters !== null) {
         setFilters(filtersResp.filters || []);
         writeLocalCache(FILTERS_CACHE, filtersResp.filters || []);
       }
     } catch (err: any) {
+      if (!active.current || generation !== refreshGeneration.current) return;
       lopu({ title: err?.error || 'Could not load your connections 😞', status: 'error' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,6 +104,15 @@ export const ConnectionsPage = () => {
 
   React.useEffect(() => {
     refresh();
+    const focus = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    window.addEventListener('focus', focus);
+    document.addEventListener('visibilitychange', focus);
+    return () => {
+      window.removeEventListener('focus', focus);
+      document.removeEventListener('visibilitychange', focus);
+    };
   }, [refresh]);
 
   // OAuth callback landing: /connections?connected=<provider id> or
@@ -109,11 +136,25 @@ export const ConnectionsPage = () => {
   const openConnect = async (provider: Provider) => {
     // SSO providers hand the browser to their own sign-in — no form here
     if (provider.auth === 'oauth2') {
+      const tab = window.open('about:blank', '_blank');
+      if (!tab) {
+        lopu({ title: 'Allow pop-ups to open the sign-in tab.', status: 'info' });
+        return;
+      }
+      tab.opener = null;
       setBusy(true);
       try {
-        const resp = await api.v1.connections.oauthBegin({ provider: provider.id });
-        if (resp?.authorizeUrl) window.location.href = resp.authorizeUrl;
+        await requireThingtimeCapability('api.connections-oauth-begin', '1.1.0');
+        const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId });
+        if (!active.current) {
+          tab.close();
+          return;
+        }
+        if (!resp?.authorizeUrl || new URL(resp.authorizeUrl).protocol !== 'https:') throw new Error('Invalid sign-in URL');
+        tab.location.replace(resp.authorizeUrl);
       } catch (err: any) {
+        tab.close();
+        if (!active.current) return;
         lopu({ title: err?.error || `Could not start the ${provider.name} sign-in 😞`, status: 'error' });
       } finally {
         setBusy(false);
@@ -128,7 +169,8 @@ export const ConnectionsPage = () => {
     if (!connecting) return;
     setBusy(true);
     try {
-      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues });
+      const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, expectedOwnerId: ownerId });
+      if (!active.current) return;
       lopu({
         title: resp.alreadyLinked
           ? `Already connected to ${resp.connection?.account?.displayName} ✨`
@@ -137,6 +179,7 @@ export const ConnectionsPage = () => {
         duration: 6000
       });
       setConnecting(null);
+      setFieldValues({});
       await refresh();
     } catch (err: any) {
       lopu({ title: err?.error || `Could not connect ${connecting.name} 😞`, status: 'error' });
@@ -146,16 +189,25 @@ export const ConnectionsPage = () => {
   };
 
   const unlink = async (connection: Connection) => {
-    // optimistic remove, restore on failure
+    // Fence any older read before the optimistic removal.
+    refreshGeneration.current++;
+    setBusy(true);
     const previous = connections;
     setConnections((current) => current.filter((entry) => entry.id !== connection.id));
     try {
       await api.v1.connections.unlink({ id: connection.id });
-      writeLocalCache(CONNECTIONS_CACHE, previous.filter((entry) => entry.id !== connection.id));
+      if (!active.current) return;
+      writeLocalCache(
+        CONNECTIONS_CACHE,
+        previous.filter((entry) => entry.id !== connection.id)
+      );
       lopu({ title: `Unlinked ${connection.account.displayName} 👋`, status: 'success', duration: 5000 });
     } catch (err: any) {
+      if (!active.current) return;
       setConnections(previous);
       lopu({ title: err?.error || 'Could not unlink that connection 😞', status: 'error' });
+    } finally {
+      if (active.current) setBusy(false);
     }
   };
 
@@ -271,25 +323,77 @@ export const ConnectionsPage = () => {
     }
   };
 
+  const verifyConnection = async (connection: Connection) => {
+    setBusy(true);
+    try {
+      await requireThingtimeCapability('api.connections-request', '1.0.0');
+      await api.v1.connections.request({ connectionId: connection.id, operation: 'account.profile' });
+      if (active.current) lopu({ title: `${connection.account.displayName} is connected`, status: 'success' });
+    } catch (error: any) {
+      if (active.current) lopu({ title: error?.error || 'Reconnect this account to restore access.', status: 'error' });
+    } finally {
+      if (active.current) setBusy(false);
+    }
+  };
+
+  const connectForm = connecting ? (
+    <Box {...cardStyle} padding={5} display="flex" flexDirection="column" rowGap={3}>
+      <Text fontWeight="600">
+        {connecting.icon} Connect {connecting.name}
+      </Text>
+      {connecting.fields.map((field) => (
+        <Box key={field.key}>
+          <Text fontSize="sm" fontWeight="500" marginBottom={1}>
+            {field.label}
+            {field.required ? ' *' : ''}
+          </Text>
+          <Input
+            aria-label={field.label}
+            value={fieldValues[field.key] || ''}
+            placeholder={field.placeholder}
+            type={field.secret ? 'password' : 'text'}
+            autoComplete={field.secret ? 'off' : undefined}
+            onChange={(event) => setFieldValues((current) => ({ ...current, [field.key]: event.target.value }))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') submitConnect();
+            }}
+          />
+          {field.help ? (
+            <Text fontSize="xs" color="var(--tt-muted, #6b7280)" marginTop={1}>
+              {field.help}
+            </Text>
+          ) : null}
+        </Box>
+      ))}
+      <Flex columnGap={2}>
+        <Button size="sm" borderRadius="999px" onClick={submitConnect} isLoading={busy}>
+          Link account
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          borderRadius="999px"
+          onClick={() => {
+            setConnecting(null);
+            setFieldValues({});
+          }}
+        >
+          Cancel
+        </Button>
+      </Flex>
+    </Box>
+  ) : null;
+
   return (
-    <Box
-      maxWidth="860px"
-      marginX="auto"
-      paddingX={[4, 6]}
-      paddingBottom={[6, 8]}
-      paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
-      display="flex"
-      flexDirection="column"
-      rowGap={8}
-    >
+    <PageShell width={1100} columnProps={{ rowGap: 8 }}>
       <Flex alignItems="baseline" justifyContent="space-between" flexWrap="wrap" rowGap={2}>
         <Box>
           <Text as="h1" fontSize="2xl" fontWeight="700">
-            Connections 🔗
+            Third-party services
           </Text>
           <Text color="var(--tt-muted, #6b7280)" marginTop={1}>
-            Link your third-party apps and browse their feeds inside Thingtime — with Thingtime comments, reactions, and AI
-            filters layered on top.
+            Your account library for connected services. Add multiple accounts, choose permissions, and reuse saved authorizations in Thingtime
+            actions.
           </Text>
         </Box>
         <Button as={Link} to="/connections/feed" size="sm" variant="outline" borderRadius="999px">
@@ -314,109 +418,29 @@ export const ConnectionsPage = () => {
         </Box>
       ) : null}
 
-      {/* linked accounts */}
-      {connections.length ? (
-        <Box display="flex" flexDirection="column" rowGap={3}>
-          <Text fontWeight="600">Your connections</Text>
-          {connections.map((connection) => (
-            <Flex key={connection.id} {...cardStyle} padding={4} alignItems="center" columnGap={3} flexWrap="wrap" rowGap={2}>
-              <Text fontSize="xl">{connection.providerIcon}</Text>
-              <Box flex="1" minWidth="200px">
-                <Text fontWeight="600">
-                  {connection.account.displayName}
-                  <Text as="span" color="var(--tt-muted, #6b7280)" fontWeight="400" marginLeft={2} fontSize="sm">
-                    {connection.providerName}
-                    {connection.contentVisibility === 'personal' ? ' · personal feed' : ''}
-                  </Text>
-                </Text>
-                <Text fontSize="sm" color="var(--tt-muted, #6b7280)">
-                  {connection.account.handle}
-                  {connection.lastSyncError ? ` · ⚠️ ${connection.lastSyncError}` : ''}
-                </Text>
-              </Box>
-              <Button
-                as={Link}
-                to={`/connections/feed?connection=${encodeURIComponent(connection.id)}`}
-                size="sm"
-                variant="outline"
-                borderRadius="999px"
-              >
-                Feed
-              </Button>
-              <Button size="sm" variant="ghost" borderRadius="999px" onClick={() => unlink(connection)}>
-                Unlink
-              </Button>
-            </Flex>
-          ))}
-        </Box>
-      ) : null}
-
-      {/* provider catalog */}
-      <Box display="flex" flexDirection="column" rowGap={3}>
-        <Text fontWeight="600">Connect a 3rd party app</Text>
-        <Box display="grid" gridTemplateColumns={['1fr', 'repeat(2, 1fr)', 'repeat(3, 1fr)']} gap={3}>
-          {providers.map((provider) => (
-            <Box key={provider.id} {...cardStyle} padding={4} display="flex" flexDirection="column" rowGap={2}>
-              <Flex alignItems="center" columnGap={2}>
-                <Text fontSize="xl">{provider.icon}</Text>
-                <Text fontWeight="600">{provider.name}</Text>
-              </Flex>
-              <Text fontSize="sm" color="var(--tt-muted, #6b7280)" flex="1">
-                {provider.about}
-              </Text>
-              <Button
-                size="sm"
-                borderRadius="999px"
-                isDisabled={!provider.configured || signedOut || busy}
-                onClick={() => openConnect(provider)}
-                variant={connecting?.id === provider.id ? 'solid' : 'outline'}
-              >
-                {!provider.configured ? 'Needs setup' : provider.auth === 'oauth2' ? `Sign in with ${provider.name}` : 'Connect'}
-              </Button>
-            </Box>
-          ))}
-        </Box>
-      </Box>
-
-      {/* connect form */}
-      {connecting ? (
-        <Box {...cardStyle} padding={5} display="flex" flexDirection="column" rowGap={3}>
-          <Text fontWeight="600">
-            {connecting.icon} Connect {connecting.name}
-          </Text>
-          {connecting.fields.map((field) => (
-            <Box key={field.key}>
-              <Text fontSize="sm" fontWeight="500" marginBottom={1}>
-                {field.label}
-                {field.required ? ' *' : ''}
-              </Text>
-              <Input
-                value={fieldValues[field.key] || ''}
-                placeholder={field.placeholder}
-                type={field.secret ? 'password' : 'text'}
-                autoComplete={field.secret ? 'off' : undefined}
-                onChange={(event) => setFieldValues((current) => ({ ...current, [field.key]: event.target.value }))}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') submitConnect();
-                }}
-              />
-              {field.help ? (
-                <Text fontSize="xs" color="var(--tt-muted, #6b7280)" marginTop={1}>
-                  {field.help}
-                </Text>
-              ) : null}
-            </Box>
-          ))}
-          <Flex columnGap={2}>
-            <Button size="sm" borderRadius="999px" onClick={submitConnect} isLoading={busy}>
-              Link account
-            </Button>
-            <Button size="sm" variant="ghost" borderRadius="999px" onClick={() => setConnecting(null)}>
-              Cancel
-            </Button>
-          </Flex>
-        </Box>
-      ) : null}
+      <ServiceCatalog
+        providers={providers.filter((provider) => provider.id === 'chatgpt')}
+        connections={connections}
+        signedOut={signedOut}
+        busy={busy}
+        openConnect={openConnect}
+        unlink={unlink}
+        verify={verifyConnection}
+        form={connectForm}
+        connectingId={connecting?.id}
+      />
+      <AIServiceAccounts key={ownerId || 'guest'} ownerId={ownerId} />
+      <ServiceCatalog
+        providers={providers.filter((provider) => provider.id !== 'chatgpt')}
+        connections={connections}
+        signedOut={signedOut}
+        busy={busy}
+        openConnect={openConnect}
+        unlink={unlink}
+        verify={verifyConnection}
+        form={connectForm}
+        connectingId={connecting?.id}
+      />
 
       {/* virtual YouTube subscription list */}
       {!signedOut ? (
@@ -496,7 +520,13 @@ export const ConnectionsPage = () => {
         {!signedOut ? (
           <Box {...cardStyle} padding={4} display="flex" flexDirection="column" rowGap={2}>
             <Flex columnGap={2} flexWrap="wrap" rowGap={2}>
-              <Input flex="1" minWidth="160px" placeholder="Filter name (e.g. Sad news)" value={filterName} onChange={(event) => setFilterName(event.target.value)} />
+              <Input
+                flex="1"
+                minWidth="160px"
+                placeholder="Filter name (e.g. Sad news)"
+                value={filterName}
+                onChange={(event) => setFilterName(event.target.value)}
+              />
               <Select width="auto" value={filterAction} onChange={(event) => setFilterAction(event.target.value === 'hide' ? 'hide' : 'warn')}>
                 <option value="warn">Warn (Show button)</option>
                 <option value="hide">Hide</option>
@@ -514,6 +544,6 @@ export const ConnectionsPage = () => {
           </Box>
         ) : null}
       </Box>
-    </Box>
+    </PageShell>
   );
 };

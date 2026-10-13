@@ -2919,8 +2919,7 @@ browses them with native Thingtime comments/reactions layered on the synced
 posts, and AI feed filters ("warn for sad news" → veiled behind a Show
 button, or hidden) applied server-side.
 
-Fork-safe setup: the shipped providers are keyless public-content APIs and
-need **no configuration**. AI-backed filter classification reuses the Lopu
+Fork-safe setup: public-content providers need no external credentials. Authenticated services additionally require an OAuth app and the encrypted account vault described below. AI-backed filter classification reuses the Lopu
 provider keys above (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and the Admin AI
 model waterfall; without any key, classification falls back to a
 deterministic keyword heuristic so the feature keeps working. Verify a
@@ -2930,19 +2929,32 @@ deployment end to end with:
 pnpm --dir remix run verify:connections
 ```
 
-(94 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
-live Hacker News pull, for 96.)
+(Real-API checks against the local Nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull.)
 
-### SSO account linking (Facebook, Instagram, TikTok, YouTube account)
+### Multiple accounts and SSO account linking
 
-SSO providers use real OAuth sign-in: Connect sends the browser to the
-provider's own login, and the token response is sealed into the linked
-account's secure storage server-side (no token ever reaches a client). Each
-provider stays `configured: false` (UI: "Needs setup") until its app
-credentials are set:
+The service library at `/connections` groups each provider and its subservices
+in titled cards. Each **Add account** opens the provider in a new tab; you can
+connect several personal/work identities. Reconnecting the same identity is
+idempotent. There is no fixed connection-count limit; individual accounts can
+be removed without deleting other saved accounts. Google services request separate read permissions, so connecting
+Google identity does not grant Gmail or Drive access.
+
+Authenticated accounts have independent owner-bound AES-256-GCM ciphertext;
+public sources can still share a feed. No access token, refresh token, or raw
+provider response is returned by the account-list API. Old shared grants must
+be reconnected: they are never silently imported into another owner's vault.
+Disconnect removes the local credential and link; revoke the app in the
+provider's dashboard too if you want to withdraw the provider-side grant.
+
+Set the following **server-only** environment variables in your ignored
+`remix/.env` locally or your deployment's secret manager. OAuth cards stay
+disabled until both provider credentials and a valid vault key are available:
+
 
 ```sh
-# Meta app (facebook provider — scopes public_profile,user_posts)
+# Meta app (facebook-account: public_profile; facebook posts also asks user_posts)
 FACEBOOK_APP_ID="<meta-app-id>"
 FACEBOOK_APP_SECRET="<meta-app-secret>"
 # Instagram API with Instagram Login (professional accounts)
@@ -2951,7 +2963,7 @@ INSTAGRAM_APP_SECRET="<instagram-app-secret>"
 # TikTok Login Kit (scopes user.info.basic,video.list)
 TIKTOK_CLIENT_KEY="<tiktok-client-key>"
 TIKTOK_CLIENT_SECRET="<tiktok-client-secret>"
-# Google OAuth client (youtube-account provider — youtube.readonly)
+# Google Web application OAuth client (Google identity and Google subservices)
 GOOGLE_CLIENT_ID="<google-oauth-client-id>"
 GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
 # Reddit script app (reddit-account provider — syncs your REAL front page)
@@ -2983,15 +2995,79 @@ SPOTIFY_CLIENT_SECRET="<spotify-client-secret>"
 # Optional: YouTube Data API key — lights up channel NAME search for the
 # Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
 YOUTUBE_API_KEY="<youtube-data-api-key>"
-# Optional: pin the OAuth redirect origin when the app runs behind a proxy or
-# tunnel (must match the redirect URI registered with each provider app)
+# Required for hosted OAuth: the exact origin serving the signed-in account.
+# Register its callback with every provider; no path/query/fragment in this value.
 CONNECTIONS_OAUTH_REDIRECT_BASE="https://your-host.example.com"
+# Required: stable 32-byte base64url vault key. Reuse an existing key; do not
+# regenerate it on deployments or existing saved credentials become unreadable.
+THINGTIME_USER_VAULT_KEY="<32-byte-base64url-key>"
 # Optional: dedicated HMAC key the PKCE code verifier is derived from. Falls
 # back to JWT_SECRET / JWT_PRIVATE_KEY, so every deployment already has one;
 # set it only to rotate PKCE independently of the auth signing key. Any
 # in-flight connect started before a rotation just has to be retried.
 CONNECTIONS_PKCE_SECRET="<random-32-byte-secret>"
 ```
+
+Generate a key **once** for a new installation with
+`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+Store it privately. An existing `THINGTIME_ADMIN_VAULT_KEY` is accepted as a
+fallback. Changing either the vault key or the JWT/PKCE key invalidates pending
+sign-in attempts. Restart the PM2-managed app after changing local env values.
+Loopback development may infer its origin; hosted deployments fail closed when
+the redirect env is absent. Use the same host for beginning and finishing OAuth
+so the initiating Thingtime session cookie reaches the callback.
+
+Google Cloud setup:
+
+1. Create or select your own project, configure its OAuth consent branding and
+   audience, and add your test Google accounts while it is in Testing mode.
+2. Create an OAuth client of type **Web application**, register the exact
+   callback below (and your local callback separately), then store its client
+   ID/secret in the env variables above. Do not use a service-account key.
+3. Enable the APIs you plan to use: Drive, Gmail, Calendar, Docs, Sheets,
+   People (Contacts), and YouTube Data. Identity uses `openid profile email`;
+   each service adds only its documented readonly scope. Gmail and other
+   sensitive/restricted scopes can require Google verification before public
+   use; a Testing-mode consent grant may have a shorter refresh lifetime.
+4. Add two different Google accounts in Thingtime, return to the original tab,
+   and use **Check connection**. Decline and replay a callback as well. Google
+   authorization requests use PKCE, offline access, and explicit account choice.
+
+Meta setup: select your own app in Meta for Developers, configure Facebook
+Login and its valid OAuth redirect URI, set `FACEBOOK_APP_ID` and
+`FACEBOOK_APP_SECRET`, and add test users/app roles while the app is in
+Development mode. The Facebook account card requests only `public_profile`;
+the separate Facebook posts card requests `user_posts`, which needs the applicable Meta approval for public
+use. Do not assume app-admin testing proves public availability.
+
+The **ChatGPT identity** card implements the [hosted OpenAI identity flow](https://developers.openai.com/siwc/website)
+for approved partner clients. Set `CHATGPT_OAUTH_CLIENT_ID`,
+`CHATGPT_OAUTH_AUTH_METHOD` (`client_secret_basic` or the explicitly registered
+`none` method), and `CHATGPT_OAUTH_CLIENT_SECRET` for confidential clients.
+Register the same exact callback below. PKCE, one-use session-bound state, and
+signature/issuer/audience/expiry/nonce checks protect the callback. The saved
+ID token is encrypted and is never sent as an API bearer token. Identity sign-in
+does not grant ChatGPT subscription or OpenAI API usage. The separate
+[open-source subscription flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+requires a local callback and host registration; it is not implemented by this
+hosted identity adapter.
+
+OpenAI API and Claude Code cards reuse the existing Secure Vault. Multiple
+saved connections are available in Lopu's model picker. OpenAI API usage has
+separate billing. Thingtime's existing Claude runtime accepts a **Claude Code
+OAuth token**, generated with `claude setup-token`; it does not accept an
+Anthropic API key. Direct browser-based Claude account enrollment remains
+unavailable. Never import browser session cookies as provider credentials.
+
+Saved Google grants can already be reused server-side through
+`POST /api/v1/connections/request` with `{ "connectionId": "<owned-link-id>",
+"operation": "drive.list-files" }`. Supported operations are `account.profile`,
+`drive.list-files`, `gmail.list-messages`, `calendar.list-calendars`,
+`docs.get-document`, `sheets.get-spreadsheet`, and `contacts.list-contacts`.
+The document/sheet operations also require `resourceId`. Each operation checks
+the owner, provider, and granted scopes; arbitrary URLs and caller-supplied
+auth headers are not accepted. Token refresh uses a database lease plus a
+compare-and-set, so rotating grants cannot be exchanged concurrently.
 
 Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
 redirect URI in each provider app's settings (Meta and TikTok require https —

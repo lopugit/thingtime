@@ -4883,8 +4883,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// first catalog model), providerTemplates carry `models[]` (efforts, speeds,
 		// audioInput 'realtime' for direct-voice models), four more kinds
 		// (mistral, deepseek, groq, cohere) — compatible additions.
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
@@ -4894,7 +4894,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403 on writes). POST bodies must be application/json (415 otherwise).' },
 		methods: ['GET', 'POST'],
 		steps: [
-			'GET the provider templates, environments, and redacted entry metadata.',
+			'GET ownerId, provider templates, environments, and redacted entry metadata. Bind cached metadata to ownerId.',
 			'POST create-group, save-secret, or save-provider to create write-only records.',
 			'POST move-entry with id and groupId to move a secret or provider between owned environments; null or an empty string means Ungrouped. Only metadata changes; the encrypted value is preserved without decryption.',
 			'POST delete with an owner-scoped record id to remove it.'
@@ -13777,10 +13777,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-providers',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Connection providers',
     endpoint: '/api/v1/connections/providers',
-    summary: 'Lists the third-party feed providers Thingtime can connect to.',
+    summary: 'Lists service groups, subservices, authentication modes and deployment readiness.',
     detail:
       'The provider catalog behind "connect a 3rd party app": Reddit, YouTube, Mastodon, Bluesky, RSS, Hacker News, ' +
       'Lemmy, GitHub, and a demo personal-algorithm provider. Each entry declares its connect fields, whether its ' +
@@ -13826,14 +13827,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Connections',
     endpoint: '/api/v1/connections',
     summary: 'Lists or creates links between this Thingtime account and third-party app accounts.',
     detail:
       'A connection links the current Thingtime account to one external identity (a subreddit set, a YouTube ' +
-      'channel, a Mastodon account, …). External accounts are shared many-to-many: the same third-party identity ' +
-      'can be linked from several Thingtime accounts, converging on one account record. Once linked, the feed is ' +
+      'channel, a Mastodon account, …). Public sources are shared many-to-many. Authenticated identities and AES-256-GCM ' +
+      'encrypted credentials are private to each Thingtime owner. Legacy shared grants require reconnect; existing connection IDs are retained. Multiple identities per provider are supported. GET includes ownerId, credentialStatus, scopes and expiry, never token values. POST accepts optional expectedOwnerId and returns 409 if the active account changed. Once linked, the feed is ' +
       'browsable via /api/v1/connections/feed with Thingtime comments and reactions layered on top.',
     auth: {
       mode: 'session-or-bearer',
@@ -13883,6 +13885,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'connections-request', featureVersion: '1.0.0', group: 'connections', title: 'Use a saved service account',
+    endpoint: '/api/v1/connections/request', summary: 'Runs a fixed read-only operation with an owned saved authorization.',
+    detail: 'Credentials are decrypted and refreshed on the server after checking the link owner. The browser and Actions pass connectionId, never an access token. No arbitrary URL, method or header is accepted. Responses are bounded and private/no-store. Supported operations: account.profile for OAuth providers; drive.list-files, gmail.list-messages, calendar.list-calendars, docs.get-document, sheets.get-spreadsheet, contacts.list-contacts for the corresponding Google service. Docs and Sheets require resourceId. The service-specific grant must include the required scope. Disconnecting removes future access from Thingtime; it does not revoke the provider app globally.',
+    auth: { mode: 'session', description: 'An authenticated first-party user. Foreign connections return 404; service accounts and scoped tokens are refused.' },
+    methods: ['POST'],
+    steps: ['Choose a connection ID from GET /api/v1/connections.', 'POST its connectionId and a supported operation.', 'Reconnect if the grant expired or a required permission was declined.'],
+    requestExamples: [{ name: 'Verify an account', description: 'Read the profile with the saved grant.', method: 'POST', body: { connectionId: 'ext-link-<owned-id>', operation: 'account.profile' } }],
+    responseExamples: [{ status: 200, description: 'A redacted result, never credentials.', body: { ok: true, provider: 'google', operation: 'account.profile', data: { displayName: 'Example', handle: 'account@example.com' } } }]
+  }),
+  endpoint({
     id: 'connections-unlink',
     group: 'connections',
     title: 'Unlink connection',
@@ -13890,7 +13902,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     summary: 'Removes one of the caller’s third-party connections.',
     detail:
       'Deletes the caller’s link to the external account. The shared external account record retires with its last ' +
-      'link; already-synced external posts (and any Thingtime comments and reactions on them) remain.',
+      'link in the same home transaction; its credentials are deleted. Already-synced external posts, inert source memberships, comments and reactions remain. Without a live link they grant no private access.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -13923,6 +13935,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-feed',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Connections feed',
     endpoint: '/api/v1/connections/feed',
@@ -13988,16 +14002,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-oauth-begin',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Begin SSO connect',
     endpoint: '/api/v1/connections/oauth/begin',
-    summary: 'Starts an SSO account link with an OAuth provider (Facebook, Instagram, TikTok, YouTube account).',
+    summary: 'Starts a new-tab account link with Google, Facebook, ChatGPT identity, or another configured OAuth provider.',
     detail:
       'Returns the provider’s authorize URL for the requested SSO provider. Send the browser there; the provider’s ' +
       'own sign-in page collects credentials (Thingtime never sees a third-party password) and returns to the ' +
       'callback endpoint, which saves the token response into the linked external account’s sealed secure storage. ' +
       'The state parameter is a short-lived signed JWT bound to the beginning session. Providers report ' +
-      'configured:false in the catalog until their app credentials are set in the environment.',
+      'configured:false until their app credentials and vault key are configured. Hosted deployments require CONNECTIONS_OAUTH_REDIRECT_BASE. The callback is bound to the exact starting session and deployment, consumes its nonce once, and uses PKCE where supported. Google always offers account selection and requests each service permission separately. Facebook basic identity does not request posts. Hosted ChatGPT sign-in requires an approved OpenAI client and supplies identity only. Optional expectedOwnerId rejects a stale account context with 409. Open authorizeUrl in a new tab.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -14032,6 +14047,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-oauth-callback',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'SSO connect callback',
     endpoint: '/api/v1/connections/oauth/callback',
@@ -14159,6 +14175,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-filters',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'connections',
     title: 'Feed filters',
     endpoint: '/api/v1/connections/filters',

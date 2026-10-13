@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **Third-party account library**: grouped service/subservice cards, multiple owner-private encrypted OAuth accounts, Google readonly subservices, new-tab sign-in with env-pinned callbacks, one-use session-bound state, safe server-side reuse, refresh serialization, and owner-scoped caches. Facebook identity and posts have separate grants; ChatGPT hosted identity is gated by an approved OpenAI client. OpenAI API and Claude Code OAuth cards reuse Secure Vault. Fork setup and manual QA are documented in README/TESTING. — Codex (AI), 2026-10-13
+
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now
   survive locally and synchronize through the shared Timeline outbox without
   rerunning the Action. Canonical events/relationships stay identical locally

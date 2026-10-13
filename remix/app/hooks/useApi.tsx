@@ -1258,17 +1258,18 @@ export function useApi() {
     // third-party app connections (Reddit, YouTube, Mastodon, …) — link
     // external accounts, browse their feeds, manage AI feed filters
     connections: {
+      request: useCallback(async (args) => asyncFetcher.submit({ connectionId: args?.connectionId, operation: args?.operation, resourceId: args?.resourceId }, { action: '/api/v1/connections/request' }), [asyncFetcher]),
       providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
       list: useCallback(async () => getJson('/api/v1/connections'), []),
       connect: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
+        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections' }),
         [asyncFetcher]
       ),
       unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
       // SSO account linking: begin returns the provider's authorize URL — send
       // the browser there; the callback lands back on /connections
       oauthBegin: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        async (args) => asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections/oauth/begin' }),
         [asyncFetcher]
       ),
       // the Thingtime-managed virtual YouTube subscription list

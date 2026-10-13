@@ -1,8 +1,11 @@
+import { chatgptIdentityProvider } from './chatgptIdentity';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 import { fail, type Fail } from './shared';
+import { GOOGLE_SERVICES, serviceGroupFor } from '../../../connections/catalog';
+import { ownerVaultConfigured } from '../auth/vaultCipher';
 
 // Third-party feed providers — the adapter registry behind
 // /api/v1/connections/*. Each provider resolves a connect form into a stable
@@ -35,6 +38,10 @@ export type ExternalFeedItem = {
 // never in crystal, never projected, never sent to a client.
 export type OAuthTokens = {
   accessToken: string;
+  idToken?: string;
+  clientId?: string;
+  oidcNonce?: string;
+  tokenType?: string;
   refreshToken?: string | null;
   // ISO timestamp; adapters refresh (when the provider supports it) once this
   // is near/past, otherwise the sync surfaces a "reconnect" error
@@ -78,6 +85,7 @@ export type ConnectionProvider = {
   id: string;
   name: string;
   icon: string;
+  accountOnly?: boolean;
   // 'none' = public content, no account; 'oauth2' = provider SSO; 'credential'
   // = fields-based connect where a secret field is exchanged for session
   // tokens server-side (never stored itself)
@@ -118,16 +126,18 @@ export type ConnectionProvider = {
   oauth?: {
     clientIdEnv: string;
     clientSecretEnv: string;
+    clientSecretOptional?: () => boolean;
     // X requires PKCE on its authorization-code flow; the begin/callback core
     // mints an S256 verifier and threads it through the signed state JWT
     pkce?: boolean;
-    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string }) => string;
+    buildAuthorizeUrl: (input: { clientId: string; redirectUri: string; state: string; codeChallenge?: string; nonce?: string }) => string;
     exchangeCode: (input: {
       code: string;
       clientId: string;
       clientSecret: string;
       redirectUri: string;
       codeVerifier?: string;
+      nonce?: string;
     }) => Promise<{ ok: true; tokens: OAuthTokens } | Fail>;
     resolveAccountFromTokens: (tokens: OAuthTokens) => Promise<{ ok: true; account: ResolvedExternalAccount } | Fail>;
     refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
@@ -594,8 +604,7 @@ const postForm = async (
       return fail(502, `The provider returned a malformed token response (${hostOf(url)})`);
     }
     if (!resp.ok) {
-      const message = data?.error?.message || data?.error_description || data?.error_message || data?.error || `status ${resp.status}`;
-      return fail(502, `Token exchange failed: ${String(message).slice(0, 200)}`);
+      return fail(502, `Token exchange failed (${hostOf(url)}, status ${resp.status})`);
     }
     return { ok: true, data };
   } catch (err: any) {
@@ -609,7 +618,7 @@ const postForm = async (
 // Authenticated JSON GET/POST for provider data APIs. Provider error bodies
 // surface as bounded messages so a revoked token reads as "reconnect", never
 // as a silent empty feed.
-const authedJson = async (
+export const authedJson = async (
   url: string,
   opts: { token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string> } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
@@ -635,9 +644,8 @@ const authedJson = async (
       data = null;
     }
     if (!resp.ok) {
-      const message = data?.error?.message || data?.error?.error_user_msg || data?.error_description || data?.error?.code || `status ${resp.status}`;
       const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
-      return fail(status, `${hostOf(url)}: ${String(message).slice(0, 200)}`);
+      return fail(status, status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`);
     }
     return { ok: true, data };
   } catch (err: any) {
@@ -661,7 +669,7 @@ export const oauthCredsFor = (provider: ConnectionProvider): { clientId: string;
   if (!provider.oauth) return null;
   const clientId = envValue(provider.oauth.clientIdEnv);
   const clientSecret = envValue(provider.oauth.clientSecretEnv);
-  return clientId && clientSecret ? { clientId, clientSecret } : null;
+  return clientId && (clientSecret || provider.oauth.clientSecretOptional?.()) ? { clientId, clientSecret } : null;
 };
 
 // Form-style OAuth grant factory: one implementation of the
@@ -697,7 +705,8 @@ const formOAuthGrant = (config: {
       accessToken: String(data.access_token),
       refreshToken: data.refresh_token ? String(data.refresh_token) : previous?.refreshToken || null,
       expiresAt: expiresAtFrom(data.expires_in),
-      scopes: config.scopes
+      tokenType: typeof data.token_type === 'string' ? data.token_type : previous?.tokenType || 'Bearer',
+      scopes: typeof data.scope === 'string' ? data.scope.split(/[ ,]+/).filter(Boolean) : previous?.scopes || config.scopes
     };
     return config.mapExtra ? config.mapExtra(data, tokens) : tokens;
   };
@@ -1676,7 +1685,7 @@ const GRAPH = 'https://graph.facebook.com/v23.0';
 
 const facebookProvider: ConnectionProvider = {
   id: 'facebook',
-  name: 'Facebook',
+  name: 'Facebook posts',
   icon: '📘',
   auth: 'oauth2',
   contentVisibility: 'personal',
@@ -1745,6 +1754,29 @@ const facebookProvider: ConnectionProvider = {
       opts
     );
   }
+};
+
+// Basic identity is separate from the optional posts permission. A deployment
+// can offer account linking before requesting Meta's user_posts review.
+const facebookAccountProvider: ConnectionProvider = {
+  ...facebookProvider,
+  id: 'facebook-account',
+  name: 'Facebook account',
+  accountOnly: true,
+  about: 'Save your Facebook identity for later actions. Requests your public profile; no posts permission.',
+  oauth: {
+    ...facebookProvider.oauth!,
+    buildAuthorizeUrl: ({ clientId, redirectUri, state }) => {
+      const url = new URL('https://www.facebook.com/v23.0/dialog/oauth');
+      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, state, response_type: 'code', scope: 'public_profile' }).toString();
+      return url.href;
+    },
+    exchangeCode: async (input) => {
+      const result = await facebookProvider.oauth!.exchangeCode(input);
+      return result.ok === false ? result : { ok: true, tokens: { ...result.tokens, scopes: ['public_profile'] } };
+    }
+  },
+  fetchFeed: async () => ({ ok: true, items: [] })
 };
 
 const instagramProvider: ConnectionProvider = {
@@ -1928,6 +1960,38 @@ const tiktokProvider: ConnectionProvider = {
   }
 };
 
+// Google services share one app registration and choose permissions per card.
+const googleOAuth = (serviceScopes: readonly string[]): NonNullable<ConnectionProvider['oauth']> => {
+  const scopes = ['openid', 'profile', 'email', ...serviceScopes];
+  return {
+    clientIdEnv: 'GOOGLE_CLIENT_ID', clientSecretEnv: 'GOOGLE_CLIENT_SECRET', pkce: true,
+    buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge }) => {
+      const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+      url.search = new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri, response_type: 'code',
+        scope: scopes.join(' '), access_type: 'offline', prompt: 'select_account consent',
+        state, code_challenge: codeChallenge || '', code_challenge_method: 'S256' }).toString();
+      return url.href;
+    },
+    ...formOAuthGrant({ tokenUrl: 'https://oauth2.googleapis.com/token', authStyle: 'body', scopes,
+      extraExchangeParams: ({ codeVerifier }) => ({ code_verifier: codeVerifier || '' }) }),
+    resolveAccountFromTokens: async (tokens) => {
+      const me = await authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
+      if (me.ok === false) return me;
+      if (typeof me.data?.sub !== 'string' || !me.data.sub) return fail(502, 'Google did not return an account identity');
+      return { ok: true, account: { providerAccountId: me.data.sub,
+        displayName: boundedText(me.data.name, 120) || 'Google account',
+        handle: boundedText(me.data.email, 254) || boundedText(me.data.name, 120) || 'Google account',
+        avatarUrl: httpsImage(me.data.picture), profileUrl: null, config: {} } };
+    }
+  };
+};
+const googleProviders: ConnectionProvider[] = GOOGLE_SERVICES.map((service) => ({
+  id: service.id, name: service.name, icon: '🌈', about: service.about,
+  auth: 'oauth2', contentVisibility: 'personal', accountOnly: true, fields: [],
+  configured: () => !!envValue('GOOGLE_CLIENT_ID') && !!envValue('GOOGLE_CLIENT_SECRET'),
+  oauth: googleOAuth(service.scopes), fetchFeed: async () => ({ ok: true, items: [] })
+}));
+
 const youtubeAccountProvider: ConnectionProvider = {
   id: 'youtube-account',
   name: 'YouTube account',
@@ -1941,33 +2005,7 @@ const youtubeAccountProvider: ConnectionProvider = {
   about: 'Sign in with Google to link your real YouTube account and sync the latest uploads from your actual subscriptions.',
   configured: () => !!envValue('GOOGLE_CLIENT_ID') && !!envValue('GOOGLE_CLIENT_SECRET'),
   fields: [],
-  oauth: {
-    clientIdEnv: 'GOOGLE_CLIENT_ID',
-    clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
-    buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
-      `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid profile https://www.googleapis.com/auth/youtube.readonly')}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`,
-    ...formOAuthGrant({
-      tokenUrl: 'https://oauth2.googleapis.com/token',
-      authStyle: 'body',
-      scopes: ['openid', 'profile', 'https://www.googleapis.com/auth/youtube.readonly']
-    }),
-    resolveAccountFromTokens: async (tokens) => {
-      const me = await authedJson('https://openidconnect.googleapis.com/v1/userinfo', { token: tokens.accessToken });
-      if (me.ok === false) return me;
-      if (!me.data?.sub) return fail(502, 'Google did not return a profile');
-      return {
-        ok: true,
-        account: {
-          providerAccountId: String(me.data.sub),
-          displayName: boundedText(me.data.name, 120) || 'YouTube account',
-          handle: boundedText(me.data.name, 120) || 'YouTube account',
-          avatarUrl: httpsImage(me.data.picture),
-          profileUrl: null,
-          config: {}
-        }
-      };
-    },
-  },
+  oauth: googleOAuth(['https://www.googleapis.com/auth/youtube.readonly']),
   fetchFeed: async (_account, opts) => {
     if (!opts.tokens?.accessToken) return fail(401, 'YouTube needs a reconnect — its saved sign-in is missing or expired');
     const token = opts.tokens.accessToken;
@@ -2725,11 +2763,14 @@ const spotifyProvider: ConnectionProvider = {
 // --- registry ---------------------------------------------------------------
 
 export const CONNECTION_PROVIDERS: ConnectionProvider[] = [
+  chatgptIdentityProvider,
+  ...googleProviders,
   redditAccountProvider,
   blueskyAccountProvider,
   mastodonAccountProvider,
   youtubeProvider,
   youtubeAccountProvider,
+  facebookAccountProvider,
   facebookProvider,
   instagramProvider,
   tiktokProvider,
@@ -2761,6 +2802,9 @@ export const publicProviders = () =>
     auth: provider.auth,
     contentVisibility: provider.contentVisibility,
     about: provider.about,
-    configured: provider.configured(),
+    configured: provider.configured() && (provider.auth === 'none' || ownerVaultConfigured()),
+    setupRequired: !provider.configured() ? 'provider' : provider.auth !== 'none' && !ownerVaultConfigured() ? 'vault' : null,
+    service: serviceGroupFor(provider),
+    accountOnly: provider.accountOnly === true,
     fields: provider.fields
   }));

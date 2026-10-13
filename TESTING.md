@@ -7517,14 +7517,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
-Automated first: `pnpm --dir remix run verify:connections` (94 real-API
+Automated first: `pnpm --dir remix run verify:connections` (real-API
 checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
 - [ ] `/connections` renders the provider catalog signed-out with a quiet
       sign-in card; signed in, connecting the Demo provider adds it under
-      "Your connections" with Feed + Unlink working, and reconnecting the
+      its service card with Feed + Disconnect working, and reconnecting the
       same handle reports "Already connected".
-- [ ] Connecting the same external identity from a SECOND Thingtime account
+- [ ] Connecting the same PUBLIC source from a SECOND Thingtime account
       converges on the same external account (many-to-many): both accounts
       read the same posts through their own links, and each earns its own
       acl grant even when the other account's sync fired first (the shared
@@ -7540,7 +7540,7 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       stops matching; verdicts stay stable across reads (cached) and editing
       the prompt re-classifies.
 - [ ] SSO connect: unconfigured providers show "Needs setup" (disabled);
-      configured ones show "Sign in with <name>" and redirect to the
+      configured ones show "Add account" and open a new tab at the
       provider's own login; the callback lands on /connections with the
       "Account linked" toast (or the oauthError toast on decline/forged
       state); the fields-based POST /api/v1/connections always refuses SSO
@@ -7576,6 +7576,43 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       membership rows + rewrites the acl + unsets `sourceIds`, a legacy
       `tt:extacct/` post stays visible to its linked member both BEFORE and
       AFTER the run, and a second run is a no-op.
+
+- [ ] Run `node remix/scripts/verify-service-accounts.mjs http://127.0.0.1:<api-port>`
+      against a disposable local replica set. It registers two synthetic users,
+      checks private vault projections, stale-owner refusal, API registration,
+      concurrent reconnect/disconnect, and removes its test links/credentials.
+- [ ] ChatGPT: validate signature, issuer, audience, expiry and nonce; never
+      use the hosted identity token for inference. Facebook account linking
+      requests public profile only; posts access is a separate card/grant.
+- [ ] Count regression: retain more than 50 connections and more than 500
+      AI vault entries without rejecting new accounts or hiding old ones.
+      Remove one and verify every other account remains independently usable.
+- [ ] Multi-account OAuth: add two Google identities under the same service;
+      reconnect one without duplicating it or replacing the other. Connect
+      the same provider identity from another Thingtime user and verify the
+      two credentials remain independent. Legacy shared grants must request
+      reconnect and preserve the reconnecting owner's existing link ID.
+- [ ] Callback fencing: forged/expired/replayed state, another Thingtime
+      account/session, changed redirect env, and declined consent must fail
+      without exchanging/writing a grant twice or echoing provider errors.
+      A JSON form POST with `text/plain` must be rejected (CSRF regression).
+- [ ] Concurrent rotating refresh: one exchange at a time per saved grant;
+      reconnect/disconnect during refresh must win over the older response.
+      Token ciphertext must reject another owner/id or modified ciphertext.
+- [ ] Owner-scoped cache regression: switch Thingtime accounts and sign out
+      while account/feed/vault reads are pending. Never display or cache the
+      previous user's identities, feed posts, forms, or saved AI accounts.
+- [ ] Check the service cards at desktop and 390px widths: title hierarchy,
+      account-name wrapping, permission disclosures, inline forms and buttons
+      stay inside their cards. Popup blocking gives an actionable message;
+      returning focus refreshes the original tab without discarding old state.
+- [ ] Google reuse API: exercise a permitted read, missing-scope denial,
+      wrong-provider operation, another owner's link, and arbitrary-URL input.
+      Result, error, logs, and client caches must not contain credentials.
+- [ ] Add separate OpenAI API and Claude Code OAuth connections from their cards, reload,
+      and find the same entries in Secure Vault and Lopu's provider picker.
+      No duplicate credential store; cancelled forms erase typed secrets.
+      Subscription sign-in availability must remain explicit.
 
 ## Commander emoji paste recovery
 

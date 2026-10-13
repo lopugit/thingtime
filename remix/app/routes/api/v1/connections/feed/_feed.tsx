@@ -12,7 +12,7 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 // `feedFilterMatches` from the caller's enabled AI feed filters.
 export const loader = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
-  if (!user) {
+  if (!user || user.accountKind === 'service') {
     return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
   }
   const url = new URL(request.url);
@@ -53,10 +53,11 @@ export const loader = async ({ request }: { request: Request }) => {
   const posts = result.posts.map((post) => ({ ...post, feedFilterMatches: matchesByPostId.get(post.id) || [] }));
   return json({
     ok: true,
+    ownerId: user.id,
     posts,
     nextCursor: result.nextCursor,
     connections: result.connections,
     synced: result.synced,
     filters
-  });
+  }, { headers: { 'Cache-Control': 'private, no-store' } });
 };

@@ -19,7 +19,7 @@ export const loader = async ({ request }: { request: Request }) => {
     return json({ ok: false, error: 'Listing filters very enthusiastically — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
   const result = await listFeedFilters(user.id);
-  return json({ ok: true, filters: result.filters });
+  return json({ ok: true, ownerId: user.id, filters: result.filters }, { headers: { 'Cache-Control': 'private, no-store' } });
 };
 
 export const action = async ({ request }: { request: Request }) => {

@@ -71,7 +71,8 @@ function Detail({ example }: { example: LibraryExample }) {
 	return (
 		<>
 			<Flex gap={3} flexWrap="wrap">
-				<Link to="/library">← All {LIBRARY_EXAMPLES.length} examples</Link>
+				<Link to="/connections">Service accounts →</Link>
+                <Link to="/library">← All {LIBRARY_EXAMPLES.length} examples</Link>
 				<Link to={libraryBuilderHref(libraryServicePageId(example.provider))}>All {example.provider} in Builder</Link>
 				<Link to={libraryBuilderHref(libraryExamplePageId(example.id))}>Open example in Builder →</Link>
 			</Flex>

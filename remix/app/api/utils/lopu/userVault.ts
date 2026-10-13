@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { encryptOwnerValue, decryptOwnerValue, ownerVaultConfigured, type EncryptedVaultValue } from '../auth/vaultCipher';
 
 import { getThingsCollection } from '../mongodb/collections';
 import { createThing, deletePost, isFail, updateThing } from '../things/things';
@@ -18,7 +19,7 @@ import {
 const VALUE_MAX_BYTES = 32 * 1024;
 const VAULT_AAD_PREFIX = 'thingtime-user-vault:v1:';
 
-type EncryptedValue = { cipherText: string; iv: string; tag: string };
+type EncryptedValue = EncryptedVaultValue;
 
 type StoredVaultCrystal = {
 	systemType: typeof LOPU_USER_VAULT_SYSTEM_TYPE;
@@ -54,48 +55,12 @@ export type PublicVaultEntry = {
 
 type StoredVaultDoc = { shareId: string; ownerId: string; crystal: StoredVaultCrystal };
 
-const vaultSourceKey = (): Buffer | null => {
-	const source = (process.env.THINGTIME_USER_VAULT_KEY || process.env.THINGTIME_ADMIN_VAULT_KEY || '').trim();
-	if (!source) return null;
-	try {
-		const decoded = Buffer.from(source, 'base64url');
-		if (decoded.byteLength !== 32) return null;
-		return createHmac('sha256', decoded).update(VAULT_AAD_PREFIX).digest();
-	} catch {
-		return null;
-	}
-};
-
-export const userVaultConfigured = () => vaultSourceKey() !== null;
-
-const vaultAad = (ownerId: string, id: string) => Buffer.from(`${VAULT_AAD_PREFIX}${ownerId}:${id}`);
-
-const encryptValue = (ownerId: string, id: string, value: string): EncryptedValue => {
-	const key = vaultSourceKey();
-	if (!key) throw new Error('Secure Vault is unavailable. Configure THINGTIME_USER_VAULT_KEY or THINGTIME_ADMIN_VAULT_KEY.');
-	const iv = randomBytes(12);
-	const cipher = createCipheriv('aes-256-gcm', key, iv);
-	cipher.setAAD(vaultAad(ownerId, id));
-	const cipherText = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-	return {
-		cipherText: cipherText.toString('base64url'),
-		iv: iv.toString('base64url'),
-		tag: cipher.getAuthTag().toString('base64url')
-	};
-};
-
+export const userVaultConfigured = ownerVaultConfigured;
+const encryptValue = (ownerId: string, id: string, value: string): EncryptedValue =>
+  encryptOwnerValue(VAULT_AAD_PREFIX, ownerId, id, value);
 const decryptValue = (doc: StoredVaultDoc): string => {
-	const key = vaultSourceKey();
-	const encrypted = doc.crystal.encryptedValue;
-	if (!key || !encrypted) throw new Error('Stored provider credential is unavailable.');
-	try {
-		const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(encrypted.iv, 'base64url'));
-		decipher.setAAD(vaultAad(doc.ownerId, doc.shareId));
-		decipher.setAuthTag(Buffer.from(encrypted.tag, 'base64url'));
-		return Buffer.concat([decipher.update(Buffer.from(encrypted.cipherText, 'base64url')), decipher.final()]).toString('utf8');
-	} catch {
-		throw new Error('Stored provider credential cannot be decrypted with the configured vault key.');
-	}
+  if (!doc.crystal.encryptedValue) throw new Error('Stored provider credential is unavailable.');
+  return decryptOwnerValue(VAULT_AAD_PREFIX, doc.ownerId, doc.shareId, doc.crystal.encryptedValue);
 };
 
 const publicEntry = (doc: StoredVaultDoc): PublicVaultEntry => ({
@@ -155,7 +120,6 @@ export const listUserVault = async (ownerId: string) => {
 			}
 		)
 		.sort({ 'crystal.name': 1 })
-		.limit(500)
 		.toArray()) as unknown as StoredVaultDoc[];
 	return {
 		vaultConfigured: userVaultConfigured(),
@@ -340,7 +304,6 @@ export const listUserVaultProviders = async (ownerId: string): Promise<PublicVau
 	)
 		.find({ ownerId, thingtime: 'data', 'crystal.systemType': LOPU_USER_VAULT_SYSTEM_TYPE, 'crystal.recordKind': 'provider' } as any, { projection: VAULT_PROVIDER_LIST_PROJECTION })
 		.sort({ 'crystal.name': 1 })
-		.limit(200)
 		.toArray()) as unknown as StoredVaultDoc[];
 	return docs.map(publicEntry);
 };

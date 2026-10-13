@@ -17,6 +17,10 @@ export type Connection = {
   // no-overlap error against a value the server really does send
   auth?: 'none' | 'oauth2' | 'credential';
   account: { id: string; handle: string; displayName: string; avatarUrl: string | null; profileUrl: string | null };
+  accountOnly?: boolean;
+  credentialStatus?: 'connected' | 'reconnect' | 'public';
+  scopes?: string[];
+  expiresAt?: string | null;
   channels?: ChannelRef[];
   lastSyncedAt: string | null;
   lastSyncError: string | null;

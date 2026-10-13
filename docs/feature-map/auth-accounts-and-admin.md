@@ -72,3 +72,22 @@ private draft API, editor recovery, account isolation and independent media copi
 ## Lopu prompt settings
 
 `GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `settings/lopuPromptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` bounds inputs and composes enabled preferences. Revision comparisons reject stale writes. `LopuPromptSettings.tsx` serves Settings → Lopu and Settings → Admin; account-keyed mounting and private in-memory caching prevent cross-account drafts. Prompt text never grants server tool authority. Routes, concurrent save conflicts, disabled entries and private response handling are covered by `test:lopu` and `test:settings`.
+
+### Third-party account library
+
+`/connections` is the service/subservice catalog and account manager. The native
+provider boundary is `api/utils/connections/{providers,oauth,connections}.ts`;
+`tokenVault.ts` uses the shared owner/id-bound AES-GCM cipher. Public sources
+retain shared accounts; authenticated grants are separate Things per owner.
+OAuth uses a deployment env callback, session binding and one-use nonce; refresh
+is serialized with a home-database lease. `connections/request` exposes only
+fixed, scope-checked operations and never returns credential material.
+OpenAI API/Claude Code OAuth cards reuse `lopu/vault`, keeping Lopu's selectable providers
+and Secure Vault as the same records. See README's third-party setup section
+and TESTING's multi-account, callback, rotation and cache isolation checklist.
+
+ChatGPT hosted identity uses an approved client, verified OIDC ID tokens and
+no inference grant. Facebook identity and posts are separate grants. Account
+and link writes/disconnects commit in one home transaction; old source rows
+remain inert without a live link. Owner IDs accompany private reads; an
+optional `expectedOwnerId` rejects forms submitted after an account switch.
