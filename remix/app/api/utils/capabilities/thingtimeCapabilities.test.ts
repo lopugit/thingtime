@@ -84,6 +84,9 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.7.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.11.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.15.0');
+	assert.equal(manifest.features['api.devices-node-state']?.version, '1.10.0');
+	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
+	assert.equal(capabilitySatisfies('1.11.0', '1.10.0'), true);
   for (const [feature, required, previous] of [['api.things-export', '1.15.0', '1.12.0'], ['api.attachment-content', '1.12.0', '1.6.4']]) {
     assert.equal(manifest.features[feature]?.version, required);
     assert.equal(capabilitySatisfies(required, required), true);

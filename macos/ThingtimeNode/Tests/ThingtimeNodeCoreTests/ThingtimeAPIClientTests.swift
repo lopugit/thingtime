@@ -44,12 +44,15 @@ final class ThingtimeAPIClientTests: XCTestCase {
         XCTAssertFalse(try accepts(features, "https://other.test"))
         XCTAssertFalse(try accepts([:]))
         var changed = features
-        changed["api.devices-node-state"] = ["version": "1.10.0"]
+        changed["api.devices-node-state"] = ["version": "1.11.0"]
         XCTAssertTrue(try accepts(changed))
         changed["api.devices-node-state"] = ["version": "2.0.0"]
         XCTAssertFalse(try accepts(changed))
         changed["api.devices-node-state"] = ["version": "1.8.9"]
         XCTAssertFalse(try accepts(changed))
+        XCTAssertFalse(ThingtimeAPIClient.supportsBatteryDetails(try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "origin": origin.absoluteString, "features": features]), origin: origin))
+        changed["api.devices-node-state"] = ["version": "1.10.0"]
+        XCTAssertTrue(ThingtimeAPIClient.supportsBatteryDetails(try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "origin": origin.absoluteString, "features": changed]), origin: origin))
     }
 
     private func claimRequest() throws -> PairingClaimRequest {

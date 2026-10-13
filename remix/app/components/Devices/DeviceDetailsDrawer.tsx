@@ -1,8 +1,9 @@
 import { FilesystemThingsBrowser } from '../Things/FilesystemThingsBrowser';
 import React, { memo } from 'react';
 
-import { Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, Text } from '@chakra-ui/react';
-import { ChevronDown, CircleAlert, LockKeyhole, WifiOff } from 'lucide-react';
+import { Box, Button, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, Text } from '@chakra-ui/react';
+import { ChevronDown, CircleAlert, LockKeyhole, Maximize2, WifiOff } from 'lucide-react';
+import { Link as RouterLink } from 'react-router';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 
@@ -29,8 +30,9 @@ import {
 } from './deviceDrawerLayout';
 import { readDeviceDrawerPreferences, setDeviceDrawerSectionExpanded, setDeviceDrawerWidthPreference } from './deviceDrawerPreferences';
 import type { DeviceDrawerSectionId } from './deviceDrawerPreferences';
-import type { DeviceCommandStatus, DeviceExecutionPermissionMode, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
+import type { DeviceBattery, DeviceCommandStatus, DeviceExecutionPermissionMode, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
 import { WatchDeviceDetails } from './WatchDeviceDetails';
+import { deviceThingsPageHref } from './deviceNavigation';
 
 const Section = ({
 	deviceId,
@@ -148,7 +150,9 @@ const permissionOptions: Array<{ mode: DeviceExecutionPermissionMode; label: str
 export type DeviceDetailsDrawerProps = {
 	isOpen: boolean;
 	onClose: () => void;
+	presentation?: 'drawer' | 'page';
 	state: DeviceRuntimeState | null;
+	localBattery?: DeviceBattery | null;
 	now?: number;
 	controlFor?: DeviceControlResolver;
 	onAction?: DeviceActionHandler;
@@ -162,7 +166,9 @@ export const DeviceDetailsDrawer = memo(
 	({
 		isOpen,
 		onClose,
+		presentation = 'drawer',
 		state,
+		localBattery,
 		now = Date.now(),
 		controlFor,
 		onAction,
@@ -314,76 +320,13 @@ export const DeviceDetailsDrawer = memo(
 			[persistDrawerWidth]
 		);
 
-		return (
-			<Drawer isOpen={isOpen} onClose={onClose} placement="right" size="full">
-				<DrawerOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
-				<DrawerContent
-					background="var(--tt-card, #ffffff)"
-					color="var(--tt-ink, #17171c)"
-					containerProps={{ zIndex: DRAWER_MODAL_Z }}
-					cursor={resizing ? 'ew-resize' : undefined}
-					marginLeft="auto"
-					maxWidth="100vw"
-					minWidth={0}
-					pointerEvents="auto"
-					sx={{
-						WebkitAppRegion: 'no-drag',
-						width: `${drawerWidth}px !important`
-					}}
-					width={`${drawerWidth}px`}
-				>
-					<Box
-						aria-label="Resize device details panel"
-						aria-orientation="vertical"
-						aria-valuemax={DEVICE_DRAWER_MAX_WIDTH}
-						aria-valuemin={DEVICE_DRAWER_MOBILE_MIN_WIDTH}
-						aria-valuenow={drawerWidth}
-						bottom={0}
-						cursor="ew-resize"
-						display="block"
-						left={0}
-						onDoubleClick={() => {
-							const nextWidth = clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth);
-							setDrawerWidth(nextWidth);
-							persistDrawerWidth(nextWidth);
-						}}
-						onKeyDown={resizeWithKeyboard}
-						onPointerDown={beginResize}
-						position="absolute"
-						role="separator"
-						tabIndex={0}
-						top={0}
-						title="Drag this edge to resize device details"
-						width={6}
-						zIndex={3}
-						sx={{ WebkitAppRegion: 'no-drag', touchAction: 'none' }}
-						_before={{
-							background: resizing ? 'var(--tt-accent, #ec4899)' : 'var(--tt-border-strong, #d4d4d8)',
-							borderRadius: '999px',
-							bottom: 0,
-							content: '""',
-							left: 0,
-							opacity: resizing ? 1 : 0,
-							position: 'absolute',
-							top: 0,
-							transition: 'background 120ms ease, opacity 120ms ease',
-							width: '2px'
-						}}
-						_hover={{ _before: { opacity: 1 } }}
-						_focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--tt-accent, #ec4899)', _before: { opacity: 1 } }}
-					/>
-					<DrawerCloseButton
-						aria-label="Close device details"
-						height={11}
-						marginTop={{ base: 'env(safe-area-inset-top)', md: 0 }}
-						pointerEvents="auto"
-						right={{ base: 2, md: 3 }}
-						sx={{ WebkitAppRegion: 'no-drag' }}
-						top={{ base: 2, md: 2 }}
-						width={11}
-						zIndex={4}
-					/>
-					<DrawerHeader
+		// Chakra's DrawerHeader and DrawerBody require a Drawer context. Use plain
+		// Boxes for the page while retaining one shared detail tree and layout.
+		const DetailHeader = presentation === 'drawer' ? DrawerHeader : Box;
+		const DetailBody = presentation === 'drawer' ? DrawerBody : Box;
+		const details = (
+			<>
+					<DetailHeader
 						borderBottom="1px solid var(--tt-border, #ececef)"
 						paddingBottom={3}
 						paddingLeft={{ base: 4, sm: 5 }}
@@ -410,9 +353,9 @@ export const DeviceDetailsDrawer = memo(
 								Device details
 							</Text>
 						)}
-					</DrawerHeader>
+					</DetailHeader>
 
-					<DrawerBody
+					<DetailBody
 						overflowX="hidden"
 						paddingBottom="calc(28px + env(safe-area-inset-bottom))"
 						paddingLeft={{ base: 4, sm: 5 }}
@@ -493,7 +436,7 @@ export const DeviceDetailsDrawer = memo(
 										chromeYouTube={snapshot?.observed.chromeYouTube}
 										powerTimers={snapshot?.observed.powerTimers}
 										spotify={snapshot?.observed.spotify}
-										battery={snapshot?.observed.battery || null}
+										battery={localBattery || snapshot?.observed.battery || null}
 										bluetoothDevices={snapshot?.observed.bluetoothDevices || []}
 										cameras={snapshot?.observed.cameras || []}
 										controlFor={controlFor}
@@ -708,7 +651,105 @@ export const DeviceDetailsDrawer = memo(
 								)}
 							</>
 						)}
-					</DrawerBody>
+					</DetailBody>
+			</>
+		);
+
+		if (presentation === 'page') return (
+			<Box background="var(--tt-card, #ffffff)" border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-lg, 16px)" color="var(--tt-ink, #17171c)" marginX="auto" maxWidth="1280px" minWidth={0} width="100%">
+				<Flex borderBottom="1px solid var(--tt-border, #ececef)" justifyContent="flex-end" padding={3}>
+					<Button as={RouterLink} size="sm" to="/things" variant="outline">Back to Things</Button>
+				</Flex>
+				{details}
+			</Box>
+		);
+
+		return (
+			<Drawer isOpen={isOpen} onClose={onClose} placement="right" size="full">
+				<DrawerOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
+				<DrawerContent
+					background="var(--tt-card, #ffffff)"
+					color="var(--tt-ink, #17171c)"
+					containerProps={{ zIndex: DRAWER_MODAL_Z }}
+					cursor={resizing ? 'ew-resize' : undefined}
+					marginLeft="auto"
+					maxWidth="100vw"
+					minWidth={0}
+					pointerEvents="auto"
+					sx={{
+						WebkitAppRegion: 'no-drag',
+						width: `${drawerWidth}px !important`
+					}}
+					width={`${drawerWidth}px`}
+				>
+					<Box
+						aria-label="Resize device details panel"
+						aria-orientation="vertical"
+						aria-valuemax={DEVICE_DRAWER_MAX_WIDTH}
+						aria-valuemin={DEVICE_DRAWER_MOBILE_MIN_WIDTH}
+						aria-valuenow={drawerWidth}
+						bottom={0}
+						cursor="ew-resize"
+						display="block"
+						left={0}
+						onDoubleClick={() => {
+							const nextWidth = clampDeviceDrawerWidth(DEVICE_DRAWER_DEFAULT_WIDTH, window.innerWidth);
+							setDrawerWidth(nextWidth);
+							persistDrawerWidth(nextWidth);
+						}}
+						onKeyDown={resizeWithKeyboard}
+						onPointerDown={beginResize}
+						position="absolute"
+						role="separator"
+						tabIndex={0}
+						top={0}
+						title="Drag this edge to resize device details"
+						width={6}
+						zIndex={3}
+						sx={{ WebkitAppRegion: 'no-drag', touchAction: 'none' }}
+						_before={{
+							background: resizing ? 'var(--tt-accent, #ec4899)' : 'var(--tt-border-strong, #d4d4d8)',
+							borderRadius: '999px',
+							bottom: 0,
+							content: '""',
+							left: 0,
+							opacity: resizing ? 1 : 0,
+							position: 'absolute',
+							top: 0,
+							transition: 'background 120ms ease, opacity 120ms ease',
+							width: '2px'
+						}}
+						_hover={{ _before: { opacity: 1 } }}
+						_focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--tt-accent, #ec4899)', _before: { opacity: 1 } }}
+					/>
+					<DrawerCloseButton
+						aria-label="Close device details"
+						height={11}
+						marginTop={{ base: 'env(safe-area-inset-top)', md: 0 }}
+						pointerEvents="auto"
+						right={{ base: 2, md: 3 }}
+						sx={{ WebkitAppRegion: 'no-drag' }}
+						top={{ base: 2, md: 2 }}
+						width={11}
+						zIndex={4}
+					/>
+					{deviceId ? <Flex
+						_hover={{ background: 'var(--tt-surface-alt, #f7f7f8)' }}
+						alignItems="center"
+						aria-label="Expand device to its Things page"
+						as={RouterLink}
+						borderRadius="8px"
+						color="var(--tt-muted, #71717a)"
+						height={11}
+						justifyContent="center"
+						position="absolute"
+						right={{ base: 14, md: 15 }}
+						top={{ base: 2, md: 2 }}
+						to={deviceThingsPageHref(deviceId)}
+						width={11}
+						zIndex={4}
+					><Maximize2 aria-hidden size={17} /></Flex> : null}
+					{details}
 				</DrawerContent>
 			</Drawer>
 		);
