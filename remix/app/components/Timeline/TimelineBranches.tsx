@@ -70,6 +70,8 @@ export function TimelineBranches({ thingId, selected, onSelect }: { thingId: str
 			if (local && alive.current) onSelect(local.event);
 			const result = await connection.sync.entry(entry.head.eventId);
 			if (result.event.thingId !== thingId) throw new Error('This branch points to another Thing.');
+			// The read cached the version and its notes; let open history views repaint them.
+			window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 			if (alive.current) onSelect(result.event);
 		} catch (failure: any) { if (alive.current) setError(failure?.error || failure?.message || 'Could not load this version.'); }
 		finally { working.current = false; if (alive.current) setBusy(false); }

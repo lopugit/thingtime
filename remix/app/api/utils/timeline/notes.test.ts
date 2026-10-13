@@ -19,7 +19,8 @@ const rejects = async (work: Promise<unknown>, status: number, pattern: RegExp) 
 	assert.rejects(work, (error: any) => error instanceof StorageMutationError && error.status === status && pattern.test(error.message));
 
 function harness(options: { billable?: boolean } = {}) {
-	let rows: any[] = []; let charge = 0; let clock = Date.parse('2026-10-13T09:00:00.000Z');
+	let rows: any[] = [{ _id: 'db-folder', shareId: timelineFolderId('user-1'), ownerId: 'user-1', thingtime: ['folder'], updatedAt: new Date(0) }]; let charge = 0; let clock = Date.parse('2026-10-13T09:00:00.000Z');
+	const touches: Date[] = [];
 	const session = { inTransaction: () => true }; const ai: string[] = []; let reply: string | null = 'The title changed from Hello to World through the editor.';
 	const match = (row: any, filter: any) => Object.entries(filter).every(([key, value]: any) => {
 		if (value?.$in) return value.$in.includes(row[key]);
@@ -27,6 +28,7 @@ function harness(options: { billable?: boolean } = {}) {
 	});
 	const things = {
 		findOne: async (filter: any) => rows.find(row => match(row, filter)) ?? null,
+		updateOne: async (filter: any, update: any, options: any) => { assert.equal(options.session, session); const index = rows.findIndex(row => match(row, filter)); if (index === -1) return { matchedCount: 0 }; rows[index] = { ...rows[index], ...update.$set }; touches.push(update.$set.updatedAt); return { matchedCount: 1 }; },
 		find: (filter: any, options?: any) => {
 			if (options?.session) assert.equal(options.session, session);
 			let selected = rows.filter(row => match(row, filter));
@@ -46,7 +48,7 @@ function harness(options: { billable?: boolean } = {}) {
 		entries: async (_things, ownerId, ids) => ids.flatMap(id => { const entry = events.get(id); return entry && entry.event.ownerId === ownerId ? [entry] : []; }),
 		explain: async entry => { ai.push(entry.event.id); if (reply === null) throw new StorageMutationError(503, 'storage_invariant', 'Lopu could not explain this change right now. Try again in a moment.'); return reply; }
 	});
-	return { things, service, ai, rows: () => rows, charge: () => charge, reply: (value: string | null) => { reply = value; } };
+	return { things, service, ai, rows: () => rows.filter(row => row._id !== 'db-folder'), folder: () => rows.find(row => row._id === 'db-folder'), touches, charge: () => charge, reply: (value: string | null) => { reply = value; } };
 }
 
 test('an owner note is one protected relational Thing beside its event, metered once, and an exact retry returns it without a second write', async () => {
@@ -165,4 +167,17 @@ test('page note reads are one bounded owner-scoped batch in createdAt order and 
 		assert.throws(() => noteFromDoc({ ...row, ...patch }), /Timeline note envelope/);
 	row.targetId = timelineEventThingId('user-1', 'other-thing');
 	await assert.rejects(readTimelineNotes(h.things, 'user-1', ['saved', 'other-thing']), /does not match its record/);
+});
+
+test('every note write touches the Timeline folder inside the transaction so concurrent adds serialize at the cap', async () => {
+	const h = harness();
+	await h.service('user-1', add(1));
+	assert.equal(h.touches.length, 1); assert.equal(h.folder().updatedAt, h.touches[0]);
+	await h.service('user-1', add(1));
+	assert.equal(h.touches.length, 1, 'an exact replay never re-enters the write path');
+	await h.service('user-1', explain(2));
+	assert.equal(h.touches.length, 2);
+	h.folder().shareId = 'elsewhere';
+	await rejects(h.service('user-1', add(3)), 404, /not in your history/);
+	assert.equal(h.rows().length, 2);
 });

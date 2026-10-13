@@ -11,8 +11,9 @@ const noteFixture = (operationId: string, author: 'owner' | 'lopu' = 'owner'): T
 
 function setup() {
 	const calls: any[] = [];
-	const state = { owner: 'user-1', plane: 'home', limited: false, limitedExplain: false, kind: 'user', temporary: false };
+	const state = { owner: 'user-1', plane: 'home', limited: false, limitedExplain: false, kind: 'user', temporary: false, lopu: null as null | { status: number; code: string; error: string } };
 	const handlers = createTimelineHandlers({
+		lopuAccess: async (user: any, input: any) => { calls.push(['lopu', user?.id, input]); return state.lopu ? { ok: false, ...state.lopu } as any : { ok: true, billing: input.billing, settings: {} as any, verified: true, account: null, release: null }; },
 		user: async () => state.owner ? ({ id: state.owner, accountKind: state.kind, temporary: state.temporary } as any) : null,
 		limit: async (...args: any[]) => { calls.push(['rate', ...args.slice(1)]); return { allowed: !state.limited && !(args[1] === 'timeline.explain' && state.limitedExplain), resetAt: new Date(Date.now() + 5000).toISOString() } as any; },
 		note: async (ownerId, command, context) => { calls.push(['note', ownerId, command, context?.signal instanceof AbortSignal]); return command.command === 'remove-note' ? { ok: true, removed: true, noteId: command.noteId } : { ok: true, note: noteFixture(command.operationId, command.command === 'add-note' ? 'owner' : 'lopu') }; },
@@ -285,12 +286,20 @@ test('asking Lopu to explain needs a full account and its own bounded allowance 
 	}
 	Object.assign(h.state, { kind: 'user', temporary: false });
 	assert.equal(h.calls.filter(call => call[0] === 'note').length, 1);
+	assert.deepEqual(h.calls.filter(call => call[0] === 'lopu').map(call => call.slice(1)), [['user-1', { billing: 'thingtime' }], ['user-1', { billing: 'thingtime' }]], 'guests and app accounts never reach the Lopu gate');
+	h.state.lopu = { status: 402, code: 'LOPU_NO_CREDITS', error: 'Lopu needs credits.' };
+	const broke = await h.handlers.action({ request: request('POST', query, explain) });
+	assert.equal(broke.status, 402); assert.equal(broke.headers.get('Cache-Control'), 'private, no-store'); assert.equal((await broke.json()).code, 'LOPU_NO_CREDITS');
+	h.state.lopu = { status: 403, code: 'LOPU_UNVERIFIED', error: 'Lopu is invite-only.' };
+	assert.equal((await h.handlers.action({ request: request('POST', query, explain) })).status, 403);
+	h.state.lopu = null;
+	assert.equal(h.calls.filter(call => call[0] === 'note').length, 1, 'a refused account never reaches the note service');
 	assert.equal(h.calls.filter(call => call[0] === 'rate' && call[1] === 'timeline.explain').length, 2, 'the account gate runs before the Lopu allowance is spent');
 	assert.equal((await h.handlers.action({ request: request('POST', query, { ...explain, text: 'not allowed' }) })).status, 400);
 	h.state.owner = 'other'; assert.equal((await h.handlers.action({ request: request('POST', query, explain) })).status, 409);
 	h.state.owner = ''; assert.equal((await h.handlers.action({ request: request('POST', query, explain) })).status, 401);
 	assert.equal(h.calls.filter(call => call[0] === 'note').length, 1);
-	const unavailable = createTimelineHandlers({ user: async () => ({ id: 'user-1', accountKind: 'user', temporary: false } as any), limit: async () => ({ allowed: true } as any), discovery: ownerId => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }),
+	const unavailable = createTimelineHandlers({ user: async () => ({ id: 'user-1', accountKind: 'user', temporary: false } as any), lopuAccess: async () => ({ ok: true } as any), limit: async () => ({ allowed: true } as any), discovery: ownerId => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }),
 		note: async () => { throw new StorageMutationError(503, 'storage_invariant', 'Lopu could not explain this change right now. Try again in a moment.'); } });
 	const down = await unavailable.action({ request: request('POST', query, explain) });
 	assert.equal(down.status, 503); assert.match((await down.json()).error, /could not explain this change right now/);

@@ -120,8 +120,8 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 					: 'First recorded moment'}{' '}
 				{!outcome ? `· ${selected.mode === 'draft' ? 'Private draft' : selected.operation}` : ''}
 			</Text>
-			<Tabs index={tab} onChange={(index) => setTabChoice({ key: detailKey, tab: index })} variant="line" size="sm" isLazy>
-				<TabList overflowX="auto" overflowY="hidden" flexWrap="nowrap" mb={3}>
+			<Tabs index={tab} onChange={(index) => setTabChoice({ key: detailKey, tab: index })} variant="line" size="sm" isLazy lazyBehavior="keepMounted">
+				<TabList flexWrap="wrap" mb={3}>
 					<Tab flexShrink={0}>Changes</Tab>
 					<Tab flexShrink={0}>Message</Tab>
 					<Tab flexShrink={0}>Versions</Tab>
@@ -294,7 +294,11 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 									textAlign="left"
 									aria-current={row.event.id === selected.id ? 'true' : undefined}
 									bg={row.event.id === selected.id ? 'var(--tt-surface)' : undefined}
-									onClick={() => setSelected(row.event)}
+									onClick={() => {
+										// Choosing from the list keeps the Versions tab open for the new selection.
+										setTabChoice({ key: `${timeline.identity}:${row.event.id}`, tab: 2 });
+										setSelected(row.event);
+									}}
 								>
 									<Box minW={0}>
 										<Text fontSize="sm" fontWeight={row.event.id === selected.id ? '700' : '500'} overflowWrap="anywhere">

@@ -87,7 +87,8 @@ persisted; every check is client-side.
   twice: idempotent, storage refunded. Explain a pending (unsynced) change: the
   button is disabled with "Sync this change first". Ask Lopu on a synced change:
   the Lopu bubble has the gradient border; with no model configured the 503
-  message shows and nothing is stored. Restore/merge/recovery rows show dashed
+  message shows and nothing is stored; an unverified or credit-less account
+  gets the chat's Lopu refusal instead and nothing is stored. Restore/merge/recovery rows show dashed
   system lines without invented version numbers.
   Run `test:timeline`, `test:api-capabilities` and `test:timeline:notes` on the
   guarded `timeline-rs` replica.

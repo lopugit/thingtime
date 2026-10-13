@@ -281,7 +281,14 @@ export function TimelineEventBrowser({
 						</Button>
 					))}
 				</Flex>
-				<Button size="xs" variant="ghost" aria-pressed={filters.messages} onClick={() => update({ messages: !filters.messages })}>
+				<Button
+					size="xs"
+					variant="ghost"
+					aria-pressed={filters.messages}
+					title={filters.messages ? 'Hide notes, explanations and system lines' : 'Show notes, explanations and system lines'}
+					sx={{ '&[aria-pressed="true"]': { bg: 'var(--tt-surface)', boxShadow: 'inset 0 0 0 1px var(--tt-border)' } }}
+					onClick={() => update({ messages: !filters.messages })}
+				>
 					Messages
 				</Button>
 				{filters.look !== 'list' ? (

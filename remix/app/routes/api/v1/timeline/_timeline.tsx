@@ -4,6 +4,7 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 import { StorageMutationError } from '~/api/utils/storage/storageCore';
 import { getTimelinePage, getTimelineEntry, getTimelineComponentBindings, getTimelineNotes, pushClientTimelineEvent, timelineDiscovery, validateClientTimelineEvent } from '~/api/utils/timeline/service';
 import { handleNoteRequest } from '~/api/utils/timeline/notes';
+import { assertLopuAccess, lopuAccessRefusalBody } from '~/api/utils/lopu/access';
 import { parseTimelineNoteCommand } from '~/timeline/notes';
 import { TIMELINE_EVENT_MAX_BYTES, TIMELINE_PAGE_SIZE } from '~/timeline/contract';
 import { handleVersionRequest, parseVersionRequest } from '~/api/utils/timeline/versions';
@@ -21,7 +22,7 @@ import { actionOutcomeRecovery } from '~/api/utils/timeline/actionRecovery';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
-const defaults = { recoverOutcome: actionOutcomeRecovery.recover, user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch, note: handleNoteRequest, notes: getTimelineNotes };
+const defaults = { lopuAccess: assertLopuAccess, recoverOutcome: actionOutcomeRecovery.recover, user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch, note: handleNoteRequest, notes: getTimelineNotes };
 
 export function createTimelineHandlers(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
@@ -133,8 +134,13 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		try {
 			if (note) {
 				if (note.command === 'explain-change') {
-					// Lopu spends this account's model allowance: full accounts only, with its own bounded window.
+					// Explanations run on Thingtime's own Lopu models. They pass the same Lopu
+					// access gate as chat (full, verified account with credits; admins always
+					// verified) and a separate bounded allowance. They are not yet metered
+					// against Lopu credits; the allowance is the spend bound.
 					if (auth.user.temporary || auth.user.accountKind !== 'user') return response({ ok: false, error: 'Sign in with a full account to ask Lopu.' }, 401);
+					const access = await deps.lopuAccess(auth.user, { billing: 'thingtime' });
+					if (access.ok === false) return json(lopuAccessRefusalBody(access), { status: access.status, headers: { ...privateHeaders, ...(access.status === 429 ? { 'Retry-After': '5' } : {}) } });
 					const limit = await deps.limit(request, 'timeline.explain', `user:${auth.user.id}`, { failClosed: true });
 					if (!limit.allowed) return json({ ok: false, error: 'Lopu is busy; retry shortly' }, { ...rateLimitedResponseInit(limit), headers: { ...privateHeaders, ...Object.fromEntries(new Headers(rateLimitedResponseInit(limit).headers)) } });
 				}

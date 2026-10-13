@@ -1,6 +1,7 @@
 // Opt-in integration. App data is created only through the real HTTP API.
 // Requires a development server using a disposable local `timeline-rs` set.
-// Lopu may be unconfigured locally: explain-change asserts only the reply shape and its idempotency.
+// Lopu may be unconfigured locally, and a fresh fixture account is not Lopu-verified: explain-change
+// asserts only the reply shape, the access-gate refusal codes and its idempotency.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { TIMELINE_NOTES_PER_EVENT, parseTimelineNote, parseTimelineNoteResult, timelineNoteId } from '../app/timeline/notes.ts';
@@ -51,7 +52,10 @@ const stored = parseTimelineNoteResult(added.data, ownerId, add);
 assert.ok('note' in stored); assert.equal(stored.note.id, timelineNoteId(add.operationId)); assert.equal(stored.note.author, 'owner');
 assert.deepEqual((await post(add)).data, added.data, 'Lost note reply retried with the same operation id returns the identical note');
 assert.equal((await post({ ...add, text: 'Different text' })).response.status, 409, 'Same operation id with other content is refused');
-assert.equal((await post({ command: 'explain-change', operationId: add.operationId, eventId: root.id, thingId: thing.id })).response.status, 409);
+{
+	const reused = await post({ command: 'explain-change', operationId: add.operationId, eventId: root.id, thingId: thing.id });
+	assert.ok([409, 402, 403].includes(reused.response.status), `reused explain id answered ${reused.response.status}`);
+}
 assert.deepEqual((await history()).data.notes, [added.data.note], 'The page lists the note under notes, not inside the event');
 assert.deepEqual((await history()).data.entries[0].event, root, 'The event record is unchanged by its note');
 assert.deepEqual((await entry(root.id)).data.notes, [added.data.note], 'The exact version read includes the note');
@@ -110,7 +114,7 @@ assert.deepEqual((await post({ command: 'remove-note', operationId: randomUUID()
 // Lopu explanation: shape and idempotency only; the model may be unconfigured locally.
 const explain = { command: 'explain-change' as const, operationId: randomUUID(), eventId: root.id, thingId: thing.id };
 const explained = await post(explain);
-assert.ok([200, 503].includes(explained.response.status), `explain-change answered ${explained.response.status}`);
+assert.ok([200, 503, 402, 403].includes(explained.response.status), `explain-change answered ${explained.response.status}`);
 assert.equal(explained.response.headers.get('cache-control'), 'private, no-store');
 if (explained.response.status === 200) {
 	const lopu = parseTimelineNoteResult(explained.data, ownerId, explain);
@@ -122,6 +126,10 @@ if (explained.response.status === 200) {
 	assert.deepEqual((await post(removeLopu)).data, { ok: true, removed: true, noteId: lopu.note.id }, 'The owner may remove a Lopu note');
 	assert.ok(!(await history()).data.notes.some((note: any) => note.id === lopu.note.id));
 	console.log('Lopu explanation stored and removed');
+} else if ([402, 403].includes(explained.response.status)) {
+	console.log(`Lopu access gate refused this fixture account (${explained.response.status} ${explained.data.code}); nothing stored`);
+	assert.equal(explained.data.ok, false); assert.ok(typeof explained.data.code === 'string' && explained.data.code.startsWith('LOPU_'));
+	assert.equal((await post(explain)).response.status, explained.response.status, 'A gate refusal stores nothing and may be retried');
 } else {
 	assert.equal(explained.data.ok, false); assert.equal(explained.data.error, 'Lopu could not explain this change right now. Try again in a moment.');
 	assert.equal((await post(explain)).response.status, 503, 'An unavailable explanation stores nothing and may be retried');

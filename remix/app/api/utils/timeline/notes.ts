@@ -68,9 +68,14 @@ export function createNoteService(overrides: Partial<typeof dependencies> = {}) 
 		const noteId = timelineNoteId(command.operationId);
 		const prior = replay(await existing(things, ownerId, noteId, session), command, author);
 		if (prior) return prior;
+		const now = deps.now();
+		// Two concurrent transactions could each count seven notes and both insert.
+		// Touching the account's Timeline folder makes the later commit a write
+		// conflict, so the retried transaction recounts and refuses at the cap.
+		const serialized = await things.updateOne({ shareId: timelineFolderId(ownerId), ownerId, thingtime: 'folder' }, { $set: { updatedAt: now } }, { session });
+		if (serialized.matchedCount !== 1) refuse(404, 'This change is not in your history yet. Sync it first.');
 		await target(things, ownerId, command, session);
 		const eventShareId = timelineEventThingId(ownerId, command.eventId);
-		const now = deps.now();
 		const note = parseTimelineNote({ formatVersion: 1, id: noteId, ownerId, eventId: command.eventId, thingId: command.thingId, author, text, createdAt: now.toISOString() });
 		const doc: any = {
 			shareId: timelineNoteThingId(ownerId, noteId), schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, thingtime: [TIMELINE_NOTE_KIND], ownerId, acl: ['tt:user'],

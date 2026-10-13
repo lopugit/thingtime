@@ -998,8 +998,11 @@ retained snapshot titles, before/after property labels, source, branch and
 time), through Thingtime's own Lopu model routing (`generateAiCompletion` with a
 bounded timeout). It is stored as a `lopu` note only when the model answers; an
 unavailable or empty answer refuses with 503 and stores nothing. Explanation
-requests need a full account, the `timeline.write` limit and a separate
-`timeline.explain` limit. A pending (unsynced) event cannot be explained until
+requests need a full account, pass the same Lopu access gate as chat (verified
+account with Lopu credits; guests and unverified accounts are refused with the
+chat refusal codes), and spend the `timeline.write` limit plus a separate
+`timeline.explain` limit. Explanations are not yet metered against Lopu
+credits; that bounded allowance is the spend limit. A pending (unsynced) event cannot be explained until
 its receipt exists, and a queued note for a still-pending event waits in the
 outbox instead of being refused.
 

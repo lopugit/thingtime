@@ -25,6 +25,16 @@
 - The repository Graphify wrapper rebuilds a snapshot even for a read-only `scripts/graphify query` when the source fingerprint changed; superseded snapshots are pruned by the wrapper and committed as deletions.
 - The in-app Browser pane scales a 1280px emulation into an 800px frame, so `ref` clicks computed from a stale frame can miss; DOM probes through the JavaScript tool were used to select rows and confirm state.
 
+## Review round (adversarial five-lens review, fixed before merge)
+
+- Ask Lopu minted a new `operationId` per click, so a retry after a lost reply could store a second explanation: the composer now keeps one request identity per selected change until the server answers definitively.
+- `timeline-note` was missing from the generic Thing read fence (`canView`): added, so note Things are only readable through History.
+- The eight-notes-per-event cap was a count-then-insert inside a snapshot transaction: every note write now touches the account's Timeline folder inside the transaction so concurrent adds conflict and recount.
+- Notes were appended after the page byte budget: `readTimelinePage` now shares the budget with notes and ends the page earlier when needed (one entry always fits with its notes).
+- `explain-change` now passes the same Lopu access gate as chat (guest / unverified / no-credits refusals) before spending the `timeline.explain` allowance; explanations are still not metered against Lopu credits.
+- Detail tabs keep their panels mounted (a typed note survives switching tabs), picking a version keeps the Versions tab open, the Messages toggle shows its pressed state, Save and note actions have separate busy states, focus returns to the composer after Remove/Retry/Dismiss, Ask Lopu is disabled client-side for non-full accounts, and loading a branch head repaints its cached notes.
+- CI: the builtin schema projection pins now include `timeline-note`.
+
 ## Remaining acceptance work
 
 - A stored Lopu explanation was only exercised by unit tests (no model configured on the local test server); production verification after merge should ask Lopu on a synced change.
