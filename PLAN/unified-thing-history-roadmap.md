@@ -1,6 +1,14 @@
 # Unified Thing history roadmap
 
-**Status:** Proposed (M0 design concept delivered)
+**Status:** Foundation shipped (Unified Timeline on `main`, PRs #956–#988); remaining design gaps in delivery (2026-10-13)
+
+> **2026-10-13.** M1–M5 were delivered on `main` by the Unified Timeline
+> work (`docs/unified-timeline.md`) through a different, stronger shape than
+> this roadmap assumed: immutable relational `timeline-event`/`timeline-link`
+> Things, a shared local/remote record contract, durable IndexedDB drafts and
+> branches, and one `/api/v1/timeline` feature negotiated at 1.x minors. The
+> remaining work is the design gap list in `docs/timeline-design-integration.md`,
+> now tracked in TODO 56 and shipped to `main` slice by slice.
 
 **Prepared:** 2026-09-27, Australia/Melbourne
 

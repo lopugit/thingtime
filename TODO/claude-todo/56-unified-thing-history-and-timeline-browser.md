@@ -1,6 +1,20 @@
 # 56 — Unified Thing history and the timeline browser 🕰️
 
-**Status:** 🟣 Design concept delivered · owner review needed before M1
+**Status:** 🟡 Foundation shipped on `main` (Unified Timeline, PRs #956–#988) · design gap-close in progress (2026-10-13)
+
+> **2026-10-13 status.** The Unified Timeline (`docs/unified-timeline.md`,
+> `/history`, `/api/v1/timeline` 1.16.0, `remix/app/timeline/*`,
+> `remix/app/components/Timeline/*`) already delivers the canonical history
+> ledger, drafts and sync, named branches with checkout/merge, Scope × Look
+> (List · Cards · Line · Frames), the detail panel/sheet, compare, restore,
+> recovery and Page + related. This item now tracks the **remaining design
+> gaps** listed in `docs/timeline-design-integration.md` (contextual messages
+> and Lopu explanations, pin/name, selective undo, compare with now, version
+> export, server-side search/filters/day counts, History settings with
+> retention/clear/export, Frames as-of rendering, named-branch lane labels,
+> device/session grouping, entry points). Owner authorized shipping these to
+> `main` as they land. The milestones below are kept as the original spec;
+> read them against the delivered foundation, not as unstarted work.
 
 **Priority:** P1 fundamental · requested 2026-09-27
 
