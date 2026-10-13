@@ -1,3 +1,5 @@
+import type { LopuReadReference } from './readContext';
+import type { LopuPageReference } from '~/utils/lopuPageContext';
 import type { LopuToolLink } from '~/utils/lopuLinks';
 // The Lopu chat wire protocol — one JSON object per NDJSON line, streamed by
 // POST /api/v1/lopu/chats/reply. Types only (no runtime imports beyond other
@@ -44,6 +46,7 @@ export type LopuBilling = 'thingtime' | 'byo' | 'free';
 
 export type LopuChatStopReason =
   | 'end_turn'
+  | 'checkpoint'
   | 'max_tokens'
   | 'tool_limit'
   | 'hop_limit'
@@ -57,6 +60,10 @@ export type LopuChatStopReason =
 // operate on what the user actually sees; `source: 'user'` means the viewer
 // owns the doc and a patch may be persisted (with expectedUpdatedAt).
 export type LopuChatPageContext = {
+  // Missing blocks never mean an empty page. Dirty/unknown omitted drafts
+  // must not be replaced with the saved page during a tool mutation.
+  dirty?: boolean;
+  ready?: boolean;
   id?: string;
   source?: 'user' | 'system';
   pageKey?: string;
@@ -67,6 +74,7 @@ export type LopuChatPageContext = {
 };
 
 export type LopuChatContext = {
+	pages?: LopuPageReference[];
   route?: string;
   page?: LopuChatPageContext | null;
   selectedBlockId?: string;
@@ -74,7 +82,7 @@ export type LopuChatContext = {
 };
 
 // Persisted on the assistant message (crystal.lopu.toolCalls) — bounded there
-// to 20 entries / 240-char summaries by the messenger util.
+// to 20 entries per message segment / 240-char summaries by the messenger util.
 export type LopuToolCallSummary = { name: string; ok: boolean; summary: string; thingId?: string; links?: LopuToolLink[] };
 
 // What a `confirm` event asks the user to approve: the exact action (`key`
@@ -86,7 +94,7 @@ export type LopuConfirmRequest = { key: string; token: string; expiresAt: string
 
 export type LopuChatEvent =
   | {
-      type: 'meta';
+      type: 'meta'; continuation?: boolean;
       chatId: string;
       userMessageId: string;
       requestId: string;
@@ -115,7 +123,7 @@ export type LopuChatEvent =
   | ({ type: 'confirm'; id: string; name: string } & LopuConfirmRequest)
   | { type: 'error'; message: string; retryable: boolean }
   | {
-      type: 'done';
+      type: 'done'; continuationSafe?: boolean; recoveryFailures?: number;
       assistantMessageId: string;
       messages: PublicChatMessage[];
       usage?: LopuChatUsage;
@@ -146,6 +154,8 @@ export type LopuChatTurnOutcome = {
   // model hops the turn took (the accounting row records it)
   hops?: number;
   toolCalls: LopuToolCallSummary[];
+  // Server-only locators; never included in wire metadata or message projections.
+  readReferences?: LopuReadReference[];
   stopReason: LopuChatStopReason;
   error?: string;
 };
@@ -166,7 +176,7 @@ export type LopuProviderEvent =
   | { type: 'tool_use_start'; id: string; name: string }
   | { type: 'tool_input_delta'; id: string; name: string; partial: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'hop_end'; stopReason: 'end_turn' | 'tool_use' | 'max_tokens'; usage?: LopuChatUsage };
+  | { type: 'hop_end'; stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'pause_turn'; usage?: LopuChatUsage };
 
 export type LopuProviderToolResult = {
   id: string;
@@ -177,6 +187,6 @@ export type LopuProviderToolResult = {
   error?: string;
 };
 
-export type LopuProviderHopInput = { results: LopuProviderToolResult[]; finalHop: boolean };
+export type LopuProviderHopInput = { results: LopuProviderToolResult[]; finalHop: boolean; notes?: string[] };
 
 export type LopuProviderStream = AsyncGenerator<LopuProviderEvent, void, LopuProviderHopInput | undefined>;

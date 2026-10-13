@@ -42,7 +42,7 @@ export const Main = (props) => {
 			flexDirection="column"
 			overflow="hidden"
 			width="100%"
-			minH="100vh"
+			minH="var(--thingtime-page-height, 100dvh)"
 			maxWidth="100vw"
 			paddingLeft={direction === 'left' ? desktopPad : undefined}
 			paddingRight={direction === 'right' ? desktopPad : undefined}
@@ -67,7 +67,7 @@ export const Main = (props) => {
 					flexDirection="column"
 					overflow="hidden"
 					width="100%"
-					minH="100vh"
+					minH="var(--thingtime-page-height, 100dvh)"
 					maxWidth="100vw"
 				>
 					{props.children}

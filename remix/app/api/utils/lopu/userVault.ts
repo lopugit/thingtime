@@ -271,6 +271,21 @@ export const saveUserVaultProvider = async (
 	return publicEntry({ shareId, ownerId, crystal: patch });
 };
 
+// A metadata-only move never decrypts, replaces or returns the credential.
+export const createVaultEnvironmentMover = (deps = { ownVaultDoc, assertGroup, updateThing }) => async (
+ ownerId: string, input: { id?: unknown; groupId?: unknown }
+): Promise<PublicVaultEntry> => {
+ const doc = await deps.ownVaultDoc(ownerId, input.id);
+ if (!doc || !['secret', 'provider'].includes(doc.crystal.recordKind)) throw new Error('Vault entry was not found.');
+ if (input.groupId === undefined) throw new Error('Choose an environment or Ungrouped.');
+ const groupId = await deps.assertGroup(ownerId, input.groupId);
+ const updatedAt = new Date().toISOString();
+ const result = await deps.updateThing({ id: ownerId }, doc.shareId, { crystal: { groupId, updatedAt } });
+ if (isFail(result)) throw new Error(result.error);
+ return publicEntry({ ...doc, crystal: { ...doc.crystal, groupId, updatedAt } });
+};
+export const moveUserVaultEntry = createVaultEnvironmentMover();
+
 export const deleteUserVaultRecord = async (ownerId: string, id: unknown) => {
 	const doc = await ownVaultDoc(ownerId, id);
 	if (!doc) throw new Error('Vault record was not found.');

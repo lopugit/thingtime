@@ -1,4 +1,7 @@
 import React from 'react';
+import { parseActionJson } from '~/schemas/actionJsonInput';
+import { ComponentDragBoundary } from './ComponentDrag';
+import { pageRuntimeSearch } from './seamlessMode';
 import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
 
@@ -36,6 +39,8 @@ export type WebpageRuntimeViewer = {
 };
 
 export type WebpageRuntime = {
+	// Opaque identity changes before protected state can cross viewer/page/link boundaries.
+	identity: object;
 	pageId: string | null;
 	pageKey: string | null;
 	suiteKey: string | null;
@@ -66,6 +71,7 @@ const INERT_VIEWER: WebpageRuntimeViewer = { signedIn: false, id: null, username
 // Outside a provider (the builder canvas, gallery thumbnails, /components
 // previews) the runtime is inert: nothing fetches, nothing installs.
 const INERT_RUNTIME: WebpageRuntime = {
+	identity: {},
 	pageId: null,
 	pageKey: null,
 	suiteKey: null,
@@ -131,6 +137,7 @@ export const queryScopeOf = (search: string): Record<string, string> => {
 };
 
 export const WebpageRuntimeProvider = ({
+	enabled = true,
 	pageId,
 	pageKey,
 	suiteKey,
@@ -148,11 +155,12 @@ export const WebpageRuntimeProvider = ({
 	shared?: boolean;
 	linkKey?: string;
 	children: React.ReactNode;
+	enabled?: boolean;
 }) => {
 	const user = useCurrentUser();
 	const location = useLocation();
 	const [version, setVersion] = React.useState(0);
-	const [last, setLast] = React.useState<WebpageRuntimeLastRun | null>(null);
+	const [lastRun, setLast] = React.useState<{ identity: object; search: string; run: WebpageRuntimeLastRun } | null>(null);
 	const [installing, setInstalling] = React.useState(false);
 	const onInstallRef = React.useRef(onInstall);
 	onInstallRef.current = onInstall;
@@ -166,30 +174,48 @@ export const WebpageRuntimeProvider = ({
 		}),
 		[user]
 	);
-	const query = React.useMemo(() => queryScopeOf(location.search), [location.search]);
-	const sharedRun = React.useCallback(async (action: string, inputs: Record<string, unknown>) => {
-		await requireThingtimeCapability('api.actions-run', '1.3.1');
-		const response = await fetch('/api/v1/actions/run', {
-			method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ action, inputs, sharedRoot: pageId, ...(linkKey ? { key: linkKey } : {}) })
-		});
-		const data = await response.json();
-		if (!response.ok || !data?.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Shared control failed');
-		return data;
-	}, [pageId, linkKey]);
+	const runtimeSearch = pageRuntimeSearch(location.pathname, location.search);
+	const query = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
+	// The bearer key participates only in this private dependency boundary.
+	// It is never a template value or a persistent cache key.
+	// eslint-disable-next-line react-hooks/exhaustive-deps -- intentional opaque access-context token
+	const identity = React.useMemo(() => ({}), [viewer.id, pageId, shared, linkKey, enabled]);
+	const sharedRun = React.useCallback(
+		async (action: string, inputs: Record<string, unknown>) => {
+			await requireThingtimeCapability('api.actions-run', '1.11.0');
+			const response = await fetch('/api/v1/actions/run', {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action, inputs, sharedRoot: pageId, ...(linkKey ? { key: linkKey } : {}) })
+			});
+			const data = await response.json();
+			if (!response.ok || !data?.ok) throw Object.assign(new Error(typeof data?.error === 'string' ? data.error : 'Shared control failed'), { status: response.status });
+			return data;
+		},
+		[pageId, linkKey]
+	);
 
 	const refresh = React.useCallback(() => setVersion((current) => current + 1), []);
-	const report = React.useCallback((run: Omit<WebpageRuntimeLastRun, 'at'>) => {
-		setLast({ ...run, at: Date.now() });
-		setVersion((current) => current + 1);
-	}, []);
+	const report = React.useCallback(
+		(run: Omit<WebpageRuntimeLastRun, 'at'>) => {
+			setLast({ identity, search: runtimeSearch, run: { ...run, at: Date.now() } });
+			setVersion((current) => current + 1);
+		},
+		[identity, runtimeSearch]
+	);
+	const last = lastRun?.identity === identity && lastRun.search === runtimeSearch ? lastRun.run : null;
 	// in-flight + settled promises per (key) — reset whenever the version
 	// moves so a refresh always refetches
-	const loadsRef = React.useRef<{ version: number; promises: Map<string, Promise<unknown>> }>({ version: -1, promises: new Map() });
+	const loadsRef = React.useRef<{ identity?: object; version: number; promises: Map<string, Promise<unknown>> }>({
+		version: -1,
+		promises: new Map()
+	});
 	const load = React.useCallback(
 		(key: string, fetcher: () => Promise<unknown>): Promise<unknown> => {
 			const store = loadsRef.current;
-			if (store.version !== version) {
+			if (store.identity !== identity || store.version !== version) {
+				store.identity = identity;
 				store.version = version;
 				store.promises = new Map();
 			}
@@ -200,7 +226,7 @@ export const WebpageRuntimeProvider = ({
 			evictSharedLoads(store.promises);
 			return promise;
 		},
-		[version]
+		[version, identity]
 	);
 	const install = React.useCallback(async () => {
 		if (!onInstallRef.current || installing) return false;
@@ -214,6 +240,7 @@ export const WebpageRuntimeProvider = ({
 
 	const value = React.useMemo<WebpageRuntime>(
 		() => ({
+			identity,
 			pageId,
 			pageKey,
 			suiteKey,
@@ -229,10 +256,40 @@ export const WebpageRuntimeProvider = ({
 			load,
 			sharedRun: shared && pageId ? sharedRun : undefined
 		}),
-		[pageId, pageKey, suiteKey, source, viewer, query, version, last, installing, refresh, report, install, onInstall, load, shared, sharedRun]
+		[
+			identity,
+			pageId,
+			pageKey,
+			suiteKey,
+			source,
+			viewer,
+			query,
+			version,
+			last,
+			installing,
+			refresh,
+			report,
+			install,
+			onInstall,
+			load,
+			shared,
+			sharedRun
+		]
 	);
 
-	return <WebpageRuntimeContext.Provider value={value}>{shared ? <SharedMediaProvider linkKey={linkKey} sharedRoot={pageId || undefined}>{children}</SharedMediaProvider> : children}</WebpageRuntimeContext.Provider>;
+	return (
+		<WebpageRuntimeContext.Provider value={enabled ? value : INERT_RUNTIME}>
+			<ComponentDragBoundary resetKey={identity}>
+			{shared ? (
+				<SharedMediaProvider linkKey={linkKey} sharedRoot={pageId || undefined}>
+					{children}
+				</SharedMediaProvider>
+			) : (
+				children
+			)}
+			</ComponentDragBoundary>
+		</WebpageRuntimeContext.Provider>
+	);
 };
 
 // The localStorage tier for source results — optimistic paint on the next
@@ -258,22 +315,34 @@ export const SOURCE_CACHE_PREFIX = 'tt-page-source:';
 export const sourceCacheKey = (viewerId: string | null, pageId: string | null, blockId: string): string | null =>
 	viewerId && pageId && blockId ? `${SOURCE_CACHE_PREFIX}${viewerId}:${pageId}:${blockId}` : null;
 
-export const readSourceCache = (viewerId: string | null, pageId: string | null, blockId: string): unknown => {
+export const readSourceCache = (viewerId: string | null, pageId: string | null, blockId: string, binding = ''): unknown => {
 	const key = sourceCacheKey(viewerId, pageId, blockId);
 	if (!key || typeof window === 'undefined') return undefined;
 	try {
 		const raw = window.localStorage.getItem(key);
-		return raw ? JSON.parse(raw) : undefined;
+		const cached = raw ? JSON.parse(raw) : null;
+		return cached?.version === 2 && cached.binding === binding ? cached.value : undefined;
 	} catch {
 		return undefined;
 	}
 };
 
-export const writeSourceCache = (viewerId: string | null, pageId: string | null, blockId: string, value: unknown): void => {
+export const clearSourceCache = (viewerId: string | null, pageId: string | null, blockId: string): void => {
 	const key = sourceCacheKey(viewerId, pageId, blockId);
 	if (!key || typeof window === 'undefined') return;
 	try {
-		const encoded = JSON.stringify(value);
+		window.localStorage.removeItem(key);
+	} catch {
+		/* storage unavailable */
+	}
+};
+
+export const writeSourceCache = (viewerId: string | null, pageId: string | null, blockId: string, value: unknown, binding = ''): void => {
+	const key = sourceCacheKey(viewerId, pageId, blockId);
+	if (!key || typeof window === 'undefined') return;
+	try {
+		// One bounded slot per block; navigating records cannot grow storage.
+		const encoded = JSON.stringify({ version: 2, binding, value });
 		if (encoded.length > 256 * 1024) return;
 		window.localStorage.setItem(key, encoded);
 	} catch {
@@ -281,42 +350,33 @@ export const writeSourceCache = (viewerId: string | null, pageId: string | null,
 	}
 };
 
-// Named form fields inside one component root, read the way the click
-// wrapper reads them: input/select/textarea with a `name`, checkboxes as
-// booleans, radios only when checked, everything else as its string value.
-// Password inputs are never read (see below). Empty strings are dropped so a
-// static ttActionInputs value survives an untouched field. Pure DOM, shared by
-// the click hook and its tests.
+// Read one bounded form group. Explicit empty text clears saved values;
+// disabled controls and native file/password contents never become action inputs.
 export const gatherFormFields = (root: HTMLElement | null): Record<string, unknown> => {
 	const out: Record<string, unknown> = {};
 	if (!root) return out;
 	const fields = root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input[name], select[name], textarea[name]');
 	fields.forEach((field) => {
 		const name = field.getAttribute('name') || '';
-		if (!name || !QUERY_KEY_PATTERN.test(name)) return;
-		if (field instanceof HTMLInputElement) {
-			// A PASSWORD field is never an action input. ACTION_INPUT_TYPES is
-			// string/text/number/boolean/enum — there is no credential type — and
-			// no suite renders one. But component markup IS untrusted data, and
-			// `autoComplete` now passes the HtmlThingRenderer allowlist, so a
-			// crafted component can put `<input type="password"
-			// autoComplete="current-password">` on this origin and let the
-			// viewer's password manager fill it. Reading that value would carry
-			// the viewer's own site password into a run's inputs — stored on
-			// their data thing and echoed in their run record. Never gather one:
-			// the field can still render and fill, the value just goes nowhere.
-			if (field.type === 'password') return;
-			if (field.type === 'checkbox') {
-				out[name] = field.checked;
+		if (!name || !QUERY_KEY_PATTERN.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name) || field.matches(':disabled')) return;
+		if (field.tagName === 'INPUT') {
+			const input = field as HTMLInputElement;
+			if (['password', 'file', 'submit', 'button', 'reset'].includes(input.type)) return;
+			if (input.type === 'checkbox') {
+				out[name] = input.checked;
 				return;
 			}
-			if (field.type === 'radio') {
-				if (field.checked) out[name] = field.value;
+			if (input.type === 'radio') {
+				if (input.checked) out[name] = input.value;
 				return;
 			}
 		}
-		const value = field.value;
-		if (typeof value === 'string' && value !== '') out[name] = value.slice(0, 4000);
+		if (typeof field.value === 'string') {
+			if (field.getAttribute('data-tt-input-type') === 'json') {
+				try { out[name] = parseActionJson(field.value); }
+				catch { throw new Error(`Check the JSON in ${name} before running this Action`); }
+			} else out[name] = field.value;
+		}
 	});
 	return out;
 };

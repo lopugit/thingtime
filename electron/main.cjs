@@ -33,6 +33,12 @@ const {
 	validateDeviceRequest
 } = require('./lib/thingtime-node-bridge.cjs');
 
+const { DesktopSpeechRecognition, requireSpeechSender } = require('./lib/speech-recognition.cjs');
+const desktopSpeech = new DesktopSpeechRecognition({ executable: app.isPackaged
+	? path.join(process.resourcesPath, '..', 'Helpers', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeSpeech')
+	: path.join(__dirname, 'dist', 'native', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeSpeech') });
+app.on('before-quit', () => desktopSpeech.stop());
+
 const repoRoot = path.resolve(__dirname, '..');
 const localWebOutput = path.join(__dirname, 'dist', 'web', '.output');
 const electronReleaseLabel = process.env.THINGTIME_DESKTOP_RELEASE_LABEL || 'Electron App Release';
@@ -1611,6 +1617,12 @@ function createWindow() {
     }
   });
 
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) desktopSpeech.stop();
+  });
+  mainWindow.webContents.on('render-process-gone', () => desktopSpeech.stop());
+  mainWindow.on('closed', () => desktopSpeech.stop());
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
@@ -1639,6 +1651,20 @@ function createWindow() {
 		showLoadUrlError(error);
 	});
 }
+
+ipcMain.handle('thingtime-desktop:speech-start', (event, request) => {
+	requireSpeechSender(event, mainWindow, appOrigin);
+	if (process.platform !== 'darwin') throw new Error('Native speech is available on macOS only.');
+	const frame = event.senderFrame;
+	return desktopSpeech.start(request, payload => {
+		try { frame.send('thingtime-desktop:speech-event', payload); } catch { desktopSpeech.stop(request.sessionId); }
+	});
+});
+ipcMain.handle('thingtime-desktop:speech-stop', (event, request) => {
+	requireSpeechSender(event, mainWindow, appOrigin);
+	if (typeof request?.sessionId !== 'string') throw new Error('Invalid speech session.');
+	return desktopSpeech.stop(request.sessionId);
+});
 
 ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
 ipcMain.handle('thingtime-desktop:get-node-panel-preference', (event, request) => {

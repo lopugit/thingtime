@@ -152,6 +152,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'legal-pages', label: 'Legal policies & terms', icon: '⚖️', to: '/legal' },
 			{ id: 'builder-pages', label: 'My pages', icon: '📄', to: '/builder' },
+			{ id: 'builder-library', label: 'Integration library', icon: '🔌', to: '/library' },
 			{ id: 'builder-components', label: 'Components', icon: '🧩', to: '/components' },
 			{ id: 'builder-actions', label: 'Actions', icon: '⚡', to: '/actions' },
 			{ id: 'builder-design-system', label: 'Design system', icon: '🎨', to: '/docs/design-system' }
@@ -164,6 +165,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/things',
 		children: [
 			{ id: 'things-browse', label: 'Browse', icon: '📦', to: '/things' },
+			{ id: 'things-history', label: 'History', icon: '🕰️', to: '/history', authOnly: true },
 			{ id: 'things-view', label: 'View', icon: '👀', to: '/things', mode: 'view', group: 'Modes' },
 			{ id: 'things-edit', label: 'Edit', icon: '🎨', to: '/edit', mode: 'edit', group: 'Modes' },
 			{ id: 'things-editor', label: 'Editor', icon: '💻', to: '/editor', mode: 'editor', group: 'Modes' },
@@ -205,12 +207,19 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		icon: '💻',
 		to: '/tests',
 		children: [
-			{ id: 'dev-admin', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true },
 			{ id: 'dev-peers', label: 'Deployment peers', icon: '🕸️', to: '/peers', adminOnly: true },
 			{ id: 'dev-tests', label: 'API tests', icon: '✅', to: '/tests' },
 			{ id: 'dev-crypto', label: 'Crypto', icon: '🔒', to: '/crypto' },
 			{ id: 'dev-migrations', label: 'Migrations', icon: '🛠️', to: '/migrations' }
 		]
+	},
+	{
+		id: 'admin',
+		label: 'Admin',
+		icon: '🛠️',
+		to: '/admin',
+		adminOnly: true,
+		children: [{ id: 'admin-home', label: 'Admin', icon: '🛠️', to: '/admin', adminOnly: true }]
 	},
 	{
 		id: 'branding',

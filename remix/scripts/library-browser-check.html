@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Library execution checks</title></head><body><h1>Library execution checks</h1><p>Runs only catalogue defaults. No account credentials. Four isolated examples at a time.</p><button id="run">Run all public examples</button><pre id="status">Ready</pre><div id="frames"></div><ol id="failures"></ol><script type="module">
+import {LIBRARY_EXAMPLES} from '/app/library/catalog.ts';
+const status=document.querySelector('#status'),failures=document.querySelector('#failures');
+const requested=new URLSearchParams(location.search).get('ids')?.split(',');
+const examples=LIBRARY_EXAMPLES.filter(x=>!x.request?.auth&&!x.sdk&&(!requested||requested.includes(x.id)));
+document.querySelector('#run').onclick=async()=>{
+ document.querySelector('#run').disabled=true;let completed=0,passed=0;const failed=[];
+ async function one(example){await new Promise(resolve=>{
+  const frame=document.createElement('iframe');frame.sandbox='allow-scripts';frame.title=example.id;frame.style.cssText='width:360px;height:340px';frame.src='/library/sandbox.html';
+  const runId=crypto.randomUUID();let timer;
+  const finish=(ok,text)=>{clearTimeout(timer);removeEventListener('message',receive);frame.remove();completed++;if(ok)passed++;else{failed.push({id:example.id,text});const li=document.createElement('li');li.textContent=example.id+': '+text;failures.append(li)}status.textContent=JSON.stringify({completed,total:examples.length,passed,failed},null,2);resolve()};
+  const receive=e=>{if(e.source!==frame.contentWindow)return;if(e.data?.type==='tt-library-ready')frame.contentWindow.postMessage({type:'tt-library-start',exampleId:example.id,input:example.input,runId},'*');if(e.data?.type==='tt-library'&&e.data.runId===runId)finish(e.data.ok,e.data.text)};
+  addEventListener('message',receive);timer=setTimeout(()=>finish(false,'Harness timeout'),35000);document.querySelector('#frames').append(frame);
+ })}
+ const pending=[...examples];await Promise.all(Array.from({length:4},async()=>{while(pending.length)await one(pending.shift())}));document.querySelector('#run').disabled=false;document.title=`Library checks: ${passed}/${examples.length}`;
+};
+</script></body></html>

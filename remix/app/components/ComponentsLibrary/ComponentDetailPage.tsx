@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { useActionRunConfirm } from '~/components/Actions/ActionRunConfirm';
 import type { TtActionConfirmHandler, TtActionUnownedHandler } from '~/components/Actions/useTtActionClicks';
-import { installSuite, installSuiteOnServer, suiteKeyFromActionKey } from '~/components/Builder/installSuite';
+import { installSuiteOnServer, suiteKeyFromActionKey } from '~/components/Builder/installSuite';
 import { LiveTemplate, useComponentArgValues, useThingSource } from '~/components/Builder/liveComponent';
 import type { ThingSourceBinding } from '~/components/Builder/liveComponent';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
@@ -14,7 +14,7 @@ import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { isSafeCssText } from '~/components/Kinds/safeUrl';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
-import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
+import { BuilderThingMenu } from '~/components/Builder/BuilderThingMenu';
 import { pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -256,20 +256,9 @@ const LivePane = ({
           </Button>
         </Flex>
       )}
-      <Center
-        background={background}
-        border="1px solid var(--tt-border, #ececef)"
-        borderRadius="var(--tt-radius-lg, 16px)"
-        minHeight="180px"
-        overflow="hidden"
-        padding={{ base: 4, md: 8 }}
-        data-testid="component-live"
-        data-trust={interactive ? 'live' : 'inert'}
-      >
-        <Box maxWidth="100%" width="100%" sx={{ '& > *': { maxWidth: '100%' } }}>
-          <LiveTemplate confirm={confirm} interactive={interactive} onUnowned={onUnowned} render={source.render} scope={scope} />
-        </Box>
-      </Center>
+      <Box background={background} width="100%" minWidth={0} data-testid="component-live" data-trust={interactive ? 'live' : 'inert'}>
+        <LiveTemplate confirm={confirm} interactive={interactive} onUnowned={onUnowned} render={source.render} scope={scope} />
+      </Box>
     </Flex>
   );
 };
@@ -623,12 +612,9 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   // the catalog: a Link, so the component page stays where they were
   const [installedHref, setInstalledHref] = React.useState<string | null>(null);
 
-  // Install the suite for the viewer. App suites go through the one-request
-  // idempotent server install (every page keeps its key, so /p/<key> now
-  // serves the viewer's own copy); the demo suites keep the part-by-part
-  // client install and open the personal copy by id.
+  // All suites install idempotently and retain their keyed private pages.
   const installForViewer = React.useCallback(
-    async (candidate: string): Promise<{ href: string | null } | null> => {
+    async (candidate: string, onlyMissing = false): Promise<{ href: string | null } | null> => {
       const target = ALL_SUITES.find((entry) => entry.key === candidate) || null;
       if (!target) return null;
       if (!user?.id) {
@@ -637,26 +623,12 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
         return null;
       }
       lopuRef.current({ title: `Installing ${target.emoji} ${target.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
-      if (target.app) {
-        const installed = await installSuiteOnServer(target.key);
-        const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
-        lopuRef.current({
-          title: `${target.emoji} ${target.title} installed ✨`,
-          description: `${installed.created} things created · ${installed.updated} refreshed — this component now runs your own programs.`,
-          status: 'success',
-          duration: 6000,
-          link: { label: 'Open your copy', href }
-        });
-        return { href };
-      }
-      const installed = await installSuite((payload) => apiRef.current.v1.things.create(payload), target, { seeded: true });
-      const href = `/p/${encodeURIComponent(installed.pageId)}`;
+      const installed = await installSuiteOnServer(target.key, { onlyMissing });
+      const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
       lopuRef.current({
         title: `${target.emoji} ${target.title} installed ✨`,
-        description: 'This component now runs your own programs.',
-        status: 'success',
-        duration: 6000,
-        link: { label: 'Open your copy', href }
+        description: `${installed.created} things created · ${installed.updated} refreshed.`,
+        status: 'success', duration: 6000, link: { label: 'Open your copy', href }
       });
       return { href };
     },
@@ -671,7 +643,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
       const candidate = suiteKeyFromActionKey(action, ALL_SUITES) || suiteKey;
       if (!candidate) return false;
       try {
-        const outcome = await installForViewer(candidate);
+        const outcome = await installForViewer(candidate, true);
         if (!outcome) return false;
         scheduleHandoff(() => {
           setInstalledHref(outcome.href);
@@ -784,13 +756,13 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth="860px" minWidth={0} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
+      <Flex direction="column" gap={5} minWidth={0} sx={{ '& > *': { width: '100%', maxWidth: '860px', marginInline: 'auto', paddingInline: '16px' }, '& > [data-testid="component-live-section"]': { maxWidth: 'none', paddingInline: 0 } }} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={0} width="100%">
         <Flex align="center" gap={2} flexWrap="wrap">
           <Button as={Link} leftIcon={<ArrowLeft size={14} />} size="xs" to="/components" variant="ghost">
             Components
           </Button>
           <Box flex={1} />
-          {active && <ThingTransferControls id={active.entry.id} linkKey={searchParams.get('key') || undefined} />}
+          {active && <BuilderThingMenu id={active.entry.id} linkKey={searchParams.get('key') || undefined} kind="component" onChanged={() => void loadFamily()} />}
           <Button leftIcon={<LinkIcon size={13} />} onClick={() => copyLink()} size="xs" variant="ghost">
             Copy link
           </Button>
@@ -898,7 +870,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
             )}
 
             {/* ------------------------------ live ------------------------------ */}
-            <Flex direction="column" gap={2}>
+            <Flex data-testid="component-live-section" direction="column" gap={2}>
               <Flex align="center" gap={2} wrap="wrap">
                 <Text {...monoLabel}>live</Text>
                 <Badge

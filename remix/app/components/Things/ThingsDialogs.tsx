@@ -26,6 +26,7 @@ import { ThingView } from '~/components/Thingtime/ThingView';
 import { ThingComments } from './ThingComments';
 
 import { FolderTree } from './FolderTree';
+import { TRANSFER_DIALOG_Z } from './transferLayers';
 import type { FolderTreeProps } from './FolderTree';
 import {
   VISIBILITY_META,
@@ -39,6 +40,11 @@ import {
 import type { ThingsThing } from './thingsCore';
 
 const modalCard = {
+  containerProps: { zIndex: TRANSFER_DIALOG_Z },
+  width: 'calc(100% - 32px)',
+  marginX: 0,
+  maxHeight: 'calc(100dvh - 48px)',
+  overflowY: 'auto',
   background: 'var(--tt-card, #ffffff)',
   border: '1px solid var(--tt-border, #ececef)',
   borderRadius: 'var(--tt-radius-lg, 16px)'
@@ -79,7 +85,7 @@ export const NewFolderDialog = ({
 
   return (
     <Modal initialFocusRef={inputRef} isOpen={isOpen} onClose={onClose} size="sm">
-      <ModalOverlay />
+      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">New folder 📁</ModalHeader>
         <ModalCloseButton />
@@ -115,7 +121,7 @@ export const NewFolderDialog = ({
 };
 
 // ---------------------------------------------------------------------------
-// Rename (folders / data / schema things — kinds whose crystal carries a name)
+// Rename — shared display title for every writable Thing
 
 export const RenameDialog = ({
   thing,
@@ -132,7 +138,7 @@ export const RenameDialog = ({
 
   useEffect(() => {
     if (thing) {
-      setName(typeof thing.crystal?.name === 'string' ? thing.crystal.name : thingDisplayName(thing));
+      setName(thingDisplayName(thing));
       setBusy(false);
     }
   }, [thing]);
@@ -147,7 +153,7 @@ export const RenameDialog = ({
 
   return (
     <Modal initialFocusRef={inputRef} isOpen={!!thing} onClose={onClose} size="sm">
-      <ModalOverlay />
+      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">Rename ✏️</ModalHeader>
         <ModalCloseButton />
@@ -157,6 +163,8 @@ export const RenameDialog = ({
             onKeyDown={(event) => event.key === 'Enter' && submit()}
             ref={inputRef}
             value={name}
+            maxLength={120}
+            aria-label="Thing title"
           />
         </ModalBody>
         <ModalFooter gap={2}>
@@ -210,7 +218,7 @@ export const MoveDialog = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="sm">
-      <ModalOverlay />
+      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">Move {count === 1 ? '1 thing' : `${count} things`} to… 📁</ModalHeader>
         <ModalCloseButton />
@@ -310,7 +318,7 @@ export const ShareDialog = ({
 
   return (
     <Modal isOpen={!!things.length} onClose={onClose} size="md">
-      <ModalOverlay />
+      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">
           Share {single ? `“${thingDisplayName(single)}”` : `${things.length} things`} 🌐
@@ -393,7 +401,7 @@ export const DeleteConfirmDialog = ({
 
   return (
     <Modal isOpen={!!things.length} onClose={onClose} size="sm">
-      <ModalOverlay />
+      <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">Delete {things.length === 1 ? '1 thing' : `${things.length} things`}? 🗑️</ModalHeader>
         <ModalCloseButton />
@@ -447,7 +455,7 @@ export const PreviewModal = ({
   const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id);
   return (
   <Modal isOpen={!!thing} onClose={onClose} size="lg" scrollBehavior="inside">
-    <ModalOverlay />
+    <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
     {thing && (
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">

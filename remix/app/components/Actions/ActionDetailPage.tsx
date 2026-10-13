@@ -1,4 +1,8 @@
 import React from 'react';
+import { openThingHistory } from '../Timeline/TimelineHost';
+import { actionTimelineWarning, type ActionTimelineReport } from '../../timeline/actionOutcome';
+import { parseActionJson } from '~/schemas/actionJsonInput';
+import { ThingDefinitionEditor } from '../Builder/DefinitionEditor/ThingDefinitionEditor';
 import {
 	Box,
 	Button,
@@ -16,7 +20,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { readLocalCache } from '~/hooks/localCache';
+import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { CARD_STYLES } from '~/theme/card';
 import { ActionChip } from './ActionChip';
 import { opChipTone } from './ActionsPage';
@@ -47,6 +51,7 @@ const monoLabel = {
 type RunResponse = {
 	ok: boolean;
 	runId?: string;
+	history?: ActionTimelineReport;
 	status?: 'ok' | 'error';
 	result?: unknown;
 	error?: string;
@@ -94,6 +99,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 		for (const descriptor of descriptors) {
 			const name = String(descriptor.name);
 			if (descriptor.type === 'boolean') initial[name] = descriptor.default === true;
+			else if (descriptor.type === 'json') initial[name] = descriptor.default === undefined ? '' : JSON.stringify(descriptor.default, null, 2);
 			else initial[name] = descriptor.default === undefined || descriptor.default === null ? '' : String(descriptor.default);
 		}
 		return initial;
@@ -111,12 +117,14 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 				const name = String(descriptor.name);
 				const value = values[name];
 				if (value === '' || value === undefined) continue;
-				inputs[name] = descriptor.type === 'number' ? Number(value) : value;
+				inputs[name] = descriptor.type === 'number' ? Number(value) : descriptor.type === 'json' ? parseActionJson(value) : value;
 			}
 			const response = (await apiRef.current.v1.actions.run({ action: action.id, inputs })) as RunResponse;
 			setLastRun(response);
 			onRan?.();
-			if (response?.status === 'ok') {
+			if (response?.history?.status === 'incomplete') {
+				lopuRef.current({ title: 'Action History sync', description: actionTimelineWarning(response.history), status: 'warning' });
+			} else if (response?.status === 'ok') {
 				lopuRef.current({ title: `⚡ ${action.crystal.name || 'Action'} ran ✓`, description: `${response.durationMs}ms · ${response.opsUsed} ops`, status: 'success', duration: 6000 });
 			} else {
 				lopuRef.current({ title: 'Run finished with an error 🧯', description: response?.error || undefined, status: 'error' });
@@ -171,7 +179,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 											</option>
 										))}
 									</Select>
-								) : type === 'text' ? (
+								) : type === 'text' || type === 'json' ? (
 									<Textarea
 										onChange={(event) => setValues((prior) => ({ ...prior, [name]: event.target.value }))}
 										rows={3}
@@ -201,10 +209,13 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 						<ActionChip size="md" tone={lastRun.status === 'ok' ? 'ok' : 'danger'}>{lastRun.status}</ActionChip>
 						{typeof lastRun.durationMs === 'number' ? (
 							<Text color={MUTED} fontSize="xs">
-								{lastRun.durationMs}ms · {lastRun.opsUsed} ops · depth {lastRun.depthUsed} · {lastRun.childActionsUsed} child actions
+								{lastRun.durationMs}ms · {lastRun.opsUsed} ops
+                                {lastRun.depthUsed != null ? ` · depth ${lastRun.depthUsed}` : ''}
+                                {lastRun.childActionsUsed != null ? ` · ${lastRun.childActionsUsed} child actions` : ''}
 							</Text>
 						) : null}
 					</Flex>
+					{lastRun.history?.status === 'incomplete' ? <Text role="status" fontSize="sm" mt={2}>{actionTimelineWarning(lastRun.history)}</Text> : null}
 					{lastRun.error ? (
 						<Text color="var(--tt-danger, #e5484d)" fontSize="sm" mt={2} overflowWrap="anywhere">
 							{lastRun.error}
@@ -260,6 +271,7 @@ export const ActionDetailPage = () => {
 		action: null,
 		missing: false
 	});
+	const [editing, setEditing] = React.useState(false);
 	const [runs, setRuns] = React.useState<RunRecord[]>([]);
 	const [schemaNames, setSchemaNames] = React.useState<Record<string, string>>({});
 	const [usedBy, setUsedBy] = React.useState<{ id: string; name: string; componentKey: string | null }[]>([]);
@@ -276,6 +288,7 @@ export const ActionDetailPage = () => {
 	const [seenKey, setSeenKey] = React.useState(requestKey);
 	if (seenKey !== requestKey) {
 		setSeenKey(requestKey);
+		setEditing(false);
 		setRuns([]);
 		setUsedBy([]);
 		setSchemaNames({});
@@ -388,6 +401,12 @@ export const ActionDetailPage = () => {
 					<Box minH="200px" />
 				) : (
 					<>
+						{editing ? <ThingDefinitionEditor id={action.id} onClose={() => setEditing(false)} onSaved={(saved) => {
+                            setState({ key: requestKey, action: saved as ActionThing, missing: false });
+                            const cacheKey = `tt-actions-${user?.id || 'anon'}`;
+                            const cached = readLocalCache<{ actions?: ActionThing[] }>(cacheKey);
+                            if (cached?.actions) writeLocalCache(cacheKey, { ...cached, actions: cached.actions.map((entry) => entry.id === saved.id ? saved : entry) });
+                        }} /> : null}
 						<Box {...CARD_STYLES} p={{ base: 5, md: 6 }}>
 							<Flex align="flex-start" justify="space-between" gap={3} wrap="wrap">
 								<Box minW={0}>
@@ -409,6 +428,7 @@ export const ActionDetailPage = () => {
 										</Text>
 									) : null}
 								</Box>
+								{action.author?.id === user?.id && user?.id ? <Button size="sm" onClick={() => setEditing(true)}>Edit definition</Button> : null}
 								<Button as={Link} rightIcon={<ExternalLink size={13} />} size="xs" to={`/thing/${encodeURIComponent(action.id)}`} variant="ghost">
 									Thing view
 								</Button>
@@ -462,10 +482,12 @@ export const ActionDetailPage = () => {
 										<Flex direction="column" gap={1}>
 											{(crystal.capabilities || []).length ? (
 												(crystal.capabilities || []).map((entry) => (
-													<ActionChip key={entry.capability} size="md" tone="ok">
+													<ActionChip key={entry.capability} size="md" tone="ok" wrap>
 														{entry.capability}
 														{entry.schemas?.length ? `: ${entry.schemas.map((ref) => displayRef(ref, schemaNames)).join(', ')}` : ''}
 														{entry.actions?.length ? `: ${entry.actions.join(', ')}` : ''}
+                                                {entry.endpoints?.length ? `: ${entry.endpoints.join(', ')}` : ''}
+													{entry.providers?.length ? `: ${entry.providers.join(', ')}` : ''}
 													</ActionChip>
 												))
 											) : (
@@ -495,9 +517,10 @@ export const ActionDetailPage = () => {
 									</Section>
 								</Flex>
 
-								{effects.creates.length || effects.reads.length || effects.updates || effects.deletes || effects.publicReads.length || effects.systemReads.length || effects.invokes.length ? (
+								{effects.lookups.length || effects.creates.length || effects.reads.length || effects.updates || effects.deletes || effects.publicReads.length || effects.systemReads.length || effects.invokes.length ? (
 									<Section title="Effects (derived from the steps)">
 										<Flex gap={1.5} wrap="wrap">
+											{effects.lookups.map((provider) => <ActionChip key={provider} tone="read" wrap>sends query to {provider} · uses your Vault key</ActionChip>)}
 											{effects.creates.map((schema) => (
 												<ActionChip key={`c-${schema}`} size="md" tone="create">
 													creates {displayRef(schema, schemaNames)}
@@ -560,12 +583,14 @@ export const ActionDetailPage = () => {
 								</Text>
 							</Box>
 						) : null}
-						{user ? <RunPanel action={action} key={action.id} onRan={loadRuns} /> : null}
+						{user ? <RunPanel action={action} key={`${action.id}:${user.id}`} onRan={loadRuns} /> : null}
 
 						<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
 							<Text {...monoLabel} mb={2}>
-								Last runs
+								Recent execution details
 							</Text>
+							<Button size="sm" variant="outline" mb={2} onClick={() => openThingHistory(action.id)}>Open History</Button>
+							<Text fontSize="xs" color={MUTED} mb={3}>History keeps saved changes and recorded server outcomes. The details below are a rolling debug window of up to 50 server runs.</Text>
 							{runs.length ? (
 								<Stack spacing={2}>
 									{runs.map((record) => (
@@ -587,7 +612,7 @@ export const ActionDetailPage = () => {
 								</Stack>
 							) : (
 								<Text color={MUTED} fontSize="sm">
-									No runs yet — this panel is the inspectable trail every invocation leaves.
+									{crystal.runtime === 'browser' ? 'Browser runs show their trace above for this session. They do not create server run records.' : 'No server runs yet.'}
 								</Text>
 							)}
 						</Box>

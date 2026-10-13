@@ -9,6 +9,7 @@ public enum ActionOrigin: String, Codable, Equatable, Sendable {
 }
 
 public enum SafeActionKind: String, Codable, Equatable, Sendable {
+    case filesystem = "filesystem"
     case refreshTelemetry = "telemetry.refresh"
     case setOutputVolume = "system.volume.set"
     case setOutputMuted = "system.audio.mute.set"
@@ -108,6 +109,8 @@ public struct SafeActionPolicy: Sendable {
 
     private func validateParameters(_ action: SafeActionRequest) -> String? {
         switch action.kind {
+        case .filesystem:
+            return RemoteFilesystem.validate(action.parameters)
         case .refreshTelemetry:
             return action.parameters.isEmpty ? nil : "telemetry.refresh does not accept parameters."
         case .lockScreen, .sleepSystem, .restartSystem, .shutDownSystem, .logOutSession, .hideOtherApplications:
@@ -352,6 +355,8 @@ public final class SafeActionExecutor {
         }
 
         switch action.kind {
+        case .filesystem:
+            return try RemoteFilesystem().execute(action.parameters)
         case .refreshTelemetry:
             return try JSONValue.from(telemetry.snapshot())
         case .setOutputVolume:

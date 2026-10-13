@@ -1,9 +1,13 @@
 import React from 'react';
+import { presentLopuTasks } from './lopuTaskPresentation';
 import { Box } from '@chakra-ui/react';
 import type { AiBackgroundTask } from '~/api/utils/lopu/backgroundTaskCore';
 import { getAiTasks, getServerAiTasks, subscribeAiTasks } from './aiTasks.client';
 
-export const useAiBackgroundTasks = () => React.useSyncExternalStore(subscribeAiTasks, getAiTasks, getServerAiTasks);
+export const useAiBackgroundTasks = () => {
+ const tasks = React.useSyncExternalStore(subscribeAiTasks, getAiTasks, getServerAiTasks);
+ return React.useMemo(() => presentLopuTasks(tasks), [tasks]);
+};
 // Fixed phase arcs, with no animation and no invented completion percentage.
 export const LopuTaskRing = ({ task, size = 18 }: { task: Pick<AiBackgroundTask, 'status' | 'stage'>; size?: number }) => {
 	const arc =

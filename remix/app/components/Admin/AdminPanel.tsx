@@ -1,3 +1,4 @@
+import { LopuPromptSettings } from '~/components/Settings/LopuPromptSettings';
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner, Switch, Text } from '@chakra-ui/react';
 
@@ -376,6 +377,7 @@ export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
     <PRConflictResolverModelWaterfallEditor />
     <LopuModelsEditor />
+    <LopuPromptSettings admin />
     {/* anchored: the locked state's "Admin → Lopu accounts" link deep-links #lopu-accounts */}
     <Box id={LOPU_ACCOUNTS_ANCHOR_ID} scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
       <LopuAccountsAdmin />

@@ -1,4 +1,14 @@
+import { validateRunInputs } from './actionInputs';
+import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
+import { capabilitySatisfies } from '../capabilities/capabilityContract';
+import type { PreparedBrowserAction } from '~/schemas/browserActions';
+import { runLookup } from './lookup';
+import { revealUserVaultValue } from '../lopu/userVault';
 import { randomUUID } from 'node:crypto';
+import { withTimelineMutationContext } from '../timeline/mutationContext';
+import { actionTimelineRecorder } from '../timeline/actionOutcome';
+import type { ActionTimelineReport } from '../../../timeline/actionOutcome';
+import { StorageMutationError } from '../storage/storageCore';
 
 import {
 	ACL_ALL,
@@ -48,9 +58,9 @@ import { sharedOperationAllowed } from './sharedCompositionCore';
 //   storage accounting always apply. An action can never do something its
 //   invoker couldn't do by hand.
 // - Closed vocabulary: an op that isn't in the sanitized program cannot run,
-//   and the executor has no fetch, no env access, and no raw Mongo writes on
-//   behalf of the program (its only direct collection reads are the
-//   scoped searches below and the run-record insert).
+//   and authored programs have no arbitrary fetch, env access or raw Mongo
+//   writes. Registered lookup adapters alone can use owner-scoped Vault
+//   credentials for a fixed provider destination.
 // - One shared budget per root invocation: deadline, operation count, depth,
 //   child-action count, and (v2) expression evaluations. actions.invoke and
 //   each recurse with the SAME budget object, so A→B→A terminates by
@@ -85,6 +95,8 @@ export type ActionRunTraceEntry = {
 };
 
 type ActionBudget = {
+	assertAuthorized?: () => Promise<void>;
+	usedLookup?: boolean;
 	deadline: number;
 	opsRemaining: number;
 	maxDepth: number;
@@ -106,6 +118,7 @@ type ActionBudget = {
 
 type ActionProgram = {
 	id: string;
+	ownerId?: string;
 	name: string;
 	crystal: Record<string, unknown>;
 	steps: ActionStep[];
@@ -114,6 +127,7 @@ type ActionProgram = {
 };
 
 export type RunActionResult =
+	| PreparedBrowserAction
 	| Fail
 	| {
 			ok: true;
@@ -121,6 +135,8 @@ export type RunActionResult =
 			status: 'ok' | 'error';
 			actionId: string;
 			result: unknown;
+			cache?: 'no-store';
+			history?: ActionTimelineReport;
 			error?: string;
 			durationMs: number;
 			opsUsed: number;
@@ -172,7 +188,7 @@ const resolveActionProgram = async (
 	const trimmed = typeof reference === 'string' ? reference.trim() : '';
 	if (!trimmed) return fail(400, 'Which action? Pass its id or actionKey');
 
-	let doc: { id: string; crystal: Record<string, unknown> } | null = null;
+	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown> } | null = null;
 	if (options?.shared) {
 		const included = options.parentId
 			? options.shared.children.get(`${options.parentId}:${trimmed}`)
@@ -182,11 +198,11 @@ const resolveActionProgram = async (
 	} else if (options?.ownedOnly) {
 		const things = await getThingsCollection();
 		const own = await things.findOne({ shareId: trimmed, ownerId: viewer.id, thingtime: 'action' } as any);
-		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
 	} else {
 		const byId = await getThing(viewer, trimmed);
 		if (byId.ok !== false && byId.thing && Array.isArray(byId.thing.thingtime) && byId.thing.thingtime.includes('action')) {
-			doc = { id: byId.thing.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
+			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
 		}
 	}
 	if (!doc) {
@@ -205,7 +221,7 @@ const resolveActionProgram = async (
 			.sort({ 'crystal.version': -1, createdAt: -1 })
 			.limit(1)
 			.toArray();
-		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
 	}
 	if (!doc) {
 		return fail(
@@ -223,6 +239,7 @@ const resolveActionProgram = async (
 	const crystal = sanitized.crystal;
 	return {
 		id: doc.id,
+		ownerId: doc.ownerId,
 		name: typeof crystal.name === 'string' ? crystal.name : 'Action',
 		crystal,
 		steps: (crystal.steps || []) as ActionStep[],
@@ -232,63 +249,6 @@ const resolveActionProgram = async (
 };
 
 // ── input validation ────────────────────────────────────────────────────────
-
-const validateRunInputs = (
-	descriptors: Record<string, unknown>[],
-	provided: unknown
-): Fail | { ok: true; inputs: Record<string, unknown> } => {
-	if (provided !== undefined && provided !== null && (typeof provided !== 'object' || Array.isArray(provided))) {
-		return fail(400, 'inputs must be an object of input values');
-	}
-	const raw = (provided || {}) as Record<string, unknown>;
-	const inputs: Record<string, unknown> = {};
-	for (const descriptor of descriptors) {
-		const name = String(descriptor.name);
-		const type = String(descriptor.type);
-		// Own-property gate, same posture as resolvePath above. Input NAMES are
-		// only pattern-checked (COMPONENT_ARG_NAME_PATTERN), so an action may
-		// declare one that collides with an Object.prototype member. A bare
-		// `raw[name]` then reads through the prototype chain of the caller's JSON
-		// object: an omitted `constructor` arrives as the native Object function
-		// rather than undefined, so the descriptor's default never applies, the
-		// "is required" refusal never fires (the type check rejects it first with
-		// a misleading message), and `$input.<name>` hands a native function to a
-		// step value. $step paths are already gated both ways (banned segments in
-		// parseActionRef + hasOwnProperty in resolvePath); $input is now too.
-		let value = Object.prototype.hasOwnProperty.call(raw, name) ? raw[name] : undefined;
-		if (value === undefined || value === null || value === '') {
-			if (descriptor.default !== undefined) value = descriptor.default;
-			else if (descriptor.required === true) return fail(400, `Input ${name} is required`);
-			else continue;
-		}
-		if (type === 'number') {
-			const num = typeof value === 'number' ? value : Number(value);
-			if (!Number.isFinite(num)) return fail(400, `Input ${name} must be a number`);
-			if (typeof descriptor.min === 'number' && num < descriptor.min) return fail(400, `Input ${name} min is ${descriptor.min}`);
-			if (typeof descriptor.max === 'number' && num > descriptor.max) return fail(400, `Input ${name} max is ${descriptor.max}`);
-			inputs[name] = num;
-		} else if (type === 'boolean') {
-			inputs[name] = value === true || value === 'true' || value === 'on' || value === 1 || value === '1';
-		} else if (type === 'enum') {
-			const values = Array.isArray(descriptor.values) ? descriptor.values.map(String) : [];
-			const candidate = String(value);
-			if (!values.includes(candidate)) return fail(400, `Input ${name} must be one of ${values.join(', ')}`);
-			inputs[name] = candidate;
-		} else {
-			// text inputs accept scalars from form controls (a number input's
-			// value arrives as text anyway; a boolean is coerced to its word)
-			const text = typeof value === 'string' ? value : typeof value === 'number' || typeof value === 'boolean' ? String(value) : null;
-			if (text === null) return fail(400, `Input ${name} must be text`);
-			const maxLength = typeof descriptor.maxLength === 'number' ? descriptor.maxLength : 2000;
-			if (text.length > maxLength) return fail(400, `Input ${name} caps at ${maxLength} characters`);
-			inputs[name] = text;
-		}
-	}
-	const declared = new Set(descriptors.map((descriptor) => String(descriptor.name)));
-	const unknown = Object.keys(raw).find((key) => !declared.has(key));
-	if (unknown) return fail(400, `Unknown input "${unknown.slice(0, 40)}"`);
-	return { ok: true, inputs };
-};
 
 // ── reference resolution ────────────────────────────────────────────────────
 
@@ -474,6 +434,7 @@ const executeProgram = async (
 	// What the parent must NOT do is assert absolute negatives it cannot know
 	// ("Cannot create things") while invoking a child that does — that half is
 	// enforced in actionInspect.actionCannotAccess.
+	if (program.crystal.runtime === 'browser') runError('Browser actions must run in the browser, not inside a server program');
 	const effective = program.capabilities;
 	if (budget.stack.includes(program.id)) {
 		runError(`Recursive invocation refused: ${program.id} is already running (stack: ${budget.stack.join(' → ')})`);
@@ -516,13 +477,18 @@ const executeProgram = async (
 				if (isFail(resolved)) runError(`Step ${label} invoke failed: ${resolved.error}`);
 				child = resolved as ActionProgram;
 			}
+			const declaredInputCap = (child.crystal.limits as Record<string, unknown> | undefined)?.maxInputBytes;
+			const childInputCap = Math.min(budget.maxInputBytes, typeof declaredInputCap === 'number' && Number.isFinite(declaredInputCap) ? declaredInputCap : ACTION_LIMIT_DEFAULTS.maxInputBytes);
+			if (jsonBytes(rawInputs ?? {}) > childInputCap) runError(`Step ${label} invoke inputs exceed the ${childInputCap}-byte cap`);
 			const childInputs = validateRunInputs(child.inputs, rawInputs);
 			if (isFail(childInputs)) runError(`Step ${label} invoke inputs invalid: ${childInputs.error}`);
+			if (childInputs.ok && jsonBytes(childInputs.inputs) > childInputCap) runError(`Step ${label} resolved inputs exceed the ${childInputCap}-byte cap`);
 			const result = await executeProgram(viewer, child, (childInputs as { ok: true; inputs: Record<string, unknown> }).inputs, budget, label);
 			return { program: child, result };
 		};
 
 		for (let index = 0; index < program.steps.length; index += 1) {
+			await budget.assertAuthorized?.();
 			const step = program.steps[index];
 			const label = stepPrefix ? `${stepPrefix}.${index + 1}` : String(index + 1);
 			const startedAt = Date.now();
@@ -549,7 +515,14 @@ const executeProgram = async (
 
 			consumeOp(budget);
 
-			if (step.op === 'compute') {
+			if (step.op === 'lookup') {
+				budget.usedLookup = true;
+				if (budget.shared || program.ownerId !== viewer?.id) runError('Lookups require an action you own and your own Vault credential');
+				if (!capabilityOf(effective, 'lookup')?.providers?.includes(String(step.provider))) runError('Lookup provider is outside the declared capability');
+				const credential = await revealUserVaultValue(viewer!.id, String(step.credentialId));
+				if (!credential) runError('Lookup credential is unavailable in your Vault');
+				scope.steps[index] = await runLookup({ provider: step.provider, query: resolveValue(step.query, scope), credential: credential!, deadline: budget.deadline });
+			} else if (step.op === 'compute') {
 				scope.steps[index] = resolveValue(step.value, scope) ?? null;
 			} else if (step.op === 'fail') {
 				const message = resolveValue(step.message, scope);
@@ -798,9 +771,9 @@ const capBytes = (value: unknown, maxBytes: number): unknown => {
 const writeRunRecord = async (
 	viewer: Viewer,
 	actionId: string,
-	crystal: Record<string, unknown>
+	crystal: Record<string, unknown>,
+	runId: string
 ): Promise<string> => {
-	const runId = `${ACTION_RESERVED_ID_PREFIX}run-${randomUUID()}`;
 	const things = await getThingsCollection();
 	// Direct insert (newThingDoc posture): action-run is PROTECTED, so
 	// createThing refuses it by design. storageClass control = operational
@@ -883,7 +856,10 @@ const writeRunRecord = async (
 // The program's identity + derived effects WITHOUT running it — what Lopu's
 // confirmation gate reads before run_action (a deleting program needs the
 // user's approval first). Same deliberate-path resolution as runAction.
-export type InspectActionProgramResult = Fail | { ok: true; id: string; name: string; actionKey: string | null; effects: ActionEffects };
+export type InspectActionProgramResult = Fail | {
+	ok: true; id: string; name: string; actionKey: string | null; effects: ActionEffects;
+	runtime: 'browser' | 'server'; inputs: Record<string, unknown>[];
+};
 
 export const inspectActionProgram = async (viewer: Viewer, reference: string): Promise<InspectActionProgramResult> => {
 	const program = await resolveActionProgram(viewer, reference);
@@ -893,14 +869,17 @@ export const inspectActionProgram = async (viewer: Viewer, reference: string): P
 		id: program.id,
 		name: program.name,
 		actionKey: typeof program.crystal.actionKey === 'string' ? program.crystal.actionKey : null,
+		runtime: program.crystal.runtime === 'browser' ? 'browser' : 'server',
+		inputs: program.inputs,
 		effects: deriveActionEffects(program.steps)
 	};
 };
 
-export const runAction = async (
+const executeActionRun = async (
 	viewer: Viewer,
-	request: { action?: unknown; inputs?: unknown; source?: unknown },
-	shared?: SharedComposition
+	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
+	shared?: SharedComposition,
+	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void> }
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
 	// account authority. Only stored composition reads are added below.
@@ -932,9 +911,29 @@ export const runAction = async (
 	}
 	const validated = validateRunInputs(program.inputs, request.inputs);
 	if (isFail(validated)) return validated;
+	if (jsonBytes(validated.inputs) > limits.maxInputBytes) return fail(413, `Resolved inputs exceed this action's ${limits.maxInputBytes}-byte cap`);
+	if (context?.browserOnly && program.crystal.runtime !== 'browser') return fail(409, 'Use a browser Action when composing browser flows');
+	if (program.crystal.runtime === 'browser') {
+		if (shared || program.ownerId !== viewer.id || viewer.pat || context?.firstPartyActorId !== viewer.id) return fail(403, 'Browser flows require your own Action and a first-party session');
+		if (request.execution !== 'browser') return fail(409, 'This Action runs in the browser. Use a client supporting api.actions-run 1.7.0');
+		if (browserActionMinimumVersion(program.crystal) !== '1.7.0' && !capabilitySatisfies(typeof request.executionVersion === 'string' ? request.executionVersion : undefined, browserActionMinimumVersion(program.crystal)))
+			return fail(409, `This Action needs a client supporting api.actions-run ${browserActionMinimumVersion(program.crystal)} for its configured limits`);
+		// This is preparation, not execution. Do not record a successful run.
+		return { ok: true, status: 'prepared', execution: 'browser', actionId: program.id, viewer: { id: viewer.id, username: viewer.username }, program: program.crystal, inputs: validated.inputs };
+	}
 
+	const runId = shared ? `shared-run-${randomUUID()}` : `${ACTION_RESERVED_ID_PREFIX}run-${randomUUID()}`;
+	let admission: Awaited<ReturnType<typeof actionTimelineRecorder.begin>> | null = null;
+	if (!shared) {
+		try { admission = await actionTimelineRecorder.begin(viewer.id, program.id, runId, program.name); }
+		catch (error) {
+			return fail(error instanceof StorageMutationError ? error.status : 503,
+				'Action did not run because its History could not be saved. Check account storage and try again.');
+		}
+	}
 	const startedAt = new Date();
 	const budget: ActionBudget = {
+		assertAuthorized: context?.assertAuthorized,
 		deadline: Date.now() + limits.timeoutMs,
 		opsRemaining: limits.maxOperations,
 		maxDepth: limits.maxDepth,
@@ -966,9 +965,14 @@ export const runAction = async (
 		errorMessage = (error instanceof Error ? error.message : String(error)).slice(0, MAX_ACTION_RUN_ERROR_CHARS);
 		result = null;
 	}
-	const durationMs = Date.now() - startedAt.getTime();
+	const durationMs = Math.max(0, Date.now() - startedAt.getTime());
+	const history = admission ? await actionTimelineRecorder.finish(admission, {
+		status, durationMs, opsUsed: budget.opsUsed, depthUsed: budget.depthUsed, childActionsUsed: budget.childActionsUsed
+	}) : undefined;
 
-	const runId = shared ? `shared-run-${randomUUID()}` : await writeRunRecord(viewer, program.id, {
+	// The bounded debug cache is supplementary. Canonical Timeline outcomes
+	// survive pruning/deleting this cache and omit its sensitive runtime data.
+	if (!shared) await writeRunRecord(viewer, program.id, {
 		status,
 		startedAt: startedAt.toISOString(),
 		durationMs,
@@ -977,9 +981,9 @@ export const runAction = async (
 		childActionsUsed: budget.childActionsUsed,
 		...(errorMessage ? { error: errorMessage } : {}),
 		inputs: capBytes(validated.inputs, budget.maxInputBytes),
-		result: capBytes(result, budget.maxResultBytes),
+		result: budget.usedLookup ? { omitted: 'External lookup results are transient' } : capBytes(result, budget.maxResultBytes),
 		trace: budget.trace
-	});
+	}, runId).catch(() => runId);
 
 	// Save every ordinary run, including successful component refreshes.
 	// Quiet delivery never means missing history. Await the non-throwing writer
@@ -1004,8 +1008,10 @@ export const runAction = async (
 	return {
 		ok: true,
 		runId,
+		...(history ? { history } : {}),
 		status,
 		actionId: program.id,
+		...(budget.usedLookup ? { cache: 'no-store' as const } : {}),
 		result,
 		...(errorMessage ? { error: errorMessage } : {}),
 		durationMs,
@@ -1015,6 +1021,9 @@ export const runAction = async (
 		trace: budget.trace
 	};
 };
+
+export const runAction = (...args: Parameters<typeof executeActionRun>): Promise<RunActionResult> =>
+	withTimelineMutationContext(args[2] ? null : args[0]?.id ?? null, 'action', () => executeActionRun(...args));
 
 // ── run history ─────────────────────────────────────────────────────────────
 

@@ -6,6 +6,7 @@ public enum ThingtimeAPIClientError: Error, LocalizedError, Equatable {
     case invalidBaseURL
     case notPaired
     case invalidResponse
+    case incompatibleCapabilities
     case rejected(status: Int)
     case pairingClaimOutcomeUncertain
 
@@ -14,6 +15,7 @@ public enum ThingtimeAPIClientError: Error, LocalizedError, Equatable {
         case .invalidBaseURL: "The Thingtime API URL is invalid."
         case .notPaired: "Thingtime Node is not paired."
         case .invalidResponse: "Thingtime returned an invalid device response."
+        case .incompatibleCapabilities: "This Thingtime server does not support the required device features. Update the server before connecting."
         case let .rejected(status): "Thingtime rejected the device request (HTTP \(status))."
         case .pairingClaimOutcomeUncertain: "The pairing response was not confirmed; retry the exact pending claim."
         }
@@ -40,8 +42,47 @@ private final class ThingtimeAPIRedirectDelegate: NSObject, URLSessionTaskDelega
     }
 }
 
+private actor DeviceCapabilityCache {
+    private var checkedAt: Date?
+    func isFresh() -> Bool { checkedAt.map { Date().timeIntervalSince($0) < 300 } ?? false }
+    func accept() { checkedAt = Date() }
+}
+
 public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
     public static let maximumOpenApplications = 64
+    public static let capabilityRequirements = [
+        "api.devices-pairing-claim": "1.0.0", "api.devices-node-state": "1.9.0",
+        "api.devices-node-commands": "1.9.0", "api.devices-node-live-sync": "1.0.0"
+    ]
+    private let capabilityCache = DeviceCapabilityCache()
+    static func compatibleManifest(_ data: Data, origin: URL) -> Bool {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["schemaVersion"] as? Int == 1, let declared = json["origin"] as? String,
+              let url = URL(string: declared), url.scheme == origin.scheme, url.host == origin.host,
+              url.port == origin.port, url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              url.path.isEmpty || url.path == "/", let features = json["features"] as? [String: [String: Any]] else { return false }
+        func semver(_ string: String) -> [Int]? {
+            guard string.range(of: "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil else { return nil }
+            let values = string.split(separator: ".").compactMap { Int($0) }
+            return values.count == 3 ? values : nil
+        }
+        return capabilityRequirements.allSatisfy { key, required in
+            guard let text = features[key]?["version"] as? String, let actual = semver(text), let minimum = semver(required) else { return false }
+            return actual[0] == minimum[0] && (actual[1] > minimum[1] || (actual[1] == minimum[1] && actual[2] >= minimum[2]))
+        }
+    }
+    private func requireCapabilities() async throws {
+        if await capabilityCache.isFresh() { return }
+        guard let url = URL(string: "/.well-known/thingtime-capabilities.json", relativeTo: baseURL)?.absoluteURL else { throw ThingtimeAPIClientError.invalidBaseURL }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, raw) = try await session.data(for: request)
+        guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
+              response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
+              data.count <= 2_097_152, Self.compatibleManifest(data, origin: baseURL) else { throw ThingtimeAPIClientError.incompatibleCapabilities }
+        await capabilityCache.accept()
+    }
+
 
     private struct PairingPrepareBody: Encodable {
         let op: String
@@ -158,6 +199,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         let revision: Int64
         let state: State
         let connectors: [Connector]
+        let capabilities: [String]
     }
 
     private struct CommandEnvelope: Decodable {
@@ -312,10 +354,12 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 soundEffectsMuted: telemetry.soundEffectsOutputMuted,
                 brightness: brightness,
                 openApps: Array(telemetry.runningApplications.compactMap { application in
-                    guard let identifier = application.bundleIdentifier, !identifier.isEmpty else { return nil }
+                    guard let identifier = application.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !identifier.isEmpty else { return nil }
+                    let name = application.name?.trimmingCharacters(in: .whitespacesAndNewlines)
                     return .init(
-                        id: String(identifier.prefix(255)),
-                        name: String((application.name ?? identifier).prefix(120)),
+                        id: String(identifier.prefix(160)),
+                        name: String((name.flatMap { $0.isEmpty ? nil : $0 } ?? identifier).prefix(120)),
                         frontmost: application.isActive,
                         hidden: application.isHidden
                     )
@@ -359,7 +403,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
 				spotify: .init(isInstalled: telemetry.spotify.isInstalled, isRunning: telemetry.spotify.isRunning),
 				chromeYouTube: .init(isInstalled: telemetry.chromeYouTube.isInstalled, isRunning: telemetry.chromeYouTube.isRunning)
             ),
-            connectors: connectors
+            connectors: connectors,
+            capabilities: ThingtimeNodeController.runtimeCapabilities(for: telemetry)
         )
         let response: OKResponse = try await send(path: "api/v1/devices/node/state", body: state, credential: credential.refreshToken)
         guard response.ok else { throw ThingtimeAPIClientError.invalidResponse }
@@ -414,6 +459,9 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         if let error = report.response.error {
             body["error"] = .string(String("\(error.code): \(error.message)".prefix(500)))
         }
+        if report.status == .succeeded, let filesystem = report.response.result?.objectValue?["filesystem"] {
+            body["result"] = filesystem
+        }
         if let outputReference = Self.commandOutputReference(report.response) {
             body["outputRef"] = .string(outputReference)
         }
@@ -467,6 +515,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         body: Body,
         credential: String?
     ) async throws -> Response {
+        try await requireCapabilities()
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw ThingtimeAPIClientError.invalidBaseURL
         }

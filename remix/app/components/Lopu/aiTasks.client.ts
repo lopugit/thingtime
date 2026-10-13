@@ -3,6 +3,9 @@ import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapa
 import { observeAiTask, type AiTaskFrame, type AiTaskRequest } from './aiTaskTransport';
 let ownerId: string | null = null;
 let ownerGeneration = 0;
+let contextKey = 'unresolved';
+const unavailableOutputs = new Set<string>();
+export const getAiTaskContextKey = () => contextKey;
 let taskState: 'idle' | 'ready' | 'unavailable' = 'idle';
 export const getAiTaskState = () => taskState;
 export const getServerAiTaskState = () => 'idle' as const;
@@ -44,6 +47,8 @@ export const bindAiTaskOwner = (next: string | null) => {
 	if (next === ownerId) return;
 	ownerId = next;
 	ownerGeneration++;
+  unavailableOutputs.clear();
+ contextKey = 'unresolved';
 	taskState = 'idle';
 	tasks = [];
 	queueMicrotask(() => listeners.forEach((fn) => fn()));
@@ -55,11 +60,14 @@ export const refreshAiTasks = (): Promise<void> => {
 	const owner = ownerId,
 		generation = ownerGeneration;
 	const work = async () => {
-		await requireThingtimeCapability('api.lopu-background-tasks', '1.0.0');
+		await requireThingtimeCapability('api.lopu-background-tasks', '1.3.0');
 		const response = await fetch(AI_TASK_PATH, { credentials: 'include', cache: 'no-store', headers: { [AI_TASK_OWNER_HEADER]: owner } });
 		if (!response.ok) throw new Error('Task status is temporarily unavailable.');
 		const result = await response.json();
 		if (ownerId === owner && generation === ownerGeneration && result.ownerId === owner && Array.isArray(result.tasks)) {
+      const nextContext = typeof result.contextKey === 'string' ? result.contextKey : 'legacy';
+      if (nextContext !== contextKey) unavailableOutputs.clear();
+			contextKey = nextContext;
 			taskState = 'ready';
 			publish(result.tasks);
 		}
@@ -86,7 +94,8 @@ export const stopAiTask = async (id: string) => {
 		body: JSON.stringify({ id, action: 'stop' })
 	});
 	if (!response.ok && response.status !== 409) throw new Error('Could not stop this task. Try again.');
-	await refreshAiTasks();
+	// A successful Stop must not fail just because the following status read is offline.
+	await refreshAiTasks().catch(() => {});
 };
 export const stopAiTaskRequest = async (requestId: string) => {
 	if (!ownerId) return;
@@ -97,12 +106,13 @@ export const stopAiTaskRequest = async (requestId: string) => {
 		body: JSON.stringify({ requestId, action: 'stop' })
 	});
 	if (!response.ok && response.status !== 409) throw new Error('Could not stop this task. Try again.');
-	await refreshAiTasks();
+	// A successful Stop must not fail just because the following status read is offline.
+	await refreshAiTasks().catch(() => {});
 };
 export const readAiTaskOutput = async (task: AiBackgroundTask) => {
 	const owner = ownerId,
-		generation = ownerGeneration;
-	if (!owner) return null;
+		generation = ownerGeneration, scope = contextKey;
+	if (!owner || unavailableOutputs.has(task.id)) return null;
 	let output = '',
 		offset = 0;
 	do {
@@ -111,9 +121,18 @@ export const readAiTaskOutput = async (task: AiBackgroundTask) => {
 			cache: 'no-store',
 			headers: { [AI_TASK_OWNER_HEADER]: owner }
 		});
-		if (!response.ok || owner !== ownerId || generation !== ownerGeneration) return null;
+    if (owner !== ownerId || generation !== ownerGeneration || scope !== contextKey) return null;
+    if (!response.ok) {
+      // Expired/missing output is terminal for this task in this account/scope.
+      // Do not refetch it on every task-list refresh. Temporary failures retry.
+      if (response.status === 404 || response.status === 410) {
+        unavailableOutputs.add(task.id);
+        if (unavailableOutputs.size > 512) unavailableOutputs.delete(unavailableOutputs.values().next().value!);
+      }
+      return null;
+    }
 		const result = await response.json();
-		if (result.ownerId !== owner) return null;
+		if (result.ownerId !== owner || owner !== ownerId || generation !== ownerGeneration || scope !== contextKey) return null;
 		output += result.output;
 		offset = result.offset;
 		if (offset >= result.length) return { task: result.task as AiBackgroundTask, output };
@@ -129,9 +148,9 @@ export const aiTaskFetch = async (url: string, init: RequestInit = {}): Promise<
 	const owner = ownerId,
 		generation = ownerGeneration;
 	if (!operation || !owner || (init.method || 'GET') !== operation.method || (init.body && typeof init.body !== 'string')) return fetch(url, init);
-	await requireThingtimeCapability('api.lopu-background-tasks', '1.0.0');
+	await requireThingtimeCapability('api.lopu-background-tasks', '1.3.0');
 	const versions: Record<string, string> = {
-		'api.lopu-chats-reply': '1.10.0',
+		'api.lopu-chats-reply': '1.15.0',
 		'api.lopu-voice-reply': '1.4.0',
 		'api.lopu-musing': '1.1.0',
 		'api.ai-complete': '1.2.0'
@@ -233,4 +252,18 @@ export const aiTaskFetch = async (url: string, init: RequestInit = {}): Promise<
 			}
 		} else resume();
 	});
+};
+
+export const sendAiTaskNote = async (id: string, noteId: string, text: string) => {
+ const owner = ownerId, generation = ownerGeneration;
+ if (!owner) throw new Error('Sign in to send a note.');
+ await requireThingtimeCapability('api.lopu-background-tasks', '1.2.0');
+ await requireThingtimeCapability('api.lopu-chats-reply', '1.13.0');
+ const response = await fetch(AI_TASK_PATH, { method: 'POST', credentials: 'include',
+  headers: { 'Content-Type': 'application/json', [AI_TASK_OWNER_HEADER]: owner },
+  body: JSON.stringify({ action: 'note', id, noteId, text }) });
+ const result = await response.json();
+ if (owner !== ownerId || generation !== ownerGeneration) throw new Error('The account changed.');
+ if (!response.ok || !result.ok) throw new Error(result.error || 'Could not send this note.');
+ return result;
 };

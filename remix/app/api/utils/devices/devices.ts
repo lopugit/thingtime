@@ -799,6 +799,7 @@ export const listDevices = async (
 };
 
 type UpdateDeviceStateInput = {
+	capabilities?: unknown;
 	revision?: unknown;
 	state?: unknown;
 	connectors?: unknown;
@@ -809,6 +810,8 @@ export const updateDeviceState = async (
 	deviceId: string,
 	input: UpdateDeviceStateInput
 ): Promise<DeviceFail | { ok: true; revision: number; applied: boolean; stale: boolean }> => {
+	const capabilities = input?.capabilities === undefined ? undefined : normalizeCapabilities(input.capabilities);
+	if (capabilities === null) return deviceFail(400, 'capabilities must be a bounded list of identifiers');
 	const revision = Number(input?.revision);
 	if (!Number.isSafeInteger(revision) || revision < 1) return deviceFail(400, 'revision must be a positive safe integer');
 	const state = normalizeDeviceState(input?.state);
@@ -826,7 +829,7 @@ export const updateDeviceState = async (
 		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any).toArray()
 	]);
 	const stateHash = devicePayloadHash(state);
-	const snapshotHash = deviceSnapshotHash(state, connectors);
+	const snapshotHash = deviceSnapshotHash(state, connectors, capabilities);
 	const stateDecision = decideDeviceRevision(
 		Number.isSafeInteger(existingState?.crystal?.revision) ? Number(existingState.crystal.revision) : null,
 		typeof existingState?.crystal?.snapshotHash === 'string' ? existingState.crystal.snapshotHash : null,
@@ -886,6 +889,10 @@ export const updateDeviceState = async (
 					{ ...HOME_ACCOUNTING, session }
 				);
 				if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
+			}
+			if (capabilities !== undefined) {
+				await updateAccountedThing(things, { shareId: deviceId, ownerId, thingtime: 'device' } as any,
+					{ $set: { 'crystal.capabilities': capabilities, updatedAt: now } }, { ...HOME_ACCOUNTING, session });
 			}
 			await deleteAccountedThings(
 				things,

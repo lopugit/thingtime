@@ -29,6 +29,18 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## Feature maps — read the map for the domain you touch
+
+`docs/feature-map/` holds one short map per domain (attachments and media,
+sharing and audiences, things and folders, posts and feed, API endpoints and
+capabilities, UI shell and menus, auth and accounts, local development). Each
+lists the routes, service modules, the authorization helper every read/write
+must call, the UI entry points, the registration steps and the tests to run.
+Before broad `graphify`/`rg` exploration, read the map for the domain you are
+changing; when you add a route, service, menu action or test script, update the
+map in the same PR. Maps link to `FUNDAMENTALS.md`, `TESTING.md`, the API docs
+registry and design notes instead of duplicating them.
+
 ## Recurring development lessons — 2026-09-11
 
 These rules come from the [two-month PR review](docs/ai-guidance-review-2026-09-11.md)
@@ -434,6 +446,18 @@ points, not the individual files.
   PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
   npm --prefix remix run dev`. Keep any tooling config that hardcodes worktree
   ports (for example `.claude/launch.json`) untracked.
+- Fresh worktrees: run `npm run worktree-bootstrap` (or let the tracked
+  `post-checkout` hook do it on first checkout). It relinks remix dependencies,
+  copies missing ignored env files from the main checkout, writes the
+  derived-port `.claude/launch.json`, and sets this worktree's `core.hooksPath`
+  to the relative `.githooks` so stale hooks from another checkout never run
+  here. Keep `core.hooksPath` relative; an absolute path shared across
+  worktrees runs one checkout's hook files everywhere.
+- Local attachment bytes: set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` in
+  `remix/.env` (see README "Local attachment storage") so uploads, previews,
+  downloads and archives work without the private bucket. Seed realistic data
+  with `node remix/scripts/seed-fixture.mjs create` (real API only) and remove it
+  with `cleanup`; never insert attachment records into Mongo by hand.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
   setup into new managed worktrees. Keep tracked files and every
   `node_modules/` directory out of `.worktreeinclude`: copied pnpm symlink
@@ -454,6 +478,41 @@ points, not the individual files.
   no hook: local checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`,
   and Vercel reads `VERCEL_GIT_COMMIT_REF` at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
+
+## Native app changes must be deployed on the development machine
+
+- After any update that affects the Thingtime Mac app, Thingtime Recovery,
+  Commander, or another native app, rebuild every affected app from the final
+  changed source, reinstall it on the machine where development is being done,
+  and start it before handing the task back. This includes changes to bundled
+  UI/assets, dependencies, build settings, helpers and daemons. Local delivery
+  is part of completing the change; a commit, PR, CI build or cloud release
+  alone does not make the changed app ready for immediate testing and use.
+- Read the affected app's local instructions and use its canonical build,
+  test, signing and installation workflow. Run the required checks before
+  replacing the installed app; preserve the previous working installation if
+  the build or verification fails.
+- On macOS, install the verified runnable bundle into
+  `~/Applications/<AppName>.app`, creating `~/Applications/` if needed. Use
+  `ditto` or the app's equivalent installer to preserve the bundle and signature,
+  replace only that app, and retain its stable bundle/signing identity, settings,
+  user data and existing privacy permissions. Verify the installed signature
+  with `codesign --verify --deep --strict` and check its executable.
+- Quit the affected old app cleanly, reinstall, then launch the installed copy.
+  Restart affected helpers/daemons through their canonical lifecycle so they
+  also run the new build without duplicate processes. Preserve unsaved work;
+  do not force-quit an app with unsaved user data to complete deployment.
+- Confirm that the running executable comes from the installed location and
+  matches the rebuilt version. Open the changed app surface and perform the
+  relevant smoke check, including helper health where applicable. For native
+  targets that cannot run directly on the development host, install and launch
+  the rebuilt app in the local supported simulator or connected test device,
+  and state which target was verified.
+- Report the build-output path, installed path, running build and smoke-check
+  result. If local build, installation, launch or verification is blocked,
+  identify the exact blocker and remaining step; do not claim the app is locally
+  deployed or ready for use. Keep existing signing and explicit privacy-consent
+  requirements in force.
 
 ## Commander macOS distribution signing
 

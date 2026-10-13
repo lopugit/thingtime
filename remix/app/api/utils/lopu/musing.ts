@@ -1,3 +1,5 @@
+import { getLopuPromptSettings } from '../settings/lopuPromptSettings';
+import { composeLopuSurfacePrompt } from './promptSettingsCore';
 import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
@@ -58,7 +60,7 @@ const ALL_MODES: LopuMode[] = ['weather', 'musing', 'quote', 'commented', 'surpr
 const pickMode = (): LopuMode => ALL_MODES[Date.now() % ALL_MODES.length];
 
 const SYSTEM_PROMPT =
-  'You are Lopu, the whimsical unicorn AI living inside Thingtime. Reply with ONE short, delightful musing ' +
+  'Reply with ONE short, delightful musing ' +
   "(max two sentences) — warm, a touch magical, and weave in the user's weather, city, or time of day when given. " +
   'Use at most one emoji. Output ONLY the musing text: no preamble, no quotes, no meta-commentary, no reasoning.';
 
@@ -383,7 +385,7 @@ async function* streamFallback(mode: LopuMode): AsyncGenerator<LopuStreamEvent> 
 // failure (no key / no credits / network) fall back to the canned library.
 export async function* streamLopuMusing(
   ctx: LopuContext,
-  opts: { forceFallback?: boolean; signal?: AbortSignal } = {}
+  opts: { forceFallback?: boolean; signal?: AbortSignal; ownerId?: string } = {}
 ): AsyncGenerator<LopuStreamEvent> {
   opts.signal?.throwIfAborted();
   const mode = opts.forceFallback ? 'fallback' : pickMode();
@@ -401,6 +403,7 @@ export async function* streamLopuMusing(
   // One durable read serves every provider attempt in this musing;
   // getWaterfall catches internally and never throws.
   const choices = await getLopuModelChoices();
+  const system = composeLopuSurfacePrompt(await getLopuPromptSettings(opts.ownerId), SYSTEM_PROMPT);
 
   for (const provider of providerOrder()) {
     const key = provider === 'claude' ? claudeOAuthConfigured() : process.env.OPENAI_API_KEY;
@@ -408,8 +411,8 @@ export async function* streamLopuMusing(
     try {
       const gen =
         provider === 'claude'
-          ? streamClaude(SYSTEM_PROMPT, user, choices.claude, opts.signal)
-          : streamOpenAI(SYSTEM_PROMPT, user, choices.openai, opts.signal);
+          ? streamClaude(system, user, choices.claude, opts.signal)
+          : streamOpenAI(system, user, choices.openai, opts.signal);
       // Pull the first chunk inside the try so a failing provider (bad key, no
       // credits) is caught here and we move to the next one cleanly.
       const first = await gen.next();

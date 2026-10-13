@@ -8,6 +8,7 @@ import {
   CHATGPT_PROTECTED_RESOURCE_METADATA_PATH
 } from './app/api/utils/chatgpt/pluginCore.ts';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
+import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
 const embedDir = new URL('./dist/embed', import.meta.url).pathname;
@@ -21,20 +22,28 @@ export default defineNitroConfig({
   serverDir: 'server',
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
-  // The Vite shell copied by sync:nitro-template. Nitro's default assets:server
-  // mount resolves to <rootDir>/assets (which does not exist here), so the page
-  // catch-all reads the shell through this explicit assets:shell mount instead.
-  serverAssets: [{ baseName: 'shell', dir: 'server/assets' }],
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,
     [APPLE_APP_ASSOCIATION_PATH]: './server/handlers/apple-app-association.ts',
     [`${APPLE_APP_ASSOCIATION_PATH}-docs`]: './server/routes/api/[...].ts',
+    // Crawler discovery lives at the well-known root paths; their -docs twins
+    // are served by the API catch-all like every other documented endpoint.
+    [ROBOTS_PATH]: './server/handlers/robots.ts',
+    [`${ROBOTS_PATH}-docs`]: './server/routes/api/[...].ts',
+    [SITEMAP_PATH]: './server/handlers/sitemap.ts',
+    [`${SITEMAP_PATH}-docs`]: './server/routes/api/[...].ts',
     [CHATGPT_PROTECTED_RESOURCE_METADATA_PATH]: chatGptDiscoveryHandler,
     [CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH]: chatGptDiscoveryHandler,
     [CHATGPT_CAPABILITY_MANIFEST_PATH]: chatGptDiscoveryHandler
   },
+  // One key: a duplicate `serverAssets` literal silently dropped the shell
+  // mount (the last key wins), leaving the page route on its client fallback.
   serverAssets: [
+    // The Vite shell copied by sync:nitro-template. Nitro's default assets:server
+    // mount resolves to <rootDir>/assets (which does not exist here), so the page
+    // catch-all reads the shell through this explicit assets:shell mount instead.
+    { baseName: 'shell', dir: 'server/assets' },
     {
       baseName: 'client',
       dir: publicDir,

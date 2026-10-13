@@ -27,8 +27,9 @@ test('direct voice sends chat history before microphone frames and keeps final t
 		Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [{ stop() { stopped++; } }] }) } } });
 		Object.defineProperty(globalThis, 'WebSocket', { configurable: true, value: Socket });
 		const voice = new LopuVoiceRealtime({ onActive() {}, onUserTranscript: (...args) => users.push(args), onAssistantStart() {}, onAssistantDelta() {}, onAssistantDone: id => completed.push(id), onError() {} });
-		await voice.start({ token: 'test-only', webSocketUrl: 'wss://example.invalid', effort: 'none', textResponse: true, history: [{ role: 'user', text: 'Roses' }, { role: 'assistant', text: 'Remembered' }] });
+		await voice.start({ instructions: 'Configured prompt and enabled preferences', token: 'test-only', webSocketUrl: 'wss://example.invalid', effort: 'none', textResponse: true, history: [{ role: 'user', text: 'Roses' }, { role: 'assistant', text: 'Remembered' }] });
 		processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array([0]) } });
+		assert.equal(sent[0].session.instructions, 'Configured prompt and enabled preferences');
 		assert.deepEqual(sent.slice(0, 3).map(event => event.type), ['session.update', 'conversation.item.create', 'conversation.item.create']);
 		assert.ok(sent[3] instanceof ArrayBuffer); assert.equal(sent.some(event => event.type === 'response.create'), false);
 		const message = (event: any) => (voice as any).handleMessage(JSON.stringify(event), true);
@@ -42,7 +43,7 @@ test('direct voice sends chat history before microphone frames and keeps final t
 		let grant!: (stream: any) => void;
 		Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { mediaDevices: { getUserMedia: () => new Promise(resolve => { grant = resolve; }) } } });
 		const cancelled = new LopuVoiceRealtime({ onActive() {}, onUserTranscript() {}, onAssistantStart() {}, onAssistantDelta() {}, onError() {} });
-		const opening = cancelled.start({ token: 'test-only', webSocketUrl: 'wss://example.invalid', effort: 'none', textResponse: true });
+		const opening = cancelled.start({ instructions: 'Configured prompt and enabled preferences', token: 'test-only', webSocketUrl: 'wss://example.invalid', effort: 'none', textResponse: true });
 		await cancelled.stop(); grant({ getTracks: () => [{ stop() { stopped++; } }] }); await opening;
 		assert.equal(stopped, 2); assert.equal(sent.length, 4);
 	} finally {

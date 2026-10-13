@@ -126,6 +126,8 @@ export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
 	sandboxExpiresAt: 1,
 	sizeBytes: 1,
 	storageAccountingVersion: 1,
+	timelineEnvelopeVersion: 1,
+	secure: 1,
 	updatedAt: 1,
 	attachmentEnvelopeVersion: 1,
 	attachmentState: 1,
@@ -1412,7 +1414,7 @@ const waitlistToThings = collectionToThingsMigration({
 });
 
 // ---------------------------------------------------------------------------
-// Builtin-schema seeding: every builtin crystal schema in the code registry
+// Builtin-schema seeding: every builtin schema in the code registry
 // becomes a system-owned, public schema THING. These are real schema things,
 // not search sugar: each crystal is projected onto the schema-thing grammar
 // (projectBuiltinSchemaCrystal — lives in the registry beside the grammar it
@@ -1429,8 +1431,8 @@ const waitlistToThings = collectionToThingsMigration({
 
 const BUILTIN_SCHEMA_SHARE_PREFIX = 'schema-';
 
-const builtinCrystalSchemas = () => thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
-const builtinSchemaShareIds = () => builtinCrystalSchemas().map((schema) => `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
+const builtinPublicSchemas = () => thingtimeSchemas;
+const builtinSchemaShareIds = () => builtinPublicSchemas().map((schema) => `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
 
 // Registry schema -> the validated schema-thing crystal the seed stores. One
 // call chains the shared projection + the shared write gate, so seeded
@@ -1445,19 +1447,19 @@ const seedBuiltinSchemas: Migration = {
   collection: 'things',
   fromVersion: THINGS_VERSION,
   toVersion: THINGS_VERSION,
-  title: 'Seed builtin crystal schemas as schema things',
+  title: 'Seed all builtin schemas as public schema things',
   description:
-    'Every builtin crystal schema in the code registry is seeded as a system-owned public schema ' +
+    'Every builtin schema in the code registry is seeded as a system-owned public schema ' +
     'thing — thingtime ["schema"], shareId schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"], ' +
     'and the server-owned storageClass "control". Each crystal is projected onto ' +
     'the schema-thing field grammar and validated through validateThingtimeCrystal(["schema"]) ' +
-    '— the same gate user-published schemas pass — before writing; open record shapes and ' +
-    'reserved names are projected away, and a validation failure is reported as a bug. ' +
+    '— the same gate user-published schemas pass — before writing; open records use bounded JSON fields, ' +
+    'reserved tagging names are omitted, and a validation failure is reported as a bug. ' +
     'Idempotent and self-healing: re-runs upsert by shareId, refresh genuine seeded docs whose ' +
     'crystal or control-plane storage stamp drifted, and skip+note foreign docs squatting a destination id.',
   pending: async () => {
     const things = await getCollection('things');
-    const schemas = builtinCrystalSchemas();
+    const schemas = builtinPublicSchemas();
     const docs = await things
       .find({ shareId: { $in: builtinSchemaShareIds() } } as any)
       .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1, storageClass: 1 })
@@ -1484,7 +1486,7 @@ const seedBuiltinSchemas: Migration = {
     await ensureIndexes();
     const things = await getCollection('things');
     const notes = makeNotes();
-    const schemas = builtinCrystalSchemas();
+    const schemas = builtinPublicSchemas();
     const matched = schemas.length;
 
     let created = 0;

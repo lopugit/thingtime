@@ -40,10 +40,18 @@ export const mapResolvedCopiedMedia = (tree: unknown, refs: ReadonlyMap<string, 
 		if (typeof value === 'string') return style ? text(value, true) : value;
 		if (!value || typeof value !== 'object') return value;
 		if (Array.isArray(value)) return style ? value.map((child) => props(child, true, depth + 1)) : value;
-		return Object.fromEntries(Object.entries(value).map(([key, child]) => [key,
-			style || isRenderMediaStyleProp(key) ? props(child, true, depth + 1) :
-			['src', 'poster', 'href'].includes(key) && typeof child === 'string' ? text(child, false) :
-			key.startsWith('_') ? props(child, false, depth + 1) : child]));
+		return Object.fromEntries(
+			Object.entries(value).map(([key, child]) => [
+				key,
+				style || isRenderMediaStyleProp(key)
+					? props(child, true, depth + 1)
+					: ['src', 'poster', 'href'].includes(key) && typeof child === 'string'
+					? text(child, false)
+					: key.startsWith('_')
+					? props(child, false, depth + 1)
+					: child
+			])
+		);
 	};
 	const render = (node: unknown, depth = 0): unknown => {
 		if (++visits > 4000 || depth > 48) return undefined;
@@ -51,6 +59,27 @@ export const mapResolvedCopiedMedia = (tree: unknown, refs: ReadonlyMap<string, 
 		if (Array.isArray(node)) return node.map((child) => render(child, depth + 1));
 		const out = { ...node } as Record<string, unknown>;
 		if (out.props) out.props = props(out.props);
+		if ((out.tag === 'tt-collection' || out.chakra === 'Collection') && out.props && typeof out.props === 'object') {
+			const fields = out.props as Record<string, unknown>;
+			const template = fields.itemTemplate;
+			if (template && typeof template === 'object' && !Array.isArray(template)) {
+				// The row has not been interpolated yet. Carry the root copy map
+				// into its later resolution, without interpreting action inputs or
+				// rewriting split-fragment strings prematurely.
+				const row = template as Record<string, unknown>;
+				const combined = copiedMediaRefs(row.ttMediaRefs);
+				for (const [source, target] of combined) combined.set(source, refs.get(target) || target);
+				for (const [source, target] of refs) if (!combined.has(source)) combined.set(source, target);
+				const pairs = [...combined];
+				const cost = JSON.stringify(pairs).length;
+				// Only charge for a map actually written. Charging for a dropped row
+				// would zero the shared budget and silently stop every later
+				// collection and URL rewrite in the same tree.
+				const carried = combined.size <= 512 && cost <= budget.chars;
+				fields.itemTemplate = carried ? { ...row, ttMediaRefs: pairs } : undefined;
+				if (carried) budget.chars -= cost;
+			}
+		}
 		for (const key of ['children', 'rawChildren']) if (out[key]) out[key] = render(out[key], depth + 1);
 		return out;
 	};

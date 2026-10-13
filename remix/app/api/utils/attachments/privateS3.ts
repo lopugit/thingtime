@@ -17,6 +17,7 @@ import { awsCredentialsProvider } from '@vercel/oidc-aws-credentials-provider';
 import { fileTypeFromBuffer } from 'file-type';
 
 import { getPrivateS3Config, type PrivateS3Config } from './config';
+import { getLocalAttachmentStorage, resolveLocalAttachmentStorageConfig } from './localAttachmentStorage';
 
 export type AttachmentUploadedPart = {
 	partNumber: number;
@@ -289,6 +290,10 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 };
 
 export const getPrivateS3 = (): AttachmentS3 => {
+	// Laptop stand-in (localAttachmentStorage.ts): only when the env opts in,
+	// and never on Vercel. Every caller keeps the same AttachmentS3 contract.
+	const local = resolveLocalAttachmentStorageConfig();
+	if (local) return getLocalAttachmentStorage(local);
 	const config = getPrivateS3Config();
 	const key = `${config.roleArn}\0${config.bucket}\0${config.region}`;
 	if (cached?.key === key) return cached.value;

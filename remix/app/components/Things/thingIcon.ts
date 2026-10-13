@@ -1,3 +1,4 @@
+import { isFolderThing } from '../../schemas/folderThing';
 // Deterministic auto-icons for /things. The ordered file rules are the single
 // source of truth: specific semantic hints (a screenshot filename) must beat a
 // broad type hint (image/png), then unknown files fall back to a floppy disk.
@@ -209,8 +210,8 @@ const FILE_LIKE_KINDS = new Set([
   'code'
 ]);
 
-export const primaryKindOf = (thing: Pick<ThingIconInput, 'thingtime'>): string =>
-  PRIMARY_KIND_ORDER.find((kind) => thing.thingtime.includes(kind)) || thing.thingtime[0] || 'data';
+export const primaryKindOf = (thing: Pick<ThingIconInput, 'thingtime'> & Partial<Pick<ThingIconInput, 'crystal'>>): string =>
+  isFolderThing(thing) ? 'folder' : PRIMARY_KIND_ORDER.find((kind) => thing.thingtime.includes(kind)) || thing.thingtime[0] || 'data';
 
 const firstString = (crystal: Record<string, unknown>, keys: readonly string[]): string => {
   for (const key of keys) {

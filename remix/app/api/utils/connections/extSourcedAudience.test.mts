@@ -67,7 +67,7 @@ mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, {
   }
 });
 
-const { canViewInherited } = await import('../things/things.ts');
+const { canViewInherited, resolvePostLinkedThings } = await import('../things/things.ts');
 
 after(() => mock.restoreAll());
 
@@ -157,4 +157,29 @@ test('a viewer linked to some OTHER account is denied this post', async () => {
 
   assert.equal(await canViewInherited(post as any, viewer as any, lookupAfter(0) as any), false);
   assert.equal(await canViewInherited(comment as any, viewer as any, lookupAfter(0) as any), false);
+});
+
+test('linked comment references share external membership reads without sharing source permissions', async () => {
+  viewerLinks = [{ crystal: { accountId: ACCOUNT } }];
+  linksQueryTicks = 4;
+  membershipQueryTicks = 8;
+  linkQueries = 0;
+  membershipQueries = 0;
+  const viewer = { id: 'viewer-linked', username: 'reader' };
+  const comments = Array.from({ length: 20 }, (_, index) => ({ ...comment, shareId: `linked-comment-${index}` }));
+  const privateComment = { ...comment, shareId: 'private-comment', acl: ['tt:user'] };
+  const docs = [...comments, privateComment, post];
+  const lookup = async (id: string) => docs.find(doc => doc.shareId === id) || null;
+  const ids = docs.map(doc => doc.shareId);
+
+  const visible = await resolvePostLinkedThings(ids, viewer, lookup as any);
+  assert.deepEqual(visible.map(doc => doc.shareId), comments.map(doc => doc.shareId));
+  assert.equal(linkQueries, 1, 'one viewer account lookup for the entire reference batch');
+  assert.equal(membershipQueries, 1, 'concurrent comments share one inherited external-source lookup');
+  assert.equal(Object.hasOwn(viewer, 'extAccountIds'), false, 'projection caches do not persist on the caller');
+
+  viewerLinks = [];
+  assert.deepEqual(await resolvePostLinkedThings(ids, viewer, lookup as any), [], 'unlinking revokes the next projection');
+  assert.equal(linkQueries, 2, 'the next projection resolves membership again');
+  assert.equal(membershipQueries, 1, 'no source query is needed after every account is unlinked');
 });

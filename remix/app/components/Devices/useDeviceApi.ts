@@ -3,6 +3,7 @@ import { useCallback, useMemo } from 'react';
 import { createApiFailure, readApiResponsePayload } from '~/hooks/apiFailure';
 
 export const PUBLIC_DEVICE_COMMAND_KINDS = [
+	'filesystem',
 	'connector.start',
 	'connector.stop',
 	'session.list',

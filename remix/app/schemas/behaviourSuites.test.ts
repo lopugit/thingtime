@@ -19,7 +19,7 @@ import { ALL_SUITES } from './appSuites/index.ts';
 
 // Controls may also name the page runtime's pseudo-actions (a refresh, an
 // install) — those never reach the run endpoint.
-const PSEUDO_ACTIONS = new Set(['$refresh', '$install']);
+const PSEUDO_ACTIONS = new Set(['$refresh', '$install', '$ui']);
 
 // A suite is only a demo if every part of it would save through the real
 // write gates — in BOTH materialisations (the seeded system copy and the

@@ -1,3 +1,4 @@
+import { fetchStoredObject } from './localAttachmentStorage';
 import sharp from 'sharp';
 
 export const IMAGE_WIDTHS = [64, 320, 640, 1280, 1920] as const;
@@ -34,7 +35,7 @@ export const attachmentImageResponse = async (source: { url: string; cacheKey: s
 			if (!work) {
 				if (pending.size >= 4) return new Response(null, { status: 503, headers: { 'Retry-After': '2' } });
 				work = (async () => {
-					const response = await fetch(source.url, { redirect: 'error', signal: AbortSignal.timeout(12_000) });
+					const response = await fetchStoredObject(source.url, { redirect: 'error', signal: AbortSignal.timeout(12_000) });
 					if (!response.ok || !response.body) throw new Error('Image unavailable');
 					const reader = response.body.getReader();
 					const chunks: Uint8Array[] = [];

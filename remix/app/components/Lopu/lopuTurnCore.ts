@@ -1,3 +1,4 @@
+import { lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
 import { lopuResultLinks, normalizeLopuLinks, safeLopuHref, type LopuToolLink } from '~/utils/lopuLinks';
 // Pure, DOM-free core for the Lopu chat client (PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md
 // §2.3 event protocol, §3.1 streaming reducer): the client mirror of the
@@ -54,6 +55,7 @@ export const microsOrNull = (value: unknown): number | null => (typeof value ===
 export type LopuConfirmSubject = { id?: string; kind?: string; name?: string };
 
 export type LopuTurnMeta = {
+ continuation?: boolean;
 	chatId: string;
 	userMessageId: string;
 	requestId: string;
@@ -110,7 +112,7 @@ export type LopuChatEvent =
 	| { type: 'confirm'; id: string; name: string; key: string; token: string; expiresAt: string; summary: string; subject?: LopuConfirmSubject }
 	| { type: 'error'; message: string; retryable: boolean }
 	| {
-			type: 'done';
+			type: 'done'; continuationSafe?: boolean; recoveryFailures?: number;
 			assistantMessageId?: string | null;
 			messages?: ChatMessage[];
 			usage?: LopuUsage;
@@ -198,6 +200,8 @@ export type LopuTurnState = {
 	chatId: string | null;
 	userMessageId: string;
 	userText: string;
+	continuation?: boolean;
+	continuationSafe?: boolean; recoveryFailures?: number;
 	userAttachments: ChatMessage['attachments'];
 	startedAt: number;
 	meta: LopuTurnMeta | null;
@@ -342,6 +346,7 @@ export const reduceLopuTurn = (state: LopuTurnState, event: LopuChatEvent): Lopu
 			const billing = normalizeLopuBilling(meta.billing);
 			return bump(state, {
 				meta: { ...meta, billing },
+    continuation: meta.continuation === true,
 				chatId: meta.chatId || state.chatId,
 				userMessageId: meta.userMessageId || state.userMessageId,
 				billing
@@ -469,6 +474,8 @@ export const reduceLopuTurn = (state: LopuTurnState, event: LopuChatEvent): Lopu
 				assistantMessageId: typeof event.assistantMessageId === 'string' ? event.assistantMessageId : null,
 				messages: Array.isArray(event.messages) ? event.messages : [],
 				usage: normalizeLopuUsage(event.usage),
+				continuationSafe: event.continuationSafe,
+				recoveryFailures: lopuRecoveryFailures(event.recoveryFailures),
 				stopReason: typeof event.stopReason === 'string' ? event.stopReason : null,
 				costMicros: microsOrNull(event.costMicros),
 				// the done event's billing wins (a fallback mid-turn can change who pays)
@@ -578,6 +585,8 @@ const TOOL_LABELS: Record<string, [string, string]> = {
 	list_actions: ['Listing your actions', 'Listed your actions'],
 	install_suite: ['Installing a suite', 'Installed a suite'],
 	create_schema: ['Creating a schema', 'Created a schema'],
+	get_schema: ['Reading a schema', 'Read schema'],
+	save_attachment: ['Saving your file', 'Saved file to Things'],
 	create_data: ['Saving data', 'Saved data'],
 	update_thing: ['Updating a thing', 'Updated a thing'],
 	delete_thing: ['Deleting a thing', 'Deleted a thing'],
@@ -615,6 +624,8 @@ export const TOOL_GLYPHS: Record<string, string> = {
 	list_actions: '⚡',
 	install_suite: '📦',
 	create_schema: '🧬',
+	get_schema: '🧬',
+	save_attachment: '📎',
 	create_data: '💎',
 	search_things: '🔎',
 	get_thing: '🔎',
@@ -841,6 +852,7 @@ export const buildUserMessage = (turn: LopuTurnState, viewerId: string, chatId: 
 		text: turn.userText,
 		createdAt: new Date(turn.startedAt).toISOString()
 	}),
+	...(turn.continuation ? { lopu: { role: 'user' as const, requestId: turn.requestId, segmentIndex: 0, segmentCount: 1, continuation: true } } : {}),
 	attachments: turn.userAttachments ?? []
 });
 
@@ -896,11 +908,37 @@ export type LopuTimelineItem =
  * their user row. A placed turn absorbs the Lopu rows that follow it — its
  * own persisted segments and any optimistic row — so a turn never shows
  * twice; a turn whose user row is not (yet) in the list is appended at the
- * end with its own optimistic user bubble. System rows are never drawn.
+ * end with its own optimistic user bubble when it has user content. An empty
+ * recovered terminal turn yields to its saved assistant reply. System rows are
+ * never drawn.
  */
 export const buildLopuTimeline = (messages: ChatMessage[], turns: LopuTurnState[], viewerId: string): LopuTimelineItem[] => {
+	const savedAssistantStops = new Map<string, Set<string>>();
+	const savedAssistantMeta = new Map<string, { requestId: string; stopReason: string }>();
+	for (const message of messages) {
+		if (message.systemType || message.deleted || isOptimisticLopuMessage(message) || !isLopuAssistantMessage(message)) continue;
+		const meta = lopuMessageMeta(message);
+		if (meta?.continuation || (!message.text.trim() && !message.attachments?.length)) continue;
+		// Persisted-row Retry needs both fields. Keep the recovered control when
+		// legacy history cannot identify the request and its terminal state.
+		if (meta?.requestId && meta.stopReason) {
+			savedAssistantMeta.set(message.id, { requestId: meta.requestId, stopReason: meta.stopReason });
+			const stops = savedAssistantStops.get(meta.requestId) || new Set<string>();
+			stops.add(meta.stopReason);
+			savedAssistantStops.set(meta.requestId, stops);
+		}
+	}
+	const timelineTurns = turns.filter(turn => {
+		const savedMessagesLoaded = turn.messages.every(message => {
+			const saved = savedAssistantMeta.get(message.id);
+			return saved?.requestId === turn.requestId && saved?.stopReason === turn.stopReason;
+		});
+		const emptyRecoveredTurn = !isLopuTurnActive(turn) && !turn.userText.trim() && !turn.userAttachments?.length &&
+			!turn.text.trim() && !turn.segments.length && !turn.tools.length && savedMessagesLoaded;
+		return !emptyRecoveredTurn || !turn.stopReason || !savedAssistantStops.get(turn.requestId)?.has(turn.stopReason);
+	});
 	const byUserMessageId = new Map<string, LopuTurnState>();
-	for (const turn of turns) byUserMessageId.set(turn.userMessageId, turn);
+	for (const turn of timelineTurns) byUserMessageId.set(turn.userMessageId, turn);
 	const placed = new Set<string>();
 	const items: LopuTimelineItem[] = [];
 	let absorbing = false;
@@ -909,7 +947,7 @@ export const buildLopuTimeline = (messages: ChatMessage[], turns: LopuTurnState[
 		const assistant = isLopuAssistantMessage(message);
 		if (assistant && absorbing) continue;
 		absorbing = false;
-		items.push({ kind: 'message', message, role: assistant ? 'assistant' : 'user' });
+		if (!lopuMessageMeta(message)?.continuation) items.push({ kind: 'message', message, role: assistant ? 'assistant' : 'user' });
 		const turn = byUserMessageId.get(message.id);
 		if (turn && !assistant) {
 			items.push({ kind: 'turn', turn });
@@ -917,9 +955,13 @@ export const buildLopuTimeline = (messages: ChatMessage[], turns: LopuTurnState[
 			absorbing = true;
 		}
 	}
-	for (const turn of turns) {
+	for (const turn of timelineTurns) {
 		if (placed.has(turn.requestId)) continue;
-		items.push({ kind: 'message', message: buildUserMessage(turn, viewerId), role: 'user' });
+		// Recovered background turns may have only provider output and no loaded
+		// user row. Keep their assistant state without inventing an empty input.
+		if (!turn.continuation && (turn.userText.trim() || turn.userAttachments?.length)) {
+			items.push({ kind: 'message', message: buildUserMessage(turn, viewerId), role: 'user' });
+		}
 		items.push({ kind: 'turn', turn });
 	}
 	return items;
@@ -951,6 +993,9 @@ export const historicalToolStatus = (call: Pick<LopuMessageToolCall, 'ok' | 'sum
 };
 
 export type LopuMessageMeta = {
+ requestId?: string | null;
+ continuation?: boolean;
+ continuationSafe?: boolean; recoveryFailures?: number;
 	role: 'user' | 'assistant' | null;
 	model: string | null;
 	effort: string | null;
@@ -984,6 +1029,7 @@ export const lopuMessageMeta = (message: unknown): LopuMessageMeta | null => {
 	const provider = LOPU_PROVIDERS.includes(record.provider as LopuProvider) ? (record.provider as LopuProvider) : null;
 	const usageRaw = record.usage && typeof record.usage === 'object' ? (record.usage as Record<string, unknown>) : null;
 	return {
+		requestId: stringOrNull(record.requestId), continuation: record.continuation === true, continuationSafe: record.continuationSafe === true, recoveryFailures: lopuRecoveryFailures(record.recoveryFailures),
 		role: record.role === 'assistant' || record.role === 'user' ? record.role : null,
 		model: stringOrNull(record.model),
 		effort: stringOrNull(record.effort),

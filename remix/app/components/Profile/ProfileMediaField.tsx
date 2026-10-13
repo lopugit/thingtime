@@ -1,5 +1,5 @@
-import { prepareProfileThumbnail } from './profileThumbnail';
-import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
+import { prepareProfileThumbnail, PROFILE_THUMBNAIL_CONTENT_TYPES } from './profileThumbnail';
+import { uploadFileTypes } from '../Attachments/attachmentFileTypes';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
 import { ImagePlus, Link2, RotateCcw, Trash2, X } from 'lucide-react';
@@ -10,6 +10,7 @@ import { useAttachmentUploads } from '~/components/Attachments/useAttachmentUplo
 import { useLopu } from '~/components/Lopu/useLopu';
 import { MediaAddTile, MediaGalleryGrid, MediaGalleryTile } from '~/components/Media/MediaGallery';
 import {
+	PROFILE_MEDIA_CONTENT_TYPES,
 	initialExternalProfileImageUrl,
 	isExternalProfileImageUrl,
 	isManagedProfileMediaUrl,
@@ -20,7 +21,6 @@ import {
 } from './profileMediaCore';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
-const ACCEPTED_PROFILE_IMAGES = `image/avif,image/gif,image/jpeg,image/png,image/webp,${HEIC_IMAGE_ACCEPT}`;
 
 type ProfileMediaIntent = ProfileMediaMutation['kind'];
 
@@ -60,6 +60,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 	const label = props.label || (slot === 'avatar' ? 'Avatar' : 'Banner');
 	const purpose = props.purpose || (slot === 'avatar' ? 'profile-avatar' : 'profile-banner');
 	const inlineThumbnail = props.storageMode === 'inline-thumbnail';
+	const fileTypes = uploadFileTypes(inlineThumbnail ? PROFILE_THUMBNAIL_CONTENT_TYPES : PROFILE_MEDIA_CONTENT_TYPES);
 	const uploadsNotGranted = !inlineThumbnail && privateUploadsEnabled === false;
 	const pickerDisabled = disabled || uploadsNotGranted;
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -100,7 +101,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		onSelectionError,
 		Boolean(props.purpose),
 		onCleanupDeferred,
-		{ purpose, maxFiles: 1, imageOnly: true, remainingBytes, storageStatus, ...(inlineThumbnail ? { maxBytesPerFile: 10 * 1024 * 1024, allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp'], prepareLocalImage: prepareProfileThumbnail } : {}) }
+		{ purpose, maxFiles: 1, imageOnly: true, remainingBytes, storageStatus, ...(inlineThumbnail ? { maxBytesPerFile: 10 * 1024 * 1024, allowedContentTypes: PROFILE_THUMBNAIL_CONTENT_TYPES, prepareLocalImage: prepareProfileThumbnail } : {}) }
 	);
 	const upload = uploads[0];
 
@@ -276,7 +277,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 						{label} image
 					</Text>
 					<Text fontSize="11px" color={MUTED} whiteSpace="normal">
-						{inlineThumbnail ? 'Choose a photo up to 10 MB. HEIC and HEIF photos are converted automatically.' : `${props.purpose ? 'Branding images are public and count toward your account’s storage.' : 'Private uploads count toward this account’s storage.'} ${storageLabel}`}
+						{inlineThumbnail ? `${fileTypes.label} · up to 10 MB.` : `${fileTypes.label}. ${props.purpose ? 'Branding images are public and count toward your account’s storage.' : 'Private uploads count toward this account’s storage.'} ${storageLabel}`}
 					</Text>
 				</Box>
 			</Flex>
@@ -292,7 +293,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 			<input
 				ref={inputRef}
 				type="file"
-				accept={ACCEPTED_PROFILE_IMAGES}
+				accept={fileTypes.accept}
 				hidden
 				disabled={pickerDisabled}
 				aria-label={`Choose ${label.toLowerCase()} image`}

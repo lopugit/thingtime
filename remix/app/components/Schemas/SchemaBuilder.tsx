@@ -1,3 +1,6 @@
+import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { DraftSaveStatus } from '~/drafts/DraftPicker';
 import React from 'react';
 import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
 import { CornerDownRight, Plus, Trash2, X } from 'lucide-react';
@@ -26,6 +29,7 @@ export type BuilderPrefill = {
   description?: string;
   fields?: SchemaThingField[];
   forkOf?: string;
+  render?: Record<string, unknown>;
 };
 
 type SchemaBuilderProps = {
@@ -72,14 +76,10 @@ const blankField = (partial: Partial<DraftField> = {}): DraftField => ({
   ...partial
 });
 
-// Builtin cards prefill with registry-vocabulary fields: open 'record' bags
-// (theme tokens, algorithm weights, app-data values, the schema fields tree)
-// can't be expressed in the builder grammar, so they're DROPPED from fork
-// prefills rather than silently coerced to 'string' — a fork asserting
-// "theme is text" would publish a wrong grammar the builder used to block
-// back when these were childless objects.
+// Old raw registry prefills and current projected copies both retain their
+// open JSON fields. No template/program payload silently disappears on copy.
 export const draftableSchemaFields = (fields: SchemaThingField[]): SchemaThingField[] =>
-  fields.filter((field) => (field.type as string) !== 'record');
+  fields.map(field => (field.type as string) === 'record' ? { ...field, type: 'json' } : field);
 
 const fromSchemaField = (field: SchemaThingField): DraftField =>
   blankField({
@@ -404,6 +404,24 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
   const [publishing, setPublishing] = React.useState(false);
   const [showPreview, setShowPreview] = React.useState(true);
 
+	const user = useCurrentUser();
+	const context = `schema-builder:${prefill?.forkOf || 'new'}`;
+	const draft = useAccountDraft({
+		actor: user?.id,
+		context,
+		surface: 'schema',
+		onRestore: (saved) => {
+			const value = JSON.parse(saved.snapshot);
+			setName(value.name || '');
+			setDescription(value.description || '');
+			if (Array.isArray(value.fields) && value.fields.length) setDrafts(value.fields);
+		}
+	});
+	const snapshot = JSON.stringify({ name, description, fields: drafts });
+	const captureDraft = draft.capture;
+ React.useEffect(() => {
+		if (!publishing) captureDraft({ name: name || 'Schema draft', surface: 'schema', context, snapshot, attachmentIds: [] }, true);
+	}, [snapshot, name, publishing, context, captureDraft]);
   const compiled = React.useMemo(() => compileDrafts(drafts, 1, ''), [drafts]);
   const issues = [...compiled.issues];
   if (!name.trim()) issues.unshift('Give your schema a name');
@@ -423,17 +441,20 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
     }
     setPublishing(true);
     try {
+			await draft.flush();
       const resp: any = await api.v1.things.create({
         thingtime: ['schema'],
         crystal: {
           name: name.trim(),
           description: description.trim(),
           fields: compiled.fields,
-          ...(prefill?.forkOf ? { forkOf: prefill.forkOf } : {})
+          ...(prefill?.forkOf ? { forkOf: prefill.forkOf } : {}),
+          ...(prefill?.render ? { render: prefill.render } : {})
         }
       });
       if (!resp?.ok) throw resp;
       lopu({ title: `Schema “${name.trim()}” published ✨`, status: 'success', duration: 6000 });
+			await draft.clear();
       onCreated(resp.thing);
     } catch (err: any) {
       lopu({ title: err?.error || 'Publishing hiccuped — try again 🌈', status: 'error' });
@@ -464,6 +485,7 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
         </Button>
       </Flex>
 
+			{user && <DraftSaveStatus status={draft.status} error={draft.error} retry={draft.retry} />}
       <Flex gap={2} wrap="wrap">
         <Input
           {...inputSx}

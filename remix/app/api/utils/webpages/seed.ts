@@ -1,3 +1,4 @@
+import { integrationBuilderSeeds } from '~/library/builderPages';
 import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { toBin } from '../auth/users';
 import { WEBPAGE_RESERVED_ID_PREFIX } from '../things/things';
@@ -333,6 +334,9 @@ export const seedDemoWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 		)
 	);
 
+// A separate, explicitly selected seed never refreshes unrelated demo suites.
+export const seedIntegrationWebpages = () => upsertSystemThings(integrationBuilderSeeds());
+
 // Behaviour suites: every part of every suite as a public system thing.
 // Schemas first in the list so a partial run still leaves the shapes the
 // actions reference; data things are stamped with the seeded schema's
@@ -403,6 +407,21 @@ const appContentDefinitions = (): SeedDefinition[] => {
 				schemaId: schemaIdOf('starsalign', 'entry')
 			}
 		});
+	}
+	// every app suite that declares `content` (the newer apps) seeds it the
+	// same way — one generic path instead of a hand-written loop per app
+	for (const suite of ALL_SUITES) {
+		if (!suite.content) continue;
+		for (const entry of suite.content()) {
+			const shareId = `data-app-${suite.key}-${entry.id}`;
+			definitions.push({
+				shareId,
+				uniqueKey: `app:${shareId}`,
+				kind: 'data',
+				tags: ['app', suite.key, 'content', entry.schema, ...(entry.tags || [])],
+				crystalInput: { ...entry.values, schema: schemaNameOf(suite.key, entry.schema), schemaId: schemaIdOf(suite.key, entry.schema) }
+			});
+		}
 	}
 	for (const species of POKEWORLD_SPECIES_SEED) {
 		const shareId = `data-app-pokeworld-species-${species.id}`;

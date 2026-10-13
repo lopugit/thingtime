@@ -22,6 +22,36 @@ export const createRootIdentityState = () => {
 };
 export const rootIdentity = createRootIdentityState();
 
+/** Same-origin tabs share cookies. Broadcast only invalidation, never profiles
+ * or credentials, and never echo a received change back to the other tabs. */
+export const bindRootIdentityChannel = (
+	identity: ReturnType<typeof createRootIdentityState>,
+	channel: Pick<BroadcastChannel, 'postMessage' | 'addEventListener' | 'removeEventListener'>,
+	refresh: () => void
+) => {
+	let generation = identity.read().generation;
+	let receiving = false;
+	const unsubscribe = identity.subscribe(() => {
+		const next = identity.read().generation;
+		if (next === generation) return;
+		generation = next;
+		if (!receiving) {
+			try { channel.postMessage('identity-changed'); } catch { /* Messaging must not fail a completed login/logout. */ }
+		}
+	});
+	const receive = (event: MessageEvent) => {
+		if (event.data !== 'identity-changed') return;
+		receiving = true;
+		try { identity.changed(); } finally { receiving = false; }
+		refresh();
+	};
+	channel.addEventListener('message', receive);
+	return () => {
+		unsubscribe();
+		channel.removeEventListener('message', receive);
+	};
+};
+
 const identityActions = new Set([
 	'/api/v1/login',
 	'/api/v1/auth/register',
@@ -32,7 +62,9 @@ const identityActions = new Set([
 	'/api/v1/auth/sso-session',
 	'/api/v1/auth/passkeys/login'
 ]);
-export const changesRootIdentity = (action: string, payload: unknown): boolean => {
+export const changesRootIdentity = (action: string, payload: unknown, method = 'POST'): boolean => {
+	if (payload && typeof payload === 'object' && (payload as { ok?: unknown }).ok === true &&
+		(action === '/api/v1/mongodb/endpoint' || (action === '/api/v1/mongodb/endpoints' && method === 'DELETE'))) return true;
 	if (!identityActions.has(action) || !payload || typeof payload !== 'object') return false;
 	const result = payload as { requiresOtp?: unknown; user?: unknown; ok?: unknown };
 	// A password step that returns an OTP challenge has not changed accounts;

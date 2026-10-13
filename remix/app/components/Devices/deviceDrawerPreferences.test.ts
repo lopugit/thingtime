@@ -24,6 +24,7 @@ test('device drawer preferences foreground everyday controls and collapse advanc
 		applications: true,
 		connectors: false,
 		screen: false,
+    files: false,
 		approvals: false,
 		'command-activity': false
 	});

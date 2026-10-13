@@ -127,7 +127,7 @@ test('normalises only canonical stable attachment metadata', () => {
 		}),
 		{ id: 'att-4', name: 'blob.bin', size: 1, contentType: 'application/octet-stream', mediaKind: 'file' }
 	);
-	assert.equal(MAX_POST_ATTACHMENTS, 25);
+	assert.equal(MAX_POST_ATTACHMENTS, Number.POSITIVE_INFINITY);
 });
 
 test('audio playback prefers a legacy row’s server-sniffed MIME', () => {

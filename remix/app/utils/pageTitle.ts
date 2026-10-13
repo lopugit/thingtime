@@ -17,6 +17,9 @@ export const pageTitle = (pathname: string, prefix = ''): string => {
 		'/branding': 'Brand resources'
 	};
 	const families: Record<string, string> = {
+		// covers /connections and /connections/feed — a static label like the
+		// other authenticated routes above, never anything off the path
+		'/connections': 'Connections',
 		'/profile': 'Profile',
 		'/lopu': 'Lopu',
 		'/builder': 'Builder',

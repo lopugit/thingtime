@@ -2,6 +2,346 @@
 
 https://thingtime.com
 
+### Unified Timeline (implementation in progress)
+
+History is available at `/history` and from a Thing's History menu. List, Cards,
+Line and Frames use the same private Timeline records and sync connection.
+The browser requires the existing Timeline replica-set setup below; no new
+secret or account-specific setup is needed. Filters currently cover the loaded
+history window. [Design integration and limits](docs/timeline-design-integration.md).
+
+**Server Action activity** uses the same private Timeline (`api.timeline` 1.16.0,
+`api.actions-run` 1.37.0). Accepted runs and redacted outcomes appear in all four
+History looks, including read-only runs. The Action inspector links to History;
+its recent input/result/trace details remain a bounded debug cache. The display
+name and numeric execution metadata are retained, never raw inputs, outputs or
+errors. Admission must save before steps run. If completion cannot be saved,
+the result explicitly reports incomplete history; do not rerun to repair it.
+A server-sealed completion is retained in the same browser outbox and retried
+after reload/reconnection. API clients retain `history.recovery` and POST
+`{command:"recover-action-outcome",recovery}` to the scoped Timeline endpoint.
+Recovery preserves the original event, obeys quota and never runs the Action.
+Browser preparation and shared read-only runs do not write account outcomes.
+No new collection, index, secret or migration is required. Run
+`TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
+test:timeline:action-outcomes`; optionally use the same synthetic
+`TIMELINE_TEST_ADMIN_FIXTURE` setup below for quota coverage.
+
+**Recovery signing setup for forks:** use the existing ES256 `JWT_PRIVATE_KEY`
+and matching `JWT_PUBLIC_KEY` authentication configuration, or a private,
+cryptographically random `JWT_SECRET` of at least 32 UTF-8 bytes. Set these in
+ignored local environment files or your deployment secret manager; placeholder
+values are `JWT_PRIVATE_KEY=<PEM private key>` / `JWT_PUBLIC_KEY=<PEM public key>`
+or `JWT_SECRET=<private random secret>`. Set a stable `JWT_ISSUER` for each trust
+domain. Recovery refuses the known development fallback. Without configured
+keys, ordinary admission/outcome writes still work; failed completion cannot
+produce a recoverable proof and remains explicitly incomplete. The disposable
+quota test also needs configured keys in its server process.
+
+Proofs bind the exact immutable event, issuer and public database location, have
+no expiry, and are not session credentials. Removing the signing key invalidates
+unacknowledged proofs made with it; already committed history is unaffected.
+An unverifiable local outcome stays retained with an error while unrelated edits
+can still sync. A lost execution response or process interruption before a result
+was produced cannot be reconstructed or rerun automatically.
+
+**Page + related** gathers a saved page and your connected Components, Actions,
+Data and Schemas into the same History browser (`api.timeline` 1.13.0). It follows
+the current saved composition, up to 128 Things; shared authors' histories stay
+private. Membership refreshes with the visible history, and changing a reference
+restarts paging so older edits on newly linked Things are not skipped. The
+account/origin/database-scoped local cache retains at most eight membership
+hints; canonical events still use the existing bounded IndexedDB cache and
+remote timeline. No extra credentials, collection, index or migration is needed.
+Run `TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix
+run test:timeline:related` against the guarded local replica described below.
+
+**Recover deleted Things** in History (`api.timeline` 1.14.0): select a saved
+version or its deletion, review the result, then choose **Recover Thing privately**.
+The original ID/link returns with a new private version; deletion and later history
+stay intact. A surviving owned folder is kept, otherwise recovery uses Things root.
+Recorded page components become private copies. Protected records, attached
+interactions, folder children and external files/effects need their own recovery
+flows. Large previews remain subject to the existing response budget.
+No new collection, index, secret or migration is required. Run
+`TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
+test:timeline:recovery` on the guarded replica. Published heads use the existing
+atomic branch/head format under Timeline; they are not editable variations.
+
+Large retained Timeline versions are split into protected relational snapshot
+parts so history cannot strand edits/deletion of an existing large Thing. No
+additional collection, index, secret or configuration is needed. Complete large
+preview and streamed restoration are still listed in the Timeline acceptance
+ledger.
+
+The shared History panel records ordinary Thing revisions and editor drafts in
+the account's private **Timeline** folder. Local IndexedDB keeps authored edits
+and a bounded cache; the database keeps the complete accepted history. Preview
+a restore or merge before applying it; restores append a version and merges ask
+for explicit choices where both sides changed the same field.
+Events and relationship links use identical relational records locally and
+remotely. Each revision/link is a separate document, with bounded history pages
+assembled on demand; Things and branches do not collect growing history arrays.
+In per-Thing History, **Branches** creates a named alternative from the selected
+version, pulls branch updates, and pushes another selected version. Each
+branch/Thing head is its own document. Pending commands survive reload and retry
+with the original identity; a conflicting push preserves both versions.
+**Merge selected version…** compares with a named branch, asks you to choose
+any overlapping fields, then saves the reviewed two-parent version locally and
+queues its branch push. A stale push keeps that version in History. Published
+content stays unchanged. **Edit branch** opens historical fields; **Open in Builder**
+opens block-based pages in the usual visual editor. Branch text, props, layout
+and page metadata use the same device-first draft events and guarded branch
+pushes. Recover drafts after reload; queued or conflicting pushes stay in History.
+New page revisions and visual drafts retain each resolved component binding in
+an individual canonical Timeline event. **Preview page** in History and branch
+Builder use those recorded definitions, including cached copies offline. Older
+versions without captures say so; **Preview current components** is an explicit
+comparison choice. Live data and Actions stay paused. Captures preserve only
+readable component definitions, not source-owner history, media bytes, runtime
+outputs or the full theme/Schema/Action dependency graph. Restoring or merging
+page content does not restore the referenced component Things. Dependency-aware
+published restore/merge and AI branch editing remain open. Named-branch merges
+now retain direct recorded components, combine independent changes, and ask
+which definition to keep for overlapping edits. Review Current branch, This
+version and Merge result before saving; missing history stays explicitly missing.
+Recorded preview requires Timeline 1.10.0; component-aware branch comparison
+requires Timeline 1.11.0; current preview uses webpages-resolve 1.5.0. No schema migration,
+additional collection, index, credential or configuration is needed.
+Named-branch comparison requires `api.timeline` 1.7.0 and a connection. Once
+reviewed, the local event and push survive reload/offline in the same existing
+stores, with no schema migration or additional setup.
+
+Forks need the existing transaction-capable Mongo replica set and completed
+storage-accounting migrations. Timeline uses the normal `getThingsCollection()`
+data plane and requires no extra credentials, provider account or collection.
+The browser needs IndexedDB on a stable origin for reload/offline recovery.
+Database version 5 adds individual branch, head and command stores while
+preserving the earlier relational event/link migration and pending drafts.
+Account, origin and custom Mongo data source each have separate local queues.
+History is private and available only to full account credentials.
+
+`api.timeline` 1.6.0 adds explicit home-history access while a custom database is
+selected. Saved themes have a **History** button, and the Timeline folder lets
+you choose **Home account** or **Selected database** without changing the active
+database. Both use the same records and scope-keyed IndexedDB stores; sessions
+that resolve to home share one upload queue. No additional runtime setup is needed.
+
+Saved theme creation, token/visibility edits and deletion also use this shared
+history (`api.timeline` 1.5.0, `api.themes` / `api.themes-delete` 1.1.0). The
+approved token snapshots remain private even for public themes and commit with
+the home-database writer/accounting when a custom data source is selected.
+They preserve historical token values rather than applying current defaults.
+No new runtime setup is needed. Dedicated theme restoration, active-theme
+selection history and legacy-theme migration coverage remain in progress.
+
+Run `npm --prefix remix run test:timeline` for the focused suite. The opt-in HTTP
+suite uses `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> npm --prefix
+remix run test:timeline:integration`. It refuses any database except the disposable
+local `timeline-rs` replica set at `127.0.0.1:20337`; it creates fixtures through
+the app API. Never use a shared or production database for these checks.
+`test:timeline:themes` uses the same guard for theme creation, unchanged saves,
+rename/move/edit ancestry, privacy and retained deletion. The quota suite below
+also checks atomic theme-save refusal and retained deletion at the ceiling.
+`test:timeline:home-scope` creates a second database on that guarded replica and
+checks concurrent history isolation, exact versions, branches and home restore
+under a custom selection, matching live Thing ids and stale read/write refusal.
+`test:timeline:visual-branch` uses the same guard for a visual page/branch
+fixture and batched component permission checks. Optionally set
+`TIMELINE_TEST_FIXTURE_PATH` to a private temporary JSON file for browser testing;
+it contains disposable sign-in credentials and must stay untracked.
+`test:timeline:branch-merge` uses the same guard for named-branch comparisons,
+canonical merged-event uploads, explicit conflicts, exact retries and stale-push
+retention. Set `TIMELINE_TEST_FIXTURE_PATH` to a private temporary file only when
+browser acceptance needs its synthetic login, and remove it afterward.
+`test:timeline:component-merge` uses the same guard for retained definitions,
+explicit choices, canonical uploads/retries, stale heads and unchanged published
+Things. No new collection, schema migration or private configuration is needed.
+`test:timeline:published-components` uses the same guarded replica for published
+restore/merge, isolated component copies, stale-preview refusal, placeholder
+preservation, exact retries and all-or-nothing storage rollback. The review
+creates private page-specific copies by default; Current shared components is an
+explicit alternative. No additional secret, service, migration or environment
+variable is required. Optional browser fixture files contain synthetic local
+credentials; keep them untracked and remove them after validation.
+The home-scope suite's private fixture file contains only synthetic local
+credentials; remove it after browser acceptance.
+
+History's **Open Thing in home** explicitly switches the selected database, then
+opens an account- and database-qualified Thing link. Thing-page caches include
+that same database identity, so switching sources cannot reuse another source's
+same-id content. `api.mongodb-endpoint` 1.1.0 exposes the public `dataPlane` key
+in root data and supports `X-Thingtime-Expected-Data-Plane` as an optional request
+precondition. It refuses stale selections with 409 and invalid keys with 400;
+it never selects a database or grants access. Updated clients negotiate this
+capability before scoped reads/writes. When this deployment uses its configured
+API fallback, root identity and ordinary source-fenced requests use that same
+fallback; the selection and precondition are forwarded for upstream enforcement.
+Existing actor-fenced commands and vault verification retain their local-origin
+requirements. No new secret or environment variable is required; use the
+existing MongoDB or fallback setup.
+
+For quota acceptance, use that same disposable replica and a dedicated local
+dev-server process. Run the following once with a new private fixture path:
+
+```sh
+TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> \
+TIMELINE_TEST_ADMIN_FIXTURE=/tmp/timeline-quota-<unique-run>.json \
+npm --prefix remix run test:timeline:quota -- --prepare-admin
+```
+
+This registers an ordinary synthetic account, saves its generated credentials
+in a new mode-0600 file, and prints only its username. Restart only this test
+server with `ADMIN_USERNAMES=<printed-synthetic-username>` in its process
+environment; signup deliberately refuses already-allowlisted usernames. Run
+the same command without `--prepare-admin`. It authenticates that exact fixture,
+creates a separate regular account and assigns its test allowance through the
+normal admin API. Do not add the synthetic username to shared env files, use
+real accounts, or print/commit the credential file. Remove the test process
+override and fixture when finished. The test checks exact-ceiling refusals,
+folder organization/deletion, retained-byte accounting and the existing 409
+refusal to downgrade below usage. It does not manufacture an over-limit ledger.
+
+Retained history counts toward account storage. Deleting a recorded Thing keeps
+its history and therefore does not by itself free those bytes. At the limit,
+history reads and previews remain available; saving another retained version
+needs enough storage. Retention controls are still in the delivery ledger.
+See [the implementation contract and open delivery gates](docs/unified-timeline.md).
+
+### Public schemas, uploaded files and Lopu instructions
+
+Every built-in schema (root Thing, content kinds and database collections) is
+published as a Thingtime-owned public Schema Thing at `schema-<id>`. Browse
+`/schemas`, open a schema and choose **Copy and extend** to save an independent
+Schema in your Things. Copies retain nested fields and render templates; open
+record fields use bounded JSON. `forkOf` records the source. Editing a copy
+never changes the platform definition or another person's schema. Native write
+permissions, protected kinds and specialized validation continue to apply.
+
+After deploying a fork, an administrator should dry-run and then run
+**backfill-user-storage-accounting** in Admin migrations. That fenced migration
+also refreshes the public schema catalog; do not run a standalone schema seed
+around active storage ledgers. Existing identities, posts and ownership remain
+in place. No new environment variable is needed for schemas or prompt settings.
+
+**Settings → Lopu** shows the shared base prompt and saves a private list of
+custom instructions with individual enable switches. **Settings → Admin → Lopu
+base prompt** edits the shared public guidance. Set the normal server
+`ADMIN_USERNAMES=<your-admin-username>` on your fork, and use its normal MongoDB
+configuration. The base prompt is public: keep credentials in Secure Vault.
+Changes apply to the next AI reply and newly started direct voice sessions.
+Chat, voice, musings and recording analysis share this guidance; surface rules
+and server-enforced permissions remain in effect. Simultaneous edits report a
+conflict and offer reload rather than overwriting someone else's changes.
+
+Lopu can save an owned chat attachment as an independent private file Thing,
+optionally file it in an owned folder, and use its ID/content URL in another
+Thing's properties. The original chat remains intact; deleting it does not
+delete the saved copy. This requires the existing private-upload approval and
+quota, and the existing object-storage configuration. Private URLs retain their
+access checks when placed in a public Thing. Public sharing remains explicit.
+
+For isolated acceptance, start a loopback MongoDB replica set and a PM2-managed
+web stack with `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:<port>/thingtime?replicaSet=<name>`,
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<absolute-test-directory>` and
+`LOPU_CHAT_PROVIDER=test`. Create a disposable account with `seed-fixture.mjs`,
+then set `ADMIN_USERNAMES=<fixture-username>` in both the app and test process.
+From `remix/`, run `node --import tsx scripts/verify-schema-files.ts
+.fixtures/<fixture>.json`. It refuses non-loopback databases/APIs, exercises the
+real multipart upload and Lopu tool paths, verifies private bytes after chat
+deletion, and creates an upload form for browser acceptance. The local storage
+adapter tests the lifecycle without claiming a live S3 or model-provider test.
+
+### Builder service workspaces
+
+Insert **Service workspace** from the builder block menu. Its native
+`<tt-service-workspace rootId="your-stable-workspace-id" name="My service business">`
+component creates real Thingtime folders and relational records for customers,
+properties, job templates, scheduled visits, sub-jobs, time logs, equipment,
+resource usage and memberships. The owner is an Admin. Add existing Thingtime
+usernames in Team; Customer/B2B memberships must select their customer account.
+Use Setup to connect the owned builder page to the same live access policy.
+Members sign in with their normal Thingtime account. Removing membership revokes
+workspace, page, comments and attachment access on subsequent requests.
+
+Records open directly; their context menus offer Edit, Duplicate and recoverable
+Delete. Trash includes all record types. Each job and visit has separate comments,
+media titles/descriptions, attachments and optional Before/After groups. Time logs
+use the workspace IANA time zone and reject ambiguous or nonexistent DST times.
+The day/week planner supports dragging, ordering buttons and date controls.
+The bounded workspace API pages 250 records at a time, up to 5,000 records.
+The workspace runs live on its page (`/p/<id>`, no special mode needed) and
+inside the seamless editor's Edit, Layout and View modes; Builder mode,
+component-library previews and feed embeds show an inert placeholder instead.
+Back returns to the record you came from (property → job → visit), and adding a
+log, sub-job or customer link keeps its parent record open.
+
+Fork-safe maps and Vault setup:
+
+1. Configure a stable `THINGTIME_USER_VAULT_KEY=<base64url-encoded-32-byte-key>`
+   on the server. Never publish its value or rotate it without migrating entries.
+2. In the workspace owner's **Settings → Secure Vault**, save
+   `GOOGLE_MAPS_JAVASCRIPT_API_KEY=<browser-restricted-key>` and
+   `GOOGLE_PLACES_API_KEY=<server-places-key>`. New entries have an Environment
+   selector; existing entries have **Change environment**. Moves preserve the
+   encrypted value and can return an entry to Ungrouped.
+3. Enable Google Maps JavaScript API and Places API (New) with billing in the
+   matching Google project. Restrict the JavaScript key to the intended website
+   referrers and API. That key is intentionally visible to workspace browsers.
+   Keep the Places key server-only, restrict it to Places API, and use supported
+   server restrictions. No Mapbox token is needed for this Google implementation.
+   Website-referrer restrictions do not work on the server Places key. Setup
+   failures are reported with safe guidance for the rejected restriction or
+   disabled service; provider messages and project identifiers are never echoed.
+4. Choose the matching Vault environment in workspace Setup. Automatic selection
+   works when there is exactly one entry of each required name; duplicate matches
+   require an explicit environment. Reload after switching a loaded Maps SDK key.
+   Place searches send only the entered query to Google; map coordinates are
+   fetched on demand, not persisted as a provider-content cache.
+
+The native service-workspace property map uses the Google Maps SDK with the
+specific Google script and service hosts listed in remix/scripts/csp.mjs. The
+application still blocks executable inline scripts and eval. Keep these hosts
+in the production and development policies when deploying a fork, and review
+[Google's Maps domains](https://developers.google.com/maps/domains) if the SDK
+changes its endpoints. Run test:vercel-config and verify:vercel-output to catch
+policy regressions; browser acceptance with restricted keys remains required.
+
+Local regression fixture: run `TT_SERVICE_TEST_LOCAL=1 node --env-file=.env
+--import tsx scripts/test-service-workspace-local.ts` from `remix/` against the
+isolated Mongo replica at `127.0.0.1:18943` (`jimsLocal`). The opt-in test rejects
+other database URLs. Use `npm run web-pms` in the `thingtime-jims-franchise`
+worktree: local web `http://localhost:18940`, HMR 18941, Nitro 18942.
+Tailscale/Funnel was unavailable during validation: the installed CLI launcher
+points to the missing `/Applications/Tailscale.app` executable.
+
+### Seamless page editor
+
+`/builder?page=<id>` and `/p/<id>` share `LiveWebpage` and its lazy
+`SeamlessPageEditor`. One floating controls bar groups page navigation, preview
+settings, and Builder / Edit / Layout / View / Visit / Deploy / Inspector.
+Builder disables page data; Edit combines contenteditable text with pink block
+handles, outlines, insertion and context menus; Layout arranges blocks; View
+runs the page with the inspector available. Visit saves and reloads
+`/p/<id>?mode=visit` without editor controls (`mode=run` remains compatible).
+Deploy opens `/t/<id>` with only a small credit link back to `/p/`. All paths
+use the same resolver, runtime and access checks.
+The preview menu offers Viewport and Container presentations with the same
+full-width, desktop, tablet, mobile, device presets and custom dimensions.
+Sized Viewports use a style-mirrored iframe portal for real CSS media queries;
+Container uses the page DOM, a maximum width and minimum height, grows with its
+content, and has no maximum height. It does not disable the chosen mode's runtime.
+No second app or API runtime is booted in the frame. Inline drafts publish only
+when saved. Switching between iframe and native presentation can remount form
+DOM; switching editing modes preserves it.
+
+Local verification for `thingtime-seamless-builder`: `http://localhost:11060`
+(Vite 11060, HMR 11061, Nitro 11062), started with `npm run web-pms` using the
+existing worktree port resolver. `/tests/seamless-builder.html` is a Vite-only,
+non-publishing editor fixture. Tailscale/Funnel is unavailable on this machine:
+the configured CLI points at a missing `/Applications/Tailscale.app` executable.
+No new secrets or external setup are required by these editor features.
+
 Thingtime is a powerful platform for storing and sharing information of all kinds. Whether you want to keep track of your personal notes, collaborate on a project with your team, or build a new app that relies on rich data, Thingtime has you covered.
 
 With Thingtime, you can create and share any abstract data structure you want, or store any practical piece of information and share it for people and machines to use equally. Thingtime is not only a platform, but also an ecosystem that empowers developers and users alike to build, share, and utilize all kinds of data and knowledge.
@@ -47,6 +387,17 @@ executable with a SHA-256/size manifest, checks the function size, and expands
 it into private temporary storage before execution. No runtime download or
 Anthropic API-key fallback is performed. Provider access checks distinguish
 OAuth configuration from model/allowance verification by a real reply.
+
+For Vercel deployments, run `npm --prefix remix run build` so packaging and
+`verify:vercel-output` validate every emitted Node function that invokes Claude,
+including Workflow steps. Each function needs its own pinned runtime assets and
+size verification; the main Nitro function and Workflow step execute in separate
+filesystem roots. Workflow generation can emit an arm64 function independently
+of an x64 Linux builder. The packager aligns each Claude-consuming function’s
+CPU architecture with its packaged executable and verifies that match; flow and
+webhook functions retain their emitted configuration. Keep the canonical
+post-build packaging/verification stages in a fork’s build command. Authenticated server-managed Claude execution still
+requires a deployed smoke test with the existing OAuth setup above.
 
 Local worktree verification: `http://localhost:15080/admin/system` (Nitro
 15082, HMR 15081). Tailscale/Funnel was unavailable on this machine during
@@ -818,6 +1169,20 @@ the thin control-plane branch carries its own root config with all Git
 deployments disabled, so branches created from it never try to build an absent
 app.
 
+### One-step worktree bootstrap
+
+A fresh linked worktree (Claude Code, Codex, `git worktree add`) has no remix
+dependencies, no ignored env files and no port-specific `.claude/launch.json`.
+`npm run worktree-bootstrap` (`remix/scripts/worktree-bootstrap.cjs`) relinks
+dependencies from the shared pnpm store, copies missing ignored env files from
+the main checkout (never overwriting), writes `.claude/launch.json` with this
+checkout's derived dev ports, points this worktree's `core.hooksPath` at the
+tracked `.githooks`, and prints the ports, PM2 name and local URLs. The tracked
+`post-checkout` hook runs it automatically (in the background, logged to the
+Git directory as `worktree-bootstrap.log`) the first time a linked worktree is
+checked out without dependencies. Flags: `--no-deps`, `--no-env`,
+`--no-launch`, `--no-hooks`, `--quiet`.
+
 ## Electron desktop app
 
 The desktop shell lives in `electron/` and packages the same `remix/` web app
@@ -877,6 +1242,31 @@ For a fork/local build, keep the normal authenticated Thingtime origin and
 database configuration in ignored Electron/Remix env files; do not grant the
 web browser filesystem access. The browser version intentionally shows the
 desktop-app requirement instead of attempting local discovery.
+
+## Brand identity for search engines (robots.txt, sitemap, Organization logo)
+
+Thingtime tells crawlers about itself from code, not configuration:
+
+- `remix/app/api/utils/meta/brandIdentity.ts` — the public `Organization`
+  JSON-LD node every HTML shell emits (site name, square logo path, wordmark
+  path, `sameAs` profile links). Forks: edit these constants; the logo paths
+  must be files generated by `npm --prefix remix run branding-assets`.
+- `remix/app/api/utils/meta/indexablePaths.ts` — which static routes are
+  indexable. The same list drives the shell's `robots` meta tag and the
+  `static` sitemap section, so they can never disagree.
+- `remix/app/api/utils/seo/sitemapCore.ts` + `sitemap.ts` — `GET /robots.txt`
+  (everything allowed, AI crawlers listed in `AI_CRAWLER_USER_AGENTS`) and
+  `GET /sitemap.xml` / `GET /api/v1/sitemap` (index + `static`, `posts`,
+  `pages`, `profiles` sections, anonymous-only, edge cached for an hour).
+- `npm --prefix remix run sitemap:generate -- --origin https://your.host
+  [--fetch] [--out dir]` — offline generator; `--fetch` mirrors every UGC
+  section from the live API into static files under `remix/sitemap-out/`
+  (untracked). Never copy a sitemap into `remix/public/`: Vercel's
+  filesystem-first routing would shadow the live route.
+
+Submit `https://<your host>/sitemap.xml` once in Google Search Console and
+Bing Webmaster Tools; nothing else needs configuring. No secrets, environment
+variables or vault entries are involved.
 
 ## API self-documentation
 
@@ -1154,6 +1544,15 @@ for the catalog size — tranche 2 grew it to 70 archetypes / 350 families /
 2800 components.
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
+
+Admins can also publish a catalog from `/components` → **Import component
+catalog**. Choose a JSON array of component definitions (or an object with a
+`components` array), review the validated count, then select **Publish catalog**.
+This uses the signed-in session, so no password file is needed. Files are capped
+at 32 MiB / 5,000 definitions. Batches respect the API's count, body-size and
+rate limits; stopping or retrying preserves completed work without duplicating
+components. The selected origin must advertise `api.admin-components-seed`
+1.0.0 and `api.webpages-suites-install` 1.1.0 or compatible versions.
 
 ```sh
 # 1. Start the dev stack and register a throwaway user, then restart with
@@ -1966,6 +2365,63 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### Local attachment storage (laptop stand-in for the private bucket)
+
+The private bucket is reached only through Vercel's OIDC role, so a checkout
+without that role cannot upload, preview or download a single byte. For local
+development set one variable in `remix/.env` and restart the dev stack:
+
+```sh
+THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments
+```
+
+`remix/app/api/utils/attachments/localAttachmentStorage.ts` then implements the
+same `AttachmentS3` interface on the filesystem (objects, versions, multipart
+parts under that directory, ignored by git) and mints short-lived HMAC-signed
+URLs to `GET|PUT /api/v1/attachments/local-object`, which it also serves.
+Uploads, image previews, downloads, "download all" archives, copies and
+moderation fetches run unchanged; quota, ACL and moderation gates are exactly
+the production ones. The module refuses to start when `VERCEL`, `VERCEL_ENV`
+or `VERCEL_TARGET_ENV` is set (reported as a non-retryable storage
+configuration failure) and the route answers 404 without the variable, so it
+can never become a storage tier. A relative directory resolves against the dev
+server's working directory (`remix/`); `~` is expanded. Delete the directory to
+reset local media.
+
+The signed URLs are root-relative by default, which is what the browser and
+every server-side reader need. A native app (the Watch recording inbox against
+a simulator build), `curl`, or a smoke script cannot follow a relative URL, so
+for those also set the dev server's origin and restart:
+
+```sh
+THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://127.0.0.1:10000   # this checkout's Nitro port (npm run web-ports)
+```
+
+Exact object versions are immutable, so the stand-in answers with an `ETag`
+and `Last-Modified` and honours `If-None-Match` (304) like a bucket would.
+
+### Seed a local fixture through the API
+
+```sh
+node remix/scripts/seed-fixture.mjs create --files 3 --name demo   # user + folder + public post with 3 stored files
+node remix/scripts/seed-fixture.mjs list
+node remix/scripts/seed-fixture.mjs cleanup remix/.fixtures/demo.json
+```
+
+The script only talks to the real endpoints (register, uploads/parts/complete,
+things, PATCH move) so seeded data shares one code path with real signups
+(FUNDAMENTALS §2). New accounts start with uploads locked: pass
+`--admin-user <name> --admin-password-file <file>` so the script enables uploads
+via `POST /api/v1/admin/users/public-uploads`. Without an admin, `create`
+registers the user and stops at the first refused upload; add
+`ADMIN_USERNAMES=<that username>` to `remix/.env`, restart the dev stack (env
+admins bypass approval, and a name listed there cannot *register*, hence the
+order), then `node remix/scripts/seed-fixture.mjs resume remix/.fixtures/<name>.json`.
+State, including the generated password for logging in as the fixture
+user, lives in `remix/.fixtures/<name>.json` (ignored, mode 0600). Cleanup
+deletes the post (cascading its attachments) and folder and signs the fixture
+session out; there is no account-deletion API, so the user row remains.
+
 ### Poll index headroom during the Watch rollout
 
 Poll writers share production's protected Binary `uniqueKeys_1` constraint and
@@ -2728,15 +3184,23 @@ Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 
 ### Trusted `develop`-target PR deployments
 
-A pull request's base branch does not select its Vercel environment. A feature
-branch targeting `develop` is therefore still an ordinary Preview unless the
-trusted controller in `.github/workflows/develop-pr-preview.yml` explicitly
-deploys its exact head SHA to the `develop` Custom Environment. Thingtime now
-also assigns the current `develop` runtime variables to generic Preview, so an
-ordinary newly built Preview shares the development data/services even without
-the controller. The controller remains responsible for the stable
-`pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
-comment, and marker-scoped cleanup.
+A pull request's base branch does not select its Vercel environment, and it
+does not gate the preview either: every same-repository PR — whether it targets
+`develop`, `main`, `github-actions` or another feature branch — gets its exact
+head SHA deployed by the trusted controller in
+`.github/workflows/develop-pr-preview.yml` into the `develop` Custom
+Environment by default, and published at
+`https://pr-<number>.previews.dev.thingtime.com` until the PR closes. The only
+base-independent requirements are the trust gates below and a head that
+carries `remix/` (controller-only branches have nothing to build and take the
+skip/reconcile path). Thingtime also assigns the current `develop` runtime
+variables to generic Preview, so an ordinary newly built Preview shares the
+development data/services even without the controller. The controller remains
+responsible for the stable alias, identity/SHA gates, status comment, and
+marker-scoped cleanup. A `production`-environment preview of a PR is an
+explicit admin choice made through the admin preview lane
+(`deploy-admin-pr-previews.mjs`, published under
+`pr-<number>.previews.thingtime.com`); it never happens by default.
 
 The workflow deliberately separates authorization, compilation, and
 publication. Product branches retain only a
@@ -2747,8 +3211,9 @@ Vercel secret, checks out no code, and emits only a bounded
 `github-actions`, proves the source workflow path/run, repository,
 same-repository PR, head SHA, action, and triggering actor through GitHub's API,
 then re-reads the live PR. Both the PR author and triggering actor must be
-explicitly allowlisted, currently hold write/admin permission, and the
-non-draft PR must still target `develop`.
+explicitly allowlisted and currently hold write/admin permission, and the PR
+must be non-draft. Its base branch is not part of the gate: `develop`, `main`
+and feature-branch targets all preview into the `develop` environment.
 
 A separate environment-free GitHub job checks out exactly that authorized SHA,
 installs locked dependencies, and generates `.vercel/output` without any
@@ -3591,3 +4056,461 @@ requires separate App Privacy disclosures in addition to policy URL/text.
 Legal-page development worktree: local `http://localhost:18460` (Nitro 18462,
 HMR 18461). Public preview is delivered through the branch Vercel deployment;
 check the PR deployment status for its current URL.
+
+### Upload admission and local regression checks
+
+Attachment starts use the shared admin rate-limit policy (default: 60 per minute
+per account). The exact persisted legacy 30/hour default is upgraded on read;
+custom/disabled rules are retained. A subsequent admin save records the policy
+version, so explicitly setting 30/hour again remains possible. The browser honors
+`Retry-After` for at most two retries of at most 60 seconds each, keeping the same
+request identity; longer/persistent limits retain the selection and show the wait.
+Upload approval, storage accounting and moderation still apply independently.
+Run `pnpm --dir remix test:attachments`, `test:rate-limit`, and
+`test:api-capabilities` after changes to upload admission.
+
+The upload-regression worktree uses `http://localhost:19800` (HMR 19801, Nitro
+19802), derived by `npm run web-ports`. Tailscale/Funnel could not be configured
+on 2026-09-16: the installed launcher points to a missing Tailscale app.
+
+
+### Lopu continuation development
+
+Lopu has no fixed tool-count, step-count, continuation-count, or task-duration cap.
+On Vercel, completed tool batches checkpoint between hosting windows; large
+streams also checkpoint before continuing with a fresh request ID. The browser
+continues persisted checkpoints while the app is open, retaining chat/model and
+completed-work receipts. Background jobs renew a worker lease instead of stopping
+a healthy job on a timer. An uncertain provider/write failure remains a manual
+recovery boundary. Closing every app tab can leave a saved checkpoint awaiting
+return to the conversation; this is not a durable cross-window workflow runner.
+Provider transport, context, platform billing and authorization constraints still
+apply. No new private configuration or credentials are required.
+
+Regression fixture: `http://localhost:16650/scripts/lopu-continuation.browser.html`
+(worktree `thingtime-lopu-auto-continue`; HMR 16651, Nitro 16652). It runs the
+production store/composer with synthetic responses, including 17 continuations
+and Stop. The Tailscale/Funnel URL could not be configured: the installed wrapper
+references a missing `/Applications/Tailscale.app/Contents/MacOS/tailscale`.
+## Social previews and search metadata
+
+The Nitro shell automatically serves Open Graph/Twitter metadata, canonical
+URLs and safe Schema.org JSON-LD from anonymous public projections. See
+[the metadata runbook](docs/seo-social-metadata.md) for validation, crawler
+cache diagnosis, fork setup and the broader SEO/rich-results TODO.
+
+
+### Lopu message queue
+
+While Lopu replies, **Queue** (or desktop Enter) adds another message without
+stopping the current task. Hold a queue handle to drag, or use the up/down arrows.
+**Send together** is checked by default: consecutive checked messages with the
+same model, page and media context become one prompt in order, with one reply.
+Unchecked messages wait for their own reply. The 8,000-character request limit
+also creates a batch boundary. Pause/Resume controls automatic delivery.
+
+**Send now** saves a text note immediately. The active task reads it after its
+current provider response/tool batch, without interrupting or replaying tools.
+A note arriving after the last boundary remains in history for the next reply.
+Attachments and selected Things use Queue or a normal send; notes never grant
+extra tool permissions.
+
+Queues are private to this browser tab and account, survive reload in session
+storage, and restore paused for review. Keep the tab open for automatic queued
+sends; already accepted background tasks continue independently. Retries preserve
+operation IDs and frozen payloads. Stop pauses queued delivery too.
+
+Queue development: `npm run web-pms` in the `thingtime-message-queue` worktree
+uses `http://localhost:18900` (HMR 18901, Nitro 18902). Public Tailscale/Funnel
+verification is unavailable on the development host because its installed CLI
+launcher points to a missing Tailscale app; no public mapping was changed.
+
+
+### Builder component SDK
+
+Start at `/docs/builder` (also reachable from `/builder/docs`) for forms, Data
+Things, uploads, source bindings, external lookups and troubleshooting. The same
+reference feeds Lopu's builder instructions. Native `tt-upload` / Chakra `Upload`
+controls require an interactive owned page, sign-in, upload approval, storage
+quota and the attachment service configuration described above. Use file commits
+a private attachment; the form action must save both its URL and attachment id.
+
+Google Maps address lookup is opt-in. Enable the Geocoding API and billing in your
+own Google Cloud project, restrict the key for your server usage, and save the key
+as a **secret in your own Vault**. An owned action references only the Vault entry
+id with `lookup`, provider `google-geocoding`, and an explicit provider capability.
+Never place the actual key in a component, action, frontend environment variable,
+source control or prompt. The server needs the existing Vault encryption setup;
+Google needs no shared project-wide API key. See `/docs/builder/lookups` for the
+complete example, attribution, limits and storage-policy links. Other providers
+require a registered server adapter; authored arbitrary fetch URLs are unsupported.
+
+Local regression fixture: `/scripts/builder-sdk-regression.html` on a Vite dev server.
+It uses production renderers with synthetic file/API transport, makes no external
+provider requests and persists no user data. Run `node remix/scripts/verify-actions.mjs
+http://127.0.0.1:<nitro-port>` only against a disposable database: it creates test
+accounts and data. Provider-positive unit tests use synthetic Google responses;
+a real credential and configured object storage are required for live integration
+acceptance.
+
+Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
+`14872`; docs `http://localhost:14870/docs/builder`. Tailscale/Funnel was unavailable
+on 2026-09-18 because the installed CLI shim referenced a missing application
+binary. Other worktrees derive their own ports via `npm run web-ports`.
+
+The reusable record controls and browser Action protocol are documented at
+`/docs/builder/record-controls` and `/docs/builder/browser-flows`. `tt-map`
+accepts a **browser** Maps JavaScript API key restricted to the exact website
+origins and API in your Google project. This public browser key is distinct
+from the server-only Vault credential used by `lookup`; never substitute the
+server credential. Maps are optional and missing setup is shown explicitly.
+
+An opt-in local composition fixture exercises ordinary saved Components and
+Actions through the real API. It does not migrate existing pages. Start a
+disposable local replica-set database and the PM2 worktree stack first; register
+a fixture user through `/api/v1/auth/register`. Save its API session response
+as a private, untracked JSON file containing `cookie` and `user.id` (mode 0600).
+Then, from `remix/`, run:
+
+```sh
+TT_BUILDER_QA_ORIGIN=http://127.0.0.1:<web-port> \
+TT_BUILDER_QA_SESSION=/private/path/to/local-fixture-session.json \
+node --import tsx scripts/test-builder-app-local.ts
+```
+
+The script refuses non-loopback origins and uses stable `qa-*` fixture IDs.
+Open `/p/qa-editable-builder-page` for records and
+`/p/qa-reference-page` for 181 searchable reference choices. For real file QA,
+use the local attachment storage setup above and enable fixture uploads through
+the normal local admin flow. Only use this fixture against disposable data.
+The 2026-09-23 editable-app checkout uses `http://localhost:17120`, HMR 17121,
+Nitro 17122, and its disposable Mongo replica set on 17123. Tailscale/Funnel
+remains unavailable: the installed shim points to a missing Tailscale app.
+
+
+### Chat continuity and iOS activity (2026-09-21)
+
+Lopu's send menu and chat settings choose browser-managed or server-managed
+continuation. Browser management requires an open page to start the next safe
+checkpoint; server management uses the existing Workflow SDK 4.8 integration
+and requires Vercel Workflow enabled for the selected Vercel project. It uses
+the normal account database and a live full-user session. Selected custom
+MongoDB connections use browser management; their credentials are never copied
+into workflow state. Session revocation stops a server chain. Recoverable
+errors back off, with five consecutive retries before requesting attention;
+manual Stop, incomplete tools, pending confirmations and unsaved page edits
+never automatically resume. Continuations retain the current conversation
+without displaying synthetic user prompts.
+
+The iOS app displays one aggregate chat Live Activity with counts and generic
+status. A Live Activity does not prevent iOS suspension: server-managed work
+continues independently. Existing private APNs setup uses `APNS_KEY_ID`,
+`APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, and optional `APNS_IOS_BUNDLE_ID`; its topic
+is `<bundle-id>.push-type.liveactivity`. Keep values in the existing private
+deployment configuration. Native clients negotiate `api.lopu-live-activity`
+1.0.0; protected tokens are bound to a live session, origin and data source.
+See [iOS setup and device checklist](iOS/README.md). No additional signing
+credentials are introduced by this feature.
+
+The continuity worktree validation server uses
+`http://localhost:19940` (Vite), 19941 (HMR), and 19942 (Nitro), with the local
+PM2 ecosystem override `remix/tmp/continuity-ecosystem.config.cjs`. Its unique
+`tt-wt-continuity-19940` identity avoids the existing worktree basename
+collision. No Funnel URL was verified: the installed Tailscale wrapper points
+to a missing app executable on the validation machine. Production/deployment
+URLs remain recorded in the project's deployment documentation.
+
+
+### Functional component and webpage demos
+
+The demo catalog uses native inputs and owner-scoped Actions. Newsletter/contact
+forms, site requests, and component records save private Things. They do not
+send email, charge cards, book services, or control devices. To add an external
+effect, create an integration Action in your account, configure its credentials
+through the normal connection settings, and bind the copied component to that
+Action. Never put credentials in component arguments or template JSON.
+
+`site-forms` and `catalog-records` are installed through
+`POST /api/v1/webpages/suites/install`; clients require
+`api.webpages-suites-install >= 1.1.0` from the selected origin's manifest.
+Copying a site demo installs missing form dependencies first without replacing customized Actions. Installed pages bind their owner’s concrete component ids. Existing installations
+can be refreshed with the suite's Install button; saved records remain intact.
+A fork needs the ordinary database/session setup described above. No external
+service key is needed for private demo records. Admins refresh system demos via
+`POST /api/v1/admin/webpages/seed-demos` after deploying the updated catalog.
+
+The declarative `$ui` binding changes bounded scalar state only in its current
+component instance (`set`, `toggle`, `increment`, `cycle`, `reset`), copies text,
+or opens Thingtime search. It cannot call arbitrary JavaScript or replace the
+runtime's viewer, query, source result, or account authority. `$ui` fields remain
+controlled so Reset and adjacent buttons also update visible inputs. Ordinary
+Action fields retain native editing and validation; Enter submits their group.
+
+Local regression fixture: `/tests/functional-demos.html` on a Vite development
+server. Verify two-instance isolation, parent renders, typed values, checkboxes,
+range/counter synchronization, reset, native disclosures, and mobile overflow.
+Native `tt-dialog` controls use browser-managed modal focus and Escape dismissal;
+`tt-countdown` accepts a bounded seconds value and provides Start/Pause/Reset.
+They run only on interactive surfaces and never execute authored JavaScript.
+## Remote integration runtime
+
+Curated integration examples use `remix/app/library/catalog.ts` and the fixed
+provider request registry in `apis.ts`. The runtime is delivered before the
+catalogue; an empty registry intentionally offers no executable examples.
+Only registry IDs and JSON inputs can enter the `IntegrationExample` component.
+Arbitrary persisted JavaScript, package URLs, and credentials are not accepted.
+
+`corepack pnpm --dir remix run build:client` builds the application, the isolated
+`/library/runner.js`, and the embed bundle. The normal dev command builds and
+watches the isolated runner too. Custom deployments must serve
+`/library/sandbox.html` with `librarySandboxCsp` from `remix/scripts/csp.mjs`;
+the Vercel build and Vite middleware apply it automatically. Do not apply the
+sandbox policy to the main application shell.
+
+Remote packages load from pinned esm.sh URLs only on Run. Pure transformations
+run in terminable workers; visual packages run in an opaque-origin sandbox.
+The frames cannot access Thingtime cookies or storage. Keyless APIs must allow
+browser CORS; provider outages and rate limits remain visible errors.
+
+Credentialed examples require the fork's normal account/session and MongoDB
+rate-limit setup. No shared provider secret or new deployment environment
+variable is required: each visitor enters their own key in the open component.
+Keys remain in component memory, travel over HTTPS to the authenticated
+`POST /api/v1/library/request`, and are forwarded only to a registered provider
+using a read-only GET with redirects disabled. Keys and live results are never
+saved in copied Things. Account changes and unmounting discard key state; the
+Clear button removes it immediately. Use provider-scoped keys; Stripe examples
+accept test-mode keys only. Fork operators must preserve request-body privacy
+in their own reverse proxies and observability tools.
+
+Clients negotiate `api.library-request` 1.0.0 against the selected origin before
+credentialed requests. The endpoint is bounded to 20 requests/minute/account,
+24 KiB request bodies, 16 KiB inputs, 256 KiB upstream responses and a 12-second
+upstream timeout. Run `corepack pnpm --dir remix run test:library` for boundaries,
+credential redaction, reusable Thing validation and capability coverage.
+
+### The integration library
+
+Browse `/library` for 540 executable recipes across 51 libraries/services: 380
+transformation actions, 59 visual components and 101 API Things. There are 468
+credential-free examples and 72 examples with provider-specific credential entry.
+Search, category/provider/type/access filters and pagination keep the catalogue
+small on screen; selecting a card shows editable inputs, live output, source and
+links to official docs. Browsing performs no integration-provider requests.
+
+Save a private copy to create sample data, an input-preparation Action Thing and
+a runnable Component Thing. Add `IntegrationExample` to builder markup with a
+curated `exampleId` and optional `inputJson`; it never accepts code or keys in
+markup. Preparation actions return inputs; remote execution occurs when Run is
+pressed in the component. Keys are entered separately for each open demo.
+
+API capability `api.library-request` 1.2.0 adds the curated credentialed provider
+registry. Each provider's account link explains its key and access requirements.
+Credentialed server examples use read-only GETs and fixed Google Places POST searches; Stripe is test-mode only. Real
+account authorization/quota behavior requires the visitor's own valid key.
+
+For browser acceptance, open `/scripts/library-browser-check.html` on the Vite
+dev server and press **Run all public examples**. The harness executes only
+credential-free catalogue defaults, four at a time, through the actual isolated
+runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
+is not copied into production static assets. Provider outages can change results.
+
+
+## Remote device files and brightness
+
+Open **Things → Browse files**, or expand **Files** in a paired device's drawer.
+The shared Things grid/list, type/name filters and action menu work in a full
+page, narrow dock and expanded pop-up. Copy or Cut, select **Your Thingtime** or
+another paired device and destination folder, then Paste. Keyboard shortcuts
+work while the file browser is focused; text inputs keep normal text editing.
+
+Update the Mac's Thingtime Node as well as the web server. An updated heartbeat
+refreshes the existing device's capabilities; re-pairing is unnecessary. The
+native brightness adapter supports DisplayServices and falls back to a matched
+IOKit display, reporting unavailable when macOS exposes no usable control.
+
+Remote files stay inside the paired Mac's home folder and obey its existing
+permission mode and locked-session policy. Files are bounded to 32 MiB each;
+a recursive browser transfer supports 500 entries, 32 levels and 128 MiB total.
+Symlinks, special files and overwrite are refused. Moves across locations copy
+and verify first, then remove originals; remote removals use recoverable Trash.
+Thingtime uploads require existing private-upload access and storage allowance,
+and use the normal protected attachment pipeline. Empty remote files can be
+read/copied on devices; Thingtime's upload pipeline requires non-empty content.
+No new secrets or environment variables are required. Forks need their existing
+MongoDB, S3 attachment setup and pairing configuration, plus the API capability
+versions documented in [the remote file contract](docs/remote-files.md).
+
+Local acceptance for `codex/remote-device-files` uses `http://localhost:22420`
+(HMR 22421, Nitro 22422), with a unique PM2 entry
+`tt-wt-remote-device-files-22420` using the canonical `pm2AppConfig` and
+`autorestart: false`. These overrides avoid another Codex checkout with the same
+`thingtime` directory basename. Tailscale/Funnel was unavailable on 2026-09-21:
+the configured launcher points to the missing Tailscale app; no public mapping
+was changed or verified.
+
+### Integration builder library
+
+The integration catalogue also has real builder pages: `/builder?page=webpage-integrations&mode=view` links to a page per provider, and each example has its own page and reusable component. The pages derive from `remix/app/library/builderPages.ts`, so adding a catalogue example updates the hierarchy without hand-maintained copies. Opening a page does not run its third-party requests. Saving edits creates an owner-private page; keys and live results stay in the open demo and are never saved.
+
+On a new deployment, configure your normal database and an admin account (see the admin setup above), then sign in as that admin and select **Prepare builder pages** on `/library`. The button negotiates `api.admin-webpages-seed-demos` 1.2.0 and calls `POST /api/v1/admin/webpages/seed-demos?catalog=integrations` with `{}`. This idempotently seeds only the integration components and pages, leaving other demo suites untouched. Re-run after catalogue updates; investigate any nonzero `skipped` count before linking to the pages. No third-party credentials are needed for setup. Viewers supply their own credentials when running keyed examples.
+
+### Map and platform examples
+
+Mapbox includes five GL JS components plus forward/reverse geocoding and driving/walking directions. Google Maps includes maps, advanced markers, info windows, polylines and radius circles. Google Places includes text/nearby search, place details and autocomplete with first-result selection in the JavaScript SDK, plus three Places API (New) REST examples. YouTube, Spotify, Microsoft Graph, GitLab, Cloudflare and Contentful add focused platform reads. Their new components and builder pages are included by **Prepare builder pages**.
+
+Use two distinct credential types:
+
+- Browser demos accept a Mapbox **public** `pk…` token or a Google Maps browser API key. Restrict the key to your actual website origin (include your preview host or localhost when testing) and the necessary APIs. Enable Maps JavaScript API, Places API (New) when applicable, and billing. Google advanced markers use `DEMO_MAP_ID`; use your own map ID in an application. Mapbox GL JS loads a pinned official CDN release; Google uses its supported quarterly channel. Browser keys go directly to the selected provider inside an opaque-origin frame. The SDK document has its own CSP; Google SDK compatibility does not loosen the app shell or ordinary package sandbox policy.
+- REST examples use dedicated server keys or short-lived OAuth **access tokens**, entered in the example's password field. Website-referrer restrictions do not apply to server requests. Use provider/API restrictions and least-privilege scopes: Spotify catalog access; Microsoft Graph `User.Read`, `Files.Read` or `Calendars.ReadBasic`; GitLab `read_api`; Cloudflare Zone/DNS Read; Contentful delivery (not management) access. Use the example's account/docs links for acquisition and provider-specific setup. No OAuth client secret, automatic token exchange, or refresh token is needed or accepted by these examples.
+
+No keys are bundled or stored with copied Things. **Clear**, reset, account changes and leaving the demo discard credentials; Clear/reset also remove running SDK frames. Provider keys, billing, quotas, development-mode access and third-party availability determine whether a live request succeeds. The tests use provider contract fixtures; they do not claim authenticated access to a visitor's account.
+
+The maps-library development worktree uses Vite `http://localhost:18860` (HMR 18861, Nitro 18862) through its local PM2 ecosystem entry `tt-wt-library-maps-platforms-18860`, with autorestart disabled. Tailscale/Funnel is not available on this machine because the Tailscale application is missing; production and Vercel previews remain available.
+
+### Discussion pagination on forks
+
+Private comment pagination uses the deployment’s existing `JWT_PRIVATE_KEY` or
+`JWT_SECRET` (with `THINGTIME_ADMIN_VAULT_KEY` as a fallback) to derive a separate
+encryption key for opaque cursors. Configure one of these existing secrets in
+both preview and production deployments; never use a public JWT key. No new
+secret variable is required. Production fails closed with HTTP 503 when none is
+configured. Local development without a configured secret uses an ephemeral
+key, so refreshing comments after a server restart starts a new cursor chain.
+
+
+### Web standards Builder app
+
+The worker-compatible Web API recipes include URL members, headers/query/form
+collections, blobs/files, response bodies, encoding, DOM exceptions, geometry,
+events/abort signals, streams and their controllers. Stream examples include
+backpressure, BYOB reads, text encoding across chunk boundaries and compression.
+These are editable Component program definitions using in-memory receivers.
+Audit that family with `TT_STANDARDS_AUDIT_LANGUAGES=webapi` and the runtime audit
+setup below; it needs no account, permissions or external request.
+
+The reusable `web-standards` suite is installed for the signed-in account using
+`POST /api/v1/webpages/suites/install` with
+`{"key":"web-standards","onlyMissing":true}`. Open the returned `entryPageId`
+in Builder, or visit `/p/web-standards`. Normal database/auth configuration is
+required; no new external credentials are needed. Installation creates private
+Things and does not change another account. Use a first-party account session;
+never place session cookies or tokens in a saved page, Component or repository.
+Explicit reinstall without `onlyMissing` refreshes suite definitions.
+
+The inventory is a checked-in standards snapshot, so running the app does not
+fetch specification sites. To refresh it, install the pinned extraction tools
+outside the repository and run:
+
+```sh
+npm install --prefix /tmp/tt-standards-tools --ignore-scripts @webref/css@8.7.5 @webref/elements@2.9.0 @webref/idl@3.84.0
+node remix/scripts/sync-web-standards.mjs --tools=/tmp/tt-standards-tools/node_modules
+corepack pnpm --dir remix run test:web-platform
+```
+
+Review source/status and coverage changes before committing the generated
+inventory and manifest together. The snapshot includes drafts and internal
+specification clauses; many entries still need interactive recipes. It does
+not claim completed coverage of every standard or API. See
+[the app's data model and runtime](docs/web-standards-builder.md). The ordinary
+client build and PM2 dev lifecycle build the isolated runtime automatically. Both
+`/platform/runtime.html` and `/platform/runtime.js` must retain `no-store` on
+custom hosting/CDNs. The built HTML uses the runtime's content digest in its
+script URL; publish that generated HTML and matching JS together. Do not replace
+it with the unbuilt public template or strip its query version.
+
+Language examples also contain editable class/function definitions, generators,
+private/static fields, accessors, inheritance, template literals/tags and
+control-flow nodes. All use the same reusable program primitive. Interface
+inspection reports accessor presence without invoking it; paths crossing an
+accessor require a receiver-specific demo. No new credentials or permissions
+are needed for these in-memory examples.
+
+To audit default JavaScript example execution, start the managed local stack
+and use an installed Google Chrome plus Playwright (it may be installed outside
+the repository). No account or database is used by this read-only audit:
+
+```sh
+TT_STANDARDS_TEST_URL=http://127.0.0.1:<web-port> \
+TT_PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+TT_STANDARDS_AUDIT_OUTPUT=/tmp/standards-audit.json \
+corepack pnpm --dir remix run audit:web-platform
+```
+
+The report separates unavailable browser/context features from program errors.
+An empty selection, program error or exhausted frame-load retry fails the audit.
+
+For runtime-only verification after `corepack pnpm --dir remix run build`, use
+`TT_STANDARDS_AUDIT_BUILT=1` in place of the test URL. This ephemeral test fixture
+serves the built HTML and JavaScript with their canonical CSP, needs no running
+app server and closes after the audit. Use an explicit HTTPS preview URL for a
+hosted runtime audit.
+
+The opt-in `HtmlTemplateField.browser.test.ts` regression needs only
+`TT_PLAYWRIGHT_MODULE`; it bundles the real field component into an intercepted
+Chrome fixture without account data. For the complete browser/API flow, use
+`remix/scripts/check-web-standards-browser.mjs` with an explicit local
+`TT_STANDARDS_TEST_URL` and `TT_STANDARDS_TEST_DATABASE_HOST` pointing to a
+disposable database. Set `TT_STANDARDS_TEST_BUILT_CLIENT=1` after a full build to
+serve public built client files inside the browser test while keeping API calls
+on that local stack. An optional `TT_STANDARDS_TEST_SESSION_FILE` must be an
+ignored, private file belonging to that same local origin; never use production
+credentials for these fixture writes.
+
+### macOS voice input setup
+
+The desktop app's Lopu microphone uses Apple's Speech framework through the
+bundled signed helper; no cloud API key or private dashboard configuration is
+needed for standard device transcription. Build and install using the
+[Electron workflow](electron/README.md), then press the microphone and allow
+Microphone and Speech Recognition when macOS asks. Re-enable denied access in
+System Settings → Privacy & Security. On-device recognition is preferred where
+the language supports it; Apple's service may be used otherwise.
+
+### Account drafts and templates
+
+Signed-in post, comment, Thing, definition and schema editors save private
+working drafts to the account. The post composer has **Load drafts & templates**;
+post menus offer **Save as template**. Loading a template creates an editable copy
+and keeps the template. The picker includes an automatic account-resume preference;
+local device recovery stays enabled. Offline changes sync when connectivity returns.
+The 512 KiB editing-snapshot limit is separate from attachment byte quotas.
+
+No new secret or deployment variable is needed. Forks need the normal authenticated
+MongoDB setup **with transactions/a replica set** and the existing private attachment
+storage configuration for uploaded files and independent template media copies.
+The development-only `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` stand-in and fixture
+upload approval flow above support local verification; never configure the local
+stand-in on Vercel. Use placeholder values in shared setup files.
+
+Create a disposable fixture with `seed-fixture.mjs`, then run
+`node remix/scripts/verify-account-drafts.mjs remix/.fixtures/<name>.json --media`.
+Fixture JSON contains test credentials and stays ignored. The verifier exercises
+only the real local API. Existing device Thing data/preferences are retained and
+copied once to the first opening account; later accounts use separate device
+workspaces and draft caches. Hydration alone does not upload that legacy data.
+
+
+### Lopu Action access QA
+
+Lopu's per-chat Ask/Full modes require no new deployment secret. Existing
+first-party sessions, Mongo transactions and the Lopu provider setup still
+apply. For an isolated verification without model billing:
+
+1. Start a disposable loopback Mongo replica at port `22563`, replica set
+   `lopuActions`, with a new empty dbpath. Do not point this check at shared data.
+2. Use the canonical PM2 app definition with an isolated process name and
+   `TT_WEB_PORT=22560`, `TT_HMR_PORT=22561`, `TT_API_PORT=22562`.
+   Set `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:22563/?replicaSet=lopuActions`
+   and a fresh local-only `JWT_SECRET` on both the app and script; unset
+   `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` for this disposable stack. No production
+   credentials or provider keys are required.
+3. From `remix/`, run `TT_LOPU_ACTIONS_LOCAL=1 node --import tsx
+   scripts/verify-lopu-actions.mts` with the same Mongo/JWT environment.
+   The script refuses any other Mongo URI, creates synthetic accounts and data,
+   and revokes its login at completion. Stop the named QA PM2 processes afterward.
+4. Open `/scripts/lopu-actions.browser.html` on the QA Vite origin for the
+   production composer's isolated desktop/phone fixture.
+
+This checks runtime and storage behavior, not live provider reasoning or
+production gear migration. See [Lopu Action access](docs/lopu-action-access.md).

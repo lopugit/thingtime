@@ -157,3 +157,23 @@ verification.
 
 The standalone bundle includes the equivalent self-relative LaunchAgent plist
 so its menu can enable or disable login startup during native development.
+
+
+## Brightness and filesystem support
+
+Brightness uses the system DisplayServices functions when present (including
+Apple Silicon internal displays), with the matched IOKit service as fallback.
+Only valid reads and available setters advertise write support. Heartbeats
+refresh capabilities for an existing pairing. The hardware regression test is
+opt-in: `TT_BRIGHTNESS_HARDWARE_TEST=1 swift test --filter DisplayBrightnessTests`.
+It reads, changes, verifies and restores the original display level.
+
+`filesystem.v1` exposes bounded home-relative inode listing and transfers through
+journaled, approved commands. No-follow directory descriptors prevent path or
+symlink escape; existing destinations are never overwritten. Chunk writes verify
+SHA-256 before exclusive publication. Recursive native copies stage before
+publication, and source removal uses Trash. Interrupted chunks expire after
+24 hours when the directory is next accessed. The command journal limits recent
+read data to 512 KiB while keeping command identities and mutation receipts.
+See [the web/native contract](../../docs/remote-files.md) for all limits and
+capability requirements. Deploy the compatible web server before updating nodes.

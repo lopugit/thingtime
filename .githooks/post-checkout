@@ -17,6 +17,22 @@ log_path=$(git rev-parse --path-format=absolute --git-path graphify-cas.log)
   GRAPHIFY_VIZ_NODE_LIMIT=1000000 scripts/graphify ensure
 ) >>"$log_path" 2>&1 &
 
+# A linked worktree (git worktree add, Claude Code, Codex) starts without remix
+# dependencies, env files or a port-specific .claude/launch.json. Bootstrap it
+# once, in the background, so the first dev/test command already works.
+git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null || true)
+common_dir=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+if [ -n "$git_dir" ] && [ -n "$common_dir" ] && [ "$git_dir" != "$common_dir" ] \
+  && [ -f "$repo_root/remix/scripts/worktree-bootstrap.cjs" ] \
+  && [ ! -d "$repo_root/remix/node_modules/.pnpm" ] \
+  && command -v node >/dev/null 2>&1; then
+  bootstrap_log=$(git rev-parse --path-format=absolute --git-path worktree-bootstrap.log)
+  (
+    cd "$repo_root"
+    node remix/scripts/worktree-bootstrap.cjs --quiet
+  ) >>"$bootstrap_log" 2>&1 &
+fi
+
 exit 0
 
 # graphify-checkout-hook-start

@@ -566,7 +566,46 @@ public struct DisplayBrightnessSnapshot: Equatable, Sendable {
 }
 
 public enum SystemDisplayBrightness {
+    // Apple Silicon built-in displays need DisplayServices: they do not always
+    // publish an IODisplayConnect service. Resolve the optional private framework
+    // at runtime so older macOS versions retain the IOKit implementation.
+    private typealias GetBrightness = @convention(c) (UInt32, UnsafeMutablePointer<Float>) -> Int32
+    private typealias SetBrightness = @convention(c) (UInt32, Float) -> Int32
+    private static let displayServices = dlopen(
+        "/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_LAZY | RTLD_LOCAL
+    )
+    private static let nativeGet: GetBrightness? = displayServices.flatMap { handle in
+        dlsym(handle, "DisplayServicesGetBrightness").map { unsafeBitCast($0, to: GetBrightness.self) }
+    }
+    private static let nativeSet: SetBrightness? = displayServices.flatMap { handle in
+        dlsym(handle, "DisplayServicesSetBrightness").map { unsafeBitCast($0, to: SetBrightness.self) }
+    }
+
+    static func readSnapshot(
+        displayID: UInt32,
+        nativeRead: (UInt32) -> Double?,
+        nativeWritable: Bool,
+        legacyRead: (UInt32) -> DisplayBrightnessSnapshot?
+    ) -> DisplayBrightnessSnapshot? {
+        if let value = nativeRead(displayID), let snapshot = normalizedSnapshot(level: value, canSet: nativeWritable) {
+            return snapshot
+        }
+        return legacyRead(displayID)
+    }
+
+    private static func nativeBrightness(_ displayID: UInt32) -> Double? {
+        guard let nativeGet else { return nil }
+        var value = Float.zero
+        guard nativeGet(displayID, &value) == kIOReturnSuccess else { return nil }
+        return Double(value)
+    }
+
     public static func snapshot(for displayID: CGDirectDisplayID) -> DisplayBrightnessSnapshot? {
+        guard CGDisplayIsActive(displayID) != 0 else { return nil }
+        return readSnapshot(displayID: displayID, nativeRead: nativeBrightness, nativeWritable: nativeSet != nil, legacyRead: legacySnapshot)
+    }
+
+    private static func legacySnapshot(for displayID: CGDirectDisplayID) -> DisplayBrightnessSnapshot? {
         withUniqueMatchingService(for: displayID) { service -> DisplayBrightnessSnapshot? in
             var value = Float.zero
             guard IODisplayGetFloatParameter(
@@ -587,6 +626,12 @@ public enum SystemDisplayBrightness {
         guard level.isFinite, (0 ... 1).contains(level) else {
             throw ThingtimeNodeError.invalidRequest("Brightness must be between 0 and 1.")
         }
+        guard CGDisplayIsActive(displayID) != 0 else {
+            throw ThingtimeNodeError.policyDenied("The selected display is no longer connected.")
+        }
+        if let nativeSet, let current = nativeBrightness(displayID),
+           normalizedSnapshot(level: current, canSet: true) != nil,
+           nativeSet(displayID, Float(level)) == kIOReturnSuccess { return }
         let result = withUniqueMatchingService(for: displayID) { service in
             IODisplaySetFloatParameter(
                 service,
@@ -597,7 +642,7 @@ public enum SystemDisplayBrightness {
         }
         if result == kIOReturnSuccess { return }
         throw ThingtimeNodeError.policyDenied(
-            "The selected display does not expose public IOKit brightness control."
+            "macOS does not expose brightness control for the selected display."
         )
     }
 

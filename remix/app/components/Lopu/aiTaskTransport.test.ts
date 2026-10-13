@@ -52,7 +52,43 @@ test('large saved output is read in contiguous slices without replaying inferenc
 	);
 });
 test('finished error and budget stops retain a Continue action after done', () => {
-	for (const reason of ['error', 'max_tokens', 'tool_limit', 'hop_limit', 'time_limit', 'aborted'])
+	for (const reason of ['checkpoint', 'error', 'max_tokens', 'tool_limit', 'hop_limit', 'time_limit', 'aborted'])
 		assert.equal(canContinueLopuReply('done', reason), true);
 	assert.equal(canContinueLopuReply('done', 'end_turn'), false);
+});
+
+
+test('a healthy observer keeps reading beyond the former 310-second deadline', async () => {
+ const originalNow = Date.now;
+ let now = 0, reads = 0;
+ Date.now = () => now;
+ try {
+  await observeAiTask(input, () => {}, async url => {
+   if (url === input.url) return Response.json({ task }, { status: 202 });
+   reads++; now += 600_000;
+   return Response.json({ ownerId: 'owner', task: { ...task, status: reads === 1 ? 'running' : 'completed' }, output: 'x', offset: reads, length: 2 });
+  });
+  assert.equal(reads, 2);
+ } finally { Date.now = originalNow; }
+});
+
+
+test('transient observation failures reconnect to the same job instead of replaying work', async () => {
+ let starts = 0, reads = 0;
+ const delays: number[] = [];
+ await observeAiTask(input, () => {}, async url => {
+  if (url === input.url) { starts++; return Response.json({ task }, { status: 202 }); }
+  if (++reads <= 5) throw new Error('offline');
+  return Response.json({ ownerId: 'owner', task, output: '', offset: 0, length: 0 });
+ }, async ms => { delays.push(ms); });
+ assert.equal(starts, 1); assert.equal(reads, 6); assert.ok(delays.every(ms => ms <= 30_000));
+});
+
+test('account changes detach the observer immediately', async () => {
+ let reads = 0;
+ await assert.rejects(observeAiTask(input, () => {}, async url => {
+  if (url === input.url) return Response.json({ task }, { status: 202 });
+  reads++; return new Response('', { status: 401 });
+ }, async () => {}), /another session/);
+ assert.equal(reads, 1);
 });

@@ -1,3 +1,4 @@
+import { FilesystemThingsBrowser } from '../Things/FilesystemThingsBrowser';
 import React, { memo } from 'react';
 
 import { Box, Drawer, DrawerBody, DrawerCloseButton, DrawerContent, DrawerHeader, DrawerOverlay, Flex, Text } from '@chakra-ui/react';
@@ -96,7 +97,7 @@ const Section = ({
 				</Box>
 			</Flex>
 			<Box hidden={!expanded} id={panelId}>
-				{children}
+				{section === 'files' && !expanded ? null : children}
 			</Box>
 		</Box>
 	);
@@ -455,7 +456,10 @@ export const DeviceDetailsDrawer = memo(
 									</Notice>
 								) : null}
 
-								<Section deviceId={state.deviceId} key={`observed-state:${state.deviceId}`} label="Quick controls" section="observed-state">
+								<Section deviceId={state.deviceId} key={`files:${state.deviceId}`} label="Files" section="files">
+                  {summary.capabilities?.some(capability => capability.id === 'filesystem.v1' && capability.supported && capability.enabled) ? <FilesystemThingsBrowser compact deviceId={state.deviceId} /> : <Text fontSize="12px">Update the Thingtime node on this device to browse its home folder.</Text>}
+                </Section>
+                <Section deviceId={state.deviceId} key={`observed-state:${state.deviceId}`} label="Quick controls" section="observed-state">
 									<DeviceStateGrid
 										commands={state.commands}
 										controlFor={controlFor}

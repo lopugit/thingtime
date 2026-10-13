@@ -6,6 +6,7 @@ import WidgetKit
 struct ThingtimeLopuWidgetBundle: WidgetBundle {
     var body: some Widget {
         LopuVoiceLiveActivity()
+        LopuChatLiveActivity()
         ThingtimeActionWidget()
         ThingtimeDashboardWidget()
         ThingtimeRenderWidget()

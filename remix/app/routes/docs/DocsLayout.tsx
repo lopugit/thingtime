@@ -24,6 +24,7 @@ import { conceptEntries, conceptStatusColors, getConceptEntryBySlug } from './co
 import { DocsSearch } from './DocsSearch';
 
 const docsNav = [
+  { label: 'Builder SDK', to: '/docs/builder', icon: Component, description: 'Forms, uploads, actions and lookups' },
   {
     label: 'Overview',
     to: '/docs',

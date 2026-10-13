@@ -11,6 +11,7 @@ export const DEVICE_DRAWER_SECTION_IDS = [
 	'applications',
 	'connectors',
 	'screen',
+	'files',
 	'approvals',
 	'command-activity'
 ] as const;

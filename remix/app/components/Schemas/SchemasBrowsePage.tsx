@@ -41,6 +41,7 @@ import {
   readCachedSchemas,
   registryToCardSource,
   schemaDetailPath,
+  schemaCopyPrefill,
   schemaSearchPath,
   schemasCacheKeyFor,
   searchableSchemaSource,
@@ -653,7 +654,6 @@ export const SchemasBrowsePage = () => {
     if (scope !== 'all') return [];
     const needle = q.trim().toLowerCase();
     return thingtimeSchemas
-      .filter((schema) => schema.kind === 'root' || schema.kind === 'crystal')
       .map(registryToCardSource)
       .filter((source) => !needle || source.name.toLowerCase().includes(needle) || source.description.toLowerCase().includes(needle));
   }, [scope, q]);
@@ -752,12 +752,7 @@ export const SchemasBrowsePage = () => {
         lopuRef.current({ title: 'Sign in to fork schemas 🍴', status: 'info', duration: 6000 });
         return;
       }
-      setBuilderPrefill({
-        name: `${source.name} fork`,
-        description: source.description,
-        fields: source.fields,
-        forkOf: source.origin === 'community' ? source.id : undefined
-      });
+      setBuilderPrefill(schemaCopyPrefill(source));
       setBuilderOpen(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },

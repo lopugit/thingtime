@@ -12,6 +12,40 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-22 — **Claude (AI)**: PR preview docs. README and the preview
+  listener's manual-dispatch description now state what the protected
+  controller already does: every same-repository PR previews into the
+  `develop` environment at `pr-<n>.previews.dev.thingtime.com` regardless of
+  its base branch (`develop`, `main`, feature branches); production-environment
+  previews stay an explicit admin choice. Evidence: PR #888 (base `main`) was
+  built and published by the controller. No workflow logic changed.
+
+- 2026-09-22 — **Claude (AI)**: Service workspaces (the builder's franchise
+  app block) run live again on `/p/` pages and in the seamless editor. Html
+  blocks now provide `NativeControlsEnabled` for live viewers in every runtime
+  mode (Edit/Layout show a preview hint, View and the page run the app; Builder
+  mode and previews stay inert with a named placeholder). Workspace Back
+  returns to the previous record, new logs/sub-jobs/links keep their parent
+  open, and creating a workspace on an unsaved page explains how to connect
+  it. Validation: `test:webpages`, `test:service-workspaces`, `test:editorjs`,
+  lint, ratchet, `build:client`, local desktop/390px click-through. Details:
+  [PR #888](../PRs/888-claude-task-completion-43f339--run-service-workspaces-live-on-pages-and-in-the-editor.md).
+
+- 2026-09-19 — **Claude (AI)**: Brand logo SEO. Every public shell now
+  publishes an `Organization` JSON-LD node (logo = the 1024px voxel tree icon,
+  wordmark image, `sameAs` profiles) linked from `WebSite.publisher`; the
+  `/branding` hero previews and the landing `<Logo>` render real committed
+  PNG `<img>` files instead of `data:` URIs / bare `<div>`s so image search can
+  index the marks. New Nitro routes `GET /robots.txt` (everything allowed,
+  AI crawlers named explicitly, origin-scoped `Sitemap:` line) and
+  `GET /sitemap.xml` (index + bounded `static` / `posts` / `pages` / `profiles`
+  sections with image-sitemap entries), twinned by `GET /api/v1/sitemap` and
+  the offline `npm run sitemap:generate` script. Vercel routing sends both
+  root files to Nitro ahead of the SPA shell (`patch-vercel-output.mjs`,
+  verified by `verify-vercel-output.mjs`). Validation: `test:seo`,
+  `test:social-previews`, `test:api-capabilities`, `test:vercel-config`, Vercel
+  preview curl checks. Details: [PR note](../PRs/brand-logo-seo-robots-sitemap-organization.md).
+
 - 2026-09-16: Added public legal directory, versioned privacy/Apple TV privacy/terms pages and copy/text exports; retained legacy notices as labelled archives. Verified anonymous preview routes and responsive exports.
 
 
@@ -33,6 +67,769 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now
+  survive locally and synchronize through the shared Timeline outbox without
+  rerunning the Action. Canonical events/relationships stay identical locally
+  and remotely; proofs bind exact content, account and database. Local storage
+  failures remain explicit. Timeline 1.16.0 / Actions 1.37.0; configured signing
+  keys are required for recovery. Replica quota/tamper/idempotence and headed
+  desktop/mobile reload/reconnect checks passed; fork setup is in README.
+  Details: [PR #988](../PRs/988-codex-timeline-outcome-recovery-recover-action-completion-history-without-rerunning-actions.md).
+
+- 2026-09-30 — **Codex (AI)**: Server Actions now save accepted-run and redacted
+  outcome activity in canonical Timeline, including read-only runs. History
+  survives Action deletion; quota failures distinguish refused execution from
+  incomplete completion recording. Fable's four looks and the Action inspector
+  use this shared activity with captured names and no replay/restore controls.
+  Timeline 1.15.0 / Actions 1.36.0; no new collection, index or secret. Details:
+  [PR #987](../PRs/987-codex-timeline-action-outcomes-record-server-action-outcomes-in-shared-timeline-history.md).
+
+- 2026-09-30 — **Codex (AI)**: History can recover deleted ordinary Things at
+  their original links as new private versions, with recorded component copies,
+  reviewed folder placement and all prior history retained. Canonical Published
+  branch heads survive deletion; stale/concurrent requests and failed copies
+  refuse atomically. Timeline 1.14.0; no new collection/index/secret. Desktop and
+  mobile recovery use the shared Fable History details. Details and limits:
+  [PR #985](../PRs/985-codex-timeline-deleted-recovery-recover-deleted-things-privately-from-timeline-history.md).
+
+- 2026-09-30 — **Codex (AI)**: Fable's Page + related scope now combines a saved
+  page's owned Component, Action, Data and Schema histories in the shared browser.
+  Current membership is authorized and bounded; shared authors' histories remain
+  private, changed references reset paging, and cached canonical events survive
+  failed refreshes. Timeline 1.13.0; no schema/index migration. Details in the
+  [PR #984](../PRs/984-codex-timeline-related-history-show-a-page-and-its-related-things-in-one-timeline-history.md).
+
+
+- 2026-09-29 — **Codex (AI)**: History browser and recorded component restore
+  validation details: [PR #983](../PRs/983-codex-timeline-published-components-bring-timeline-designs-to-life-and-restore-recorded-components.md).
+
+- 2026-09-29: Integrate the working History browser from Fable 5.1's PR #947:
+  shared List/Cards/Line/Frames, recorded cards and property changes, URL filters,
+  desktop details/mobile sheet, read-only comparisons and friendly variation
+  controls over the existing Timeline core. Search/density are explicitly
+  limited to loaded history. [Design mapping and remaining work](../docs/timeline-design-integration.md).
+
+
+- 2026-09-29 — **Codex (AI)**: Published Timeline restore/merge now reviews
+  recorded component definitions and creates private copies for the page in the
+  same transaction as its content, history and storage accounting. Shared pages
+  stay unchanged; stale component previews refuse, known absence stays explicit,
+  and merges follow stable block identities after copying. Desktop/390px review
+  and guarded API rollback/concurrency checks cover the flow. See
+  [the implementation and remaining work](../docs/unified-timeline.md#published-component-restore-and-merge--2026-09-29).
+
+- 2026-09-28 — **Codex (AI)**: Named-branch merges preserve recorded component
+  definitions, combine independent changes and ask for overlapping choices.
+  Inert previews show current/incoming/result versions; offline save/reload
+  preserves selected captures and reconnect advances once. Added bounded private
+  Timeline 1.11.0 comparison and mobile long-title wrapping. Full unit/build,
+  focused HTTP/Timeline and desktop/mobile checks passed; TypeScript baseline
+  unchanged. [PR #979](../PRs/979-timeline-component-merge-preserve-recorded-components-when-merging-timeline-branches.md).
+
+- 2026-09-28 — **Codex (AI)**: Page versions capture readable component definitions
+  as atomic linked Timeline records, using the same local/remote schema. History
+  and visual branches preview recorded definitions, preserve offline drafts,
+  and offer an explicit current-component preview. Added bounded private API
+  reads, insertion/preview regressions and desktop/mobile acceptance. Timeline
+  capability 1.10.0; nested runtime dependencies and dependency-aware merges
+  remain open. [PR #978](../PRs/978-timeline-component-snapshots-preserve-recorded-component-definitions-in-timeline-page-versions.md).
+
+- 2026-09-28 — **Codex (AI)**: Named page branches open in the visual Builder,
+  sharing durable draft events and revision-checked saves with the field editor.
+  Offline recovery, one-click inline saves, stale-push preservation and scoped
+  current-component previews keep published content unchanged. Validated on
+  desktop/390px, disposable HTTP, full unit/build and baseline TypeScript checks.
+  [PR #977](../PRs/977-timeline-visual-branches-edit-named-timeline-branches-in-the-visual-builder.md).
+
+- 2026-09-28 — **Codex (AI)**: Direct private named-branch lookup for cold
+  editors, with account/database fences and canonical cache adoption that
+  preserves queued pushes. Timeline 1.9.0; existing schemas and indexes.
+  [PR #976](../PRs/976-timeline-branch-lookup-resolve-named-timeline-branches-directly-with-scoped-reads.md).
+
+- 2026-09-28 — **Codex (AI)**: Named Timeline branches can open their exact
+  historical content in the shared field editor. Device-first drafts survive
+  reload, resume offline, and push through the existing revision-fenced queue;
+  stale or divergent edits stay in History. Published Things are unchanged.
+  Added private bounded checkout in `api.timeline` 1.8.0, API regressions and
+  desktop/mobile acceptance. Visual Builder branch switching remains open.
+  Details: [PR #975](../PRs/975-timeline-branch-checkout-edit-named-timeline-branches-with-durable-offline-drafts.md).
+
+- 2026-09-28 — **Codex (AI)**: Named Timeline branches can review and merge a
+  selected version with explicit conflict choices. Merges use the existing
+  canonical local/remote event and branch queues, survive offline reload and
+  retries, and preserve the version after a stale push. Published Things stay
+  unchanged. Shared version reconstruction retains folder moves through later
+  drafts. Added real API and desktop/mobile offline acceptance; `api.timeline`
+  advances to 1.7.0. Direct branch checkout/editing remains in progress.
+  Details: [PR #974](../PRs/974-timeline-branch-merge-review-and-merge-versions-into-named-timeline-branches.md).
+
+- 2026-09-28 — **Codex (AI)**: Fixed a Timeline null-connection crash on
+  signed-out pages and sign-out transitions. Require a viewer and connection
+  before checking account/database identity; preserve same-viewer cached
+  history and all scope fences. Added a regression and desktop/mobile
+  sign-in/sign-out acceptance.
+
+- 2026-09-28 — **Codex (AI)**: History can open its Thing in the home database
+  through an explicit selection change. Links pin account/database identity;
+  Thing-page caches and cross-tab invalidation keep same-id records separate.
+  Root data shares Timeline's canonical database key, and negotiated optional
+  API preconditions refuse stale-source reads/writes before handlers run.
+  MongoDB endpoint capability 1.1.0; no Timeline record-format change.
+  Fallback deployments forward the same source precondition as root identity;
+  the upstream enforces it without breaking ordinary Thing reads/writes.
+  [PR #972 details](../PRs/972-timeline-thing-navigation-open-history-things-in-their-matching-database.md).
+
+- 2026-09-28 — **Codex (AI)**: Home history is accessible while a custom database
+  stays selected. Saved themes expose History; Timeline offers Home account and
+  Selected database views. Shared connection leases prevent duplicate home
+  uploads and keep each database's pending edits/cache separate. Explicit scoped
+  API routing covers branches and restore with existing account/source fences;
+  Timeline 1.6.0. Opening Timeline also closes the History modal.
+  [PR #971 details](../PRs/971-timeline-home-scope-keep-home-history-accessible-across-database-selections.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu continuations recover completed tool results
+  from their exact private background transcript, so a checkpoint after an
+  Action preserves its output without rerunning it. Account, chat, deployment,
+  retention and completion checks remain required. Expired task outputs stop
+  repeated polling. Reply capability 1.19.2.
+  [PR #969 details](../PRs/969-lopu-checkpoint-tool-results-preserve-completed-tool-results-when-lopu-resumes.md).
+
+- 2026-09-27 — **Codex (AI)**: Saved theme creation, token/visibility updates
+  and deletion now record approved token versions in shared History. Content,
+  head and storage commit together in the home database, including under a
+  custom data-source selection. Identical saves add no event; deleting at the
+  storage ceiling retains the prior version. Timeline 1.5.0 and themes/delete
+  1.1.0; dedicated restore, selection history and legacy coverage remain open.
+  [PR #970 details](../PRs/970-timeline-theme-history-record-saved-theme-changes-in-shared-history.md).
+
+- 2026-09-27 — **Codex (AI)**: Timeline quota acceptance uses synthetic accounts
+  and the normal admin API on a guarded disposable replica. At the exact limit,
+  reads, folder organization and deletion retain history; refused edits/restores
+  leave content, events and accounting untouched. Below-usage downgrades remain
+  refused. Storage errors now explain that retained history uses space instead
+  of promising deletion will free it. Fork-safe test setup is in README.
+
+- 2026-09-27 — **Codex (AI)**: Things display-name edits for themes, algorithms,
+  emoji and chat archives now appear in shared History. Strict title-only
+  snapshots preserve protected payloads; content, quota and history commit
+  together. Stale/refused writes and unchanged titles add no successful event.
+  The Thing permalink updates immediately after Rename, and optimistic views
+  preserve protected source names. Temporary refresh failures keep the matching
+  cached Thing with a retry control; access refusals clear it.
+  Timeline 1.4.0 / Things 1.33.2. Dedicated
+  content writers and protected restoration remain in progress. See
+  [PR #966 details](../PRs/966-timeline-library-history-record-library-renames-in-shared-history-and-refresh-thing-views.md).
+
+- **2026-09-27 · Codex (AI):** Added 41 reusable native traversal programs and bounded synchronous callback definitions saved as Component data. Verified 116 native cases, edited-filter save/reload/reuse, private API round-trips, responsive layout and production output; Actions contract is 1.35.0. See [PR #962 details](../PRs/962-web-standards-traversal-reusable-native-traversal-and-editable-callback-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Folder deletion records each child move before
+  removing the folder; shared transactional ancestor checks prevent deleted
+  destinations and concurrent cycles. Compact placement history restores exact
+  saved content, and the open Thing refreshes after restore/merge. Protected
+  library moves retain folder metadata only. Timeline 1.3.0 / Things 1.33.1;
+  [PR #965 implementation and acceptance](../PRs/965-timeline-folder-history-record-folder-moves-and-restore-their-exact-thing-history.md).
+
+- 2026-09-27 — **Codex (AI)**: Private account autosave for post/comment, Thing,
+  definition and schema editors; shared draft/template picker, reusable post
+  templates with independent media, revision-safe recovery and scoped local
+  workspaces. Preserve original definition versions during recovery so stale
+  drafts cannot overwrite newer saved content; retain recovered text in History.
+  Preserve raw JSON schema input through account recovery and parse only for
+  validation/publication, including schemas copied from the platform catalog.
+  Verified full unit, production output, real API/media and browser recovery
+  flows against current main. See [PR #957 details](../PRs/957-codex-account-drafts-autosave-account-drafts-and-add-reusable-post-templates.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu Mac/browser dictation waits five seconds
+  before sending the current message draft. Settings → Lopu → Voice transcription
+  and the voice gear share a custom 1–120 second delay. Chat settings adds
+  **Hear me out**: keep listening and ask “Send now?” every ten seconds of silence,
+  with no automatic send. Manual Stop retains the draft; stale timers and rejected
+  sends cannot lose text. Removed the Mac dictation capture's fixed 1.5-second cutoff.
+  See [PR #961 details](../PRs/961-codex-voice-silence-settings--configurable-dictation-silence-and-hear-me-out.md).
+
+- 2026-09-27 — **Codex (AI)**: Canonical Thing changes from server Actions and
+  Lopu tools now retain trusted origin and group nested writes through the
+  existing relational Timeline operation links. Concurrent calls stay isolated;
+  partial failures record only committed edits, and browser preparation claims
+  no execution. Shared local/remote record schemas remain unchanged. Complete
+  Action outcomes and ordinary browser execution receipts remain in progress.
+  [PR #959 details](../PRs/959-timeline-mutation-coverage-preserve-action-and-ai-provenance-in-thing-history.md).
+
+- 2026-09-27 — **Codex (AI)**: Reviewed PR #954 against current main, preserved Lopu Ask/Full permissions with prompt settings, validated all 100 public schema definitions, and fixed concurrent attachment-save rollback deleting a completed file. Full unit suite, 902 API checks, real-byte acceptance, settings isolation/concurrency, production web build and iOS simulator build pass; no added TypeScript diagnostics. [QA details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Add 30 reusable XPath query, expression, namespace and result programs, with owned document isolation and synchronous work limits. Negotiate Actions 1.34.0; validate saved edits and native browser behavior. See [PR #958 details](../PRs/958-web-standards-xpath-reusable-native-xpath-query-and-result-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Unified Timeline work in progress: shared local/API
+  event and relationship records, durable draft recovery, private relational event/link Things and transactional
+  ordinary Thing history. Shared History now previews restores and three-way
+  merges with explicit conflict choices and idempotent, version-fenced commits.
+  Named branches now use separate branch/Thing head records, durable local
+  commands, private exact-version reads, and transactional forward-only pushes.
+  Concurrent/deferred pushes preserve versions and show per-branch outcomes.
+  Large versions retain separate snapshot parts, so history cannot strand later
+  edits or deletion; the real API grow/shrink/restore/delete regression passes.
+  IndexedDB upgrades pending work to atomic relationship records; server ancestry
+  uses exact parent links and existing shared indexes. Lopu preserves missing/dirty page context instead of treating it as an empty
+  page. Disposable replica-set and browser evidence, limits and outstanding
+  delivery gates: [PR #956 notes](../PRs/956-unified-timeline-add-relational-timeline-history-and-durable-branch-synchronization.md) and [implementation contract](../docs/unified-timeline.md).
+
+- 2026-09-27 — **Codex (AI)**: Add 53 reusable ARIA object programs with native nullable reflection, owned element relationships and frozen-list identity; negotiate Actions 1.33.0. Make animation stages grow to keep both tiles visible. Validate production output and retain the managed loopback dev stack; see [PR #955 details](../PRs/955-web-standards-aria-reusable-native-aria-object-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu can execute saved browser and server Actions
+  from chat. Per-chat **Ask before running** and **Full access** controls gate
+  mutations, persist safely across chat/account changes, and retain existing
+  Action, account and storage boundaries. The internal host shares canonical
+  data routes with Nitro and works in durable workflows. See
+  [execution contract](../docs/lopu-action-access.md) and
+  [PR #953 validation](../PRs/953-codex-lopu-workspace-actions--allow-lopu-actions-with-per-chat-access.md).
+
+- 2026-09-27 — **Codex (AI)**: Follow-up to the live Lopu Action run: large
+  Thing reads now offer lossless, authorized JSON Pointer pages instead of
+  repeating a truncated summary. Workspace select errors report their exact
+  allowed values, so Lopu can correct categories without trial writes. See
+  [PR #960 validation](../PRs/960-lopu-action-observation-lossless-inspection-and-actionable-category-errors.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu can inspect Action contracts and check
+  candidate inputs without execution. Invalid inputs fail before confirmation;
+  partial failures retain their run identity and recovery guidance. Newly
+  authored workspace Actions expose canonical choices, numeric bounds and
+  reference hints. Existing installed apps and their data are preserved. See
+  [PR #964 validation](../PRs/964-lopu-action-guidance-inspect-action-contracts-and-recover-from-errors.md).
+
+- 2026-09-27 — **Codex (AI)**: Lopu now recognizes JSON-labelled tool fences,
+  repairs printed tool requests with bounded corrective hops, and restores
+  lossless read pages across checkpoints with fresh access/revision checks.
+  Private message metadata stores only read locators; Action failure recovery
+  details now reach the next model hop. Reply capability is 1.19.1. See
+  [PR #967 validation](../PRs/967-lopu-stall-recovery-fix-tool-call-stalls-and-preserve-read-context.md).
+
+
+
+- 2026-09-27 — **Codex (AI)**: Mac/browser Lopu dictation now writes directly into the editable
+  message field. Stop keeps partial words, recording again appends, and explicit
+  Send uses the ordinary composer with late-result and rejected-send protection.
+  See [PR #952](../PRs/952-codex-voice-composer-draft--keep-voice-transcription-in-the-editable-message-draft.md) for behavior and validation.
+
+- 2026-09-27 — **Codex (AI)**: Web Standards adds 111 editable native animation
+  programs with saved keyframes/timing, playback promises and callbacks, scoped
+  receivers and cleanup. Both manifests/client negotiate actions-run 1.32.0.
+  Browser validation includes native interpolation, keyframe copying and ignored
+  option detection. See the [animation guide](../docs/web-standards-builder.md#native-web-animation-programs) and [PR #951 details](../PRs/951-web-standards-animations-reusable-web-animations-programs.md).
+- 2026-09-27 — **Codex (AI)**: Publish all built-in schemas as copyable public
+  Schema Things, preserve nested/JSON fields and render templates in forks,
+  fix real Builder file commits, and let Lopu save chat attachments as durable
+  private files for Thing properties. Add visible shared Lopu guidance,
+  private tickable custom instructions, admin base-prompt editing, and shared
+  prompt composition across chat, voice, musings and recording analysis.
+  Includes isolated local upload/schema acceptance and native voice support.
+  [PR #954 details](../PRs/954-post-schemas-attachments-make-all-schemas-copyable-fix-uploads-and-add-lopu-prompt-settings.md).
+
+- 2026-09-27 — **Codex (AI)**: Add 40 reusable live/static range programs with
+  editable boundaries, native document edits and bounded contextual fragments.
+  Check owned endpoints and concrete native getters; negotiate actions-run 1.31.0.
+  See [PR #950](../PRs/950-codex-web-standards-ranges--add-reusable-live-and-static-range-programs.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Add 81 reusable observer programs with database-authored callbacks, native records, scoped targets and synchronous mutation batches. Disconnect on completion/Stop, preserve unsupported results in callbacks, and negotiate actions-run 1.30.0. See [PR #949](../PRs/949-codex-web-standards-observers--add-reusable-observer-programs-and-database-authored-callbacks.md).
+- 2026-09-27 — **Codex (AI)**: Recover from the Mac speech recognizer's observed
+  empty-input retry during silence. Keep listening without a false service
+  error, while preserving errors from failed captures that contain speech and
+  from unrelated service failures.
+- 2026-09-27 — **Codex (AI)**: Clear stale microphone/recognition errors when
+  retrying Lopu voice input. Capture errors no longer linger as conversation
+  history after permission is granted and a voice message sends successfully.
+
+- 2026-09-27 — **Codex (AI)**: Add 149 reusable layout/Geometry programs with scoped browser metrics, hit tests, native scroll completion, quad/range measurements and removable media-query listeners. Preserve native mixin accessors and private Component save/reuse. See [PR #944](../PRs/944-codex-web-standards-layout--add-reusable-layout-and-geometry-standards-programs.md).
+
+- 2026-09-27: Fix Mac Lopu voice input reporting `Microphone unavailable (network)`
+  by routing standard desktop transcription through a signed Apple Speech helper.
+  Preserve the existing chat/model flow, stop capture at lifecycle boundaries,
+  and show actionable microphone/speech permission errors. See [PR #945 notes](../PRs/945-codex-mac-voice-input--fix-mac-lopu-voice-input-with-native-speech-recognition.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Add 102 reusable CSSOM programs, bounded native stylesheet/declaration receivers, scoped adoption and cancellable async replacement. Fix sample CSS masking adopted widths; verify private save/reload/reuse and native browser behavior. See [PR #943](../PRs/943-codex-web-standards-cssom--add-reusable-cssom-programs-and-native-stylesheet-editing.md).
+
+- 2026-09-27: Add reusable CSS Typed OM programs for 249 catalogue entries, with native unit/math/transform/style-map receivers, bounded CSS factories and actions-run 1.27.0 negotiation. See [PR #942](../PRs/942-codex-web-standards-typed-css--add-reusable-css-typed-om-programs-and-native-style-maps.md) for native/API validation and delivery evidence.
+
+
+- 2026-09-27 — **Codex (AI)**: Reusable CSS function comparisons cover 180
+  catalogue entries (137 newly interactive), including maths, colour, transforms,
+  shapes, grids, easing, counters and anchors. Scoped CSS probes distinguish
+  syntax acceptance from native computed results and compare a control sample.
+  Edited programs retain the existing private Component/Action save path;
+  actions-run 1.26.0 advertises the additive contract. Details:
+  [PR #940](../PRs/940-codex-web-standards-css-functions--add-reusable-css-function-comparisons.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 192 reusable SVG filter programs with visible
+  original/filtered drawings, typed native values and private Component saving.
+  Shared filter/PNG budgets preserve the existing isolated runtime; literal SVG
+  booleans and non-element DOM ownership stay correct. Actions-run is 1.25.0.
+  Validation and deployment: [PR #939](../PRs/939-codex-web-standards-svg-filters-add-reusable-svg-filter-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 311 reusable SVG programs with native geometry,
+  units, text, transforms, typed lists and primitive IDL constants. Namespaced
+  documents and surface receivers keep bounded local resources; native probes
+  report ignored bounding-box options as unsupported. Actions-run advances to
+  1.24.0; private save/reload, browser boundaries and deployment checks recorded
+  in [PR #938](../PRs/938-codex-web-standards-svg-add-reusable-native-svg-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 145 reusable Canvas programs with native
+  surface receivers, drawing, fonts, pixels, paths and typed settings. Fixed
+  detached-context font no-ops by using the actual isolated surface. Bounded
+  bitmap/path work and blocked runtime-document access; actions-run is 1.23.0.
+  Details: [PR #936](../PRs/936-codex-web-standards-canvas-add-reusable-native-canvas-programs.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Web Standards Builder adds 95 reusable native media
+  programs (89 newly interactive entries), local audio/video clips, editable
+  playback settings, native media events and property/range/error results.
+  Playback promises retain rejection and fence stale completions; initial mute
+  uses the native setter. Both manifests/client require actions-run 1.22.0.
+  Local validation includes restarting a crashed Nitro worker through the
+  checkout's PM2 lifecycle command while preserving the disposable API scope.
+  Details: [PR #935](../PRs/935-codex-web-standards-media-add-reusable-native-audio-and-video-programs.md).
+
+
+### 2026-09-27 — Reusable live HTML event programs
+
+- Add 107 editable HTML/GlobalEventHandlers examples with native listener options,
+  IDL handler properties, propagation/cancellation controls and bounded event traces.
+  Interactive coverage reaches 3,184 entries; the full catalogue remains incomplete.
+- Report cancellation after native dispatch, clean up failed/exhausted bindings,
+  and preserve ordinary private Component save/reopen behavior. Existing sandbox
+  restrictions remain unchanged. Catalogue/client contract: 1.21.0.
+  Details: [PR #934](../PRs/934-codex-web-standards-html-events-add-reusable-live-html-event-programs-and-native-handler-bindings.md).
+
+
+- 2026-09-27 — **Codex (AI)**: Added 132 reusable Web IDL dictionary, field,
+  enum and callback programs for events, files, fetch metadata, decoding,
+  geometry and stream lifecycles. Interactive coverage reaches 3,077 entries.
+  Saved callbacks and inputs use the existing isolated runtime; native errors
+  and unsupported features stay visible. Catalogue/client contract: 1.20.0.
+  Details: [PR #933](../PRs/933-codex-web-standards-webidl-options-add-reusable-web-idl-options-and-callback-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Added reusable native destructuring patterns
+  across declarations, assignments, parameters, catches and loops. Twenty new
+  examples bring coverage to 2,945; Parameter Lists now demonstrates patterns.
+  Getter-order differences remain visible. API/client negotiation advances to
+  `api.actions-run` 1.19.0; runtime sandbox permissions are unchanged. Details:
+  [PR #932](../PRs/932-codex-web-standards-binding-patterns--add-reusable-binding-patterns-and-javascript-examples.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 66 reusable constructor-signature
+  programs, taking interactive coverage to 2,925 entries. Editable native
+  call/new behavior, typed-array overloads, Promise order, Proxy invariants and
+  saved defaults use existing Component language nodes. The catalogue contract
+  is `api.actions-run` 1.18.0; runtime permissions are unchanged. Details:
+  [PR #931](../PRs/931-codex-web-standards-constructor-programs-add-reusable-javascript-constructor-signature-programs.md).
+
+- 2026-09-27 — **Codex (AI)**: Saved collection sources load cursor pages through viewer-authorized Actions, with older-result search, deduplication, retry and bounded accumulation. Copies preserve the source Action dependency; existing collection styling and editable row templates are retained. Details: [PR #929](../PRs/929-codex-builder-paged-collections-load-editable-collections-from-paged-action-sources.md).
+
+- 2026-09-27 — **Codex (AI)**: Added 67 reusable TypedArray, iterator and
+  generator intrinsic examples, taking worked coverage to 2,859 entries.
+  Native byte conversions, callback traces, cleanup and protocol errors remain
+  editable Component program data. Missing-throw behavior reports differences
+  from ECMA-262 2026 without replacing native results. The catalogue contract
+  is `api.actions-run` 1.17.0; runtime permissions remain unchanged. Details:
+  [PR #928](../PRs/928-codex-web-standards-intrinsic-receivers-reusable-typed-array-and-iterator-examples.md).
+
+- 2026-09-27: Added editable `tt-menu` controls with bounded native popovers, keyboard navigation and scoped dialog hosting. See [PR note](../PRs/925-codex-builder-menu-controls-editable-native-menus.md).
+- 2026-09-27 — **Codex (AI)**: Reusable ECMAScript receiver and prototype
+  programs fill 136 missing built-in examples and improve 22 existing ones.
+  Editable binary data, iterator consumption, weak identity, promises, function
+  receivers and local prototype extensions use existing Thingtime language
+  nodes. The catalogue reaches 2,792 interactive entries; API/client catalogue
+  negotiation advances to `api.actions-run` 1.16.0. Details:
+  [PR #924](../PRs/924-codex-web-standards-js-receivers-add-reusable-ecmascript-receiver-and-prototype-examples.md).
+
+- 2026-09-27 — **Codex (AI)**: Live Components expose scoped pending Action
+  state for authored saving labels and disabled forms, plus current page identity
+  for reusable page controls. Dialog close content
+  and its accessible label can use the same sanitized, editable markup as
+  the rest of the app.
+
+- 2026-09-27 — **Codex (AI)**: Saved Component links keep their page and view
+  mode inside Builder. Local Back controls can return through nested links
+  within the same app, with an explicit fallback for direct entry.
+
+- 2026-09-27 — **Codex (AI)**: Reusable live form programs add native reset,
+  requestSubmit/submitter and user-edited validity examples. Shared DOM bindings
+  resolve native methods despite named form controls, preserve immediate errors,
+  and expose bounded event receipts. Form events explicitly opt in while runtime
+  CSP keeps the origin opaque and denies submission navigation. Catalogue and
+  client capability contract advance to `api.actions-run` 1.15.0. Details:
+  [PR #919](../PRs/919-codex-web-standards-live-form-actions-add-reusable-live-form-events-and-validation-contexts.md).
+
+- 2026-09-27 — **Codex (AI)**: Editable media forms can reset automatically
+  after a successful receipt matches their generated operation id. Failed and
+  sibling saves preserve drafts and retry identities. Attachment controls add
+  configurable helper text, linked-URL visibility and local upload readiness.
+  Nested discussions also isolate clicks from authored ancestor Actions.
+
+- 2026-09-27 — **Codex (AI)**: Web standards adds 212 reusable HTML form
+  examples with typed control state, text selection, validity and live
+  option/radio collections. Native overload dispatch and detached collection
+  allocation limits are covered by real-browser regressions. Reset remains
+  requires-context after a native detached-document no-op was reproduced.
+  The catalogue Action contract advances to 1.14.0. Validation includes private
+  API round trips, browser execution and a full Vercel build. Details:
+  [PR #914](../PRs/914-codex-web-standards-form-receivers-add-reusable-html-form-state-and-selection-examples.md).
+
+- 2026-09-27 — **Codex (AI)**: Saved Builder Components can embed the standard
+  Thing discussion with `tt-discussion`, retaining rich comments, replies,
+  reactions, media and collection controls. Previews stay inert; target reads
+  and writes keep the current viewer's permissions. Accepted comments refresh
+  source-bound page blocks for related galleries and record revisions.
+
+- 2026-09-27 — **Codex (AI)**: DOM receiver inspection and projection now use
+  captured browser accessors, so named form controls cannot hide descendants
+  from allocation/depth limits. Added reusable browser regressions and rejected
+  shallow clones that would create a second receiver Document. Details:
+  [PR #909](../PRs/909-codex-web-standards-dom-receivers-add-reusable-dom-receivers-to-web-standards-programs.md).
+
+- 2026-09-26 — **Codex (AI)**: Web standards adds 158 editable detached-DOM
+  examples through reusable program operations: native document/element/text
+  receivers, node collections, attributes and class tokens. Run-local handles,
+  native member policies and shared execution/allocation limits preserve the
+  isolated runtime. Private API round trips and browser mutation/refusal checks
+  cover the new path. Full platform demo coverage remains unfinished; these
+  examples do not provide a live window/layout context. Details:
+  [PR #909](../PRs/909-codex-web-standards-dom-receivers-add-reusable-dom-receivers-to-web-standards-programs.md).
+
+- 2026-09-26 — **Codex (AI)**: Web standards edited draft saving. The authored
+  save Action keeps the full program and current input defaults in a private
+  reusable Component. Added bounded JSON Action inputs and preserved literal
+  program data across Component rendering. Invalid drafts cannot save an older
+  snapshot; resolved defaults and nested calls obey input byte limits. Details:
+  [PR #908](../PRs/908-codex-web-standards-save-drafts-save-edited-web-standards-examples-as-reusable-components.md).
+
+- 2026-09-24 — **Codex (AI)**: Web standards language programs. Added reusable
+  class/function/generator, template and control-flow nodes with 28 authored
+  recipes (25 additional interactive entries). Interface inspection now reads
+  descriptors without invoking getters. Runtime HTML versions its compiler URL
+  by content digest; both assets use no-store to prevent stale compiler reuse.
+  Template encoding explicitly escapes backslashes before delimiters, with
+  adversarial plain/tagged literal regressions.
+  Details: [PR #903](../PRs/903-codex-web-standards-language-programs-add-reusable-javascript-language-definitions.md).
+
+- 2026-09-24 — **Codex (AI)**: Add 120 interactive Web API entries for event and
+  abort lifecycles, streams, native controllers, BYOB reads, queue strategies,
+  streaming text encoding and compression. Editable Component programs share
+  reusable expression builders and show observed delivery, backpressure,
+  cancellation and closure. Browser support remains independently reported;
+  no runtime permission or account access is added. See the
+  [PR #902 validation note](../PRs/902-codex-web-standards-events-streams-add-reusable-event-and-stream-lifecycle-demos.md).
+
+- 2026-09-23 — **Codex (AI)**: Complete saved planner date, filter and move bindings with reusable change/drag controls. Split the planner controls and days into editable Components, group daily visits once, preserve the original page-size choices and cancel delayed field changes when their binding changes. Local fixture requests now time out and negotiate Action protocol 1.11. See [PR #899 implementation and validation notes](../PRs/899-codex-builder-portable-app-programs-compose-editable-planner-and-themed-collections.md).
+
+- 2026-09-23 — **Codex (AI)**: Add inherited Component theme tokens, instance-scoped CSS rules, deferred editable collection rows and configurable dialog/selection behavior. Builder app authoring uses the original HQ styles and saved relationship calculations. Copying preserves row Actions, media and dialog completion references. Index/group expressions negotiate Action protocol 1.11; production HQ data migration remains a separate reviewed operation.
+
+- 2026-09-23 — **Codex (AI)**: Normalize Builder app record titles once and use shared field descriptors so each saved Action fits the existing signed mutation preview. Preserve reference permissions, archived labels, zero values, and empty text.
+
+- 2026-09-23 — **Codex (AI)**: Add 248 reusable Web API member demos for URLs,
+  collections, blobs/files, fetch objects and bodies, encoding, exceptions and
+  geometry. All 272 runnable Web API recipes pass the Chrome runtime audit;
+  missing browser/context support remains explicit. Definitions retain their
+  full program and only the inputs they use. See
+  [PR #901 validation and scope](../PRs/901-codex-web-standards-worker-api-add-reusable-web-api-member-demos-and-receiver-fixtures.md).
+
+- 2026-09-23 — **Codex (AI)**: Expand the reusable Web standards catalogue to
+  576 runnable JavaScript examples, including language control flow and
+  well-known symbol members. Builder fields adopt asynchronous defaults while
+  preserving visitor edits. Isolated workers get a bounded startup phase before
+  their unchanged two-second execution limit; regression checks cover delayed
+  startup, cancellation and filter reloads. See
+  [PR #900 validation and delivery notes](../PRs/900-codex-web-standards-syntax-and-controls-expand-standards-language-demos-and-preserve-builder-filter-values.md).
+
+- 2026-09-23 — **Codex (AI)**: Added authored declarative JavaScript fixtures
+  for Intl, Object/Reflect, collections, promises, buffers and byte encodings.
+  The shared isolated worker reports unavailable features before execution,
+  without invoking getters during support detection. A local browser audit now
+  checks catalogue recipe execution separately from definition validation. See
+  [PR #898 validation notes](../PRs/898-codex-web-standards-runtime-coverage-fix-javascript-standards-fixtures-and-browser-availability-reporting.md).
+
+- 2026-09-23 — **Codex (AI)**: Added the reusable Web standards Builder suite,
+  a sourced standards inventory and editable isolated HTML/CSS/JavaScript demo
+  programs. Inspection/context-dependent entries retain explicit coverage gaps.
+  Shared query-form controls now collect their declared fields; development and
+  Vercel builds include the sandboxed runtime. See the
+  [PR #897 validation and coverage notes](../PRs/897-codex-web-standards-builder-add-reusable-web-standards-builder-catalogue-and-isolated-demos.md).
+
+
+- 2026-09-23 — **Codex (AI)**: Ordinary shared Builder pages can expose an
+  editable copy through the reusable `$install` control. Copying pins the
+  account and preserves connected-record permissions. Revoked source access
+  clears previously rendered data while transient failures retain it.
+  Verified with separate local team accounts, private 50-Thing copies and
+  membership revocation; production app migration remains in progress.
+  [PR #896 details](../PRs/896-codex-builder-shared-app-copies--editable-shared-app-copies-with-live-access-checks.md).
+
+- 2026-09-23 — **Codex (AI)**: Add saved, editable linked-record histories,
+  child-form defaults, duplication, visit totals/status controls, discussions
+  and image selection to the opt-in Builder composition. Copies use relative
+  page links and stable save receipts. Existing records and access rules remain
+  authoritative; production page migration is tracked separately.
+  [PR #895 details](../PRs/895-codex-builder-linked-workflows--editable-linked-records-and-copy-safe-app-flows.md).
+
+- 2026-09-23 — **Codex (AI)**: Editable planner/address workflows and record-bound source state. Validation and remaining migration scope: [PR #894](../PRs/894-codex-builder-app-workflows--editable-planner-address-and-record-workflows.md).
+
+- 2026-09-23: Fence Builder source results, cached bindings and action receipts across record navigation and viewer/page/sharing changes so stale controls cannot target the previous record.
+
+- 2026-09-23 — **Codex (AI)**: Editable app flows add day/week planner filters, readable record references, category-specific equipment choices, role-gated forms, grouped media and a saved address-search Action. Reusable local draft fallbacks, atomic patches and configurable select state preserve typed values through refreshes and reset on navigation. Local fixture validation only; live app migration remains separate.
+
+- 2026-09-23 — **Codex (AI)**: Builder Components retain saved source bindings;
+  reusable form, searchable selection, map and attachment primitives support
+  record screens authored as editable Things. Browser Actions add bounded
+  `each` and configurable expression budgets (protocol 1.9), and populated
+  textareas reopen without a renderer crash. The local composition fixture
+  exercises the existing record API without migrating live records or ACLs.
+  Details: [PR #893](../PRs/893-codex-editable-builder-app--reusable-record-controls.md).
+
+
+- 2026-09-23 — **Codex (AI)**: Saved browser Actions can collect cursor-backed
+  GET lists with configurable response fields, deduplication and explicit
+  budgets. Every page retains account/capability checks; incomplete lists
+  fail visibly. Versioned client preparation protects older clients from
+  silently truncating lists. The full-program composer includes a paginated
+  request preset. See [browser Action documentation](../docs/builder-browser-actions.md).
+
+
+- 2026-09-23 — **Codex (AI)**: Add saved browser Action request flows with
+  endpoint allowlists, semantic capability negotiation, account fencing,
+  shared execution limits and session traces. Add nested Fields/Source editing
+  for saved Builder definitions and a full Action authoring mode with stale
+  edit protection. Existing native workspaces are not yet converted. See
+  [PR #890 acceptance notes](../PRs/890-codex-editable-service-components--editable-builder-definitions-and-browser-actions.md).
+
+- 2026-09-22 — **Codex (AI)**: Hide empty user placeholders reconstructed from
+  background reply output after reload, and retain an already-saved terminal
+  reply instead of appending an empty duplicate. Preserve attachment-only
+  messages, active output and manual Retry; stopped tasks remain stopped.
+
+- 2026-09-22 — **Codex (AI)**: Include the pinned Claude runtime in Vercel
+  Workflow execution packaging and check the worker bundle independently of the
+  main server. Align each Claude-consuming function’s CPU architecture with
+  its packaged executable. Reply capability 1.14.2 records the correction for a
+  production failure before provider invocation. The follow-up PR records
+  deployed acceptance and final release evidence; see the
+  [follow-up note](../PRs/883-codex-lopu-workflow-claude-runtime-fix-claude-workflow-runtime-and-stop-recovery-display.md).
+- 2026-09-22 — **Claude (AI)**: The five demo apps adopt PR #870's native
+  controls — confirmation dialogs (`tt-dialog`) on every destructive control,
+  a focus-timer countdown (`tt-countdown`) with `$ui` length pickers, a `$ui`
+  "Hide unseen" toggle on the Thingmon dex — and return tidy results for the
+  runtime's inline result panel. [PR #886 note](../PRs/886-claude-builder-demos-native-controls--demo-apps-adopt-native-controls.md).
+- 2026-09-22 — **Codex (AI)**: Route native-tool GPT-5.6 Sol chat replies through
+  Responses while retaining the selected reasoning effort and speed. The reply
+  contract advances to 1.14.1 after authenticated preview QA exposed a rejected
+  Chat Completions combination. Live repaired-path acceptance remains pending;
+  details are in the [PR 867 note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md).
+
+- 2026-09-22 — **Codex (AI)**: Commit keyboard adjustments on the remote
+  brightness and volume sliders. Arrow and range-navigation keys now send the
+  displayed value, with duplicate pointer/keyboard completion suppressed.
+
+- 2026-09-22 — **Codex (AI)**: Keep remote device telemetry flowing when a
+  macOS application has a blank display name. The native heartbeat now uses
+  its bundle identifier as the name and skips blank identifiers before paging,
+  preventing HTTP 400 responses that hide brightness and file capabilities.
+
+- 2026-09-21 — **Claude (AI)**: Five creative builder demo app suites on the
+  📱 Apps tab — ✅ Done & Dusted (todo), 🔮 Thingmon (creature collector with
+  60 generated original pixel-art species and a new `thingmon` domain pack),
+  📸 Snapquest (photo hunt with real uploads), 📖 Branchwood (choose-your-own-
+  adventure), 🌱 Pixel Garden (time-based growth on an interval source).
+  Adds `schemas/appSuites/kit.ts`, `BehaviourSuite.content` (generic seeding
+  of app content), `scripts/generate-thingmon-sprites.mjs` and the live
+  verifier `scripts/verify-demo-apps.mjs` (151 checks). Details, gotchas
+  (rolldown + JSON initialisers, nested `$item` lambdas) and the manual
+  checklist: `PRs/864-claude-thingtime-builder-demos-2e2672--creative-demo-app-suites.md`
+  and `TESTING.md`.
+
+- **2026-09-21 · Codex (AI):** Seamless Lopu continuation with browser/server
+  management, one aggregate iOS chat Live Activity, Builder settings and unified
+  Commander navigation. Things now share post discussions, attach existing
+  Things, recognize legacy folders, preserve scalar previews and expose broader
+  management/rename controls. Shared discussions preserve paginated search and
+  filters with authorized rich comment batches (Things 1.27.0). Generic Thing
+  reads also protect device-command inputs and expiring file results. Action-run delivery defaults off; unlisted social
+  previews retain context without indexing. Fix Nitro shell asset registration
+  and writable Graphify working copies. Pre-merge review also hardens abandoned
+  server task cancellation, workflow admission recovery and persisted local
+  retry limits. See the [delivery note](../PRs/867-codex-thingtime-continuity-ux-seamless-lopu-and-things-controls.md)
+  for validation and device/deployment limits.
+
+- 2026-09-21 — **Codex (AI)**: Restore native display brightness on Apple
+  Silicon Macs and refresh paired capabilities on heartbeat. Add a shared
+  Things file browser in full-page, docked and pop-up layouts, with protected
+  Thingtime files and bounded remote copy/cut/paste. Preserve originals on
+  failed transfers and keep file bytes out of device history/events. Verified
+  real brightness round-trip, repeated native/web tests, a full web build and
+  desktop/mobile browser states. [QA and rollout](../PRs/878-codex-remote-device-files-fix-brightness-and-shared-file-browser.md).
+
+- 2026-09-21 — **Codex (AI)**: Add 40 Mapbox, Google Maps/Places and larger-platform examples (540 total), isolated browser SDK loading with transient key controls, bounded Places POST searches and generated builder pages. `api.library-request` advances to 1.2.0; setup and verification guidance cover separate browser/server keys. [PR #880 details](../PRs/880-codex-library-maps-platforms-maps-and-major-platform-examples.md).
+
+- 2026-09-21 — **Codex (AI)**: Added shared franchise list controls with search, relevant filters, result counts, 5/10/15/20 page sizes and infinite scrolling across records, histories, comments, media and planner days. Removed the eight-visit dashboard cutoff; paged planner moves retain the full day order. Details: [PR #879](../PRs/879-codex-franchise-list-controls-paginate-and-filter-franchise-lists.md).
+
+- 2026-09-21 — **Codex (AI):** Require native app changes, including Thingtime
+  Mac, Thingtime Recovery and Commander, to be rebuilt, verified, reinstalled
+  and launched on the development machine before handoff, with installed-build
+  and smoke-check evidence in the completion report.
+
+- 2026-09-21 — **Codex (AI)**: Production franchise follow-up: restore saved
+  comment attachments in workspace galleries, clear committed upload batches,
+  and show safe Google Places setup or gateway error guidance. Contracts:
+  api.things 1.24.0 and api.builder-workspaces 1.0.1.
+  [PR #876 details](../PRs/876-codex-franchise-production-polish-media-galleries-and-places-errors.md).
+
+- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action. Long account names now truncate in the mobile header, with a compact search trigger. Retired a stale Connections lookup that could block seeding at the MongoDB index limit. [PR #875 notes](../PRs/875-codex-library-builder-pages-integration-builder-pages.md).
+- **2026-09-20 · Claude (AI):** Developer-experience follow-ups. Filesystem
+  stand-in for the private S3 bucket (`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR`,
+  `localAttachmentStorage.ts`, dev-only `GET|PUT /api/v1/attachments/local-object`
+  with HMAC-signed URLs, refused on Vercel) so uploads, previews, downloads,
+  archives and moderation fetches run locally; `remix/scripts/seed-fixture.mjs`
+  (`create`/`resume`/`cleanup`/`list`) seeds a user, folder and post with N
+  stored files through the real API; `docs/feature-map/` per-domain maps linked
+  from `AI_ALL.md`; `nitro.config.ts` duplicate `serverAssets` merged (the
+  `shell` mount was silently dropped), `registry.ts` schema fields completed and
+  the typecheck baseline ratcheted down; Graphify snapshot files are now
+  read-only on activation so stale hooks cannot mutate committed snapshots;
+  `npm run worktree-bootstrap` + `post-checkout` auto-bootstrap for linked
+  worktrees (deps, env copy, derived-port `.claude/launch.json`, relative
+  `core.hooksPath`). Validation: `test:attachments`, `test:api-capabilities`,
+  `test:graphify-cas`, seed → archive → cleanup against the local stand-in.
+  Details: [PR #863 note](../PRs/863-claude-dx-local-storage-fixtures-feature-maps--developer-experience-follow-ups.md).
+
+- **2026-09-21 · Claude (AI):** Once-over review fixes for download-all
+  archives and the local attachment stand-in. Archive: the 280 s deadline is a
+  timer that aborts stalled upstream reads and now covers planning too (504 on
+  overrun); `manifest=1`/HEAD probes authorize without presigning on their own
+  `attachments.archiveManifest` window; bound rows past the cap return 413
+  instead of a shorter ZIP; the traversal budget counts only visible Things;
+  blocked linked media is withheld from `links.txt`; the `skipped` count is
+  owner/admin-only and 404s carry one message; `sharedRoot` resolves a
+  composition-only media root; long names keep their extension; client toasts,
+  folder-pill caching and hook placement tightened (`api.attachment-archive`
+  1.0.1). Stand-in: signing-secret retry, `PrivateS3ConfigError` on Vercel,
+  foreign version ids as absent objects, honoured abort signals, one pipeline
+  per completion, 400 for cancelled part PUTs, optional
+  `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, ETag/304
+  (`api.attachment-local-object` 1.0.1). Scripts: install lock in
+  `ensure-dependencies.js`, `.worktreeinclude`-driven env copy and an attach
+  entry in `.claude/launch.json`, seed-fixture cleanup/validation/realpath
+  fixes, ratchet hard-fail on duplicate declarations. Details:
+  [PR #865 note](../PRs/865-claude-dx-once-over-fixes--archive-and-local-storage-review-fixes.md).
+
+- 2026-09-21 — **Codex (AI)**: Allow the franchise Google Maps SDK and map-service
+  hosts in production/dev CSP while retaining the inline-script and eval bans;
+  use raster map rendering and verify the explicit host policy.
+
+- 2026-09-21 — **Codex (AI)**: Added an admin catalog importer on `/components`
+  with whole-file schema validation, capability negotiation, bounded paced
+  batches, cancellation and real publication counts. Functional demo runtime
+  PR #870 is production-live; all 322 built-in demos and 18 suites are seeded.
+
+- 2026-09-21 — **Codex (AI)**: Keep mobile sign-in hints above the floating
+  assistant and DevKit buttons, with bounded scrolling for short viewports.
+  Verified while testing the remote integration catalogue preview.
+
+- 2026-09-21 — **Codex (AI)**: Enable 500 remote integration examples across 42
+  libraries/services with searchable `/library` pages, editable demos, source,
+  provider account/key entry and private reusable Things. The catalogue extends
+  the previously delivered isolated runtime with capability 1.1.0. [Acceptance notes](../PRs/869-codex-third-party-catalogue-500-remote-integration-examples.md).
+
+- 2026-09-21: Make demo forms run real Actions, preserve confirmation through
+  composed pages, show results inline, and support bounded local component
+  controls. Site forms and requests save private Things; template copying
+  installs their dependencies. Added responsive browser regression coverage.
+  [Validation notes](../PRs/870-codex-functional-thingtime-demos-functional-demo-controls.md).
+- 2026-09-21 — **Codex (AI)**: Add the curated remote integration runtime, opaque
+  preview documents, cancellable workers, credential-safe read-only provider
+  requests, capability negotiation and reusable Component Thing rendering.
+  Build and dev workflows generate the isolated runner. The catalogue ships
+  separately after this backing infrastructure. [Validation notes](../PRs/866-codex-third-party-runtime-isolated-remote-integration-runtime.md).
+
+- **2026-09-21 · Codex (AI):** Add a native builder service workspace for franchise
+  operations: folder-backed customer/property/job/visit/equipment records, live
+  role and customer access, direct record context menus, day/week planning,
+  time and resource logs, per-record comments/media and Google Maps via the
+  owner's Vault. Add environment selection for new Vault secrets and metadata-only
+  environment moves for existing secrets/providers. Document fork setup and
+  local role, scheduling, media and responsive regression checks.
+  [Validation notes](../PRs/871-codex-jims-franchise-builder-franchise-workspaces-and-vault-environments.md).
+
+- **2026-09-20 · Claude (AI):** Download all attachments. New
+  `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
+  one stored (uncompressed) ZIP of every file the caller may already read —
+  posts/comments archive their gallery in stored order, folders walk nested
+  folders and post galleries with each child re-judged on its own ACL, linked
+  media lands in `links.txt`, and `manifest=1` returns the file list/bytes as
+  JSON. Every file is signed through the existing content-endpoint gates; bounds
+  are 500 files / 2 GiB / 1000 Things / 280 s. UI: a `Download all · N files`
+  pill under multi-file post galleries, a folder-down button in the lightbox,
+  a **Files** section (`Download all files`, `Share download link`) in the
+  post/media ⋯ menus and the /things item menu, a `/media/:id` gallery button
+  and a current-folder pill on /things. The share link is the canonical
+  endpoint URL (no secret key): it downloads directly in browsers, `wget` and
+  `curl` for whoever can view the Thing. Capability `api.attachment-archive`
+  1.0.0 on both manifests; rate key `attachments.archive`. Validation:
+  `test:attachments`, `test:api-capabilities`, lint, browser checks. Details:
+  [PR note](../PRs/download-all-attachments-archive.md).
+
+- **2026-09-19 · Codex (AI):** Make unlisted posts, pages and inherited media
+  open through their canonical URLs, including fresh anonymous gallery visitors.
+  Copy/share controls omit legacy secret keys; saved discoveries remain bound
+  to the account or anonymous browser identity. Private/group-only access and
+  moderation remain enforced. Removing the link audience revokes URL access.
+  Details: [PR #860](../PRs/860-codex-plain-link-sharing-canonical-unlisted-urls.md).
+
+- **2026-09-19 · Codex (AI):** Keep inherited secret-link context through nested
+  comment/media galleries, standalone share menus and parent navigation. Show
+  the resolved parent audience beside privacy icons; enforce intermediate
+  moderation gates and negotiate the additive audience read contract.
+  Details: [PR #857](../PRs/857-codex-inherited-media-audience-preserve-inherited-media-sharing.md).
+
+- **2026-09-18 · Codex (AI):** Preserve the mounted page and unsaved UI state when
+  a background session read temporarily fails. Recover initial session failures
+  on return/reconnect, and invalidate same-origin tabs on account changes.
+  Navigation and permission failures continue to fail closed.
+
+- 2026-09-18 — Remove the post attachment count cap and add Retry all. Images and videos share ordered layouts, a popup player and shareable media links. Profiles include permitted direct/group audiences and previously collected secret posts, with account/browser discovery revoked by link rotation. [PR #852 validation](../PRs/852-codex-media-gallery-profile-access-unify-post-media-and-collect-secret-posts.md). Local validation uses worktree ports 18420–18422; Tailscale/Funnel is unavailable because the installed CLI target is missing. — Codex (AI)
+
+- 2026-09-18 — Fix Copy to my Things for image-only posts and nested comment
+  galleries. Copies preserve attachment order/purpose and reply parents, validate
+  inspected media, and negotiate `api.things-fork` 1.5.0. Verified with local
+  replica-set API tests and desktop/mobile Chrome. [PR #851 validation notes](../PRs/851-codex-copy-nested-things-fix-copying-nested-comments-and-attachment-galleries.md). — **Codex (AI)**
+
+- 2026-09-18 — Floating builder controls follow Lopu split panes and pinned
+  navigation drawers. Narrow panes use a wrapped bar and keyboard-accessible
+  mode menu; preview popovers stay inside the available pane. — Codex (AI)
+
+- **2026-09-18 · Codex (AI):** Fix Enter and the normal send arrow to auto-queue during Lopu replies, remove the separate Queue button, and allow draft attachment editing while replying. Keep Stop visible with a floating send arrow for typed drafts and a compact Send now menu. Remove accepted messages from the queue immediately without releasing the reply lock.
+
+- **2026-09-18 · Codex (AI):** Fix native uploads in embedded Builder components, preserve explicit empty form fields, validate before saving, guard pending uploads and inherit component sources. Add `/docs/builder` sections shared with Lopu and a capability-scoped Google geocoding adapter using owned Vault credentials. Local isolated validation uses ports 14870–14872; no live Google/storage credentials were used. [PR #853 validation and setup](../PRs/853-codex-builder-sdk-uploads-forms-fix-builder-uploads-and-form-saves-document-sdk-and-add-scoped-lookups.md).
+
+- **2026-09-18 · Codex (AI):** Add Lopu message queues with drag/arrow ordering, default grouped sends, pause/resume and stable retries; add immediately saved notes consumed at safe provider boundaries. Queues restore paused after reload. Publish background-task 1.2.0 and chat-reply 1.13.0 capabilities. [PR #846 validation notes](../PRs/846-codex-lopu-message-queue-add-lopu-message-queues-and-send-now-notes.md).
+
+- 2026-09-18: Add reversible account-saved Lopu chat archiving with Chats/Archived views and Restore in the shared page/window list. Preserve transcripts and running replies; guard rollback across account changes and negotiate archive API capabilities. — Codex (AI)
+
+- **2026-09-17 — Lopu context and docking (Codex):** Show and toggle current-page context, attach recent Thingtime pages, persist minimise-to-bubble, resize every edge/corner, and dock on all four sides with split or overlay behavior. Split navigation adapts to the remaining page width. Reply capability 1.12 adds validated page references without granting permissions. [PR #844 validation notes](../PRs/844-codex-lopu-context-docking-add-page-context-and-flexible-docking-to-lopu.md).
+
+- 2026-09-17 — Shared seamless builder on `/builder` and `/p`: live inline text
+  editing with pink block controls, Builder/Edit/Layout/View/Visit/Deploy, one
+  floating navigation/preview/mode bar, overlay inspector, real
+  responsive device previews and natural-height Container previews without an
+  iframe. Dedicated live output
+  fills the available space; `/t/` hides Thingtime chrome except its tiny credit
+  link. Local PM2 validation uses worktree ports 11060–11062; Tailscale is
+  unavailable because its installed CLI target is missing.
+  [PR 843 notes](../PRs/843-codex-seamless-live-builder-add-seamless-live-builder-modes-responsive-previews-and-standalone-pages.md). — Codex (AI)
+- 2026-09-17: Lopu removes the 24-tool, 12-hop and four-minute task limits, renews background worker leases, and automatically continues saved hosting checkpoints and token-truncated replies without a fixed continuation cap, preserving chat/model selection and completed-work receipts. Stop, account switches, confirmations, unsaved replies, and ambiguous interruptions prevent automatic continuation. [PR #842 validation and rollout notes](../PRs/842-codex-lopu-auto-continue-remove-lopu-task-caps.md).
+- **2026-09-17 — Social previews and Schema.org foundation (Codex):** align server titles, canonical URLs, image alt metadata and safe JSON-LD with anonymous public previews; revise the branded image cache URL, make fallback image URLs absolute and mark private/unavailable pages noindex. [PR #841 validation, investigation and broader SEO TODO](../PRs/841-social-schema-crawler-fix.md).
+- 2026-09-17: Lopu collapses submitted attachments optimistically, clears them on server acceptance despite uploader handle changes, restores rejected drafts, and keeps typing enabled during uploads. Expand supports native new-tab/window links. See [PR #838](../PRs/838-lopu-expand-link-optimistic-composer.md).
+- 2026-09-17: Floating Lopu chat and voice now share the full conversation list with the Lopu page, with collapsible wide-window navigation and a narrow list view that preserves the composer. — Codex (AI)
+
+- 2026-09-16 — **Codex (AI):** Fix image uploads hitting the legacy 30/hour start limit: default to 60/minute, upgrade only the exact persisted legacy policy, preserve custom rules, and honor bounded Retry-After retries without changing upload identity. Show the actual wait on persistent throttling; add policy, cancellation, route and capability regressions.
 
 - 2026-09-16: Enable attachment paste/drop directly in Lopu and Messenger message fields; clear Lopu media on server acceptance instead of reply completion. Added synthetic browser regression coverage. — Codex (AI)
 - 2026-09-16 — **Codex (AI):** Default link previews now use the branding

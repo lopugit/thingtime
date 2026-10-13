@@ -69,3 +69,11 @@ test('archive placement moves only a complete owned root and preserves history a
     assert.throws(() => prepareManagedPlacement({ ...archive, ...change }, 'owner', folder(), now));
   }
 });
+
+test('legacy explicit data folders accept owner placement while retaining namespace and owner fences', () => {
+  const legacy = { ...folder(), thingtime: ['data'], crystal: { kind: 'folder', name: 'Legacy Lopu folder' } };
+  assert.equal(prepareManagedPlacement(source('attachment'), 'owner', legacy, now).folderId, legacy.shareId);
+  for (const patch of [{ ownerId: 'other' }, { appId: 'app' }, { sandbox: true }, { crystal: { name: 'folder' } }, { thingtime: ['post', 'data'] }]) {
+    assert.throws(() => prepareManagedPlacement(source('attachment'), 'owner', { ...legacy, ...patch }, now));
+  }
+});

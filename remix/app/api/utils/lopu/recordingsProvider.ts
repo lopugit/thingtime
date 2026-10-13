@@ -1,7 +1,10 @@
+import { getLopuPromptSettings } from '../settings/lopuPromptSettings';
+import { composeLopuSurfacePrompt } from './promptSettingsCore';
 import { createClaudeOAuthClient } from '../ai/claudeOAuth';
 import OpenAI, { toFile } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAttachmentDownload } from '../attachments/attachments';
+import { fetchStoredObject } from '../attachments/localAttachmentStorage';
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
 import {
 	resolveAiPreferredAnthropicChoice,
@@ -68,7 +71,8 @@ export const readRecordingBytes = async (ownerId: string, attachmentId: string):
 	if (!AUDIO_TYPES.has(download.contentType) || download.size < 1 || download.size > RECORDING_MAX_AUDIO_BYTES) {
 		throw new RecordingFailure('format');
 	}
-	const response = await fetch(download.url, { redirect: 'error', signal: AbortSignal.timeout(30_000) }).catch(() => {
+	// Signed object URLs: real S3 over the network, the local stand-in in-process.
+	const response = await fetchStoredObject(download.url, { redirect: 'error', signal: AbortSignal.timeout(30_000) }).catch(() => {
 		throw new RecordingFailure('download');
 	});
 	if (!response.ok || !response.body) throw new RecordingFailure('download');
@@ -129,6 +133,7 @@ export const transcribeRecordingAudio = async (
 
 export const analyzeRecording = async (transcript: string, beforeSend?: () => Promise<void>, ownerId?: string) => {
 	const preferences = await getAiPreferredModelWaterfall();
+  const system = composeLopuSurfacePrompt(await getLopuPromptSettings(ownerId), RECORDING_INSIGHTS_PROMPT);
 	const attempt = async (connection: LopuVaultProviderRecord | undefined, signal?: AbortSignal) => {
 		if (connection?.provider === 'anthropic') {
 			const choice = resolveAiPreferredAnthropicChoice(preferences, process.env.LOPU_CLAUDE_MODEL || 'claude-sonnet-4-6');
@@ -137,7 +142,7 @@ export const analyzeRecording = async (transcript: string, beforeSend?: () => Pr
 				{
 					model: connection.model || choice.model,
 					max_tokens: 6000,
-					system: RECORDING_INSIGHTS_PROMPT,
+					system,
 					messages: [{ role: 'user', content: transcript }]
 				},
 				{ signal }
@@ -162,7 +167,7 @@ export const analyzeRecording = async (transcript: string, beforeSend?: () => Pr
 				max_completion_tokens: 6000,
 				response_format: { type: 'json_object' },
 				messages: [
-					{ role: 'system', content: RECORDING_INSIGHTS_PROMPT },
+					{ role: 'system', content: system },
 					{ role: 'user', content: transcript }
 				]
 			},

@@ -8,6 +8,7 @@ export type ThingtimeBridgeMessage = {
 export type ThingtimeNativeBridge = {
   version: string;
   lopuVoiceVersion?: string;
+  lopuChatActivityVersion?: string;
   widgetVersion?: string;
   notificationsVersion?: string;
   platform: 'ios' | 'macos';

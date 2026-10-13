@@ -8,8 +8,9 @@ import { defineConfig, type Plugin } from 'vite';
 
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/capabilityContract';
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
+import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
-import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
+import { platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -217,6 +218,46 @@ const embedBundleDevPlugin = () => ({
   }
 });
 
+// Proxy to the local Nitro while preserving the browser-facing host/proto (an
+// upstream proxy's x-forwarded-* wins), so origin-derived output stays correct.
+const forwardHostProxy = (target: string) => ({
+  target,
+  changeOrigin: true,
+  configure(proxy: any) {
+    proxy.on('proxyReq', (proxyReq: any, req: any) => {
+      const host = req.headers.host;
+      if (!host || proxyReq.getHeader('x-forwarded-host')) return;
+      proxyReq.setHeader('x-forwarded-host', host);
+      const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
+      proxyReq.setHeader('x-forwarded-proto', proto || 'http');
+    });
+  }
+});
+
+const librarySandboxPlugin = (): Plugin => ({
+  name: 'library-isolated-preview',
+  configureServer(server) {
+    server.middlewares.use((req,res,next) => {
+      const path = req.url?.split('?')[0];
+      if (path === '/platform/runtime.html' || path === '/platform/runtime.js') {
+        const file = fileURLToPath(new URL(`./dist${path}`, import.meta.url));
+        if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:platform');return; }
+        res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
+        res.setHeader('Content-Security-Policy',platformRuntimeCsp);
+        res.setHeader('Cache-Control','no-store');
+        createReadStream(file).pipe(res);return;
+      }
+      if (path !== '/library/sandbox.html' && path !== '/library/sdk.html' && path !== '/library/runner.js') return next();
+      const file = fileURLToPath(new URL(path.endsWith('.html') ? `./public${path}` : './dist/library/runner.js', import.meta.url));
+      if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:library');return; }
+      res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
+      res.setHeader('Content-Security-Policy',path === '/library/sdk.html' ? librarySdkCsp : librarySandboxCsp);
+      res.setHeader('Cache-Control','no-store');
+      createReadStream(file).pipe(res);
+    });
+  }
+});
+
 export default defineConfig({
   build: {
     outDir: 'dist',
@@ -255,6 +296,11 @@ export default defineConfig({
         }
       },
       [APPLE_APP_ASSOCIATION_PATH]: { target: localApiTarget, changeOrigin: true },
+      // Crawler discovery files are Nitro routes (server/handlers/{robots,sitemap}.ts);
+      // prefix matching also covers their -docs twins. Forward the browser host so
+      // the robots Sitemap: line and every sitemap <loc> name this dev origin.
+      [ROBOTS_PATH]: forwardHostProxy(localApiTarget),
+      [SITEMAP_PATH]: forwardHostProxy(localApiTarget),
       [THINGTIME_CAPABILITY_MANIFEST_PATH]: {
         target: localApiTarget,
         changeOrigin: true,
@@ -307,5 +353,5 @@ export default defineConfig({
       }
     }
   },
-  plugins: [previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
+  plugins: [librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });

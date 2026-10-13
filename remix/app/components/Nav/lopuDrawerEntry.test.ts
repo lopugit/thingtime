@@ -126,8 +126,8 @@ test('the floating host is non-modal chrome that hides on /lopu and honours the 
 	assert.match(source, /if \(hiddenOnPath\) \{\s*return null;/);
 	// the launcher setting hides the bubble only — the window still follows
 	// `open`, so the navbar 🦄 can open it with the bubble turned off
-	assert.match(source, /const showLauncher = !hiddenOnPath && settings\.launcher;/);
-	assert.match(source, /const showWindow = !hiddenOnPath && open;/);
+	assert.match(source, /const showLauncher = !hiddenOnPath && \(settings\.launcher \|\| minimised\);/);
+	assert.match(source, /const showWindow = !hiddenOnPath && open && !minimised;/);
 	assert.match(source, /\{showLauncher && !showSheet && !\(showFrame && docked\) && \(/);
 	assert.doesNotMatch(source, /role="dialog"/, 'the window must not claim to be a dialog while non-modal');
 	assert.match(source, /role="complementary"/);

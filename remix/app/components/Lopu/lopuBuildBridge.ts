@@ -84,6 +84,7 @@ export type LopuDraftHandle = {
   readonly updatedAt: string | null;
   readonly blocks: WebpageBlock[];
   readonly dirty: boolean;
+  readonly ready?: boolean;
   setBlocks: (next: WebpageBlock[]) => void;
   addComponent: (ref: string, component: ComponentThingLike | null) => void;
   markSaved: (thing: LopuSavedThingLike) => void;
@@ -99,12 +100,14 @@ export type LopuDraftHandle = {
 
 // What the reply request's `context.page` carries (design note §2.5/§3.3).
 export type LopuDraftContextPage = {
+  dirty: boolean;
+  ready: boolean;
   id?: string;
   source?: 'user' | 'system';
   pageKey?: string;
   siteRoute?: string;
   updatedAt?: string;
-  blocks: WebpageBlock[];
+  blocks?: WebpageBlock[];
 };
 
 type Registration = { handle: LopuDraftHandle; registeredAt: number; touchedAt: number };
@@ -204,12 +207,14 @@ export const describeActiveWebpageDraft = (): LopuDraftContextPage | null => {
   const draft = getActiveWebpageDraft();
   if (!draft) return null;
   return {
+    dirty: draft.dirty,
+    ready: draft.ready !== false,
     ...(draft.id ? { id: draft.id } : {}),
     ...(draft.source ? { source: draft.source } : {}),
     ...(draft.pageKey ? { pageKey: draft.pageKey } : {}),
     ...(draft.siteRoute ? { siteRoute: draft.siteRoute } : {}),
     ...(draft.updatedAt ? { updatedAt: draft.updatedAt } : {}),
-    blocks: draft.blocks
+    ...(draft.ready !== false ? { blocks: draft.blocks } : {})
   };
 };
 

@@ -479,10 +479,6 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [thing, thingDep, validKeyTypes, editorJsDoc]);
 
 	const type = React.useMemo(() => {
-		if (thing === null) {
-			return 'undefined';
-		}
-
 		return typeof thing;
 	}, [thing]);
 
@@ -529,7 +525,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		}
 
 		if (type === 'string') {
-			return <MagicInput value={thing} readonly></MagicInput>;
+			return thing === '' ? <Box as="span" color="var(--tt-muted)">""</Box> : <MagicInput value={thing} readonly></MagicInput>;
 		} else if (type === 'number') {
 			return thing;
 		} else if (type === 'boolean') {
@@ -558,7 +554,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			}
 
 			if (!keys?.length) {
-				return 'Something!';
+				return Array.isArray(thing) ? '[]' : '{}';
 			}
 
 			try {
@@ -578,11 +574,11 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		} else if (props?.children) {
 			return;
 		} else if (type === 'undefined') {
-			return 'Imagine..';
+			return editMode ? 'Imagine..' : 'undefined';
 		} else {
 			return 'Something..';
 		}
-	}, [thing, thingDep, type, chakraChild, keys, codeView]);
+	}, [thing, thingDep, type, chakraChild, keys, codeView, editMode]);
 
 	const renderChakra = React.useMemo(() => {
 		if (!editMode && chakra && render) {
@@ -702,7 +698,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	}, [keysToUse, thingtime?.settings?.keyGateLength, visibleKeyCount, loadTargetCount, mountedChildrenCount]);
 
 	const inner = React.useMemo(() => {
-		let content = <AtomicWrapper paddingLeft={pl}>Imagine..</AtomicWrapper>;
+		let content = <AtomicWrapper paddingLeft={pl}>{Array.isArray(thing) ? '[]' : thing === null ? 'null' : '{}'}</AtomicWrapper>;
 
 		if (keysToUse?.length && !circular) {
 			const keyGateLength = thingtime?.settings?.keyGateLength || 5;
@@ -818,7 +814,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 			return;
 		}
 
-		if (type === 'object' && !circular) {
+		if (type === 'object' && thing !== null && !circular) {
 			if (chakra) {
 				const ChakraComponent = Chakras[chakra];
 

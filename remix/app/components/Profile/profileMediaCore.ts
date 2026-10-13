@@ -1,3 +1,4 @@
+import { IMAGE_UPLOAD_CONTENT_TYPES } from '../Attachments/attachmentFileTypes';
 import { isHeicImage } from '../Attachments/heicImage';
 export type ProfileMediaSlot = 'avatar' | 'banner';
 
@@ -15,7 +16,7 @@ export type ProfileMediaFieldSnapshot = {
 
 export const MAX_PROFILE_MEDIA_BYTES = 64 * 1024 * 1024;
 export const MAX_EXTERNAL_PROFILE_IMAGE_URL_CHARS = 2048;
-export const PROFILE_MEDIA_CONTENT_TYPES = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
+export const PROFILE_MEDIA_CONTENT_TYPES = IMAGE_UPLOAD_CONTENT_TYPES;
 const PROFILE_MEDIA_CONTENT_TYPE_SET = new Set<string>(PROFILE_MEDIA_CONTENT_TYPES);
 
 export const isManagedProfileMediaUrl = (value: unknown): value is string => {

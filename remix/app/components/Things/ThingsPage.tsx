@@ -1,12 +1,18 @@
+import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
+import { isManagedLibraryThing } from './thingsCore';
+import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { transferIntent } from '~/utils/thingTransfer/intent';
 import { readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
 
-import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
-import { ArrowUpDown, Columns3, Eye, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
+import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Text } from '@chakra-ui/react';
+import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { archiveNounForKinds } from '~/components/Attachments/attachmentArchiveActions';
+import { archiveDownloadLabel } from '~/components/Attachments/attachmentUiCore';
+import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
 import { sendRecordingThingToLopu } from '~/components/Lopu/recordingThingHandoff';
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
@@ -47,6 +53,7 @@ import {
   schemaRenderOf,
   sortThings,
   thingDisplayName,
+  thingRenameCrystal,
   thingShareLink,
   thingOpenHref,
   thingsCacheKey
@@ -124,6 +131,17 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 };
 
 export const ThingsPage = () => {
+  const [params] = useSearchParams();
+  const folder = params.get('folder');
+  return folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents />;
+};
+
+const ThingsPageContents = () => {
+  const [params] = useSearchParams();
+  return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage />;
+};
+
+const ThingsLibraryPage = () => {
   const user = useCurrentUser();
   const [importOpen, setImportOpen] = useState(false);
   const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
@@ -156,6 +174,8 @@ export const ThingsPage = () => {
   const previewParam = searchParams.get('preview') || null;
 	const deviceParam = searchParams.get('device') || null;
   const currentKey = folderKeyOf(folderId);
+
+  const archive = useAttachmentArchive();
 
 	const devicesEnabled = Boolean(user && user.accountKind === 'user' && !user.temporary);
 	const deviceStore = useDeviceStore({
@@ -214,6 +234,33 @@ export const ThingsPage = () => {
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
   const [folderMeta, setFolderMeta] = useState<NonNullable<ThingsCache['folderMeta']>>(cached?.folderMeta || {});
 
+  // "Download all files" for the folder being browsed: one small manifest read
+  // says whether a ZIP would hold anything (folders with no stored files show
+  // no button). The answer is cached per folder AND per listed contents, so
+  // walking back into an unchanged folder costs nothing, while adding, moving
+  // or deleting a Thing in it re-probes — a stale pill never survives a change.
+  // The probe waits for the folder's own listing so a never-loaded folder is
+  // not probed twice, and it draws on the manifest rate window, never the
+  // download one.
+  const [folderArchives, setFolderArchives] = useState<Record<string, { signature: string; archive: { fileCount: number; totalBytes: number } | null }>>({});
+  const folderSignature = folderId && folderPages[currentKey] ? folderPages[currentKey].map((item) => item.id).join('\n') : null;
+  useEffect(() => {
+    if (!user?.id || !folderId || folderSignature === null) return;
+    if (folderArchives[folderId]?.signature === folderSignature) return;
+    let cancelled = false;
+    const remember = (value: { fileCount: number; totalBytes: number } | null) => {
+      if (!cancelled) setFolderArchives((prev) => ({ ...prev, [folderId]: { signature: folderSignature, archive: value } }));
+    };
+    apiRef.current.v1.attachments.archive
+      .manifest({ id: folderId })
+      .then((manifest: any) => remember(manifest?.ok && manifest.fileCount > 0 ? { fileCount: manifest.fileCount, totalBytes: manifest.totalBytes || 0 } : null))
+      .catch(() => remember(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, folderId, folderSignature]); // eslint-disable-line react-hooks/exhaustive-deps
+  const folderArchive = folderId ? folderArchives[folderId]?.archive ?? null : null;
+
   const [searchResults, setSearchResults] = useState<ThingsThing[] | null>(null);
   const [searching, setSearching] = useState(false);
   // bumped after mutations (duplicate) so an active search re-fetches and the
@@ -243,15 +290,17 @@ export const ThingsPage = () => {
   const [menuThing, setMenuThing] = useState<ThingsThing | null>(null);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+  const openNewFolder = useCallback((parent: string | null) => { setNewFolderParent(parent); setNewFolderOpen(true); }, []);
   useEffect(() => {
     const action = searchParams.get('widget');
     if (!user || (action !== 'search' && action !== 'newFolder')) return;
-    if (action === 'newFolder') setNewFolderOpen(true);
+    if (action === 'newFolder') openNewFolder(folderId);
     else requestAnimationFrame(() => document.getElementById('thingtime-things-search')?.focus());
     const next = new URLSearchParams(searchParams);
     next.delete('widget');
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, user]);
+  }, [searchParams, setSearchParams, user, folderId, openNewFolder]);
 
   const [renameThing, setRenameThing] = useState<ThingsThing | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -681,8 +730,7 @@ export const ThingsPage = () => {
           return;
         }
       }
-      setSelection(new Set([thing.id]));
-      anchorRef.current = thing.id;
+      openThing(thing);
     },
     [displayItems, isMobile, openThing, toggleSelect]
   );
@@ -943,7 +991,7 @@ export const ThingsPage = () => {
       setFolderPages((prev) => {
         const next: typeof prev = {};
         for (const [key, things] of Object.entries(prev)) {
-					next[key] = things.map((entry) => (entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, name } } : entry));
+					next[key] = things.map((entry) => (entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, ...thingRenameCrystal(entry, name) } } : entry));
         }
         return next;
       });
@@ -951,11 +999,19 @@ export const ThingsPage = () => {
         setFolderMeta((prev) => ({ ...prev, [thing.id]: { ...(prev[thing.id] || { folderId: thing.folderId }), name } }));
       }
       try {
-        await apiRef.current.v1.things.update({ id: thing.id, crystal: { name } });
+        const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+        await requireThingtimeCapability('api.things', '1.27.0');
+        const response = isManagedLibraryThing(thing)
+          ? await apiRef.current.v1.things.renameLibrary({ id: thing.id, displayTitle: name, expectedUpdatedAt: thing.updatedAt })
+          : thing.thingtime.includes('attachment')
+          ? await apiRef.current.v1.attachments.annotate({ id: thing.id, title: name })
+          : await apiRef.current.v1.things.update({ id: thing.id, crystal: thingRenameCrystal(thing, name) });
+        if (response?.ok === false) throw new Error(response.error || 'Rename failed');
+        setSearchResults(previous => previous?.map(entry => entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, ...thingRenameCrystal(entry, name) } } : entry) || null);
         lopuRef.current({ title: 'Renamed ✏️', status: 'success', duration: 4000 });
         return true;
       } catch (err: any) {
-        lopuRef.current({ title: 'Rename failed 😔', description: err?.error || undefined, status: 'error' });
+        lopuRef.current({ title: 'Rename failed 😔', description: err?.error || err?.message || undefined, status: 'error' });
         refreshAfterMutation(sourceKeysOf([thing.id]));
         return false;
       }
@@ -969,11 +1025,11 @@ export const ThingsPage = () => {
         const resp = await apiRef.current.v1.things.create({
           thingtime: ['folder'],
           crystal: { name, ...(icon ? { icon } : {}) },
-          folderId
+          folderId: newFolderParent
         });
         const thing: ThingsThing | undefined = resp?.thing;
         if (thing) {
-          setFolderPages((prev) => ({ ...prev, [currentKey]: dedupeById([thing, ...(prev[currentKey] || [])]) }));
+          setFolderPages((prev) => ({ ...prev, [folderKeyOf(newFolderParent)]: dedupeById([thing, ...(prev[folderKeyOf(newFolderParent)] || [])]) }));
           rememberFolderMeta([thing]);
         }
         lopuRef.current({ title: `Folder “${name}” created 📁`, status: 'success', duration: 5000 });
@@ -983,7 +1039,7 @@ export const ThingsPage = () => {
         return false;
       }
     },
-    [currentKey, folderId, rememberFolderMeta]
+    [newFolderParent, rememberFolderMeta]
   );
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
@@ -1022,8 +1078,15 @@ export const ThingsPage = () => {
     (thing: ThingsThing, action: ThingsItemAction) => {
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
+        case 'history': openThingHistory(thing.id, thing.thingtime); break;
         case 'download':
           setExportIds(group.map((entry) => entry.id));
+          break;
+        case 'download-archive':
+          void archive.download(thing.id, archiveNounForKinds(thing.thingtime) || 'post');
+          break;
+        case 'share-download-link':
+          void archive.shareLink(thing.id, archiveNounForKinds(thing.thingtime) || 'post');
           break;
         case 'send-to-lopu':
           void sendRecording(thing);
@@ -1076,7 +1139,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo]
+    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1173,8 +1236,13 @@ export const ThingsPage = () => {
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
+        case 'history': openThingHistory(menuThing.id, menuThing.thingtime); break;
         case 'download':
           onItemAction(menuThing, 'download');
+          break;
+        case 'download-archive':
+        case 'share-download-link':
+          onItemAction(menuThing, action.command);
           break;
         case 'send-to-lopu':
           onItemAction(menuThing, 'send-to-lopu');
@@ -1247,7 +1315,7 @@ export const ThingsPage = () => {
           setImportBundle(null); setImportDestination(folderId); setImportOpen(true);
           break;
         case 'new-folder':
-          setNewFolderOpen(true);
+          openNewFolder(folderId);
           break;
         case 'paste':
           pasteClipboard();
@@ -1269,7 +1337,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [folderId, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
+    [folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
@@ -1428,6 +1496,7 @@ export const ThingsPage = () => {
         style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · Things</Text>
+          <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>
         </Flex>
 				{devicesEnabled && !folderId && !searchMode && !shouldHideLocalNodePanel(localNode, nodePanelDismissed) ? (
 					<LocalNodeSetupCard onDismiss={() => setNodePanelDismissed(true)} onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
@@ -1448,14 +1517,32 @@ export const ThingsPage = () => {
             Things
           </Text>
           <Box flex={1} />
-          {user?.isAdmin && <Button as={RouterLink} to="/things?logs=1" size="sm" variant="outline">Error logs</Button>}
+          <Menu placement="bottom-end" closeOnSelect={false}>
+            <MenuButton as={Button} size="sm" variant="ghost" aria-label="Things settings" minW="36px" px={2}><Settings size={18} /></MenuButton>
+            <Portal><MenuList zIndex={10250} maxH="70vh" overflowY="auto" maxW="calc(100vw - 32px)">
+              <MenuOptionGroup title="Layout" type="radio" value={view} onChange={value => setView(value as ThingsView)}>
+                <MenuItemOption value="grid">Grid</MenuItemOption><MenuItemOption value="list">List</MenuItemOption><MenuItemOption value="columns">Folder columns</MenuItemOption>
+              </MenuOptionGroup>
+              <MenuOptionGroup title="Display" type="radio" value={displayMode} onChange={value => setDisplayMode(value as ThingsDisplayMode)}>
+                <MenuItemOption value="name">Names</MenuItemOption><MenuItemOption value="preview">Rendered previews</MenuItemOption>
+              </MenuOptionGroup>
+              <MenuOptionGroup title="Sort" type="radio" value={sort} onChange={value => setSort(value as ThingsSort)}>{THINGS_SORT_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
+              <MenuOptionGroup title="Group" type="radio" value={groupBy} onChange={value => setGroupBy(value as ThingsGroupBy)}>{THINGS_GROUP_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
+              <MenuDivider />
+              <MenuItem onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import Things…</MenuItem>
+              <MenuItem onClick={() => void fetchFolder(folderId)}>Refresh this folder</MenuItem>
+              <MenuItem onClick={selectAll}>{allSelected ? 'Clear selection' : 'Select all'}</MenuItem>
+              {devicesEnabled && <MenuItem onClick={() => setNodePanelDismissed(!nodePanelDismissed)}>{nodePanelDismissed ? 'Show' : 'Hide'} device setup</MenuItem>}
+              <MenuDivider /><MenuItem as={RouterLink} to="/things?logs=1">Error logs</MenuItem>
+            </MenuList></Portal>
+          </Menu>
           <Menu placement="bottom-end">
             <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
               New
             </MenuButton>
             <Portal>
               <MenuList fontSize="13px" zIndex={10250}>
-                <MenuItem onClick={() => setNewFolderOpen(true)}>📁 New folder</MenuItem>
+                <MenuItem onClick={() => openNewFolder(folderId)}>📁 New folder</MenuItem>
                 <MenuItem as={RouterLink} to="/feed">
                   📝 New post
                 </MenuItem>
@@ -1508,6 +1595,11 @@ export const ThingsPage = () => {
             <Button {...pillProps(false)} onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import…</Button>
             <Button {...pillProps(false)} onClick={pasteClipboard}>Paste</Button>
             {!!selection.size && <Button {...pillProps(false)} onClick={() => setExportIds([...selection])}>Download…</Button>}
+            {folderId && folderArchive ? (
+              <Button {...pillProps(false)} leftIcon={<FolderDown size={13} />} title="Every stored file in this folder (and its sub-folders) as one ZIP" onClick={() => void archive.download(folderId, 'folder')}>
+                {archiveDownloadLabel(folderArchive.fileCount, folderArchive.totalBytes)}
+              </Button>
+            ) : null}
           </>}
           <ToolbarGroup label="view">
             <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
@@ -1664,7 +1756,7 @@ export const ThingsPage = () => {
           {/* folder tree sidebar (desktop, browse mode) */}
           {!isMobile && !searchMode && view !== 'columns' && (
             <Box flexShrink={0} paddingTop={1} width="220px">
-							<FolderTree currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} />
+							<FolderTree currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} onNewFolder={openNewFolder} />
             </Box>
           )}
 
@@ -1764,6 +1856,7 @@ export const ThingsPage = () => {
               ))}
 						{canPaintContent && view === 'columns' && !searchMode && (
               <ThingsColumnsView
+                onNewFolder={openNewFolder}
 								{...devicePresentation}
                 activeFolderAt={(depth) => columnsPath[depth + 1] ?? null}
                 displayMode={displayMode}

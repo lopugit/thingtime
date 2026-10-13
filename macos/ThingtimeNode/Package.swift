@@ -10,7 +10,8 @@ let package = Package(
     products: [
         .library(name: "ThingtimeNodeCore", targets: ["ThingtimeNodeCore"]),
         .executable(name: "ThingtimeNode", targets: ["ThingtimeNode"]),
-        .executable(name: "ThingtimeNodeBridge", targets: ["ThingtimeNodeBridge"])
+        .executable(name: "ThingtimeNodeBridge", targets: ["ThingtimeNodeBridge"]),
+        .executable(name: "ThingtimeSpeech", targets: ["ThingtimeSpeech"])
     ],
     targets: [
         .target(
@@ -45,6 +46,16 @@ let package = Package(
         .executableTarget(
             name: "ThingtimeNodeBridge",
             dependencies: ["ThingtimeNodeCore"]
+        ),
+        .executableTarget(
+            name: "ThingtimeSpeech",
+            dependencies: ["ThingtimeSpeechCore"],
+            linkerSettings: [.linkedFramework("Speech"), .linkedFramework("AVFoundation")]
+        ),
+        .target(name: "ThingtimeSpeechCore"),
+        .testTarget(
+            name: "ThingtimeSpeechCoreTests",
+            dependencies: ["ThingtimeSpeechCore"]
         ),
         .testTarget(
             name: "ThingtimeNodeCoreTests",

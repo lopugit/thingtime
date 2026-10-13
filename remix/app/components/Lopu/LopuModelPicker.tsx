@@ -1,5 +1,6 @@
+import { DRAWER_POPUP_Z } from '../Nav/Drawer/useDrawer';
 import React from 'react';
-import { Box, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
+import { Box, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Select, Switch, Text } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router';
 import { Check, ChevronDown } from 'lucide-react';
 
@@ -215,7 +216,7 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 	};
 
 	return (
-		<Popover placement="top-start" isLazy strategy="fixed" gutter={8}>
+		<Popover placement="top-start" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12 } }, { name: "flip", options: { padding: 12 } }]}>
 			{({ onClose }) => (
 				<>
 					<PopoverTrigger>
@@ -242,7 +243,7 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 							<ChevronDown size={12} strokeWidth={2.2} aria-hidden style={{ flexShrink: 0, opacity: 0.7 }} />
 						</Box>
 					</PopoverTrigger>
-					<PopoverContent
+					<Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z}
 						width="320px"
 						maxW="calc(100vw - 24px)"
 						sx={lopuPopoverSx}
@@ -317,7 +318,7 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 								) : null}
 							</Flex>
 						</PopoverBody>
-					</PopoverContent>
+					</PopoverContent></Portal>
 				</>
 			)}
 		</Popover>

@@ -18,6 +18,7 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 
 import { SampleRender, ShapeChip, kindOf, monoLabel, systemThingFields } from './SchemasBrowsePage';
 import { SchemaThingFormBody } from './SchemaThingForm';
+import { SchemaBuilder, type BuilderPrefill } from './SchemaBuilder';
 import {
   SCHEMAS_LEGACY_CACHE_KEY,
   builtinSchemaForKey,
@@ -26,6 +27,7 @@ import {
   parseSchemaDetailKey,
   registryToCardSource,
   schemaDetailKeyFor,
+  schemaCopyPrefill,
   schemaDetailPath,
   schemaSearchPath,
   searchableSchemaSource,
@@ -183,6 +185,7 @@ const OwnThingCard = ({ thing, source }: { thing: OwnThing; source: SchemaCardSo
 export const SchemaDetailPage = () => {
   const { key: rawKey } = useParams();
   const api = useApi();
+  const [copyPrefill, setCopyPrefill] = React.useState<BuilderPrefill | null>(null);
   const lopu = useLopu();
   const user = useCurrentUser();
   const apiRef = React.useRef(api);
@@ -209,6 +212,10 @@ export const SchemaDetailPage = () => {
     communityId ? (cachedSchemaEntry(user?.id, communityId)?.usageCount ?? null) : null
   );
   const [notFound, setNotFound] = React.useState(!key || (!builtin && !communityId));
+
+  React.useEffect(() => {
+    setCopyPrefill(null);
+  }, [user?.id, key]);
 
   React.useEffect(() => {
     if (!communityId) {
@@ -384,6 +391,18 @@ export const SchemaDetailPage = () => {
           )}
         </Flex>
 
+        {source && (
+          <Button alignSelf="flex-start" size="sm" onClick={() => {
+            if (!user) { lopu({ title: 'Sign in to copy this schema', status: 'info' }); return; }
+            setCopyPrefill(schemaCopyPrefill(source));
+          }}>
+            Copy and extend
+          </Button>
+        )}
+        {copyPrefill && <SchemaBuilder key={`${user?.id}:${source?.key}`} prefill={copyPrefill} onClose={() => setCopyPrefill(null)} onCreated={(thing) => {
+          setCopyPrefill(null);
+          lopu({ title: 'Your schema copy is ready', status: 'success', link: { label: 'Open your schema', href: `/schemas/${encodeURIComponent(thing.id)}` } });
+        }} />}
         {!source && !notFound && (
           <Box color="var(--tt-muted, #9a9aa6)" padding={10} textAlign="center">
             Loading schema…

@@ -4,13 +4,14 @@ import { AttachmentComposer, type AttachmentComposerHandle } from '../Attachment
 import type { AttachmentComposerSnapshot } from '../Attachments/attachmentTypes';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { componentUploadCommitId, componentUploadCommitInput } from './componentUploadCommit';
 
 export const ComponentUploadEnabled = React.createContext(false);
 const empty: AttachmentComposerSnapshot = { attachmentIds: [], attachments: [], blocking: false, hasSelection: false };
 
 // Authored markup only selects a named native control. It never gets scripts,
 // credentials or signed storage URLs. The saved file retains private ownership.
-export function ComponentUpload(props: { name?: unknown; imageOnly?: unknown; disabled?: unknown; title?: unknown }) {
+export function ComponentUpload(props: { name?: unknown; imageOnly?: unknown; disabled?: unknown; title?: unknown; value?: unknown; attachmentId?: unknown }) {
 	const enabled = React.useContext(ComponentUploadEnabled);
 	const user = useCurrentUser();
 	if (!enabled || !user?.id)
@@ -23,19 +24,25 @@ function OwnedUpload({
 	name,
 	imageOnly,
 	disabled,
-	title
+	title,
+	value: initialValue,
+	attachmentId: initialAttachmentId
 }: {
 	ownerId: string;
 	name?: unknown;
 	imageOnly?: unknown;
 	disabled?: unknown;
 	title?: unknown;
+	value?: unknown;
+	attachmentId?: unknown;
 }) {
 	const api = useApi();
 	const composer = React.useRef<AttachmentComposerHandle>(null);
 	const [snapshot, setSnapshot] = React.useState(empty);
-	const [value, setValue] = React.useState('');
-	const [attachmentId, setAttachmentId] = React.useState('');
+	const [value, setValue] = React.useState(typeof initialValue === 'string' ? initialValue : '');
+	const [attachmentId, setAttachmentId] = React.useState(typeof initialAttachmentId === 'string' ? initialAttachmentId : '');
+	const [generation, setGeneration] = React.useState(0);
+	const busyRef = React.useRef(false);
 	const [busy, setBusy] = React.useState(false);
 	const [showUrl, setShowUrl] = React.useState(false);
 	const [error, setError] = React.useState('');
@@ -47,23 +54,18 @@ function OwnedUpload({
 			live.current = false;
 		};
 	}, []);
-	const field = typeof name === 'string' && /^[A-Za-z][\w.-]{0,79}$/.test(name) ? name : 'file';
+	const field = typeof name === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,27}$/.test(name) ? name : 'file';
 	const save = async () => {
-		if (busy || snapshot.blocking || !snapshot.attachmentIds.length) return;
+		if (disabled === true || busyRef.current || snapshot.blocking || !snapshot.attachmentIds.length) return;
 		const ids = JSON.stringify(snapshot.attachmentIds);
-		if (operation.current?.ids !== ids) operation.current = { ids, shareId: `component-upload-${crypto.randomUUID()}` };
+		if (operation.current?.ids !== ids) operation.current = { ids, shareId: componentUploadCommitId() };
+		busyRef.current = true;
 		setBusy(true);
 		setError('');
 		try {
 			let result;
 			try {
-				result = await api.v1.things.create({
-					thingtime: ['post'],
-					crystal: { text: 'Component file', type: 'post' },
-					acl: ['tt:user'],
-					attachmentIds: snapshot.attachmentIds,
-					shareId: operation.current.shareId
-				});
+				result = await api.v1.things.create(componentUploadCommitInput(snapshot.attachmentIds, operation.current.shareId));
 			} catch (failure) {
 				const existing = await api.v1.things.get({ id: operation.current.shareId }).catch(() => null);
 				const saved = existing?.thing;
@@ -85,13 +87,15 @@ function OwnedUpload({
 		} catch (failure) {
 			if (live.current) setError(failure instanceof Error ? failure.message : 'Could not save the file. Retry uses the same upload.');
 		} finally {
+			busyRef.current = false;
 			if (live.current) setBusy(false);
 		}
 	};
 	return (
-		<Box data-tt-native-upload onClick={(event) => event.stopPropagation()} minW={0}>
+		<Box data-tt-native-upload data-tt-upload-blocking={disabled !== true && (busy || snapshot.blocking || (snapshot.hasSelection && snapshot.attachmentIds[0] !== attachmentId)) ? 'true' : 'false'} onClick={(event) => event.stopPropagation()} minW={0}>
 			<Text fontSize="sm">{typeof title === 'string' ? title.slice(0, 120) : imageOnly === true ? 'Upload image' : 'Upload file'}</Text>
 			<AttachmentComposer
+				key={generation}
 				ref={composer}
 				ownerId={ownerId}
 				purpose="post"
@@ -105,9 +109,10 @@ function OwnedUpload({
 			<Button type="button" size="sm" variant="ghost" onClick={() => setShowUrl(!showUrl)}>
 				{showUrl ? 'Hide URL option' : 'Use URL instead'}
 			</Button>
-			<input type="hidden" name={field} value={value} />
-			<input type="hidden" name={`${field}AttachmentId`} value={attachmentId} />
+			<input type="hidden" disabled={disabled === true} name={field} value={value} />
+			<input type="hidden" disabled={disabled === true} name={`${field}AttachmentId`} value={attachmentId} />
 			<Button
+				type="button"
 				size="sm"
 				onClick={save}
 				isLoading={busy}
@@ -122,11 +127,16 @@ function OwnedUpload({
 			</Button>
 			{value && (
 				<Button
+					type="button"
+					isDisabled={disabled === true || busy}
 					size="sm"
 					variant="ghost"
 					onClick={() => {
 						setValue('');
 						setAttachmentId('');
+						setSnapshot(empty);
+						setGeneration((value) => value + 1);
+						operation.current = null;
 					}}
 				>
 					Clear field

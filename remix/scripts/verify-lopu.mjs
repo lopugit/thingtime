@@ -739,6 +739,20 @@ const run = async () => {
   } else {
     skip('the chat adopts a catalog model', 'no available model');
   }
+  // Archive is an owner-only reversible flag, never a membership/message deletion.
+  const beforeArchive = await api(`/api/v1/chats/messages?chatId=${encodeURIComponent(chatId)}`, { cookie: user.cookie });
+  const foreignArchive = await api('/api/v1/lopu/chats/update', { cookie: other.cookie, method: 'POST', body: { chatId, archived: true } });
+  check('another user cannot archive this chat', [403, 404].includes(foreignArchive.status));
+  const invalidArchive = await api('/api/v1/lopu/chats/update', { cookie: user.cookie, method: 'POST', body: { chatId, archived: 'true' } });
+  check('archive requires a boolean', invalidArchive.status === 400);
+  for (const archived of [true, true, false, false]) {
+    const changed = await api('/api/v1/lopu/chats/update', { cookie: user.cookie, method: 'POST', body: { chatId, archived } });
+    check(`archive=${archived} is idempotent`, changed.status === 200 && (changed.body?.chat?.lopu?.archived === true) === archived);
+    const listed = await api('/api/v1/lopu/chats', { cookie: user.cookie });
+    check('archive state survives a fresh list read', (listed.body?.chats?.find(row => row.id === chatId)?.lopu?.archived === true) === archived);
+    const messages = await api(`/api/v1/chats/messages?chatId=${encodeURIComponent(chatId)}`, { cookie: user.cookie });
+    check('archiving preserves the transcript', messages.status === 200 && JSON.stringify(messages.body?.messages) === JSON.stringify(beforeArchive.body?.messages));
+  }
   const messengerRename = await api('/api/v1/chats/update', { cookie: user.cookie, method: 'POST', body: { id: chatId, name: 'Renamed via messenger' } });
   check('the messenger rename path also works for Lopu chats', messengerRename.status === 200 && messengerRename.body?.chat?.name === 'Renamed via messenger');
   const leave = await api('/api/v1/chats/members', { cookie: user.cookie, method: 'POST', body: { chatId, leave: true } });

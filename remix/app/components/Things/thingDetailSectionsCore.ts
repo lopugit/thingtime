@@ -1,3 +1,10 @@
+import { ThingtimeApiError } from '../../hooks/apiFailure';
+
+// Keep a same-identity, previously authorized projection during temporary read
+// failures. Access, identity and missing-record refusals must clear it instead.
+export const canKeepThingAfterReadFailure = (error: unknown): boolean =>
+	error instanceof ThingtimeApiError && (error.status === null || error.status === 408 || error.status === 429 || error.status >= 500);
+
 // `/thing/:id` serves two different payloads: an ordinary Thing, which renders
 // the `Views` card with the `Rendered preview` and `Thing data` switches, and a
 // migration diagnostic, whose only content is the redacted error card and which

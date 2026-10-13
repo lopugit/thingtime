@@ -1,3 +1,13 @@
+import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
+import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
+import { copyActionJson } from './actionJsonInput.ts';
+import { TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND } from '../timeline/contract.ts';
+import { parseBrowserExpressionLimits } from './browserActions';
+import { BROWSER_ACTION_EXPANDED_LIMITS } from './browserActions';
+import { parseActionRequestPagination } from './actionRequestPagination';
+import { BROWSER_ACTION_OPS, actionHttpEndpoint, isActionHttpEndpoint } from './browserActions';
+import { MAX_POST_THINGS, postThingReferences } from '../components/Feed/postThingReferences.ts';
+import { isActionLookupProvider } from './actionLookups';
 // Thingtime Schemas — the single source of truth for the shapes Thingtime data
 // can take. Everything in the `things` collection is a thing: one root Thing
 // schema (schemaVersion per doc), sub-schemas applied via the root `thingtime`
@@ -76,6 +86,8 @@ export type ThingtimeSchema = {
   // dedicated write path, for kinds the generic things CRUD refuses
   createdVia?: string;
   fields: ThingtimeSchemaField[];
+  // Ordinary editable preview copied with the public schema definition.
+  render?: Record<string, unknown>;
   example: Record<string, unknown>;
 };
 
@@ -928,6 +940,15 @@ const postSchema: ThingtimeSchema = {
   collection: null,
   title: 'Post',
   summary: 'A feed post — text, image, marketplace listing, or a thingtime thing.',
+  render: {
+    tag: 'article',
+    props: { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+    children: [
+      { tag: 'h3', children: '{title}' },
+      { tag: 'img', props: { src: '{images.0}', alt: '{title}', style: { maxWidth: '100%', maxHeight: '360px', objectFit: 'contain' } } },
+      { tag: 'p', props: { style: { whiteSpace: 'pre-wrap' } }, children: '{text}' }
+    ]
+  },
   detail:
     'The thing shows up in feeds and profile listings. Marketplace posts carry a listing; the ' +
     'listing category is folded into the root tags so feed filters can find it. Thingtime posts ' +
@@ -1229,7 +1250,9 @@ const dataSchema: ThingtimeSchema = {
 // builder. Field defs are bounded and whitelisted — never arbitrary JSON.
 export const MAX_SCHEMA_NAME_CHARS = 60;
 export const MAX_SCHEMA_DESCRIPTION_CHARS = 500;
-export const MAX_SCHEMA_FIELDS = 40; // total field nodes, counting nested children/items
+// Accommodates the complete root Thing shape plus user extensions while
+// keeping schema trees bounded (nested children/items count toward this cap).
+export const MAX_SCHEMA_FIELDS = 80;
 export const MAX_SCHEMA_ENUM_VALUES = 30;
 export const MAX_SCHEMA_ENUM_VALUE_CHARS = 60;
 export const MAX_SCHEMA_UNIT_CHARS = 20;
@@ -1251,7 +1274,7 @@ export const MAX_SCHEMA_RENDER_BYTES = 48 * 1024;
 // 24-level DOM cap, which the RESOLVED tree still has to clear
 export const MAX_SCHEMA_RENDER_DEPTH = 48;
 export const MAX_SCHEMA_RENDER_NODES = 2000;
-export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array'] as const;
+export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array', 'json'] as const;
 export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
 
 // An array field types its entries with an unnamed field def.
@@ -1275,7 +1298,7 @@ export type SchemaThingField = {
 
 const schemaThingSchema: ThingtimeSchema = {
   id: 'schema',
-  version: 2,
+  version: 3,
   kind: 'crystal',
   collection: null,
   title: 'Schema',
@@ -1439,6 +1462,7 @@ const componentSchema: ThingtimeSchema = {
 			description: 'The design language this component follows; user-authored components default to custom.'
 		},
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. buttons, forms, feedback, navigation, flow.' },
+		{ name: 'source', type: 'record', required: false, description: 'Viewer-owned Action binding: { action, inputs?, refresh?: load/manual/interval, intervalMs? }. Source values resolve into result/state/error; the page can override this binding.' },
 		{ name: 'componentKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions to their source component.' },
 		{ name: 'familyKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Groups the library renditions (designs) of one functional component — /components shows one card per family.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a componentKey.' },
@@ -1576,6 +1600,8 @@ const webpageSchema: ThingtimeSchema = {
 // which is the whole of branching: there is still no loop primitive other
 // than the budget-bounded `each`, and no persisted code.
 export const ACTION_STEP_OPS = [
+	'http.request',
+	'lookup',
 	'things.create',
 	'things.get',
 	'things.search',
@@ -1587,8 +1613,8 @@ export const ACTION_STEP_OPS = [
 	'fail',
 	'return'
 ] as const;
-export const ACTION_CAPABILITIES = ['things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
-export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum'] as const;
+export const ACTION_CAPABILITIES = ['http.request', 'lookup', 'things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
+export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum', 'json'] as const;
 export const MAX_ACTION_STEPS = 40;
 export const MAX_ACTION_INPUTS = 16;
 export const MAX_ACTION_CAPABILITY_ENTRIES = 8;
@@ -1680,12 +1706,13 @@ const actionSchema: ThingtimeSchema = {
 		'"$now") or { ttConcat: [...] } string composition — reference substitution, never ' +
 		'evaluation. Child actions started via actions.invoke consume the PARENT invocation\'s ' +
 		'budget, so recursive chains terminate by construction. Every run is recorded as a ' +
-		'protected action-run child thing for inspection. In v1 the vocabulary has no network, ' +
-		'no secrets, and no delete — external integrations arrive later as Connection-owned ' +
-		'capabilities.',
+		'protected action-run child thing for inspection. Lookup steps use a registered provider ' +
+		'and the action owner’s Vault credential; provider results are omitted from run history. ' +
+		'Authored actions cannot supply arbitrary network destinations or read raw secrets.',
 	fields: [
 		{ name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "Create customer".' },
 		{ name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this action does and when to run it.' },
+		{ name: 'runtime', type: 'string', required: false, description: 'server (default) or browser. Browser programs use request steps with the current session.' },
 		{ name: 'actionKey', type: 'string', required: false, max: MAX_ACTION_KEY_CHARS, description: 'Stable slug identity (lowercase-dashed) other actions can invoke by key.' },
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. customers, invoices, utilities.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved revisions of an actionKey.' },
@@ -1708,7 +1735,7 @@ const actionSchema: ThingtimeSchema = {
 			description:
 				`Ordered step list, 1–${MAX_ACTION_STEPS}, each { op: ${ACTION_STEP_OPS.join(' | ')}, … }. ` +
 				'things.create { schema, values }; things.get { id }; things.search { schema?, limit? }; ' +
-				'things.update { id, values }; actions.invoke { action, inputs? }; return { value }. ' +
+				'things.update { id, values }; actions.invoke { action, inputs? }; lookup { provider, credentialId, query }; return { value }. ' +
 				'Values are literal JSON, whole-value refs, or ttConcat compositions.'
 		},
 		{
@@ -1718,7 +1745,7 @@ const actionSchema: ThingtimeSchema = {
 			max: MAX_ACTION_CAPABILITY_ENTRIES,
 			description:
 				`Declared capability list, max ${MAX_ACTION_CAPABILITY_ENTRIES}: { capability (${ACTION_CAPABILITIES.join('/')}), ` +
-				'schemas? (scope list), actions? (invoke allowlist) }. Save-time validation requires every step ' +
+				'schemas? (scope list), actions? (invoke allowlist), providers? (lookup allowlist) }. Save-time validation requires every step ' +
 				'to be covered by a declared capability, so the declaration is always true.'
 		},
 		{
@@ -1751,7 +1778,7 @@ const actionSchema: ThingtimeSchema = {
 	}
 };
 
-// Every action invocation lands one protected run record — server-minted by
+// Completed ordinary server invocations attempt one bounded debug record — server-minted by
 // the executor only (a forged run record would falsify the audit trail), so
 // the kind rides PROTECTED_THINGTIME and has no crystal sanitizer on the
 // generic write path.
@@ -1772,7 +1799,8 @@ const actionRunSchema: ThingtimeSchema = {
 		'action contract. Direct create/update/delete through the generic things routes is ' +
 		'refused. Operational telemetry, so the trail is retained rather than kept forever: the ' +
 		`executor keeps the newest ${MAX_ACTION_RUNS_RETAINED} records per action per owner and ` +
-		'prunes older ones after each run, and deleting the action deletes its run records with it.',
+		'prunes older ones after each run, and deleting the action deletes its run records with it. ' +
+		'Canonical Timeline separately retains private admission and redacted outcome events; this bounded record is supplementary debugging data.',
 	fields: [
 		{ name: 'status', type: 'enum', required: true, values: ['ok', 'error'], description: 'Whether the run completed or failed.' },
 		{ name: 'startedAt', type: 'date', required: true, description: 'When the invocation began.' },
@@ -2320,16 +2348,16 @@ const errorLogSchema: ThingtimeSchema = {
   fields: [
     { name: 'source', type: 'string', required: true, max: 128, description: 'Authored operation label.' },
     { name: 'message', type: 'string', required: true, max: 2048, description: 'Redacted error summary.' },
-    { name: 'provider', type: 'string', description: 'External provider when applicable.' },
-    { name: 'status', type: 'number', description: 'Upstream or HTTP status.' },
-    { name: 'code', type: 'string', description: 'Provider error code.' },
-    { name: 'requestId', type: 'string', description: 'Server-generated correlation id.' },
-    { name: 'route', type: 'string', description: 'Registered API route, without query strings.' },
-    { name: 'method', type: 'string', description: 'HTTP request method.' },
-    { name: 'providerType', type: 'string', description: 'Provider error classification.' },
-    { name: 'providerRequestId', type: 'string', description: 'Upstream request correlation id.' },
-    { name: 'retryAfter', type: 'string', description: 'Upstream retry delay.' },
-    { name: 'attempt', type: 'number', description: 'Bounded provider attempt number.' }
+    { name: 'provider', type: 'string', required: false, description: 'External provider when applicable.' },
+    { name: 'status', type: 'number', required: false, description: 'Upstream or HTTP status.' },
+    { name: 'code', type: 'string', required: false, description: 'Provider error code.' },
+    { name: 'requestId', type: 'string', required: false, description: 'Server-generated correlation id.' },
+    { name: 'route', type: 'string', required: false, description: 'Registered API route, without query strings.' },
+    { name: 'method', type: 'string', required: false, description: 'HTTP request method.' },
+    { name: 'providerType', type: 'string', required: false, description: 'Provider error classification.' },
+    { name: 'providerRequestId', type: 'string', required: false, description: 'Upstream request correlation id.' },
+    { name: 'retryAfter', type: 'string', required: false, description: 'Upstream retry delay.' },
+    { name: 'attempt', type: 'number', required: false, description: 'Bounded provider attempt number.' }
   ], example: { source: 'moderation', message: 'Rate limit reached', provider: 'openai', status: 429 }
 };
 
@@ -2418,16 +2446,16 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail: 'The root stores fixed configuration and latest-run metadata. Ordered sources and targets are relational ci-feature-stack-entry Things published by revision, so edits never expose a partially replaced list.',
     createdVia: '/api/v1/admin/ci/stacks',
     fields: [
-      { name: 'title', type: 'string', required: true, max: 80 },
-      { name: 'repository', type: 'string', required: true, max: 300 },
-      { name: 'autoDecideBranches', type: 'boolean', required: true },
-      { name: 'revision', type: 'string', required: true, max: 80 },
-      { name: 'status', type: 'string', required: true, max: 120 },
-      { name: 'archived', type: 'boolean', required: true },
-      { name: 'createdBy', type: 'string', required: true, max: 180 },
-      { name: 'updatedBy', type: 'string', required: true, max: 180 },
-      { name: 'lastDispatchId', type: 'string', required: false, max: 180 },
-      { name: 'lastRunAt', type: 'date', required: false }
+      { name: 'title', type: 'string', required: true, max: 80, description: 'Human name of the saved Feature Stack.' },
+      { name: 'repository', type: 'string', required: true, max: 300, description: 'GitHub owner/name the stack builds against.' },
+      { name: 'autoDecideBranches', type: 'boolean', required: true, description: 'Whether Lopu chooses branch names for each stacked feature.' },
+      { name: 'revision', type: 'string', required: true, max: 80, description: 'Immutable revision id of the saved stack definition.' },
+      { name: 'status', type: 'string', required: true, max: 120, description: 'Lifecycle status such as saved, dispatched or completed.' },
+      { name: 'archived', type: 'boolean', required: true, description: 'Hidden from the active stack list when true.' },
+      { name: 'createdBy', type: 'string', required: true, max: 180, description: 'Admin username that saved the stack.' },
+      { name: 'updatedBy', type: 'string', required: true, max: 180, description: 'Admin username of the latest edit.' },
+      { name: 'lastDispatchId', type: 'string', required: false, max: 180, description: 'Id of the most recent controller dispatch, when any.' },
+      { name: 'lastRunAt', type: 'date', required: false, description: 'When the stack was last dispatched to the controller.' }
     ],
     example: { title: 'Search + Actions', repository: 'lopugit/thingtime', autoDecideBranches: true, revision: 'revision-id', status: 'saved', archived: false, createdBy: 'admin', updatedBy: 'admin' }
   },
@@ -2438,12 +2466,12 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail: 'Each child belongs to one root and revision. entryType chooses either prNumber or branch; position preserves administrator order without embedding an unbounded list on the root.',
     createdVia: '/api/v1/admin/ci/stacks',
     fields: [
-      { name: 'repository', type: 'string', required: true, max: 300 },
-      { name: 'revision', type: 'string', required: true, max: 80 },
-      { name: 'entryType', type: 'enum', required: true, values: ['source', 'target'] },
-      { name: 'position', type: 'number', required: true, min: 0 },
-      { name: 'prNumber', type: 'number', required: false, min: 1 },
-      { name: 'branch', type: 'string', required: false, max: 180 }
+      { name: 'repository', type: 'string', required: true, max: 300, description: 'GitHub owner/name the entry belongs to.' },
+      { name: 'revision', type: 'string', required: true, max: 80, description: 'Revision of the parent Feature Stack this entry is part of.' },
+      { name: 'entryType', type: 'enum', required: true, values: ['source', 'target'], description: 'Whether the entry is a source pull request or a target branch.' },
+      { name: 'position', type: 'number', required: true, min: 0, description: 'Zero-based administrator ordering within the stack.' },
+      { name: 'prNumber', type: 'number', required: false, min: 1, description: 'Pull request number for source entries.' },
+      { name: 'branch', type: 'string', required: false, max: 180, description: 'Branch name for target entries.' }
     ],
     example: { repository: 'lopugit/thingtime', revision: 'revision-id', entryType: 'source', position: 0, prNumber: 427 }
   },
@@ -2750,7 +2778,7 @@ export type NormalizedNotificationPrefs = {
 // the push/in-app channel — unchanged from the original shape, so prefs saved
 // before channels existed keep working with zero migration — plus nested
 // email: { [type]: boolean } and masters: { push, email }. Absent = ON,
-// except EMAIL_DEFAULT_OFF_TYPES whose email channel is opt-in. Shared by the
+// except action-run (push opt-in) and EMAIL_DEFAULT_OFF_TYPES (email opt-in). Shared by the
 // server (write/read gating) and the settings UI (defaults) so both sides
 // agree on what absent keys mean. Also accepts an already-normalized matrix
 // (nested push object) so the wire shape round-trips: normalize(normalize(x))
@@ -2761,7 +2789,7 @@ export const normalizeNotificationPrefs = (stored: Record<string, any> | null | 
   const mastersStored = source.masters && typeof source.masters === 'object' ? source.masters : {};
   const pushStored = source.push && typeof source.push === 'object' ? source.push : source;
   const push: Record<string, boolean> = {};
-  for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
+  for (const type of NOTIFICATION_TYPES) push[type] = type === 'action-run' ? pushStored[type] === true : pushStored[type] !== false;
   const email: Record<string, boolean> = {};
   for (const type of EMAIL_NOTIFICATION_TYPES) {
 		email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type) ? emailStored[type] === true : emailStored[type] !== false;
@@ -4170,6 +4198,9 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'draft',
+  TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND,
+  'post-discovery',
   ...CHAT_ARCHIVE_THINGTIME,
 
   'account-invite',
@@ -4242,7 +4273,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = ['post-discovery', ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4369,9 +4400,32 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+  { id: 'draft', version: 1, kind: 'crystal', collection: null, title: 'Draft or template',
+    summary: 'Private account-backed editing snapshots and reusable templates.',
+    detail: 'Owner-only, quota-accounted drafts, version-checked through the drafts API. Each is an atomic Thing; files are relational attachment children. Generic CRUD, feeds and search cannot publish drafts.',
+    createdVia: '/api/v1/drafts', fields: [], example: {} },
+	{ id: TIMELINE_SNAPSHOT_PART_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline snapshot part',
+		summary: 'One bounded private fragment of a retained large version.',
+		detail: 'The shared canonical part record lives in secure BinData. parentId and targetId reference its immutable event; scalar side and ordinal identify its position. Each part is a separate atomic Thing, with no accumulating arrays. The parent event accounts for retained customer bytes exactly once. Only the canonical content transaction writes parts; generic reads and writes are refused.',
+		createdVia: 'Canonical Timeline transaction', fields: [], example: {} },
+	{ id: TIMELINE_BRANCH_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline branch',
+		summary: 'A named private branch with relational Thing memberships.', detail: 'The shared branch record lives in secure BinData. Each contained Thing has a separate timeline-branch-head record; neither revisions nor heads accumulate in this document. Dedicated Timeline commands own the lifecycle and record branch changes in History.',
+		createdVia: 'Timeline branch command', fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Branch display name.' }], example: { name: 'Design experiment' } },
+	{ id: TIMELINE_BRANCH_HEAD_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline branch version',
+		summary: 'One current version for one branch and Thing.', detail: 'A protected atomic relationship with scalar branchId, thingId, eventId and optimistic revision. targetId names its Thing and parentId its branch. A push requires the current revision and preserves ancestry; divergence requires a merge. The canonical head record is identical locally and remotely.',
+		createdVia: 'Timeline branch command', fields: [], example: {} },
+	{ id: TIMELINE_LINK_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline relationship',
+		summary: 'One immutable private link between an event and a version, Thing, branch or operation.',
+		detail: 'Each relationship is its own protected Thing in Timeline. The identical local/server link record lives in secure BinData; targetId points to its event Thing. Hashed crystal.targetId and crystal.linkKind support reverse lookup through the existing shared index. Links commit with the event, never accumulate in document arrays, and cannot be edited through generic Things APIs.',
+		createdVia: 'Canonical Timeline transaction', fields: [], example: {} },
+	{ id: TIMELINE_EVENT_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline event',
+		summary: 'An immutable private change and its server acceptance receipt.',
+		detail: 'An atomic Thing under the owner’s Timeline folder. targetId names the affected Thing, including deleted Things. The shared versioned event and receipt live in secure BinData, excluded from generic reads/search. V3 stores the canonical relational event record; parent, dependency, Thing, branch and operation links are separate atomic timeline-link Things. Logical storage accounting meters retained customer snapshot content. Dedicated Timeline reads authenticate the owner; ordinary content sharing never shares its history.',
+		createdVia: 'Canonical mutation transactions and the Timeline sync API',
+		fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Value-free display label.' }], example: { name: 'Change' } },
 	{ id: 'lopu-background-task', version: 1, kind: 'crystal', collection: null, title: 'Background AI task',
     summary: 'Protected owner-private execution and reconnect state.',
-    detail: 'Home control Thing with origin/data-source scope, immutable request digest and bounded secure BinData output. Seven-day output access; lazy byte removal; retained operation marker prevents replay. Chat output additionally requires current conversation access.',
+    detail: 'Home control Thing with origin/data-source scope, immutable request digest and bounded secure BinData output. Seven-day output access; lazy byte removal; retained operation marker prevents replay. Chat output additionally requires current conversation access. Optional management and workflowStatus track a durable chain. The root workflowInput is protected BinData containing the initial request and a revocable session grant; it is never indexed or projected and is removed at terminal completion. Child parts link by protected rootTaskId. Protected activeWorkerRequestId, workerStarted, workerFinishedAt, workflowFinalStatus and workflowFinalizedAt fence admission and preserve the conversation claim until all executors acknowledge their final saved output; lease expiry alone never releases that claim.',
     createdVia: 'Background transport on the canonical AI endpoints', fields: [], example: {} },
 	...(['lopu-recording-settings', 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const).map((id): ThingtimeSchema => ({
 		id, version: 1, kind: 'crystal', collection: null, title: id,
@@ -4404,6 +4458,18 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   webpageSchema,
   actionSchema,
   actionRunSchema,
+  {
+    id: 'post-discovery', version: 1, kind: 'crystal', collection: null,
+    title: 'Collected secret post', summary: 'Private record of a successful secret-link visit.',
+    requiresTarget: true, createdVia: 'GET /api/v1/things?id=...&key=...',
+    detail: 'One protected control Thing per account or anonymous browser and post. targetId identifies the discovered post. Never exposed through generic reads, exports, search or CRUD. Current hidden ACL and key digest are rechecked on every access; rotation or removal revokes the record. Post deletion cascades it. IP metadata is private and does not itself authorize access.',
+    fields: [
+      { name: 'authorId', type: 'id', required: true, system: true, description: 'Author whose profile may list the discovered post.' },
+      { name: 'linkKeyDigest', type: 'string', required: true, system: true, max: 64, description: 'One-way digest of the valid secret link generation.' },
+      { name: 'anonymousId', type: 'id', required: false, system: true, description: 'One-way browser identity, absent for signed-in accounts.' },
+      { name: 'ipAddress', type: 'string', required: false, system: true, max: 45, description: 'Private IP observed when this link generation was collected.' }
+    ], example: { authorId: 'author-id', linkKeyDigest: 'one-way-link-generation-digest' }
+  },
   saveThingSchema,
   voteSchema,
   updownSchema,
@@ -4687,6 +4753,17 @@ const sanitizePostCrystal = (
       const sanitized = sanitizeDataValue(raw, { path: 'thing', depth: 2 });
 			if (sanitized.ok === false) return sanitized;
       thing = sanitized.value as Record<string, unknown>;
+      if (thing.kind === 'thing-collection') {
+        if (!Array.isArray(thing.items) || !thing.items.length || thing.items.length > MAX_POST_THINGS ||
+          thing.items.some(item => !item || typeof item !== 'object' || !['data', 'interactive'].includes(item.mode))) {
+          return fail(400, `Attach 1-${MAX_POST_THINGS} Things with a data or interactive mode`);
+        }
+        const items = postThingReferences(thing);
+        if (items.length !== thing.items.length) return fail(400, 'Attached Things require unique valid ids');
+        if (thing.data !== undefined && (!thing.data || typeof thing.data !== 'object' || Array.isArray(thing.data))) return fail(400, 'Inline Thing data must be an object');
+        thing = { kind: 'thing-collection', items, ...(thing.data ? { data: thing.data } : {}) };
+      }
+
     }
     if (!isShare && (!thing || !Object.keys(thing).length)) {
       return fail(400, 'Thingtime posts need a thing with at least one field 🌀');
@@ -5021,21 +5098,18 @@ export const SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES: ReadonlySet<string> = new Se
 // builtinSchemaProjection.test.ts pins that congruence so registry/grammar
 // drift fails a test instead of seeding an invalid thing.
 //
-// Deliberately dropped (each an open shape the closed grammar can't express,
-// or a name the grammar reserves):
-// - 'record' fields — documented open bags (data's '*', schema's fields tree,
-//   theme tokens, algorithm weights, app-data values)
+// Open 'record' and opaque 'object' fields become bounded 'json' fields so
+// copies retain crystals, program payloads, rich text and other open structures.
+// Deliberately dropped names:
 // - reserved top-level names ('schema'/'schemaid' — data's convention field IS
 //   the tagging namespace the reservation protects)
 // - names outside the field grammar (the '*' catch-all)
 // 'id' fields project as 'string' (ids are strings on the wire). Everything
 // else carries through: required, enum values, number min/max, string
-// maxLength / string[] maxItems (registry `max`), object children (recursed —
-// an object whose children ALL project away is dropped, since a childless
-// object can't validate).
+// maxLength / string[] maxItems (registry `max`), object children (recursed).
+// An object without projectable children remains available as bounded JSON.
 const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record<string, unknown> | null => {
-  const type = field.type === 'id' ? 'string' : field.type;
-  if (type === 'record') return null;
+  const type = field.type === 'id' ? 'string' : field.type === 'record' ? 'json' : field.type;
   if (!(SCHEMA_FIELD_TYPES as readonly string[]).includes(type)) return null;
   if (field.name.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(field.name)) return null;
   if (depth === 1 && SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES.has(field.name.toLowerCase())) return null;
@@ -5057,8 +5131,8 @@ const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record
     const children = (field.children || [])
       .map((child) => projectBuiltinField(child, depth + 1))
       .filter((child): child is Record<string, unknown> => child !== null);
-    if (!children.length) return null;
-    out.children = children;
+    if (children.length) out.children = children;
+    else out.type = 'json';
   }
   return out;
 };
@@ -5066,7 +5140,8 @@ const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record
 export const projectBuiltinSchemaCrystal = (schema: ThingtimeSchema): Record<string, unknown> => ({
   name: schema.title,
   description: schema.summary,
-  fields: schema.fields.map((field) => projectBuiltinField(field, 1)).filter((field): field is Record<string, unknown> => field !== null)
+  fields: schema.fields.map((field) => projectBuiltinField(field, 1)).filter((field): field is Record<string, unknown> => field !== null),
+  ...(schema.render ? { render: structuredClone(schema.render) } : {})
 });
 
 // whole-number constraint (maxLength/minItems/maxItems); fail-loudly on junk
@@ -5107,6 +5182,7 @@ const sanitizeSchemaField = (
     if (!fieldName || fieldName.length > MAX_SCHEMA_FIELD_NAME_CHARS || !SCHEMA_FIELD_NAME_PATTERN.test(fieldName)) {
       return fail(400, `Schema field names are letters/numbers/_/- — nest with children, not dots (got ${String(def.name).slice(0, 80)})`);
     }
+    if (['__proto__', 'prototype', 'constructor'].includes(fieldName.toLowerCase())) return fail(400, `Unsafe schema field name: ${fieldName}`);
     if (depth === 1 && SCHEMA_RESERVED_TOP_LEVEL_FIELD_NAMES.has(fieldName.toLowerCase())) {
       return fail(400, `Field name ${fieldName} is reserved (it tags data things with their schema)`);
     }
@@ -5384,6 +5460,50 @@ const sanitizeComponentArgs = (input: unknown): { ok: true; args: Record<string,
 	return { ok: true, args };
 };
 
+const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<string, unknown> } | Fail => {
+	if (typeof input !== 'object' || Array.isArray(input)) return fail(400, `Component/page source must be an object`);
+	const rawSource = input as Record<string, unknown>;
+	const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
+	if (!action || action.length > MAX_ACTION_KEY_CHARS || !ACTION_KEY_PATTERN.test(action)) {
+		return fail(400, `Component/page source.action must be an actionKey (lowercase-dashed slug)`);
+	}
+	const source: Record<string, unknown> = { action };
+	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
+		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
+			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
+		}
+		const inputs: Record<string, unknown> = {};
+		const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
+		if (entries.length > MAX_ACTION_INPUTS) return fail(400, `Component/page source.inputs can hold at most ${MAX_ACTION_INPUTS} entries`);
+		for (const [key, value] of entries) {
+			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
+				return fail(400, `Component/page source input "${key.slice(0, 40)}" is not a valid input name`);
+			}
+			const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
+			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a string, number, or boolean`);
+			if (scalar !== null) inputs[key] = scalar;
+		}
+		if (Object.keys(inputs).length) source.inputs = inputs;
+	}
+	// refresh: 'load' (default — again after every control run), 'manual'
+	// (once, on load), or 'interval' (also every intervalMs — a clock, a
+	// live tally; bounded so a page can never poll the executor hard)
+	if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
+		if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval') {
+			return fail(400, `Component/page source.refresh must be load, manual, or interval`);
+		}
+		if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
+	}
+	if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
+		const intervalMs = Number(rawSource.intervalMs);
+		if (!Number.isInteger(intervalMs) || intervalMs < MIN_WEBPAGE_SOURCE_INTERVAL_MS || intervalMs > MAX_WEBPAGE_SOURCE_INTERVAL_MS) {
+			return fail(400, `Component/page source.intervalMs must be ${MIN_WEBPAGE_SOURCE_INTERVAL_MS}–${MAX_WEBPAGE_SOURCE_INTERVAL_MS}`);
+		}
+		if (source.refresh === 'interval') source.intervalMs = intervalMs;
+	}
+	return { ok: true as const, source };
+};
+
 const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
 	const name = typeof input.name === 'string' ? input.name.trim() : '';
 	if (!name) return fail(400, 'Components need a name');
@@ -5468,6 +5588,12 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 	const render = sanitizeSchemaRender(input.render);
 	if (isFail(render)) return render;
 	crystal.render = render.render;
+
+	if (input.source !== undefined && input.source !== null) {
+		const checked = sanitizeSourceBinding(input.source);
+		if (isFail(checked)) return checked;
+		crystal.source = checked.source;
+	}
 
 	return { ok: true, crystal };
 };
@@ -5613,47 +5739,9 @@ const sanitizeWebpageBlock = (
 		// scalars whose strings may carry {arg} / {query.<name>} tokens, and
 		// nothing here widens what the viewer could run by hand.
 		if (raw.source !== undefined && raw.source !== null) {
-			if (typeof raw.source !== 'object' || Array.isArray(raw.source)) return fail(400, `Block ${id} source must be an object`);
-			const rawSource = raw.source as Record<string, unknown>;
-			const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
-			if (!action || action.length > MAX_ACTION_KEY_CHARS || !ACTION_KEY_PATTERN.test(action)) {
-				return fail(400, `Block ${id} source.action must be an actionKey (lowercase-dashed slug)`);
-			}
-			const source: Record<string, unknown> = { action };
-			if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
-				if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
-					return fail(400, `Block ${id} source.inputs must be an object of scalar input values`);
-				}
-				const inputs: Record<string, unknown> = {};
-				const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
-				if (entries.length > MAX_ACTION_INPUTS) return fail(400, `Block ${id} source.inputs can hold at most ${MAX_ACTION_INPUTS} entries`);
-				for (const [key, value] of entries) {
-					if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
-						return fail(400, `Block ${id} source input "${key.slice(0, 40)}" is not a valid input name`);
-					}
-					const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
-					if (scalar === null && value !== null) return fail(400, `Block ${id} source input ${key} must be a string, number, or boolean`);
-					if (scalar !== null) inputs[key] = scalar;
-				}
-				if (Object.keys(inputs).length) source.inputs = inputs;
-			}
-			// refresh: 'load' (default — again after every control run), 'manual'
-			// (once, on load), or 'interval' (also every intervalMs — a clock, a
-			// live tally; bounded so a page can never poll the executor hard)
-			if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
-				if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval') {
-					return fail(400, `Block ${id} source.refresh must be load, manual, or interval`);
-				}
-				if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
-			}
-			if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
-				const intervalMs = Number(rawSource.intervalMs);
-				if (!Number.isInteger(intervalMs) || intervalMs < MIN_WEBPAGE_SOURCE_INTERVAL_MS || intervalMs > MAX_WEBPAGE_SOURCE_INTERVAL_MS) {
-					return fail(400, `Block ${id} source.intervalMs must be ${MIN_WEBPAGE_SOURCE_INTERVAL_MS}–${MAX_WEBPAGE_SOURCE_INTERVAL_MS}`);
-				}
-				if (source.refresh === 'interval') source.intervalMs = intervalMs;
-			}
-			block.source = source;
+			const checked = sanitizeSourceBinding(raw.source);
+			if (isFail(checked)) return checked;
+			block.source = checked.source;
 		}
 		return { ok: true, block };
 	}
@@ -5764,7 +5852,7 @@ const sanitizeWebpageBlock = (
 	return { ok: true, block };
 };
 
-const sanitizeWebpageBlocks = (input: unknown): { ok: true; blocks: Record<string, unknown>[] } | Fail => {
+export const sanitizeWebpageBlocks = (input: unknown): { ok: true; blocks: Record<string, unknown>[] } | Fail => {
 	if (!Array.isArray(input)) return fail(400, 'Webpage blocks must be a list');
 	const state = { nodes: 0, ids: new Set<string>() };
 	const blocks: Record<string, unknown>[] = [];
@@ -6065,7 +6153,13 @@ const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record
 			}
 			descriptor.values = values;
 		}
-		if (raw.default !== undefined) {
+		if (raw.default !== undefined && type === 'json') {
+			try {
+				descriptor.default = copyActionJson(raw.default);
+			} catch (error) {
+				return fail(400, `Input ${name}: ${error instanceof Error ? error.message : 'Invalid JSON default'}`);
+			}
+		} else if (raw.default !== undefined) {
 			const fallback = sanitizeComponentArgScalar(raw.default, MAX_COMPONENT_ARG_DEFAULT_CHARS);
 			if (fallback === null && raw.default !== null) return fail(400, `Input ${name} default must be a string, number, or boolean`);
 			if (fallback !== null) {
@@ -6098,7 +6192,7 @@ const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record
 	return { ok: true, inputs };
 };
 
-export type ActionCapabilityEntry = { capability: string; schemas?: string[]; actions?: string[] };
+export type ActionCapabilityEntry = { capability: string; schemas?: string[]; actions?: string[]; providers?: string[]; endpoints?: string[] };
 
 const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabilities: ActionCapabilityEntry[] } => {
 	if (!Array.isArray(input)) return fail(400, 'Action capabilities must be a list');
@@ -6117,6 +6211,15 @@ const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabili
 		if (seen.has(capability)) return fail(400, `Duplicate capability: ${capability}`);
 		seen.add(capability);
 		const sanitized: ActionCapabilityEntry = { capability };
+		if (capability === 'http.request') {
+			if (!Array.isArray(raw.endpoints) || !raw.endpoints.length || raw.endpoints.length > MAX_ACTION_CAPABILITY_SCOPES || !raw.endpoints.every(isActionHttpEndpoint))
+				return fail(400, 'http.request needs a literal method and API path allowlist');
+			sanitized.endpoints = [...new Set(raw.endpoints)] as string[];
+		} else if (raw.endpoints !== undefined) return fail(400, 'Only http.request takes endpoints');
+		if (capability === 'lookup') {
+			if (!Array.isArray(raw.providers) || !raw.providers.length || raw.providers.length > MAX_ACTION_CAPABILITY_SCOPES || raw.providers.some((provider) => !isActionLookupProvider(provider))) return fail(400, 'lookup needs a registered providers allowlist');
+			sanitized.providers = [...new Set(raw.providers)] as string[];
+		} else if (raw.providers !== undefined) return fail(400, 'Only lookup takes providers');
 		if (raw.schemas !== undefined && raw.schemas !== null) {
 			if (!Array.isArray(raw.schemas) || raw.schemas.length > MAX_ACTION_CAPABILITY_SCOPES) {
 				return fail(400, `Capability ${capability} scopes cap at ${MAX_ACTION_CAPABILITY_SCOPES} schemas`);
@@ -6147,15 +6250,16 @@ const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabili
 	return { ok: true, capabilities };
 };
 
-const sanitizeActionLimits = (input: unknown): Fail | { ok: true; limits: Record<string, number> } => {
+const sanitizeActionLimits = (input: unknown, browser = false): Fail | { ok: true; limits: Record<string, number> } => {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Action limits must be an object');
 	const raw = input as Record<string, unknown>;
 	const limits: Record<string, number> = {};
+	const ceilings = browser ? { ...ACTION_LIMIT_CEILINGS, ...BROWSER_ACTION_EXPANDED_LIMITS } : ACTION_LIMIT_CEILINGS;
 	for (const key of Object.keys(ACTION_LIMIT_CEILINGS) as (keyof typeof ACTION_LIMIT_CEILINGS)[]) {
 		if (raw[key] === undefined || raw[key] === null) continue;
 		const value = Number(raw[key]);
 		if (!Number.isInteger(value) || value < 1) return fail(400, `Limit ${key} must be a positive integer`);
-		limits[key] = Math.min(value, ACTION_LIMIT_CEILINGS[key]);
+		limits[key] = Math.min(value, ceilings[key]);
 	}
 	const unknown = Object.keys(raw).find((key) => !(key in ACTION_LIMIT_CEILINGS));
 	if (unknown) return fail(400, `Unknown limit "${unknown.slice(0, 40)}"`);
@@ -6247,7 +6351,28 @@ const sanitizeActionSteps = (
 			return null;
 		};
 		let failure: Fail | null = null;
-		if (op === 'things.create') {
+		if (op === 'http.request') {
+			const endpoint = actionHttpEndpoint(raw.method, raw.path);
+			if (!endpoint) return fail(400, `Step ${stepIndex} needs a literal API path and HTTP method`);
+			if (!byCapability.get('http.request')?.endpoints?.includes(endpoint)) return fail(400, `Step ${stepIndex} endpoint is outside its http.request capability`);
+			if (typeof raw.feature !== 'string' || !/^api\.[a-z0-9-]+$/.test(raw.feature) || typeof raw.minimumVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(raw.minimumVersion))
+				return fail(400, `Step ${stepIndex} needs an API capability feature and minimumVersion`);
+			Object.assign(step, { method: raw.method, path: raw.path, feature: raw.feature, minimumVersion: raw.minimumVersion });
+			if (raw.method === 'GET' && raw.body !== undefined) return fail(400, 'GET request steps cannot carry a body');
+			failure = checkValues(raw.query ?? {}, 'query', true) || checkValues(raw.body, 'body', false);
+			if (raw.pagination !== undefined) {
+				const pagination = parseActionRequestPagination(raw.pagination);
+				if (raw.method !== 'GET' || !pagination) return fail(400, 'Pagination needs a GET request and valid cursor/items paths and budgets');
+				step.pagination = pagination;
+			}
+		} else if (op === 'lookup') {
+			if (!isActionLookupProvider(raw.provider)) return fail(400, `Step ${stepIndex} needs a registered lookup provider`);
+			if (!byCapability.get('lookup')?.providers?.includes(raw.provider)) return fail(400, `Step ${stepIndex} needs lookup capability for ${raw.provider}`);
+			if (typeof raw.credentialId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(raw.credentialId)) return fail(400, 'lookup credentialId must be a literal Vault entry id');
+			step.provider = raw.provider;
+			step.credentialId = raw.credentialId;
+			failure = checkRefString(raw.query, 'query');
+		} else if (op === 'things.create') {
 			const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);
 			if (isFail(schema)) return schema;
 			step.schema = schema.ref;
@@ -6371,6 +6496,7 @@ const sanitizeActionSteps = (
 // renders THIS, never an author-written claim, so the display can't drift
 // from the behaviour.
 export type ActionEffects = {
+	lookups: string[];
 	creates: string[];
 	reads: string[];
 	updates: boolean;
@@ -6387,7 +6513,7 @@ export type ActionEffects = {
 };
 
 export const deriveActionEffects = (steps: unknown): ActionEffects => {
-	const effects: ActionEffects = { creates: [], reads: [], updates: false, deletes: false, invokes: [], returns: false, computes: false, publicReads: [], systemReads: [] };
+	const effects: ActionEffects = { lookups: [], creates: [], reads: [], updates: false, deletes: false, invokes: [], returns: false, computes: false, publicReads: [], systemReads: [] };
 	if (!Array.isArray(steps)) return effects;
 	for (const entry of steps) {
 		if (!entry || typeof entry !== 'object') continue;
@@ -6404,11 +6530,19 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		// a system-scope search reads only what the SEED wrote — no stranger's
 		// row can enter that corpus, so it is not a public-corpus disclosure
 		if (step.op === 'things.search' && step.scope === 'system' && schema && !effects.systemReads.includes(schema)) effects.systemReads.push(schema);
+		if (step.op === 'http.request') {
+			const endpoint = actionHttpEndpoint(step.method, step.path);
+			if (endpoint && !effects.reads.includes(endpoint)) effects.reads.push(endpoint);
+			// A general API call can create, update, or delete according to its
+			// contract. Never claim a write request is a harmless read.
+			if (step.method !== 'GET') { effects.updates = true; effects.deletes = true; effects.creates.push(String(step.path)); }
+		}
 		if (step.op === 'things.update') effects.updates = true;
 		if (step.op === 'things.delete') effects.deletes = true;
 		if ((step.op === 'actions.invoke' || step.op === 'each') && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {
 			effects.invokes.push(step.action);
 		}
+		if (step.op === 'lookup' && typeof step.provider === 'string' && !effects.lookups.includes(step.provider)) effects.lookups.push(step.provider);
 		if (step.op === 'compute') effects.computes = true;
 		if (step.op === 'return') effects.returns = true;
 	}
@@ -6423,6 +6557,14 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	if (name.length > MAX_SCHEMA_NAME_CHARS) return fail(400, `Action name is too long (max ${MAX_SCHEMA_NAME_CHARS})`);
 
 	const crystal: Record<string, unknown> = { name };
+	if (input.runtime !== undefined && input.runtime !== 'server' && input.runtime !== 'browser') return fail(400, 'Action runtime must be server or browser');
+	if (input.runtime === 'browser') crystal.runtime = 'browser';
+	if (input.expressionLimits !== undefined) {
+		const parsed = parseBrowserExpressionLimits(input.expressionLimits);
+		if (input.runtime !== 'browser' || !parsed) return fail(400, 'Expression limits require browser execution and bounded nodes/listItems');
+		crystal.expressionLimits = parsed;
+	}
+
 
 	const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
 	if (description) crystal.description = description;
@@ -6469,6 +6611,9 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	const steps = sanitizeActionSteps(input.steps, capabilities);
 	if (isFail(steps)) return steps;
 	crystal.steps = steps.steps;
+	if (input.runtime === 'browser') {
+		if (steps.steps.some((step) => !(BROWSER_ACTION_OPS as readonly string[]).includes(step.op))) return fail(400, 'Browser actions use HTTP requests, computations, child actions and returns');
+	} else if (steps.steps.some((step) => step.op === 'http.request')) return fail(400, 'HTTP request steps require the browser runtime');
 
 	// $input refs must point at declared inputs — a ref to an undeclared input
 	// would always resolve to undefined and is certainly an authoring mistake.
@@ -6500,7 +6645,7 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	if (inputRefIssue) return inputRefIssue;
 
 	if (input.limits !== undefined && input.limits !== null) {
-		const limits = sanitizeActionLimits(input.limits);
+		const limits = sanitizeActionLimits(input.limits, input.runtime === 'browser');
 		if (isFail(limits)) return limits;
 		if (Object.keys(limits.limits).length) crystal.limits = limits.limits;
 	}
@@ -6584,6 +6729,11 @@ const checkSchemaValue = (
           issues.push({ path: `${path}[${index}]`, message: `caps at ${field.maxLength} characters` });
         }
       });
+      return;
+    }
+    case 'json': {
+      const checked = sanitizeDataValue(value);
+      if (checked.ok === false) issues.push({ path, message: checked.error });
       return;
     }
     case 'object': {
@@ -6816,6 +6966,15 @@ export const validateThingtimeCrystal = (
 		const sanitized = sanitizer(input, ids, options);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
+  }
+  // Every generically writable Thing may have an owner-chosen display title.
+  // Typed sanitizers retain their stricter title rules; schemas without one
+  // gain the same bounded metadata without changing their content.
+  if (input.title !== undefined && !Object.prototype.hasOwnProperty.call(merged, 'title')) {
+    if (input.title !== null && typeof input.title !== 'string') return fail(400, 'Thing title must be text');
+    const title = typeof input.title === 'string' ? input.title.trim() : '';
+    if (title.length > 300) return fail(400, 'Thing title is too long (max 300)');
+    if (title) merged.title = title;
   }
   return { ok: true, thingtime: ids, crystal: merged, requiresTarget };
 };

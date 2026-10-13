@@ -116,7 +116,7 @@ export const importTransfer = async (
       const file = recordingTransferFile(recording, manifest);
       const copied = files.get(file.id)!;
       const uploaded = await deps.getFile(viewer.id, copied);
-      if (!uploaded) throw new Error('Recording upload not found');
+      if (!uploaded || uploaded.attachmentPurpose !== (recording.crystal.filePurpose === 'file' ? 'file' : 'recording')) throw new Error('File upload purpose does not match the transfer');
       prepareRecordingImport(uploaded, viewer.id, file.bytes, transferAnnotations(file));
       // Embedded recording URLs use the original Thing ID, whereas archive
       // byte entries have distinct portable IDs. Both resolve to the new file.

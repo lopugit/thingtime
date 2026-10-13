@@ -1,9 +1,10 @@
+import { isFolderThing } from '../../schemas/folderThing';
 // Shared vocabulary for the /things page — types, display helpers, and the
 // localCache shape. Pure module (no React) so views/dialogs/tests can all
 // import it without dragging component code along.
 
 import { primaryKindOf, THING_KIND_ICONS } from './thingIcon';
-import { THING_AUDIENCE_META, sharePathForThing, thingPath } from '../Sharing/audienceCore';
+import { THING_AUDIENCE_META, sharePathForThing, thingPath, type ResolvedAudience } from '../Sharing/audienceCore';
 
 export { FILE_TYPE_ICON_RULES, THING_KIND_ICONS, fileIconForThing, primaryKindOf, thingIcon } from './thingIcon';
 
@@ -16,6 +17,8 @@ export type ThingsAuthor = {
 
 // PublicThing as the /things page consumes it (see api/utils/things/things.ts)
 export type ThingsThing = {
+  inode?: import('~/api/utils/devices/deviceFilesystemCore').FilesystemEntry & { deviceId: string };
+  audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
   author: ThingsAuthor;
@@ -81,7 +84,7 @@ export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-
 
 export const folderKeyOf = (folderId: string | null) => folderId || 'root';
 
-export const isFolder = (thing: Pick<ThingsThing, 'thingtime'>): boolean => thing.thingtime.includes('folder');
+export const isFolder = (thing: Pick<ThingsThing, 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): boolean => isFolderThing(thing);
 
 // Kinds the server refuses to copy (mirrors UNCOPYABLE in
 // api/utils/things/things.ts): attached children live under their target — a
@@ -98,6 +101,7 @@ export const isDuplicable = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
 export const THINGS_KIND_FILTERS = [
   { id: 'all', label: 'All', icon: '🌀' },
   { id: 'folder', label: 'Folders', icon: '📁' },
+  { id: 'attachment', label: 'Files', icon: '💾' },
   { id: 'post', label: 'Posts', icon: '📝' },
   { id: 'data', label: 'Data', icon: '📦' },
   { id: 'schema', label: 'Schemas', icon: '💎' },
@@ -117,7 +121,7 @@ const firstLine = (value: string, max = 80): string => {
 // about what the thing is instead of rendering an empty row.
 export const thingDisplayName = (thing: Pick<ThingsThing, 'thingtime' | 'crystal'>): string => {
   const crystal = thing.crystal || {};
-  for (const key of ['name', 'title']) {
+  for (const key of ['title', 'name']) {
     if (typeof crystal[key] === 'string' && crystal[key].trim()) return firstLine(crystal[key]);
   }
   if (typeof crystal.text === 'string' && crystal.text.trim()) return firstLine(crystal.text);
@@ -156,7 +160,7 @@ export const formatWhen = (iso: string): string => {
 // (folders open in place on /things); components, data and whatever kind
 // comes next land on the universal /thing/:id page. The /things?preview=
 // deep link stays the explicit quick-look, never the permalink.
-export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'>): string => {
+export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): string => {
   return thingPath(thing);
 };
 
@@ -171,7 +175,7 @@ export type ThingsReferrer = 'things' | 'actions' | 'feed';
 // hint the universal /thing/:id page reads for its back link. Only that page
 // consumes the hint, so dedicated pages (post/action/webpage/schema) and the
 // shareable permalink itself never carry it.
-export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'>, from: ThingsReferrer): string => {
+export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, from: ThingsReferrer): string => {
   const href = thingLink(thing);
   return href.startsWith('/thing/') ? `${href}${href.includes('?') ? '&' : '?'}from=${from}` : href;
 };
@@ -324,3 +328,11 @@ export const interpolateRenderTree = (
   };
   return walk(tree) as Record<string, unknown>;
 };
+
+// Match the writer's projection: dedicated library/attachment renames change
+// display metadata only; ordinary schema names stay in sync with their title.
+export const thingRenameCrystal = (thing: Pick<ThingsThing, 'crystal' | 'thingtime'>, title: string): Record<string, string> =>
+  ({ title, ...(!isManagedLibraryThing(thing) && !thing.thingtime.includes('attachment') && typeof thing.crystal?.name === 'string' ? { name: title } : {}) });
+
+export const isManagedLibraryThing = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
+  thing.thingtime.length === 1 && ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(thing.thingtime[0]);

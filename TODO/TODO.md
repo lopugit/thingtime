@@ -2,6 +2,11 @@
 
 ## Priority 1 — Fundamental product behavior
 
+- **Complete SEO, Schema.org and rich results across all pages, `/things` and public UGC.**
+  Automatically populate social/schema metadata, preserve private content, and
+  validate actual crawler/search behavior. [Scope and remaining acceptance](claude-todo/seo-schema-rich-results.md);
+  [2026-09-17 investigation and implemented foundation](../docs/seo-social-metadata.md).
+
 - **Preserve and revisit any meaningful app, search, or generated-feed state.**
 
   Thingtime should automatically retain timestamped, versioned experience
@@ -12,6 +17,15 @@
   replay from a fresh rerun of the same query or algorithm.
   Full spec and Bambu Studio reference screenshot:
   `claude-todo/20-versioned-experience-history.md`.
+
+- **Give every Thing one History panel and a global timeline browser.**
+
+  Every change should show the Thing card as it was, the property-level
+  diff, and the message that explains why — durable on the device first,
+  then synced to the account, with restore, undo and variations that only
+  ever append versions. Design concept delivered on `/docs/design`
+  (`docs/design/thingtime-history-timeline/`); spec and phases:
+  `claude-todo/56-unified-thing-history-and-timeline-browser.md`.
 
 1. **~~Make true `hydrateRoot(document, ...)` merge-ready.~~ RESOLVED — obsolete
    (closed 2026-07-21).**

@@ -21,6 +21,9 @@ const fixture = () => {
 	const deps: Parameters<typeof forkComposition>[2] = {
 		uuid: () => `new-${++serial}`, revalidate: async () => composition,
 		listBoundFiles: async () => [],
+		inspect: async (_owner, ids) => ({ ok: true, hasAny: !!ids.length, hasVisual: !!ids.length }),
+		inspectComment: async (_owner, ids) => ({ ok: true, hasAny: !!ids.length, hasVisual: !!ids.length, attachments: [] }),
+		bindComment: (ids) => async (doc, session) => { bound.push({ ids, doc, session, comment: true }); },
 		copyFile: async (viewer, id, signal) => { copied.push({ viewer, id, signal }); return { ok: true, id: `copy-${id}`, attachment: {} }; },
 		removeFile: async (owner, input) => { removedFiles.push({ owner, input }); return { ok: true, deferred: false }; },
 		bind: (ids) => async (doc, session) => { bound.push({ ids, doc, session }); },
@@ -151,4 +154,48 @@ test('anonymous copying and missing executable dependencies never start file cop
 	f.composition.requiredReferences.add('page:component:missing');
 	assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
 	assert.equal(f.copied.length, 0);
+});
+
+test('image-only posts and deep rich replies validate with copied media and bind to fresh parents', async () => {
+ const f = fixture();
+ const { validateThingtimeCrystal } = await import('../../../schemas/registry');
+ const root: any = { shareId: 'post', ownerId: 'author', thingtime: ['post'], crystal: { type: 'image', images: [], text: '', subspaceId: 'old-community' } };
+ const comment: any = { shareId: 'comment', ownerId: 'second-author', targetId: 'post', thingtime: ['post', 'comment'], crystal: { type: 'image', images: [], text: '' } };
+ const reply: any = { shareId: 'reply', ownerId: 'author', targetId: 'comment', thingtime: ['comment'], crystal: { text: 'Nested reply' } };
+ f.composition = { ...f.composition, root, docs: new Map([['post', root], ['comment', comment], ['reply', reply]]), references: new Map(), requiredReferences: new Set() };
+ f.deps.revalidate = async () => f.composition;
+ f.deps.listBoundFiles = async () => [{ id: 'post-image', targetId: 'post' }, { id: 'comment-image', targetId: 'comment' }];
+ const create = f.deps.create;
+ f.deps.create = async (...args) => {
+  assert.equal(validateThingtimeCrystal(args[1].thingtime, args[1].crystal, { postAttachments: args[4]?.postAttachments }).ok, true);
+  return create(...args);
+ };
+ const copyFile = f.deps.copyFile;
+ f.deps.copyFile = async (...args) => { assert.equal(args[3], args[1] === 'comment-image' ? 'comment' : 'post'); return copyFile(...args); };
+ assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, true);
+ assert.equal(f.created[1].targetId, f.created[0].shareId);
+ assert.equal(f.created[2].targetId, f.created[1].shareId);
+ assert.equal(f.created[0].crystal.subspaceId, undefined);
+ assert.equal(f.bound[1].comment, true);
+ assert.ok(f.created.every(doc => doc.ownerId === viewer.id));
+});
+
+test('attachment inspection refusal cleans copied files without creating an invalid post', async () => {
+ const f = fixture();
+ f.deps.inspect = async () => ({ ok: false, status: 409, error: 'Attachment unavailable' });
+ assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
+ assert.equal(f.created.length, 0);
+ assert.equal(f.removedFiles.length, 2);
+});
+
+test('a changed source or new nested reply invalidates the snapshot before writes', async () => {
+ for (const added of [true, false]) {
+  const f = fixture();
+  const fresh = structuredClone(f.composition);
+  if (added) fresh.docs.set('new-comment', { shareId: 'new-comment' } as any);
+  else fresh.docs.get('page')!.crystal.name = 'Edited';
+  f.deps.revalidate = async () => fresh;
+  assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
+  assert.equal(f.copied.length, 0);
+ }
 });

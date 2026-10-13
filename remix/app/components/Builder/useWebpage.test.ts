@@ -21,7 +21,7 @@ const withFetch = async <T,>(
 	Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'https://test.example' } } });
 	globalThis.fetch = ((url: string) => {
 		if (String(url) === THINGTIME_CAPABILITY_MANIFEST_PATH) {
-			return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.2.0' } } }) } as Response);
+			return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.3.0' } } }) } as Response);
 		}
 		calls.push(String(url));
 		return impl(String(url));

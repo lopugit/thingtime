@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: Existing open PR targeting develop
+        description: Existing open same-repository PR (any base branch) to preview in the develop environment
         required: true
         type: number
   repository_dispatch:

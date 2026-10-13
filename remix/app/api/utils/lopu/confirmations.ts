@@ -13,14 +13,14 @@
 // the user already approved, and only while it is still fresh.
 
 import { signPurposeToken, verifyPurposeToken } from '../auth/jwt';
-import { MAX_LOPU_CONFIRM_KEY_CHARS, MAX_LOPU_CONFIRM_SUMMARY_CHARS, type LopuApprovedAction, type LopuConfirmableTool, type LopuConfirmationAction, type LopuConfirmationGrant } from './chatTools';
+import { LOPU_TOOL_DEFINITIONS, MAX_LOPU_CONFIRM_KEY_CHARS, MAX_LOPU_CONFIRM_SUMMARY_CHARS, type LopuApprovedAction, type LopuConfirmableTool, type LopuConfirmationAction, type LopuConfirmationGrant } from './chatTools';
 
 export const LOPU_CONFIRM_PURPOSE = 'lopu-confirm';
 export const LOPU_CONFIRM_TTL_MS = 15 * 60_000;
 export const MAX_LOPU_CONFIRMATIONS_PER_REPLY = 8;
 export const MAX_LOPU_CONFIRM_TOKEN_CHARS = 4096;
 
-const CONFIRMABLE_TOOLS: readonly LopuConfirmableTool[] = ['delete_thing', 'update_thing', 'run_action', 'comment_on_thing', 'http_request'];
+const CONFIRMABLE_TOOLS: readonly LopuConfirmableTool[] = LOPU_TOOL_DEFINITIONS.filter(tool => tool.mutates).map(tool => tool.name);
 
 export type LopuConfirmationInput = { key: string; token: string };
 

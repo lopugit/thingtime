@@ -1,4 +1,6 @@
 import React from 'react';
+import { CATALOG_RECORD_ACTION } from '~/schemas/catalogRecordsSuite';
+import { LOCAL_UI_ACTION, localQueryFormInput } from './localUiAction';
 import { useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
@@ -88,7 +90,7 @@ export const toastFromResult = (
 	return { title: title || (status === 'error' ? 'Hmm 🧯' : '⚡ Done ✓'), description: message || fallback.description, status };
 };
 
-export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler }) => {
+export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler; confirm?: TtActionConfirmHandler; onLocal?: (inputs: Record<string, unknown>) => void; onPending?: (action: string | null) => void; onResult?: (outcome: { action: string; ok: boolean; result: unknown; error: string | null }) => void }) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -99,12 +101,22 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 	onUnownedRef.current = options?.onUnowned;
 	const confirmRef = React.useRef(options?.confirm);
 	confirmRef.current = options?.confirm;
+	const localRef = React.useRef(options?.onLocal);
+	localRef.current = options?.onLocal;
+	const resultRef = React.useRef(options?.onResult);
+	resultRef.current = options?.onResult;
+	const pendingRef = React.useRef(options?.onPending);
+	pendingRef.current = options?.onPending;
 	const busyRef = React.useRef(false);
+	const mountedRef = React.useRef(true);
+	React.useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 	const runtime = useWebpageRuntime();
 	const runtimeRef = React.useRef(runtime);
 	runtimeRef.current = runtime;
 	const user = useCurrentUser();
 	const signedIn = !!user?.id;
+	const identityRef = React.useRef(user?.id);
+	identityRef.current = user?.id;
 	const navigate = useNavigate();
 
 	return React.useCallback(
@@ -118,9 +130,25 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			if (tag === 'input' || tag === 'select' || tag === 'textarea' || tag === 'option' || tag === 'label') return;
 			event.preventDefault();
 			event.stopPropagation();
-			if (busyRef.current) return;
+			if (busyRef.current || control.matches(':disabled') || control.getAttribute('aria-disabled') === 'true') return;
 			const action = control.getAttribute('data-tt-action') || '';
 			if (!action) return;
+			if (action === LOCAL_UI_ACTION) {
+				try {
+					const input = JSON.parse(control.getAttribute('data-tt-action-inputs') || '{}');
+					if (input && typeof input === 'object' && !Array.isArray(input)) {
+						const wrapper = event.currentTarget as HTMLElement;
+						const fieldset = control.closest('fieldset') as HTMLElement | null;
+						const group = fieldset && wrapper.contains(fieldset) ? fieldset : wrapper;
+						if (input.op === 'query' && input.form === true) {
+							const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
+							if (invalid) { invalid.reportValidity(); return; }
+							localRef.current?.(localQueryFormInput(input, gatherFormFields(group)));
+						} else localRef.current?.(input);
+					}
+				} catch {}
+				return;
+			}
 			if (action === REFRESH_ACTION) {
 				runtimeRef.current.refresh();
 				return;
@@ -150,16 +178,34 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			// component with an <input name="nickname"> and a button IS a form.
 			// The group is the closest <fieldset> around the control (so one
 			// component can hold several independent forms), else the whole
-			// component root. Field values win over the static inputs; untouched
-			// fields keep them.
+			// component root. Fields win over static inputs, including explicit
+			// empty text; excluded or missing fields preserve static inputs.
 			const group = (control.closest('fieldset') as HTMLElement | null) || (event.currentTarget as HTMLElement);
-			inputs = { ...inputs, ...gatherFormFields(group) };
+			if (group.querySelector('[data-tt-upload-blocking="true"]')) {
+				lopuRef.current({ title: 'Finish adding your file', description: 'Wait for the upload, then choose Use file before running this form.', status: 'info' });
+				return;
+			}
+			const invalid = Array.from(group.querySelectorAll<HTMLInputElement>('input, select, textarea')).find((field) => !field.checkValidity());
+			if (invalid) { invalid.reportValidity(); return; }
+			try { inputs = { ...inputs, ...gatherFormFields(group) }; }
+			catch (error) {
+				lopuRef.current({ title: 'Check the form', description: messageOf(error), status: 'error' });
+				return;
+			}
 			busyRef.current = true;
+			const identity = identityRef.current;
+			const runRuntime = runtimeRef.current;
+			const runApi = apiRef.current;
+			const reportResult = resultRef.current;
+			const reportPending = pendingRef.current;
+			const onUnowned = onUnownedRef.current;
+			control.setAttribute('aria-busy', 'true');
+			reportPending?.(action);
 			(async () => {
 				try {
 					if (confirmRef.current && !runtimeRef.current.sharedRun) {
 						const approved = await confirmRef.current({ action, inputs });
-						if (!approved) return;
+						if (!mountedRef.current || identity !== identityRef.current || !approved) return;
 					}
 					// source: 'component' NARROWS server-side resolution to actions
 					// this viewer owns. Markup can name any id, so the delegated
@@ -168,13 +214,27 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 					const outcome = await runDelegatedAction({
 						action,
 						inputs,
-						run: () => runtimeRef.current.sharedRun ? runtimeRef.current.sharedRun(action, inputs) : apiRef.current.v1.actions.run({ action, inputs, source: 'component' }),
-						onUnowned: onUnownedRef.current
+						run: () => {
+							if (!mountedRef.current || identity !== identityRef.current) throw new Error('Account changed');
+							return runRuntime.sharedRun ? runRuntime.sharedRun(action, inputs) : runApi.v1.actions.run({ action, inputs, source: 'component' });
+						},
+						onUnowned: async (key, fields) => {
+							if (!mountedRef.current || identity !== identityRef.current) return false;
+							if (key === CATALOG_RECORD_ACTION) {
+								const { installSuiteOnServer } = await import('../Builder/installSuite');
+								await installSuiteOnServer('catalog-records', { onlyMissing: true });
+								return true;
+							}
+							return onUnowned?.(key, fields) ?? false;
+						}
 					});
+					if (!mountedRef.current || identity !== identityRef.current) return;
 					const response = outcome.response;
 					if (outcome.error !== undefined) {
 						lopuRef.current({ title: 'That didn’t work 😔', description: outcome.error || undefined, status: 'error' });
-						runtimeRef.current.report({ action, ok: false, result: null, error: outcome.error || 'failed' });
+						const report = { action, ok: false, result: null, error: outcome.error || 'failed' };
+						runRuntime.report(report);
+						reportResult?.(report);
 					} else if (response?.status === 'ok') {
 						const toast = toastFromResult(response.result, {
 							title: '⚡ Action ran ✓',
@@ -187,13 +247,26 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 								...(!runtimeRef.current.sharedRun ? { link: { label: 'Inspect the run', href: `/actions/${encodeURIComponent(response.actionId || action)}` } } : {})
 							});
 						}
-						runtimeRef.current.report({ action, ok: true, result: response.result ?? null, error: null });
+						const report = { action, ok: true, result: response.result ?? null, error: null };
+						runRuntime.report(report);
+						reportResult?.(report);
 					} else {
 						lopuRef.current({ title: 'The action finished with an error 🧯', description: response?.error || undefined, status: 'error' });
-						runtimeRef.current.report({ action, ok: false, result: null, error: response?.error || 'error' });
+						const report = { action, ok: false, result: null, error: response?.error || 'error' };
+						runRuntime.report(report);
+						reportResult?.(report);
+					}
+				} catch {
+					if (mountedRef.current && identity === identityRef.current) {
+						lopuRef.current({ title: 'Could not run this action', status: 'error' });
+						const report = { action, ok: false, result: null, error: 'Could not run this action' };
+						runRuntime.report(report);
+						reportResult?.(report);
 					}
 				} finally {
+					control.removeAttribute('aria-busy');
 					busyRef.current = false;
+					if (mountedRef.current) reportPending?.(null);
 				}
 			})();
 		},

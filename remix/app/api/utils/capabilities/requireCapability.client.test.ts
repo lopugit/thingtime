@@ -91,3 +91,15 @@ test('timed out negotiation is bounded and can be retried', async (t) => {
   assert.equal(fetchMock.mock.callCount(), 2);
   assert.equal(controllers.length, 2);
 });
+
+test('archive clients reject missing, older and breaking contracts but accept compatible versions', async (t) => {
+ for (const [feature, minimum] of [['api.lopu-chats', '1.4.0'], ['api.lopu-chats-update', '1.3.0']]) {
+  for (const version of [undefined, '1.2.0', '2.0.0', minimum, '1.9.1']) {
+   const mock = t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: version ? { [feature]: { version } } : {} }));
+   const check = createThingtimeCapabilityChecker();
+   if (version === minimum || version === '1.9.1') await check(feature, minimum);
+   else await assert.rejects(check(feature, minimum));
+   mock.mock.restore();
+  }
+ }
+});

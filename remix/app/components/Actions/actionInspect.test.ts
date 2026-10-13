@@ -190,6 +190,9 @@ test('coerceInputDefault coerces toward the declared type only', () => {
 	assert.equal(coerceInputDefault('true', 'text'), 'true');
 	assert.equal(coerceInputDefault('sent', 'enum'), 'sent');
 	assert.equal(coerceInputDefault('0412345678', 'string'), '0412345678');
+	assert.deepEqual(coerceInputDefault('{"items":[0,false,null]}', 'json'), { items: [0, false, null] });
+	assert.equal(coerceInputDefault('null', 'json'), null);
+	assert.throws(() => coerceInputDefault('{', 'json'));
 });
 
 // Duplicate actionKeys must resolve identically in the inspector and the
@@ -215,9 +218,9 @@ test('selectActionByKey: id wins, then the latest actionKey revision', () => {
 // every program unconditionally.
 test('a composing action does not claim negatives its children can break', () => {
 	const composed = actionCannotAccess([{ capability: 'actions.invoke', actions: ['make-invoice'] }]);
-	assert.ok(composed.includes('No network'), 'vocabulary negatives always hold');
-	assert.ok(composed.includes('No secrets'));
-	assert.ok(composed.includes('No deletes'));
+	assert.equal(composed.includes('No network'), false, 'a child can perform a registered lookup');
+	assert.equal(composed.includes('No secrets'), false);
+	assert.equal(composed.includes('No deletes'), false, 'a child may delete');
 	assert.equal(composed.includes('Cannot create things'), false, 'a child may create');
 	assert.equal(composed.includes('Cannot update things'), false, 'a child may update');
 	assert.equal(composed.includes('Cannot read things'), false, 'a child may read');

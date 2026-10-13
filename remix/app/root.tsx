@@ -1,3 +1,6 @@
+import { ThingDraftsProvider } from './drafts/ThingDrafts';
+import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
+import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
 import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
@@ -11,6 +14,8 @@ import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
 import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+import { TimelineHost } from './components/Timeline/TimelineHost';
+import { TimelineProvider } from './timeline/TimelineProvider';
 import { DevKit } from './components/DevKit/DevKit';
 import { ElectronBridgeHost } from './components/Electron/ElectronBridgeHost';
 import { NativeBridgeHost } from './components/NativeBridge/NativeBridgeHost';
@@ -20,10 +25,10 @@ import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
 import { LopuPositionSync } from './components/Lopu/useLopuPosition';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
-import { QuickSwitcher } from './components/QuickSwitcher/QuickSwitcher';
 import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
 import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals';
 import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
+import { LopuPageTracker } from './components/Lopu/useLopuPages';
 import { LopuHost } from './components/Lopu/LopuHost';
 import { rememberAuthReturnTo } from './utils/authReturn';
 import { bindTransferIdentity } from './utils/thingTransfer/intent';
@@ -62,7 +67,8 @@ export default function App() {
   React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
-  const isAuthorizePopup = pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const isStandalonePage = pathname.startsWith('/t/');
+  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
   React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
@@ -100,13 +106,7 @@ export default function App() {
       // viewer — nothing would then set its title and the tab would keep the
       // previous page's one.
       if (pathname === '/marketing' || pathname.startsWith('/marketing/')) return;
-      // The route -> title table now lives in utils/pageTitle (shared with the
-      // server-rendered social meta). /connections only exists on this branch,
-      // so layer it on top here instead of forking the shared helper.
-      const baseTitle = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
-      document.title = pathname.startsWith('/connections')
-        ? `${baseTitle} - Connections`
-        : pageTitle(pathname, titlePrefix);
+      document.title = pageTitle(pathname, titlePrefix);
     }
   }, [pathname, titlePrefix]);
 
@@ -126,8 +126,18 @@ export default function App() {
   return (
     <ChakraWrapper>
       <GlobalStyles />
-      <ThingtimeProvider key={rootData.user?.id || 'guest'}>
+      <style>{`
+        ${PAGE_VIEWPORT_CSS}
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid="site-edit-pill"],
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
+        html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
+      `}</style>
+      <ThingtimeProvider key={rootData.user?.id || 'guest'} accountId={rootData.user?.id} storageKey={rootData.user?.id ? `thingtime:account:${rootData.user.id}` : 'thingtime'}>
+        <ThingDraftsProvider>
+         <TimelineProvider>
+         {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
         <VisualSettingsHost />
+        <LopuPageTracker />
         <ThemeHost />
         {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
         <LopuPositionSync />
@@ -136,8 +146,10 @@ export default function App() {
         {/* Invite signup and authorization/pairing use a focused auth
             surface with their own chrome, so the app shell (nav, drawer trigger,
             DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
+        <div id="lopuPageViewport">
         {isAuthorizePopup ? null : <DevKit />}
         {isAuthorizePopup ? null : <Nav />}
+        <div id="lopuPageScroll">
         {isAuthorizePopup ? (
           <Outlet />
         ) : (
@@ -149,11 +161,12 @@ export default function App() {
             </SiteBlocksHost>
           </Main>
         )}
+        </div>
         {isAuthorizePopup ? null : <DrawerSystem />}
+        </div>
         {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
         {mounted && !isAuthorizePopup ? <LopuHost /> : null}
         {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
-        {mounted && !isAuthorizePopup ? <QuickSwitcher /> : null}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
         {mounted && !isAuthorizePopup ? <WatchPendingApprovals /> : null}
@@ -161,8 +174,10 @@ export default function App() {
             "continue as" suggestions (cross-deployment auto-login). */}
         {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
-        <ConfettiCanvas />
-        {mounted ? <EasterEggs /> : null}
+        {!isStandalonePage ? <ConfettiCanvas /> : null}
+        {mounted && !isStandalonePage ? <EasterEggs /> : null}
+         </TimelineProvider>
+        </ThingDraftsProvider>
       </ThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}

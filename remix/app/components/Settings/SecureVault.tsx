@@ -2,6 +2,7 @@ import React from 'react';
 import { Badge, Box, Button, Flex, Input, Select, Text } from '@chakra-ui/react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { VaultReveal } from './VaultReveal';
 
 type Group = { id: string; name: string };
@@ -30,6 +31,7 @@ const fieldStyles = {
 const emptyVault: VaultPayload = { vaultConfigured: false, groups: [], entries: [], providerTemplates: [] };
 
 const postVault = async (body: Record<string, unknown>) => {
+	await requireThingtimeCapability('api.lopu-vault', body.action === 'move-entry' ? '1.2.0' : '1.1.0');
 	const response = await fetch('/api/v1/lopu/vault', {
 		method: 'POST',
 		credentials: 'include',
@@ -46,6 +48,8 @@ export const SecureVault = () => {
 	const [busy, setBusy] = React.useState(false);
 	const [groupName, setGroupName] = React.useState('');
 	const [groupId, setGroupId] = React.useState('');
+	const [secretGroupId, setSecretGroupId] = React.useState('');
+	const [editingEnvironment, setEditingEnvironment] = React.useState<{ id: string; groupId: string } | null>(null);
 	const [secretName, setSecretName] = React.useState('');
 	const [secretKey, setSecretKey] = React.useState('');
 	const [secretValue, setSecretValue] = React.useState('');
@@ -156,7 +160,7 @@ export const SecureVault = () => {
 					) : null}
 					<Input {...fieldStyles} type="password" autoComplete="new-password" value={providerToken} onChange={(event) => setProviderToken(event.target.value)} placeholder="Provider token (encrypted)" aria-label="Provider token" />
 					<Select {...fieldStyles} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Provider environment">
-						<option value="">No environment</option>
+						<option value="">Ungrouped</option>
 						{vault.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
 					</Select>
 					<Button alignSelf="flex-start" isLoading={busy} isDisabled={!vault.vaultConfigured} onClick={() => run({ action: 'save-provider', name: providerName, provider: templateId, endpoint: providerEndpoint, model: modelToSave, token: providerToken, groupId }, 'AI provider saved', () => setProviderToken(''))}>Save provider</Button>
@@ -169,7 +173,12 @@ export const SecureVault = () => {
 					<Input {...fieldStyles} value={secretName} onChange={(event) => setSecretName(event.target.value)} placeholder="Display name" aria-label="Secret display name" />
 					<Input {...fieldStyles} value={secretKey} onChange={(event) => setSecretKey(event.target.value)} placeholder="Key, e.g. SERVICE_TOKEN" aria-label="Secret key" />
 					<Input {...fieldStyles} type="password" autoComplete="new-password" value={secretValue} onChange={(event) => setSecretValue(event.target.value)} placeholder="Value (encrypted)" aria-label="Secret value" />
-					<Button alignSelf="flex-start" isLoading={busy} isDisabled={!vault.vaultConfigured} onClick={() => run({ action: 'save-secret', name: secretName, key: secretKey, value: secretValue, groupId }, 'Secret saved', () => { setSecretName(''); setSecretKey(''); setSecretValue(''); })}>Save secret</Button>
+					<Text as="label" htmlFor="vault-secret-environment" fontSize="sm">Environment</Text>
+					<Select {...fieldStyles} id="vault-secret-environment" value={secretGroupId} onChange={(event) => setSecretGroupId(event.target.value)} aria-label="Secret environment">
+						<option value="">Ungrouped</option>
+						{vault.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+					</Select>
+					<Button alignSelf="flex-start" isLoading={busy} isDisabled={!vault.vaultConfigured} onClick={() => run({ action: 'save-secret', name: secretName, key: secretKey, value: secretValue, groupId: secretGroupId }, 'Secret saved', () => { setSecretName(''); setSecretKey(''); setSecretValue(''); })}>Save secret</Button>
 				</Flex>
 			</Box>
 
@@ -179,13 +188,20 @@ export const SecureVault = () => {
 				<Flex flexDirection="column" gap={2}>
 					{vault.entries.map((entry) => (
 						<Flex key={entry.id} alignItems="center" gap={2} border="1px solid var(--tt-border, #ececef)" borderRadius="10px" p={3} flexWrap="wrap">
-							<Box minWidth={0} flex="1">
+							<Box minWidth={0} flex={{ base: '1 1 100%', md: '1 1 200px' }}>
 								<Text fontSize="sm" fontWeight={700}>{entry.name}</Text>
 								<Text fontSize="xs" color="var(--tt-muted, #777783)" wordBreak="break-word">{entry.kind === 'provider' ? [entry.provider, entry.model, entry.endpoint].filter(Boolean).join(' · ') : entry.key}</Text>
 							</Box>
-							<Badge>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'}</Badge>
+							{editingEnvironment?.id === entry.id ? <Flex width="100%" gap={2} flexWrap="wrap" alignItems="center">
+         <Text as="label" htmlFor={`vault-env-${entry.id}`} fontSize="sm">Environment</Text>
+         <Select {...fieldStyles} id={`vault-env-${entry.id}`} aria-label={`Environment for ${entry.name}`} flex="1" minWidth="160px" value={editingEnvironment.groupId} isDisabled={busy} onChange={event => setEditingEnvironment({ id: entry.id, groupId: event.target.value })}>
+          <option value="">Ungrouped</option>{vault.groups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}
+         </Select>
+         <Button size="sm" isLoading={busy} onClick={() => run({ action: 'move-entry', id: entry.id, groupId: editingEnvironment.groupId }, 'Environment updated', () => setEditingEnvironment(null))}>Save environment</Button>
+         <Button size="sm" variant="ghost" isDisabled={busy} onClick={() => setEditingEnvironment(null)}>Cancel</Button>
+        </Flex> : <Button size="sm" variant="outline" isDisabled={busy} aria-label={`Change environment for ${entry.name}`} onClick={() => setEditingEnvironment({ id: entry.id, groupId: entry.groupId || '' })}>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'} · Change</Button>}
 							<VaultReveal vault="personal" id={entry.id} label={entry.name} />
-							<Button size="xs" variant="ghost" onClick={() => deleteEntry(entry)}>Delete</Button>
+							<Button size="xs" variant="ghost" isDisabled={busy} onClick={() => deleteEntry(entry)}>Delete</Button>
 						</Flex>
 					))}
 				</Flex>

@@ -3,7 +3,11 @@ export const AI_TASK_PATH = '/api/v1/lopu/tasks';
 export const AI_TASK_HEADER = 'X-Thingtime-Background-Id';
 export const AI_TASK_OWNER_HEADER = 'X-Thingtime-Task-Owner';
 export const AI_TASK_KIND = 'lopu-background-task';
-export const AI_TASK_MAX_MS = 260_000;
+// Expiring worker lease, renewed while alive; not a task runtime limit.
+export const AI_TASK_LEASE_MS = 30_000;
+// Allow the durable scheduler to dispatch a new root, then fail closed if no
+// worker ever claims it. This is separate from a running worker heartbeat.
+export const AI_TASK_ADMISSION_LEASE_MS = 5 * 60_000;
 export const AI_TASK_MAX_BYTES = 2 * 1024 * 1024;
 export const AI_TASK_OPERATIONS: Record<string, { method: string; label: string; feature: string }> = {
 	'/api/v1/lopu/chats/reply': { method: 'POST', label: 'Lopu chat', feature: 'api.lopu-chats-reply' },
@@ -14,6 +18,9 @@ export const AI_TASK_OPERATIONS: Record<string, { method: string; label: string;
 export type AiTaskStatus = 'running' | 'completed' | 'needs-attention' | 'stopped';
 export type AiBackgroundTask = {
 	id: string;
+ management?: 'client' | 'server';
+ rootTaskId?: string | null;
+ workflowStatus?: AiTaskStatus | null;
 	requestId: string;
 	label: string;
 	path: string;
@@ -29,4 +36,4 @@ export type AiBackgroundTask = {
 };
 export const validAiTaskRequestId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
 export const taskNeedsAttention = (stopReason: unknown) =>
-	['error', 'max_tokens', 'tool_limit', 'hop_limit', 'time_limit'].includes(String(stopReason));
+	['checkpoint', 'error', 'max_tokens', 'tool_limit', 'hop_limit', 'time_limit'].includes(String(stopReason));

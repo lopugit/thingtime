@@ -1,3 +1,4 @@
+import { createCanViewHomeAttachmentTarget } from './attachmentAccess';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -6,7 +7,7 @@ import {
 	attachmentExpectedPartBytes,
 	attachmentIdForRequest,
 	createReadyAttachmentPostInsertHook,
-	createAttachmentService,
+	createAttachmentService as createProductionAttachmentService,
 	validateCompletedAttachmentParts
 } from './attachments';
 import {
@@ -24,6 +25,9 @@ import {
 import type { AttachmentS3 } from './privateS3';
 import { StorageMutationError } from '../storage/storageCore';
 import { PrivateS3ConfigError } from './config';
+
+const createAttachmentService = (overrides: Parameters<typeof createProductionAttachmentService>[0] = {}) =>
+  createProductionAttachmentService({ ownedMediaDraftIds: async () => [], ...overrides });
 
 const checksum = (byte: number) => Buffer.alloc(32, byte).toString('base64');
 const now = new Date('2026-08-09T00:00:00.000Z');
@@ -102,8 +106,8 @@ test('import annotation fence refuses already-bound, expired and non-post drafts
 	}
 });
 
-test('durable recording export and download work without a draft expiry, for the owner only', async () => {
-	const saved = attachmentDoc({ attachmentPurpose: 'recording', attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: 'version-1' });
+for (const purpose of ['recording', 'file'] as const) test(`${purpose}: durable recording export and download work without a draft expiry, for the owner only`, async () => {
+	const saved = attachmentDoc({ attachmentPurpose: purpose, attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: 'version-1' });
 	let doc = saved;
 	let signs = 0;
 	let custom = false;
@@ -1903,7 +1907,7 @@ test('global expired draft scan is expiry-first, unattached, bounded, and repeat
 		attachmentExpiresAt: { $lte: now },
 		$or: [
 			{ targetId: { $exists: false }, attachmentState: 'pending' },
-			{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $ne: 'recording' } }, { attachmentPurpose: 'recording', attachmentImportDraft: true }] },
+			{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $nin: ['recording', 'file'] } }, { attachmentPurpose: { $in: ['recording', 'file'] }, attachmentImportDraft: true }] },
 			{
 				targetId: { $exists: false },
 				attachmentState: 'finalizing',
@@ -2320,7 +2324,7 @@ test('detection backfill validates input, fails closed off the home plane, and s
 });
 
 
-test('recording upload starts remain owner-bound and replay a completed Thing without a second reservation', async () => {
+for (const purpose of ['recording', 'file'] as const) test(`${purpose}: recording upload starts remain owner-bound and replay a completed Thing without a second reservation`, async () => {
   const stored = new Map<string, AttachmentDoc>();
   let reservations = 0;
   let creates = 0;
@@ -2341,14 +2345,14 @@ test('recording upload starts remain owner-bound and replay a completed Thing wi
   };
   const service = createAttachmentService({ store, now: () => now, customMongoActive: () => false,
     getS3: () => noopS3({ createMultipartUpload: async () => { creates++; return { uploadId: 'mpu' }; } }) });
-  const input = { requestId: 'voice-recording-1', filename: 'Lopu.m4a', contentType: 'audio/mp4', sizeBytes: 100, purpose: 'recording' };
+  const input = { requestId: 'voice-recording-1', filename: 'Lopu.m4a', contentType: 'audio/mp4', sizeBytes: 100, purpose };
   const start = await service.start('user-1', input);
   assert.equal(start.ok, true);
   if (!start.ok) return;
   const id = start.upload.id as string;
   const draft = stored.get(id)!;
   assert.deepEqual(draft.acl, ['tt:user']);
-  assert.equal(draft.attachmentPurpose, 'recording');
+  assert.equal(draft.attachmentPurpose, purpose);
   stored.set(id, { ...draft, attachmentState: 'ready', attachmentExpiresAt: undefined, uploadId: undefined, objectVersionId: 'version-1' });
   const replay = await service.start('user-1', input);
   assert.equal(replay.ok, true);
@@ -2378,4 +2382,58 @@ test('subspace uploads stamp slot-specific purposes and bound raster limits befo
     for (const [contentType, sizeBytes] of [['image/svg+xml', 128], ['text/plain', 128], ['image/png', 64 * 1024 * 1024 + 1]]) assert.equal((await service.start('user-1', { filename: 'bad', contentType, sizeBytes, purpose })).ok, false);
     assert.equal(reserved.length, count);
   }
+});
+
+
+test('posts accept more than 25 owned ready attachments without relaxing other purposes or identity validation', async () => {
+	let purpose: 'post' | 'comment' | 'message' = 'post';
+	const ids = Array.from({ length: 80 }, (_, index) => `large-gallery-${index}`);
+	const service = createAttachmentService({
+		store: { getOwnedMany: async (owner: string, requested: string[]) => requested.map(shareId => attachmentDoc({
+			shareId, ownerId: owner, attachmentPurpose: purpose, attachmentState: 'ready', uploadId: undefined
+		})) } as any,
+		now: () => now, customMongoActive: () => false
+	});
+	assert.equal((await service.inspectForPost('user-1', ids)).ok, true);
+	assert.equal((await service.inspectForPost('user-1', [...ids, ids[0]])).ok, false);
+	purpose = 'comment';
+	assert.equal((await service.inspectForComment('user-1', ids)).ok, false);
+	purpose = 'message';
+	assert.equal((await service.inspectForMessage('user-1', ids)).ok, false);
+	assert.equal((await service.inspectForPost('user-1', ids)).ok, false);
+});
+
+
+test('a fresh anonymous video download follows its plain permalink through a comment and rechecks revocation', async () => {
+  const root: any = { shareId: 'hidden-root', ownerId: 'root-owner', thingtime: ['post'], acl: ['tt:hidden', 'tt:custom', 'tt:user/invited'] };
+  const comment: any = { shareId: 'comment', ownerId: 'user-1', thingtime: ['post', 'comment'], targetId: root.shareId, acl: ['tt:inherit'] };
+  const doc = attachmentDoc({ attachmentPurpose: 'comment', attachmentState: 'ready', targetId: comment.shareId, acl: ['tt:inherit'], objectVersionId: 'version-1', attachmentExpiresAt: undefined,
+    moderation: { status: 'clean' } as any, crystal: { name: 'clip.mp4', contentType: 'video/mp4', mediaKind: 'video', size: 10 } });
+  const canViewTarget = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async ({ shareId }: any) => [root, comment].find(row => row.shareId === shareId) || null } as any) });
+  let signs = 0;
+  const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+    customMongoActive: () => false, canViewTarget, canViewSharedTarget: async () => false,
+    getS3: () => noopS3({ signDownload: async () => { signs++; return { url: 'https://s3.example/video', expiresAt: now.toISOString() }; } }) });
+  assert.equal((await service.download(null, doc.shareId, false)).ok, true);
+  assert.equal(signs, 1);
+  root.acl = ['tt:custom', 'tt:group/family'];
+  assert.equal((await service.download(null, doc.shareId, false)).ok, false);
+  assert.equal(signs, 1, 'revoked viewers never reach S3');
+  assert.equal((await service.download({ id: 'member', groupIds: new Set(['family']) }, doc.shareId, false)).ok, true);
+  root.acl = ['tt:user'];
+  assert.equal((await service.download(null, doc.shareId, false)).ok, false);
+});
+
+test('only an authorized working draft can donate a bound file to a post', async () => {
+  const doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'draft-1', attachmentExpiresAt: undefined });
+  let eligible = true;
+  const service = createAttachmentService({
+    store: { getOwnedMany: async () => [doc] } as any, now: () => now, customMongoActive: () => false,
+    ownedMediaDraftIds: async (owner, targets) => { assert.equal(owner, 'user-1'); assert.deepEqual(targets, ['draft-1']); return eligible ? ['draft-1'] : []; }
+  });
+  assert.equal((await service.inspectForPost('user-1', ['attachment-1'])).ok, true);
+  eligible = false;
+  const rejected = await service.inspectForPost('user-1', ['attachment-1']);
+  assert.equal(rejected.ok, false);
+  if (rejected.ok === false) assert.equal(rejected.status, 409);
 });

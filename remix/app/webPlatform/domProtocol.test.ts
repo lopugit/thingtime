@@ -1,0 +1,187 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import vm from 'node:vm';
+import { compilePlatformProgram } from './compiler';
+import { compilePlatformWorker } from './workerSource';
+import {
+	array,
+	awaited,
+	declare,
+	domCall,
+	domDocument,
+	domGet,
+	domSurface,
+	domConstruct,
+	domConstant,
+	fn,
+	get,
+	global,
+	method,
+	returns,
+	variable
+} from './programBuilders';
+import { DOM_BOUNDARY_FIXTURES } from './domBoundaryFixtures';
+
+test('real-browser DOM boundary fixtures remain valid reusable programs', () => {
+	for (const fixture of DOM_BOUNDARY_FIXTURES) assert.doesNotThrow(() => compilePlatformWorker(fixture.program), fixture.name);
+});
+
+async function run(steps: unknown[], reply: (request: any) => unknown, input = {}) {
+	const requests: any[] = [],
+		results: any[] = [];
+	const context: any = { inputJSON: JSON.stringify(input) };
+	context.postMessage = (value: any) => {
+		if (value.type === 'tt-platform-dom') {
+			// structuredClone, not JSON: the real worker boundary rejects an
+			// uncloneable argument instead of silently dropping it.
+			requests.push(structuredClone(value));
+			const response = structuredClone({ type: 'tt-platform-dom-result', id: value.id, result: reply(value) });
+			queueMicrotask(() => context.onmessage({ data: response }));
+		} else if (value.type !== 'tt-platform-worker-ready') results.push(JSON.parse(JSON.stringify(value)));
+	};
+	await vm.runInNewContext(`${compilePlatformWorker({ version: 1, title: 'DOM program', steps })};onmessage({data:JSON.parse(inputJSON)})`, context, {
+		timeout: 1000
+	});
+	return { requests, results, context };
+}
+
+test('the compiled worker routes document handles across awaited program steps', async () => {
+	const handle = { $dom: 'run:1', type: 'Document' };
+	const result = await run([declare('doc', domDocument()), ...returns(domGet(variable('doc'), 'nodeType'))], (request) => ({
+		value: request.action === 'document' ? handle : 9
+	}));
+	assert.deepEqual(result.requests, [
+		{ type: 'tt-platform-dom', id: 1, action: 'document', target: null, key: '', args: [] },
+		{ type: 'tt-platform-dom', id: 2, action: 'get', target: handle, key: 'nodeType', args: [] }
+	]);
+	assert.deepEqual(result.results, [{ ok: true, result: 9 }]);
+	await result.context.onmessage({ data: { type: 'tt-platform-dom-result', id: 2, result: { value: 123 } } });
+	await result.context.onmessage({ data: {} });
+	assert.equal(result.results.length, 1, 'late replies and duplicate input cannot rerun a program');
+});
+
+test('native DOM exceptions remain catchable while unsupported members stay explicit', async () => {
+	const steps = [{ op: 'try', body: returns(domDocument()), error: 'error', catch: returns(get(variable('error'), 'name')) }];
+	const caught = await run(steps, () => ({ error: { name: 'SyntaxError', message: 'Invalid selector' } }));
+	assert.deepEqual(caught.results, [{ ok: true, result: 'SyntaxError' }]);
+	const missing = await run(returns(domDocument()), () => ({ error: { name: 'UnsupportedDOMMember', message: 'Missing moveBefore' } }));
+	assert.deepEqual(missing.results, [{ ok: false, result: { status: 'unsupported', message: 'Missing moveBefore' } }]);
+});
+
+test('synchronous callback throws retain falsy data and nested receiver identity', async () => {
+	for (const thrown of [undefined, null, false, 0, '', { reason: 'filtered' }]) {
+		const result = await run([{ op: 'try', body: returns(domDocument()), error: 'caught', catch: returns(variable('caught')) }], () => ({
+			error: { name: 'AuthoredCallbackThrown', message: 'callback', thrown }
+		}));
+		assert.deepEqual(result.results, [{ ok: true, result: thrown === undefined ? '[undefined]' : thrown }]);
+	}
+	const handle = { $dom: 'run:node', type: 'Element' };
+	const result = await run(
+		[
+			declare('node', domDocument()),
+			declare('bindings', domGet(variable('node'), 'bindings')),
+			...returns({ op: 'binary', operator: '===', left: variable('node'), right: get(variable('bindings'), 'node') })
+		],
+		(request) => ({ value: request.action === 'document' ? handle : { node: handle } })
+	);
+	assert.deepEqual(result.results, [{ ok: true, result: true }]);
+});
+
+test('DOM syntax never interpolates member source and reserves its backing helper', () => {
+	for (const value of [
+		{ op: 'dom', action: 'eval' },
+		{ op: 'dom', action: 'get', target: null, key: 'x);throw 1' },
+		{ op: 'global', name: '__ttDom' }
+	])
+		assert.throws(() => compilePlatformProgram({ version: 1, title: 'Invalid DOM', steps: returns(value) }));
+	assert.match(
+		compilePlatformProgram({ version: 1, title: 'Allowed member data', steps: returns(domCall(null, 'append', ['literal'])) }),
+		/__ttDom\("call"/
+	);
+});
+
+test('repeated handles retain receiver identity and undefined native returns stay undefined', async () => {
+	const handle = { $dom: 'run:1', type: 'Document' };
+	const result = await run(
+		[
+			declare('a', domDocument()),
+			declare('b', domDocument()),
+			...returns({ op: 'binary', operator: '===', left: variable('a'), right: variable('b') })
+		],
+		() => ({ value: handle })
+	);
+	assert.deepEqual(result.results, [{ ok: true, result: true }]);
+	const voidResult = await run(returns(domDocument()), () => ({ value: undefined }));
+	assert.deepEqual(voidResult.results, [{ ok: true, result: '[undefined]' }]);
+});
+
+test('native FrozenArray transport preserves cached array and contained receiver identity', async () => {
+	const handle = { $dom: 'run:element', type: 'Element' };
+	const list = { $domArray: 'run:array:1', items: [handle] };
+	const result = await run(
+		[
+			declare('a', domDocument()),
+			declare('b', domDocument()),
+			...returns(
+				array(
+					{ op: 'binary', operator: '===', left: variable('a'), right: variable('b') },
+					{ op: 'binary', operator: '===', left: get(variable('a'), 0), right: get(variable('b'), 0) },
+					method(global('Object'), 'isFrozen', [variable('a')]),
+					method(global('Reflect'), 'set', [variable('a'), '0', null])
+				)
+			)
+		],
+		() => ({ value: list })
+	);
+	assert.deepEqual(result.results, [{ ok: true, result: [true, true, true, false] }]);
+});
+
+test('a refused DOM request leaves the frame-side request numbering intact', async () => {
+	// The bridge accepts a request only when its id equals its own request count,
+	// so a refused request must not consume an id. Exceeding the concurrency
+	// budget and posting an uncloneable argument are both catchable program
+	// errors; neither may desynchronise the operations that follow.
+	const concurrent = { op: 'dom', action: 'document' };
+	const attempt = (body: unknown[]) => [{ op: 'try', body, error: 'e', catch: [] }, ...returns(domDocument())];
+	const budget = await run(
+		attempt([{ op: 'expression', value: awaited(method(global('Promise'), 'all', [array(...Array.from({ length: 33 }, () => concurrent))])) }]),
+		() => ({ value: null })
+	);
+	const uncloneable = await run(attempt(returns(domCall(null, 'append', [fn([], 1)]))), () => ({ value: null }));
+	for (const { requests } of [budget, uncloneable])
+		assert.deepEqual(
+			requests.map((request) => request.id),
+			requests.map((_, index) => index + 1),
+			'posted DOM request ids stay contiguous'
+		);
+	assert.deepEqual(budget.results, [{ ok: true, result: null }]);
+	assert.deepEqual(uncloneable.results, [{ ok: true, result: null }]);
+});
+
+test('an ordinary parameter named type cannot impersonate a bridge reply before execution', async () => {
+	const result = await run(returns(42), () => ({}), { type: 'tt-platform-dom-result', id: 1 });
+	assert.deepEqual(result.results, [{ ok: true, result: 42 }]);
+});
+
+test('surface and bounded native constructors use the same worker transport', async () => {
+	const result = await run([declare('surface', domSurface()), ...returns(domConstruct('Path2D', ['M0 0L8 8']))], (request) => ({
+		value: request.action === 'surface' ? { $dom: 'run:1', type: 'Element' } : { $dom: 'run:2', type: 'Path2D' }
+	}));
+	assert.deepEqual(
+		result.requests.map((r) => [r.action, r.target, r.key, r.args]),
+		[
+			['surface', null, '', []],
+			['construct', null, 'Path2D', ['M0 0L8 8']]
+		]
+	);
+	assert.equal(result.results[0].ok, true);
+});
+
+test('primitive IDL constants cross the worker boundary without exposing a constructor', async () => {
+	const result = await run(returns(domConstant('SVGUnitTypes', 'SVG_UNIT_TYPE_USERSPACEONUSE')), () => ({ value: 1 }));
+	assert.deepEqual(
+		result.requests.map(({ action, target, key, args }) => ({ action, target, key, args })),
+		[{ action: 'constant', target: 'SVGUnitTypes', key: 'SVG_UNIT_TYPE_USERSPACEONUSE', args: [] }]
+	);
+	assert.deepEqual(result.results, [{ ok: true, result: 1 }]);
+});

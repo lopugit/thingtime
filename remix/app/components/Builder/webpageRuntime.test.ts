@@ -133,3 +133,67 @@ test('a `__proto__` query key never becomes a scope entry', () => {
 	assert.equal(Object.prototype.hasOwnProperty.call(scope, '__proto__'), false);
 	assert.equal(Object.getPrototypeOf(scope), Object.prototype);
 });
+
+test('form gathering treats iframe password and checkbox fields by element type', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const fields = [
+		{ tagName: 'INPUT', type: 'password', value: 'must-not-be-collected', getAttribute: () => 'password' },
+		{ tagName: 'INPUT', type: 'checkbox', checked: false, value: 'on', getAttribute: () => 'enabled' },
+		{ tagName: 'INPUT', type: 'text', value: 'hello', getAttribute: () => 'message' }
+	];
+	const form = { querySelectorAll: () => fields.map((field) => ({ ...field, matches: () => false })) } as unknown as HTMLElement;
+	assert.deepEqual(gatherFormFields(form), { enabled: false, message: 'hello' });
+});
+
+test('forms preserve empty text, false, leading zeros and long text without collecting unsafe fields', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const fields = [
+		['notes', 'text', '', false],
+		['phone', 'text', '0412345678', false],
+		['long', 'text', 'a'.repeat(5000), false],
+		['secret', 'password', 'private', false],
+		['file', 'file', 'fakepath', false],
+		['disabled', 'text', 'old', true],
+		['constructor', 'text', 'bad', false]
+	].map(([name, type, value, disabled]) => ({ tagName: 'INPUT', type, value, getAttribute: () => name, matches: () => disabled }));
+	const result = gatherFormFields({ querySelectorAll: () => fields } as unknown as HTMLElement);
+	assert.deepEqual(result, { notes: '', phone: '0412345678', long: 'a'.repeat(5000) });
+});
+
+test('a source cache paints only the matching action and resolved input binding', () => {
+	withFakeStorage((store) => {
+		const a = JSON.stringify({ action: 'detail', inputs: { id: 'record-a' } });
+		const b = JSON.stringify({ action: 'detail', inputs: { id: 'record-b' } });
+		writeSourceCache('viewer', 'page', 'block', { id: 'record-a' }, a);
+		assert.deepEqual(readSourceCache('viewer', 'page', 'block', a), { id: 'record-a' });
+		assert.equal(readSourceCache('viewer', 'page', 'block', b), undefined);
+		writeSourceCache('viewer', 'page', 'block', { id: 'record-b' }, b);
+		assert.equal(readSourceCache('viewer', 'page', 'block', a), undefined);
+		assert.deepEqual(readSourceCache('viewer', 'page', 'block', b), { id: 'record-b' });
+		assert.equal(store.size, 1, 'record navigation reuses one bounded cache slot');
+	});
+});
+
+test('legacy unbound and malformed source caches cannot seed a new record', () => {
+	withFakeStorage((store) => {
+		const key = sourceCacheKey('viewer', 'page', 'block')!;
+		store.set(key, JSON.stringify({ id: 'old-record' }));
+		assert.equal(readSourceCache('viewer', 'page', 'block', 'new-binding'), undefined);
+		store.set(key, 'invalid json');
+		assert.equal(readSourceCache('viewer', 'page', 'block', 'new-binding'), undefined);
+		writeSourceCache('viewer', 'page', 'block', 'x'.repeat(256 * 1024), 'new-binding');
+		assert.equal(store.get(key), 'invalid json', 'oversized cache is not stored');
+	});
+});
+
+test('typed JSON form fields decode once and reject invalid drafts before an Action can run', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const form = (value: string) => ({ querySelectorAll: () => [{
+		tagName: 'INPUT', type: 'hidden', value, matches: () => false,
+		getAttribute: (key: string) => key === 'name' ? 'program' : key === 'data-tt-input-type' ? 'json' : null
+	}] } as unknown as HTMLElement);
+	for (const value of [{ nested: [[0, false], [null, '{name}']], ttArg: 'literal' }, '', 'null', '123', '$input.keep', null]) {
+		assert.deepEqual(gatherFormFields(form(JSON.stringify(value))), { program: value });
+	}
+	for (const value of ['', '{', 'x'.repeat(65537)]) assert.throws(() => gatherFormFields(form(value)), /Check the JSON/);
+});

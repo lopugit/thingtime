@@ -1,3 +1,4 @@
+import { BROWSER_ACTION_EXPANDED_LIMITS, BROWSER_EXPRESSION_DEFAULTS, BROWSER_EXPRESSION_CEILINGS, actionHttpEndpoint } from '~/schemas/browserActions';
 import {
 	ACTION_LIMIT_CEILINGS,
 	ACTION_LIMIT_DEFAULTS,
@@ -12,6 +13,7 @@ import {
 // cannot drift from the behaviour.
 
 export type ActionCrystal = {
+	runtime?: 'server' | 'browser';
 	name?: string;
 	description?: string;
 	actionKey?: string;
@@ -22,9 +24,11 @@ export type ActionCrystal = {
 	steps?: Record<string, unknown>[];
 	capabilities?: ActionCapabilityEntry[];
 	limits?: Record<string, number>;
+	expressionLimits?: Record<string, number>;
 };
 
 export type ActionThing = {
+	author?: { id: string };
 	id: string;
 	thingtime: string[];
 	crystal: ActionCrystal;
@@ -56,10 +60,14 @@ export const runInputDescriptorsOf = (crystal: ActionCrystal | null | undefined)
 // clamped by the server ceilings, defaults elsewhere.
 export const actionLimitsOf = (crystal: ActionCrystal | null | undefined): Record<string, number> => {
 	const declared = crystal?.limits || {};
+	const ceilings = crystal?.runtime === 'browser' ? { ...ACTION_LIMIT_CEILINGS, ...BROWSER_ACTION_EXPANDED_LIMITS } : ACTION_LIMIT_CEILINGS;
 	const merged: Record<string, number> = {};
 	for (const key of Object.keys(ACTION_LIMIT_DEFAULTS) as (keyof typeof ACTION_LIMIT_DEFAULTS)[]) {
 		const value = typeof declared[key] === 'number' ? declared[key] : ACTION_LIMIT_DEFAULTS[key];
-		merged[key] = Math.min(value, ACTION_LIMIT_CEILINGS[key]);
+		merged[key] = Math.min(value, ceilings[key]);
+	}
+	if (crystal?.runtime === 'browser') {
+		for (const key of ['nodes','listItems'] as const) merged[`expression.${key}`] = Math.min(crystal.expressionLimits?.[key] ?? BROWSER_EXPRESSION_DEFAULTS[key], BROWSER_EXPRESSION_CEILINGS[key]);
 	}
 	return merged;
 };
@@ -76,6 +84,11 @@ export const describeActionStep = (step: Record<string, unknown>, names?: Record
 	const op = String(step.op || '');
 	const schema = typeof step.schema === 'string' ? displayRef(step.schema, names) : 'data';
 	const guard = step.when !== undefined ? ' (when a condition holds)' : '';
+	if (op === 'http.request') {
+		const pages = step.pagination as { maxPages?: number; maxItems?: number } | undefined;
+		return `${String(step.method)} ${String(step.path)} in your browser${pages ? ` · up to ${pages.maxPages ?? 20} pages / ${pages.maxItems ?? 5000} items` : ''}${guard}`;
+	}
+	if (op === 'lookup') return `Send query to ${String(step.provider)} using your Vault credential${guard}`;
 	if (op === 'things.create') return `Create a ${schema} thing${guard}`;
 	if (op === 'things.get') return `Read ${String(step.id || 'a thing')}${guard}`;
 	if (op === 'things.search') {
@@ -106,6 +119,8 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	const scopes = new Map<string, Set<string>>();
 	const unscoped = new Set<string>();
 	const invoked = new Set<string>();
+	const providers = new Set<string>();
+	const endpoints = new Set<string>();
 	let invokeUnscoped = false;
 	const need = (capability: string, schema?: string | null) => {
 		if (!scopes.has(capability)) scopes.set(capability, new Set());
@@ -114,7 +129,9 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	};
 	for (const step of steps) {
 		if (!step || typeof step !== 'object') continue;
+		if (step.op === 'http.request') { need('http.request'); const endpoint = actionHttpEndpoint(step.method, step.path); if (endpoint) endpoints.add(endpoint); }
 		const schema = typeof step.schema === 'string' ? step.schema : null;
+		if (step.op === 'lookup') { need('lookup'); if (typeof step.provider === 'string') providers.add(step.provider); }
 		if (step.op === 'things.create') need('things.create', schema);
 		if (step.op === 'things.get' || step.op === 'things.search') need('things.read', schema);
 		if (step.op === 'things.update') need('things.update');
@@ -127,6 +144,8 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	}
 	return [...scopes.entries()].map(([capability, schemaSet]) => ({
 		capability,
+		...(capability === 'http.request' ? { endpoints: [...endpoints] } : {}),
+		...(capability === 'lookup' ? { providers: [...providers] } : {}),
 		...(schemaSet.size && !unscoped.has(capability) ? { schemas: [...schemaSet] } : {}),
 		...(capability === 'actions.invoke' && invoked.size && !invokeUnscoped ? { actions: [...invoked] } : {})
 	}));
@@ -155,8 +174,9 @@ export const coerceValueText = (raw: string): unknown => {
 // '42' (or 'true') stays text. Incongruent leftovers (e.g. 'abc' on a number
 // input) pass through as text so the save fails with the grammar's message
 // instead of silently mislabeling.
-export const coerceInputDefault = (raw: string, type: string): string | number | boolean => {
+export const coerceInputDefault = (raw: string, type: string): unknown => {
 	const text = raw.trim();
+	if (type === 'json') return JSON.parse(text);
 	if (type === 'number') {
 		const coerced = coerceValueText(text);
 		return typeof coerced === 'number' ? coerced : text;
@@ -240,27 +260,28 @@ export const ACTION_LIMIT_LABELS: Record<string, (value: number) => string> = {
 	maxDepth: (value) => `depth ${value}`,
 	maxChildActions: (value) => `${value} child actions`,
 	maxResultBytes: (value) => `${Math.round(value / 1024)}KB result`,
-	maxInputBytes: (value) => `${Math.round(value / 1024)}KB input`
+	maxInputBytes: (value) => `${Math.round(value / 1024)}KB input`,
+	'expression.nodes': value => `${value.toLocaleString()} expression evaluations`,
+	'expression.listItems': value => `${value.toLocaleString()} items per expression list`
 };
 
 // The complement summary — what this program can NEVER touch. The first
-// two are vocabulary invariants (no op reaches the network or a secret); the
-// rest derive from the declared capabilities and their scopes. Deletes are a
+// entries derive from declared capabilities and their scopes. Deletes are a
 // declared capability since the v2 vocabulary, so "No deletes" is only
 // claimed when the program does not declare things.delete.
 export const actionCannotAccess = (
 	capabilities: ActionCapabilityEntry[] | undefined,
 	names?: Record<string, string>
 ): string[] => {
-	const list = ['No network', 'No secrets'];
+	const list: string[] = [];
 	const declared = capabilities || [];
 	const has = (capability: string) => declared.some((entry) => entry.capability === capability);
-	if (!has('things.delete')) list.push('No deletes');
+	if (!has('lookup') && !has('actions.invoke') && !has('http.request')) list.push('No network', 'No secrets');
+	if (!has('things.delete') && !has('http.request') && !has('actions.invoke')) list.push('No deletes');
 	// An action that invokes another action cannot honestly claim the absolute
 	// negatives: the child runs on ITS own declaration, so "Cannot create
-	// things" would be a claim about code this page never read. Only the two
-	// vocabulary-level negatives above hold unconditionally (no op reaches the
-	// network or a secret). The composed case says so instead, and the Does
+	// things" would be a claim about code this page never read. Child programs
+	// can also use registered lookups. The composed case says so, and the Does
 	// list links each invoked child so its effects are one click away.
 	//
 	// Every line here is rendered under a 🚫 as something the program CANNOT
@@ -268,13 +289,14 @@ export const actionCannotAccess = (
 	// an affirmative — it belongs in the Effects chips (deriveActionEffects
 	// .deletes), where a destructive op reads as one, not here where the
 	// prefix would invert it.
-	const composes = has('actions.invoke');
+	const composes = has('actions.invoke') || has('http.request');
 	if (!has('things.read') && !composes) list.push('Cannot read things');
 	if (!has('things.create') && !composes) list.push('Cannot create things');
 	if (!has('things.update') && !composes) list.push('Cannot update things');
 	if (!composes) list.push('Cannot invoke other actions');
-	else list.push('Runs other actions — their effects are listed on their own pages');
+	else if (has('actions.invoke')) list.push('Runs other actions — their effects are listed on their own pages');
 	for (const entry of declared) {
+		if (entry.endpoints?.length) list.push('Requests outside the declared API endpoints');
 		if (entry.schemas?.length) list.push(`${entry.capability} only: ${entry.schemas.map((ref) => displayRef(ref, names)).join(', ')}`);
 		if (entry.actions?.length) list.push(`invoke only: ${entry.actions.join(', ')}`);
 	}

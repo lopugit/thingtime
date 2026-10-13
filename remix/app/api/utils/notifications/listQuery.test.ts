@@ -12,7 +12,7 @@ import {
   resolveNotificationListQuery
 } from './listQuery';
 
-const prefsOn = normalizeNotificationPrefs(null);
+const prefsOn = normalizeNotificationPrefs({ push: { 'action-run': true } });
 
 test('limit clamps to the documented window and defaults when absent or junk', () => {
   assert.equal(resolveNotificationListQuery({}).limit, DEFAULT_LIST_LIMIT);
@@ -115,4 +115,14 @@ test('unread, date bounds and the cursor compose into base + page filters', () =
   // the cursor only narrows the page — the total still counts the whole range
   assert.deepEqual(filters.page.createdAt, { $gte: query.since, $lte: query.until, $lt: query.before });
   assert.equal('crystal.type' in filters.base, false);
+});
+
+test('default delivery omits action runs while history retains them', () => {
+  const defaults = normalizeNotificationPrefs(null);
+  const bell = buildNotificationListFilters('u1', defaults, resolveNotificationListQuery({}));
+  assert.ok(bell);
+  assert.deepEqual(bell.base['crystal.type'], { $nin: ['action-run'] });
+  const history = buildNotificationListFilters('u1', defaults, resolveNotificationListQuery({ history: '1' }));
+  assert.ok(history);
+  assert.equal('crystal.type' in history.base, false);
 });

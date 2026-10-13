@@ -27,6 +27,7 @@ import Welcome from './routes/welcome';
 import { recoverStaleChunk } from './utils/staleChunkRecovery';
 import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 import { fetchRootData } from './utils/rootDataRecovery';
+import { createRootDataLoader } from './utils/rootDataLoader';
 import { rootIdentity } from './utils/rootIdentity';
 import { RootRecovery } from './components/Layout/RootRecovery';
 
@@ -82,7 +83,7 @@ const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   return (await response.json()) as T;
 };
 
-const rootLoader = async ({ request }: LoaderFunctionArgs) => {
+const rootLoader = createRootDataLoader(async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const generation = rootIdentity.read().generation;
   const rootData = await fetchRootData<RootLoaderData>(`/api/root-data${url.search}`, request.signal);
@@ -105,7 +106,7 @@ const rootLoader = async ({ request }: LoaderFunctionArgs) => {
     // with an error boundary for an optional first-session convenience.
     return current(rootData);
   }
-};
+}, rootIdentity);
 
 const currentUserLoader = async () => {
   const response = await fetchJson<{ user: RootLoaderData['user'] }>('/api/v1/auth/me');
@@ -168,14 +169,18 @@ export const router = createBrowserRouter([
       { path: 'branding_old', lazy: lazyRoute(() => import('./routes/branding_old')) },
       // the block-based site builder — create webpages from component things;
       // ?page=<id> opens the canvas (site pages included)
+      { path: 'builder/docs', loader: () => redirect('/docs/builder'), element: <HydrateFallback /> },
       { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
       // the demo library — a few hundred example sections/pages to preview and
       // copy into your own pages (catalog in schemas/webpageDemos)
+      { path: 'library', lazy: lazyRoute(() => import('./routes/library')) },
+      { path: 'library/:id', lazy: lazyRoute(() => import('./routes/library')) },
       { path: 'builder/demos', lazy: lazyRoute(() => import('./routes/builder-demos')) },
       // one demo / suite / app on its own page: preview + the LIVE version
       { path: 'builder/demos/:slug', lazy: lazyRoute(() => import('./routes/builder-demo-detail')) },
       // published block-based webpages (reserved prefix — outranks the * catch-all)
       { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
+      { path: 't/:id', lazy: lazyRoute(() => import('./routes/p')) },
       // the storybook-style design-system docs own the canonical short URL too
       { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
       // third-party app connections — no guard: both pages render their own
@@ -188,6 +193,8 @@ export const router = createBrowserRouter([
         lazy: lazyRoute(() => import('./routes/docs/DocsLayout')),
         children: [
           { index: true, lazy: lazyRoute(() => import('./routes/docs/index')) },
+          { path: 'builder', lazy: lazyRoute(() => import('./routes/docs/builder')) },
+          { path: 'builder/:section', lazy: lazyRoute(() => import('./routes/docs/builder')) },
           { path: 'mcp', lazy: lazyRoute(() => import('./routes/docs/mcp')) },
           { path: 'embed', lazy: lazyRoute(() => import('./routes/docs/embed')) },
           { path: 'api', lazy: lazyRoute(() => import('./routes/docs/api')) },
@@ -255,6 +262,7 @@ export const router = createBrowserRouter([
       { path: 's/:slug', lazy: lazyRoute(() => import('./routes/subspace')) },
       { path: 's/:slug/mod', lazy: lazyRoute(() => import('./routes/subspace-mod')), loader: requireUser('/login') },      // the viewer's full notification history (search + category/type/
       // unread/date filters in the URL) — same signed-out quiet state posture
+      { path: 'history', lazy: lazyRoute(() => import('./routes/history')) },
       { path: 'notifications', lazy: lazyRoute(() => import('./routes/notifications')) },
       { path: 'lopu/recordings', lazy: lazyRoute(() => import('./routes/lopu.recordings')) },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);

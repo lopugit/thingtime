@@ -1,8 +1,10 @@
+import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { getAttachmentDownload } from '~/api/utils/attachments/attachments';
 import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
+import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
 
@@ -43,7 +45,7 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				return json({ ok: false, error: 'Too many attachment requests' }, rateLimitedResponseInit(limit));
 			}
 
-			const audience = await dependencies.enrichViewer(withLinkKeys(viewerOf(user), [url.searchParams.get('key') || '']));
+			const audience = await dependencies.enrichViewer(withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || '']));
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.
@@ -71,7 +73,7 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			}
 			if (url.searchParams.get('cache') === 'bytes') {
 				if (result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
-				const upstream = await fetch(result.url, { redirect: 'error', signal: AbortSignal.timeout(25_000) });
+				const upstream = await fetchStoredObject(result.url, { redirect: 'error', signal: AbortSignal.timeout(25_000) });
 				if (!upstream.ok || !upstream.body) return new Response(null, { status: 502 });
 				return new Response(upstream.body, {
 					headers: {

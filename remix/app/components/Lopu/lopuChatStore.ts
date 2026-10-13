@@ -1,3 +1,7 @@
+import { lopuAccessMode, type LopuAccessMode } from '~/api/utils/lopu/accessMode';
+import { continuationContext, continuationRequestId, LOPU_MAX_RECOVERY_FAILURES, type LopuManagement } from '~/api/utils/lopu/continuationCore';
+import { bindLopuQueue, pauseLopuQueue } from './lopuQueueStore';
+import { LOPU_CONTINUE_PROMPT, shouldAutoContinueLopuReply } from './lopuRecovery';
 import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
 // The Lopu chat module store (design note §3.1/§3.2): ONE state shared by the
 // /lopu page and the floating window (LopuHost), read through
@@ -79,7 +83,7 @@ export type LopuChatDefaults = { model: string | null; effort: string | null; sp
 
 // the viewer's per-chat choice: a catalog model (+ effort / speed) OR one of
 // their own Secure Vault providers (providerId, which wins over the model)
-export type LopuChatSettings = LopuChatDefaults & { providerId: string | null };
+export type LopuChatSettings = LopuChatDefaults & { providerId: string | null; accessMode?: LopuAccessMode; management?: LopuManagement };
 
 // providers.<p>: key presence + the server's probe verdict (never a value)
 export type LopuProvidersInfo = Partial<Record<'anthropic' | 'openai', { configured: boolean; verified?: boolean | null; checkedAt?: string | null; reason?: string | null }>>;
@@ -95,19 +99,19 @@ export type LopuModelsPayload = {
 // a Lopu conversation row — the messenger chat summary plus the chat's own
 // model settings when the list projects them
 export type LopuChatSummary = ChatSummary & {
-	lopu?: (Partial<LopuChatSettings> & { turns?: number; lastModel?: string | null }) | null;
+	lopu?: (Partial<LopuChatSettings> & { turns?: number; lastModel?: string | null; archived?: boolean }) | null;
 };
 
 export type LopuNotice = { id: number; title: string; description?: string; status: 'success' | 'error' | 'info' };
 
-export type LopuChatWriteArgs = { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null };
+export type LopuChatWriteArgs = { accessMode?: LopuAccessMode; management?: LopuManagement; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null };
 
 export type LopuApiClient = {
 	models: (options?: { signal?: AbortSignal }) => Promise<any>;
 	chats: {
 		list: (options?: { signal?: AbortSignal }) => Promise<any>;
 		create: (args?: LopuChatWriteArgs) => Promise<any>;
-		update: (args: { chatId: string } & LopuChatWriteArgs) => Promise<any>;
+		update: (args: { chatId: string; archived?: boolean } & LopuChatWriteArgs) => Promise<any>;
 		delete: (args: { chatId: string }) => Promise<any>;
 	};
 	// the messenger's message page (GET /api/v1/chats/messages, newest first)
@@ -129,6 +133,7 @@ export type LopuStoreState = {
 	turnOrder: string[];
 	streamingId: string | null;
 	sending: boolean;
+ recoveryChatIds: string[];
 	models: AiModelPublic[];
 	modelsLoaded: boolean;
 	modelsLoading: boolean;
@@ -178,6 +183,7 @@ const createInitialState = (): LopuStoreState => ({
 	turnOrder: [],
 	streamingId: null,
 	sending: false,
+ recoveryChatIds: [],
 	models: [],
 	modelsLoaded: false,
 	modelsLoading: false,
@@ -200,6 +206,7 @@ let state: LopuStoreState = createInitialState();
 const listeners = new Set<() => void>();
 let client: LopuApiClient | null = null;
 const controllers = new Map<string, AbortController>();
+const stoppedRequests = new Set<string>();
 let noticeSeq = 0;
 let emitScheduled = false;
 
@@ -335,27 +342,29 @@ export const reconcileLopuSettings = (
 			model: requested?.model ?? defaults?.model ?? null,
 			effort: requested?.effort ?? defaults?.effort ?? null,
 			speed: requested?.speed ?? defaults?.speed ?? null,
-			providerId
+			providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {})
 		};
 	}
 	const wanted = requested?.model ? models.find((model) => model.id === requested.model) : null;
 	const fallback = defaults?.model ? models.find((model) => model.id === defaults.model) : null;
 	const model = isAvailable(wanted) ? wanted : isAvailable(fallback) ? fallback : models.find(isAvailable) || null;
-	if (!model) return { model: null, effort: null, speed: null, providerId };
+	// Execution management is independent of provider access (including new
+ // invite-gated accounts whose catalog has no available model).
+ if (!model) return { model: null, effort: null, speed: null, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {}) };
 	const efforts = Array.isArray(model.efforts) ? model.efforts : [];
 	const speeds = Array.isArray(model.speeds) ? model.speeds : [];
 	const effortCandidates = [requested?.effort, defaults?.effort, 'high'];
 	const effort = effortCandidates.find((candidate): candidate is string => !!candidate && efforts.includes(candidate)) ?? efforts[efforts.length - 1] ?? null;
 	const speedWanted = requested?.speed ?? defaults?.speed ?? 'normal';
 	const speed = speeds.includes(speedWanted) ? speedWanted : speeds.includes('normal') ? 'normal' : speeds[0] ?? null;
-	return { model: model.id, effort, speed, providerId };
+	return { model: model.id, effort, speed, providerId, ...(requested?.accessMode ? { accessMode: lopuAccessMode(requested.accessMode) } : {}), ...(requested?.management ? { management: requested.management } : {}) };
 };
 
 export const sameLopuSettings = (a: LopuChatSettings, b: LopuChatSettings): boolean =>
-	a.model === b.model && a.effort === b.effort && a.speed === b.speed && a.providerId === b.providerId;
+	a.model === b.model && a.effort === b.effort && a.speed === b.speed && a.providerId === b.providerId && a.management === b.management && lopuAccessMode(a.accessMode) === lopuAccessMode(b.accessMode);
 
 const persistSettings = (userId: string | null, settings: LopuChatSettings) => {
-	if (userId) writeLocalCache(lopuSettingsCacheKey(userId), settings);
+	if (userId) writeLocalCache(lopuSettingsCacheKey(userId), { ...settings, accessMode: 'ask' });
 };
 
 // the vault providers the reconciler may trust: null until the catalog has
@@ -384,12 +393,46 @@ const mergeSettingsPatch = (patch: Partial<LopuChatSettings>): LopuChatSettings 
 	return reconciled;
 };
 
+// Serialize permission writes per chat. Stale sends never restore Full access.
+const accessWrites = new Map<string, Promise<void>>();
+const accessRevisions = new Map<string, number>();
+const persistChatAccess = (chatId: string, accessMode: LopuAccessMode) => {
+  const api = client, owner = state.userId, generation = accountGeneration;
+  chatWrites++;
+  const revision = (accessRevisions.get(chatId) ?? 0) + 1;
+  accessRevisions.set(chatId, revision);
+  const work = (accessWrites.get(chatId) ?? Promise.resolve()).catch(() => {}).then(async () => {
+    if (!api || generation !== accountGeneration) return;
+    const result = await api.chats.update({ chatId, accessMode });
+    if (result?.ok === false) throw new Error(errorText(result, 'Could not save chat access'));
+    if (generation !== accountGeneration || state.userId !== owner) return;
+    setState(current => {
+      const chats = current.chats.map(chat => chat.id === chatId ? { ...chat, lopu: { ...chat.lopu, accessMode } } : chat);
+      writeChatsCache(owner, chats);
+      return { chats, ...(current.activeChatId === chatId && accessRevisions.get(chatId) === revision ? { settings: { ...current.settings, accessMode } } : {}) };
+    });
+  }).catch(error => {
+    if (generation === accountGeneration && accessRevisions.get(chatId) === revision) {
+      if (state.activeChatId === chatId) setState(current => ({ settings: { ...current.settings, accessMode: lopuAccessMode(current.chats.find(chat => chat.id === chatId)?.lopu?.accessMode) } }));
+      notice('Could not save chat access', { status: 'error', description: errorText(error, 'Please try again') });
+    }
+    throw error;
+  }).finally(() => { chatWrites--; });
+  accessWrites.set(chatId, work);
+  void work.catch(() => {});
+};
+
 export const setLopuSettings = (patch: Partial<LopuChatSettings>) => {
 	const settings = mergeSettingsPatch(patch);
-	if (sameLopuSettings(settings, state.settings)) return;
+	if (sameLopuSettings(settings, state.settings)) {
+    if (patch.accessMode && state.activeChatId) persistChatAccess(state.activeChatId, patch.accessMode);
+    return;
+  }
 	const providerChanged = settings.providerId !== state.settings.providerId;
 	persistSettings(state.userId, settings);
 	setState({ settings });
+  if (patch.accessMode && state.activeChatId) persistChatAccess(state.activeChatId, patch.accessMode);
+	if (patch.management && state.activeChatId && client) void client.chats.update({ chatId: state.activeChatId, management: patch.management }).catch(() => {});
 	if (providerChanged && 'providerId' in patch && state.activeChatId) persistChatProvider(state.activeChatId, settings.providerId);
 };
 
@@ -404,9 +447,12 @@ let accountGeneration = 0;
 export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	if (state.hydrated && state.userId === userId) return state;
 	accountGeneration++;
+  accessWrites.clear(); accessRevisions.clear();
 	for (const controller of controllers.values()) controller.abort();
 	controllers.clear();
+ stoppedRequests.clear();
 	bindAiTaskOwner(userId);
+ bindLopuQueue(userId);
 	const chatsCache = userId ? readLocalCache<ChatsCache>(lopuChatsCacheKey(userId)) : null;
 	const modelsCache = readLocalCache<ModelsCache>(LOPU_MODELS_CACHE_KEY);
 	const settingsCache = userId ? readLocalCache<LopuChatSettings>(lopuSettingsCacheKey(userId)) : null;
@@ -427,7 +473,7 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 		vaultProviders,
 		vault,
 		// a cached providerId is trusted until the fresh catalog says otherwise
-		settings: reconcileLopuSettings(settingsCache || defaults, models, defaults, null)
+		settings: reconcileLopuSettings({ ...(settingsCache || defaults), accessMode: 'ask' }, models, defaults, null)
 	};
 	scheduleEmit();
 	return state;
@@ -487,7 +533,7 @@ export const loadLopuChats = async (options: { quiet?: boolean } = {}): Promise<
 		if (state.chats !== previous || chatWrites) { setState({ chatsLoading: false }); return; }
 		const chats: LopuChatSummary[] = response.chats;
 		writeChatsCache(userId, chats);
-		setState({ chats, chatsLoaded: true, chatsLoading: false });
+		setState(current => ({ chats, chatsLoaded: true, chatsLoading: false, ...(current.activeChatId ? { settings: { ...current.settings, accessMode: lopuAccessMode(chats.find(chat => chat.id === current.activeChatId)?.lopu?.accessMode) } } : {}) }));
 	} catch (error) {
 		if (generation !== accountGeneration) return;
 		setState({ chatsLoading: false, chatsLoaded: true, ...(!options.quiet ? { error: errorText(error, 'Could not load your conversations') } : {}) });
@@ -555,10 +601,11 @@ const settingsFromChat = (chat: LopuChatSummary | undefined): Partial<LopuChatSe
 	const raw = (chat as { lopu?: unknown; settings?: unknown } | undefined)?.lopu ?? (chat as { settings?: unknown } | undefined)?.settings;
 	if (!raw || typeof raw !== 'object') return null;
 	const record = raw as Record<string, unknown>;
-	const out: Partial<LopuChatSettings> = {};
+	const out: Partial<LopuChatSettings> = { accessMode: lopuAccessMode(record.accessMode) };
 	if (typeof record.model === 'string') out.model = record.model;
 	if (typeof record.effort === 'string') out.effort = record.effort;
 	if (typeof record.speed === 'string') out.speed = record.speed;
+ if (record.management === 'server' || record.management === 'client') out.management = record.management;
 	// a chat that carries the key (even null) states its provider choice
 	if ('providerId' in record) out.providerId = typeof record.providerId === 'string' && record.providerId ? record.providerId : null;
 	return Object.keys(out).length ? out : null;
@@ -574,7 +621,7 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 	seedLopuMessages(chatId);
 	const chat = chatId ? state.chats.find((entry) => entry.id === chatId) : undefined;
 	const fromChat = settingsFromChat(chat);
-	const settings = fromChat ? reconcileLopuSettings({ ...state.settings, ...fromChat }, state.models, state.defaults, knownVaultProviders()) : state.settings;
+	const settings = fromChat ? reconcileLopuSettings({ ...state.settings, ...fromChat }, state.models, state.defaults, knownVaultProviders()) : { ...state.settings, accessMode: 'ask' as const };
 	const next = { activeChatId: chatId, settings };
 	if (options?.silent) {
 		state = { ...state, ...next };
@@ -592,6 +639,7 @@ export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: b
 	try {
 		const response = await client.chats.create({
 			...(args?.title ? { title: args.title } : {}),
+      accessMode: state.activeChatId ? 'ask' : lopuAccessMode(state.settings.accessMode),
 			...(state.settings.model ? { model: state.settings.model } : {}),
 			...(state.settings.effort ? { effort: state.settings.effort } : {}),
 			...(state.settings.speed ? { speed: state.settings.speed } : {}),
@@ -602,7 +650,7 @@ export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: b
 		setState((current) => {
 			const chats = [chat, ...current.chats.filter((entry) => entry.id !== chat.id)];
 			writeChatsCache(current.userId, chats);
-			return { chats, activeChatId: chat.id };
+			return { chats, activeChatId: chat.id, settings: { ...current.settings, accessMode: lopuAccessMode(chat.lopu?.accessMode) } };
 		});
 		return { ok: true, chat };
 	} catch (error) {
@@ -648,6 +696,39 @@ export const renameLopuChat = async (chatId: string, title: string): Promise<{ o
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
 	} finally { chatWrites--; }
+};
+
+// Archive only changes list visibility. Keep the selected transcript and any
+// running turn alive; a failed write rolls back only this field, not other chats.
+const archivingChats = new Set<string>();
+export const archiveLopuChat = async (chatId: string, archived: boolean): Promise<{ ok: boolean; error?: string }> => {
+	if (!client || !state.userId) return { ok: false, error: 'Lopu is not connected yet' };
+	const previous = state.chats.find(chat => chat.id === chatId);
+	const generation = accountGeneration;
+	const key = `${generation}:${chatId}`;
+	if (!previous || archivingChats.has(key)) return { ok: false, error: 'Conversation is unavailable or already updating' };
+	archivingChats.add(key);
+	chatWrites++;
+	const apply = (value: boolean) => {
+		if (generation !== accountGeneration) return;
+		const chats = state.chats.map(chat => chat.id === chatId ? { ...chat, lopu: { ...chat.lopu, archived: value } } : chat);
+		writeChatsCache(state.userId, chats);
+		setState({ chats });
+	};
+	apply(archived);
+	try {
+		const response = await client.chats.update({ chatId, archived });
+		if (response?.ok !== true) throw response;
+		return { ok: true };
+	} catch (error) {
+		apply(previous.lopu?.archived === true);
+		const message = errorText(error, archived ? 'Could not archive the chat' : 'Could not restore the chat');
+		if (generation === accountGeneration) notice(message, { status: 'error' });
+		return { ok: false, error: message };
+	} finally {
+		archivingChats.delete(key);
+		chatWrites--;
+	}
 };
 
 export const deleteLopuChat = async (chatId: string): Promise<{ ok: boolean; error?: string }> => {
@@ -699,8 +780,9 @@ export const describeActiveDraft = (): { page: NonNullable<LopuReplyContext['pag
 	}
 	if (!draft || !page) return null;
 	const label = (typeof draft.name === 'string' && draft.name) || page.pageKey || page.siteRoute || 'this page';
-	// the reply body caps context.page.blocks at 48KB — past that the server
-	// resolves the page by id instead of the live draft
+	// Past the request budget, preserve dirty/readiness/base-version metadata.
+	// Only a known clean saved page can be resolved by id; an omitted dirty
+	// draft must never become an empty page or a saved-state replacement.
 	let blocks: WebpageBlock[] | undefined = page.blocks;
 	try {
 		if (blocks && JSON.stringify(blocks).length > LOPU_CONTEXT_BLOCKS_MAX_CHARS) blocks = undefined;
@@ -855,7 +937,7 @@ const forgetTurn = (requestId: string) => {
 	});
 };
 
-const upsertChatSummary = (chatId: string, turn: LopuTurnState, assistantRows: ChatMessage[]) => {
+const upsertChatSummary = (chatId: string, turn: LopuTurnState, assistantRows: ChatMessage[], initialAccessMode?: LopuAccessMode) => {
 	setState((current) => {
 		const existing = current.chats.find((chat) => chat.id === chatId);
 		const now = new Date().toISOString();
@@ -897,6 +979,7 @@ const upsertChatSummary = (chatId: string, turn: LopuTurnState, assistantRows: C
 			lastMessage,
 			lopu: {
 				...(base.lopu || {}),
+        accessMode: lopuAccessMode(base.lopu?.accessMode ?? initialAccessMode),
 				...(turn.meta ? { model: turn.meta.model, effort: turn.meta.effort, speed: turn.meta.speed, lastModel: turn.meta.model } : {}),
 				// the turn's provider choice is the chat's until it changes
 				providerId: turn.meta?.provider === 'vault' ? turn.meta.providerId ?? current.settings.providerId : current.settings.providerId
@@ -918,6 +1001,9 @@ const appendMessages = (chatId: string, rows: ChatMessage[]) => {
 };
 
 export type SendLopuOptions = {
+ continuation?: { previousRequestId: string; automatic?: boolean };
+ chatId?: string;
+ requestId?: string;
 	// Fired once the server has persisted the user message, before reply completion.
 	onAccepted?: () => void;
 	attachmentIds?: string[];
@@ -947,6 +1033,41 @@ export type SendLopuResult =
  * `done` lands. Resolves after the stream ends (or fails).
  */
 export const sendLopuMessage = async (text: string, options: SendLopuOptions = {}): Promise<SendLopuResult> => {
+ const generation = accountGeneration;
+ let recoveryFailures = 0;
+ let continuation: LopuContinuation | undefined = options.continuation && (options.chatId || state.activeChatId) ? { chatId: options.chatId || state.activeChatId!, ...options.continuation } : undefined;
+ for (;;) {
+  const result = await sendLopuMessagePart(text, options, continuation);
+  if (!result.next || generation !== accountGeneration) return result;
+  if (state.turns[result.next.continuation.previousRequestId]?.stopReason === 'error') {
+   recoveryFailures = Math.max(recoveryFailures + 1, state.turns[result.next.continuation.previousRequestId]?.recoveryFailures ?? 0);
+   if (recoveryFailures >= LOPU_MAX_RECOVERY_FAILURES) return result;
+   const recoveringChatId = result.next.continuation.chatId;
+   setState(current => ({ recoveryChatIds: [...new Set([...current.recoveryChatIds, recoveringChatId])] }));
+   await new Promise(resolve => setTimeout(resolve, Math.min(30_000, 2000 * 2 ** (recoveryFailures - 1))));
+   if (generation === accountGeneration) setState(current => ({ recoveryChatIds: current.recoveryChatIds.filter(id => id !== recoveringChatId) }));
+   if (stoppedRequests.has(result.next.continuation.previousRequestId) || generation !== accountGeneration) return result;
+  } else recoveryFailures = 0;
+  text = LOPU_CONTINUE_PROMPT;
+  options = result.next.options;
+  continuation = result.next.continuation;
+ }
+};
+
+type LopuContinuation = { chatId: string; previousRequestId: string; automatic?: boolean };
+type LopuPartResult = SendLopuResult & { next?: { options: SendLopuOptions; continuation: LopuContinuation } };
+const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, continuation?: LopuContinuation): Promise<LopuPartResult> => {
+ const chatId = continuation?.chatId ?? options.chatId ?? state.activeChatId;
+ const accessGeneration = accountGeneration;
+ try {
+   if (chatId) {
+     let pending: Promise<void> | undefined;
+     do { pending = accessWrites.get(chatId); await pending; }
+     while (accessGeneration === accountGeneration && pending !== accessWrites.get(chatId));
+   }
+ }
+ catch { return { ok: false, error: 'Save the chat access setting before sending.', text }; }
+ if (accessGeneration !== accountGeneration) return { ok: false, error: 'The active account changed.', text };
 	const trimmed = (text || '').trim();
 	if (!trimmed) return { ok: false, error: 'Say something first', text };
 	if (!client) return { ok: false, error: 'Lopu is not connected yet', text };
@@ -954,7 +1075,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		notice('Sign in to chat with Lopu 🦄', { status: 'info' });
 		return { ok: false, error: 'Sign in to chat with Lopu', text };
 	}
-	if (Object.values(state.turns).some(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn)) || getAiTasks().some(task => task.chatId === state.activeChatId && task.status === 'running')) {
+	if (Object.values(state.turns).some(turn => turn.chatId === chatId && isLopuTurnActive(turn)) || getAiTasks().some(task => task.chatId === chatId && (task.status === 'running' || task.workflowStatus === 'running') && task.requestId !== continuation?.previousRequestId)) {
 		notice('Lopu is still replying — stop it first or wait a moment ✨', { status: 'info' });
 		return { ok: false, error: 'Lopu is still replying', text };
 	}
@@ -963,10 +1084,12 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	const generation = accountGeneration;
 	const startingPath = typeof window === 'undefined' ? null : window.location.pathname;
 	const foreground = () => state.activeChatId === (turn.chatId || chatId) && (startingPath === null || window.location.pathname === startingPath);
-	const requestId = uuid();
-	const chatId = state.activeChatId;
+	const requestId = continuation ? await continuationRequestId(chatId!, continuation.previousRequestId) : options.requestId ?? uuid();
+ // Computing a continuation id is asynchronous; an account/source change
+ // or Stop during that gap must not dispatch through a newly bound client.
+ if (state.userId !== userId || generation !== accountGeneration || !client || (continuation && stoppedRequests.has(continuation.previousRequestId))) return {ok:false,error:'This continuation was cancelled before sending.',text:trimmed};
 	const settings = mergeSettingsPatch(options.settings || {});
-	if (options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
+	if (!continuation && !options.chatId && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);
 		setState({ settings });
 	}
@@ -975,6 +1098,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	const attachmentIds = new Set(options.attachmentIds ?? []);
 	let turn = initialLopuTurn({ requestId, chatId, userText: trimmed,
 		userAttachments: (options.attachments ?? []).filter(attachment => attachmentIds.has(attachment.id)) });
+ turn = { ...turn, ...(continuation ? { continuation: true } : {}) };
 	const abort = new AbortController();
 	controllers.set(requestId, abort);
 	rememberTurn(turn);
@@ -999,15 +1123,15 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 				const id = next.chatId;
 				if (!id) break;
 				if (!before.meta) options.onAccepted?.();
-				if (state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
+				if (!continuation && !options.chatId && state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
 					setState({ activeChatId: id });
 				}
 				appendMessages(id, [buildUserMessage(next, userId, id)]);
-				if (!state.chats.some((chat) => chat.id === id)) upsertChatSummary(id, next, []);
+				if (!state.chats.some((chat) => chat.id === id)) upsertChatSummary(id, next, [], !chatId ? lopuAccessMode(settings.accessMode) : 'ask');
 				break;
 			}
 			case 'tool_input_delta': {
-				if (!applyPatches || !foreground()) break;
+				if (!applyPatches || !foreground() || lopuAccessMode(state.settings.accessMode) !== 'full') break;
 				const activity = next.tools.find((tool) => tool.id === event.id);
 				if (!activity) break;
 				if (activity.name === 'patch_page') applyStreamingPatchOps(activity);
@@ -1042,7 +1166,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 				break;
 			}
 			case 'error': {
-				notice(event.message || 'Lopu hit a snag', { status: 'error', description: event.retryable ? 'You can try again.' : undefined });
+				if (!event.retryable) notice(event.message || 'Lopu hit a snag', { status: 'error', description: event.retryable ? 'You can try again.' : undefined });
 				break;
 			}
 			case 'done': {
@@ -1063,8 +1187,11 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	// null — a pin the server still holds (a refused update, a provider the
 	// vault no longer lists) must never route the turn behind the picker's back
 	const activeChat = chatId ? state.chats.find((chat) => chat.id === chatId) : null;
-	const statesProvider = !!settings.providerId || !!activeChat?.lopu;
+	const statesProvider = !!settings.providerId || !!activeChat?.lopu || !!(options.settings && 'providerId' in options.settings);
 	const body: LopuReplyBody = {
+  management: settings.management || 'client',
+  ...(!chatId ? { accessMode: lopuAccessMode(settings.accessMode) } : {}),
+  ...(continuation ? { continueFromRequestId: continuation.previousRequestId, automaticContinuation: continuation.automatic === true } : {}),
 		...(chatId ? { chatId } : {}),
 		text: trimmed,
 		requestId,
@@ -1079,9 +1206,11 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	};
 
 	let failure: string | null = null;
+	let cleanEnd = false;
 	try {
 		const response = await client.reply(body, { signal: abort.signal });
 		await readNdjson(response, onEvent, abort.signal);
+		cleanEnd = true;
 		if (turn.status === 'streaming') commit(markLopuTurnFailed(turn, 'Lopu got cut off before finishing', true));
 	} catch (error) {
 		if (isAbortError(error) || abort.signal.aborted) {
@@ -1109,6 +1238,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 
 	const finalChatId = turn.chatId;
 	if (turn.gate && !turn.meta) {
+  pauseLopuQueue(true);
 		// the turn stays in the timeline: the viewer's bubble and Lopu's gate
 		// bubble (request credits / ask an admin); nothing was persisted
 		setState({ sending: controllers.size > 0, streamingId: controllers.keys().next().value ?? null, error: null });
@@ -1133,12 +1263,27 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	// the server managed to persist (the turn bubble absorbs those rows)
 	if (!chatId) void loadLopuChats();
 	if (!turn.messages.length) void loadLopuMessages(finalChatId);
+	const stopped = stoppedRequests.has(requestId);
+ if (settings.management !== 'server' && cleanEnd && !stopped && !abort.signal.aborted && shouldAutoContinueLopuReply(turn)) {
+  // Fresh request IDs let the server persist/account each part independently.
+  // Never resend attachments, acceptance callbacks, spent confirmation grants,
+  // or an old builder snapshot over changes made by the preceding part.
+  const context = continuationContext(options.context);
+  return { ok: true, requestId, chatId: finalChatId, next: { options: { settings, context, applyPatches }, continuation: { chatId: finalChatId, previousRequestId: requestId, automatic: true } } };
+ }
+ if (turn.status !== 'done' || stopped || abort.signal.aborted) pauseLopuQueue(true);
 	return { ok: true, requestId, chatId: finalChatId };
 };
 
 /** Stop the in-flight reply (what streamed so far is kept). */
 export const abortLopuTurn = (): void => {
+ pauseLopuQueue(true);
  const turn = Object.values(state.turns).find(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn));
+ if (turn) stoppedRequests.add(turn.requestId);
+ const pending = [...state.turnOrder].reverse().map(id => state.turns[id]).find(item => item.chatId === state.activeChatId && shouldAutoContinueLopuReply(item));
+ if (!turn && pending) { setState(current => ({ recoveryChatIds: current.recoveryChatIds.filter(id => id !== pending.chatId) })); stoppedRequests.add(pending.requestId); void stopAiTaskRequest(pending.requestId).catch(() => notice('Could not stop the recovery.', { status: 'error' })); }
+ const runningTask = getAiTasks().find(task => task.chatId === state.activeChatId && (task.status === 'running' || task.workflowStatus === 'running'));
+ if (!turn && runningTask) { stoppedRequests.add(runningTask.requestId); void stopAiTaskRequest(runningTask.requestId).catch(() => notice('Could not stop the task.', { status: 'error' })); }
  if (turn) void stopAiTaskRequest(turn.requestId).then(() => controllers.get(turn.requestId)?.abort()).catch(() => notice('Could not stop the task. Open Background tasks to try again.', { status: 'error' }));
 };
 
@@ -1219,6 +1364,7 @@ export const selectLopuProviderNames = (snapshot: LopuStoreState): Record<string
 export const resetLopuStoreForTests = () => {
 	for (const controller of controllers.values()) controller.abort();
 	controllers.clear();
+ stoppedRequests.clear();
 	client = null;
 	undoSnapshots.clear();
 	streamingComponentRefs.clear();
@@ -1235,11 +1381,11 @@ export const recoverLopuBackgroundTasks = async () => {
  try {
   await refreshAiTasks();
   for (const task of getAiTasks()) {
-   if (task.path !== '/api/v1/lopu/chats/reply' || controllers.has(task.requestId)) continue;
-   if (task.status !== 'running' && task.chatId !== state.activeChatId && !state.turns[task.requestId]) continue;
+   if (task.path !== '/api/v1/lopu/chats/reply' || controllers.has(task.requestId) || (task.chatId && state.recoveryChatIds.includes(task.chatId))) continue;
+   if (task.status === 'completed' && task.chatId !== state.activeChatId && !state.turns[task.requestId]) continue;
    const versionKey = `${generation}:${task.id}`;
    if (recoveredTaskVersions.get(versionKey) === task.updatedAt) continue;
-   if (task.status !== 'running' && state.turns[task.requestId]?.status === 'done') continue;
+   if (task.status === 'completed' && state.turns[task.requestId]?.status === 'done') continue;
    const result = await readAiTaskOutput(task);
    if (state.userId !== owner || accountGeneration !== generation) return;
    if (!result) continue;
@@ -1253,7 +1399,18 @@ export const recoverLopuBackgroundTasks = async () => {
    if (state.userId !== owner || accountGeneration !== generation) return;
    rememberTurn(turn);
    recoveredTaskVersions.set(versionKey, task.updatedAt);
+   const latest = getAiTasks().find(candidate => candidate.chatId === turn.chatId && candidate.path === task.path);
+   const workflowRunning = getAiTasks().some(candidate => candidate.chatId === turn.chatId && candidate.workflowStatus === 'running');
+   if (latest?.id === task.id && task.management !== 'server' && !workflowRunning && task.status === 'needs-attention' && !stoppedRequests.has(task.requestId) && turn.chatId && shouldAutoContinueLopuReply(turn)) {
+    void resumeLopuChat(turn.chatId, turn.requestId, true);
+   }
    if (recoveredTaskVersions.size > 150) recoveredTaskVersions.delete(recoveredTaskVersions.keys().next().value!);
   }
  } finally { recoveringTasks = false; }
+};
+
+/** Explicit continuation is protocol metadata, never inferred from typed text. */
+export const resumeLopuChat = (chatId: string, previousRequestId: string, automatic = false) => {
+ const savedSettings = settingsFromChat(state.chats.find(chat => chat.id === chatId));
+ return sendLopuMessage(LOPU_CONTINUE_PROMPT, { chatId, ...(savedSettings ? { settings: savedSettings } : {}), continuation: { previousRequestId, automatic }, applyPatches: true });
 };

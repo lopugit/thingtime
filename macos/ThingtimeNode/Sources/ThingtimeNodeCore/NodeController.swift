@@ -55,6 +55,7 @@ public actor ThingtimeNodeController {
     private static let connectorID = "codex-app-server"
     private static let maximumPairingAttempts = 3
     private static let basePairingCapabilities = [
+        "filesystem.v1",
         "ai.session.create",
         "ai.session.interrupt",
         "ai.session.list",
@@ -418,19 +419,7 @@ public actor ThingtimeNodeController {
         preconditionFailure("The bounded pairing attempt loop must return or throw.")
     }
 
-    private func executePairingClaimAttempt(
-        pairingSecret: String,
-        client: any ControlPlaneClient
-    ) async throws -> PairingStatus {
-        let device = await telemetry.snapshot()
-        let challenge = try await pairing.begin(pairingID: pairingSecret)
-        let descriptor = PairingDeviceDescriptor(
-            name: device.deviceName,
-            platform: "macos",
-            model: device.modelIdentifier,
-            osVersion: device.operatingSystemVersion,
-            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
-        )
+    public static func runtimeCapabilities(for device: DeviceTelemetry) -> [String] {
         var pairingCapabilities = Self.basePairingCapabilities
         if let mainDisplay = device.displays.first(where: { $0.isMain }), mainDisplay.brightness != nil {
             pairingCapabilities.append("system.brightness.read")
@@ -449,6 +438,23 @@ public actor ThingtimeNodeController {
                 pairingCapabilities.append("system.display.brightness.write")
             }
         }
+        return Array(Set(pairingCapabilities)).sorted()
+    }
+
+    private func executePairingClaimAttempt(
+        pairingSecret: String,
+        client: any ControlPlaneClient
+    ) async throws -> PairingStatus {
+        let device = await telemetry.snapshot()
+        let challenge = try await pairing.begin(pairingID: pairingSecret)
+        let descriptor = PairingDeviceDescriptor(
+            name: device.deviceName,
+            platform: "macos",
+            model: device.modelIdentifier,
+            osVersion: device.operatingSystemVersion,
+            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+        )
+        let pairingCapabilities = Self.runtimeCapabilities(for: device)
         let claimRequest: PairingClaimRequest
         if let prepared = try await pairing.preparedClaim(pairingID: challenge.pairingID) {
             claimRequest = prepared
@@ -546,6 +552,8 @@ public actor ThingtimeNodeController {
         let action: SafeActionRequest
         let input = try requireObject(command.parameters)
         switch command.method {
+        case "filesystem":
+            action = SafeActionRequest(kind: .filesystem, parameters: input)
         case "system.volume.set":
             guard let level = input["level"]?.numberValue else {
                 throw ThingtimeNodeError.invalidRequest("system.volume.set requires level.")

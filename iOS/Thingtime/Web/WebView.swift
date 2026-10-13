@@ -50,7 +50,7 @@ struct WebView: UIViewRepresentable {
         // A destination switch always drops the previous origin's widget content
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
-        if rootChanged { WidgetStore.clear() }
+        if rootChanged { WidgetStore.clear(); context.coordinator.resetChatActivity() }
         context.coordinator.cancelVoice()
         if rootChanged { context.coordinator.suspendRecordingUploads() }
         context.coordinator.loadedRootURL = url
@@ -63,6 +63,9 @@ struct WebView: UIViewRepresentable {
         weak var webView: WKWebView?
         var loadedRootURL: URL?
         private let lopuVoice = LopuVoiceSessionController()
+        private let lopuChats = LopuChatActivityController()
+
+        func resetChatActivity() { lopuChats.reset() }
         private var pendingVoiceStart = UUID()
         private var pendingRecordingSync = UUID()
         private var recordingOwnerId: String?
@@ -76,6 +79,10 @@ struct WebView: UIViewRepresentable {
 
         override init() {
             super.init()
+            lopuChats.register = { [weak self] root, owner, activityId, token, contextKey, chats in
+                await self?.registerChatActivity(root: root, owner: owner, activityId: activityId, token: token, contextKey: contextKey, chats: chats)
+            }
+            lopuChats.sendToWeb = { [weak self] type, payload in self?.sendToWeb(type: type, payload: payload) }
             lopuVoice.sendToWeb = { [weak self] type, payload in
                 self?.sendToWeb(type: type, payload: payload)
             }
@@ -90,6 +97,7 @@ struct WebView: UIViewRepresentable {
                 "platform": "ios",
                 "version": "1.3.0",
                 "lopuVoiceVersion": "1.3.0",
+                "lopuChatActivityVersion": "1.0.0",
                 "notificationsVersion": "1.0.0",
                 "watchNotifications": true
             ])
@@ -113,6 +121,13 @@ struct WebView: UIViewRepresentable {
                 return
             }
             switch type {
+            case "lopu-chat-activity-sync":
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frameURL = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frameURL, root),
+                      let payload = body["payload"] as? [String: Any],
+                      let snapshot = LopuChatActivitySnapshot(payload: payload) else { return }
+                lopuChats.sync(snapshot, root: root)
             case "notification-settings":
                 guard message.frameInfo.isMainFrame, let webView, let rootURL = loadedRootURL,
                       let currentURL = webView.url, LopuVoiceContract.sameOrigin(currentURL, rootURL),
@@ -166,6 +181,42 @@ struct WebView: UIViewRepresentable {
             default:
                 sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
             }
+        }
+
+        private func registerChatActivity(root: URL, owner: String, activityId: String, token: String?, contextKey: String, chats: [LopuChatActivitySnapshot.Chat]) async {
+            guard let webView, loadedRootURL == root, let current = webView.url,
+                  LopuVoiceContract.sameOrigin(current, root) else { return }
+            var body: [String: Any] = ["ownerId": owner, "activityId": activityId, "contextKey": contextKey]
+            if let token {
+                body["token"] = token
+#if DEBUG
+                body["environment"] = "sandbox"
+#else
+                body["environment"] = "production"
+#endif
+                body["chats"] = chats.map { ["chatId": $0.chatId, "status": $0.status, "management": $0.management] }
+            }
+            guard let data = try? JSONSerialization.data(withJSONObject: body), let json = String(data: data, encoding: .utf8) else { return }
+            // Cookie and selected-data-source ownership stay inside the current
+            // first-party web session. Never persist or transfer its credentials.
+            _ = try? await webView.callAsyncJavaScript(
+                """
+                if (location.origin !== expectedOrigin) return false;
+                const manifestResponse = await fetch('/.well-known/thingtime-capabilities.json', {signal: AbortSignal.timeout(10000)});
+                const manifest = await manifestResponse.json();
+                const version = manifest.features?.['api.lopu-live-activity']?.version;
+                if (!manifestResponse.ok || manifest.schemaVersion !== 1 || manifest.origin !== expectedOrigin || !/^1\\.\\d+\\.\\d+$/.test(version ?? '')) return false;
+                if (location.origin !== expectedOrigin) return false;
+                const response = await fetch('/api/v1/lopu/live-activity', {
+                  method, credentials: 'same-origin', redirect: 'error', signal: AbortSignal.timeout(10000),
+                  headers: {'Content-Type':'application/json', Accept:'application/json'}, body: bodyJSON
+                });
+                return response.ok;
+                """,
+                arguments: ["expectedOrigin": root.scheme! + "://" + root.host! + (root.port.map { ":\($0)" } ?? ""),
+                            "bodyJSON": json, "method": token == nil ? "DELETE" : "POST"],
+                in: nil, contentWorld: .page
+            )
         }
 
         fileprivate func sendToWeb(type: String, payload: Any) {

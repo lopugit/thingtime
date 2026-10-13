@@ -107,3 +107,13 @@ test('HTTP transport pins DNS and bounds responses without redirects or ambient 
 	await assert.rejects(mixed.result, /public addresses/);
 	assert.equal(mixed.calls(), 0);
 });
+
+test('authorized chat files include stable property references without storage credentials', async () => {
+  const f = fixture(); const result = await resolveLopuMedia('owner', ['one'], undefined, f.deps);
+  assert.match(result.text, /"id":"one"/);
+  assert.match(result.text, /\/api\/v1\/attachments\/content\?id=one/);
+  assert.match(result.text, /save_attachment/);
+  assert.doesNotMatch(result.text, /object.example|signed|version-one/);
+  const denied = fixture({ deny: true }); const hidden = await resolveLopuMedia('owner', ['one'], undefined, denied.deps);
+  assert.doesNotMatch(hidden.text, /content\?id=one|"name":"test"/);
+});

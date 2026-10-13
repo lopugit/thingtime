@@ -1,3 +1,4 @@
+import { ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS } from '~/api/utils/attachments/attachmentArchiveCore';
 import { isHeicImage } from './heicImage';
 import type {
 	AttachmentComposerSnapshot,
@@ -22,7 +23,7 @@ const INLINE_VIDEO_TYPES = new Set([
 	'video/x-matroska'
 ]);
 const isAudioContentType = (value: string) => value.startsWith('audio/');
-export const MAX_POST_ATTACHMENTS = 25;
+export { MAX_POST_ATTACHMENTS } from '~/schemas/attachmentLimits';
 const MAX_POST_TAGS = 12;
 const MAX_POST_TAG_CHARS = 40;
 
@@ -320,6 +321,34 @@ export const attachmentContentUrl = (id: string, download = false): string => {
 	return `/api/v1/attachments/content?${params.toString()}`;
 };
 
+// "Download all" archives: one ZIP of a post's, folder's or media Thing's
+// stored files. The plain URL IS the share link — opening it in a browser,
+// wget or curl downloads the archive under the Thing's own audience rules.
+// The path and the client requirement live with the (dependency-free) server
+// core so the two sides can never disagree about either.
+export { ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS };
+
+export const attachmentArchiveUrl = (id: string, options: { key?: string; sharedRoot?: string; manifest?: boolean } = {}): string => {
+	const params = new URLSearchParams({ id });
+	if (options.manifest) params.set('manifest', '1');
+	// Only the exact first-party endpoint ever receives a legacy hidden key.
+	if (options.key) params.set('key', options.key);
+	if (options.sharedRoot) params.set('sharedRoot', options.sharedRoot);
+	return `${ATTACHMENT_ARCHIVE_PATH}?${params.toString()}`;
+};
+
+// The shareable form is canonical: no secret key (unlisted Things open by
+// exact id since PR #860), only the non-secret composition context survives.
+export const attachmentArchiveShareUrl = (id: string, origin: string, sharedRoot?: string): string =>
+	new URL(attachmentArchiveUrl(id, sharedRoot ? { sharedRoot } : {}), origin).href;
+
+// Stored files only — linked (external URL) media has no bytes to archive.
+export const downloadableAttachments = <T extends Pick<PublicAttachment, 'url'>>(attachments: readonly T[] | null | undefined): T[] =>
+	(attachments || []).filter((attachment) => !attachment.url);
+
+export const archiveDownloadLabel = (fileCount: number, totalBytes = 0): string =>
+	`Download all · ${fileCount} file${fileCount === 1 ? '' : 's'}${totalBytes > 0 ? ` · ${formatAttachmentBytes(totalBytes)}` : ''}`;
+
 // The src every renderer should use: linked attachments render straight from
 // their external URL; everything else goes through the authenticated content
 // endpoint.
@@ -377,7 +406,17 @@ export const attachmentUploadError = (
 	}
 	if (status === 403) return 'This account is not allowed to upload that file.';
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
-	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';
+	if (status === 429) {
+		const seconds = (error as { retryAfterSeconds?: unknown } | null)?.retryAfterSeconds;
+		const wait = typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+			? seconds < 60
+				? `${Math.ceil(seconds)} second${Math.ceil(seconds) === 1 ? '' : 's'}`
+				: `${Math.ceil(seconds / 60)} minute${Math.ceil(seconds / 60) === 1 ? '' : 's'}`
+			: null;
+		return wait
+			? `This account’s upload limit was reached. Retry this file in ${wait}. Your selection is kept.`
+			: 'This account’s upload limit was reached. Wait before retrying this file. Your selection is kept.';
+	}
 	if (status === 507 || code === 'quota_exceeded' || snapshotShowsQuota) return ATTACHMENT_QUOTA_ERROR;
 	if (code === 'storage_unconfigured') {
 		return 'Private uploads are unavailable in this environment. For images, use the public image URL option instead.';

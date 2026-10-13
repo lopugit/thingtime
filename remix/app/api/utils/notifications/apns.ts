@@ -1,11 +1,12 @@
 import type { PushDeliveryReport } from './pushDeliveryCore';
-export type { PushDeliveryReport } from './pushDeliveryCore';
 import { connect } from 'node:http2';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
 import { clampPreview, safeInternalHref } from './notifications';
 import type { EmitNotificationInput } from './notifications';
 import { listPushDevicesForUser, removePushDeviceById, type PushDevice } from './pushDevices';
+
+export type { PushDeliveryReport } from './pushDeliveryCore';
 
 type ApnsConfig = { keyId: string; teamId: string; privateKey: string };
 type PushEnvelope = EmitNotificationInput & { notificationId: string };
@@ -107,8 +108,9 @@ export const apnsCollapseId = (notificationId: string): string =>
 const sendDevice = async (
   authToken: string,
   device: PushDevice,
-  payload: ReturnType<typeof buildApnsPayload>,
-  collapseId: string
+  payload: Record<string, unknown>,
+  collapseId: string,
+  pushType: 'alert' | 'liveactivity' = 'alert'
 ): Promise<{ status: number; reason: string | null }> => {
   const authority = device.environment === 'sandbox' ? 'https://api.sandbox.push.apple.com' : 'https://api.push.apple.com';
   const client = connect(authority);
@@ -129,8 +131,8 @@ const sendDevice = async (
         ':path': `/3/device/${device.token}`,
         authorization: `bearer ${authToken}`,
         'apns-topic': device.topic,
-        'apns-push-type': 'alert',
-        'apns-priority': '10',
+        'apns-push-type': pushType,
+        'apns-priority': pushType === 'liveactivity' ? '5' : '10',
         'apns-collapse-id': apnsCollapseId(collapseId)
       });
       let status = 0;
@@ -198,3 +200,14 @@ export const createPushSender = (deps = pushDependencies) => async (notification
 };
 
 export const sendNotificationPush = createPushSender();
+
+/** Reuse signing and bounded HTTP/2 transport; activity tokens are not alert devices. */
+export const sendLiveActivityPush = async (
+  device: PushDevice,
+  payload: Record<string, unknown>,
+  activityId: string
+): Promise<{ status: number; reason: string | null }> => {
+  const config = apnsConfig();
+  if (!config) return { status: 503, reason: 'Unconfigured' };
+  return sendDevice(providerToken(config), device, payload, activityId, 'liveactivity');
+};

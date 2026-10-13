@@ -1,3 +1,4 @@
+import { internalRequestActor } from './internalRequestActor';
 import { resolveAppToken } from '../apps/appTokens';
 import { appAccountAllows, appAccountThingScopes } from '../apps/accountScopes';
 import { getAuthToken } from './authCookie';
@@ -403,6 +404,8 @@ export const resolveGetBridgeSelf = async (rawToken: unknown): Promise<PatIntros
 // caller can act on (missing scope, uses exhausted) return explicit errors.
 export const resolveThingsActor = async (request: Request, scope: string | string[]): Promise<ThingsActorResult> => {
   const anonymous: ThingsActorResult = { ok: true, actor: { user: null, pat: null } };
+  const internal = internalRequestActor(request);
+  if (internal) return { ok: true, actor: { user: await internal(), pat: null } };
 
   const token = await getAuthToken(request);
   if (!token) return anonymous;

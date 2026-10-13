@@ -1,3 +1,5 @@
+import { ownedMediaDraftIds } from '../drafts/media';
+import { MAX_POST_ATTACHMENTS, attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { isDeepStrictEqual } from 'node:util';
 import { isDurableRecordingUpload, prepareRecordingImport } from './recordingImportCore';
 
@@ -24,7 +26,7 @@ import {
 	type AttachmentState
 } from './attachmentCore';
 
-export const MAX_ATTACHMENTS_PER_TARGET = 25;
+export { MAX_ATTACHMENTS_PER_TARGET } from '../../../schemas/attachmentLimits';
 export const ATTACHMENT_FINALIZING_DELETE_GRACE_MS = 60 * 60 * 1000;
 export const ATTACHMENT_FINALIZATION_LEASE_MS = 15 * 60 * 1000;
 export const ATTACHMENT_DELETING_RETRY_DELAY_MS = 15 * 60 * 1000;
@@ -204,7 +206,7 @@ export const expiredAttachmentDraftFilter = (
 	attachmentExpiresAt: { $lte: expiredAtOrBefore },
 	$or: [
 		{ targetId: { $exists: false }, attachmentState: 'pending' },
-		{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $ne: 'recording' } }, { attachmentPurpose: 'recording', attachmentImportDraft: true }] },
+		{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $nin: ['recording', 'file'] } }, { attachmentPurpose: { $in: ['recording', 'file'] }, attachmentImportDraft: true }] },
 		{
 			targetId: { $exists: false },
 			attachmentState: 'finalizing',
@@ -219,7 +221,7 @@ export const expiredAttachmentDraftFilter = (
 
 export const attachmentStore: AttachmentStore = {
 	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft }) {
-		if (recordingImportDraft && (purpose !== 'recording' || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
+		if (recordingImportDraft && (!['recording', 'file'].includes(purpose) || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
 		const now = new Date();
 		const unstamped = {
 			shareId: id,
@@ -789,7 +791,7 @@ export const attachmentStore: AttachmentStore = {
 	}
 };
 
-type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording'>;
+type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording' | 'file'>;
 
 const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
 	post: 'post',
@@ -810,7 +812,7 @@ export const bindReadyAttachmentsForPurpose = async (
 	targetId: string,
 	session: any,
 	purpose: BindableAttachmentPurpose,
-	maxAttachments = MAX_ATTACHMENTS_PER_TARGET
+	maxAttachments = attachmentCountLimit(purpose)
 ): Promise<void> => {
 	if (isCustomMongoEndpointActive()) {
 		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
@@ -836,6 +838,8 @@ export const bindReadyAttachmentsForPurpose = async (
 	const now = new Date();
 	const purposeFence =
 		purpose === 'post' ? { $or: [{ attachmentPurpose: 'post' }, { attachmentPurpose: { $exists: false } }] } : { attachmentPurpose: purpose };
+  const sourceRows = await things.find({ shareId: { $in: ids }, ownerId, thingtime: ATTACHMENT_THINGTIME }, { session, projection: { targetId: 1 } }).toArray();
+  const sources = await ownedMediaDraftIds(ownerId, sourceRows.map(row => row.targetId).filter((id): id is string => typeof id === 'string' && id !== targetId), session);
 	const candidates = (await things
 		.find(
 			{
@@ -848,7 +852,7 @@ export const bindReadyAttachmentsForPurpose = async (
 					{ attachmentProfileSlot: { $exists: false } },
 					{
 				$or: [
-					{ targetId, attachmentExpiresAt: { $exists: false } },
+					{ targetId: { $in: [targetId, ...sources] }, attachmentExpiresAt: { $exists: false } },
 					{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
 				]
 					}
@@ -858,7 +862,7 @@ export const bindReadyAttachmentsForPurpose = async (
 		)
 		.toArray()) as Array<{ shareId: string; targetId?: string }>;
 
-	if (candidates.length !== ids.length || candidates.some((attachment) => attachment.targetId && attachment.targetId !== targetId)) {
+	if (candidates.length !== ids.length || candidates.some((attachment) => attachment.targetId && attachment.targetId !== targetId && !sources.includes(attachment.targetId))) {
 		throw new AttachmentBindingError(409, 'One or more attachments are unavailable or already attached');
 	}
 
@@ -877,7 +881,7 @@ export const bindReadyAttachmentsForPurpose = async (
 						{ attachmentProfileSlot: { $exists: false } },
 						{
 							$or: [
-								{ targetId, attachmentExpiresAt: { $exists: false } },
+								{ targetId: { $in: [targetId, ...sources] }, attachmentExpiresAt: { $exists: false } },
 								{ targetId: { $exists: false }, attachmentExpiresAt: { $gt: now } }
 							]
 						}
@@ -922,7 +926,7 @@ export const commitRecordingImport = async (ownerId: string, id: string, expecte
     const sizeBytes = thingStorageSizeBytes(next);
     await applyUserStorageDelta(ownerId, sizeBytes - canonicalStoredBytes(before), session);
     const write = await things.updateOne({
-      _id: before._id, ownerId, attachmentState: 'ready', attachmentPurpose: 'recording', attachmentImportDraft: true,
+      _id: before._id, ownerId, attachmentState: 'ready', attachmentPurpose: before.attachmentPurpose, attachmentImportDraft: true,
       updatedAt: before.updatedAt, sizeBytes: before.sizeBytes
     } as any, {
       $set: { crystal: next.crystal, acl: [ACL_OWNER], updatedAt: next.updatedAt, sizeBytes },
@@ -994,7 +998,7 @@ export const reorderBoundTargetAttachments = async (ownerId: string, targetId: s
 	const plan = planAttachmentReorder(
 		requestedIds,
 		bound.map((doc) => String(doc.shareId)),
-		MAX_ATTACHMENTS_PER_TARGET
+		MAX_POST_ATTACHMENTS
 	);
 	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
 	if (!plan.orderedIds.length) return;
@@ -1042,15 +1046,15 @@ export const syncBoundTargetAttachments = async (ownerId: string, targetId: stri
 	const hiddenBound = bound
 		.filter((doc) => attachmentModerationHidesFromPublic(doc.moderation))
 		.sort((left, right) => attachmentStoredSortValue(left.attachmentSortIndex) - attachmentStoredSortValue(right.attachmentSortIndex));
+	const purpose: BindableAttachmentPurpose = Array.isArray(target.thingtime) && target.thingtime.includes('comment') ? 'comment' : 'post';
 	const plan = planAttachmentSync(
 		requestedIds,
 		bound.map((doc) => String(doc.shareId)),
 		hiddenBound.map((doc) => String(doc.shareId)),
-		MAX_ATTACHMENTS_PER_TARGET
+		attachmentCountLimit(purpose)
 	);
 	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
 	if (!plan.orderedIds.length && !plan.hiddenTrailingIds.length) return;
-	const purpose: BindableAttachmentPurpose = Array.isArray(target.thingtime) && target.thingtime.includes('comment') ? 'comment' : 'post';
 	await withHomeMongoTransaction(async (session) => {
 		if (plan.orderedIds.length) {
 			await bindReadyAttachmentsForPurpose(ownerId, plan.orderedIds, targetId, session, purpose);

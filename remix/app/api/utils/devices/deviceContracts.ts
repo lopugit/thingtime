@@ -43,6 +43,7 @@ export type DevicePairingClaimResponse =
 	  };
 
 export type DeviceNodeStateRequest = {
+	capabilities?: string[];
 	revision: number;
 	state: DeviceStateSnapshot;
 	connectors: DeviceConnectorSnapshot[];
@@ -66,6 +67,7 @@ export type DeviceNodeCommandRequest =
 			status: Exclude<DeviceCommandStatus, 'queued' | 'claimed'>;
 			error?: string;
 			outputRef?: string;
+			result?: import('./deviceFilesystemCore').FilesystemResult;
 	  }
 	| {
 			op: 'approval-request';

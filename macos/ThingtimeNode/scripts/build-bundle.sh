@@ -36,6 +36,7 @@ ICON_SOURCE_PATH="${PACKAGE_ROOT}/Resources/ThingtimeNodeIcon.png"
 
 test -x "${BIN_PATH}"
 test -x "${BRIDGE_PATH}"
+test -x "$(dirname "${BIN_PATH}")/ThingtimeSpeech"
 test -d "${RESOURCE_BUNDLE_PATH}"
 test -f "${ICON_SOURCE_PATH}"
 mkdir -p "${STAGE_ROOT}"
@@ -46,6 +47,7 @@ mkdir -p "${CONTENTS_PATH}/MacOS"
 mkdir -p "${CONTENTS_PATH}/Resources"
 /usr/bin/ditto "${BIN_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNode"
 /usr/bin/ditto "${BRIDGE_PATH}" "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
+/usr/bin/ditto "$(dirname "${BIN_PATH}")/ThingtimeSpeech" "${CONTENTS_PATH}/MacOS/ThingtimeSpeech"
 /usr/bin/ditto "${RESOURCE_BUNDLE_PATH}" "${CONTENTS_PATH}/Resources/ThingtimeNode_ThingtimeNodeCore.bundle"
 /usr/bin/ditto "${PACKAGE_ROOT}/Resources/Info.plist" "${CONTENTS_PATH}/Info.plist"
 ICON_WORK_ROOT="$(mktemp -d "${CACHE_ROOT}/icon-build.XXXXXX")"
@@ -97,6 +99,7 @@ case "${SIGNING_MODE}" in
             "") echo "No Apple Development identity is available. Set THINGTIME_NODE_SIGNING_IDENTITY." >&2; exit 3 ;;
             *) echo "THINGTIME_NODE_SIGNING_IDENTITY must be Apple Development or Developer ID Application." >&2; exit 3 ;;
         esac
+        /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.speech --options runtime "${TIMESTAMP_ARGUMENT}" --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeSpeech.entitlements" "${CONTENTS_PATH}/MacOS/ThingtimeSpeech"
         /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --identifier com.thingtime.desktop.node.bridge --options runtime "${TIMESTAMP_ARGUMENT}" "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
         /usr/bin/codesign --force --sign "${SIGNING_IDENTITY}" --options runtime "${TIMESTAMP_ARGUMENT}" --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeNode.entitlements" "${APP_PATH}"
         ;;
@@ -107,6 +110,7 @@ case "${SIGNING_MODE}" in
         fi
         # This ad-hoc signature has no Apple team identity or Gatekeeper trust;
         # it only keeps nested macOS code executable in an UNSIGNED release.
+        /usr/bin/codesign --force --sign - --identifier com.thingtime.desktop.speech --options runtime --timestamp=none --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeSpeech.entitlements" "${CONTENTS_PATH}/MacOS/ThingtimeSpeech"
         /usr/bin/codesign --force --sign - --identifier com.thingtime.desktop.node.bridge --options runtime --timestamp=none "${CONTENTS_PATH}/MacOS/ThingtimeNodeBridge"
         /usr/bin/codesign --force --sign - --options runtime --timestamp=none --entitlements "${PACKAGE_ROOT}/Resources/ThingtimeNode.entitlements" "${APP_PATH}"
         ;;

@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { thingDetailSections } from './thingDetailSectionsCore.ts';
+import { thingDetailSections, canKeepThingAfterReadFailure } from './thingDetailSectionsCore.ts';
+import { ThingtimeApiError } from '../../hooks/apiFailure';
+
+test('temporary read failures may retain a Thing but access and identity refusals cannot', () => {
+	for (const status of [null, 408, 429, 500, 502, 503]) assert.equal(canKeepThingAfterReadFailure(new ThingtimeApiError('Temporary failure', { status })), true);
+	for (const status of [200, 400, 401, 403, 404, 409, 410, 422]) assert.equal(canKeepThingAfterReadFailure(new ThingtimeApiError('Refused', { status })), false);
+	for (const error of [new Error('Unknown failure'), { status: 503 }, null]) assert.equal(canKeepThingAfterReadFailure(error), false);
+});
 
 test('a Thing honours both view switches independently', () => {
 	assert.deepEqual(thingDetailSections({ hasThing: true, showPreview: true, showData: true }), {

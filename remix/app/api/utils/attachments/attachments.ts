@@ -1,3 +1,5 @@
+import { ownedMediaDraftIds } from '../drafts/media';
+import { attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -48,7 +50,7 @@ import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
 import { queueAttachmentModeration } from '../moderation/analyzeAttachment';
 import { copyStoredAttachment } from './copyStoredAttachment';
-import { findUserById, userPublicUploadsEnabled } from '../auth/users';
+import { findUserById, userPublicUploadsEnabled, userPrivateUploadsEnabled } from '../auth/users';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -63,7 +65,7 @@ export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
 export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
 export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
-export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import', 'subspace-icon', 'subspace-banner'] as const;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import', 'file', 'file-import', 'subspace-icon', 'subspace-banner'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
 export const CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -82,6 +84,7 @@ type AttachmentCleanupOutcome = { status: 'deleted' | 'skipped' } | { status: 'd
 type AttachmentViewer = AttachmentAccessViewer;
 
 type AttachmentServiceDependencies = {
+  ownedMediaDraftIds: typeof ownedMediaDraftIds;
 	store: AttachmentStore;
 	getS3: () => AttachmentS3;
 	now: () => Date;
@@ -89,7 +92,7 @@ type AttachmentServiceDependencies = {
 	customMongoActive: () => boolean;
 	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
 	canViewSharedTarget: typeof canViewSharedCompositionAttachment;
-	canCopyFiles: (ownerId: string) => Promise<boolean>;
+	canCopyFiles: (ownerId: string, purpose?: 'post' | 'comment' | 'file') => Promise<boolean>;
 	clock: () => number;
 	// Fire-and-forget NSFW/TOS analysis kickoff after markReady; optional so
 	// unit tests that stub the store never trigger network analysis.
@@ -138,6 +141,8 @@ const attachmentUploadIntent = (
 	if (value === undefined || value === 'post') return { requestPurpose: 'post', purpose: 'post' };
 	if (value === 'comment') return { requestPurpose: value, purpose: 'comment' };
 	if (value === 'message') return { requestPurpose: value, purpose: 'message' };
+	if (value === 'file') return { requestPurpose: value, purpose: 'file' };
+	if (value === 'file-import') return { requestPurpose: value, purpose: 'file', recordingImportDraft: true };
 	if (value === 'recording') return { requestPurpose: value, purpose: 'recording' };
 	if (value === 'recording-import') return { requestPurpose: value, purpose: 'recording', recordingImportDraft: true };
 	if (value === 'profile-avatar') return { requestPurpose: value, purpose: 'profile', profileSlot: 'avatar' };
@@ -261,6 +266,7 @@ const exactPartRequest = (value: unknown, partCount: number) => {
 };
 
 const defaultDependencies: AttachmentServiceDependencies = {
+  ownedMediaDraftIds,
 	store: attachmentStore,
 	getS3: getPrivateS3,
 	now: () => new Date(),
@@ -268,9 +274,9 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
 	canViewSharedTarget: (viewer, attachment, rootId) => canViewSharedCompositionAttachment(viewer, attachment, rootId),
-	canCopyFiles: async (ownerId) => {
+	canCopyFiles: async (ownerId, purpose = 'post') => {
 		const user = await findUserById(ownerId);
-		return !!user && user.accountKind !== 'service' && userPublicUploadsEnabled(user);
+		return !!user && user.accountKind !== 'service' && (purpose === 'file' ? userPrivateUploadsEnabled(user) : userPublicUploadsEnabled(user));
 	},
 	clock: Date.now,
 	queueModeration: queueAttachmentModeration
@@ -836,7 +842,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
-			if (intent.purpose === 'recording' && reserved.attachmentState === 'ready') {
+			if (['recording', 'file'].includes(intent.purpose) && reserved.attachmentState === 'ready') {
 				if (intent.recordingImportDraft && (reserved.attachmentImportDraft !== true ||
 					!(reserved.attachmentExpiresAt instanceof Date) || !Number.isFinite(reserved.attachmentExpiresAt.getTime()) ||
 					reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
@@ -1200,7 +1206,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const remove = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>> => {
+	const remove = async (ownerId: string, input: unknown, options?: { pendingOnly: boolean }): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>> => {
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment deletion request');
 			const raw = input as Record<string, unknown>;
@@ -1211,6 +1217,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing) return { ok: true, deferred: false };
+			// Internal copy rollback may only discard unfinished uploads. The
+			// cleanup claim below CAS-fences the observed state, so a concurrent
+			// finalization cannot turn this retry into deletion of a durable file.
+			if (options?.pendingOnly && !['pending', 'deleting'].includes(existing.attachmentState)) return { ok: true, deferred: false };
 			// A client may miss a successful post-create response and then try to
 			// clean up its former draft ids. Once bound, only post cascade deletion
 			// may remove the object; this check makes that ambiguous success safe.
@@ -1262,7 +1272,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// Saved recordings intentionally have no expiry: they are private
 			// library content, not abandoned upload drafts. This exception is
 			// exact-owner only and must not revive an expiring/import draft.
-			const durableRecording = doc.attachmentPurpose === 'recording' &&
+			const durableRecording = ['recording', 'file'].includes(doc.attachmentPurpose || '') &&
 				doc.attachmentImportDraft !== true && !doc.attachmentExpiresAt &&
 				!doc.attachmentLinked && !doc.attachmentProfileSlot &&
 				doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment' &&
@@ -1353,13 +1363,26 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal) => copyStoredAttachment({
+	// The download gates without a signed URL: size and served type only. The
+	// archive planner uses it for manifests and HEAD probes so those never
+	// presign hundreds of objects nobody is about to fetch.
+	const inspectDownload = async (viewer: AttachmentViewer, idInput: unknown): Promise<AttachmentResult<{ size: number; contentType: string }>> => {
+		try {
+			const readable = await readableStoredAttachment(viewer, idInput);
+			if (readable.ok === false) return readable;
+			return { ok: true, size: readable.doc.objectSizeBytes, contentType: 'application/octet-stream' };
+		} catch (error) {
+			return knownFailure(error) || unavailable('inspect', error);
+		}
+	};
+
+	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal, purpose: 'post' | 'comment' | 'file' = 'post', requestId?: string) => copyStoredAttachment({
 		canCopy: dependencies.canCopyFiles,
 		read: (viewer, id) => readableStoredAttachment(viewer, id, true), start, complete, remove,
 		readyDraftTtlMs: ATTACHMENT_READY_DRAFT_TTL_MS,
 		store: dependencies.store, getS3: dependencies.getS3,
 		plan: attachmentPartPlan, uuid: dependencies.uuid, now: dependencies.now
-	}, viewer, id, signal);
+	}, viewer, id, signal, purpose, requestId);
 
 	type ContentAttachmentPurpose = Extract<AttachmentPurpose, 'post' | 'comment' | 'message' | 'emoji'>;
 	type InspectedAttachments = {
@@ -1372,7 +1395,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		ownerId: string,
 		attachmentIds: readonly unknown[],
 		purpose: ContentAttachmentPurpose,
-		maxAttachments = MAX_ATTACHMENTS_PER_TARGET,
+		maxAttachments = attachmentCountLimit(purpose),
 		expectedTargetId?: unknown
 	): Promise<AttachmentResult<InspectedAttachments>> => {
 		try {
@@ -1393,10 +1416,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const byId = new Map(docs.map((doc) => [doc.shareId, doc]));
 			const ordered = normalized.map((id) => byId.get(id)).filter((doc): doc is AttachmentDoc => !!doc);
 			const bindingStates = new Set<'draft' | 'bound'>();
+            const sourceDrafts = purpose === 'post' || purpose === 'comment'
+              ? await dependencies.ownedMediaDraftIds(ownerId, ordered.map(doc => doc.targetId).filter((id): id is string => typeof id === 'string' && id !== normalizedExpectedTargetId))
+              : [];
 			if (
 				ordered.length !== normalized.length ||
 				ordered.some((doc) => {
-					const draft = !doc.targetId && !!doc.attachmentExpiresAt && doc.attachmentExpiresAt.getTime() > now;
+					const draft = (!doc.targetId && !!doc.attachmentExpiresAt && doc.attachmentExpiresAt.getTime() > now) || (!!doc.targetId && sourceDrafts.includes(doc.targetId) && doc.attachmentExpiresAt === undefined);
 					const idempotentlyBound =
 						!!normalizedExpectedTargetId && doc.targetId === normalizedExpectedTargetId && doc.attachmentExpiresAt === undefined;
 					if (draft) bindingStates.add('draft');
@@ -1494,6 +1520,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		cancel,
 		remove,
 		download,
+		inspectDownload,
 		describeTransfer,
 		copy,
 		inspectForPost,
@@ -1515,6 +1542,7 @@ export const completeAttachmentUpload = service.complete;
 export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
+export const inspectAttachmentDownload = service.inspectDownload;
 export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;

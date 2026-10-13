@@ -46,7 +46,7 @@ type UploadTarget =
 	| { kind: 'insert'; containerId: string | null; index: number }
 	| { kind: 'replace'; blockId: string };
 
-export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
+export const useBuilderChrome = (draft: UseWebpageDraft, options?: { enabled?: boolean }): UseBuilderChrome => {
 	const [hoverId, setHoverId] = React.useState<string | null>(null);
 	const [selectedId, setSelectedId] = React.useState<string | null>(null);
 	const [insertAt, setInsertAt] = React.useState<{ containerId: string | null; index: number; anchor: HTMLElement } | null>(null);
@@ -201,7 +201,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	// the uploader (a blob <img> pasted into contentEditable would die at the
 	// allowlist render anyway — uploading is strictly better).
 	React.useEffect(() => {
-		if (!selectedId) return;
+		if (!selectedId || options?.enabled === false) return;
 		const onPaste = (event: ClipboardEvent) => {
 			if (event.defaultPrevented) return;
 			const files = Array.from(event.clipboardData?.files || []);
@@ -219,7 +219,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		};
 		window.addEventListener('paste', onPaste);
 		return () => window.removeEventListener('paste', onPaste);
-	}, [selectedId, uploadToBlock]);
+	}, [selectedId, uploadToBlock, options?.enabled]);
 
 	const chrome = React.useMemo<BuilderChrome>(
 		() => ({
@@ -247,7 +247,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 	// Escape deselects from anywhere in the canvas (the inline editor commits
 	// first via its own Escape handler, then the event bubbles here)
 	React.useEffect(() => {
-		if (!selectedId) return;
+		if (!selectedId || options?.enabled === false) return;
 		const onKey = (event: KeyboardEvent) => {
 			// an overlay (context menu, Editor.js popover) that consumed this
 			// Escape marked it defaultPrevented — the selection stays
@@ -255,7 +255,7 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 		};
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
-	}, [selectedId]);
+	}, [selectedId, options?.enabled]);
 
 	const handlePick = React.useCallback((pick: InsertPick) => {
 		const target = insertAt;

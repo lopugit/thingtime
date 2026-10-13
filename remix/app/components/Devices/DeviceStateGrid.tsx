@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useRef } from 'react';
 
 import { Box, Button, Flex, Grid, MenuItem, Progress, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
 import { AppWindow, LockKeyhole, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
@@ -173,6 +173,7 @@ const Meter = ({
 	controlFor?: DeviceControlResolver;
 	onAction?: DeviceActionHandler;
 }) => {
+	const lastSubmission = useRef<{ key: string; percent: number } | null>(null);
 	if (value === null)
 		return (
 			<Text color="var(--tt-muted, #71717a)" fontSize="10px">
@@ -194,6 +195,19 @@ const Meter = ({
 		);
 	}
 	const actionable = control.policy.allowed && Boolean(control.idempotencyKey) && Boolean(onAction) && !control.busy;
+	const commit = (nextPercent: number) => {
+		if (!actionable || !onAction || !Number.isFinite(nextPercent) || nextPercent < 0 || nextPercent > 100) return;
+		if (lastSubmission.current?.key === control.idempotencyKey && lastSubmission.current.percent === nextPercent) return;
+		lastSubmission.current = { key: control.idempotencyKey, percent: nextPercent };
+		onAction({
+			deviceId,
+			action,
+			idempotencyKey: control.idempotencyKey,
+			commandId: control.commandId,
+			targetId: field,
+			desired: { [field]: nextPercent / 100 }
+		});
+	};
 	return (
 		<Box>
 			<Slider
@@ -203,16 +217,13 @@ const Meter = ({
 				key={`${field}:${valuePercent}`}
 				min={0}
 				max={100}
-				onChangeEnd={(nextPercent) => {
-					if (!actionable || !onAction) return;
-					onAction({
-						deviceId,
-						action,
-						idempotencyKey: control.idempotencyKey,
-						commandId: control.commandId,
-						targetId: field,
-						desired: { [field]: nextPercent / 100 }
-					});
+				onChangeEnd={commit}
+				onKeyUp={(event) => {
+					if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) return;
+					// Chakra's pointer-end callback does not reliably run for keyboard
+					// input in the current React runtime. Commit the rendered thumb value.
+					const percent = event.target instanceof HTMLElement ? event.target.getAttribute('aria-valuenow') : null;
+					if (percent !== null) commit(Number(percent));
 				}}
 				step={1}
 			>

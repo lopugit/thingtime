@@ -24,6 +24,7 @@ const MAX_PROJECT_REGISTRY_BYTES = 1_048_576;
 const ALLOWED_SIGNATURE_MODES = new Set(['local', 'production', 'runtime']);
 const LOCAL_SIGNING_AUTHORITY_PREFIX = 'Apple Development:';
 const PRODUCTION_SIGNING_AUTHORITY_PREFIX = 'Developer ID Application:';
+const AUDIO_INPUT_ENTITLEMENT = 'com.apple.security.device.audio-input';
 const ELECTRON_ENTITLEMENTS = new Set(['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory']);
 // Ad-hoc hardened-runtime applications do not inherit the Developer ID library
 // validation policy. Keep this relaxation confined to the explicitly labelled
@@ -671,7 +672,11 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	assertExpectedEntitlements(helper, [], 'Thingtime Node');
 	assertExpectedEntitlements(bridge, [], 'Thingtime Node bridge');
 	if (paths.outerApp) {
-		assertExpectedEntitlements(signed.at(-1).details, ELECTRON_ENTITLEMENTS, 'Thingtime');
+		const desktop = signed.at(-1).details;
+		// Recovery must still accept older signed builds without microphone capture.
+		const expected = desktop.entitlementKeys.includes(AUDIO_INPUT_ENTITLEMENT)
+			? [...ELECTRON_ENTITLEMENTS, AUDIO_INPUT_ENTITLEMENT] : ELECTRON_ENTITLEMENTS;
+		assertExpectedEntitlements(desktop, expected, 'Thingtime');
 	}
 	return { identityClass: [...identityClasses][0], teamIdentifier: [...teams][0] };
 }
@@ -717,7 +722,12 @@ async function verifyUnsignedArtifacts(paths, runner = runProcess) {
 	}
 	assertExpectedEntitlements(unsigned[0].details, [], 'Thingtime Node');
 	assertExpectedEntitlements(unsigned[1].details, [], 'Thingtime Node bridge');
-	if (paths.outerApp) assertExpectedEntitlements(unsigned.at(-1).details, UNSIGNED_ELECTRON_ENTITLEMENTS, 'Thingtime');
+	if (paths.outerApp) {
+		const desktop = unsigned.at(-1).details;
+		const expected = desktop.entitlementKeys.includes(AUDIO_INPUT_ENTITLEMENT)
+			? [...UNSIGNED_ELECTRON_ENTITLEMENTS, AUDIO_INPUT_ENTITLEMENT] : UNSIGNED_ELECTRON_ENTITLEMENTS;
+		assertExpectedEntitlements(desktop, expected, 'Thingtime');
+	}
 	return { identityClass: 'unsigned', teamIdentifier: null };
 }
 

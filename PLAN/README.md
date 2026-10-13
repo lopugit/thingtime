@@ -43,6 +43,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Conversation agency and private-communication roadmap](./conversation-agency-and-private-communication-roadmap.md)                 | Conversation authority through state/effect truth, metadata choices, delivery evidence, safety stopping, family cleanup, archive independence, and one synthetic rehearsal | Proposed |
 | [Measurement agency and privacy-respecting telemetry roadmap](./measurement-agency-and-privacy-respecting-telemetry-roadmap.md)     | Purpose-specific measurement through separated planes, minimum signals, useful-baseline choice, bounded retention, metric truth, and one synthetic rehearsal               | Proposed |
 | [Temporal agency and humane time-semantics roadmap](./temporal-agency-and-humane-time-semantics-roadmap.md)                         | Explicit temporal types and authority through civil-time rules, accessible formatters, DST/skew fixtures, honest receipts, and one low-risk date-filter slice              | Proposed |
+| [Unified Thing history roadmap](./unified-thing-history-roadmap.md)                                                                 | Design concept through a durable editor journal, one contextual History panel, account-synced history Things, the /history timeline browser, versions with review-and-combine, and every writer emitting events | Proposed (M0 delivered) |
 
 ## Conventions
 

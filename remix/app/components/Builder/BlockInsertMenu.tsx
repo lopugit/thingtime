@@ -1,4 +1,5 @@
 import React from 'react';
+import { builderRect, builderDocuments } from './builderCoordinates';
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
 
 import { DRAWER_POPUP_Z } from '../Nav/Drawer/useDrawer';
@@ -42,6 +43,7 @@ const QUICK_BLOCKS: Array<{ key: string; icon: string; label: string; make: (exi
 	{ key: 'row', icon: '➡️', label: 'Row', make: (existing) => defaultContainerBlock(existing, 'row') },
 	{ key: 'grid', icon: '🔲', label: 'Grid', make: (existing) => defaultContainerBlock(existing, 'grid') },
 	{ key: 'media', icon: '🖼', label: 'Media', make: (existing) => defaultMediaBlock(existing) },
+	{ key: 'service', icon: '🌿', label: 'Service workspace', make: existing => ({ id: newBlockId('service', existing), type: 'html', html: `<tt-service-workspace rootId="${crypto.randomUUID()}" name="Service workspace"></tt-service-workspace>` }) },
 	{ key: 'html', icon: '🧬', label: 'HTML', make: (existing) => defaultHtmlBlock(existing) }
 ];
 
@@ -63,7 +65,7 @@ export const BlockInsertMenu = (props: {
 	// keeps the anchored popover: open whichever way has more room, never grow
 	// past the viewport.
 	const sheet = typeof window !== 'undefined' && window.innerWidth < 640;
-	const rect = anchor.getBoundingClientRect();
+	const rect = builderRect(anchor);
 	const width = 300;
 	const left = Math.max(8, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 8));
 	const spaceBelow = window.innerHeight - rect.bottom - 12;
@@ -93,11 +95,12 @@ export const BlockInsertMenu = (props: {
 				onClose();
 			}
 		};
-		window.addEventListener('mousedown', onDown);
-		window.addEventListener('keydown', onKey, true);
+		const documents = builderDocuments();
+		for (const doc of documents) doc.addEventListener('mousedown', onDown);
+		for (const doc of documents) doc.addEventListener('keydown', onKey, true);
 		return () => {
-			window.removeEventListener('mousedown', onDown);
-			window.removeEventListener('keydown', onKey, true);
+			for (const doc of documents) doc.removeEventListener('mousedown', onDown);
+			for (const doc of documents) doc.removeEventListener('keydown', onKey, true);
 		};
 	}, [onClose]);
 

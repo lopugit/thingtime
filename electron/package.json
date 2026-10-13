@@ -83,7 +83,11 @@
 			],
 			"signIgnore": [
 				"Thingtime Node\\.app(?:/|$)"
-			]
+			],
+			"extendInfo": {
+				"NSMicrophoneUsageDescription": "Thingtime uses your microphone when you start voice input for Lopu.",
+				"NSSpeechRecognitionUsageDescription": "Thingtime transcribes your speech for Lopu. macOS may use Apple servers when on-device recognition is unavailable."
+			}
 		}
 	},
 	"devDependencies": {

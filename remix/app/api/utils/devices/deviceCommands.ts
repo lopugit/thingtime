@@ -1,3 +1,4 @@
+import { normalizeFilesystemInput, normalizeFilesystemResult, type FilesystemResult } from './deviceFilesystemCore';
 import { randomBytes } from 'node:crypto';
 
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
@@ -57,6 +58,9 @@ export const availableDeviceApprovalSlot = (values: unknown[]): number | null =>
 };
 
 export const deviceSessionSendRedactionFields = (command: any, now: Date): Record<string, unknown> => {
+	if (command?.crystal?.kind === 'filesystem' && typeof command.crystal.input?.data === 'string') {
+    return { 'crystal.input.data': '', 'crystal.inputRedactedAt': now, 'crystal.controlBytes': deviceControlEventLogicalBytes({ kind: 'filesystem', input: { ...command.crystal.input, data: '' } }) };
+  }
 	if (command?.crystal?.kind !== 'session.send') return {};
 	const input = command.crystal?.input && typeof command.crystal.input === 'object' ? (command.crystal.input as Record<string, unknown>) : {};
 	const text = typeof input.text === 'string' ? input.text : '';
@@ -87,6 +91,7 @@ const commandOutputReference = (value: unknown): string | null => {
 };
 
 export type PublicDeviceCommand = {
+	result?: FilesystemResult;
 	id: string;
 	requestId: string;
 	deviceId: string;
@@ -112,7 +117,7 @@ const commandApprovalState = (value: unknown, requiresApproval: boolean): Device
 	return requiresApproval ? 'pending' : 'not-required';
 };
 
-export const publicDeviceCommand = (doc: any): PublicDeviceCommand => {
+export const publicDeviceCommand = (doc: any, includeResult = false): PublicDeviceCommand => {
 	const requiresApproval = doc.crystal?.requiresApproval === true;
 	return {
 		id: String(doc.shareId),
@@ -120,7 +125,8 @@ export const publicDeviceCommand = (doc: any): PublicDeviceCommand => {
 		deviceId: String(doc.targetId),
 		kind: String(doc.crystal?.kind || ''),
 		status: commandStatus(doc.crystal?.status),
-		input: doc.crystal?.input && typeof doc.crystal.input === 'object' ? doc.crystal.input : {},
+		...(includeResult && doc.crystal?.kind === 'filesystem' && doc.crystal?.result && new Date(doc.crystal.resultExpiresAt).getTime() > Date.now() ? { result: doc.crystal.result } : {}),
+		input: doc.crystal?.input && typeof doc.crystal.input === 'object' ? (doc.crystal.kind === 'filesystem' ? Object.fromEntries(Object.entries(doc.crystal.input).filter(([key]) => key !== 'data')) : doc.crystal.input) : {},
 		requiresApproval,
 		approvalState: commandApprovalState(doc.crystal?.approvalState, requiresApproval),
 		error: typeof doc.crystal?.error === 'string' ? doc.crystal.error : null,
@@ -432,8 +438,8 @@ export const listDeviceCommands = async (
 		}
 		filter['crystal.status'] = statusValue;
 	}
-	const docs = await (await getHomeThingsCollection()).find(filter).sort({ createdAt: -1, shareId: 1 }).limit(MAX_COMMANDS_PAGE).toArray();
-	return { ok: true, commands: docs.map(publicDeviceCommand) };
+	const docs = await (await getHomeThingsCollection()).find(filter, { projection: { 'crystal.result': 0, 'crystal.input.data': 0 } }).sort({ createdAt: -1, shareId: 1 }).limit(MAX_COMMANDS_PAGE).toArray();
+	return { ok: true, commands: docs.map(doc => publicDeviceCommand(doc)) };
 };
 
 const leaseHash = (leaseId: string): string => deviceHash('lease', leaseId);
@@ -551,7 +557,7 @@ export const claimNextDeviceCommand = async (
 				session
 			);
 		});
-		if (claimed) return { ok: true, command: { ...publicDeviceCommand(claimed), leaseId }, serverTime: new Date().toISOString() };
+		if (claimed) return { ok: true, command: { ...publicDeviceCommand(claimed), input: claimed.crystal.input, leaseId }, serverTime: new Date().toISOString() };
 		if (Date.now() >= deadline) return { ok: true, command: null, serverTime: new Date().toISOString() };
 		await new Promise((resolve) => setTimeout(resolve, Math.min(500, Math.max(1, deadline - Date.now()))));
 	}
@@ -598,6 +604,7 @@ export const reportDeviceCommand = async (
 		status?: unknown;
 		error?: unknown;
 		outputRef?: unknown;
+		result?: unknown;
 	}
 ): Promise<DeviceFail | { ok: true; command: PublicDeviceCommand; idempotent: boolean }> => {
 	const commandId = bounded(input?.commandId, 160);
@@ -616,7 +623,7 @@ export const reportDeviceCommand = async (
 		return deviceFail(400, 'outputRef must be a bounded opaque identifier');
 	}
 	const reportKey = deviceHash('command-report', ownerId, deviceId, commandId, eventId);
-	const reportHash = devicePayloadHash({ nextStatus, error, outputRef });
+	const reportHash = devicePayloadHash({ nextStatus, error, outputRef, ...(input.result === undefined ? {} : { result: input.result }) });
 	const things = await getHomeThingsCollection();
 	const current = await things.findOne({ shareId: commandId, thingtime: 'device-command', ownerId, targetId: deviceId } as any);
 	if (!current) return deviceFail(404, 'Command not found');
@@ -627,11 +634,15 @@ export const reportDeviceCommand = async (
 		return deviceFail(409, 'Command lease is expired and its outcome requires review');
 	}
 	if (leaseDecision === 'invalid') return deviceFail(409, 'Command lease is invalid');
-	if (current.crystal?.lastReportKey === reportKey) {
+	if (current.crystal?.lastReportKey === reportKey && current.crystal?.leaseHash === leaseHash(leaseId)) {
 		return current.crystal?.lastReportHash === reportHash
 			? { ok: true, command: publicDeviceCommand(current), idempotent: true }
 			: deviceFail(409, 'eventId was already used for different report content');
 	}
+
+	const filesystemInput = current.crystal?.kind === 'filesystem' ? normalizeFilesystemInput(current.crystal.input) : null;
+	const result = input.result === undefined ? undefined : (filesystemInput && nextStatus === 'succeeded' ? normalizeFilesystemResult(filesystemInput, input.result) : null);
+	if (result === null || (filesystemInput && nextStatus === 'succeeded' && !result)) return deviceFail(400, 'Invalid filesystem command result');
 	const from = commandStatus(current.crystal?.status);
 	if (!canTransitionDeviceCommand(from, nextStatus)) return deviceFail(409, `Command cannot move from ${from} to ${nextStatus}`);
 	const terminal = nextStatus === 'succeeded' || nextStatus === 'failed' || nextStatus === 'cancelled' || nextStatus === 'needs-review';
@@ -650,13 +661,14 @@ export const reportDeviceCommand = async (
 					'crystal.status': nextStatus,
 					'crystal.error': error,
 					'crystal.outputRef': outputRef,
+					...(result ? { 'crystal.result': result, 'crystal.resultExpiresAt': new Date(now.getTime() + 10 * 60_000) } : {}),
 					'crystal.lastReportKey': reportKey,
 					'crystal.lastReportHash': reportHash,
 					...(terminal
 						? {
 								'crystal.completedAt': now,
-								'crystal.expiresAt': new Date(now.getTime() + DEVICE_COMMAND_TERMINAL_RETENTION_MS),
-								'crystal.deviceTtlAt': new Date(now.getTime() + DEVICE_COMMAND_TERMINAL_RETENTION_MS),
+								'crystal.expiresAt': new Date(now.getTime() + (current.crystal?.kind === 'filesystem' ? 10 * 60_000 : DEVICE_COMMAND_TERMINAL_RETENTION_MS)),
+								'crystal.deviceTtlAt': new Date(now.getTime() + (current.crystal?.kind === 'filesystem' ? 10 * 60_000 : DEVICE_COMMAND_TERMINAL_RETENTION_MS)),
 								...deviceSessionSendRedactionFields(current, now)
 						  }
 						: {}),
@@ -1102,4 +1114,12 @@ export const listNodeApprovalDecisions = async (ownerId: string, deviceId: strin
 		.limit(MAX_APPROVALS_PAGE)
 		.toArray();
 	return { ok: true, approvals: docs.map(publicApproval) };
+};
+
+/** Result bytes are available only through an exact owner/device/command read. */
+export const readDeviceCommand = async (ownerId: string, deviceId: string, commandId: string) => {
+	if (!(await deviceExistsForOwner(ownerId, deviceId))) return deviceFail(404, "Device not found");
+	const things = await getHomeThingsCollection();
+	const doc = await things.findOne({ ownerId, targetId: deviceId, shareId: commandId, thingtime: "device-command" } as any);
+	return doc ? { ok: true as const, command: publicDeviceCommand(doc, true) } : deviceFail(404, "Command not found");
 };

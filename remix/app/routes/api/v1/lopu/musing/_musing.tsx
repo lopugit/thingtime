@@ -1,3 +1,4 @@
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { consumeLopuMusingQuota } from '~/api/utils/lopu/rateLimit';
 import { wishSlotMusing } from '~/api/utils/lopu/fallbacks';
 import { fetchWeather, hasLopuAiProviderConfigured, streamLopuMusing } from '~/api/utils/lopu/musing';
@@ -59,11 +60,13 @@ export const loader = async ({ request }: { request: Request }) => {
     localTime: formatLocalTime(tz)
   };
 
+  const viewer = await getCurrentUser(request);
+  const ownerId = viewer?.accountKind !== 'service' ? viewer?.id : undefined;
   const encoder = new TextEncoder();
   const body = new ReadableStream({
     async start(controller) {
       try {
-        for await (const ev of streamLopuMusing(ctx, { forceFallback, signal: request.signal })) {
+        for await (const ev of streamLopuMusing(ctx, { forceFallback, signal: request.signal, ownerId })) {
           controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
         }
       } catch {

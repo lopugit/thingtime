@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
+import { Button, Menu, MenuButton, MenuItem, MenuList, Portal, Text, IconButton, MenuDivider } from '@chakra-ui/react';
+import { Settings } from 'lucide-react';
 import { Link } from 'react-router';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -11,7 +12,7 @@ import { ThingImportDialog } from './ThingImportDialog';
 import { TRANSFER_MENU_Z } from './transferLayers';
 import { transferIntent } from '~/utils/thingTransfer/intent';
 
-type Props = { id?: string | null; linkKey?: string; disabledReason?: string; onImported?: () => void; canCut?: boolean; menuContainerRef?: React.RefObject<HTMLElement | null> };
+type Props = { id?: string | null; linkKey?: string; disabledReason?: string; onImported?: () => void; canCut?: boolean; menuContainerRef?: React.RefObject<HTMLElement | null>; settings?: boolean; menuItems?: React.ReactNode; onOpen?: () => void; label?: string };
 
 /** Shared persisted-Thing entry point. Account, source or key changes tear down
  * every pending transfer before another context can receive its result. */
@@ -21,7 +22,7 @@ export const ThingTransferControls = (props: Props) => {
     {...props} ownerId={user?.id} />;
 };
 
-const TransferControls = ({ id, linkKey, disabledReason, ownerId, onImported, canCut, menuContainerRef }: Props & { ownerId?: string }) => {
+const TransferControls = ({ id, linkKey, disabledReason, ownerId, onImported, canCut, menuContainerRef, settings, menuItems, onOpen, label }: Props & { ownerId?: string }) => {
   const api = useApi();
   const lopu = useLopu();
   const [exportOpen, setExportOpen] = useState(false);
@@ -54,12 +55,15 @@ const TransferControls = ({ id, linkKey, disabledReason, ownerId, onImported, ca
   return <>
     {/* The inspector is fixed: an absolute portal can scroll/move on focus
         between pointer-down and pointer-up, losing the menu item's click. */}
-    <Menu isLazy strategy="fixed" placement="bottom-end">
-      <MenuButton as={Button} size="xs" variant="outline" data-testid="thing-transfer-menu">{copying ? 'Copying…' : 'Transfer'}</MenuButton>
+    <Menu isLazy strategy="fixed" placement="bottom-end" onOpen={onOpen}>
+      {settings ? <MenuButton as={IconButton} icon={<Settings size={16} />} aria-label={label || 'Thing settings'} size="sm" variant="ghost" data-testid="builder-thing-settings" />
+        : <MenuButton as={Button} size="xs" variant="outline" data-testid="thing-transfer-menu">{copying ? 'Copying…' : 'Transfer'}</MenuButton>}
       <Portal containerRef={menuContainerRef}><MenuList zIndex={TRANSFER_MENU_Z} maxWidth="calc(100vw - 32px)" minWidth="min(240px, calc(100vw - 32px))">
+        {menuItems}
+        {menuItems ? <MenuDivider /> : null}
         <MenuItem onClick={() => copy()} isDisabled={!id || !!disabledReason || copying}>Copy to clipboard</MenuItem>
         {canCut && ownerId && <MenuItem onClick={() => copy(true)} isDisabled={!id || !!disabledReason || copying}>Cut to clipboard</MenuItem>}
-        <MenuItem onClick={() => setExportOpen(true)} isDisabled={!id || !!disabledReason}>Download…</MenuItem>
+        <MenuItem onClick={() => setExportOpen(true)} isDisabled={!id || !!disabledReason}>Export / Download…</MenuItem>
         {disabledReason && <Text fontSize="xs" px={3} py={2} whiteSpace="normal">{disabledReason}</Text>}
         {ownerId ? <MenuItem onClick={() => setImportOpen(true)}>Import into my Things…</MenuItem>
           : <MenuItem as={Link} to="/login">Sign in to import</MenuItem>}

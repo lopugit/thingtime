@@ -241,7 +241,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
           let index = 0;
           do { portableId = `recording-file:${index++}`; } while (reservedIds.has(portableId));
           reservedIds.add(portableId);
-          plan.things.find(thing => thing.id === id)!.crystal = { recordingFileId: portableId };
+          plan.things.find(thing => thing.id === id)!.crystal.recordingFileId = portableId;
         }
         (plan.attachmentOrder ||= []).push(portableId);
         if (result.linked) {

@@ -45,6 +45,7 @@ mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { namedExport
     return {content:[{type:'text',text:JSON.stringify({items:[{kind:'todo',title:'Buy bike tubes',description:'',evidence:'buy bike tubes'}]})}]};
   } } })
 } });
+mock.module(new URL('../settings/lopuPromptSettings.ts', import.meta.url).href, { namedExports: { getLopuPromptSettings: async () => ({ basePrompt: 'Lopu test base', instructions: [] }) } });
 const { readRecordingBytes, transcribeRecording, analyzeRecording } = await import('./recordingsProvider');
 
 beforeEach(() => {

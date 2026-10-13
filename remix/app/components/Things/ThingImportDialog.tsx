@@ -63,7 +63,8 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
     { maxFiles: TRANSFER_LIMITS.files, purpose: 'post', selectionScope: 'transfer', purposeForFile: file => {
       const entry = bundle?.manifest.files.find(entry => entry.id === fileIds.current.get(file));
       if (bundle?.manifest.things.some(thing => thing.id === entry?.targetId && isTransferEmoji(thing))) return 'custom-emoji';
-      return bundle?.manifest.things.some(thing => thing.id === entry?.targetId && isTransferRecording(thing)) ? 'recording-import' : 'post';
+      const storedFile = bundle?.manifest.things.find(thing => thing.id === entry?.targetId && isTransferRecording(thing));
+      return storedFile ? (storedFile.crystal.filePurpose === 'file' ? 'file-import' : 'recording-import') : 'post';
     } });
   useEffect(() => {
     const controller = new AbortController();
