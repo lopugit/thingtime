@@ -24,6 +24,9 @@ secondary use.
 - Give every field and derivative an explicit retention and cleanup path.
 - Version metrics, definitions, exclusions, uncertainty, and environments.
 - Treat provider defaults and privacy labels as claims requiring live proof.
+- A device value shown for a user's explicit device task is not automatically a
+  measurement signal; never copy it into analytics or resource metrics by
+  convenience.
 - Qualified product, privacy, security, data, safety, accessibility,
   child-safety, infrastructure, support, research, and legal owners approve
   real collection or use.
@@ -49,6 +52,29 @@ processor, consumer, effect, security, retention, deletion, and prohibited uses.
 Gate: every signal has one approved primary purpose and no catch-all event
 stream, dashboard, stable identifier, or generic consent silently authorizes
 secondary use.
+
+### Device-state boundary before a hardware-facing rehearsal
+
+The open [PR #990](https://github.com/lopugit/thingtime/pull/990) proposes a
+bounded Mac battery/adapter snapshot with origin capability negotiation. It is
+not yet merged or independently verified on a real installed app. Before
+rehearsing a device surface:
+
+- [ ] Map each field to its source, unit, sample time, meaning, user task,
+      authorization check, and selected-origin capability.
+- [ ] Define explicit refresh/foreground sampling, pause conditions, network
+      behavior, and a resource budget; do not add periodic upload by default.
+- [ ] Distinguish current, stale, unknown, unsupported, unavailable, and
+      permission-denied results without fabricating zeroes or health claims.
+- [ ] Prove fake readings do not enter product/resource analytics, user
+      profiling, or Timeline history; any retained history needs its own
+      approved purpose and deletion contract.
+- [ ] Keep older-origin fallback honest, and reserve installed-app comparison
+      against an independent OS reading for real-device acceptance.
+
+Gate: a synthetic adapter can demonstrate the full status/fallback matrix and
+prove plane separation without a real device, provider export, or background
+collection. A successful build or mock is not live hardware verification.
 
 ## Phase 2 — specify choice, receipts, retention, and metric truth
 

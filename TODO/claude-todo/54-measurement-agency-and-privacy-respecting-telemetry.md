@@ -48,8 +48,24 @@ collection, experiments, provider exports, or production analytics.
   privacy, necessity, anonymity, fairness, safety, accuracy, and deletion claims.
 - [TODO 49](./49-personalization-agency-and-accountable-memory.md) owns
   inspectable observations, derivatives, forgetting, and reset.
+- [TODO 55](./55-temporal-agency-and-humane-time-semantics.md) owns timestamp,
+  freshness, and clock semantics; this TODO decides whether and why a signal is
+  collected.
+- [TODO 56](./56-unified-thing-history-and-timeline-browser.md) owns durable
+  Thing-change history; device refreshes must not silently become a sensor log.
 - `FUNDAMENTALS.md` and `DECISIONS.md` remain authoritative. This TODO approves
   no production measurement or provider configuration change.
+
+## Device state is not automatically a measurement signal
+
+The open [PR #990](https://github.com/lopugit/thingtime/pull/990) proposes
+detailed battery and adapter fields on a device surface. Its PR note describes
+a bounded field allowlist and origin capability gate, but the PR remains open
+and its real-device acceptance is still manual. Do not describe that proposal
+as shipped or live-verified. A reading shown to the user for an explicit device
+task is functional product state; it does not authorize a second analytics,
+resource-monitoring, personalization, or history purpose. See the
+[device-state boundary note](../../NOTES/device-state-snapshots-and-measurement-boundary.md).
 
 ## Phase 0 — establish the safe current posture
 
@@ -64,6 +80,9 @@ collection, experiments, provider exports, or production analytics.
       mark assumptions and provider defaults unverified.
 - [ ] Freeze new signals, custom events, production experiments, exports,
       drains, dashboards, and public privacy claims until the contract is approved.
+- [ ] For device status proposals, separate the user-requested snapshot from
+      analytics/resource telemetry; record the source, fields, units, authority,
+      sampling trigger, retention, and explicit non-use in other planes.
 
 ## Phase 1 — approve purposes, necessity, and separated planes
 
@@ -73,6 +92,10 @@ collection, experiments, provider exports, or production analytics.
 - [ ] For every current field, document source, subject, resolution,
       linkability, necessity, processor, consumer, effect, retention, deletion,
       and prohibited uses.
+- [ ] Decide whether a device snapshot is strictly foreground/explicit-refresh,
+      what freshness means, how unsupported/denied/unavailable differ, and
+      whether any history is justified; default to no background upload and no
+      retained sample history.
 - [ ] Replace any catch-all purpose or stream with the minimum purpose-specific
       event envelope and an explicit owner.
 - [ ] Decide which processing is essential, optional, or prohibited and prove
@@ -102,6 +125,10 @@ collection, experiments, provider exports, or production analytics.
       identity strategies; record manipulation resistance and privacy cost.
 - [ ] Rehearse user-owned algorithm inspect/pause/reset/delete and optional
       product analytics refusal while preserving the useful baseline.
+- [ ] Use a fake device adapter to test current/stale/unknown/unsupported/
+      permission-denied states and older-origin capability fallback; assert the
+      snapshot is absent from analytics collectors and no sample becomes a
+      Timeline event.
 - [ ] Keep the mock safety envelope inert and hand its decision semantics to
       TODO 26; never combine planes for convenience.
 
@@ -138,6 +165,9 @@ collection, experiments, provider exports, or production analytics.
 - Every current and proposed signal has one approved primary purpose, necessity
   test, owner, plane, processor map, allowed consumers, retention, deletion,
   prohibited uses, and stop condition.
+- A user-facing device snapshot remains separate from product/performance
+  telemetry; source time, units, freshness, unavailable states, and capability
+  fallback are explicit, with no default sample history or background upload.
 - Operational diagnostics, public counters, user-owned adaptation, optional
   product learning, and safety evidence have separate stores and authority.
 - Optional-measurement refusal preserves core function, price, support, safety,
@@ -162,6 +192,8 @@ collection, experiments, provider exports, or production analytics.
   contacts, messages, queries, private content, precise location, or devices.
 - Production analytics, provider settings, dashboards, exports, drains,
   experiments, advertising, targeting, or cross-context tracking.
+- Periodic detailed-device collection, analytics reuse, or retained history
+  without a separately approved purpose, owner, cadence, and deletion contract.
 - Device fingerprinting, vulnerable-trait inference, covert monitoring, small
   identifiable cohorts, minors, or high-risk safety/health/legal contexts.
 - Silent ranking, pricing, eligibility, moderation, AI, research, staff/user
