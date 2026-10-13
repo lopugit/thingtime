@@ -32,6 +32,16 @@ test('recovery previews explicitly represent absence and promise private results
 		assert.throws(() => parsePublishedVersionPreview({ ...preview, ...change }, 'old', 'thing', request));
 	assert.throws(() => parsePublishedVersionPreview(preview, 'old', 'thing', { ...request, recover: undefined }));
 });
+test('undo is a third merge-engine mode that keeps recovery restore-only', () => {
+	const undo = { command: 'preview-version' as const, mode: 'undo' as const, eventId: 'middle', choices: {}, componentMode: 'current' as const, componentChoices: {} };
+	assert.deepEqual(parseVersionRequest(undo), undo);
+	assert.throws(() => parseVersionRequest({ ...undo, recover: true }), /recovery/);
+	assert.throws(() => parseVersionRequest({ ...undo, mode: 'revert' }), /Invalid version request/);
+	const apply = { ...undo, command: 'apply-version', expectedHeadId: 'head', operationId: '377abf25-b322-4ac0-9707-a59c36e7bcd5', expectedComponents: 'b'.repeat(64) };
+	assert.deepEqual(parseVersionRequest(apply), apply);
+	const { expectedComponents: _omitted, ...unreviewed } = apply;
+	assert.throws(() => parseVersionRequest(unreviewed), /components/);
+});
 test('recovery is explicit restore-only and its preview identity is bounded', () => {
 	assert.deepEqual(parseVersionRequest(request), request);
 	for (const change of [{ recover: false }, { mode: 'merge' }, { expectedRecovery: 'a'.repeat(64) }])

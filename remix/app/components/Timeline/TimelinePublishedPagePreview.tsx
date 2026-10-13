@@ -7,10 +7,13 @@ import { TimelinePageCanvas } from './TimelinePageCanvas';
 
 export function TimelinePublishedPagePreview({
 	preview,
-	componentMode
+	componentMode,
+	labels
 }: {
 	preview: PublishedVersionPreview;
 	componentMode: 'recorded' | 'current';
+	/** An undo previews the page from "before this change" rather than "this version". */
+	labels?: { previewIncoming?: string };
 }) {
 	const [side, setSide] = React.useState<'current' | 'incoming' | 'result' | null>(null);
 	if (!preview.thingtime?.includes('webpage') || !preview.components || !Array.isArray((preview.result.value as any)?.crystal?.blocks)) return null;
@@ -28,7 +31,7 @@ export function TimelinePublishedPagePreview({
 						isDisabled={(key === 'current' && preview.current === null) || (key === 'result' && unresolved)}
 						onClick={() => setSide(selected === key ? null : key)}
 					>
-						{key === 'current' ? 'Preview current page' : key === 'incoming' ? 'Preview this version' : 'Preview result'}
+						{key === 'current' ? 'Preview current page' : key === 'incoming' ? labels?.previewIncoming ?? 'Preview this version' : 'Preview result'}
 					</Button>
 				))}
 			</Flex>

@@ -4,6 +4,8 @@ import { filterHistoryCards, historyCard, historyComparison, historyPositions, h
 import type { LocalTimelineRow } from './localStore.ts';
 import type { TimelineEvent } from './contract.ts';
 import type { HistoryNoteView } from './notes.ts';
+import { TIMELINE_UNDO_LABEL } from './publishedVersion.ts';
+import { TIMELINE_VERSION_NAME_KIND, TIMELINE_VERSION_NAME_LABELS, type TimelineVersionName } from './versionNames.ts';
 
 const row = (id: string, position: number | null, overrides: Partial<TimelineEvent> = {}): LocalTimelineRow => ({
 	scope: 'owner',
@@ -111,6 +113,9 @@ const note = (id: string, text: string, author: 'owner' | 'lopu' = 'owner', stat
 	status,
 	failure: null
 });
+const versionName = (name: string, revision = 1, eventId = 'a'): TimelineVersionName => ({
+	formatVersion: 1, id: `${eventId}/name`, ownerId: 'owner', eventId, thingId: 'page', name, revision, createdAt: '2026-10-13T05:00:00.000Z', updatedAt: '2026-10-13T05:00:00.000Z'
+});
 
 test('the messages toggle defaults on, round-trips only when off and ignores other values', () => {
 	assert.equal(readHistoryFilters(new URLSearchParams('')).messages, true);
@@ -163,7 +168,46 @@ test('system lines come from the recorded operation only and never invent versio
 		}
 	};
 	assert.equal(historySystemLine(outcome), null);
-	for (const text of [historySystemLine({ ...base, operation: 'restore', parentIds: ['p'] }), historySystemLine(branch('Created branch'))]) assert.ok(!/\bv?\d+\b/.test(text ?? ''));
+	// Undo is a restore distinguished only by its shared label; the generic restore line above keeps holding for every other restore.
+	const undo: TimelineEvent = { ...base, operation: 'restore', parentIds: ['head', 'p'], label: TIMELINE_UNDO_LABEL };
+	assert.equal(historySystemLine(undo), 'Undid just this change · later edits to other properties were kept');
+	assert.equal(historySystemLine({ ...undo, label: 'Undid change later' }), 'Restored from an earlier version · nothing was lost');
+	const named = (label: string, before: TimelineVersionName | null, after: TimelineVersionName | null): TimelineEvent => ({
+		...base, mode: 'effect', operation: 'effect', label, dependencies: [{ thingId: 'page', eventId: 'a' }],
+		before: before && { adapter: TIMELINE_VERSION_NAME_KIND, version: 1, value: before }, after: after && { adapter: TIMELINE_VERSION_NAME_KIND, version: 1, value: after }
+	});
+	const launch = versionName('Launch copy'); const final = versionName('Final copy', 2);
+	assert.equal(historySystemLine(named(TIMELINE_VERSION_NAME_LABELS.named, null, launch)), 'Named this version');
+	assert.equal(historySystemLine(named(TIMELINE_VERSION_NAME_LABELS.renamed, launch, final)), 'Renamed this version');
+	assert.equal(historySystemLine(named(TIMELINE_VERSION_NAME_LABELS.cleared, final, null)), 'Removed this version name');
+	assert.equal(historySystemLine(named('Unknown future label', null, launch)), 'Named this version');
+	assert.equal(historySystemLine(named('Unknown future label', launch, final)), 'Renamed this version');
+	assert.equal(historySystemLine(named('Unknown future label', final, null)), 'Removed this version name');
+	for (const text of [historySystemLine(undo), historySystemLine(named(TIMELINE_VERSION_NAME_LABELS.renamed, launch, final)), historySystemLine({ ...base, operation: 'restore', parentIds: ['p'] }), historySystemLine(branch('Created branch'))]) assert.ok(!/\bv?\d+\b/.test(text ?? ''));
+});
+
+test('cards carry their 📌 name, title a name-change effect by the recorded name and match names in search', () => {
+	const pinned = historyCard(row('a', 1), [], versionName('Launch copy'));
+	assert.equal(pinned.name, 'Launch copy');
+	assert.equal(pinned.title, 'Recorded title');
+	assert.equal(historyCard(row('b', 2)).name, undefined);
+	assert.equal(historyCard(row('b', 2), []).name, undefined);
+	const effect = historyCard(row('effect', 3, {
+		mode: 'effect', operation: 'effect', label: TIMELINE_VERSION_NAME_LABELS.cleared, dependencies: [{ thingId: 'page', eventId: 'a' }],
+		before: { adapter: TIMELINE_VERSION_NAME_KIND, version: 1, value: versionName('Final copy', 2) }, after: null
+	}));
+	assert.equal(effect.title, 'Final copy'); assert.equal(effect.system, 'Removed this version name');
+	assert.equal(effect.kind, ''); assert.deepEqual(effect.chips, []); assert.equal(effect.changeCount, 0); assert.equal(effect.removed, false);
+	const renamed = historyCard(row('rename', 4, {
+		mode: 'effect', operation: 'effect', label: TIMELINE_VERSION_NAME_LABELS.renamed, dependencies: [{ thingId: 'page', eventId: 'a' }],
+		before: { adapter: TIMELINE_VERSION_NAME_KIND, version: 1, value: versionName('Launch copy') }, after: { adapter: TIMELINE_VERSION_NAME_KIND, version: 1, value: versionName('Final copy', 2) }
+	}));
+	assert.equal(renamed.title, 'Final copy'); assert.equal(renamed.system, 'Renamed this version');
+	const cards = [pinned, historyCard(row('b', 2)), effect];
+	assert.deepEqual(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('q=launch+copy'))).map((card) => card.row.event.id), ['a']);
+	assert.deepEqual(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('q=final+copy'))).map((card) => card.row.event.id), ['effect']);
+	assert.deepEqual(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('q=launch+copy&operation=delete'))), []);
+	assert.deepEqual(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('q=recorded+title'))).map((card) => card.row.event.id), ['a', 'b']);
 });
 
 test('cards carry their notes and system line; search matches note text without changing other filters', () => {
