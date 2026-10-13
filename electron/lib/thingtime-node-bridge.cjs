@@ -182,7 +182,7 @@ function validateDeviceRequest(value) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Device request must be an object.');
 	}
 	const action = boundedString(value.action, 'Device action', 16);
-	if (action === 'snapshot' || action === 'permissions') return { action };
+	if (action === 'snapshot' || action === 'battery' || action === 'permissions') return { action };
 	if (action !== 'evaluate' && action !== 'execute') {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Device action is not supported.');
 	}
@@ -644,10 +644,10 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 		if (!identityClass) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is not signed with an allowed identity class.`);
 		}
-		if (mode !== 'runtime' && identityClass !== mode) {
+		if (mode !== 'runtime' && identityClass !== mode && !(mode === 'local' && identityClass === 'production')) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is not signed for ${mode} verification.`);
 		}
-		if (mode === 'production' && !details.timestamp) {
+		if (mode !== 'runtime' && identityClass === 'production' && !details.timestamp) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is missing a secure timestamp.`);
 		}
 		teams.add(details.teamIdentifier);
@@ -1230,6 +1230,7 @@ class ThingtimeNodeIntegration {
 	async device(value, { userApproved = false } = {}) {
 		const request = validateDeviceRequest(value);
 		if (request.action === 'snapshot') return this.request('telemetry.snapshot');
+		if (request.action === 'battery') return this.request('telemetry.battery');
 		if (request.action === 'permissions') return this.request('permissions.preflight');
 
 		const telemetry = await this.request('telemetry.snapshot');

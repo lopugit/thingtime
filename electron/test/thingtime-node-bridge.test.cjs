@@ -20,7 +20,7 @@ const {
 	verifySignedArtifacts
 } = require('../lib/thingtime-node-bridge.cjs');
 
-async function makeSignedNodeFixture() {
+async function makeSignedNodeFixture(signingAuthority = 'Apple Development: Test (ABCDE12345)') {
 	const root = await mkdtemp(path.join(tmpdir(), 'thingtime-node-bridge-'));
 	const helperApp = path.join(root, 'Thingtime Node.app');
 	const helperExecutable = path.join(helperApp, 'Contents', 'MacOS', 'ThingtimeNode');
@@ -94,7 +94,7 @@ async function makeSignedNodeFixture() {
 				status: 0,
 				signal: null,
 				stdout: '',
-				stderr: `Identifier=${identifier}\nTeamIdentifier=6DQQ9V7C84\nAuthority=Apple Development: Test (ABCDE12345)\nRuntime Version=15.0.0\n`
+				stderr: `Identifier=${identifier}\nTeamIdentifier=6DQQ9V7C84\nAuthority=${signingAuthority}\nRuntime Version=15.0.0\n${signingAuthority.startsWith('Developer ID Application:') ? 'Timestamp=Oct 13, 2026 at 6:00:00 PM' : ''}\n`
 			};
 		}
 		if (command === bridgeExecutable) {
@@ -254,6 +254,7 @@ test('connector requests are allowlisted, bounded, and command-bound', () => {
 
 test('device mutations require a command id and reject unsupported action kinds', () => {
 	assert.deepEqual(validateDeviceRequest({ action: 'snapshot' }), { action: 'snapshot' });
+	assert.deepEqual(validateDeviceRequest({ action: 'battery' }), { action: 'battery' });
 	assert.deepEqual(
 		validateDeviceRequest({
 			action: 'execute',
@@ -298,6 +299,15 @@ test('device mutations require a command id and reject unsupported action kinds'
 		() => validateDeviceRequest({ action: 'execute', request: { kind: 'application.launch', parameters: { bundleIdentifier: 'com.example.app' } } }),
 		/commandId/u
 	);
+});
+
+test('desktop battery read uses the narrow native bridge method', async () => {
+	const integration = new ThingtimeNodeIntegration({ app: { isPackaged: true }, electronDir: '' });
+	integration.request = async (method) => {
+		assert.equal(method, 'telemetry.battery');
+		return { battery: { cycleCount: 282 } };
+	};
+	assert.deepEqual(await integration.device({ action: 'battery' }), { battery: { cycleCount: 282 } });
 });
 
 test('connector child environment uses an explicit non-secret allowlist', () => {
@@ -484,6 +494,18 @@ test('packaging verification extracts leaf certificates with the macOS equals-fo
 			assert.equal(args.includes('--extract-certificates'), false);
 			assert.match(args.find((argument) => argument.startsWith('--extract-certificates=')) || '', /^--extract-certificates=\/.*\/certificate-$/u);
 		}
+	} finally {
+		await rm(fixture.root, { recursive: true, force: true });
+	}
+});
+
+test('local installation verification accepts the existing Developer ID identity with a secure timestamp', async () => {
+	const fixture = await makeSignedNodeFixture('Developer ID Application: Test (6DQQ9V7C84)');
+	try {
+		assert.deepEqual(await verifySignedArtifacts(fixture.paths, fixture.runner, { mode: 'local' }), {
+			identityClass: 'production',
+			teamIdentifier: '6DQQ9V7C84'
+		});
 	} finally {
 		await rm(fixture.root, { recursive: true, force: true });
 	}

@@ -32,10 +32,25 @@ corepack pnpm@10.12.1 --dir electron build:native
 corepack pnpm@10.12.1 --dir electron verify:native
 corepack pnpm@10.12.1 --dir electron test
 corepack pnpm@10.12.1 --dir electron dev
+corepack pnpm@10.12.1 --dir electron dev:parallel
 corepack pnpm@10.12.1 --dir electron dist
 corepack pnpm@10.12.1 --dir electron dist:unsigned
 corepack pnpm@10.12.1 --dir electron install:local
 ```
+
+`dev` and `dev:parallel` run the same unsigned development lane. It builds the
+web/AI resources and starts Electron with a temporary, isolated user-data
+profile. The development process has its own application name, loopback port,
+session, and login state; it can run beside the signed app in
+`~/Applications/Thingtime.app`. Its Node bridge is deliberately disabled, and
+it cannot register, stop, restart, or reconfigure the installed Thingtime Node
+LaunchAgent. Quit the development app or press Ctrl+C to stop it; the launcher
+then removes its temporary profile and staged `electron/dist/web` and
+`electron/dist/ai` bundles. Use this lane for renderer and ordinary desktop
+iteration. Exercise Node/XPC and other signature-sensitive behavior in the
+final signed, installed app after the canonical tests and `build` +
+`install:local` commands. The development app does not replace the installed
+copy or its service.
 
 Use the repository's exact Corepack pin for packaging. The build preflights
 that version and gives electron-builder's nested dependency collector an
@@ -53,11 +68,15 @@ requires the MCP runtime, while `verify:native` checks bundle identifiers,
 same-leaf-certificate stable signatures, paths, the Electron-authoritative
 login-registration contract, and symlink-free resources.
 
-`build` is the local path. It requires a real Apple Development identity,
-builds all resources, asks `electron-builder` to sign the full app with that
+`build` is the local path. It preserves the exact Apple Development or Developer
+ID signing identity of an existing `~/Applications/Thingtime.app` when that
+identity is still available; a fresh installation defaults to Apple Development.
+It builds all resources, asks `electron-builder` to sign the full app with that
 same identity and Hardened Runtime, then validates the outer app, nested node,
 bridge, bundle identifiers, team identifiers, and designated requirements. It
-never falls back to an ad-hoc signature. `install:local` accepts only that
+never falls back to an ad-hoc signature. A Developer ID local build is not a
+notarized distribution release; the production `dist` path still requires
+notarization and Gatekeeper verification. `install:local` accepts only that
 verified build, copies it to `~/Applications/Thingtime.app`, verifies the
 installed copy again, registers it with LaunchServices, and asks Spotlight to
 index it. If the exact managed Thingtime Node service is registered, installation
@@ -98,7 +117,9 @@ desktop settings automatically; no database secret is bundled into the app.
 The same origin check protects the local-node bridge. Renderer code gets fixed
 operations only: node status, login-service register/unregister, pairing,
 non-prompting permission preflight, allowlisted connector operations, and four
-safe device action kinds. It cannot choose a native method, executable, shell
+safe device action kinds. A paired Mac's battery card also has a narrow
+`telemetry.battery` read through the signed setup bridge; the full
+`telemetry.snapshot` remains forbidden there. It cannot choose a native method, executable, shell
 command, LaunchAgent field, environment variable, or XPC destination. Every
 connector/device mutation carries a caller-provided `commandId`; the native
 durable journal rejects conflicting reuse and replays completed results.

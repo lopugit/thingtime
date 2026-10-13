@@ -64,6 +64,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Dialogs (new folder, rename, move, share, delete, preview) | `app/components/Things/ThingsDialogs.tsx` |
 | Export/import dialogs | `ThingExportDialog.tsx`, `ThingImportDialog.tsx` |
 | Universal Thing page `/thing/:id` | `app/routes/thing.tsx` |
+| Device page `/things?device=<id>&deviceView=page` | `app/components/Things/ThingsPage.tsx` selects the same `DeviceDetailsDrawer.tsx` content used in the drawer; device cards/rows have a navigation-only right-click menu |
 
 Adding an item action: extend `ThingsItemAction` in `ThingsViews.tsx`, add the
 action to `buildThingsItemMenu`, handle it in both `onItemAction` and
