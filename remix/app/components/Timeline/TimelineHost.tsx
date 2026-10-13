@@ -1,5 +1,8 @@
 import { readActionOutcome, actionOutcomeDescription } from '../../timeline/actionOutcome';
-import { TimelineEventBrowser } from './TimelineEventBrowser';
+import { TimelineEventBrowser, VersionNameBadge } from './TimelineEventBrowser';
+import { TimelineVersionNameEditor } from './TimelineVersionNameEditor';
+import { HistoryChangeBox, TimelineCompareNow, useTimelineCompareNow } from './TimelineCompareNow';
+import { historyAncestryLine } from './timelineVersionControls';
 import { readHistoryFilters, writeHistoryFilters, historyCard, historyComparison, type HistoryFilters } from '../../timeline/browserModel';
 import { HistoryMessageComposer } from './TimelineMessages';
 import type { LocalTimelineRow } from '../../timeline/localStore';
@@ -75,7 +78,13 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 		() => (selected ? timeline.rows.find((row) => row.event.id === selected.id) ?? { scope: '', event: selected, receipt: null, status: 'accepted', accessedAt: 0, bytes: 1 } : null),
 		[selected, timeline.rows]
 	);
-	const selectedCard = React.useMemo(() => (selectedRow ? historyCard(selectedRow, timeline.notes.get(selectedRow.event.id)) : null), [selectedRow, timeline.notes]);
+	const selectedCard = React.useMemo(
+		() => (selectedRow ? historyCard(selectedRow, timeline.notes.get(selectedRow.event.id), timeline.names.get(selectedRow.event.id)) : null),
+		[selectedRow, timeline.notes, timeline.names]
+	);
+	// Typed version names outlive the detail panel (the mobile sheet unmounts it on Escape); keyed by history identity and event.
+	const nameDrafts = React.useRef(new Map<string, string>());
+	const now = useTimelineCompareNow(selected);
 	const versions = React.useMemo(
 		() =>
 			selected
@@ -103,6 +112,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 			<Flex justify="space-between" align="center" gap={2} mb={3} flexWrap="wrap">
 				<Heading size="sm" minW={0} overflowWrap="anywhere">
 					{selected.label}
+					{selectedCard?.name ? <VersionNameBadge name={selectedCard.name} /> : null}
 				</Heading>
 				<Button size="xs" flexShrink={0} variant="ghost" onClick={() => setSelected(null)}>
 					Close preview
@@ -113,11 +123,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 				· {sourceLabel(selected)}
 			</Text>
 			<Text fontSize="xs" color="var(--tt-muted)" mb={3}>
-				{outcome
-					? `Run began ${date(outcome.startedAt)}`
-					: selected.parentIds.length
-					? `${selected.parentIds.length === 2 ? 'Combined from' : 'Continues from'} ${selected.parentIds.map((id) => id.slice(0, 12)).join(' + ')}`
-					: 'First recorded moment'}{' '}
+				{outcome ? `Run began ${date(outcome.startedAt)}` : historyAncestryLine(selected)}{' '}
 				{!outcome ? `· ${selected.mode === 'draft' ? 'Private draft' : selected.operation}` : ''}
 			</Text>
 			<Tabs index={tab} onChange={(index) => setTabChoice({ key: detailKey, tab: index })} variant="line" size="sm" isLazy lazyBehavior="keepMounted">
@@ -128,7 +134,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 				</TabList>
 				<TabPanels>
 					<TabPanel px={0} py={0}>
-						{largeVersion ? (
+						{largeVersion && !now.preview ? (
 							<Text fontSize="sm" mb={3}>
 								The complete data for this large version is retained in your account. Full preview is not available here yet.
 							</Text>
@@ -160,7 +166,25 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 									Clear comparison
 								</Button>
 							) : null}
+							{selected.mode !== 'effect' && selected.after !== null && selectedRow?.status === 'accepted' ? (
+								// Enabled for split-snapshot versions and deleted Things too: the server resolves both sides and the
+								// parser accepts a null `current`. The preview costs a POST (timeline.write budget) and applies nothing.
+								now.preview ? (
+									<Button size="sm" variant="ghost" onClick={() => now.clear()}>
+										Back to before / after
+									</Button>
+								) : (
+									<Button size="sm" variant="outline" isLoading={now.busy} isDisabled={!now.enabled} onClick={() => void now.compare()}>
+										Compare with now
+									</Button>
+								)
+							) : null}
 						</Flex>
+						{now.error ? (
+							<Text role="alert" fontSize="sm" mb={3} overflowWrap="anywhere">
+								{now.error}
+							</Text>
+						) : null}
 						{compareFrom ? (
 							<Box p={3} mb={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
 								<Text fontWeight="600" fontSize="sm">
@@ -203,19 +227,11 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 							</Box>
 						) : null}
 						<TimelinePagePreview key={`page-preview:${timeline.identity}:${selected.id}`} event={selected} />
-						{changes.map((change, index) => (
-							<Box key={index} mb={3} p={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
-								<Text fontWeight="600" mb={2} overflowWrap="anywhere">
-									{timelineChangeLabel(change.path)}
-								</Text>
-								<Text fontSize="sm" color="var(--tt-muted)" noOfLines={4} overflowWrap="anywhere">
-									Before: {timelineValueLabel(change.before, change.path)}
-								</Text>
-								<Text fontSize="sm" mt={1} noOfLines={4} overflowWrap="anywhere">
-									After: {timelineValueLabel(change.after, change.path)}
-								</Text>
-							</Box>
-						))}
+						{now.preview ? (
+							<TimelineCompareNow preview={now.preview} />
+						) : (
+							changes.map((change, index) => <HistoryChangeBox key={index} change={change} labels={['Before', 'After']} />)
+						)}
 						<Button size="sm" variant="ghost" mb={3} onClick={() => setShowData((value) => !value)} aria-expanded={showData}>
 							{showData ? 'Hide data' : 'View data'}
 						</Button>
@@ -282,35 +298,50 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 					</TabPanel>
 					<TabPanel px={0} py={0}>
 						<Flex direction="column" gap={1} align="stretch" role="group" aria-label="Loaded versions of this Thing">
-							{versions.map((row) => (
-								<Button
-									key={row.event.id}
-									size="sm"
-									variant="ghost"
-									justifyContent="flex-start"
-									h="auto"
-									py={2}
-									whiteSpace="normal"
-									textAlign="left"
-									aria-current={row.event.id === selected.id ? 'true' : undefined}
-									bg={row.event.id === selected.id ? 'var(--tt-surface)' : undefined}
-									onClick={() => {
-										// Choosing from the list keeps the Versions tab open for the new selection.
-										setTabChoice({ key: `${timeline.identity}:${row.event.id}`, tab: 2 });
-										setSelected(row.event);
-									}}
-								>
-									<Box minW={0}>
-										<Text fontSize="sm" fontWeight={row.event.id === selected.id ? '700' : '500'} overflowWrap="anywhere">
-											{row.event.label}
-										</Text>
-										<Text fontSize="xs" fontWeight="400" color="var(--tt-muted)" overflowWrap="anywhere">
-											{row.event.branchId === 'main' ? 'Saved version' : 'Private variation'} · {date(row.event.occurredAt)} ·{' '}
-											{row.status === 'accepted' ? 'Synced to your account' : 'Saved on this device'}
-										</Text>
+							{versions.map((row) => {
+								// A row is a non-interactive container: the select button and the name/export strip are siblings, so
+								// typing, Enter and Save never select the row and no control is nested inside a button.
+								const active = row.event.id === selected.id;
+								const name = timeline.names.get(row.event.id);
+								return (
+									<Box key={row.event.id} className="history-version" data-selected={active} minW={0}>
+										<Button
+											size="sm"
+											variant="ghost"
+											justifyContent="flex-start"
+											w="100%"
+											h="auto"
+											py={2}
+											whiteSpace="normal"
+											textAlign="left"
+											aria-current={active ? 'true' : undefined}
+											onClick={() => {
+												// Choosing from the list keeps the Versions tab open for the new selection.
+												setTabChoice({ key: `${timeline.identity}:${row.event.id}`, tab: 2 });
+												setSelected(row.event);
+											}}
+										>
+											<Box minW={0}>
+												<Text className="history-version-label" fontSize="sm" fontWeight={active ? '700' : '500'} overflowWrap="anywhere">
+													{row.event.label}
+													{name ? <VersionNameBadge name={name.name} /> : null}
+												</Text>
+												<Text fontSize="xs" fontWeight="400" color="var(--tt-muted)" overflowWrap="anywhere">
+													{row.event.branchId === 'main' ? 'Saved version' : 'Private variation'} · {date(row.event.occurredAt)} ·{' '}
+													{row.status === 'accepted' ? 'Synced to your account' : 'Saved on this device'}
+												</Text>
+											</Box>
+										</Button>
+										<TimelineVersionNameEditor
+											key={`${timeline.identity}:${row.event.id}`}
+											row={row}
+											current={name}
+											drafts={nameDrafts.current}
+											draftKey={`${timeline.identity}:${row.event.id}`}
+										/>
 									</Box>
-								</Button>
-							))}
+								);
+							})}
 						</Flex>
 						{!versions.length ? (
 							<Text fontSize="sm" color="var(--tt-muted)">
@@ -382,6 +413,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 					<TimelineEventBrowser
 						rows={timeline.rows}
 						notes={timeline.notes}
+						names={timeline.names}
 						filters={filters}
 						onFilters={changeFilters}
 						selected={selected}

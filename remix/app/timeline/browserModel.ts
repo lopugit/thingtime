@@ -4,6 +4,8 @@ import type { LocalTimelineRow } from './localStore.ts';
 import type { HistoryNoteView } from './notes.ts';
 import { timelineDisplayChanges, timelineChangeLabel, timelineValueLabel } from './changes.ts';
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from './snapshotParts.ts';
+import { TIMELINE_UNDO_LABEL } from './publishedVersion.ts';
+import { TIMELINE_VERSION_NAME_KIND, TIMELINE_VERSION_NAME_LABELS, type TimelineVersionName } from './versionNames.ts';
 
 export const HISTORY_LOOKS = ['list', 'cards', 'line', 'frames'] as const;
 export type HistoryLook = (typeof HISTORY_LOOKS)[number];
@@ -104,19 +106,33 @@ export function historyDayLabel(key: string) {
  * and never a version number: the record does not say which version it was. */
 export function historySystemLine(event: TimelineEvent): string | null {
 	if (readActionOutcome(event)) return null;
+	// Undo is recorded as a restore whose label is the only signal every client shares.
+	if (event.operation === 'restore' && event.label === TIMELINE_UNDO_LABEL) return 'Undid just this change · later edits to other properties were kept';
 	if (event.operation === 'restore') return 'Restored from an earlier version · nothing was lost';
 	if (event.operation === 'merge') return 'Combined two versions · both remain in History';
 	if (event.operation === 'create' && event.label === 'Recovered deleted Thing') return 'Recovered deleted Thing · its earlier moments are still here';
 	if (event.mode === 'effect' && event.after?.adapter === 'timeline-branch') return event.label === 'Created branch' ? 'Started a private variation' : 'Updated a private variation';
+	if (versionNameRecord(event)) {
+		if (event.label === TIMELINE_VERSION_NAME_LABELS.named) return 'Named this version';
+		if (event.label === TIMELINE_VERSION_NAME_LABELS.cleared) return 'Removed this version name';
+		if (event.label === TIMELINE_VERSION_NAME_LABELS.renamed) return 'Renamed this version';
+		return event.after === null ? 'Removed this version name' : event.before === null ? 'Named this version' : 'Renamed this version';
+	}
 	return null;
 }
-export function historyCard(row: LocalTimelineRow, notes: HistoryNoteView[] = []) {
+/** The name record carried by a `timeline-version-name` effect event: the new
+ * record, or the removed one when the name was cleared. */
+const versionNameRecord = (event: TimelineEvent): Record<string, any> | null =>
+	event.mode === 'effect' && (event.after ?? event.before)?.adapter === TIMELINE_VERSION_NAME_KIND ? object((event.after ?? event.before)!.value) : null;
+/** `name` is the 📌 version name of this row (from the connection's name cache);
+ * a name-change effect event is titled by the name it recorded. */
+export function historyCard(row: LocalTimelineRow, notes: HistoryNoteView[] = [], name?: TimelineVersionName) {
 	const { event } = row;
 	const outcome = readActionOutcome(event);
 	const content = historyContent(event.after ?? event.before);
 	const crystal = content?.crystal;
 	const title =
-		(outcome?.actionName ?? '') || text(crystal?.title || crystal?.name) || (event.after?.adapter === 'folder-placement' ? 'Moved Thing' : 'Thing');
+		(outcome?.actionName ?? '') || text(versionNameRecord(event)?.name) || text(crystal?.title || crystal?.name) || (event.after?.adapter === 'folder-placement' ? 'Moved Thing' : 'Thing');
 	const kind = outcome ? 'action' : content?.kinds[0] ?? '';
 	const large = [event.before, event.after].some((snapshot) => snapshot?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER);
 	const changes = large || event.mode === 'effect' ? [] : timelineDisplayChanges(event.before, event.after);
@@ -156,6 +172,7 @@ export function historyCard(row: LocalTimelineRow, notes: HistoryNoteView[] = []
 		excerpt: text(crystal?.description || crystal?.text || crystal?.body),
 		blockCount: kind === 'webpage' && Array.isArray(crystal?.blocks) ? crystal.blocks.length : null,
 		notes,
+		name: name?.name,
 		system: historySystemLine(event)
 	};
 }
@@ -172,6 +189,7 @@ export function filterHistoryCards(cards: HistoryCard[], filters: HistoryFilters
 			(!query ||
 				[
 					card.title,
+					card.name ?? '',
 					card.row.event.label,
 					card.row.event.thingId,
 					card.source,

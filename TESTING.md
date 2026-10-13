@@ -93,6 +93,50 @@ persisted; every check is client-side.
   Run `test:timeline`, `test:api-capabilities` and `test:timeline:notes` on the
   guarded `timeline-rs` replica.
 
+- [ ] Named versions, undo, compare with now and export (2026-10-13): select a
+  synced saved change and open the Versions tab at desktop and in the 375px
+  bottom sheet. Each row is a select button plus a sibling strip (name field,
+  Save, Clear when named, Export); typing and Enter never select the row.
+  Name a version with an 80-character name, rename it, Clear it: the 📌 badge
+  (ellipsised, never pushing the title out of its row) appears beside the title
+  in List, Cards, Frames and Line, in the Versions row and in the detail
+  heading, and a name-change effect event appears beside the named version in
+  its lane. Scroll the sheet to the bottom with the field focused: Save stays
+  reachable. Close the sheet with Escape mid-typing and reopen: the draft is
+  still there. Search by the name in "Search loaded history". Pending (unsynced)
+  and draft rows show disabled controls with "Sync this version first" /
+  "Only saved versions can be named". Rename the same version from a second
+  device or tab, then Save here: the inline 409 offers Refresh, which re-prefills
+  the current name and the next Save succeeds.
+- [ ] Undo this change: make three edits to different properties, select the
+  middle one, press "Undo this change…": the card reads "Review undo", the
+  comparison says "Before this change", the page preview button "Preview before
+  this change", apply says "Undo this change"; after apply the later edit is
+  kept, the notice reads "Undid this change. Every version is still in your
+  Timeline.", the new row shows the system line "Undid just this change · later
+  edits to other properties were kept" and the header "Undid <source> ·
+  continues from <head>". Edit the same property again, undo the earlier edit:
+  the overlap needs a choice (Keep current / Use the earlier value); choose the
+  earlier value and apply. Undo the same change again: the 409 "already
+  reverted" message renders inline. Create/delete/activity rows have no Undo
+  button.
+- [ ] Compare with now (Changes tab): on a synced version press "Compare with
+  now": Then/Now boxes replace the Before/After list, "Back to before / after"
+  restores it. On a deleted Thing's last version the panel says "This Thing no
+  longer exists now". On a split-snapshot (large) version the Then/Now list
+  shows content instead of the retained-only notice. A page version with
+  non-component dependencies shows "Compare with now is not available for this
+  page version yet."
+- [ ] Export: press Export on a synced row: a `history-<thingId>-<eventId>.json`
+  file downloads (unsafe id characters become `_`, name capped at 120 chars),
+  the inline notice reads "Exported <name or label> · <file>", and the file's
+  `event.id` is the row's id. A synced deletion exports its `before` content.
+  Export of a version over the 4 MiB response ceiling shows the server 413
+  message inline and the version stays in History.
+  Run `test:timeline`, `test:api-capabilities` and `test:timeline:versions` on
+  the guarded `timeline-rs` replica, plus
+  `node --import tsx --test app/components/Timeline/timelineExportDownload.test.ts app/components/Timeline/timelineVersionControls.test.ts`.
+
 - [ ] With only admission storage available, run an ordinary server Action.
   Preserve its actual result and sealed completion. Block recovery requests:
   desktop and 390px show local retention, and the pending History event survives

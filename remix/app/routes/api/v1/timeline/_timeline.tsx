@@ -2,10 +2,11 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { StorageMutationError } from '~/api/utils/storage/storageCore';
-import { getTimelinePage, getTimelineEntry, getTimelineComponentBindings, getTimelineNotes, pushClientTimelineEvent, timelineDiscovery, validateClientTimelineEvent } from '~/api/utils/timeline/service';
+import { getTimelinePage, getTimelineEntry, getTimelineComponentBindings, getTimelineNotes, getTimelineVersionNames, handleVersionNameCommand, exportTimelineVersion, pushClientTimelineEvent, timelineDiscovery, validateClientTimelineEvent } from '~/api/utils/timeline/service';
 import { handleNoteRequest } from '~/api/utils/timeline/notes';
 import { assertLopuAccess, lopuAccessRefusalBody } from '~/api/utils/lopu/access';
 import { parseTimelineNoteCommand } from '~/timeline/notes';
+import { parseTimelineVersionNameCommand } from '~/timeline/versionNames';
 import { TIMELINE_EVENT_MAX_BYTES, TIMELINE_PAGE_SIZE } from '~/timeline/contract';
 import { handleVersionRequest, parseVersionRequest } from '~/api/utils/timeline/versions';
 import { handleBranchRequest, getTimelineBranches, getTimelineBranch } from '~/api/utils/timeline/branches';
@@ -22,7 +23,7 @@ import { actionOutcomeRecovery } from '~/api/utils/timeline/actionRecovery';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
-const defaults = { lopuAccess: assertLopuAccess, recoverOutcome: actionOutcomeRecovery.recover, user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch, note: handleNoteRequest, notes: getTimelineNotes };
+const defaults = { lopuAccess: assertLopuAccess, recoverOutcome: actionOutcomeRecovery.recover, user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch, note: handleNoteRequest, notes: getTimelineNotes, versionName: handleVersionNameCommand, names: getTimelineVersionNames, exportVersion: exportTimelineVersion };
 
 export function createTimelineHandlers(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
@@ -77,6 +78,24 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 				throw error;
 			}
 		}
+		if (auth.url.searchParams.has('export')) {
+			// Checked before the plain eventId read, which tolerates unknown keys and would otherwise answer export=1 with a bare entry.
+			const params = auth.url.searchParams;
+			const allowed = ['ownerId', 'dataPlane', 'storage', 'eventId', 'export'];
+			const eventId = params.get('eventId') ?? '';
+			if (params.get('export') !== '1' || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(eventId) || ['ownerId', 'dataPlane', 'eventId', 'export'].some(key => params.getAll(key).length !== 1) || [...params.keys()].some(key => !allowed.includes(key))) return response({ ok: false, error: 'Invalid Timeline export request' }, 400);
+			const limit = await deps.limit(request, 'timeline.export', `user:${auth.user.id}`, { failClosed: true });
+			if (!limit.allowed) return json({ ok: false, error: 'Timeline export is busy; retry shortly' }, { ...rateLimitedResponseInit(limit), headers: { ...privateHeaders, ...Object.fromEntries(new Headers(rateLimitedResponseInit(limit).headers)) } });
+			try {
+				const result = await deps.exportVersion(auth.user.id, eventId);
+				if (!result) return response({ ok: false, error: 'Version not found' }, 404);
+				if (new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This version is too large to export in one file. It remains retained in your account.', code: 'storage_invariant' }, 413);
+				return response({ ok: true, export: result });
+			} catch (error) {
+				if (error instanceof StorageMutationError) return response({ ok: false, error: error.message, code: error.code }, error.status);
+				throw error;
+			}
+		}
 		if (auth.url.searchParams.has('branchId')) {
 			const params = auth.url.searchParams;
 			let lookup;
@@ -91,9 +110,9 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		if (auth.url.searchParams.has('eventId')) {
 			const eventId = auth.url.searchParams.get('eventId')!;
 			const validId = (value: string) => /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(value);
-			if (!auth.url.searchParams.has('dataPlane') || !validId(eventId) || (thingId !== null && !validId(thingId)) || ['branches', 'history', 'before', 'after', 'limit'].some(key => auth.url.searchParams.has(key))) return response({ ok: false, error: 'Invalid Timeline version request' }, 400);
+			if (!auth.url.searchParams.has('dataPlane') || !validId(eventId) || (thingId !== null && !validId(thingId)) || ['branches', 'history', 'before', 'after', 'limit', 'export'].some(key => auth.url.searchParams.has(key))) return response({ ok: false, error: 'Invalid Timeline version request' }, 400);
 			const entry = await deps.entry(auth.user.id, eventId);
-			return entry && (!thingId || entry.event.thingId === thingId) ? response({ ok: true, entry, notes: await deps.notes(auth.user.id, [eventId]) }) : response({ ok: false, error: 'Version not found' }, 404);
+			return entry && (!thingId || entry.event.thingId === thingId) ? response({ ok: true, entry, notes: await deps.notes(auth.user.id, [eventId]), names: await deps.names(auth.user.id, [eventId]) }) : response({ ok: false, error: 'Version not found' }, 404);
 		}
 		if (auth.url.searchParams.get('branches') === '1') {
 			const before = auth.url.searchParams.has('before') ? Number(auth.url.searchParams.get('before')) : null;
@@ -114,7 +133,7 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		const auth = await authorize(request);
 		if (auth instanceof Response) return auth;
 		if (!auth.url.searchParams.has('dataPlane')) return response({ ok: false, error: 'Timeline data source is required' }, 400);
-		let recovery; let event; let version; let branch; let branchMerge; let branchCheckout; let note;
+		let recovery; let event; let version; let branch; let branchMerge; let branchCheckout; let note; let versionName;
 		try {
 			const input = await readJsonBody(request, TIMELINE_EVENT_MAX_BYTES);
 			if (input && typeof input === 'object' && Object.prototype.hasOwnProperty.call(input, 'command')) {
@@ -123,13 +142,14 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 				else if ((input as any).command === 'preview-branch-merge') branchMerge = parseBranchMergeRequest(input);
 				else if (['create-branch', 'advance-branch'].includes((input as any).command)) branch = parseTimelineBranchCommand(input);
 				else if (['add-note', 'explain-change', 'remove-note'].includes((input as any).command)) note = parseTimelineNoteCommand(input);
+				else if ((input as any).command === 'name-version') versionName = parseTimelineVersionNameCommand(input);
 				else version = parseVersionRequest(input);
 			}
 			else event = validateClientTimelineEvent(auth.user.id, input);
 		}
 		catch (error) {
 			if (error instanceof Response) return response({ ok: false, error: 'Timeline event is too large' }, error.status);
-			return response({ ok: false, error: 'Invalid Timeline event, version, branch or note request' }, 400);
+			return response({ ok: false, error: 'Invalid Timeline event, version, branch, note or name request' }, 400);
 		}
 		try {
 			if (note) {
@@ -158,6 +178,7 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 				return response(result);
 			}
 			if (branch) return response(await deps.branch(auth.user.id, branch));
+			if (versionName) return response(await deps.versionName(auth.user.id, versionName));
 			if (!version) return response({ ok: true, entry: await deps.push(auth.user.id, event!) });
 			const result = await deps.version(auth.user.id, version);
 			if (version.command === 'preview-version' && new TextEncoder().encode(JSON.stringify(result)).byteLength > TIMELINE_EVENT_MAX_BYTES) return response({ ok: false, error: 'This comparison is too large to display in one request. Open the version data separately.' }, 413);

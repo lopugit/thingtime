@@ -2,14 +2,17 @@ import { parseTimelineEntry, TIMELINE_PAGE_SIZE, type TimelineEntry, type Timeli
 import type { TimelineLocalStore } from './localStore.ts';
 import type { TimelineBranchStore } from './branchStore.ts';
 import type { TimelineNoteStore } from './noteStore.ts';
+import type { TimelineNameStore } from './nameStore.ts';
 import { parseTimelineNote, parseTimelineNoteResult, TIMELINE_NOTES_PER_EVENT, type TimelineNote, type TimelineNoteCommand, type TimelineNoteResult } from './notes.ts';
+import { parseTimelineVersionName, type TimelineVersionName } from './versionNames.ts';
 import { parseRelatedTimelineScope, timelineRelatedId, timelineRelatedRevision, type RelatedTimelineScope } from './relatedHistory.ts';
 import { parseTimelineBranchEntry, parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchEntry, type TimelineBranchCommand, type TimelineBranchResult, type TimelineBranchPage } from './branches.ts';
 
 export type TimelineCursor = { before?: number; after?: number; related?: true; relatedRevision?: string };
 export type TimelinePageRequest = { thingId: string | null; before: number | null; after: number | null; limit: number; related?: true; relatedRevision?: string };
-/** `notes` are the contextual messages for the page's events (see notes.ts); older servers omit them. */
-export type TimelinePage = { entries: TimelineEntry[]; nextBefore: number | null; nextAfter: number | null; related?: RelatedTimelineScope; reset?: true; notes?: TimelineNote[] };
+/** `notes` are the contextual messages for the page's events (see notes.ts) and
+ * `names` their 📌 version names (see versionNames.ts); older servers omit both. */
+export type TimelinePage = { entries: TimelineEntry[]; nextBefore: number | null; nextAfter: number | null; related?: RelatedTimelineScope; reset?: true; notes?: TimelineNote[]; names?: TimelineVersionName[] };
 /** The queue persisted a definitive command outcome. History reads remain
  * healthy; the owning branch control presents the actionable refusal. */
 export class TimelineBranchCommandRefusal extends Error {}
@@ -23,7 +26,7 @@ export interface TimelineTransport {
 	branches?(thingId: string, before: number | undefined, signal: AbortSignal): Promise<TimelineBranchPage>;
 	branchHead?(branchId: string, thingId: string, signal: AbortSignal): Promise<TimelineBranchEntry>;
 	/** A bare entry remains accepted; servers with contextual notes wrap it. */
-	entry?(eventId: string, signal: AbortSignal): Promise<TimelineEntry | { entry: TimelineEntry; notes?: TimelineNote[] }>;
+	entry?(eventId: string, signal: AbortSignal): Promise<TimelineEntry | { entry: TimelineEntry; notes?: TimelineNote[]; names?: TimelineVersionName[] }>;
 	note?(command: TimelineNoteCommand, signal: AbortSignal): Promise<TimelineNoteResult>;
 }
 
@@ -34,7 +37,7 @@ export class TimelineSync {
 	private pushing: Promise<number> | null = null;
 	private pages = new Map<string, Promise<TimelinePage>>();
 	private branchPages = new Map<string, Promise<TimelineBranchPage>>();
-	constructor(readonly store: TimelineLocalStore, private transport: TimelineTransport, readonly branchStore?: TimelineBranchStore, readonly noteStore?: TimelineNoteStore) {}
+	constructor(readonly store: TimelineLocalStore, private transport: TimelineTransport, readonly branchStore?: TimelineBranchStore, readonly noteStore?: TimelineNoteStore, readonly nameStore?: TimelineNameStore) {}
 	stop() { this.controller.abort(); }
 	/** Fetch one pointer directly; the bounded cache is not a branch directory.
 	 * Accepting a read never acknowledges or replaces a queued push. */
@@ -153,6 +156,25 @@ export class TimelineSync {
 			seen.add(note.id); return note;
 		});
 	}
+	/** One 📌 name per page event, same owner, and never for an event outside
+	 * the page; a server without names omits the field. */
+	private pageNames(input: unknown, eventIds: string[]): TimelineVersionName[] | undefined {
+		if (input === undefined) return undefined;
+		if (!Array.isArray(input) || input.length > TIMELINE_PAGE_SIZE) throw new Error('Invalid Timeline page');
+		const events = new Set(eventIds); const seen = new Set<string>();
+		return input.map(item => {
+			const name = parseTimelineVersionName(item);
+			if (name.ownerId !== this.store.scope.ownerId || !events.has(name.eventId) || seen.has(name.eventId)) throw new Error('Invalid Timeline page');
+			seen.add(name.eventId); return name;
+		});
+	}
+	/** Accepted name-change effects keep already-loaded versions current. Pages
+	 * before a cursor arrive newest-first; apply in acceptance order so a later
+	 * clear or rename is never undone by the effect it superseded. */
+	private applyNameEffects(entries: TimelineEntry[]) {
+		if (!this.nameStore) return;
+		for (const entry of [...entries].sort((a, b) => a.receipt.position - b.receipt.position)) this.nameStore.applyEffect(entry.event);
+	}
 	branchPage(thingId: string, before?: number): Promise<TimelineBranchPage> {
 		const key = JSON.stringify([thingId, before ?? null]); const current = this.branchPages.get(key); if (current) return current;
 		const next = this.readBranchPage(thingId, before).finally(() => this.branchPages.delete(key)); this.branchPages.set(key, next); return next;
@@ -177,8 +199,11 @@ export class TimelineSync {
 		const entry = parseTimelineEntry(wrapped ? response.entry : response);
 		if (entry.event.id !== eventId) throw new Error('Server returned a different version');
 		const notes = this.pageNotes(wrapped ? response.notes : undefined, [eventId]);
+		const names = this.pageNames(wrapped ? response.names : undefined, [eventId]);
+		this.applyNameEffects([entry]);
 		await this.store.accept([entry]);
 		if (notes) await this.noteStore?.accept(notes, { events: [eventId] });
+		if (names) this.nameStore?.accept(names, { events: [eventId] });
 		return entry;
 	}
 	page(thingId: string | null, cursor: TimelineCursor = {}): Promise<TimelinePage> {
@@ -221,8 +246,11 @@ export class TimelineSync {
 		if (next !== null && next !== previous) throw new Error('Timeline continuation would skip events');
 		const ids = entries.map(entry => entry.event.id);
 		const notes = this.pageNotes(response.notes, ids);
+		const names = this.pageNames(response.names, ids);
+		this.applyNameEffects(entries);
 		await this.store.accept(entries);
 		if (notes) await this.noteStore?.accept(notes, { events: ids });
-		return { entries, nextBefore: response.nextBefore, nextAfter: response.nextAfter, ...(related ? { related } : {}), ...(response.reset ? { reset: true } : {}), ...(notes ? { notes } : {}) };
+		if (names) this.nameStore?.accept(names, { events: ids });
+		return { entries, nextBefore: response.nextBefore, nextAfter: response.nextAfter, ...(related ? { related } : {}), ...(response.reset ? { reset: true } : {}), ...(notes ? { notes } : {}), ...(names ? { names } : {}) };
 	}
 }
