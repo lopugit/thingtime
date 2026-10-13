@@ -126,7 +126,15 @@ export type DevicePrinter = { id: string; name: string; isDefault: boolean };
 export type DeviceCamera = { id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' };
 export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
 export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
-export type DeviceBattery = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled?: boolean };
+export type DeviceBattery = {
+	level: number | null; charging: boolean | null; isExternalPower?: boolean | null;
+	isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean;
+	fullyCharged?: boolean | null; cycleCount?: number | null; designCycleCount?: number | null;
+	designCapacityMAh?: number | null; fullChargeCapacityMAh?: number | null; remainingCapacityMAh?: number | null;
+	currentMA?: number | null; voltageMV?: number | null; temperatureC?: number | null;
+	timeToEmptyMinutes?: number | null; timeToFullMinutes?: number | null;
+	adapterWatts?: number | null; adapterVoltageMV?: number | null; adapterCurrentMA?: number | null;
+};
 export type DevicePowerTimers = { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 export type DeviceAppleMusic = { isInstalled: boolean; isRunning: boolean };
 export type DeviceSpotify = { isInstalled: boolean; isRunning: boolean };

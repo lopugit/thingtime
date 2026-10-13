@@ -178,13 +178,46 @@ public struct BatteryTelemetry: Codable, Equatable, Sendable {
     public let isExternalPower: Bool?
     public let isPreventingIdleSleep: Bool
     public let isLowPowerModeEnabled: Bool
+    public let fullyCharged: Bool?
+    public let cycleCount: Int?
+    public let designCycleCount: Int?
+    public let designCapacityMAh: Int?
+    public let fullChargeCapacityMAh: Int?
+    public let remainingCapacityMAh: Int?
+    public let currentMA: Int?
+    public let voltageMV: Int?
+    public let temperatureC: Double?
+    public let timeToEmptyMinutes: Int?
+    public let timeToFullMinutes: Int?
+    public let adapterWatts: Int?
+    public let adapterVoltageMV: Int?
+    public let adapterCurrentMA: Int?
 
-    public init(level: Double?, isCharging: Bool?, isExternalPower: Bool?, isPreventingIdleSleep: Bool, isLowPowerModeEnabled: Bool = false) {
+    public init(level: Double?, isCharging: Bool?, isExternalPower: Bool?, isPreventingIdleSleep: Bool, isLowPowerModeEnabled: Bool = false,
+                fullyCharged: Bool? = nil, cycleCount: Int? = nil, designCycleCount: Int? = nil,
+                designCapacityMAh: Int? = nil, fullChargeCapacityMAh: Int? = nil, remainingCapacityMAh: Int? = nil,
+                currentMA: Int? = nil, voltageMV: Int? = nil, temperatureC: Double? = nil,
+                timeToEmptyMinutes: Int? = nil, timeToFullMinutes: Int? = nil,
+                adapterWatts: Int? = nil, adapterVoltageMV: Int? = nil, adapterCurrentMA: Int? = nil) {
         self.level = level
         self.isCharging = isCharging
         self.isExternalPower = isExternalPower
         self.isPreventingIdleSleep = isPreventingIdleSleep
         self.isLowPowerModeEnabled = isLowPowerModeEnabled
+        self.fullyCharged = fullyCharged
+        self.cycleCount = cycleCount
+        self.designCycleCount = designCycleCount
+        self.designCapacityMAh = designCapacityMAh
+        self.fullChargeCapacityMAh = fullChargeCapacityMAh
+        self.remainingCapacityMAh = remainingCapacityMAh
+        self.currentMA = currentMA
+        self.voltageMV = voltageMV
+        self.temperatureC = temperatureC
+        self.timeToEmptyMinutes = timeToEmptyMinutes
+        self.timeToFullMinutes = timeToFullMinutes
+        self.adapterWatts = adapterWatts
+        self.adapterVoltageMV = adapterVoltageMV
+        self.adapterCurrentMA = adapterCurrentMA
     }
 }
 
@@ -475,6 +508,12 @@ public final class DeviceTelemetryCollector {
             spotify: SystemSpotify.telemetry(),
             chromeYouTube: SystemChromeYouTube.telemetry()
         )
+    }
+
+    /// Narrow local bridge read. Do not collect or return the full device
+    /// snapshot just to render battery status in the desktop app.
+    public func batterySnapshot() -> BatteryTelemetry {
+        SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep)
     }
 
     public func setPreventIdleSleep(_ enabled: Bool) throws {

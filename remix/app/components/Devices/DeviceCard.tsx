@@ -99,10 +99,11 @@ export type DeviceCardProps = {
 	pendingApprovalCount?: number;
 	now?: number;
 	onSelect: (deviceId: string) => void;
+	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 export const DeviceCard = memo(
-	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect }: DeviceCardProps) => {
+	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onContextMenu }: DeviceCardProps) => {
 		const observed = snapshot?.observed;
 		const model = device.system?.model || (device.platform === 'watchos' ? 'Apple Watch' : device.platform) || 'Device';
 		const version = device.system?.osVersion || device.nodeVersion || null;
@@ -122,6 +123,7 @@ export const DeviceCard = memo(
 				color="var(--tt-ink, #17171c)"
 				minWidth={0}
 				onClick={() => onSelect(device.id)}
+				onContextMenu={(event) => onContextMenu?.(device.id, event)}
 				padding={4}
 				textAlign="left"
 				transition="border-color 120ms ease, transform 120ms ease, background 120ms ease"
