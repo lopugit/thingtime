@@ -3017,6 +3017,15 @@ Loopback development may infer its origin; hosted deployments fail closed when
 the redirect env is absent. Use the same host for beginning and finishing OAuth
 so the initiating Thingtime session cookie reaches the callback.
 
+This draft currently encrypts credentials with the server vault key. The
+password/session encryption primitives in `auth/vaultEnvelope.ts` are tested
+but are **not connected to login or credential storage yet**. They wrap a
+stable random data key using scrypt for passwords or HKDF for session tokens;
+they do not verify authentication or revoke sessions themselves. Do not remove
+the server vault key or assume password changes/resets migrate saved values.
+Background access, recovery, passkey login, and legacy migration must be settled
+and integrated before presenting this as password-protected credential storage.
+
 Google Cloud setup:
 
 1. Create or select your own project, configure its OAuth consent branding and

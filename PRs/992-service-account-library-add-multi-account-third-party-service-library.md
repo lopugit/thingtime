@@ -30,10 +30,20 @@ key through password change/reset, passkeys, account switching and session
 revocation. Passwords and rotating session JWTs must not directly encrypt each
 credential or overwrite the only key capable of decrypting existing values.
 
+`auth/vaultEnvelope.ts` adds the shared cryptographic primitives for that
+revision, without changing runtime storage. A random per-user data key uses
+owner/record/purpose-bound AES-GCM envelopes. Password wrappers use fixed
+scrypt N=32768/r=8/p=3 with a random salt; session wrappers use HKDF-SHA256 and
+bind the owner, session ID and expiry. Rewrapping preserves the data key and
+saved ciphertext. Callers must independently validate live authentication and
+revocation. No key registry, login/reset/passkey integration, migration,
+background access or recovery policy is implemented by this helper. This is
+not end-to-end encryption or a claim that the server cannot access plaintext.
+
 ## Verified locally
 
 - Client and Nitro server builds passed. Changed-file lint passed.
-- Connection tests: 116 passed, including 55 independently removable connections and the 605-entry vault-count regression.
+- Connection tests: 128 passed, including 55 independently removable connections, the 605-entry vault-count regression, and 12 password/session envelope tests.
 - Existing real API connections verifier: 103 passed; new account-library API verifier: 21 passed on a disposable local replica set.
 - Browser: desktop and 390px layout, two saved AI accounts surviving reload, logout clears private account metadata, sign-in restores the correct library, demo add/feed/disconnect, and independent removal of one synthetic AI credential.
 - Typecheck ratchet reports 91 diagnostics against an 89 baseline; no diagnostics in changed feature files. This is a warning, not a clean typecheck.

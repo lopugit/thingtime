@@ -70,6 +70,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - **Third-party account library**: grouped service/subservice cards, multiple owner-private encrypted OAuth accounts, Google readonly subservices, new-tab sign-in with env-pinned callbacks, one-use session-bound state, safe server-side reuse, refresh serialization, and owner-scoped caches. Facebook identity and posts have separate grants; ChatGPT hosted identity is gated by an approved OpenAI client. OpenAI API and Claude Code OAuth cards reuse Secure Vault. Fork setup and manual QA are documented in README/TESTING. Password/session encryption and real-provider acceptance remain pending; see [draft PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13
 
+- **Credential encryption preparation**: tested password/session key-wrapping primitives now preserve a stable data key across rotations and reject altered owner, record, purpose, session and expiry metadata. Runtime credentials still use the existing server-key vault; login/recovery and migration remain open in [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13
+
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now
   survive locally and synchronize through the shared Timeline outbox without
   rerunning the Action. Canonical events/relationships stay identical locally

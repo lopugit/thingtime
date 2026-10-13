@@ -7587,6 +7587,14 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 - [ ] Count regression: retain more than 50 connections and more than 500
       AI vault entries without rejecting new accounts or hiding old ones.
       Remove one and verify every other account remains independently usable.
+- [ ] Password/session vault migration gate: run the envelope tests for wrong
+      passwords, exact Unicode/long passwords, owner/record/purpose swaps,
+      tampered metadata, expiry boundaries, and key rewrapping. These are
+      cryptographic primitive tests only. Before enabling the migration, also
+      exercise real login/2FA/passkeys, password change/reset, session
+      revocation, background actions, interrupted migration, and legacy reads
+      against the agreed recovery policy; failed unlock must never replace
+      the only key capable of decrypting saved credentials.
 - [ ] Multi-account OAuth: add two Google identities under the same service;
       reconnect one without duplicating it or replacing the other. Connect
       the same provider identity from another Thingtime user and verify the
