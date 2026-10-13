@@ -79,6 +79,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   preview, GET `export=1` with its own `timeline.export` limit, and the opt-in
   `test:timeline:versions` HTTP suite. Details in
   [docs/unified-timeline.md](../docs/unified-timeline.md#named-versions-undo-compare-with-now-and-export--2026-10-13).
+  PR note: [PRs/993-…](../PRs/993-claude-history-browser-integration--unified-timeline-named-versions-undo-compare-export.md) (PR #993).
 - 2026-10-13 — **Claude (AI)**: Unified Timeline contextual messages. Owner
   notes, Lopu explanations and derived system lines on every recorded change:
   new `timeline-note` relational records, `add-note` / `explain-change` /
