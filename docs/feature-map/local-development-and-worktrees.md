@@ -43,6 +43,7 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 | Types | `corepack pnpm --dir remix run typecheck` (raw) and `typecheck:ratchet` (warns above `scripts/typecheck-baseline.json`; lower the baseline with `--update-baseline` when the count drops) |
 | Vercel output contract | `npm --prefix remix run verify:vercel-output` |
 | Graphify | `scripts/graphify update .` after code changes; `npm run test:graphify-cas` for the wrapper |
+| Local Electron bundle | `corepack pnpm --dir electron run build` runs `npm ci` for the separately locked `MCP/` helper before the web/native build and preserves an available installed app signing identity; a fresh worktree needs no manual MCP dependency install |
 
 ## Graphify snapshots and hooks
 

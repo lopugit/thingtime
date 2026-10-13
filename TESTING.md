@@ -6296,6 +6296,19 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       **Hide other apps**, and expose **Sleep** from Power. Menus must stay
       above the drawer overlay and remain usable without clipping or horizontal
       overflow at desktop and 390 CSS px.
+- [ ] On a paired Mac, Quick controls shows the reported battery percentage and
+      charging or power-source state instead of "Power: Unknown". Expand
+      Displays & system hardware and check cycles, capacity, current, power,
+      voltage, temperature, time estimates, and adapter rating against the
+      machine's available readings. Missing readings say "Unavailable"; an old
+      server may show the basic battery state until it advertises the detailed
+      battery capability.
+- [ ] Right-click the device in grid, list, and columns views and choose
+      **Open device page**. Open the same page with the expand icon beside the
+      drawer X. At desktop and 390 CSS px, check the shared sections and their
+      expanded states from top to bottom, including battery details, then use
+      **Back to Things**. The page must use the drawer's content and controls
+      without a second copy or horizontal overflow.
 - [ ] In the exact installed Electron app, open that device drawer and click
       its 44px X while it overlaps the native title-bar band. Reopen it and
       confirm the left edge has an always-visible centred grip with a forgiving
@@ -6308,6 +6321,15 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       section toggle may close the drawer or block another control. At 390 CSS
       px the resize edge is absent, the drawer remains full width, and every
       section still toggles without horizontal overflow.
+- [ ] Rebuild the local Electron app on a Mac that has both Apple Development
+      and Developer ID identities. If Thingtime is already installed, the new
+      bundle must retain its signing identity and designated requirement before
+      replacement; verify the installed copy and permission preflights after
+      launch. A fresh install uses Apple Development and never ad-hoc signing.
+- [ ] In a fresh worktree with no `MCP/node_modules`, run the canonical
+      Electron build. It must install the locked MCP dependencies before the
+      web build and bundle both desktop helper entry points without a manual
+      `fflate` install or an untracked lockfile.
 - [ ] On `/things`, collapse a different selection of sections and choose a
       different width for two paired computers. Close/reopen each drawer and
       refresh the page: only that computer's locally stored section layout and
@@ -6586,8 +6608,9 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       or horizontal overflow. Scroll top-to-bottom: stale and offline state is
       explicit, and desired controls confirm or revert against a newer observed
       revision.
-- [ ] Device rows never enter generic selection, copy/move/share/delete,
-      context-menu, or preview flows. Capability, permission, lock, connector,
+- [ ] Device rows never enter generic selection, copy/move/share/delete, or
+      preview flows; their context menu contains device navigation only.
+      Capability, permission, lock, connector,
       version, local-only, offline-queue, and approval policy each disable or
       gate the relevant control before a command is sent. Approve and deny one
       command, replay its request id, and confirm the node leases only approved

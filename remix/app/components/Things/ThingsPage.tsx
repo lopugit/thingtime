@@ -17,6 +17,7 @@ import { sendRecordingThingToLopu } from '~/components/Lopu/recordingThingHandof
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
+import { deviceThingsPageHref } from '~/components/Devices/deviceNavigation';
 import { shouldHideLocalNodePanel } from '~/components/Devices/localNodePanel';
 import { useNodePanelPreference } from '~/components/Devices/useNodePanelPreference';
 import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
@@ -173,6 +174,7 @@ const ThingsLibraryPage = () => {
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
 	const deviceParam = searchParams.get('device') || null;
+	const devicePageMode = Boolean(deviceParam && searchParams.get('deviceView') === 'page');
   const currentKey = folderKeyOf(folderId);
 
   const archive = useAttachmentArchive();
@@ -287,6 +289,12 @@ const ThingsLibraryPage = () => {
   // presentation) — one instance for items, one for the background
   const itemMenu = useThingContextMenu();
   const backgroundMenu = useThingContextMenu();
+  const deviceMenu = useThingContextMenu();
+  const closeItemMenu = itemMenu.closeMenu;
+  const closeBackgroundMenu = backgroundMenu.closeMenu;
+  const closeDeviceMenu = deviceMenu.closeMenu;
+  const openDeviceMenu = deviceMenu.openAtPointer;
+  const [menuDeviceId, setMenuDeviceId] = useState<string | null>(null);
   const [menuThing, setMenuThing] = useState<ThingsThing | null>(null);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
@@ -607,6 +615,7 @@ const ThingsLibraryPage = () => {
 				(previous) => {
 					const next = new URLSearchParams(previous);
 					next.set('device', deviceId);
+					next.delete('deviceView');
 					next.delete('preview');
 					return next;
 				},
@@ -621,6 +630,7 @@ const ThingsLibraryPage = () => {
 			(previous) => {
 				const next = new URLSearchParams(previous);
 				next.delete('device');
+				next.delete('deviceView');
 				return next;
 			},
 			{ preventScrollReset: true, replace: true }
@@ -1224,6 +1234,13 @@ const ThingsLibraryPage = () => {
     [backgroundMenu.openAtPointer, itemMenu.closeMenu] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+	const onDeviceContextMenu = useCallback((deviceId: string, event: React.MouseEvent) => {
+		closeItemMenu();
+		closeBackgroundMenu();
+		setMenuDeviceId(deviceId);
+		openDeviceMenu(event);
+	}, [closeItemMenu, closeBackgroundMenu, openDeviceMenu]);
+
   const menuActCount = menuThing && selection.has(menuThing.id) && selection.size > 1 ? selection.size : 1;
 
   const itemMenuModel = useMemo(
@@ -1301,6 +1318,10 @@ const ThingsLibraryPage = () => {
       }),
     [clipboard?.ids.length, displayItems.length, sort, groupBy, view, displayMode]
   );
+	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
+		id: 'open-device-page', label: 'Open device page', icon: '↗', lucide: 'maximize',
+		href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
+	}] }] }), [menuDeviceId]);
 
   const onBackgroundMenuAction = useCallback(
     ({ action }: ThingContextMenuAction) => {
@@ -1343,16 +1364,17 @@ const ThingsLibraryPage = () => {
   // context menus close on any outside press (their surfaces portal to <body>,
   // so this checks the class, not the React tree)
   useEffect(() => {
-    if (!itemMenu.open && !backgroundMenu.open) return;
+    if (!itemMenu.open && !backgroundMenu.open && !deviceMenu.open) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest?.('.thing-context-menu')) return;
-      itemMenu.closeMenu();
-      backgroundMenu.closeMenu();
+      closeItemMenu();
+      closeBackgroundMenu();
+      closeDeviceMenu();
     };
     window.addEventListener('pointerdown', onPointerDown);
     return () => window.removeEventListener('pointerdown', onPointerDown);
-  }, [itemMenu.open, backgroundMenu.open, itemMenu.closeMenu, backgroundMenu.closeMenu]);
+  }, [itemMenu.open, backgroundMenu.open, deviceMenu.open, closeItemMenu, closeBackgroundMenu, closeDeviceMenu]);
 
   // ------------------------------------------------------------------ keyboard
 
@@ -1479,9 +1501,24 @@ const ThingsLibraryPage = () => {
 		devices: visibleDevices,
 		deviceCounts: deviceStore.countsById,
 		selectedDeviceId: deviceParam,
-		onDeviceSelect: openDevice
+		onDeviceSelect: openDevice,
+		onDeviceContextMenu
 	};
 	const searchResultCount = (searchResults || []).length + visibleDevices.length;
+	if (devicePageMode) return (
+		<Flex background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingBottom={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 20px)" paddingX={{ base: 3, md: 6 }}>
+			<DeviceDetailsDrawer
+				controlFor={deviceControlFor}
+				isOpen
+				onAction={onDeviceAction}
+				onClose={closeDevice}
+				onPermissionModeChange={setDevicePermissionMode}
+				presentation="page"
+				screenAvailability="not-installed"
+				state={deviceStore.selectedState}
+			/>
+		</Flex>
+	);
 
   return (
     <Flex
@@ -1905,7 +1942,7 @@ const ThingsLibraryPage = () => {
 
 			<DeviceDetailsDrawer
 				controlFor={deviceControlFor}
-				isOpen={Boolean(deviceParam)}
+				isOpen={Boolean(deviceParam) && !devicePageMode}
 				onAction={onDeviceAction}
 				onClose={closeDevice}
 				onPermissionModeChange={setDevicePermissionMode}
@@ -1959,6 +1996,11 @@ const ThingsLibraryPage = () => {
         model={backgroundMenuModel}
         onAction={onBackgroundMenuAction}
       />
+		<ThingContextMenu
+			{...deviceMenu.menuProps}
+			meta={menuDeviceId ? { path: deviceStore.devices.find((device) => device.deviceId === menuDeviceId)?.summary?.name || 'Device', type: 'Device' } : undefined}
+			model={deviceMenuModel}
+		/>
     </Flex>
   );
 };

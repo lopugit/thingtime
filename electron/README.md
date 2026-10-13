@@ -53,11 +53,15 @@ requires the MCP runtime, while `verify:native` checks bundle identifiers,
 same-leaf-certificate stable signatures, paths, the Electron-authoritative
 login-registration contract, and symlink-free resources.
 
-`build` is the local path. It requires a real Apple Development identity,
-builds all resources, asks `electron-builder` to sign the full app with that
+`build` is the local path. It preserves the exact Apple Development or Developer
+ID signing identity of an existing `~/Applications/Thingtime.app` when that
+identity is still available; a fresh installation defaults to Apple Development.
+It builds all resources, asks `electron-builder` to sign the full app with that
 same identity and Hardened Runtime, then validates the outer app, nested node,
 bridge, bundle identifiers, team identifiers, and designated requirements. It
-never falls back to an ad-hoc signature. `install:local` accepts only that
+never falls back to an ad-hoc signature. A Developer ID local build is not a
+notarized distribution release; the production `dist` path still requires
+notarization and Gatekeeper verification. `install:local` accepts only that
 verified build, copies it to `~/Applications/Thingtime.app`, verifies the
 installed copy again, registers it with LaunchServices, and asks Spotlight to
 index it. If the exact managed Thingtime Node service is registered, installation

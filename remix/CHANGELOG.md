@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-13 — **Codex (AI)**: The Mac node now collects bounded battery and
+  adapter measurements, with detailed publishing negotiated through device
+  state 1.10.0. The device drawer shows battery status in Quick controls,
+  detailed readings under system hardware, and an expandable full Things page
+  shared with the drawer. Device right-click menus open that page. The local
+  Electron build now installs its separately locked MCP helper before building
+  in a fresh worktree and preserves an available installed app signing identity.
+
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now
   survive locally and synchronize through the shared Timeline outbox without
   rerunning the Action. Canonical events/relationships stay identical locally

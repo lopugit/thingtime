@@ -191,6 +191,11 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 		normalizeDeviceState({ locked: false, battery: { level: 0.5, charging: true }, openApps: [] })?.battery,
 		{ level: 0.5, charging: true, isExternalPower: null, isPreventingIdleSleep: false, isLowPowerModeEnabled: false }
 	);
+	const measured = normalizeDeviceState({ locked: false, battery: { level: 0.8, charging: false, cycleCount: 280, currentMA: -1200, voltageMV: 12000, adapterWatts: 100 }, openApps: [] });
+	assert.equal(measured?.battery?.cycleCount, 280);
+	assert.equal(measured?.battery?.currentMA, -1200);
+	assert.equal(normalizeDeviceState({ locked: false, battery: { level: 0.8, serial: 'private' }, openApps: [] }), null);
+	assert.equal(normalizeDeviceState({ locked: false, battery: { level: 0.8, adapterWatts: -10 }, openApps: [] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, displays: [{ id: 1, width: 1, height: 1, isMain: true, isBuiltIn: false, brightness: null, brightnessControlSupported: false, currentMode: null, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false, path: '/private' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, appleMusic: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
 	assert.equal(normalizeDeviceState({ locked: false, spotify: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);

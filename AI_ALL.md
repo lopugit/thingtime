@@ -68,6 +68,12 @@ or authorization for new work.
   uses Vite, React Router in non-framework mode and Nitro; `entry.client.tsx`
   mounts with `createRoot`. Do not add SSR/hydration machinery to repair a stale
   chunk, client cache or missing-route problem without reproducing that cause.
+- When work exposes a build, test, setup or runtime failure, trace the cause and
+  repair the canonical entry point, dependency declaration, bootstrap step or
+  contract that let it recur. Verify the repaired path from a clean or missing
+  dependency state when practical. A manual install or one-off retry may unblock
+  the current run, but it is not the final fix; record a focused regression or
+  runbook check so later worktrees encounter the repaired workflow.
 
 ### Carry new fields through the whole data path
 

@@ -166,6 +166,7 @@ export type ThingsDevicePresentation = {
 	deviceCounts?: Record<string, { commands: number; approvals: number }>;
 	selectedDeviceId?: string | null;
 	onDeviceSelect?: (deviceId: string) => void;
+	onDeviceContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 const pendingCommandCount = (state: DeviceRuntimeState): number =>
@@ -293,7 +294,8 @@ export const ThingsGridView = ({
 	devices = [],
 	deviceCounts = {},
 	selectedDeviceId = null,
-	onDeviceSelect
+	onDeviceSelect,
+	onDeviceContextMenu
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -307,6 +309,7 @@ export const ThingsGridView = ({
 					device={state.summary}
 					key={`device:${state.deviceId}`}
 					onSelect={onDeviceSelect || noopDeviceSelect}
+					onContextMenu={onDeviceContextMenu}
 					pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 					pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 					selected={selectedDeviceId === state.deviceId}
@@ -393,7 +396,8 @@ export const ThingsListView = ({
 	devices = [],
 	deviceCounts = {},
 	selectedDeviceId = null,
-	onDeviceSelect
+	onDeviceSelect,
+	onDeviceContextMenu
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -411,6 +415,7 @@ export const ThingsListView = ({
 							device={state.summary}
 							key={`device:${state.deviceId}`}
 							onSelect={onDeviceSelect || noopDeviceSelect}
+					onContextMenu={onDeviceContextMenu}
 							pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 							pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 							selected={selectedDeviceId === state.deviceId}
@@ -543,7 +548,8 @@ export const ThingsColumnsView = ({
 	devices = [],
 	deviceCounts = {},
 	selectedDeviceId = null,
-	onDeviceSelect
+	onDeviceSelect,
+	onDeviceContextMenu
 }: {
   // folder ids by depth; index 0 is always null (the root)
   path: (string | null)[];
@@ -578,6 +584,7 @@ export const ThingsColumnsView = ({
 										device={state.summary}
 										key={`device:${state.deviceId}`}
 										onSelect={onDeviceSelect || noopDeviceSelect}
+					onContextMenu={onDeviceContextMenu}
 										pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 										pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 										selected={selectedDeviceId === state.deviceId}

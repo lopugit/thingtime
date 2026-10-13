@@ -644,10 +644,10 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 		if (!identityClass) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is not signed with an allowed identity class.`);
 		}
-		if (mode !== 'runtime' && identityClass !== mode) {
+		if (mode !== 'runtime' && identityClass !== mode && !(mode === 'local' && identityClass === 'production')) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is not signed for ${mode} verification.`);
 		}
-		if (mode === 'production' && !details.timestamp) {
+		if (mode !== 'runtime' && identityClass === 'production' && !details.timestamp) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is missing a secure timestamp.`);
 		}
 		teams.add(details.teamIdentifier);

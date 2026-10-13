@@ -63,6 +63,7 @@ const pnpmRunner = pnpmExecPath
     ? { command: process.execPath, args: [pnpmExecPath] }
     : { command: pnpmExecPath, args: [] }
   : { command: corepackCommand, args: ['pnpm'] };
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -92,6 +93,11 @@ function readGitValue(args) {
 function runRemixScript(script, options = {}) {
   run(pnpmRunner.command, [...pnpmRunner.args, '--dir', remixDir, 'run', script], options);
 }
+
+// MCP has its own npm lockfile and is not part of the Remix pnpm workspace.
+// Install it from that lockfile before the expensive web build, including in a
+// fresh worktree where MCP/node_modules is intentionally absent.
+run(npmCommand, ['ci', '--prefix', mcpDir, '--no-audit', '--no-fund']);
 
 await rm(stagedWebDir, { force: true, recursive: true });
 await rm(stagedAiDir, { force: true, recursive: true });
