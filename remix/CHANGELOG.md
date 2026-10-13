@@ -72,6 +72,27 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - **Credential encryption preparation**: tested password/session key-wrapping primitives now preserve a stable data key across rotations and reject altered owner, record, purpose, session and expiry metadata. Runtime credentials still use the existing server-key vault; login/recovery and migration remain open in [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13
 
+- 2026-10-13 — **Codex (AI)**: The Mac node now collects bounded battery and
+  adapter measurements, with detailed publishing negotiated through device
+  state 1.10.0. The device drawer shows battery status in Quick controls,
+  detailed readings under system hardware, and an expandable full Things page
+  shared with the drawer. Device right-click menus open that page. The local
+  Electron build now installs its separately locked MCP helper before building
+  in a fresh worktree and preserves an available installed app signing identity.
+  The shared device page uses context-free layout wrappers so expanding it does
+  not trip the app recovery screen. The installed app footer now identifies its
+  bundled branch and full commit instead of the selected server's deployment.
+  Follow-up: installed-app QA found the selected production server's older
+  device-state contract left every detailed row empty. The paired local Mac
+  now uses a narrow signed Node battery read in both device views, with an
+  adapter registry fallback and live-value acceptance checks in the project
+  guidance. The broad local snapshot remains blocked by XPC policy. The
+  installed signed app now shows real cycles, capacity, voltage and adapter
+  values matching the Mac's IOKit reading in both device views. The Electron
+  dev command now runs an isolated unsigned app beside the installed app,
+  blocks Node service access, and cleans its profile and staged bundles on exit.
+  Details: [PR #990](../PRs/990-codex-mac-battery-monitor-add-detailed-mac-battery-telemetry-and-full-device-things-page.md).
+
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now
   survive locally and synchronize through the shared Timeline outbox without
   rerunning the Action. Canonical events/relationships stay identical locally

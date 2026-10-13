@@ -243,15 +243,15 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-node-state',
-    featureVersion: '1.9.0',
-		contractVersion: '1.9.0',
+    featureVersion: '1.10.0',
+		contractVersion: '1.10.0',
 		group: 'devices',
 		title: 'Publish device state',
 		endpoint: '/api/v1/devices/node/state',
 		summary: 'Applies one quota-accounted, monotonic state and connector snapshot.',
 		detail:
 			'Optional capabilities replaces the paired device capability list atomically with a newer state revision. Omission preserves older node capabilities; the full snapshot hash includes supplied capabilities. ' +
-      'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Raw paths, process arguments and window titles are not accepted.',
+			'The credential fixes owner and device; request ids cannot override either. Equal revision/equal hash is a no-op, equal revision/different hash is 409, and older revisions are ignored. Raw paths, process arguments and window titles are not accepted. Version 1.10 accepts optional, bounded read-only battery measurements: charge cycles, design cycles, capacities in mAh, signed battery current in mA, voltage in mV, temperature in Celsius, time estimates in minutes, and attached adapter rated watts, voltage and current. Missing measurements are null; battery serial numbers and raw registry dictionaries are never accepted.',
 		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only.' },
 		methods: ['POST'],
 		steps: [
@@ -271,7 +271,7 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 						locked: false,
 						volume: 0.5,
 						brightness: 0.8,
-						battery: { level: 0.82, charging: true, isExternalPower: true, isPreventingIdleSleep: false, isLowPowerModeEnabled: false },
+						battery: { level: 0.82, charging: true, isExternalPower: true, isPreventingIdleSleep: false, isLowPowerModeEnabled: false, cycleCount: 280, designCapacityMAh: 6200, fullChargeCapacityMAh: 5300, currentMA: 1200, voltageMV: 12000, adapterWatts: 100 },
 						powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 },
 						appleMusic: { isInstalled: true, isRunning: false },
 						spotify: { isInstalled: true, isRunning: false },
@@ -13777,6 +13777,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-providers',
+    contractVersion: '1.1.0',
     featureVersion: '1.1.0',
     group: 'connections',
     title: 'Connection providers',
@@ -13827,6 +13828,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections',
+    contractVersion: '1.1.0',
     featureVersion: '1.1.0',
     group: 'connections',
     title: 'Connections',
@@ -14002,6 +14004,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-oauth-begin',
+    contractVersion: '1.1.0',
     featureVersion: '1.1.0',
     group: 'connections',
     title: 'Begin SSO connect',
@@ -14047,6 +14050,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-oauth-callback',
+    contractVersion: '1.1.0',
     featureVersion: '1.1.0',
     group: 'connections',
     title: 'SSO connect callback',

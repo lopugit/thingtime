@@ -44,6 +44,7 @@ not end-to-end encryption or a claim that the server cannot access plaintext.
 
 - Client and Nitro server builds passed. Changed-file lint passed.
 - Connection tests: 128 passed, including 55 independently removable connections, the 605-entry vault-count regression, and 12 password/session envelope tests.
+- API capability tests: 94 passed, including both manifests for owner-fenced account writes and the fixed credential-reuse endpoint. Manual credential forms, like OAuth and AI forms, negotiate owner-fence support before transmitting secrets and abandon submission after an account switch.
 - Existing real API connections verifier: 103 passed; new account-library API verifier: 21 passed on a disposable local replica set.
 - Browser: desktop and 390px layout, two saved AI accounts surviving reload, logout clears private account metadata, sign-in restores the correct library, demo add/feed/disconnect, and independent removal of one synthetic AI credential.
 - Typecheck ratchet reports 91 diagnostics against an 89 baseline; no diagnostics in changed feature files. This is a warning, not a clean typecheck.

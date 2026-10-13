@@ -145,6 +145,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
       setBusy(true);
       try {
         await requireThingtimeCapability('api.connections-oauth-begin', '1.1.0');
+        if (!active.current) { tab.close(); return; }
         const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId });
         if (!active.current) {
           tab.close();
@@ -169,6 +170,8 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     if (!connecting) return;
     setBusy(true);
     try {
+      await requireThingtimeCapability('api.connections', '1.1.0');
+      if (!active.current) return;
       const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, expectedOwnerId: ownerId });
       if (!active.current) return;
       lopu({
@@ -182,9 +185,10 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
       setFieldValues({});
       await refresh();
     } catch (err: any) {
+      if (!active.current) return;
       lopu({ title: err?.error || `Could not connect ${connecting.name} 😞`, status: 'error' });
     } finally {
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   };
 

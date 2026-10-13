@@ -1,9 +1,12 @@
 import { access, readFile, readdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { createPinnedPnpmEnvironment } from './pinned-package-manager.mjs';
+import { productionSigningIdentity } from './production-signing-identity.mjs';
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBuilder = path.join(electronDir, 'node_modules', '.bin', 'electron-builder');
@@ -23,18 +26,38 @@ function run(command, args, options = {}) {
 	return result;
 }
 
-function resolveAppleDevelopmentIdentity() {
+function installedSigningIdentity() {
+	const installedApp = path.join(homedir(), 'Applications', 'Thingtime.app');
+	if (!existsSync(installedApp)) return null;
+	const result = spawnSync('/usr/bin/codesign', ['--display', '--verbose=4', installedApp], {
+		encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']
+	});
+	if (result.status !== 0) return null;
+	const details = `${result.stdout || ''}\n${result.stderr || ''}`;
+	if (!/^Identifier=com\.thingtime\.desktop$/mu.test(details)) return null;
+	return [...details.matchAll(/^Authority=(Apple Development:|Developer ID Application:)[^\n]+$/gmu)][0]?.[0].slice('Authority='.length) || null;
+}
+
+function resolveLocalSigningIdentity() {
 	const requested = process.env.THINGTIME_ELECTRON_SIGNING_IDENTITY || '';
 	const result = run('/usr/bin/security', ['find-identity', '-v', '-p', 'codesigning'], {
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'pipe']
 	});
 	const identities = [...result.stdout.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
-	const identity = requested || identities.find((value) => value.startsWith('Apple Development:'));
-	if (!identity || !identity.startsWith('Apple Development:') || !identities.includes(identity)) {
-		throw new Error('A valid Apple Development identity is required for the local TCC-stable Thingtime build.');
+	const installed = installedSigningIdentity();
+	const identity = requested || (installed && identities.includes(installed) ? installed : null)
+		|| identities.find((value) => value.startsWith('Apple Development:'));
+	if (!identity || !/^(Apple Development:|Developer ID Application:)/u.test(identity) || !identities.includes(identity)) {
+		throw new Error('A valid Apple Development or Developer ID Application identity is required for the local TCC-stable Thingtime build.');
 	}
-	return identity;
+	if (installed && installed !== identity) console.warn('Local signing identity differs from the installed Thingtime app; macOS privacy grants may need a one-time refresh.');
+	return {
+		identity,
+		qualifier: identity.startsWith('Developer ID Application:')
+			? productionSigningIdentity(result.stdout, identity).qualifier
+			: identity
+	};
 }
 
 async function builtAppPath() {
@@ -58,11 +81,11 @@ async function builtAppPath() {
 
 if (process.platform !== 'darwin') throw new Error('The signed local Electron app can only be built on macOS.');
 
-const identity = resolveAppleDevelopmentIdentity();
+const { identity, qualifier } = resolveLocalSigningIdentity();
 const signingEnvironment = {
 	...process.env,
 	CSC_IDENTITY_AUTO_DISCOVERY: 'true',
-	CSC_NAME: identity,
+	CSC_NAME: qualifier,
 	THINGTIME_NODE_SIGNING_IDENTITY: identity
 };
 
@@ -70,7 +93,7 @@ const pinnedPnpm = await createPinnedPnpmEnvironment(packageManager, signingEnvi
 try {
 	run('corepack', [packageManager, 'run', 'build:resources'], { env: pinnedPnpm.environment });
 	await rm(path.join(electronDir, 'release'), { force: true, recursive: true });
-	run(electronBuilder, ['--dir', '--mac', '--config.forceCodeSigning=true', `--config.mac.identity=${identity}`, '--config.mac.notarize=false'], {
+	run(electronBuilder, ['--dir', '--mac', '--config.forceCodeSigning=true', `--config.mac.identity=${qualifier}`, '--config.mac.notarize=false'], {
 		env: pinnedPnpm.environment
 	});
 } finally {
