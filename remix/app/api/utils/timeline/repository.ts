@@ -11,6 +11,7 @@ import { StorageMutationError, thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VE
 import { applyUserStorageDelta } from '../storage/userStorage';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { recordPublishedTimelineHead } from './publishedHead.ts';
+import { readTimelineNotes } from './notes.ts';
 
 const digest = (parts: string[]) => createHash('sha256').update(JSON.stringify(parts)).digest('hex');
 // Leave room for the receipt/page wrapper while staying below the hosting
@@ -212,5 +213,7 @@ export async function readTimelinePage(things: any, ownerId: string, request: Ti
 	const entries = await entriesFromDocs(things, ownerId, ordered, session);
 	if (Buffer.byteLength(JSON.stringify(entries)) > TIMELINE_PAGE_MAX_BYTES - 128) throw new Error('Timeline page exceeds its recorded size');
 	const next = headers.length > ids.length ? entries[entries.length - 1].receipt.position : null;
-	return { entries, nextBefore: ascending ? null : next, nextAfter: ascending ? next : null };
+	// Contextual notes ride the same page: bounded by count and record size, never by the entry byte budget.
+	const notes = await readTimelineNotes(things, ownerId, entries.map(entry => entry.event.id), session);
+	return { entries, nextBefore: ascending ? null : next, nextAfter: ascending ? next : null, notes };
 }

@@ -1,6 +1,7 @@
 import { readActionOutcome } from './actionOutcome.ts';
 import type { TimelineEvent, TimelineSnapshot } from './contract.ts';
 import type { LocalTimelineRow } from './localStore.ts';
+import type { HistoryNoteView } from './notes.ts';
 import { timelineDisplayChanges, timelineChangeLabel, timelineValueLabel } from './changes.ts';
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from './snapshotParts.ts';
 
@@ -18,6 +19,7 @@ export type HistoryFilters = {
 	day: string;
 	compact: boolean;
 	realTime: boolean;
+	messages: boolean;
 };
 const choice = (value: string | null, values: readonly string[]) => (value && values.includes(value) ? value : '');
 export function readHistoryFilters(params: URLSearchParams, initialThing = ''): HistoryFilters {
@@ -38,7 +40,8 @@ export function readHistoryFilters(params: URLSearchParams, initialThing = ''): 
 		query: (params.get('q') ?? '').slice(0, 160),
 		day: validDay ? day : '',
 		compact: params.get('density') === 'compact',
-		realTime: params.get('spacing') === 'time'
+		realTime: params.get('spacing') === 'time',
+		messages: params.get('messages') !== 'off'
 	};
 }
 export function writeHistoryFilters(params: URLSearchParams, state: HistoryFilters) {
@@ -54,7 +57,8 @@ export function writeHistoryFilters(params: URLSearchParams, state: HistoryFilte
 		q: state.query,
 		day: state.day,
 		density: state.compact ? 'compact' : '',
-		spacing: state.realTime ? 'time' : ''
+		spacing: state.realTime ? 'time' : '',
+		messages: state.messages ? '' : 'off'
 	})) {
 		if (value) result.set(key, value);
 		else result.delete(key);
@@ -96,7 +100,17 @@ export function historyDay(value: Date) {
 export function historyDayLabel(key: string) {
 	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(`${key}T12:00:00`));
 }
-export function historyCard(row: LocalTimelineRow) {
+/** A system line is derived from the recorded operation alone, never stored
+ * and never a version number: the record does not say which version it was. */
+export function historySystemLine(event: TimelineEvent): string | null {
+	if (readActionOutcome(event)) return null;
+	if (event.operation === 'restore') return 'Restored from an earlier version · nothing was lost';
+	if (event.operation === 'merge') return 'Combined two versions · both remain in History';
+	if (event.operation === 'create' && event.label === 'Recovered deleted Thing') return 'Recovered deleted Thing · its earlier moments are still here';
+	if (event.mode === 'effect' && event.after?.adapter === 'timeline-branch') return event.label === 'Created branch' ? 'Started a private variation' : 'Updated a private variation';
+	return null;
+}
+export function historyCard(row: LocalTimelineRow, notes: HistoryNoteView[] = []) {
 	const { event } = row;
 	const outcome = readActionOutcome(event);
 	const content = historyContent(event.after ?? event.before);
@@ -140,7 +154,9 @@ export function historyCard(row: LocalTimelineRow) {
 		source: historySource(event),
 		removed: event.operation === 'delete',
 		excerpt: text(crystal?.description || crystal?.text || crystal?.body),
-		blockCount: kind === 'webpage' && Array.isArray(crystal?.blocks) ? crystal.blocks.length : null
+		blockCount: kind === 'webpage' && Array.isArray(crystal?.blocks) ? crystal.blocks.length : null,
+		notes,
+		system: historySystemLine(event)
 	};
 }
 export type HistoryCard = ReturnType<typeof historyCard>;
@@ -159,7 +175,8 @@ export function filterHistoryCards(cards: HistoryCard[], filters: HistoryFilters
 					card.row.event.label,
 					card.row.event.thingId,
 					card.source,
-					...card.chips.flatMap((chip) => [chip.label, chip.before, chip.after])
+					...card.chips.flatMap((chip) => [chip.label, chip.before, chip.after]),
+					...card.notes.map((view) => view.note.text)
 				]
 					.join(' ')
 					.toLocaleLowerCase()

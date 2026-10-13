@@ -68,6 +68,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-13 — **Claude (AI)**: Unified Timeline contextual messages. Owner
+  notes, Lopu explanations and derived system lines on every recorded change:
+  new `timeline-note` relational records, `add-note` / `explain-change` /
+  `remove-note` Timeline commands (`api.timeline` 1.17.0, page and entry reads
+  now carry `notes`), a `timeline.explain` rate limit, IndexedDB note cache and
+  offline queue, Changes / Message / Versions tabs in the History detail panel,
+  message bubbles in List / Cards / Frames with a Messages toggle. Details in
+  [docs/unified-timeline.md](../docs/unified-timeline.md#contextual-notes-and-lopu-explanations--2026-10-13).
+
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now
   survive locally and synchronize through the shared Timeline outbox without
   rerunning the Action. Canonical events/relationships stay identical locally

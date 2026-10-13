@@ -1,6 +1,8 @@
 import { readActionOutcome, actionOutcomeDescription } from '../../timeline/actionOutcome';
 import { TimelineEventBrowser } from './TimelineEventBrowser';
-import { readHistoryFilters, writeHistoryFilters, historyComparison, type HistoryFilters } from '../../timeline/browserModel';
+import { readHistoryFilters, writeHistoryFilters, historyCard, historyComparison, type HistoryFilters } from '../../timeline/browserModel';
+import { HistoryMessageComposer } from './TimelineMessages';
+import type { LocalTimelineRow } from '../../timeline/localStore';
 import { COMPONENT_BINDING_PREFIX } from '../../timeline/componentBindings';
 import { TimelinePagePreview } from './TimelinePagePreview';
 import { historyStorageForThing, timelineFolderHref, type TimelineStorage } from '../../timeline/storageScope';
@@ -9,7 +11,7 @@ import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../timeline/snapshotParts';
 import React from 'react';
 import { useMediaQuery } from '@chakra-ui/react';
 import { TimelineBranches } from './TimelineBranches';
-import { Box, Button, Flex, Heading, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Heading, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Tab, TabList, TabPanel, TabPanels, Tabs, Text } from '@chakra-ui/react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '../Nav/Drawer/useDrawer';
 import { PageHeader, PageShell } from '../Layout/PageShell';
@@ -65,6 +67,29 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 	const compareFrom = comparison?.identity === timeline.identity ? comparison.event : null;
 	const comparisonResult = React.useMemo(() => (selected && compareFrom ? historyComparison(compareFrom, selected) : null), [selected, compareFrom]);
 	const [showData, setShowData] = React.useState(false);
+	// Tab choice is fenced by history identity and event: a new selection opens on Changes.
+	const [tabChoice, setTabChoice] = React.useState<{ key: string; tab: number } | null>(null);
+	const detailKey = selected ? `${timeline.identity}:${selected.id}` : '';
+	const tab = tabChoice?.key === detailKey ? tabChoice.tab : 0;
+	const selectedRow = React.useMemo<LocalTimelineRow | null>(
+		() => (selected ? timeline.rows.find((row) => row.event.id === selected.id) ?? { scope: '', event: selected, receipt: null, status: 'accepted', accessedAt: 0, bytes: 1 } : null),
+		[selected, timeline.rows]
+	);
+	const selectedCard = React.useMemo(() => (selectedRow ? historyCard(selectedRow, timeline.notes.get(selectedRow.event.id)) : null), [selectedRow, timeline.notes]);
+	const versions = React.useMemo(
+		() =>
+			selected
+				? timeline.rows
+						.filter((row) => row.event.thingId === selected.thingId && row.event.mode !== 'effect')
+						.sort(
+							(a, b) =>
+								(a.receipt?.position ?? Number.MAX_SAFE_INTEGER) - (b.receipt?.position ?? Number.MAX_SAFE_INTEGER) ||
+								a.event.occurredAt.localeCompare(b.event.occurredAt) ||
+								a.event.id.localeCompare(b.event.id)
+						)
+				: [],
+		[selected, timeline.rows]
+	);
 	const outcome = selected ? readActionOutcome(selected) : null;
 	const largeVersion = selected?.before?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER || selected?.after?.adapter === TIMELINE_SNAPSHOT_PARTS_ADAPTER;
 	const changes = React.useMemo(
@@ -95,154 +120,207 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 					: 'First recorded moment'}{' '}
 				{!outcome ? `· ${selected.mode === 'draft' ? 'Private draft' : selected.operation}` : ''}
 			</Text>
-			{largeVersion ? (
-				<Text fontSize="sm" mb={3}>
-					The complete data for this large version is retained in your account. Full preview is not available here yet.
-				</Text>
-			) : null}
-			{outcome ? (
-				<Box mb={3} data-testid="timeline-action-outcome">
-					<Text fontSize="sm">{actionOutcomeDescription(outcome)}</Text>
-					{outcome.durationMs !== null ? (
-						<Text fontSize="sm" mt={2}>
-							{outcome.durationMs} ms · {outcome.opsUsed} operations · {outcome.childActionsUsed} child Actions
-						</Text>
-					) : null}
-					<Text fontSize="xs" mt={2} overflowWrap="anywhere">
-						Run: {outcome.runId}
-					</Text>
-					<Text fontSize="xs" mt={2} color="var(--tt-muted)">
-						Inputs, results and error details are omitted from this receipt. This activity cannot be restored or replayed.
-					</Text>
-				</Box>
-			) : null}
-			<Flex gap={2} wrap="wrap" mb={3}>
-				{selected.mode !== 'effect' ? (
-					<Button size="sm" variant="outline" onClick={() => setComparison({ identity: timeline.identity, event: selected })}>
-						Compare from this version
-					</Button>
-				) : null}
-				{compareFrom ? (
-					<Button size="sm" variant="ghost" onClick={() => setComparison(null)}>
-						Clear comparison
-					</Button>
-				) : null}
-			</Flex>
-			{compareFrom ? (
-				<Box p={3} mb={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
-					<Text fontWeight="600" fontSize="sm">
-						Read-only comparison
-					</Text>
-					<Text fontSize="xs" color="var(--tt-muted)" mb={2}>
-						From {compareFrom.label} · {date(compareFrom.occurredAt)}. Select another version of this Thing, including a variation.
-					</Text>
-					{compareFrom.id === selected.id ? (
-						<Text fontSize="sm">Choose the second version in History.</Text>
-					) : comparisonResult?.error ? (
-						<Text role="status" fontSize="sm">
-							{comparisonResult.error}
-						</Text>
-					) : (
-						<>
-							<Text fontSize="sm" mb={2}>
-								{comparisonResult?.changes.length ?? 0} changed content properties
+			<Tabs index={tab} onChange={(index) => setTabChoice({ key: detailKey, tab: index })} variant="line" size="sm" isLazy>
+				<TabList overflowX="auto" overflowY="hidden" flexWrap="nowrap" mb={3}>
+					<Tab flexShrink={0}>Changes</Tab>
+					<Tab flexShrink={0}>Message</Tab>
+					<Tab flexShrink={0}>Versions</Tab>
+				</TabList>
+				<TabPanels>
+					<TabPanel px={0} py={0}>
+						{largeVersion ? (
+							<Text fontSize="sm" mb={3}>
+								The complete data for this large version is retained in your account. Full preview is not available here yet.
 							</Text>
-							{comparisonResult?.dependenciesChanged ? (
-								<Text fontSize="sm" mb={2}>
-									Recorded component dependencies also differ. Open each version's recorded page preview to inspect them.
+						) : null}
+						{outcome ? (
+							<Box mb={3} data-testid="timeline-action-outcome">
+								<Text fontSize="sm">{actionOutcomeDescription(outcome)}</Text>
+								{outcome.durationMs !== null ? (
+									<Text fontSize="sm" mt={2}>
+										{outcome.durationMs} ms · {outcome.opsUsed} operations · {outcome.childActionsUsed} child Actions
+									</Text>
+								) : null}
+								<Text fontSize="xs" mt={2} overflowWrap="anywhere">
+									Run: {outcome.runId}
 								</Text>
-							) : null}
-							{comparisonResult?.changes.map((change, index) => (
-								<Box key={index} mb={2}>
-									<Text fontSize="sm" fontWeight="600">
-										{timelineChangeLabel(change.path)}
-									</Text>
-									<Text fontSize="xs" overflowWrap="anywhere">
-										Then: {timelineValueLabel(change.before, change.path)}
-									</Text>
-									<Text fontSize="xs" overflowWrap="anywhere">
-										Selected: {timelineValueLabel(change.after, change.path)}
-									</Text>
-								</Box>
-							))}
-						</>
-					)}
-				</Box>
-			) : null}
-			<TimelinePagePreview key={`page-preview:${timeline.identity}:${selected.id}`} event={selected} />
-			{changes.map((change, index) => (
-				<Box key={index} mb={3} p={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
-					<Text fontWeight="600" mb={2} overflowWrap="anywhere">
-						{timelineChangeLabel(change.path)}
-					</Text>
-					<Text fontSize="sm" color="var(--tt-muted)" noOfLines={4} overflowWrap="anywhere">
-						Before: {timelineValueLabel(change.before, change.path)}
-					</Text>
-					<Text fontSize="sm" mt={1} noOfLines={4} overflowWrap="anywhere">
-						After: {timelineValueLabel(change.after, change.path)}
-					</Text>
-				</Box>
-			))}
-			<Button size="sm" variant="ghost" mb={3} onClick={() => setShowData((value) => !value)} aria-expanded={showData}>
-				{showData ? 'Hide data' : 'View data'}
-			</Button>
-			{showData
-				? (outcome ? (['after'] as const) : (['before', 'after'] as const)).map((side) => (
-						<Box key={side} mb={4}>
-							<Text fontWeight="600" fontSize="sm" mb={2}>
-								{outcome ? 'Execution receipt' : side === 'before' ? 'Before' : 'After'}
-							</Text>
-							<Box
-								as="pre"
-								fontSize="xs"
-								whiteSpace="pre-wrap"
-								overflowWrap="anywhere"
-								maxH="280px"
-								overflow="auto"
-								p={3}
-								borderRadius="md"
-								bg="var(--tt-surface)"
-							>
-								{preview(selected[side])}
+								<Text fontSize="xs" mt={2} color="var(--tt-muted)">
+									Inputs, results and error details are omitted from this receipt. This activity cannot be restored or replayed.
+								</Text>
 							</Box>
-						</Box>
-				  ))
-				: null}
-			{!selected.thingId.startsWith(COMPONENT_BINDING_PREFIX) ? (
-				<Button
-					size="sm"
-					variant="outline"
-					isLoading={opening}
-					isDisabled={!session.connection}
-					onClick={async () => {
-						const scope = session.connection?.scope;
-						if (!scope) return;
-						setOpening(true);
-						setOpenError('');
-						try {
-							if (differentSource) await api.v1.mongodb.endpoint.set({ reset: true });
-							navigate(thingHistoryHref(selected.thingId, scope.dataPlane, scope.ownerId));
-						} catch (error) {
-							setOpenError(apiErrorMessage(error, 'Could not open this Thing. Your history is still here.'));
-						} finally {
-							setOpening(false);
-						}
-					}}
-				>
-					{differentSource ? 'Open Thing in home' : 'Open Thing'}
-				</Button>
-			) : null}
-			{differentSource && !selected.thingId.startsWith(COMPONENT_BINDING_PREFIX) ? (
-				<Text fontSize="xs" color="var(--tt-muted)" mt={2}>
-					Opening this Thing switches your selected database to your home account.
-				</Text>
-			) : null}
-			{openError ? (
-				<Text role="status" fontSize="sm" mt={2}>
-					{openError}
-				</Text>
-			) : null}
-			<TimelineVersionActions key={`${timeline.identity}:${selected.id}`} event={selected} onApplied={() => void timeline.refresh()} />
+						) : null}
+						<Flex gap={2} wrap="wrap" mb={3}>
+							{selected.mode !== 'effect' ? (
+								<Button size="sm" variant="outline" onClick={() => setComparison({ identity: timeline.identity, event: selected })}>
+									Compare from this version
+								</Button>
+							) : null}
+							{compareFrom ? (
+								<Button size="sm" variant="ghost" onClick={() => setComparison(null)}>
+									Clear comparison
+								</Button>
+							) : null}
+						</Flex>
+						{compareFrom ? (
+							<Box p={3} mb={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
+								<Text fontWeight="600" fontSize="sm">
+									Read-only comparison
+								</Text>
+								<Text fontSize="xs" color="var(--tt-muted)" mb={2}>
+									From {compareFrom.label} · {date(compareFrom.occurredAt)}. Select another version of this Thing, including a variation.
+								</Text>
+								{compareFrom.id === selected.id ? (
+									<Text fontSize="sm">Choose the second version in History.</Text>
+								) : comparisonResult?.error ? (
+									<Text role="status" fontSize="sm">
+										{comparisonResult.error}
+									</Text>
+								) : (
+									<>
+										<Text fontSize="sm" mb={2}>
+											{comparisonResult?.changes.length ?? 0} changed content properties
+										</Text>
+										{comparisonResult?.dependenciesChanged ? (
+											<Text fontSize="sm" mb={2}>
+												Recorded component dependencies also differ. Open each version's recorded page preview to inspect them.
+											</Text>
+										) : null}
+										{comparisonResult?.changes.map((change, index) => (
+											<Box key={index} mb={2}>
+												<Text fontSize="sm" fontWeight="600">
+													{timelineChangeLabel(change.path)}
+												</Text>
+												<Text fontSize="xs" overflowWrap="anywhere">
+													Then: {timelineValueLabel(change.before, change.path)}
+												</Text>
+												<Text fontSize="xs" overflowWrap="anywhere">
+													Selected: {timelineValueLabel(change.after, change.path)}
+												</Text>
+											</Box>
+										))}
+									</>
+								)}
+							</Box>
+						) : null}
+						<TimelinePagePreview key={`page-preview:${timeline.identity}:${selected.id}`} event={selected} />
+						{changes.map((change, index) => (
+							<Box key={index} mb={3} p={3} borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg">
+								<Text fontWeight="600" mb={2} overflowWrap="anywhere">
+									{timelineChangeLabel(change.path)}
+								</Text>
+								<Text fontSize="sm" color="var(--tt-muted)" noOfLines={4} overflowWrap="anywhere">
+									Before: {timelineValueLabel(change.before, change.path)}
+								</Text>
+								<Text fontSize="sm" mt={1} noOfLines={4} overflowWrap="anywhere">
+									After: {timelineValueLabel(change.after, change.path)}
+								</Text>
+							</Box>
+						))}
+						<Button size="sm" variant="ghost" mb={3} onClick={() => setShowData((value) => !value)} aria-expanded={showData}>
+							{showData ? 'Hide data' : 'View data'}
+						</Button>
+						{showData
+							? (outcome ? (['after'] as const) : (['before', 'after'] as const)).map((side) => (
+									<Box key={side} mb={4}>
+										<Text fontWeight="600" fontSize="sm" mb={2}>
+											{outcome ? 'Execution receipt' : side === 'before' ? 'Before' : 'After'}
+										</Text>
+										<Box
+											as="pre"
+											fontSize="xs"
+											whiteSpace="pre-wrap"
+											overflowWrap="anywhere"
+											maxH="280px"
+											overflow="auto"
+											p={3}
+											borderRadius="md"
+											bg="var(--tt-surface)"
+										>
+											{preview(selected[side])}
+										</Box>
+									</Box>
+							  ))
+							: null}
+						{!selected.thingId.startsWith(COMPONENT_BINDING_PREFIX) ? (
+							<Button
+								size="sm"
+								variant="outline"
+								isLoading={opening}
+								isDisabled={!session.connection}
+								onClick={async () => {
+									const scope = session.connection?.scope;
+									if (!scope) return;
+									setOpening(true);
+									setOpenError('');
+									try {
+										if (differentSource) await api.v1.mongodb.endpoint.set({ reset: true });
+										navigate(thingHistoryHref(selected.thingId, scope.dataPlane, scope.ownerId));
+									} catch (error) {
+										setOpenError(apiErrorMessage(error, 'Could not open this Thing. Your history is still here.'));
+									} finally {
+										setOpening(false);
+									}
+								}}
+							>
+								{differentSource ? 'Open Thing in home' : 'Open Thing'}
+							</Button>
+						) : null}
+						{differentSource && !selected.thingId.startsWith(COMPONENT_BINDING_PREFIX) ? (
+							<Text fontSize="xs" color="var(--tt-muted)" mt={2}>
+								Opening this Thing switches your selected database to your home account.
+							</Text>
+						) : null}
+						{openError ? (
+							<Text role="status" fontSize="sm" mt={2}>
+								{openError}
+							</Text>
+						) : null}
+						<TimelineVersionActions key={`${timeline.identity}:${selected.id}`} event={selected} onApplied={() => void timeline.refresh()} />
+					</TabPanel>
+					<TabPanel px={0} py={0}>
+						{selectedCard ? <HistoryMessageComposer key={detailKey} card={selectedCard} /> : null}
+					</TabPanel>
+					<TabPanel px={0} py={0}>
+						<Flex direction="column" gap={1} align="stretch" role="group" aria-label="Loaded versions of this Thing">
+							{versions.map((row) => (
+								<Button
+									key={row.event.id}
+									size="sm"
+									variant="ghost"
+									justifyContent="flex-start"
+									h="auto"
+									py={2}
+									whiteSpace="normal"
+									textAlign="left"
+									aria-current={row.event.id === selected.id ? 'true' : undefined}
+									bg={row.event.id === selected.id ? 'var(--tt-surface)' : undefined}
+									onClick={() => setSelected(row.event)}
+								>
+									<Box minW={0}>
+										<Text fontSize="sm" fontWeight={row.event.id === selected.id ? '700' : '500'} overflowWrap="anywhere">
+											{row.event.label}
+										</Text>
+										<Text fontSize="xs" fontWeight="400" color="var(--tt-muted)" overflowWrap="anywhere">
+											{row.event.branchId === 'main' ? 'Saved version' : 'Private variation'} · {date(row.event.occurredAt)} ·{' '}
+											{row.status === 'accepted' ? 'Synced to your account' : 'Saved on this device'}
+										</Text>
+									</Box>
+								</Button>
+							))}
+						</Flex>
+						{!versions.length ? (
+							<Text fontSize="sm" color="var(--tt-muted)">
+								No loaded versions of this Thing.
+							</Text>
+						) : null}
+						{timeline.nextBefore !== null ? (
+							<Text fontSize="xs" color="var(--tt-muted)" mt={2}>
+								Loaded versions only · load older changes to see more
+							</Text>
+						) : null}
+					</TabPanel>
+				</TabPanels>
+			</Tabs>
 		</Box>
 	) : null;
 
@@ -299,6 +377,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 				<Box flex={selected ? '0 0 48%' : '1'} minW={0}>
 					<TimelineEventBrowser
 						rows={timeline.rows}
+						notes={timeline.notes}
 						filters={filters}
 						onFilters={changeFilters}
 						selected={selected}

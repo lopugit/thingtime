@@ -2,7 +2,9 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { StorageMutationError } from '~/api/utils/storage/storageCore';
-import { getTimelinePage, getTimelineEntry, getTimelineComponentBindings, pushClientTimelineEvent, timelineDiscovery, validateClientTimelineEvent } from '~/api/utils/timeline/service';
+import { getTimelinePage, getTimelineEntry, getTimelineComponentBindings, getTimelineNotes, pushClientTimelineEvent, timelineDiscovery, validateClientTimelineEvent } from '~/api/utils/timeline/service';
+import { handleNoteRequest } from '~/api/utils/timeline/notes';
+import { parseTimelineNoteCommand } from '~/timeline/notes';
 import { TIMELINE_EVENT_MAX_BYTES, TIMELINE_PAGE_SIZE } from '~/timeline/contract';
 import { handleVersionRequest, parseVersionRequest } from '~/api/utils/timeline/versions';
 import { handleBranchRequest, getTimelineBranches, getTimelineBranch } from '~/api/utils/timeline/branches';
@@ -19,7 +21,7 @@ import { actionOutcomeRecovery } from '~/api/utils/timeline/actionRecovery';
 
 const privateHeaders = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization, x-tt-mongo-url' };
 const response = (body: unknown, status = 200) => json(body, { status, headers: privateHeaders });
-const defaults = { recoverOutcome: actionOutcomeRecovery.recover, user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch };
+const defaults = { recoverOutcome: actionOutcomeRecovery.recover, user: getCurrentUser, limit: enforceRateLimit, discovery: timelineDiscovery, page: getTimelinePage, relatedPage: getRelatedTimelinePage, entry: getTimelineEntry, componentBindings: getTimelineComponentBindings, push: pushClientTimelineEvent, version: handleVersionRequest, branch: handleBranchRequest, branchHead: getTimelineBranch, branches: getTimelineBranches, branchMerge: previewBranchMerge, branchCheckout: checkoutTimelineBranch, note: handleNoteRequest, notes: getTimelineNotes };
 
 export function createTimelineHandlers(overrides: Partial<typeof defaults> = {}) {
 	const deps = { ...defaults, ...overrides };
@@ -90,7 +92,7 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 			const validId = (value: string) => /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(value);
 			if (!auth.url.searchParams.has('dataPlane') || !validId(eventId) || (thingId !== null && !validId(thingId)) || ['branches', 'history', 'before', 'after', 'limit'].some(key => auth.url.searchParams.has(key))) return response({ ok: false, error: 'Invalid Timeline version request' }, 400);
 			const entry = await deps.entry(auth.user.id, eventId);
-			return entry && (!thingId || entry.event.thingId === thingId) ? response({ ok: true, entry }) : response({ ok: false, error: 'Version not found' }, 404);
+			return entry && (!thingId || entry.event.thingId === thingId) ? response({ ok: true, entry, notes: await deps.notes(auth.user.id, [eventId]) }) : response({ ok: false, error: 'Version not found' }, 404);
 		}
 		if (auth.url.searchParams.get('branches') === '1') {
 			const before = auth.url.searchParams.has('before') ? Number(auth.url.searchParams.get('before')) : null;
@@ -111,7 +113,7 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 		const auth = await authorize(request);
 		if (auth instanceof Response) return auth;
 		if (!auth.url.searchParams.has('dataPlane')) return response({ ok: false, error: 'Timeline data source is required' }, 400);
-		let recovery; let event; let version; let branch; let branchMerge; let branchCheckout;
+		let recovery; let event; let version; let branch; let branchMerge; let branchCheckout; let note;
 		try {
 			const input = await readJsonBody(request, TIMELINE_EVENT_MAX_BYTES);
 			if (input && typeof input === 'object' && Object.prototype.hasOwnProperty.call(input, 'command')) {
@@ -119,15 +121,25 @@ export function createTimelineHandlers(overrides: Partial<typeof defaults> = {})
 				else if ((input as any).command === 'checkout-branch') branchCheckout = parseBranchCheckoutRequest(input);
 				else if ((input as any).command === 'preview-branch-merge') branchMerge = parseBranchMergeRequest(input);
 				else if (['create-branch', 'advance-branch'].includes((input as any).command)) branch = parseTimelineBranchCommand(input);
+				else if (['add-note', 'explain-change', 'remove-note'].includes((input as any).command)) note = parseTimelineNoteCommand(input);
 				else version = parseVersionRequest(input);
 			}
 			else event = validateClientTimelineEvent(auth.user.id, input);
 		}
 		catch (error) {
 			if (error instanceof Response) return response({ ok: false, error: 'Timeline event is too large' }, error.status);
-			return response({ ok: false, error: 'Invalid Timeline event, version or branch request' }, 400);
+			return response({ ok: false, error: 'Invalid Timeline event, version, branch or note request' }, 400);
 		}
 		try {
+			if (note) {
+				if (note.command === 'explain-change') {
+					// Lopu spends this account's model allowance: full accounts only, with its own bounded window.
+					if (auth.user.temporary || auth.user.accountKind !== 'user') return response({ ok: false, error: 'Sign in with a full account to ask Lopu.' }, 401);
+					const limit = await deps.limit(request, 'timeline.explain', `user:${auth.user.id}`, { failClosed: true });
+					if (!limit.allowed) return json({ ok: false, error: 'Lopu is busy; retry shortly' }, { ...rateLimitedResponseInit(limit), headers: { ...privateHeaders, ...Object.fromEntries(new Headers(rateLimitedResponseInit(limit).headers)) } });
+				}
+				return response(await deps.note(auth.user.id, note, { signal: request.signal }));
+			}
 			if (recovery) return response({ ok: true, entry: await deps.recoverOutcome(auth.user.id, recovery) });
 			if (branchCheckout) {
 				const result = await deps.branchCheckout(auth.user.id, branchCheckout);

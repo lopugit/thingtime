@@ -437,8 +437,9 @@ test('native traversal requires bounded synchronous callback support on both man
 test('server Action outcomes are discoverable in both capability manifests', () => {
   for (const features of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://outcomes.test').features).map(([id, feature]) => [id, feature.version]))]) {
     assert.equal(features['api.actions-run'], '1.37.0');
-    assert.equal(features['api.timeline'], '1.16.0');
+    assert.equal(features['api.timeline'], '1.17.0');
     assert.equal(capabilitySatisfies('1.36.0', '1.37.0'), false);
     assert.equal(capabilitySatisfies('1.15.0', '1.16.0'), false);
+    assert.equal(capabilitySatisfies('1.16.0', '1.17.0'), false);
   }
 });
