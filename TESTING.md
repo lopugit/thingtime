@@ -75,6 +75,24 @@ persisted; every check is client-side.
 
 ## Unified Timeline
 
+- [ ] Contextual messages (2026-10-13): select a synced change in `/history` and
+  in a Thing's History; the detail panel shows Changes / Message / Versions tabs
+  at desktop and in the 375px bottom sheet. In Message, save a note: it appears
+  as a bubble under that row in List, Cards and Frames (not Line), with "Saved
+  on this device" until the sync receipt lands, then without it. Reload: the
+  note persists; the Messages toggle (URL `messages=off`) hides every bubble.
+- [ ] Offline: add a note, reload, reconnect — exactly one note syncs; retrying
+  the same command returns the original. Add nine notes to one change: the
+  ninth is refused with the limit message and stays dismissible. Remove a note
+  twice: idempotent, storage refunded. Explain a pending (unsynced) change: the
+  button is disabled with "Sync this change first". Ask Lopu on a synced change:
+  the Lopu bubble has the gradient border; with no model configured the 503
+  message shows and nothing is stored; an unverified or credit-less account
+  gets the chat's Lopu refusal instead and nothing is stored. Restore/merge/recovery rows show dashed
+  system lines without invented version numbers.
+  Run `test:timeline`, `test:api-capabilities` and `test:timeline:notes` on the
+  guarded `timeline-rs` replica.
+
 - [ ] With only admission storage available, run an ordinary server Action.
   Preserve its actual result and sealed completion. Block recovery requests:
   desktop and 390px show local retention, and the pending History event survives

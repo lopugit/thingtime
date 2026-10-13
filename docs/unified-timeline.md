@@ -970,3 +970,44 @@ This reconciles **known responses received by a retaining client**. It cannot
 recover a response lost before the client receives the bundle, infer a process
 crash's execution result, retain browser execution evidence or finish external
 side effects. Those broader requirements remain open; no Action is replayed.
+
+## Contextual notes and Lopu explanations — 2026-10-13
+
+Every immutable event can carry contextual messages: owner notes, Lopu
+explanations and derived system lines. A note is its own relational record
+(`timeline-note`, shared contract in `remix/app/timeline/notes.ts`): one
+protected Thing per note under the Timeline folder, `targetId` naming its event
+Thing, `crystal.targetId`/`linkKind` for reverse lookup through the existing
+shared index, the record in secure BinData. Events keep their exact 17 keys;
+nothing appends a notes array to an event, Thing or folder, and notes never
+appear as separate moments in the event list. The same record is read with each
+history page (one bounded query per page, at most eight notes per event, two
+thousand characters per note), cached in IndexedDB beside the event rows, and
+queued offline through the same account-scoped outbox as branch commands.
+
+`add-note`, `explain-change` and `remove-note` are Timeline POST commands under
+`api.timeline` 1.17.0. Add and explain mint `note-<operationId>`, so a retried
+request after a lost reply returns the original note and never a duplicate;
+another text under a used id is refused. Removal is idempotent and refunds the
+note's storage. Notes are the owner's private content: accounted against the
+owner's storage on the home plane, readable only by the owner, and absent from
+generic reads, search and public projections.
+
+An explanation is produced server-side from the recorded change only (label,
+retained snapshot titles, before/after property labels, source, branch and
+time), through Thingtime's own Lopu model routing (`generateAiCompletion` with a
+bounded timeout). It is stored as a `lopu` note only when the model answers; an
+unavailable or empty answer refuses with 503 and stores nothing. Explanation
+requests need a full account, pass the same Lopu access gate as chat (verified
+account with Lopu credits; guests and unverified accounts are refused with the
+chat refusal codes), and spend the `timeline.write` limit plus a separate
+`timeline.explain` limit. Explanations are not yet metered against Lopu
+credits; that bounded allowance is the spend limit. A pending (unsynced) event cannot be explained until
+its receipt exists, and a queued note for a still-pending event waits in the
+outbox instead of being refused.
+
+System lines are derived in the browser from `operation`, `parentIds`, `label`
+and `mode` (restore, merge, recovered deletion, variation effects). They are
+not stored, carry no invented version numbers, and disappear when the Messages
+toggle is off. The detail panel's Message tab holds the composer, Ask Lopu and
+per-note removal; List, Cards and Frames show the bubbles under the change chips.

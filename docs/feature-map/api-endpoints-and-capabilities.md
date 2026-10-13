@@ -1,5 +1,13 @@
 # API endpoints and capabilities
 
+Timeline 1.17.0 adds contextual notes on the existing route: POST commands
+`add-note`, `explain-change` and `remove-note` (`api/utils/timeline/notes.ts`,
+shared `timeline/notes.ts`), page and `eventId` reads carry `notes`, and
+`timeline.explain` rate-limits Lopu explanations (`api/utils/timeline/explain.ts`
+over the Lopu platform model routing). Register changes in `apiDocs.ts`, keep the
+`timeline-note` protected kind in `schemas/registry.ts`, and run
+`test:timeline`, `test:api-capabilities` and `test:timeline:notes`.
+
 Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
 shared `timeline/actionOutcome.ts`, called from the canonical server executor.
 They retain safe effect receipts in the existing Timeline, never a new history

@@ -68,6 +68,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-13 — **Claude (AI)**: Unified Timeline contextual messages. Owner
+  notes, Lopu explanations and derived system lines on every recorded change:
+  new `timeline-note` relational records, `add-note` / `explain-change` /
+  `remove-note` Timeline commands (`api.timeline` 1.17.0, page and entry reads
+  now carry `notes`), a `timeline.explain` rate limit, IndexedDB note cache and
+  offline queue, Changes / Message / Versions tabs in the History detail panel,
+  message bubbles in List / Cards / Frames with a Messages toggle. Details in
+  [docs/unified-timeline.md](../docs/unified-timeline.md#contextual-notes-and-lopu-explanations--2026-10-13)
+  and the PR note
+  [PRs/991-…](../PRs/991-claude-history-browser-integration--unified-timeline-contextual-messages.md)
+  (PR #991).
 - 2026-10-13 — **Codex (AI)**: The Mac node now collects bounded battery and
   adapter measurements, with detailed publishing negotiated through device
   state 1.10.0. The device drawer shows battery status in Quick controls,

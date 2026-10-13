@@ -2,6 +2,8 @@ import React from 'react';
 import { Box, Button, Flex, FormControl, FormLabel, Input, Select, Text } from '@chakra-ui/react';
 import type { TimelineEvent } from '../../timeline/contract';
 import type { LocalTimelineRow } from '../../timeline/localStore';
+import type { HistoryNoteView } from '../../timeline/notes';
+import { HistoryMessages } from './TimelineMessages';
 import {
 	HISTORY_LOOKS,
 	filterHistoryCards,
@@ -88,6 +90,7 @@ function ChangeChips({ card }: { card: HistoryCard }) {
  * No per-look data store, requests, fictional actors or invented version counts. */
 export function TimelineEventBrowser({
 	rows,
+	notes,
 	filters,
 	onFilters,
 	selected,
@@ -98,6 +101,7 @@ export function TimelineEventBrowser({
 	ready
 }: {
 	rows: LocalTimelineRow[];
+	notes: Map<string, HistoryNoteView[]>;
 	filters: HistoryFilters;
 	onFilters: (next: HistoryFilters) => void;
 	selected: TimelineEvent | null;
@@ -107,7 +111,7 @@ export function TimelineEventBrowser({
 	hasOlder: boolean;
 	ready: boolean;
 }) {
-	const cards = React.useMemo(() => rows.map(historyCard), [rows]);
+	const cards = React.useMemo(() => rows.map((row) => historyCard(row, notes.get(row.event.id))), [rows, notes]);
 	const [visibleCount, setVisibleCount] = React.useState(80);
 	const matches = React.useMemo(() => filterHistoryCards(cards, filters), [cards, filters]);
 	const filtered = React.useMemo(() => matches.slice(0, visibleCount), [matches, visibleCount]);
@@ -277,6 +281,16 @@ export function TimelineEventBrowser({
 						</Button>
 					))}
 				</Flex>
+				<Button
+					size="xs"
+					variant="ghost"
+					aria-pressed={filters.messages}
+					title={filters.messages ? 'Hide notes, explanations and system lines' : 'Show notes, explanations and system lines'}
+					sx={{ '&[aria-pressed="true"]': { bg: 'var(--tt-surface)', boxShadow: 'inset 0 0 0 1px var(--tt-border)' } }}
+					onClick={() => update({ messages: !filters.messages })}
+				>
+					Messages
+				</Button>
 				{filters.look !== 'list' ? (
 					<>
 						<Button size="xs" variant="ghost" aria-pressed={filters.compact} onClick={() => update({ compact: !filters.compact })}>
@@ -424,6 +438,7 @@ export function TimelineEventBrowser({
 									<strong className="history-event-label">{card.row.event.label}</strong>
 									<SnapshotCard card={card} />
 									<ChangeChips card={card} />
+									{filters.messages ? <HistoryMessages card={card} /> : null}
 									<SyncPill card={card} />
 								</span>
 							</button>
@@ -469,7 +484,7 @@ export function TimelineEventBrowser({
 						</Text>
 					</Flex>
 					<div
-						className={`history-strip ${filters.look}`}
+						className={`history-strip ${filters.look}${filters.messages && filters.look !== 'line' ? ' messages' : ''}`}
 						ref={strip}
 						onScroll={measure}
 						onKeyDown={keyboard}
@@ -515,6 +530,7 @@ export function TimelineEventBrowser({
 												{filters.look !== 'line' ? <SnapshotCard card={card} frame={filters.look === 'frames'} /> : <strong>{card.title}</strong>}
 												<strong className="history-event-label">{card.row.event.label}</strong>
 												{filters.look !== 'line' ? <ChangeChips card={card} /> : null}
+												{filters.look !== 'line' && filters.messages ? <HistoryMessages card={card} compact /> : null}
 												<span className="history-caption">{card.source}</span>
 												<SyncPill card={card} />
 											</span>
