@@ -399,6 +399,132 @@
 	margin-top: 8px;
 	accent-color: var(--tt-accent, #47b5e6);
 }
+.history-messages {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	max-width: 100%;
+}
+.history-message {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-top: 6px;
+	min-width: 0;
+	max-width: 100%;
+}
+.history-message-who {
+	font-family: var(--tt-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+	font-size: 10px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--tt-muted);
+}
+.history-message-text {
+	font-size: 13px;
+	line-height: 1.4;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	border: 1px solid var(--tt-border);
+	border-radius: 4px 12px 12px 12px;
+	padding: 7px 11px;
+	background: var(--tt-surface);
+	color: var(--tt-ink);
+	min-width: 0;
+	max-width: 100%;
+}
+.history-message.lopu .history-message-text {
+	background: var(--tt-gradient-rainbow, linear-gradient(135deg, var(--tt-rainbow-5, #a555e8), var(--tt-rainbow-2, #ffbc48)));
+	padding: 1.5px;
+	border: 0;
+}
+.history-message.lopu .history-message-text > div {
+	background: var(--tt-surface);
+	border-radius: 3px 11px 11px 11px;
+	padding: 7px 11px;
+	min-width: 0;
+}
+.history-message.system .history-message-text {
+	background: transparent;
+	border: 1px dashed var(--tt-border);
+	color: var(--tt-muted);
+	font-size: 12.5px;
+}
+.history-message.pending {
+	opacity: 0.8;
+}
+.history-message-state {
+	font-size: 10px;
+	color: var(--tt-muted);
+	overflow-wrap: anywhere;
+}
+.history-message.removing .history-message-text {
+	text-decoration: line-through;
+}
+.history-message-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 4px;
+}
+.history-stop .history-message {
+	margin-top: 3px;
+	gap: 1px;
+}
+.history-stop .history-messages {
+	max-height: 60px;
+	overflow: hidden;
+}
+.history-stop .history-message-text {
+	font-size: 12px;
+	padding: 5px 9px;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.history-stop .history-message.lopu .history-message-text {
+	display: block;
+	padding: 1.5px;
+}
+.history-stop .history-message.lopu .history-message-text > div {
+	padding: 5px 9px;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.history-strip.messages.cards .history-lane {
+	height: 640px;
+}
+.history-strip.messages.cards .history-spine {
+	top: 332px;
+}
+.history-strip.messages.cards .history-stop {
+	height: 273px;
+}
+.history-strip.messages.cards .history-node {
+	top: 284px;
+}
+.history-strip.messages.cards .history-stop[data-side='below'] {
+	top: 352px;
+}
+.history-strip.messages.cards .history-stop[data-side='below'] .history-node {
+	top: -26px;
+}
+.history-strip.messages.frames .history-lane {
+	height: 400px;
+}
+.history-strip.messages.frames .history-spine {
+	top: 382px;
+}
+.history-strip.messages.frames .history-stop {
+	height: 325px;
+}
+.history-strip.messages.frames .history-node,
+.history-strip.messages.frames .history-stop[data-side='below'] .history-node {
+	top: 336px;
+}
 @media (max-width: 420px) {
 	.history-toolbar {
 		padding: 8px;

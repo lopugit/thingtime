@@ -12,6 +12,8 @@ import { getThingsCollection, withMongoTransaction } from '../mongodb/collection
 import { mongoDataPlane } from '../mongodb/dataPlane';
 import { appendTimelineEvent, readTimelinePage, readTimelineEntries, timelineEventThingId, timelineFolderId } from './repository.ts';
 
+export { getTimelineNotes } from './notes.ts';
+
 export const timelineDataPlane = mongoDataPlane;
 
 export const timelineDiscovery = (ownerId: string) => ({ ownerId, dataPlane: timelineDataPlane(), folderId: timelineFolderId(ownerId) });

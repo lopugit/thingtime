@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { filterHistoryCards, historyCard, historyComparison, historyPositions, readHistoryFilters, writeHistoryFilters } from './browserModel.ts';
+import { filterHistoryCards, historyCard, historyComparison, historyPositions, historySystemLine, readHistoryFilters, writeHistoryFilters } from './browserModel.ts';
 import type { LocalTimelineRow } from './localStore.ts';
 import type { TimelineEvent } from './contract.ts';
+import type { HistoryNoteView } from './notes.ts';
 
 const row = (id: string, position: number | null, overrides: Partial<TimelineEvent> = {}): LocalTimelineRow => ({
 	scope: 'owner',
@@ -103,4 +104,78 @@ test('read-only comparison allows variations of one Thing and refuses other owne
 	assert.ok(historyComparison(first, { ...next, thingId: 'foreign' }).error);
 	assert.ok(historyComparison(first, { ...next, after: { adapter: 'folder-placement', version: 1, value: { folderId: null } } }).error);
 	assert.equal(historyComparison(first, { ...next, after: null }).changes.length, 1);
+});
+
+const note = (id: string, text: string, author: 'owner' | 'lopu' = 'owner', status: HistoryNoteView['status'] = 'accepted'): HistoryNoteView => ({
+	note: { formatVersion: 1, id: `note-${id}`, ownerId: 'owner', eventId: 'a', thingId: 'page', author, text, createdAt: '2026-09-29T12:01:00.000Z' },
+	status,
+	failure: null
+});
+
+test('the messages toggle defaults on, round-trips only when off and ignores other values', () => {
+	assert.equal(readHistoryFilters(new URLSearchParams('')).messages, true);
+	assert.equal(readHistoryFilters(new URLSearchParams('messages=on')).messages, true);
+	assert.equal(readHistoryFilters(new URLSearchParams('messages=off')).messages, false);
+	const filters = readHistoryFilters(new URLSearchParams('messages=off&storage=home'));
+	assert.equal(writeHistoryFilters(new URLSearchParams('storage=home'), filters).get('messages'), 'off');
+	const shown = writeHistoryFilters(new URLSearchParams('messages=off&storage=home'), { ...filters, messages: true });
+	assert.equal(shown.has('messages'), false);
+	assert.equal(shown.get('storage'), 'home');
+	assert.deepEqual(readHistoryFilters(shown), { ...filters, messages: true });
+});
+
+test('system lines come from the recorded operation only and never invent version numbers', () => {
+	const base = row('a', 1).event;
+	assert.equal(historySystemLine(base), null);
+	assert.equal(historySystemLine({ ...base, operation: 'restore', parentIds: ['p'] }), 'Restored from an earlier version · nothing was lost');
+	assert.equal(historySystemLine({ ...base, operation: 'merge', parentIds: ['p', 'q'] }), 'Combined two versions · both remain in History');
+	assert.equal(
+		historySystemLine({ ...base, operation: 'create', before: null, label: 'Recovered deleted Thing' }),
+		'Recovered deleted Thing · its earlier moments are still here'
+	);
+	assert.equal(historySystemLine({ ...base, operation: 'create', before: null, label: 'Created page' }), null);
+	assert.equal(historySystemLine({ ...base, operation: 'delete', after: null }), null);
+	const branch = (label: string): TimelineEvent => ({
+		...base,
+		mode: 'effect',
+		operation: 'effect',
+		label,
+		before: null,
+		after: { adapter: 'timeline-branch', version: 1, value: { branch: { id: 'branch-1' }, head: { eventId: 'a' } } }
+	});
+	assert.equal(historySystemLine(branch('Created branch')), 'Started a private variation');
+	assert.equal(historySystemLine(branch('Pushed branch version')), 'Updated a private variation');
+	assert.equal(historySystemLine(branch('Added Thing to branch')), 'Updated a private variation');
+	const outcome: TimelineEvent = {
+		...base,
+		mode: 'effect',
+		operation: 'effect',
+		source: 'action',
+		clientId: null,
+		actorId: 'owner',
+		label: 'Action run accepted',
+		before: null,
+		dependencies: [],
+		after: {
+			adapter: 'action-outcome',
+			version: 1,
+			value: { actionName: 'Send', runId: 'action-run-2d6a0f8e-5d3b-4c3a-9c1e-0f9a8b7c6d5e', status: 'started', startedAt: '2026-09-29T12:00:00.000Z', durationMs: null, opsUsed: null, depthUsed: null, childActionsUsed: null }
+		}
+	};
+	assert.equal(historySystemLine(outcome), null);
+	for (const text of [historySystemLine({ ...base, operation: 'restore', parentIds: ['p'] }), historySystemLine(branch('Created branch'))]) assert.ok(!/\bv?\d+\b/.test(text ?? ''));
+});
+
+test('cards carry their notes and system line; search matches note text without changing other filters', () => {
+	const restored = historyCard(row('a', 1, { operation: 'restore', parentIds: ['p'] }), [note('1', 'Client asked for the old headline'), note('2', 'Lopu: the title went back.', 'lopu', 'pending')]);
+	assert.equal(restored.system, 'Restored from an earlier version · nothing was lost');
+	assert.equal(restored.notes.length, 2);
+	assert.deepEqual(historyCard(row('b', 2)).notes, []);
+	assert.equal(historyCard(row('b', 2)).system, null);
+	const cards = [restored, historyCard(row('b', 2))];
+	assert.deepEqual(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('q=old+headline'))).map((card) => card.row.event.id), ['a']);
+	assert.deepEqual(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('q=title+went'))).map((card) => card.row.event.id), ['a']);
+	assert.equal(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('q=old+headline&operation=update'))).length, 0);
+	assert.equal(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('q=nothing+was+lost'))).length, 0);
+	assert.equal(filterHistoryCards(cards, readHistoryFilters(new URLSearchParams('messages=off&q=old+headline'))).length, 1);
 });
