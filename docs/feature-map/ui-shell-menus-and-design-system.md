@@ -47,6 +47,8 @@ Owned Things inherit `history` from `THING_ACTIONS`. `TimelineHost` opens the
 same History modal from Things, persisted entity menus and Builder definitions;
 `TimelineLibrary` renders the managed Timeline folder through PageShell.
 `TimelineVersionActions` previews restores/merges and presents conflict choices.
+`TimelineMessages` renders note/Lopu/system bubbles in every look and the
+Message tab composer (add note, Ask Lopu, remove) over `connection.notes`.
 `TimelineBranches` creates named alternatives from a selected version, pulls heads,
 loads an exact version and pushes a selection with a durable command queue. A
 refused push stays visible on that branch; it does not turn healthy History reads

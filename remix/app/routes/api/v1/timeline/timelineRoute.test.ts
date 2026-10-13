@@ -4,13 +4,20 @@ import { createTimelineHandlers } from './_timeline.tsx';
 import { entryFixture, eventFixture } from '../../../../timeline/testFixtures.ts';
 import { runWithMongoEndpoint, getActiveMongoEndpoint } from '../../../../api/utils/mongodb/endpoint.ts';
 import { timelineDiscovery, timelineDataPlane } from '../../../../api/utils/timeline/service.ts';
+import { StorageMutationError } from '../../../../api/utils/storage/storageCore.ts';
+import { timelineNoteId, type TimelineNote } from '../../../../timeline/notes.ts';
+
+const noteFixture = (operationId: string, author: 'owner' | 'lopu' = 'owner'): TimelineNote => ({ formatVersion: 1, id: timelineNoteId(operationId), ownerId: 'user-1', eventId: 'saved', thingId: 'page-1', author, text: author === 'owner' ? 'Renamed before review.' : 'The title changed.', createdAt: '2026-10-13T09:30:00.000Z' });
 
 function setup() {
 	const calls: any[] = [];
-	const state = { owner: 'user-1', plane: 'home', limited: false };
+	const state = { owner: 'user-1', plane: 'home', limited: false, limitedExplain: false, kind: 'user', temporary: false, lopu: null as null | { status: number; code: string; error: string } };
 	const handlers = createTimelineHandlers({
-		user: async () => state.owner ? ({ id: state.owner } as any) : null,
-		limit: async (...args: any[]) => { calls.push(['rate', ...args.slice(1)]); return { allowed: !state.limited, retryAfterSeconds: 5 } as any; },
+		lopuAccess: async (user: any, input: any) => { calls.push(['lopu', user?.id, input]); return state.lopu ? { ok: false, ...state.lopu } as any : { ok: true, billing: input.billing, settings: {} as any, verified: true, account: null, release: null }; },
+		user: async () => state.owner ? ({ id: state.owner, accountKind: state.kind, temporary: state.temporary } as any) : null,
+		limit: async (...args: any[]) => { calls.push(['rate', ...args.slice(1)]); return { allowed: !state.limited && !(args[1] === 'timeline.explain' && state.limitedExplain), resetAt: new Date(Date.now() + 5000).toISOString() } as any; },
+		note: async (ownerId, command, context) => { calls.push(['note', ownerId, command, context?.signal instanceof AbortSignal]); return command.command === 'remove-note' ? { ok: true, removed: true, noteId: command.noteId } : { ok: true, note: noteFixture(command.operationId, command.command === 'add-note' ? 'owner' : 'lopu') }; },
+		notes: async (ownerId, eventIds) => { calls.push(['notes', ownerId, eventIds]); return eventIds.includes('saved') ? [noteFixture('177abf25-b322-4ac0-9707-a59c36e7bcd5')] : []; },
 		discovery: ownerId => ({ ownerId, dataPlane: state.plane, folderId: 'timeline-folder' }),
 		componentBindings: async (ownerId, eventId) => { calls.push(['components', ownerId, eventId]); return eventId === 'saved' ? { eventId, entries: [] } : null; },
 		page: async (ownerId, request) => { calls.push(['page', ownerId, request]); return { entries: [], nextBefore: null, nextAfter: null }; },
@@ -231,4 +238,82 @@ test('related history refuses ambiguous selectors and missing cursor membership 
  owner = 'other'; assert.equal((await read()).status, 409);
  owner = ''; assert.equal((await read()).status, 401);
  assert.equal(calls.length, 2);
+});
+
+test('note commands reach the note service with the request signal, behind the same account, source and strict-input gates', async () => {
+	const h = setup(); const query = 'ownerId=user-1&dataPlane=home';
+	const add = { command: 'add-note', operationId: '177abf25-b322-4ac0-9707-a59c36e7bcd5', eventId: 'saved', thingId: 'page-1', text: 'Renamed before review.' };
+	const remove = { command: 'remove-note', operationId: '277abf25-b322-4ac0-9707-a59c36e7bcd5', noteId: 'note-177abf25-b322-4ac0-9707-a59c36e7bcd5' };
+	const added = await h.handlers.action({ request: request('POST', query, add) });
+	assert.equal(added.status, 200); assert.equal(added.headers.get('Cache-Control'), 'private, no-store');
+	assert.deepEqual(await added.json(), { ok: true, note: noteFixture(add.operationId) });
+	const removed = await h.handlers.action({ request: request('POST', query, remove) });
+	assert.equal(removed.status, 200); assert.deepEqual(await removed.json(), { ok: true, removed: true, noteId: remove.noteId });
+	assert.deepEqual(h.calls.filter(call => call[0] === 'note'), [['note', 'user-1', add, true], ['note', 'user-1', remove, true]]);
+	assert.deepEqual(h.calls.filter(call => call[0] === 'rate').map(call => call[1]), ['timeline.write', 'timeline.write'], 'owner notes use the ordinary write allowance only');
+	for (const invalid of [{ ...add, operationId: 'nope' }, { ...add, text: '' }, { ...add, text: 'x'.repeat(2001) }, { ...add, ownerId: 'other' }, { ...add, eventId: '' }, { ...remove, noteId: 'saved' }, { ...remove, eventId: 'saved' }, { command: 'add-note' }])
+		assert.equal((await h.handlers.action({ request: request('POST', query, invalid) })).status, 400, JSON.stringify(invalid));
+	assert.equal(h.calls.filter(call => ['note', 'push', 'version', 'branch'].includes(call[0])).length, 2);
+	assert.equal((await h.handlers.action({ request: request('POST', 'ownerId=user-1', add) })).status, 400);
+	h.state.limited = true; assert.equal((await h.handlers.action({ request: request('POST', query, add) })).status, 429); h.state.limited = false;
+	h.state.owner = 'other'; assert.equal((await h.handlers.action({ request: request('POST', query, add) })).status, 409);
+	h.state.owner = 'user-1'; h.state.plane = 'custom'; assert.equal((await h.handlers.action({ request: request('POST', query, add) })).status, 409);
+	h.state.owner = ''; assert.equal((await h.handlers.action({ request: request('POST', query, add) })).status, 401);
+	assert.equal(h.calls.filter(call => call[0] === 'note').length, 2);
+	const refusing = createTimelineHandlers({ user: async () => ({ id: 'user-1', accountKind: 'user', temporary: false } as any), limit: async () => ({ allowed: true } as any), discovery: ownerId => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }),
+		note: async () => { throw new StorageMutationError(413, 'storage_invariant', 'This change already has 8 notes. Remove one to add another.'); } });
+	const full = await refusing.action({ request: request('POST', query, add) });
+	assert.equal(full.status, 413); assert.equal(full.headers.get('Cache-Control'), 'private, no-store');
+	assert.deepEqual(await full.json(), { ok: false, error: 'This change already has 8 notes. Remove one to add another.', code: 'storage_invariant' });
+});
+
+test('asking Lopu to explain needs a full account and its own bounded allowance before the note service runs', async () => {
+	const h = setup(); const query = 'ownerId=user-1&dataPlane=home';
+	const explain = { command: 'explain-change', operationId: '377abf25-b322-4ac0-9707-a59c36e7bcd5', eventId: 'saved', thingId: 'page-1' };
+	const explained = await h.handlers.action({ request: request('POST', query, explain) });
+	assert.equal(explained.status, 200); assert.equal(explained.headers.get('Cache-Control'), 'private, no-store');
+	assert.deepEqual(await explained.json(), { ok: true, note: noteFixture(explain.operationId, 'lopu') });
+	assert.deepEqual(h.calls.filter(call => call[0] === 'rate').map(call => call.slice(1)), [['timeline.write', 'user:user-1', { failClosed: true }], ['timeline.explain', 'user:user-1', { failClosed: true }]]);
+	assert.deepEqual(h.calls.filter(call => call[0] === 'note'), [['note', 'user-1', explain, true]]);
+	h.state.limitedExplain = true;
+	const busy = await h.handlers.action({ request: request('POST', query, explain) });
+	assert.equal(busy.status, 429); assert.ok(Number(busy.headers.get('Retry-After')) >= 1); assert.equal(busy.headers.get('Cache-Control'), 'private, no-store');
+	h.state.limitedExplain = false;
+	for (const patch of [{ kind: 'app' }, { kind: 'sandbox' }, { temporary: true }]) {
+		Object.assign(h.state, { kind: 'user', temporary: false }, patch);
+		const refused = await h.handlers.action({ request: request('POST', query, explain) });
+		assert.equal(refused.status, 401, JSON.stringify(patch)); assert.match((await refused.json()).error, /full account/);
+	}
+	Object.assign(h.state, { kind: 'user', temporary: false });
+	assert.equal(h.calls.filter(call => call[0] === 'note').length, 1);
+	assert.deepEqual(h.calls.filter(call => call[0] === 'lopu').map(call => call.slice(1)), [['user-1', { billing: 'thingtime' }], ['user-1', { billing: 'thingtime' }]], 'guests and app accounts never reach the Lopu gate');
+	h.state.lopu = { status: 402, code: 'LOPU_NO_CREDITS', error: 'Lopu needs credits.' };
+	const broke = await h.handlers.action({ request: request('POST', query, explain) });
+	assert.equal(broke.status, 402); assert.equal(broke.headers.get('Cache-Control'), 'private, no-store'); assert.equal((await broke.json()).code, 'LOPU_NO_CREDITS');
+	h.state.lopu = { status: 403, code: 'LOPU_UNVERIFIED', error: 'Lopu is invite-only.' };
+	assert.equal((await h.handlers.action({ request: request('POST', query, explain) })).status, 403);
+	h.state.lopu = null;
+	assert.equal(h.calls.filter(call => call[0] === 'note').length, 1, 'a refused account never reaches the note service');
+	assert.equal(h.calls.filter(call => call[0] === 'rate' && call[1] === 'timeline.explain').length, 2, 'the account gate runs before the Lopu allowance is spent');
+	assert.equal((await h.handlers.action({ request: request('POST', query, { ...explain, text: 'not allowed' }) })).status, 400);
+	h.state.owner = 'other'; assert.equal((await h.handlers.action({ request: request('POST', query, explain) })).status, 409);
+	h.state.owner = ''; assert.equal((await h.handlers.action({ request: request('POST', query, explain) })).status, 401);
+	assert.equal(h.calls.filter(call => call[0] === 'note').length, 1);
+	const unavailable = createTimelineHandlers({ user: async () => ({ id: 'user-1', accountKind: 'user', temporary: false } as any), lopuAccess: async () => ({ ok: true } as any), limit: async () => ({ allowed: true } as any), discovery: ownerId => ({ ownerId, dataPlane: 'home', folderId: 'timeline' }),
+		note: async () => { throw new StorageMutationError(503, 'storage_invariant', 'Lopu could not explain this change right now. Try again in a moment.'); } });
+	const down = await unavailable.action({ request: request('POST', query, explain) });
+	assert.equal(down.status, 503); assert.match((await down.json()).error, /could not explain this change right now/);
+});
+
+test('an exact version read returns its notes beside the entry and never looks notes up for a missing version', async () => {
+	const h = setup(); const query = 'ownerId=user-1&dataPlane=home&eventId=saved';
+	const response = await h.handlers.loader({ request: request('GET', query) });
+	assert.equal(response.status, 200);
+	const body = await response.json();
+	assert.equal(body.entry.event.id, 'saved'); assert.deepEqual(body.notes, [noteFixture('177abf25-b322-4ac0-9707-a59c36e7bcd5')]);
+	assert.deepEqual(h.calls.filter(call => call[0] === 'notes'), [['notes', 'user-1', ['saved']]]);
+	assert.equal((await h.handlers.loader({ request: request('GET', query.replace('eventId=saved', 'eventId=missing')) })).status, 404);
+	assert.equal((await h.handlers.loader({ request: request('GET', `${query}&thingId=another-thing`) })).status, 404);
+	h.state.owner = 'other'; assert.equal((await h.handlers.loader({ request: request('GET', query) })).status, 409);
+	assert.equal(h.calls.filter(call => call[0] === 'notes').length, 1);
 });

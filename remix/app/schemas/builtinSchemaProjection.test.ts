@@ -23,6 +23,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "timeline-branch": ["name"],
   "timeline-branch-head": [],
   "timeline-link": [],
+  "timeline-note": ["name"],
   "timeline-event": ["name"],
   "lopu-background-task": [],
   "lopu-recording-settings": [],
@@ -128,6 +129,7 @@ test('all builtin schema kinds matches the pinned projection table', () => {
 test('registered server-owned Things are protected from generic Thing CRUD', () => {
 	assert.ok(PROTECTED_THINGTIME.includes('timeline-event'));
 	assert.ok(PROTECTED_THINGTIME.includes('timeline-link'));
+	assert.ok(PROTECTED_THINGTIME.includes('timeline-note'));
 	assert.ok(PROTECTED_THINGTIME.includes('timeline-snapshot-part'));
 	assert.ok(PROTECTED_THINGTIME.includes('attachment'));
 	assert.ok(PROTECTED_THINGTIME.includes('app'));

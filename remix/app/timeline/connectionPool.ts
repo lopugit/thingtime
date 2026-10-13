@@ -1,9 +1,10 @@
 import { timelineScopeKey, type TimelineScope } from './contract.ts';
 import type { TimelineLocalStore } from './localStore.ts';
 import type { TimelineBranchStore } from './branchStore.ts';
+import type { TimelineNoteStore } from './noteStore.ts';
 import type { TimelineSync } from './sync.ts';
 
-export type TimelineConnection = { scope: TimelineScope; folderId: string; store: TimelineLocalStore; branches: TimelineBranchStore; sync: TimelineSync };
+export type TimelineConnection = { scope: TimelineScope; folderId: string; store: TimelineLocalStore; branches: TimelineBranchStore; notes: TimelineNoteStore; sync: TimelineSync };
 
 /** A signed-out render has neither a viewer nor a connection. Check both
  * before comparing identities: undefined === undefined is not an account. */
