@@ -14,10 +14,11 @@ export type DeviceListRowProps = {
 	pendingApprovalCount?: number;
 	now?: number;
 	onSelect: (deviceId: string) => void;
+	onContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 export const DeviceListRow = memo(
-	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect }: DeviceListRowProps) => (
+	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect, onContextMenu }: DeviceListRowProps) => (
 		<Flex
 			_focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)' }}
 			_hover={{ background: 'var(--tt-surface-hover, #f7f7f8)' }}
@@ -32,6 +33,7 @@ export const DeviceListRow = memo(
 			minHeight="66px"
 			minWidth={0}
 			onClick={() => onSelect(device.id)}
+			onContextMenu={(event) => onContextMenu?.(device.id, event)}
 			paddingX={{ base: 3, md: 4 }}
 			paddingY={2.5}
 			textAlign="left"

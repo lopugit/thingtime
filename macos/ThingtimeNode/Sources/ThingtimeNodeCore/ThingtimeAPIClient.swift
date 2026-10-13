@@ -44,8 +44,10 @@ private final class ThingtimeAPIRedirectDelegate: NSObject, URLSessionTaskDelega
 
 private actor DeviceCapabilityCache {
     private var checkedAt: Date?
+    private var batteryDetails = false
     func isFresh() -> Bool { checkedAt.map { Date().timeIntervalSince($0) < 300 } ?? false }
-    func accept() { checkedAt = Date() }
+    func supportsBatteryDetails() -> Bool { batteryDetails }
+    func accept(supportsBatteryDetails: Bool) { batteryDetails = supportsBatteryDetails; checkedAt = Date() }
 }
 
 public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
@@ -71,6 +73,14 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             return actual[0] == minimum[0] && (actual[1] > minimum[1] || (actual[1] == minimum[1] && actual[2] >= minimum[2]))
         }
     }
+    static func supportsBatteryDetails(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-state"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 10
+    }
     private func requireCapabilities() async throws {
         if await capabilityCache.isFresh() { return }
         guard let url = URL(string: "/.well-known/thingtime-capabilities.json", relativeTo: baseURL)?.absoluteURL else { throw ThingtimeAPIClientError.invalidBaseURL }
@@ -80,7 +90,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
               response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
               data.count <= 2_097_152, Self.compatibleManifest(data, origin: baseURL) else { throw ThingtimeAPIClientError.incompatibleCapabilities }
-        await capabilityCache.accept()
+        await capabilityCache.accept(supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL))
     }
 
 
@@ -161,7 +171,43 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             struct Camera: Encodable { let id: String; let name: String; let isConnected: Bool; let isPreferred: Bool; let authorization: String }
             struct BluetoothDevice: Encodable { let id: String; let name: String; let isConnected: Bool }
             struct VPNService: Encodable { let id: String; let name: String; let isConnected: Bool }
-            struct Battery: Encodable { let level: Double?; let charging: Bool?; let isExternalPower: Bool?; let isPreventingIdleSleep: Bool; let isLowPowerModeEnabled: Bool }
+            struct Battery: Encodable {
+                let level: Double?; let charging: Bool?; let isExternalPower: Bool?
+                let isPreventingIdleSleep: Bool; let isLowPowerModeEnabled: Bool
+                let fullyCharged: Bool?; let cycleCount: Int?; let designCycleCount: Int?
+                let designCapacityMAh: Int?; let fullChargeCapacityMAh: Int?; let remainingCapacityMAh: Int?
+                let currentMA: Int?; let voltageMV: Int?; let temperatureC: Double?
+                let timeToEmptyMinutes: Int?; let timeToFullMinutes: Int?
+                let adapterWatts: Int?; let adapterVoltageMV: Int?; let adapterCurrentMA: Int?
+                enum CodingKeys: String, CodingKey {
+                    case level, charging, isExternalPower, isPreventingIdleSleep, isLowPowerModeEnabled
+                    case fullyCharged, cycleCount, designCycleCount, designCapacityMAh, fullChargeCapacityMAh, remainingCapacityMAh
+                    case currentMA, voltageMV, temperatureC, timeToEmptyMinutes, timeToFullMinutes
+                    case adapterWatts, adapterVoltageMV, adapterCurrentMA
+                }
+                func encode(to encoder: Encoder) throws {
+                    var values = encoder.container(keyedBy: CodingKeys.self)
+                    try values.encode(level, forKey: .level)
+                    try values.encode(charging, forKey: .charging)
+                    try values.encode(isExternalPower, forKey: .isExternalPower)
+                    try values.encode(isPreventingIdleSleep, forKey: .isPreventingIdleSleep)
+                    try values.encode(isLowPowerModeEnabled, forKey: .isLowPowerModeEnabled)
+                    try values.encodeIfPresent(fullyCharged, forKey: .fullyCharged)
+                    try values.encodeIfPresent(cycleCount, forKey: .cycleCount)
+                    try values.encodeIfPresent(designCycleCount, forKey: .designCycleCount)
+                    try values.encodeIfPresent(designCapacityMAh, forKey: .designCapacityMAh)
+                    try values.encodeIfPresent(fullChargeCapacityMAh, forKey: .fullChargeCapacityMAh)
+                    try values.encodeIfPresent(remainingCapacityMAh, forKey: .remainingCapacityMAh)
+                    try values.encodeIfPresent(currentMA, forKey: .currentMA)
+                    try values.encodeIfPresent(voltageMV, forKey: .voltageMV)
+                    try values.encodeIfPresent(temperatureC, forKey: .temperatureC)
+                    try values.encodeIfPresent(timeToEmptyMinutes, forKey: .timeToEmptyMinutes)
+                    try values.encodeIfPresent(timeToFullMinutes, forKey: .timeToFullMinutes)
+                    try values.encodeIfPresent(adapterWatts, forKey: .adapterWatts)
+                    try values.encodeIfPresent(adapterVoltageMV, forKey: .adapterVoltageMV)
+                    try values.encodeIfPresent(adapterCurrentMA, forKey: .adapterCurrentMA)
+                }
+            }
             struct PowerTimers: Encodable { let displayIdleMinutes: Int?; let systemSleepMinutes: Int?; let diskIdleMinutes: Int? }
             struct AppleMusic: Encodable { let isInstalled: Bool; let isRunning: Bool }
             struct Spotify: Encodable { let isInstalled: Bool; let isRunning: Bool }
@@ -322,6 +368,8 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
 
     public func sendHeartbeat(_ heartbeat: DeviceHeartbeat) async throws {
         let credential = try await requireCredential(deviceID: heartbeat.deviceID)
+        try await requireCapabilities()
+        let detailedBattery = await capabilityCache.supportsBatteryDetails()
         let telemetry = heartbeat.telemetry
         let brightness = telemetry.displays.first(where: { $0.isMain })?.brightness
         var connectors = [StateBody.Connector(
@@ -397,7 +445,12 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 cameras: Array(telemetry.cameras.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected, isPreferred: $0.isPreferred, authorization: $0.authorization.rawValue) },
                 bluetoothDevices: Array(telemetry.bluetoothDevices.prefix(64)).map { .init(id: String($0.id.prefix(120)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
                 vpnServices: Array(telemetry.vpnServices.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
-                battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled),
+                battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled,
+                               fullyCharged: detailedBattery ? telemetry.battery.fullyCharged : nil, cycleCount: detailedBattery ? telemetry.battery.cycleCount : nil, designCycleCount: detailedBattery ? telemetry.battery.designCycleCount : nil,
+                               designCapacityMAh: detailedBattery ? telemetry.battery.designCapacityMAh : nil, fullChargeCapacityMAh: detailedBattery ? telemetry.battery.fullChargeCapacityMAh : nil, remainingCapacityMAh: detailedBattery ? telemetry.battery.remainingCapacityMAh : nil,
+                               currentMA: detailedBattery ? telemetry.battery.currentMA : nil, voltageMV: detailedBattery ? telemetry.battery.voltageMV : nil, temperatureC: detailedBattery ? telemetry.battery.temperatureC : nil,
+                               timeToEmptyMinutes: detailedBattery ? telemetry.battery.timeToEmptyMinutes : nil, timeToFullMinutes: detailedBattery ? telemetry.battery.timeToFullMinutes : nil,
+                               adapterWatts: detailedBattery ? telemetry.battery.adapterWatts : nil, adapterVoltageMV: detailedBattery ? telemetry.battery.adapterVoltageMV : nil, adapterCurrentMA: detailedBattery ? telemetry.battery.adapterCurrentMA : nil),
                 powerTimers: .init(displayIdleMinutes: telemetry.powerTimers.displayIdleMinutes, systemSleepMinutes: telemetry.powerTimers.systemSleepMinutes, diskIdleMinutes: telemetry.powerTimers.diskIdleMinutes),
                 appleMusic: .init(isInstalled: telemetry.appleMusic.isInstalled, isRunning: telemetry.appleMusic.isRunning),
 				spotify: .init(isInstalled: telemetry.spotify.isInstalled, isRunning: telemetry.spotify.isRunning),

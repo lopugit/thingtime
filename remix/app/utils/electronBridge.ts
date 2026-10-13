@@ -29,6 +29,7 @@ export type ThingtimeDesktopEndpointCompatibility = {
 
 export type ThingtimeDesktopInfo = {
 	appVersion?: string;
+	buildIdentity?: { gitBranch?: string | null; gitCommit?: string | null };
 	contentOrigin?: string | null;
 	currentUrl?: string | null;
 	desktopSettings?: ThingtimeDesktopSettings | null;
@@ -219,7 +220,7 @@ export type ThingtimeNodeConnectorRequest =
 	  };
 
 export type ThingtimeNodeDeviceRequest =
-	| { action: 'snapshot' | 'permissions' }
+	| { action: 'snapshot' | 'battery' | 'permissions' }
 	| {
 			action: 'evaluate' | 'execute';
 			commandId?: string;

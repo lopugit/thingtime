@@ -68,6 +68,12 @@ or authorization for new work.
   uses Vite, React Router in non-framework mode and Nitro; `entry.client.tsx`
   mounts with `createRoot`. Do not add SSR/hydration machinery to repair a stale
   chunk, client cache or missing-route problem without reproducing that cause.
+- When work exposes a build, test, setup or runtime failure, trace the cause and
+  repair the canonical entry point, dependency declaration, bootstrap step or
+  contract that let it recur. Verify the repaired path from a clean or missing
+  dependency state when practical. A manual install or one-off retry may unblock
+  the current run, but it is not the final fix; record a focused regression or
+  runbook check so later worktrees encounter the repaired workflow.
 
 ### Carry new fields through the whole data path
 
@@ -288,6 +294,33 @@ or authorization for new work.
   Expose only allowlisted provider diagnostics and retire invalid device tokens.
 
 ### Native apps and recordings need native acceptance
+
+- Iterate with `corepack pnpm@10.12.1 --dir electron dev:parallel`, the repo's
+  unsigned Electron development app, rather than repeatedly packaging and
+  signing `Thingtime.app`. Keep its bundle identity,
+  user data, local web port, process names, and any helper or LaunchAgent
+  separate from `/Users/lopu/Applications/Thingtime.app` so both apps can run
+  at once. If a feature needs a parallel dev lane that is missing, add durable
+  scripts/configuration for it during the task and document how to start,
+  inspect, stop and clean it. Do not let a dev app replace or stop the user's
+  installed signed app or its Node service.
+- After dev acceptance, stop and remove the dev app and generated dev-only
+  artifacts. Run required tests and the canonical signed build/install once,
+  then verify the installed copy and any signing-sensitive Node/XPC or TCC
+  operation there. Do not claim a security-gated feature complete based only
+  on an unsigned dev app; preserve the prior installed copy if final checks fail.
+
+- For user-visible native telemetry, verify the real installed app against an
+  independent operating-system reading on the user's machine. Exercise the
+  full collector → local/remote transport → selected origin → rendered control
+  path for the paired device and account, in every promised view. Record which
+  fields have actual values and which macOS truly omits. Synthetic tests,
+  successful builds, API snapshots and a card full of placeholders do not
+  establish feature acceptance. If a selected origin lacks a needed capability,
+  provide a working local path or treat delivery as blocked and say so.
+- When QA exposes a missing value or broken path, fix the underlying path and
+  add a regression check before release. Update `TESTING.md` for the new bug
+  class; do not convert the observed failure into an accepted exception.
 
 - Negotiate an explicit native feature version; the existence of a generic bridge
   does not prove microphone recording, Watch delivery or Live Activity support.

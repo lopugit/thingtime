@@ -1,7 +1,7 @@
 import React, { memo, useRef } from 'react';
 
 import { Box, Button, Flex, Grid, MenuItem, Progress, Slider, SliderFilledTrack, SliderThumb, SliderTrack, Text } from '@chakra-ui/react';
-import { AppWindow, LockKeyhole, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
+import { AppWindow, Battery, LockKeyhole, Sun, Volume2, VolumeX } from 'lucide-react';
 
 import { reconcileDesiredState } from './deviceCore';
 import type { DeviceActionKind, DeviceActionPolicy, DeviceCommand, DeviceDesiredState, DeviceSnapshot } from './deviceTypes';
@@ -331,9 +331,9 @@ export const DeviceStateGrid = memo(({ deviceId, snapshot, commands = [], now, c
 			/>
 
 			<StateCell
-				icon={<Moon aria-hidden size={15} />}
-				label="Power"
-				value={state.sleeping === null ? 'Unknown' : state.sleeping ? 'Sleeping' : 'Awake'}
+				icon={<Battery aria-hidden size={15} />}
+				label="Battery & power"
+				value={state.battery?.level == null ? 'Battery level unavailable' : `${Math.round(state.battery.level * 100)}% · ${state.battery.fullyCharged ? 'Fully charged' : state.battery.charging ? 'Charging' : state.battery.isExternalPower ? 'Connected to power' : state.battery.isExternalPower === false ? 'On battery' : 'Power source unavailable'}`}
 			/>
 		</Grid>
 	);

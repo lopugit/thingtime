@@ -1,6 +1,30 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import test from 'node:test';
+
+test('the full device page renders without Chakra Drawer context', () => {
+	// Resolve the renderer and router through one module condition so their
+	// React contexts match in the Node test runner.
+	const localRequire = createRequire(import.meta.url);
+	const React = localRequire('react');
+	const { renderToString } = localRequire('react-dom/server');
+	const { ChakraProvider } = localRequire('@chakra-ui/react');
+	const { MemoryRouter } = localRequire('react-router');
+	const { DeviceDetailsDrawer } = localRequire('./DeviceDetailsDrawer.tsx');
+	const page = React.createElement(
+		ChakraProvider,
+		null,
+		React.createElement(
+			MemoryRouter,
+			null,
+			React.createElement(DeviceDetailsDrawer, { isOpen: true, onClose: () => {}, presentation: 'page', state: null })
+		)
+	);
+	const html = renderToString(page);
+	assert.match(html, /Back to Things/u);
+	assert.match(html, /Select a device to inspect its last-known state/u);
+});
 
 test('device and chat drawers place the Chakra portal container above their overlay', async () => {
 	for (const sourceUrl of [new URL('./DeviceDetailsDrawer.tsx', import.meta.url), new URL('../Messenger/ChatDetailsDrawer.tsx', import.meta.url)]) {
