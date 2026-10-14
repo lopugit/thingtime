@@ -1,4 +1,5 @@
 import { verifyPassword } from './passwords';
+import { bindVaultPassword } from './vaultKeys';
 import { findUserById, type UserDoc } from './users';
 
 const CONFIRMATION_INPUT_CHAR_LIMIT = 4_096;
@@ -7,11 +8,13 @@ const MAX_CONFIRMATION_USER_ID_CHARS = 256;
 type PasswordConfirmationDependencies = {
 	findUser: (userId: string) => Promise<UserDoc | null>;
 	verify: (password: string, hash: string) => Promise<boolean>;
+	verifyVault?: (userId: string, password: string, hash: string) => Promise<void>;
 };
 
 const defaultDependencies: PasswordConfirmationDependencies = {
 	findUser: findUserById,
-	verify: verifyPassword
+	verify: verifyPassword,
+	verifyVault: bindVaultPassword
 };
 
 export type PasswordConfirmationResult = 'confirmed' | 'mismatch' | 'unavailable';
@@ -39,7 +42,9 @@ export const confirmCurrentPassword = async (
 		const user = await dependencies.findUser(userId);
 		if (!user) return 'mismatch';
 		if (typeof user.passwordHash !== 'string' || !user.passwordHash) return 'unavailable';
-		return (await dependencies.verify(password, user.passwordHash)) === true ? 'confirmed' : 'mismatch';
+		if (!(await dependencies.verify(password, user.passwordHash))) return 'mismatch';
+		await dependencies.verifyVault?.(userId, password, user.passwordHash);
+		return 'confirmed';
 	} catch {
 		return 'unavailable';
 	}

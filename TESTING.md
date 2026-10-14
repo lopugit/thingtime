@@ -9844,3 +9844,31 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   canonical public projection, a cold local branch cache, queued push retention,
   delayed-reply revision protection and cancellation after an identity change.
   No visual Builder behavior is introduced by this increment.
+
+
+### Account vault encryption and recovery
+
+- Register on a disposable local stack; save two independently named provider
+  credentials. Normal list/account/profile responses must contain neither
+  tokens nor password/session/recovery wrappers.
+- Reveal one credential with fresh password verification, then reset that
+  account's password via its one-use reset link. Both saved credentials must
+  remain usable with the new password; the previous password, old session and
+  reset-link replay must fail. Delete one account and verify the other still
+  works. Log out and confirm the old session immediately fails.
+- Verify a legacy owner-private entry upgrades on read without changing its
+  value; a concurrent edit/reconnect/disconnect must win over a stale migration.
+  Corrupted user key material must fail without generating a replacement key.
+- Test passkey/OTP/account-switch sessions against existing credentials; each
+  live session gets its own grant. Revoked/expired/foreign/scoped sessions must
+  never fall back to server recovery. Background actions remain possible after
+  browser logout under their existing owner/capability authorization.
+- Passwords are exact UTF-8 input, limited to 4096 bytes before account creation
+  or reset-token consumption. A password that only matches bcrypt's first
+  72 bytes must not unlock an existing password wrapper.
+- Run `npm --prefix remix run test:connections`, `test:sensitive-reveal`,
+  `test:collections`; on a disposable loopback stack run
+  `node remix/scripts/verify-vault-recovery.mjs http://localhost:<web-port>`.
+- Real provider acceptance additionally requires callback → encrypted save →
+  authenticated provider API request for each connected account; mocked grants
+  and a success toast do not establish this. Keep provider approval gaps explicit.

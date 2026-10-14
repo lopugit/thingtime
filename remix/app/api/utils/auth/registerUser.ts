@@ -1,3 +1,4 @@
+import { bindVaultPassword } from './vaultKeys';
 import { InviteError } from '../invites/inviteCore';
 import { prepareInviteSignup } from '../invites/invites';
 import { ensureIndexes, withHomeMongoTransaction } from '../mongodb/collections';
@@ -88,6 +89,7 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   // slugifies to [a-z0-9._-], and /profile/:username can't address one either.
   if (username.includes('/')) return { ok: false, status: 400, error: 'Usernames can’t contain “/”' };
   if (password.length < 6) return { ok: false, status: 400, error: 'Password must be at least 6 characters' };
+  if (Buffer.byteLength(password) > 4096) return { ok: false, status: 400, error: 'Password must be at most 4096 UTF-8 bytes' };
   if ((!email && !input.emailOptional) || (email && !isEmail(email))) return { ok: false, status: 400, error: 'A valid email is required' };
 
   // Reserve env-allowlist admin usernames across EVERY creation path (register,
@@ -227,6 +229,8 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
 
   const user = created.user;
   const userId = String(user._id);
+
+  await bindVaultPassword(userId, input.password, user.passwordHash);
 
   // session + JWT (logs the user in immediately; emailVerified stays false)
   const session = await createSession(userId);

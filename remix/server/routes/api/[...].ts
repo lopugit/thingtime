@@ -1,3 +1,4 @@
+import { withVaultRequest } from '../../../app/api/utils/auth/vaultRequest';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
@@ -436,7 +437,7 @@ export default defineHandler(async (event) => {
   const mongoEndpoint = path.startsWith('v1/admin/') ? null : selectedEndpoint;
 
   try {
-		const response = await runWithMongoEndpoint(mongoEndpoint, async () => {
+		const response = await withVaultRequest(event.req, () => runWithMongoEndpoint(mongoEndpoint, async () => {
       const identityFailure = await enforceExpectedActor(event.req, getCurrentUser);
       if (identityFailure) return identityFailure;
       if (event.req.headers.has('X-Thingtime-Background-Id')) {
@@ -444,7 +445,7 @@ export default defineHandler(async (event) => {
         return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
       }
       return normalizeResponse(await handler({ request: event.req }));
-    });
+    }));
     if (response.status >= 500 && path !== 'v1/admin/error-logs') await recordErrorLog(new Error('HTTP request returned a server error'), { source: 'http-response', status: response.status });
     return response;
   } catch (err) {

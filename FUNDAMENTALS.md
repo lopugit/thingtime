@@ -504,3 +504,15 @@ ceremony can consume a marker, before any session is issued.
 ### Saved AI waterfall data
 
 Personal waterfall library entries are owner-only `data` Things with `crystal.systemType: ai-waterfall-v1`; each config is its own bounded record, not an array embedded on the user. Generic Thing create/update supplies storage accounting and optimistic revision checks. No new physical collection is introduced.
+
+### Account credential encryption
+
+Third-party OAuth grants and personal Secure Vault values share one random
+per-user data key (`auth/vaultKeys.ts`, envelope version 2). The home user
+`secure.vaultKey` holds bounded password and server recovery wrappers; session
+wrappers live separately as `sessions.secureVaultKey` BinData, never in an
+unbounded user array. All public projections omit both. Browser decrypts require
+a matching, verified, live session. Background server access and password-reset
+recovery are intentionally supported; do not describe this as zero knowledge.
+Password reset rewraps the stable key alongside the password hash in the same
+secure CAS. Legacy migrations cannot overwrite newer edits or reconnects.

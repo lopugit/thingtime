@@ -16,34 +16,40 @@ OpenAI API and Claude Code OAuth credentials reuse the existing Secure Vault.
 
 ## Current security boundary
 
-OAuth tokens use owner/record-bound AES-256-GCM with a server vault key.
+OAuth tokens use owner/record-bound AES-256-GCM with per-user data keys.
 Callback state is session-bound and single-use; Google uses PKCE and offline
 access. Rotating refresh uses a compare-and-set lease. Account/link mutations
 and final disconnect commit atomically in the home database. Requests accept
 only fixed provider operations, with owner and scope checks and redacted output.
 
-**Requested encryption revision remains open:** the user additionally requested
-password and session-based protection. The current server-key implementation
-does not meet that requirement. Decide between server-assisted background
-access/recovery and session-only unlocking before wiring a stable per-user data
-key through password change/reset, passkeys, account switching and session
-revocation. Passwords and rotating session JWTs must not directly encrypt each
-credential or overwrite the only key capable of decrypting existing values.
+The approved encryption revision is now integrated: per-user stable random data
+keys, scrypt password wrappers, exact-JWT HKDF session wrappers and a server-key
+recovery wrapper. Password reset changes the hash and password wrapper in one
+secure CAS, preserving credentials. Session liveness/owner/purpose are checked
+before decrypting; revocation removes session wrappers. Passkey/OTP/account
+switching create a grant lazily on first credential access. Background use
+intentionally retains server-assisted access; this is not zero knowledge.
 
-`auth/vaultEnvelope.ts` adds the shared cryptographic primitives for that
-revision, without changing runtime storage. A random per-user data key uses
-owner/record/purpose-bound AES-GCM envelopes. Password wrappers use fixed
-scrypt N=32768/r=8/p=3 with a random salt; session wrappers use HKDF-SHA256 and
-bind the owner, session ID and expiry. Rewrapping preserves the data key and
-saved ciphertext. Callers must independently validate live authentication and
-revocation. No key registry, login/reset/passkey integration, migration,
-background access or recovery policy is implemented by this helper. This is
-not end-to-end encryption or a claim that the server cannot access plaintext.
+Legacy owner-private OAuth grants migrate under an exact credential CAS;
+Secure Vault values migrate through canonical revision-guarded updates. Damaged
+key metadata cannot be replaced with a new key. Public projections omit keys
+and wrappers. Existing users gain password wrapping at their next successful
+password login/verification. No raw password or session JWT is stored in the
+key registry or session wrapper.
 
 ## Verified locally
 
-- Client and Nitro server builds passed. Changed-file lint passed.
-- Connection tests: 128 passed, including 55 independently removable connections, the 605-entry vault-count regression, and 12 password/session envelope tests.
+October 14: 18 live password recovery checks passed, including two credentials
+surviving reset, old session/password rejection, reset replay, independent
+removal and logout. The 21 live service-account checks passed. One real Google
+identity was saved through the browser callback and its account.profile API
+request returned 200. The legacy synthetic QA work credential migrated and
+remained readable on a second reveal after migration.
+
+
+- Client and Nitro server builds passed. Changed-file lint passed without errors.
+- Connection tests: 137 passed, including 55 independently removable connections, the 605-entry vault-count regression, and 12 password/session envelope tests.
+- Password confirmation/reveal: 19 passed; collection contracts: 60 passed; auth introspection: 10 passed.
 - API capability tests: 94 passed, including both manifests for owner-fenced account writes and the fixed credential-reuse endpoint. Manual credential forms, like OAuth and AI forms, negotiate owner-fence support before transmitting secrets and abandon submission after an account switch.
 - Existing real API connections verifier: 103 passed; new account-library API verifier: 21 passed on a disposable local replica set.
 - Browser: desktop and 390px layout, two saved AI accounts surviving reload, logout clears private account metadata, sign-in restores the correct library, demo add/feed/disconnect, and independent removal of one synthetic AI credential.
@@ -51,8 +57,8 @@ not end-to-end encryption or a claim that the server cannot access plaintext.
 
 ## Remaining acceptance
 
-- Implement the confirmed password/session encryption and migration design.
-- Google client creation and Facebook callback saves are prepared in the user's browser and await action-time confirmation; no provider client secrets have been installed locally yet.
-- Complete positive Google and Facebook authorization/refresh/reconnect/decline testing with real provider accounts. Current mocked OAuth tests and public/demo API checks do not establish this.
-- Hosted ChatGPT requires an approved partner client. Local subscription-token enrollment is not implemented. Direct browser Claude enrollment is unavailable; the current adapter accepts a Claude Code setup token.
+- Finish the remaining real-provider acceptance and final review.
+- Google web client created on October 14 with production and localhost callbacks; secret stored only in ignored local configuration. A real Google OAuth callback and account.profile API request passed. Second-account passkey verification is pending. Facebook callback save encounters an empty provider verification dialog; save and client-secret setup are not confirmed.
+- Finish Google multi-account/refresh/reconnect/decline and Facebook positive authorization testing. Mocked OAuth tests alone do not establish these.
+- The OpenAI partner inquiry page confirms receipt. Hosted ChatGPT still requires an approved partner client. Local subscription-token enrollment is not implemented. Direct browser Claude enrollment is unavailable; the current adapter accepts a Claude Code setup token.
 - Review preview behavior and required CI. Production promotion requires separate approval for the exact PR.

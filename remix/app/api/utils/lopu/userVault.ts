@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { encryptOwnerValue, decryptOwnerValue, ownerVaultConfigured, type EncryptedVaultValue } from '../auth/vaultCipher';
+import { encryptUserVaultValue, decryptUserVaultValue } from '../auth/vaultKeys';
+import type { VaultEnvelope } from '../auth/vaultEnvelope';
+import { decryptOwnerValue, ownerVaultConfigured, type EncryptedVaultValue } from '../auth/vaultCipher';
 
 import { getThingsCollection } from '../mongodb/collections';
 import { createThing, deletePost, isFail, updateThing } from '../things/things';
@@ -19,7 +21,7 @@ import {
 const VALUE_MAX_BYTES = 32 * 1024;
 const VAULT_AAD_PREFIX = 'thingtime-user-vault:v1:';
 
-type EncryptedValue = EncryptedVaultValue;
+type EncryptedValue = EncryptedVaultValue | VaultEnvelope;
 
 type StoredVaultCrystal = {
 	systemType: typeof LOPU_USER_VAULT_SYSTEM_TYPE;
@@ -53,14 +55,22 @@ export type PublicVaultEntry = {
 	updatedAt: string;
 };
 
-type StoredVaultDoc = { shareId: string; ownerId: string; crystal: StoredVaultCrystal };
+type StoredVaultDoc = { updatedAt?: Date; shareId: string; ownerId: string; crystal: StoredVaultCrystal };
 
 export const userVaultConfigured = ownerVaultConfigured;
-const encryptValue = (ownerId: string, id: string, value: string): EncryptedValue =>
-  encryptOwnerValue(VAULT_AAD_PREFIX, ownerId, id, value);
-const decryptValue = (doc: StoredVaultDoc): string => {
-  if (!doc.crystal.encryptedValue) throw new Error('Stored provider credential is unavailable.');
-  return decryptOwnerValue(VAULT_AAD_PREFIX, doc.ownerId, doc.shareId, doc.crystal.encryptedValue);
+const encryptValue = (ownerId: string, id: string, value: string) =>
+  encryptUserVaultValue(ownerId, id, 'secret', value);
+const decryptValue = async (doc: StoredVaultDoc): Promise<string> => {
+  const encrypted = doc.crystal.encryptedValue;
+  if (!encrypted) throw new Error('Stored provider credential is unavailable.');
+  if ('version' in encrypted) return decryptUserVaultValue(doc.ownerId, doc.shareId, 'secret', encrypted);
+  const value = decryptOwnerValue(VAULT_AAD_PREFIX, doc.ownerId, doc.shareId, encrypted);
+  if (!doc.updatedAt) throw new Error('Stored credential requires a new save before use.');
+  const encryptedValue = await encryptValue(doc.ownerId, doc.shareId, value);
+  const updated = await updateThing({ id: doc.ownerId }, doc.shareId, { crystal: { encryptedValue } },
+    { expectedUpdatedAt: new Date(doc.updatedAt).toISOString() });
+  if (isFail(updated)) throw new Error('Saved credential changed. Retry the request.');
+  return value;
 };
 
 const publicEntry = (doc: StoredVaultDoc): PublicVaultEntry => ({
@@ -178,7 +188,7 @@ export const saveUserVaultSecret = async (
 		name,
 		key,
 		groupId,
-		encryptedValue: encryptValue(ownerId, shareId, value),
+		encryptedValue: await encryptValue(ownerId, shareId, value),
 		createdAt: existing?.crystal.createdAt || now,
 		updatedAt: now
 	};
@@ -211,7 +221,7 @@ export const saveUserVaultProvider = async (
 	if (!existing && !token) throw new Error('A provider token is required when creating a connection.');
 	const shareId = existing?.shareId || randomUUID();
 	const now = new Date().toISOString();
-	const encryptedValue = token ? encryptValue(ownerId, shareId, token) : existing?.crystal.encryptedValue;
+	const encryptedValue = token ? await encryptValue(ownerId, shareId, token) : existing?.crystal.encryptedValue;
 	if (!encryptedValue) throw new Error('Provider token is required.');
 	const patch: StoredVaultCrystal = {
 		systemType: LOPU_USER_VAULT_SYSTEM_TYPE,
@@ -274,7 +284,7 @@ export const getUserVaultProvider = async (ownerId: string, id: unknown) => {
 		provider: doc.crystal.provider,
 		endpoint: doc.crystal.endpoint,
 		model: doc.crystal.model || null,
-		token: decryptValue(doc)
+		token: await decryptValue(doc)
 	};
 };
 

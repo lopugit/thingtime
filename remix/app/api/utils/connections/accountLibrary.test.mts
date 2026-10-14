@@ -8,6 +8,7 @@ const matches = (doc: any, query: any): boolean =>
   Object.entries(query).every(([key, expected]: any) => {
     const value = valueAt(doc, key);
     if (key === '$or') return expected.some((part: any) => matches(doc, part));
+    if (expected && typeof expected === 'object' && '$exists' in expected) return (value !== undefined) === expected.$exists;
     if (expected === null) return value == null;
     if (expected && typeof expected === 'object' && '$lte' in expected) return value <= expected.$lte;
     if (expected && typeof expected === 'object' && '$in' in expected) return expected.$in.includes(value);
@@ -43,7 +44,7 @@ const collection = {
     }
     for (const [k, v] of Object.entries(patch.$set || {})) set(doc, k, v);
     for (const k of Object.keys(patch.$unset || {})) delete doc[k];
-    return { matchedCount: inserted ? 0 : 1, upsertedCount: inserted ? 1 : 0 };
+    return { modifiedCount: 1, matchedCount: inserted ? 0 : 1, upsertedCount: inserted ? 1 : 0 };
   },
   async deleteOne(q: any) {
     const at = docs.findIndex((doc) => matches(doc, q));
@@ -64,7 +65,7 @@ mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, {
 const { upsertAccountAndLink, listConnections, resolveConnectionCredential, externalAccountShareId, externalLinkShareId, unlinkConnection } =
   await import('./connections.ts');
 const { connectionProviderById } = await import('./providers.ts');
-const { fromBin } = await import('../auth/users.ts');
+const { fromBin, toBin } = await import('../auth/users.ts');
 const { unpackConnectionTokens } = await import('./tokenVault.ts');
 const { runConnectionRequest } = await import('./requests.ts');
 const provider = connectionProviderById('google')!;
@@ -85,7 +86,12 @@ const tokens = {
   scopes: ['openid', 'profile']
 };
 beforeEach(() => {
-  docs = [];
+  docs = ['owner-a', 'owner-b'].map((shareId) => ({
+    shareId,
+    thingtime: ['user'],
+    secureVersion: 0,
+    secure: toBin(JSON.stringify({ passwordHash: 'fixture-hash', meta: {} }))
+  }));
 });
 test('two Google accounts coexist; the same identity in another Thingtime account has independent encrypted credentials', async () => {
   const first = await upsertAccountAndLink(user, provider, account(), tokens);
@@ -98,9 +104,9 @@ test('two Google accounts coexist; the same identity in another Thingtime accoun
   for (const doc of accounts) {
     assert.ok(!fromBin(doc.secure)?.includes('token'));
     assert.ok(!fromBin(doc.secure)?.includes('private-access-value'));
-    assert.ok(unpackConnectionTokens(doc)?.accessToken);
-    assert.equal(unpackConnectionTokens({ ...doc, ownerId: 'wrong-owner' }), null);
-    assert.equal(unpackConnectionTokens({ ...doc, shareId: 'wrong-id' }), null);
+    assert.ok((await unpackConnectionTokens(doc))?.accessToken);
+    assert.equal(await unpackConnectionTokens({ ...doc, ownerId: 'wrong-owner' }), null);
+    assert.equal(await unpackConnectionTokens({ ...doc, shareId: 'wrong-id' }), null);
   }
   const publicResult = JSON.stringify(await listConnections(user));
   assert.ok(!publicResult.includes('private-access-value') && !publicResult.includes('private-refresh-value'));
@@ -142,7 +148,7 @@ test('disconnect removes saved credentials and denies subsequent requests', asyn
   assert.equal((await unlinkConnection(other, { id: linked.connection.id })).ok, false);
   assert.ok((await unlinkConnection(user, { id: linked.connection.id })).ok);
   assert.equal(
-    docs.some((doc) => doc.secure),
+    docs.some((doc) => doc.thingtime.includes('external-account') && doc.secure),
     false
   );
   assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
@@ -206,4 +212,31 @@ test('a service can retain more than fifty independently removable accounts', as
   assert.equal((await listConnections(user)).connections.length, 54);
   assert.ok((await upsertAccountAndLink(user, provider, account('many-55'), tokens)).ok);
   assert.equal((await listConnections(user)).connections.length, 55);
+});
+
+test('concurrent first encrypted accounts converge on one persisted user key', async () => {
+  const results = await Promise.all(Array.from({ length: 8 }, (_, index) => upsertAccountAndLink(user, provider, account(`first-${index}`), tokens)));
+  assert.ok(results.every((result) => result.ok));
+  const accounts = docs.filter((doc) => doc.thingtime.includes('external-account'));
+  assert.equal(new Set(accounts.map((doc) => JSON.parse(fromBin(doc.secure)).keyId)).size, 1);
+  for (const doc of accounts) assert.equal((await unpackConnectionTokens(doc))?.accessToken, tokens.accessToken);
+});
+
+test('a corrupt user secure blob cannot be replaced with a fresh vault key', async () => {
+  const owner = docs.find((doc) => doc.shareId === user.id);
+  owner.secure = toBin('damaged secure payload');
+  await assert.rejects(upsertAccountAndLink(user, provider, account(), tokens));
+  assert.equal(fromBin(owner.secure), 'damaged secure payload');
+  assert.equal(docs.filter((doc) => doc.thingtime.includes('external-account')).length, 0);
+});
+
+test('invalid persisted key registries fail closed without replacing credentials', async () => {
+  const owner = docs.find((doc) => doc.shareId === user.id);
+  for (const vaultKey of [null, [], false, 0]) {
+    const payload = JSON.stringify({ passwordHash: 'fixture', vaultKey });
+    owner.secure = toBin(payload);
+    await assert.rejects(upsertAccountAndLink(user, provider, account(), tokens));
+    assert.equal(fromBin(owner.secure), payload);
+    assert.equal(docs.filter((doc) => doc.thingtime.includes('external-account')).length, 0);
+  }
 });

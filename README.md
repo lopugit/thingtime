@@ -3017,14 +3017,34 @@ Loopback development may infer its origin; hosted deployments fail closed when
 the redirect env is absent. Use the same host for beginning and finishing OAuth
 so the initiating Thingtime session cookie reaches the callback.
 
-This draft currently encrypts credentials with the server vault key. The
-password/session encryption primitives in `auth/vaultEnvelope.ts` are tested
-but are **not connected to login or credential storage yet**. They wrap a
-stable random data key using scrypt for passwords or HKDF for session tokens;
-they do not verify authentication or revoke sessions themselves. Do not remove
-the server vault key or assume password changes/resets migrate saved values.
-Background access, recovery, passkey login, and legacy migration must be settled
-and integrated before presenting this as password-protected credential storage.
+Credential storage uses **server-assisted account encryption**. Each user has a
+random data key in their private home-account secure record. New OAuth grants
+and Secure Vault secrets use owner/record/purpose-bound AES-256-GCM envelopes.
+Password login wraps that key with scrypt (N=32768, r=8, p=3); browser requests
+use a live-session-checked HKDF wrapper bound to their exact JWT and session.
+Session wrappers live on individual session records and are removed on revocation.
+Passkey/OTP login and account switching obtain a wrapper when first accessing a
+credential, after live session/owner checks. Existing accounts gain a password
+wrapper at their next successful password login or verification.
+
+The stable server vault key protects a recovery wrapper for authorized background
+actions and password resets. This is **not end-to-end or zero-knowledge encryption**:
+the Thingtime server can decrypt credentials. Password reset atomically rewraps
+the same data key with the new password hash, then revokes sessions; it does not
+rewrite every saved credential. Missing/corrupted key material fails closed and
+must never be replaced with a freshly generated key. Back up the configured server
+vault key with the database; do not rotate it without a recovery-wrapper migration.
+
+Legacy owner-private OAuth and Secure Vault values upgrade on use with a
+revision/credential compare-and-set so migration cannot overwrite a reconnect,
+edit or disconnect. Legacy shared OAuth grants still require reconnecting. The
+normal account list never returns keys, wrappers, tokens or decrypted values.
+
+Local disposable-database acceptance:
+`node remix/scripts/verify-vault-recovery.mjs http://localhost:<web-port>` checks
+registration, two saved accounts, password recovery, old-session revocation,
+reset replay, independent removal and logout. `verify-service-accounts.mjs`
+covers owner isolation, stale forms, concurrency and route registration.
 
 Google Cloud setup:
 

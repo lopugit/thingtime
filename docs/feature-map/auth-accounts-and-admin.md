@@ -77,7 +77,7 @@ private draft API, editor recovery, account isolation and independent media copi
 
 `/connections` is the service/subservice catalog and account manager. The native
 provider boundary is `api/utils/connections/{providers,oauth,connections}.ts`;
-`tokenVault.ts` uses the shared owner/id-bound AES-GCM cipher. Public sources
+`tokenVault.ts` and `lopu/userVault.ts` use the shared account-key envelope. Public sources
 retain shared accounts; authenticated grants are separate Things per owner.
 OAuth uses a deployment env callback, session binding and one-use nonce; refresh
 is serialized with a home-database lease. `connections/request` exposes only
@@ -91,3 +91,21 @@ no inference grant. Facebook identity and posts are separate grants. Account
 and link writes/disconnects commit in one home transaction; old source rows
 remain inert without a live link. Owner IDs accompany private reads; an
 optional `expectedOwnerId` rejects forms submitted after an account switch.
+
+### Server-assisted vault keys
+
+`auth/vaultEnvelope.ts` owns AES-GCM, scrypt password wrapping and HKDF session
+wrapping. `auth/vaultKeys.ts` owns the stable per-user key, approved background
+recovery, exact-password binding and live-session grants. The bounded registry
+stays in the home user secure blob through `users.ts` CAS; wrappers are excluded
+from public user projections. Session wrappers are binary on each session row,
+removed by the shared revocation pipeline. `vaultRequest.ts` gives the Nitro API
+dispatcher request-local token context without a global identity/key cache.
+Login/registration/verified reveal bind passwords; reset writes hash+wrapper in
+one CAS. Passkey/OTP/account-switch sessions obtain grants lazily after liveness
+checks. Server recovery is intentional, not zero-knowledge encryption.
+
+Run `test:connections` (envelopes, registry, concurrency, scope isolation),
+`test:sensitive-reveal`, `test:collections`, and the local-only
+`scripts/verify-vault-recovery.mjs` acceptance script. Existing legacy entries
+migrate only under canonical revision guards; corrupt key records fail closed.

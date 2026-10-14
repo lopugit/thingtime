@@ -1,7 +1,7 @@
 
 import { randomUUID } from 'node:crypto';
-import { toBin } from '../auth/users';
-import { packConnectionTokens, unpackConnectionTokens, connectionVaultConfigured } from './tokenVault';
+import { fromBin, toBin } from '../auth/users';
+import { packConnectionTokens, unpackConnectionTokens, hasConnectionTokenEnvelope, connectionVaultConfigured } from './tokenVault';
 import { getHomeThingsCollection, getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import {
   chronoCursorClause,
@@ -134,7 +134,7 @@ const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionP
   contentVisibility: provider?.contentVisibility === 'personal' ? 'personal' : 'public',
   auth: provider?.oauth ? 'oauth2' : provider?.auth === 'credential' ? 'credential' : 'none',
   accountOnly: provider?.accountOnly === true,
-  credentialStatus: !provider || provider.auth === 'none' ? 'public' : accountDoc?.ownerId === linkDoc?.ownerId && unpackConnectionTokens(accountDoc) ? 'connected' : 'reconnect',
+  credentialStatus: !provider || provider.auth === 'none' ? 'public' : accountDoc?.ownerId === linkDoc?.ownerId && hasConnectionTokenEnvelope(accountDoc) ? 'connected' : 'reconnect',
   scopes: Array.isArray(accountDoc?.crystal?.scopes) ? accountDoc.crystal.scopes.filter((scope: unknown) => typeof scope === 'string').slice(0, 100) : [],
   expiresAt: typeof accountDoc?.crystal?.expiresAt === 'string' ? accountDoc.crystal.expiresAt : null,
   account: {
@@ -211,7 +211,7 @@ export const upsertAccountAndLink = async (
       const previous = tokens
         ? await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND, ownerId: user.id }, { session })
         : null;
-      const previousTokens = previous ? unpackConnectionTokens(previous) : null;
+      const previousTokens = previous ? await unpackConnectionTokens(previous) : null;
       const savedTokens = tokens ? { ...tokens, refreshToken: tokens.refreshToken || previousTokens?.refreshToken || null } : null;
       const now = new Date();
       // Account and link commit together, serialized against disconnect. Public
@@ -228,7 +228,7 @@ export const upsertAccountAndLink = async (
             // a fresh sign-in clears any stale reconnect-needed state
             ...(savedTokens
               ? {
-                  secure: packConnectionTokens(user.id, accountShareId, savedTokens),
+                  secure: await packConnectionTokens(user.id, accountShareId, savedTokens),
                   'crystal.scopes': savedTokens.scopes || [],
                   'crystal.expiresAt': savedTokens.expiresAt || null,
                   'crystal.lastSyncError': null
@@ -608,8 +608,17 @@ export type ConnectionsFeedResult = {
 // alone prevents stale writes but still sends the same single-use token twice.
 const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any, ownerId: string): Promise<OAuthTokens | null> => {
   if ((!provider.oauth && provider.auth !== 'credential') || accountDoc?.ownerId !== ownerId) return null;
-  const tokens = unpackConnectionTokens(accountDoc);
+  const tokens = await unpackConnectionTokens(accountDoc);
   if (!tokens || (!tokens.accessToken && !(provider.id === 'chatgpt' && tokens.idToken))) return null;
+  // Lazily migrate only this exact legacy grant. A concurrent reconnect or
+  // disconnect wins; never resurrect or use a grant after losing the CAS.
+  if (JSON.parse(fromBin(accountDoc.secure)).version === 1) {
+    const secure = await packConnectionTokens(ownerId, String(accountDoc.shareId), tokens);
+    const migrated = await (await getHomeThingsCollection()).updateOne({ shareId: accountDoc.shareId,
+      thingtime: EXTERNAL_ACCOUNT_KIND, ownerId, secure: accountDoc.secure }, { $set: { secure } });
+    if (!migrated.matchedCount) return null;
+    accountDoc = { ...accountDoc, secure };
+  }
   const expiresAt = tokens.expiresAt ? Date.parse(tokens.expiresAt) : NaN;
   const expiring = !Number.isFinite(expiresAt) || expiresAt - Date.now() < TOKEN_REFRESH_MARGIN_MS;
   const refreshFn = provider.oauth?.refreshTokens ?? provider.refreshTokens;
@@ -631,7 +640,7 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any, owne
     const refreshed = await refreshFn(tokens, creds);
     if (!refreshed) return tokens;
     const result = await home.updateOne({ ...identity, secure: accountDoc.secure, 'credentialRefreshLease.id': lease }, {
-      $set: { secure: packConnectionTokens(ownerId, identity.shareId, refreshed), 'crystal.scopes': refreshed.scopes || [], 'crystal.expiresAt': refreshed.expiresAt || null, updatedAt: new Date() }
+      $set: { secure: await packConnectionTokens(ownerId, identity.shareId, refreshed), 'crystal.scopes': refreshed.scopes || [], 'crystal.expiresAt': refreshed.expiresAt || null, updatedAt: new Date() }
     });
     // A reconnect or disconnect wins over a refresh started with older credentials.
     return result.matchedCount ? refreshed : unpackConnectionTokens(await home.findOne(identity));
