@@ -456,21 +456,24 @@ test('OAuth dynamic client registration signs only exact local, ChatGPT, or firs
 
 test('revoking a never-expiring bridge session leaves a reap date for the sessions TTL index', () => {
   const revokedAt = new Date('2026-01-01T00:00:00.000Z');
-  const [stage, ...rest] = revokedSessionPipeline(revokedAt);
+  const pipeline = revokedSessionPipeline(revokedAt);
+  const stage = pipeline.find((entry) => entry.$set)?.$set;
+  assert.ok(stage);
 
   // Already a pipeline, so no caller has to remember to wrap it — passed to a
   // plain update the $ifNull would be STORED as a literal sub-document, which
   // is not a Date, which the TTL index skips: the exact leak this fixes,
   // silently back.
-  assert.equal(rest.length, 0);
+  assert.ok(Array.isArray(pipeline));
+  assert.ok(pipeline.some((entry) => entry.$unset === 'secureVaultKey'));
   // TTL skips expiresAt: null, so a disconnect must fill one in or the revoked
   // bridge sessions accumulate in Mongo forever.
-  assert.equal(stage.$set.revokedAt, revokedAt);
-  assert.deepEqual(stage.$set.expiresAt, {
+  assert.equal(stage.revokedAt, revokedAt);
+  assert.deepEqual(stage.expiresAt, {
     $ifNull: ['$expiresAt', new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS)]
   });
   // A session that already carries a real expiry keeps it.
-  assert.equal(stage.$set.expiresAt.$ifNull[0], '$expiresAt');
+  assert.equal(stage.expiresAt.$ifNull[0], '$expiresAt');
 });
 
 test('consuming a rotated refresh grant also leaves a reap date, not just revokedAt', () => {
@@ -491,5 +494,5 @@ test('consuming a rotated refresh grant also leaves a reap date, not just revoke
   // where a nested { meta: { consumedAt } } would replace the whole record and
   // strip clientId/resource/connectionId off every rotated grant.
   assert.ok(Array.isArray(pipeline));
-  assert.deepEqual(Object.keys(pipeline[1].$set), ['meta.consumedAt']);
+  assert.deepEqual(Object.keys(pipeline.at(-1)!.$set!), ['meta.consumedAt']);
 });

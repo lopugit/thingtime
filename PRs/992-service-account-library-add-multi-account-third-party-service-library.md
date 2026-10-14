@@ -47,6 +47,8 @@ request returned 200. A second authorization of the same identity retained one a
 remained readable on a second reveal after migration.
 
 
+- Full local unit command passed: 4,445 tests passed, zero failed, eight skipped. Existing ChatGPT session-pipeline assertions now accommodate removal of the vault grant while still checking TTL and consumed-token metadata.
+- Hosted API suite passed on retry after its first MongoDB container exited before app startup. The first hosted unit run caught the obsolete pipeline assertions; those are corrected and covered by the full local run.
 - After merging current develop, both client and Nitro server builds passed; connection/capability suites and both live API verifiers passed again.
 - Graphify refresh was attempted after both merge reconciliations. It refused to publish because saved semantic nodes disappeared during extraction; the coherent snapshot from the remote branch is preserved and freshness remains unverified.
 - Client and Nitro server builds passed. Changed-file lint passed without errors.
