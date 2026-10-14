@@ -43,12 +43,12 @@ October 14: 18 live password recovery checks passed, including two credentials
 surviving reset, old session/password rejection, reset replay, independent
 removal and logout. The 21 live service-account checks passed. One real Google
 identity was saved through the browser callback and its account.profile API
-request returned 200. A second authorization of the same identity retained one account entry. The legacy synthetic QA work credential migrated and
+request returned 200. A second authorization of the same identity retained one account entry. Cancelling another Google authorization returned without removing the existing grant; a fresh Thingtime login then successfully used the saved token again. The legacy synthetic QA work credential migrated and
 remained readable on a second reveal after migration.
 
 
 - After merging current develop, both client and Nitro server builds passed; connection/capability suites and both live API verifiers passed again.
-- Graphify refresh was attempted twice after resolving the whole snapshot directory to the branch side. It refused to publish because four saved semantic nodes disappeared during extraction; the previous coherent snapshot is preserved and freshness remains unverified.
+- Graphify refresh was attempted after both merge reconciliations. It refused to publish because saved semantic nodes disappeared during extraction; the coherent snapshot from the remote branch is preserved and freshness remains unverified.
 - Client and Nitro server builds passed. Changed-file lint passed without errors.
 - Connection tests: 137 passed, including 55 independently removable connections, the 605-entry vault-count regression, and 12 password/session envelope tests.
 - Password confirmation/reveal: 19 passed; collection contracts: 60 passed; auth introspection: 10 passed.
@@ -61,6 +61,6 @@ remained readable on a second reveal after migration.
 
 - Finish the remaining real-provider acceptance and final review.
 - Google web client created on October 14 with production and localhost callbacks; secret stored only in ignored local configuration. A real Google OAuth callback and account.profile API request passed. Second-account passkey verification is pending. Facebook callback save encounters an empty provider verification dialog; save and client-secret setup are not confirmed.
-- Finish Google multi-account/refresh/decline and Facebook positive authorization testing. Mocked OAuth tests alone do not establish these.
+- Finish Google multi-account/refresh and Facebook positive authorization testing. Mocked OAuth tests alone do not establish these.
 - The OpenAI partner inquiry page confirms receipt. Hosted ChatGPT still requires an approved partner client. Local subscription-token enrollment is not implemented. Direct browser Claude enrollment is unavailable; the current adapter accepts a Claude Code setup token.
 - Review preview behavior and required CI. Production promotion requires separate approval for the exact PR.
