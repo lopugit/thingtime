@@ -56,9 +56,10 @@ is selected. The UI scope is optional and persisted in the global History URL.
 - Frames currently show recorded field summaries. Full filmstrip rendering
   should batch visible-frame dependencies and keep Actions/live sources inert;
   selected page details already render retained component definitions.
-- Named branch labels, branch elbows, actual device/session groups, notes and
-  Lopu explanations need corresponding trusted metadata. Do not invent these
-  from operation IDs, source enums or client clocks.
+- Named branch labels, branch elbows and actual device/session groups need
+  corresponding trusted metadata. Do not invent these from operation IDs,
+  source enums or client clocks. Notes and Lopu explanations shipped on
+  2026-10-13 as relational `timeline-note` records (see below).
 - Pin/name, version export, selective undo, retention/clear/pause and sync
   settings require their canonical relational records, authority checks,
   dependency retention and transactional commands. The concept's simulated
@@ -101,3 +102,19 @@ local storage. List/Cards/Line/Frames use the same Local/remote receipt state an
 refresh after delivery. Reload/reconnect resends the exact server-sealed event,
 never the Action. Unconfirmed admissions alone still make no completion claim.
 See the unified Timeline ledger for lost-response and signing-key limits.
+
+## Contextual messages — 2026-10-13
+
+The concept's Message tab, message bubbles and "Ask Lopu to explain" are now
+product behaviour on the same unified Timeline. Owner notes and Lopu
+explanations are `timeline-note` relational records attached to one immutable
+event (`remix/app/timeline/notes.ts`, `api/utils/timeline/notes.ts`,
+`api/utils/timeline/explain.ts`), read with every history page, cached beside
+event rows and queued offline through the account outbox. System lines
+("Restored from an earlier version · nothing was lost", "Combined two versions",
+"Recovered deleted Thing", "Started a private variation") are derived in the
+browser from the event record and never stored. The detail panel now has
+Changes / Message / Versions tabs in the desktop column and the mobile sheet;
+a Messages toggle hides bubbles in every look. Version numbers are still not
+invented: the Versions tab lists loaded versions of the selected Thing and says
+so when older history is not loaded.

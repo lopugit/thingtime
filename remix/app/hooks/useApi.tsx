@@ -4,8 +4,10 @@ import { timelineRequestScope, type TimelineStorage } from '../timeline/storageS
 import { draftRequest } from '~/drafts/draftClient';
 import type { BranchMergeRequest } from '../timeline/branchMerge';
 import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
+import type { TimelineNote, TimelineNoteCommand } from '../timeline/notes';
+import { parseTimelineVersionName, type TimelineVersionName, type TimelineVersionNameCommand } from '../timeline/versionNames';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
-import type { TimelineEvent } from '~/timeline/contract';
+import { parseTimelineEntry, type TimelineEvent, type TimelineReceipt, type TimelineSnapshot } from '~/timeline/contract';
 import { retainActionOutcomeRecovery, type ActionOutcomeRecovery } from '~/timeline/actionRecovery';
 import { enqueueActionOutcomeRecovery } from '~/timeline/localBackend.client';
 import type { TimelinePageRequest } from '~/timeline/sync';
@@ -86,6 +88,23 @@ const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDa
 
 // Build "?a=1&b=2" from an args object, skipping null/undefined/'' and
 // joining array values with commas (the feed API's csv convention).
+/** One saved version as the server exports it (`export=1`): the raw event and
+ * receipt, its resolved restorable content, notes and 📌 name. Parsed leniently
+ * so a later server may add fields; the entry itself is parsed exactly. */
+export type TimelineVersionExport = {
+  formatVersion: 1; exportedAt: string; event: TimelineEvent; receipt: TimelineReceipt;
+  content: TimelineSnapshot; notes: TimelineNote[]; name: TimelineVersionName | null;
+};
+const parseTimelineVersionExport = (input: unknown, ownerId: string, eventId: string): TimelineVersionExport => {
+  const data = (input as any)?.export;
+  if ((input as any)?.ok !== true || !data || typeof data !== 'object' || Array.isArray(data) || data.formatVersion !== 1) throw new Error('Invalid Timeline export');
+  const entry = parseTimelineEntry({ event: data.event, receipt: data.receipt });
+  if (entry.event.id !== eventId || entry.event.ownerId !== ownerId) throw new Error('Server exported a different version');
+  const name = data.name === undefined || data.name === null ? null : parseTimelineVersionName(data.name);
+  if (name && (name.eventId !== eventId || name.ownerId !== ownerId)) throw new Error('Server exported a different version');
+  return { ...data, event: entry.event, receipt: entry.receipt, notes: Array.isArray(data.notes) ? data.notes : [], name };
+};
+
 const toQuery = (args?: Record<string, unknown>) => {
   const params = new URLSearchParams();
   Object.entries(args || {}).forEach(([key, value]) => {
@@ -148,6 +167,21 @@ export function useApi() {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
+      note: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineNoteCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.17.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      // Online only: there is no offline name queue, so the editor stays disabled without a verified connection.
+      nameVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineVersionNameCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.18.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      // Strict gate: a 1.17 server answers `export=1&eventId=` with a plain entry read (HTTP 200), so the manifest is the only reliable signal.
+      exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.18.0');
+        const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, export: 1 })}`, options);
+        return parseTimelineVersionExport(result, scope.ownerId, eventId);
+      }, []),
       discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal; storage?: TimelineStorage }) => {
         const expectedDataPlane = planeRef.current;
         if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
@@ -163,7 +197,8 @@ export function useApi() {
         return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: VersionRequest) => {
-        await requireThingtimeCapability('api.timeline', request.recover ? '1.14.0' : request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
+        // Undo first: it always carries componentMode, which alone would negotiate 1.12.0 and earn a 400 from an older server.
+        await requireThingtimeCapability('api.timeline', request.mode === 'undo' ? '1.18.0' : request.recover ? '1.14.0' : request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
       }, [asyncFetcher])
     },

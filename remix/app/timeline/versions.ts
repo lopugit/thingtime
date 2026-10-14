@@ -66,3 +66,9 @@ export function versionContent(snapshot: TimelineSnapshot | null, basis?: JsonVa
  }
  return result;
 }
+
+/** Canonical equality for restorable content: `versionContent` emits a fixed
+ * key order while merges return key-sorted records, so compare sorted copies. */
+export function versionContentEquals(a: unknown, b: unknown): boolean {
+ return JSON.stringify(copy(a)) === JSON.stringify(copy(b));
+}

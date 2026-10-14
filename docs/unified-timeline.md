@@ -970,3 +970,124 @@ This reconciles **known responses received by a retaining client**. It cannot
 recover a response lost before the client receives the bundle, infer a process
 crash's execution result, retain browser execution evidence or finish external
 side effects. Those broader requirements remain open; no Action is replayed.
+
+## Contextual notes and Lopu explanations — 2026-10-13
+
+Every immutable event can carry contextual messages: owner notes, Lopu
+explanations and derived system lines. A note is its own relational record
+(`timeline-note`, shared contract in `remix/app/timeline/notes.ts`): one
+protected Thing per note under the Timeline folder, `targetId` naming its event
+Thing, `crystal.targetId`/`linkKind` for reverse lookup through the existing
+shared index, the record in secure BinData. Events keep their exact 17 keys;
+nothing appends a notes array to an event, Thing or folder, and notes never
+appear as separate moments in the event list. The same record is read with each
+history page (one bounded query per page, at most eight notes per event, two
+thousand characters per note), cached in IndexedDB beside the event rows, and
+queued offline through the same account-scoped outbox as branch commands.
+
+`add-note`, `explain-change` and `remove-note` are Timeline POST commands under
+`api.timeline` 1.17.0. Add and explain mint `note-<operationId>`, so a retried
+request after a lost reply returns the original note and never a duplicate;
+another text under a used id is refused. Removal is idempotent and refunds the
+note's storage. Notes are the owner's private content: accounted against the
+owner's storage on the home plane, readable only by the owner, and absent from
+generic reads, search and public projections.
+
+An explanation is produced server-side from the recorded change only (label,
+retained snapshot titles, before/after property labels, source, branch and
+time), through Thingtime's own Lopu model routing (`generateAiCompletion` with a
+bounded timeout). It is stored as a `lopu` note only when the model answers; an
+unavailable or empty answer refuses with 503 and stores nothing. Explanation
+requests need a full account, pass the same Lopu access gate as chat (verified
+account with Lopu credits; guests and unverified accounts are refused with the
+chat refusal codes), and spend the `timeline.write` limit plus a separate
+`timeline.explain` limit. Explanations are not yet metered against Lopu
+credits; that bounded allowance is the spend limit. A pending (unsynced) event cannot be explained until
+its receipt exists, and a queued note for a still-pending event waits in the
+outbox instead of being refused.
+
+System lines are derived in the browser from `operation`, `parentIds`, `label`
+and `mode` (restore, merge, recovered deletion, variation effects). They are
+not stored, carry no invented version numbers, and disappear when the Messages
+toggle is off. The detail panel's Message tab holds the composer, Ask Lopu and
+per-note removal; List, Cards and Frames show the bubbles under the change chips.
+
+## Named versions, undo, compare with now and export — 2026-10-13
+
+`api.timeline` 1.18.0 adds four owner-facing operations on existing saved
+versions. None of them invents version numbers, none changes retention (no
+retention policy exists yet, so a named version does not "survive" anything
+more than an unnamed one), and none rewrites history: undo and restore only
+make the line longer.
+
+**Named versions** are a relational record, `timeline-version-name` (shared
+contract in `remix/app/timeline/versionNames.ts`, server in
+`remix/app/api/utils/timeline/versionNames.ts`): one protected Thing per
+(owner, event) under the Timeline folder, `targetId` naming the event Thing,
+`crystal.targetId`/`linkKind` for reverse lookup through the shared index, the
+record in secure BinData, and a root `nameRevision` for optimistic concurrency.
+The crystal label is the constant `Version name`, so the text never reaches
+crystal projections, search or root data. Only a synced `revision` event with
+an `after` snapshot can be named; effects, client drafts and deletions are
+refused. `name-version` names, renames (send the current revision) or clears
+(`name: null`, which leaves a tombstone record without a payload; reads skip
+it and the next name continues the revision counter, so a stale rename from
+before the clear can never land). The record itself is unbilled `control` metadata, but **every
+name, rename and clear appends an immutable `timeline-version-name` effect
+event in the named version's branch**, stamped `content`, metered like every
+effect event and never refunded; the only bound on rename churn is the
+`timeline.write` allowance. The effect event carries the full prior and new
+record in `before`/`after` (`after` is null on clear) and is the retry
+identity: an identical `operationId` replays the receipt, a different request
+under a used id is refused. A no-op (the same name again, or clearing an
+absent name) writes nothing and returns `entry: null`. The event is appended
+before the record is written so two concurrent first-time names serialise on
+the Timeline folder instead of racing the unique `shareId` index. History
+pages and exact version reads return `names` beside `notes`, inside the same
+page byte budget; related history and the bounded deleted-Thing scan inherit
+that one extra small query per page. On the client names are online-only and
+cached per connection in memory, never queued offline; a rename made on
+another device reaches an already-loaded event only through its effect event
+or when the event is paged again.
+
+**Undo this change** reuses the merge engine with `mode: 'undo'`: for one
+`update` revision carrying both snapshots, the edit's after-state is the base,
+its before-state the incoming side, and the live current content the other
+side. Later edits of other properties survive, overlapping edits need the
+ordinary conflict choice, arrays stay atomic, and a result equal to the current
+content is refused as already reverted. A compact before (folder placement)
+overlays its field on the exact after-state; the head is never loaded into the
+graph, so long-lived Things undo where restore succeeds. The committed event is
+`operation: 'restore'` with the label `Undid change` and both the current head
+and the undone version as parents — no new operation value, no new event key.
+`componentMode: 'current'` is the client default so recorded components are
+never silently forked into private copies; page versions with recorded
+dependencies need exactly one parent. Undoing a version on an abandoned branch
+or an already-merged line is allowed and deterministic; undoing on a deleted
+Thing stays 404 because recovery is restore-only.
+
+**Compare with now** needs no new API: the client sends the existing
+`recover: true`, `componentMode: 'current'` restore preview for a live Thing
+and renders its `incoming` (then) and `current` (now) sides; the preview's
+`thingtime` says whether page blocks expand. It is read-only, works for
+parts-adapter versions and for deleted Things (`current: null`), and spends the
+POST `timeline.write` allowance.
+
+**Export** (`GET export=1&eventId=`) returns one `revision` version as a
+private JSON file: the raw event and receipt, the resolved restorable content
+(the six keys of `versionContent`, compact ancestors resolved; deletions export
+their before-image), its notes and its name. Effects and drafts refuse with
+422. The file shares the 4 MiB response ceiling of previews: a version whose
+retained parts or resolved file exceed it is refused with 413 from the parts
+reference, before any part document is read, and remains retained. Export has
+its own `timeline.export` allowance beside `timeline.read` and writes nothing.
+
+Older clients degrade, they do not corrupt: a `timeline-version-name` effect
+event renders as a card titled `Thing` with no system line, an undo as
+`Restored from an earlier version`, `names` is ignored, and a 1.17.0 client
+never offers naming, undo or export because those are gated on 1.18.0; Compare
+with now negotiates the existing 1.14.0 recovery preview (and 1.12.0 component
+previews), so it stays available against a 1.17.0 server.
+Run `test:timeline`, `test:api-capabilities` and the opt-in
+`test:timeline:versions` (`scripts/timeline-versions.integration.mts`) on the
+guarded `timeline-rs` replica.

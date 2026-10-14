@@ -6,10 +6,18 @@ import { useTimelineSession, timelineAccessFailure } from './TimelineProvider';
 import { TIMELINE_CHANGED_EVENT } from './clientEvents';
 import type { RelatedTimelineScope } from './relatedHistory';
 import { readRelatedHistoryCache, writeRelatedHistoryCache, clearRelatedHistoryCache } from './relatedHistoryCache';
+import { historyNoteViews } from './noteStore';
+import type { HistoryNoteView } from './notes';
+import type { TimelineVersionName } from './versionNames';
 export { TIMELINE_CHANGED_EVENT } from './clientEvents';
 
-type View = { identity: string; rows: LocalTimelineRow[]; error: string; ready: boolean; nextBefore: number | null; folderId: string | null; related?: RelatedTimelineScope | null };
-const emptyView = (identity: string): View => ({ identity, rows: [], error: '', ready: false, nextBefore: null, folderId: null });
+/** `notes` holds the contextual messages per loaded event id (see notes.ts);
+ * `names` the 📌 version name per loaded event id (see versionNames.ts). Names
+ * are a cache: a rename made elsewhere for an already-loaded version arrives
+ * only with its effect event on the `after` cursor or when the event is paged
+ * again, exactly like notes. */
+type View = { identity: string; rows: LocalTimelineRow[]; notes: Map<string, HistoryNoteView[]>; names: Map<string, TimelineVersionName>; error: string; ready: boolean; nextBefore: number | null; folderId: string | null; related?: RelatedTimelineScope | null };
+const emptyView = (identity: string): View => ({ identity, rows: [], notes: new Map(), names: new Map(), error: '', ready: false, nextBefore: null, folderId: null });
 
 /** Only open history views pull pages. The account queue runs independently. */
 export function useThingTimeline(thingId: string | null, enabled = true, related = false) {
@@ -24,7 +32,7 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 	useEffect(() => {
 		if (!enabled || !connection) { refreshRef.current = () => sessionRef.current.retry(); return; }
 		let alive = true; let busy = false; let unavailable = false; let after: number | null = null; let before: number | null = null;
-		const { store, sync, folderId } = connection;
+		const { store, sync, folderId, notes: noteStore, names: nameStore } = connection;
 		let membership = related && thingId ? readRelatedHistoryCache(connection.scope, thingId) : null;
 		const fail = async (error: unknown) => {
 			if (!alive) return;
@@ -35,7 +43,10 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 		const cached = async () => {
 			if (unavailable) return;
 			const rows = membership ? await store.forThings(membership.thingIds) : await store.forThing(thingId);
-			if (alive) setView(previous => ({ ...(previous.identity === identity ? previous : emptyView(identity)), identity, rows, ready: true, folderId, nextBefore: before, related: membership }));
+			const [stored, queued] = await Promise.all([noteStore.forEvents(rows.map(row => row.event.id)), noteStore.queued()]);
+			const notes = historyNoteViews(connection.scope.ownerId, rows, stored, queued);
+			const names = nameStore.forEvents(rows.map(row => row.event.id));
+			if (alive) setView(previous => ({ ...(previous.identity === identity ? previous : emptyView(identity)), identity, rows, notes, names, ready: true, folderId, nextBefore: before, related: membership }));
 		};
 		const refresh = async (force = false) => {
 			if (!alive || busy || (!force && document.visibilityState === 'hidden')) return;

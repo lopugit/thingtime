@@ -1,5 +1,7 @@
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
+import { TIMELINE_NOTE_KIND } from '../timeline/notes.ts';
+import { TIMELINE_VERSION_NAME_KIND } from '../timeline/versionNames.ts';
 import { copyActionJson } from './actionJsonInput.ts';
 import { TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND } from '../timeline/contract.ts';
 import { parseBrowserExpressionLimits } from './browserActions';
@@ -4199,7 +4201,7 @@ export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant
 
 export const PROTECTED_THINGTIME = [
   'draft',
-  TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND,
+  TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_NOTE_KIND, TIMELINE_VERSION_NAME_KIND,
   'post-discovery',
   ...CHAT_ARCHIVE_THINGTIME,
 
@@ -4414,6 +4416,14 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
 	{ id: TIMELINE_BRANCH_HEAD_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline branch version',
 		summary: 'One current version for one branch and Thing.', detail: 'A protected atomic relationship with scalar branchId, thingId, eventId and optimistic revision. targetId names its Thing and parentId its branch. A push requires the current revision and preserves ancestry; divergence requires a merge. The canonical head record is identical locally and remotely.',
 		createdVia: 'Timeline branch command', fields: [], example: {} },
+	{ id: TIMELINE_NOTE_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline note',
+		summary: 'A private contextual message attached to one immutable Timeline event.',
+		detail: 'Each note is its own protected relational Thing: the identical local/server note record (owner or Lopu author, plain text up to 2000 characters, at most 8192 bytes) lives in secure BinData, targetId points to its event Thing, and hashed crystal.targetId plus crystal.linkKind support reverse lookup through the existing shared index. Events stay immutable and exact-keyed; notes never accumulate as an array on the event, the Thing or the Timeline folder. At most 8 notes per event; the owner may remove either author’s note, refunding metered storage. Only the dedicated Timeline note commands write notes; generic Things reads, search and sharing never expose them.',
+		createdVia: 'Timeline note command', fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Value-free display label.' }], example: { name: 'Note' } },
+	{ id: TIMELINE_VERSION_NAME_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline version name',
+		summary: 'A private pinned display name for one saved Timeline version.',
+		detail: 'One protected relational Thing per named event: the identical local/server name record (1–80 characters, at most 4096 bytes) lives in secure BinData, targetId points to its event Thing, hashed crystal.targetId plus crystal.linkKind support reverse lookup through the existing shared index, and a root nameRevision fences concurrent renames. The crystal label is constant, so the name text never reaches crystal projections, search or root data. Events stay immutable and exact-keyed; names never accumulate on the event, the Thing or the Timeline folder and invent no version numbers. The record is unbilled control metadata, but every name, rename and clear appends a metered timeline-version-name effect event beside the named version. Only the dedicated name-version Timeline command writes names; generic Things reads, search and sharing never expose them.',
+		createdVia: 'Timeline name-version command', fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Value-free display label.' }], example: { name: 'Version name' } },
 	{ id: TIMELINE_LINK_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline relationship',
 		summary: 'One immutable private link between an event and a version, Thing, branch or operation.',
 		detail: 'Each relationship is its own protected Thing in Timeline. The identical local/server link record lives in secure BinData; targetId points to its event Thing. Hashed crystal.targetId and crystal.linkKind support reverse lookup through the existing shared index. Links commit with the event, never accumulate in document arrays, and cannot be edited through generic Things APIs.',

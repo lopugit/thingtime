@@ -3012,7 +3012,9 @@ export const resolvePublicAudiences = async (
 const isDeviceControlThing = (doc: ThingDoc) => thingtimeOf(doc).some(kind => (DEVICE_CONTROL_THINGTIME as readonly string[]).includes(kind));
 
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
-  if (thingtimeOf(doc).some(kind => kind === 'timeline-snapshot-part' || kind === 'timeline-event' || kind === 'timeline-link' || kind === 'timeline-branch' || kind === 'timeline-branch-head')) return false;
+  // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
+  // is protected History metadata reachable only through the Timeline API, never a generic read.
+  if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
   if (isDeviceControlThing(doc)) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.

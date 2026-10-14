@@ -74,6 +74,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - **Credential encryption preparation**: tested password/session key-wrapping primitives now preserve a stable data key across rotations and reject altered owner, record, purpose, session and expiry metadata. Runtime credentials still use the existing server-key vault; login/recovery and migration remain open in [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13
 
+- 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
+  change, compare with now and version export (`api.timeline` 1.18.0): new
+  `timeline-version-name` relational records behind the `name-version`
+  command (one protected unbilled record per event, every name/rename/clear a
+  metered effect event in the version's branch, page and entry reads carry
+  `names`), `mode: 'undo'` on preview/apply-version through the existing merge
+  engine (committed as a restore labelled `Undid change`, no new operation
+  value), a client-only compare-with-now view over the existing recovery
+  preview, GET `export=1` with its own `timeline.export` limit, and the opt-in
+  `test:timeline:versions` HTTP suite. Details in
+  [docs/unified-timeline.md](../docs/unified-timeline.md#named-versions-undo-compare-with-now-and-export--2026-10-13).
+  PR note: [PRs/993-…](../PRs/993-claude-history-browser-integration--unified-timeline-named-versions-undo-compare-export.md) (PR #993).
+- 2026-10-13 — **Claude (AI)**: Unified Timeline contextual messages. Owner
+  notes, Lopu explanations and derived system lines on every recorded change:
+  new `timeline-note` relational records, `add-note` / `explain-change` /
+  `remove-note` Timeline commands (`api.timeline` 1.17.0, page and entry reads
+  now carry `notes`), a `timeline.explain` rate limit, IndexedDB note cache and
+  offline queue, Changes / Message / Versions tabs in the History detail panel,
+  message bubbles in List / Cards / Frames with a Messages toggle. Details in
+  [docs/unified-timeline.md](../docs/unified-timeline.md#contextual-notes-and-lopu-explanations--2026-10-13)
+  and the PR note
+  [PRs/991-…](../PRs/991-claude-history-browser-integration--unified-timeline-contextual-messages.md)
+  (PR #991).
 - 2026-10-13 — **Codex (AI)**: The Mac node now collects bounded battery and
   adapter measurements, with detailed publishing negotiated through device
   state 1.10.0. The device drawer shows battery status in Quick controls,

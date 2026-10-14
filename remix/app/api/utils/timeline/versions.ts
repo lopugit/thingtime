@@ -2,9 +2,9 @@ import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../../timeline/snapshotParts
 import { readTimelineSnapshot } from './snapshotParts.ts';
 import { createHash } from 'node:crypto';
 import { copyBoundedJson } from '../../../utils/boundedJson.ts';
-import { PUBLISHED_PREVIEW_MAX_BYTES, parseVersionRequest, type VersionRequest } from '../../../timeline/publishedVersion.ts';
+import { PUBLISHED_PREVIEW_MAX_BYTES, TIMELINE_UNDO_LABEL, parseVersionRequest, type VersionRequest } from '../../../timeline/publishedVersion.ts';
 import type { TimelineEntry, TimelineSnapshot } from '../../../timeline/contract.ts';
-import { mergeVersionValues, versionContent } from '../../../timeline/versions.ts';
+import { mergeVersionValues, versionContent, versionContentEquals } from '../../../timeline/versions.ts';
 import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import type { ThingWriteTransaction } from '../things/things';
 import { createThing, findViewableThing, updateThing } from '../things/things';
@@ -20,7 +20,7 @@ export { parseVersionRequest, type VersionRequest } from '../../../timeline/publ
 const reject = (status: number, message: string): never => {
 	throw new StorageMutationError(status, status === 409 ? 'storage_conflict' : 'storage_invariant', message);
 };
-const restorableContent = (snapshot: TimelineSnapshot | null, basis?: TimelineSnapshot['value']) => {
+export const restorableContent = (snapshot: TimelineSnapshot | null, basis?: TimelineSnapshot['value']) => {
 	try {
 		return versionContent(snapshot, basis);
 	} catch {
@@ -151,14 +151,20 @@ const dependencies = {
 	find: findViewableThing,
 	update: updateThing,
 	create: createThing,
-	transaction: withMongoTransaction
+	transaction: withMongoTransaction,
+	entries: readTimelineEntries,
+	nodes: readTimelineNodes,
+	snapshot: readTimelineSnapshot,
+	deleted: readDeletedThingState,
+	recorded: recordedComponentVersions,
+	live: liveComponentContext
 };
 export function createVersionService(overrides: Partial<typeof dependencies> = {}) {
 	const deps = { ...dependencies, ...overrides };
 	return async (ownerId: string, input: VersionRequest) => {
 		const request = parseVersionRequest(input);
 		const things = await deps.collection();
-		const read = (ids: string[], session?: any) => readTimelineEntries(things, ownerId, ids, session);
+		const read = (ids: string[], session?: any) => deps.entries(things, ownerId, ids, session);
 		const signature = createHash('sha256')
 			.update(
 				JSON.stringify({
@@ -194,7 +200,7 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		const source = (await read([request.eventId]))[0];
 		if (!source) reject(404, 'Version not found.');
 		const liveDoc = await deps.find(source.event.thingId, { id: ownerId });
-		const recovery = !liveDoc && request.recover ? await readDeletedThingState(things, ownerId, source.event.thingId) : null;
+		const recovery = !liveDoc && request.recover ? await deps.deleted(things, ownerId, source.event.thingId) : null;
 		const doc =
 			liveDoc ??
 			(recovery
@@ -212,6 +218,11 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 				  } as any)
 				: null);
 		if (!doc || doc.ownerId !== ownerId || isProtectedThingtime(doc.thingtime ?? [])) reject(404, 'This Thing is not available for version changes.');
+		// Undo reverts exactly one saved edit: base is that edit's after-state and
+		// incoming its before-state, merged against the live current content.
+		const undo = request.mode === 'undo';
+		if (undo && (source.event.operation !== 'update' || source.event.mode !== 'revision' || !source.event.before || !source.event.after))
+			reject(422, 'Only a saved edit can be undone on its own.');
 		if (!source.event.after && (source.event.operation !== 'delete' || request.mode !== 'restore' || !request.recover))
 			reject(422, 'Choose Restore to recover the content before this deletion.');
 		const headId = recovery?.entry.event.id ?? ((doc as any).timelineHeadId as string);
@@ -222,25 +233,31 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 			request.mode === 'merge' ||
 			!['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes((source.event.after ?? source.event.before)?.adapter ?? '')
 				? await loadVersionGraph(request.mode === 'merge' ? [source.event.id, headId] : [source.event.id], source.event.thingId, (ids) =>
-						readTimelineNodes(things, ownerId, ids)
+						deps.nodes(things, ownerId, ids)
 				  )
 				: new Map<string, TimelineGraphNode>();
 		const baseNode = request.mode === 'merge' ? versionMergeBase(graph, headId, source.event.id) : null;
 		const base = baseNode ? (await read([baseNode.id]))[0] : null;
-		const resolved = (entry: TimelineEntry) => readTimelineSnapshot(things, ownerId, entry.event.id, 'after', entry.event.after);
+		const resolved = (entry: TimelineEntry) => deps.snapshot(things, ownerId, entry.event.id, 'after', entry.event.after);
 		const contentFor = createVersionContentReader(graph, read, resolved);
 		const currentSnapshot = thingContentSnapshot(doc)!;
 		const current = restorableContent(currentSnapshot);
-		const incoming = source.event.after
-			? await contentFor(source)
-			: restorableContent(await readTimelineSnapshot(things, ownerId, source.event.id, 'before', source.event.before));
-		const baseContent = base ? await contentFor(base) : null;
+		const beforeContent = async (basis?: TimelineSnapshot['value']) =>
+			['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(source.event.before?.adapter ?? '')
+				? restorableContent(await deps.snapshot(things, ownerId, source.event.id, 'before', source.event.before))
+				: // A compact before (folder-placement) overlays its field on the exact after-state; no parent walk.
+				  restorableContent(source.event.before, basis);
+		// Undo never loads the head into the graph: every ancestor would be walked
+		// and long-lived Things would refuse as too far back where restore succeeds.
+		const baseContent = undo ? await contentFor(source) : base ? await contentFor(base) : null;
+		const incoming = undo ? await beforeContent(baseContent!) : source.event.after ? await contentFor(source) : await beforeContent();
 		let merged: ReturnType<typeof mergeVersionValues>;
 		try {
 			merged = baseContent ? mergeVersionValues(baseContent, current, incoming, request.choices) : { value: incoming, conflicts: [] };
 		} catch {
 			return reject(422, 'This comparison or its conflict choices are no longer valid. Refresh the comparison before applying it.');
 		}
+		if (undo && !merged.conflicts.length && versionContentEquals(merged.value, current)) reject(409, 'Nothing to undo: this change is already reverted.');
 		if (request.mode === 'restore' && Object.keys(request.choices ?? {}).length) reject(400, 'Restores do not accept merge choices.');
 		if (recovery) {
 			const folderId =
@@ -254,7 +271,19 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		}
 		const snapshot = (value: any): TimelineSnapshot => ({ adapter: 'thing-content', version: 1, value });
 		const isPage = doc.thingtime?.includes('webpage');
-		const componentSources = await Promise.all(
+		// Undo compares the edit's own two sides: its parent's crystal source
+		// supplies the recorded definitions before the edit, the edit its own.
+		const undoSources = async () => {
+			if (!isPage || !(webpageComponentRefs((incoming.crystal as any)?.blocks).length || source.event.dependencies.length)) return [source.event.id, source.event.id];
+			if (source.event.parentIds.length !== 1) reject(422, 'Undo is not available for this page version yet. Use Restore or Review and combine.');
+			const parent = (await read([source.event.parentIds[0]]))[0];
+			if (!parent || parent.event.thingId !== source.event.thingId || !parent.event.after) reject(409, 'The earlier version is unavailable.');
+			const ancestors = ['thing-content', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(parent!.event.after!.adapter)
+				? graph
+				: await loadVersionGraph([parent!.event.id], source.event.thingId, (ids) => deps.nodes(things, ownerId, ids));
+			return [versionContentSources(ancestors, parent!).crystalId, versionContentSources(graph, source).crystalId];
+		};
+		const componentSources = undo ? await undoSources() : await Promise.all(
 			[source, ...(base ? [base] : [])].map(async (entry) => {
 				if (entry.event.after) return versionContentSources(graph, entry).crystalId;
 				if (
@@ -266,7 +295,7 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 					return entry.event.id;
 				const parent = (await read([entry.event.parentIds[0]]))[0];
 				if (!parent || parent.event.thingId !== entry.event.thingId) reject(409, 'The deleted version has incomplete ancestry.');
-				const ancestors = await loadVersionGraph([parent.event.id], entry.event.thingId, (ids) => readTimelineNodes(things, ownerId, ids));
+				const ancestors = await loadVersionGraph([parent.event.id], entry.event.thingId, (ids) => deps.nodes(things, ownerId, ids));
 				return versionContentSources(ancestors, parent).crystalId;
 			})
 		);
@@ -285,13 +314,13 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		let components: ReturnType<typeof comparePublishedComponents> | undefined;
 		if (request.componentMode) {
 			const recorded = isPage
-				? await recordedComponentVersions(
+				? await deps.recorded(
 						things,
 						ownerId,
 						componentSources.map((id, index) => ({ event: providers.get(id)!, content: index === 0 ? incoming : baseContent }))
 				  )
 				: [{}, {}];
-			const live = await liveComponentContext(things, undefined, doc, current, merged.value);
+			const live = await deps.live(things, undefined, doc, current, merged.value);
 			try {
 				// Resolve the page's block tree before aligning definitions by block
 				// identity. Its provisional tree may intentionally share a reference
@@ -327,7 +356,7 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 			...(recovery ? { recovery: true as const, recoveryFingerprint } : {}),
 			incoming: snapshot(incoming),
 			result: snapshot(merged.value),
-			baseEventId: base?.event.id ?? null,
+			baseEventId: undo ? source.event.id : base?.event.id ?? null,
 			conflicts: merged.conflicts,
 			...(components ? { thingtime: doc.thingtime ?? ['data'], components } : {})
 		};
@@ -349,9 +378,11 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 			...newThingMutationCapture(ownerId, 'api'),
 			id: committedId!,
 			operationId: signature,
-			operation: recovery ? ('create' as const) : request.mode,
+			// No new operation value: an undo commits as a restore whose label and
+			// hashed mode keep it distinct from a restore of the same version.
+			operation: recovery ? ('create' as const) : request.mode === 'undo' ? ('restore' as const) : request.mode,
 			parentIds: [...new Set([headId, source.event.id])],
-			label: recovery ? 'Recovered deleted Thing' : request.mode === 'merge' ? 'Merged branch into current version' : 'Restored earlier version'
+			label: recovery ? 'Recovered deleted Thing' : undo ? TIMELINE_UNDO_LABEL : request.mode === 'merge' ? 'Merged branch into current version' : 'Restored earlier version'
 		};
 		const plan =
 			request.componentMode === 'recorded' && refs.length
@@ -368,7 +399,7 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 		}));
 		const beforeCommit = async (transaction: ThingWriteTransaction) => {
 			if (components) {
-				const live = await liveComponentContext(things, transaction.session, doc, current, merged.value);
+				const live = await deps.live(things, transaction.session, doc, current, merged.value);
 				if (live.fingerprint !== request.expectedComponents) reject(409, 'A component changed after the preview. Refresh and compare again.');
 			}
 			for (const copy of copies) {
@@ -389,7 +420,7 @@ export function createVersionService(overrides: Partial<typeof dependencies> = {
 					effects = [];
 					const replay = await existing(session);
 					if (replay) return replay;
-					const deleted = await readDeletedThingState(things, ownerId, source.event.thingId, session);
+					const deleted = await deps.deleted(things, ownerId, source.event.thingId, session);
 					if (deleted.entry.event.id !== headId) reject(409, 'This Thing changed after the recovery preview. Refresh and compare again.');
 					const transaction = {
 						session,

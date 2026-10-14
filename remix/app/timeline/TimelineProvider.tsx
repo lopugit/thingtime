@@ -4,7 +4,9 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { localTimelineBackend } from './localBackend.client';
 import { TimelineLocalStore } from './localStore';
 import { TimelineBranchStore } from './branchStore';
-import { TimelineSync, TimelineBranchCommandRefusal } from './sync';
+import { TimelineNoteStore } from './noteStore';
+import { TimelineNameStore } from './nameStore';
+import { TimelineSync, TimelineBranchCommandRefusal, TimelineNoteCommandRefusal } from './sync';
 import { timelineScopeKey, type TimelineScope } from './contract';
 import { listenTimelineScopeChange, TIMELINE_CHANGED_EVENT } from './clientEvents';
 import { TimelineConnectionPool, timelineConnectionForViewer, type TimelineConnection } from './connectionPool';
@@ -64,10 +66,12 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 			// explicit authorization refusal. Network failure is not revocation.
 			await old?.store.prune(0, 0);
 			await old?.branches.clearCache();
+			await old?.notes.clearCache();
+			old?.names.clear();
 		};
 		redact.current = deny;
 		const syncFailure = async (failure: unknown) => {
-			if (failure instanceof TimelineBranchCommandRefusal) { setError(''); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
+			if (failure instanceof TimelineBranchCommandRefusal || failure instanceof TimelineNoteCommandRefusal) { setError(''); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
 			else if (timelineAccessFailure(failure)) await onDenied(failure);
 			else setError(failureMessage(failure));
 		};
@@ -110,16 +114,19 @@ export function TimelineProvider({ children }: { children: React.ReactNode }) {
 	const [pool] = React.useState(() => new TimelineConnectionPool((scope, folderId) => {
 		const store = new TimelineLocalStore(scope, localTimelineBackend());
 		const branches = new TimelineBranchStore(scope, localTimelineBackend());
+		const notes = new TimelineNoteStore(scope, localTimelineBackend());
+		const names = new TimelineNameStore(scope);
 		const sync = new TimelineSync(store, {
 			push: async (event, signal) => (await apiRef.current.v1.timeline.push(scope, event, { signal })).entry,
 			recoverOutcome: async (event, proof, signal) => (await apiRef.current.v1.timeline.recoverOutcome(scope, { formatVersion: 1, event, dataPlane: scope.dataPlane, proof }, { signal })).entry,
 			page: (request, signal) => apiRef.current.v1.timeline.page(scope, request, { signal }),
 			branch: (command, signal) => apiRef.current.v1.timeline.branch(scope, command, { signal }),
 			branchHead: (branchId, thingId, signal) => apiRef.current.v1.timeline.branchHead(scope, branchId, thingId, { signal }),
-			entry: async (eventId, signal) => (await apiRef.current.v1.timeline.entry(scope, eventId, { signal })).entry,
-			branches: (thingId, before, signal) => apiRef.current.v1.timeline.branches(scope, thingId, before, { signal })
-		}, branches);
-		return { scope, folderId, store, branches, sync };
+			entry: async (eventId, signal) => { const { entry, notes, names } = await apiRef.current.v1.timeline.entry(scope, eventId, { signal }); return { entry, notes, names }; },
+			branches: (thingId, before, signal) => apiRef.current.v1.timeline.branches(scope, thingId, before, { signal }),
+			note: (command, signal) => apiRef.current.v1.timeline.note(scope, command, { signal })
+		}, branches, notes, names);
+		return { scope, folderId, store, branches, notes, names, sync };
 	}));
 	const sessions = React.useRef<Session[]>([]);
 	const redact = React.useCallback(async (failure: unknown) => { await Promise.all(sessions.current.map(session => session.redact(failure))); }, []);
