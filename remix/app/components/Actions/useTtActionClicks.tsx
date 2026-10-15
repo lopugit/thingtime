@@ -199,7 +199,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				return;
 			}
 			busyRef.current = true;
-			const identity =	identityRef.current;
+			const identity = identityRef.current;
 			const runRuntime = runtimeRef.current;
 			const runApi = apiRef.current;
 			const reportResult = resultRef.current;
@@ -211,7 +211,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				try {
 					if (confirmRef.current && !runtimeRef.current.sharedRun) {
 						const approved = await confirmRef.current({ action, inputs });
-						if (!mountedRef.current || identity !==	identityRef.current || !approved) return;
+						if (!mountedRef.current || identity !== identityRef.current || !approved) return;
 					}
 					// source: 'component' NARROWS server-side resolution to actions
 					// this viewer owns. Markup can name any id, so the delegated
@@ -221,11 +221,11 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 						action,
 						inputs,
 						run: () => {
-							if (!mountedRef.current || identity !==	identityRef.current) throw new Error('Account changed');
+							if (!mountedRef.current || identity !== identityRef.current) throw new Error('Account changed');
 							return runRuntime.sharedRun ? runRuntime.sharedRun(action, inputs) : runApi.v1.actions.run({ action, inputs, source: 'component' });
 						},
 						onUnowned: async (key, fields) => {
-							if (!mountedRef.current || identity !==	identityRef.current) return false;
+							if (!mountedRef.current || identity !== identityRef.current) return false;
 							// Cloud install hooks must never be reached by a local delegated run.
 							if (user?.localOnly) return false;
 							if (key === CATALOG_RECORD_ACTION) {
@@ -236,7 +236,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 							return onUnowned?.(key, fields) ?? false;
 						}
 					});
-					if (!mountedRef.current || identity !==	identityRef.current) return;
+					if (!mountedRef.current || identity !== identityRef.current) return;
 					const response = outcome.response;
 					if (outcome.error !== undefined) {
 						lopuRef.current({ title: 'That didn’t work 😔', description: outcome.error || undefined, status: 'error' });
@@ -265,7 +265,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 						reportResult?.(report);
 					}
 				} catch {
-					if (mountedRef.current && identity ===	identityRef.current) {
+					if (mountedRef.current && identity === identityRef.current) {
 						lopuRef.current({ title: 'Could not run this action', status: 'error' });
 						const report = { action, ok: false, result: null, error: 'Could not run this action' };
 						runRuntime.report(report);
