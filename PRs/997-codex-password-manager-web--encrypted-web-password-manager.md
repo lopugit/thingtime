@@ -1,6 +1,7 @@
 # PR #997 — Encrypted web password manager
 
-PR: https://github.com/lopugit/thingtime/pull/997  
+PR: https://github.com/lopugit/thingtime/pull/997
+
 Branch: `codex/password-manager-web` → `main`
 
 ## Scope
@@ -20,6 +21,9 @@ Third-party OAuth work remains in [PR #992](https://github.com/lopugit/thingtime
 
 ## Verification — 2026-10-15
 
+- Production environment metadata confirms the existing `THINGTIME_ADMIN_VAULT_KEY`
+  secret is present for the documented compatibility path; no key was exposed,
+  rotated or replaced.
 - This web branch: 35 focused password tests pass. Focused lint has zero errors
   and two ref-cleanup warnings. No private env files or real credentials added.
 - The equivalent web implementation in #996 passed the complete Web CI build,
