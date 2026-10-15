@@ -250,3 +250,14 @@ test('failed draft saving and failed cleanup do not prevent local retirement or 
 	assert.equal(session.current()!.content.name, 'third post');
 	session.dispose();
 });
+
+test('retirement cancels an unsent draft rather than saving it before cleanup', async () => {
+	let saves = 0, removals = 0;
+	const { session } = setup(async input => { saves++; return saved(input); });
+	session.capture(content('already posted'));
+	await session.retire(async () => { removals++; }, () => {});
+	assert.equal(saves, 0);
+	assert.equal(removals, 0);
+	assert.equal(session.current(), null);
+	session.dispose();
+});
