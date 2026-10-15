@@ -10,7 +10,7 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
-import { platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
+import { draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -239,6 +239,18 @@ const librarySandboxPlugin = (): Plugin => ({
   configureServer(server) {
     server.middlewares.use((req,res,next) => {
       const path = req.url?.split('?')[0];
+      if (path === '/draft-preview/index.html' || path === '/draft-preview/' ) {
+        res.setHeader('Content-Security-Policy', draftPreviewCsp);
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'text/html');
+        createReadStream(fileURLToPath(new URL('./public/draft-preview/index.html', import.meta.url))).pipe(res); return;
+      }
+      if (path === '/draft-preview/runner.js') {
+        const file = fileURLToPath(new URL('./dist/draft-preview/runner.js', import.meta.url));
+        if (!existsSync(file)) { res.statusCode = 503; res.end('Run npm run build:draft'); return; }
+        res.setHeader('Content-Type', 'text/javascript'); res.setHeader('Cache-Control', 'no-store');
+        createReadStream(file).pipe(res); return;
+      }
       if (path === '/platform/runtime.html' || path === '/platform/runtime.js') {
         const file = fileURLToPath(new URL(`./dist${path}`, import.meta.url));
         if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:platform');return; }

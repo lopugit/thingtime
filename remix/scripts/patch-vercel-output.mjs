@@ -2,7 +2,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import { platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, prodCsp } from './csp.mjs';
+import { draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, prodCsp } from './csp.mjs';
 
 const configPath = '.vercel/output/config.json';
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -57,6 +57,7 @@ config.routes = [
     },
     continue: true
   },
+  { src: '^/draft-preview(?:/.*)?$', headers: { 'Content-Security-Policy': draftPreviewCsp, 'Cache-Control': 'no-store' }, continue: true },
   { src: '^/platform/runtime\\.html$', headers: { 'Content-Security-Policy': platformRuntimeCsp, 'Cache-Control': 'no-store' }, continue: true },
   { src: '^/platform/runtime\\.js$', headers: { 'Cache-Control': 'no-store' }, continue: true },
   { src: '^/library/sandbox\\.html$', headers: { 'Content-Security-Policy': librarySandboxCsp, 'Cache-Control': 'no-store' }, continue: true },

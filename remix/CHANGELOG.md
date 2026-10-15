@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-15 — **Codex (AI)**: Add isolated no-login native draft previews and the stdio MCP `thingtime_render_and_export` tool, reusing canonical transfers, schema validation and native renderers. Return bounded JSON/PNG artifacts with diagnostics; keep Actions, account data, assets and publishing unavailable. Local clean-browser and disposable importer verification: [workflow and evidence](../docs/no-login-draft-preview.md).
+
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new
   `timeline-version-name` relational records behind the `name-version`
