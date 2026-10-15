@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous page Components and Collections now run
+  local source Actions and refresh after native controls, including cold offline
+  reload. Source caches and local form state use complete workspace identity;
+  shared authorization and inert previews are preserved. Local 1440/390/320px
+  acceptance and 446 checks passed. Full local-first rollout remains incomplete;
+  see [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous Actions reuse the canonical bounded
   executor against device storage, with local authoring/editing, scoped nested
   data operations and protected execution details. Offline browser JSON

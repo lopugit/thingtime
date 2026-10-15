@@ -264,3 +264,22 @@ not a deployed/full-suite completion claim. The coverage matrix still gates merg
   component/collection sources, canonical local Timeline and account execution/
   sync. Generic Thing-page local Action comments/owner menus also remain incomplete.
   This checkpoint does not satisfy the full-suite merge gate.
+
+
+## Anonymous page sources checkpoint — 2026-10-16
+
+The native page runtime now allows local workspace sources without asserting a
+signed-in viewer. Components and Collections reuse the local Action API, refresh
+after controls and preserve inert preview behavior. Source caches and local forms
+are isolated by complete workspace scope; shared-root runs remain separately
+server-authorized and uncached.
+
+Normal Transfer import, native page render, offline control update, Component +
+Collection refresh and cold offline reload passed locally with no account session.
+1440/390/320px checks found no horizontal overflow; the complete captured interval
+had zero mutation requests. Evidence lives in `tmp/local-sources-ui/`.
+445 automated checks plus the real-browser source lifecycle regression passed;
+changed-file lint is clean, raw tsc remains exactly 91 baseline diagnostics and
+the client build contains 237 verified assets. Dedicated Component surfaces,
+browser request adapters, local suite installation, Timeline and account execution/
+sync still require work; the full-suite merge gate remains unmet.

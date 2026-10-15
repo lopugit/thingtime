@@ -2,6 +2,18 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Anonymous page sources: normal-import an editable schema/Data/Action/
+      Component/page bundle. Both source-bound Components and native Collections
+      must load without sign-in, refresh after a local control, and survive a
+      cold offline reload. Inert previews make no run. Malformed pages show an
+      error. Verify 1440/390/320px and zero account mutation requests.
+- [ ] Source caches and local forms must retire across anonymous/account/origin/
+      data-plane boundaries, even when the page and block IDs match. Never adopt
+      legacy viewer-only cache entries or cache shared-root run results. Run the
+      opt-in `sourceWorkspace.browser.test.ts` lifecycle regression against Vite
+      with `TT_SHARED_TEST_URL`, `TT_SHARED_PLAYWRIGHT_PATH`, and optional
+      `TT_SHARED_CHROME_PATH`; use a fresh browser and disposable local data.
+
 - [ ] Anonymous Actions: create in the native editor, cold-reload offline, run,
       edit in Fields/Source, save and reload. Invalid JSON cannot save; execution
       failures show their actual error. Local definition drafts do not require an

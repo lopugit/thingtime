@@ -345,3 +345,11 @@ transfer; they do not substitute for canonical Timeline history.
 `useWorkspaceScope` partitions Action view/cache identity, while the shared
 `ThingDefinitionEditor` uses local drafts for anonymous definitions. See
 [local workspace coverage](../local-workspaces.md) for the remaining merge gate.
+
+
+Local page source availability and full workspace cache scope live in
+`Builder/webpageRuntime.tsx`; `liveComponent.tsx` and `useCollectionSource.ts`
+execute through the existing API adapter. `sourceWorkspace.browser.test.ts`
+verifies real local Action execution/refresh and inert/identity boundaries;
+`webpageRuntime.test.ts` covers account/origin/data-plane cache separation.
+See [the local source checkpoint](../local-workspaces.md#local-page-sources-checkpoint--2026-10-16).

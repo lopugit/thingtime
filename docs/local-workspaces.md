@@ -68,10 +68,10 @@ change this pointer; logout/account changes revoke it.
 | --- | --- |
 | Local storage and account boundaries | Unit-tested persistence, atomic rollback, concurrent edits, scope isolation and identity invalidation. Add browser multi-tab and account-switch regressions. |
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
-| Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. |
+| Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. Grid checkbox mouse clicks navigated into a Thing during local acceptance; keyboard Space selection worked and needs a focused regression/fix. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Finish bundled catalog availability, copies, argument editing, schema forms and offline creation. |
-| Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Finish local browser request adapters, collection/component sources, suite installation and account execution/sync. External lookups and public/system searches remain explicit remote requirements. |
+| Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Finish local browser request adapters, dedicated component surfaces, suite installation and account execution/sync. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
@@ -477,3 +477,38 @@ operations for local Action Things; the Things library supports their deletion.
 Those shared-surface gaps remain in the broader rollout. CI and branch-preview
 checks are separate from this local acceptance; this checkpoint is not deployed
 feature acceptance and does not make the full-suite PR merge-ready.
+
+
+## Local page sources checkpoint — 2026-10-16
+
+The real page runtime now separates content-workspace availability from account
+sign-in. Anonymous owned pages run saved source Actions through the existing local
+API adapter. `viewer.signedIn` remains false; this does not grant server authority.
+Component and collection hooks retain sibling-load deduplication, bounded paging,
+retry behavior and refresh after a control completes. Disabled Builder previews
+remain inert. Shared-root runs retain their separate server-authorized path and
+never read or write the owned source cache.
+
+Source cache entries now use the full account/origin/data-plane or anonymous
+partition rather than an account ID alone. Old unqualified entries are not
+adopted. Runtime results, last-control state and local form state retire on a
+workspace boundary. The transport's existing lease remains the final authority.
+This change does not implement offline account Action execution.
+
+Local production-build acceptance imported a six-Thing canonical fixture through
+normal Transfer (schema, Data, two Actions, Component and webpage). With no login,
+the source Component and its native Collection rendered the saved Data. With all
+networking disabled, a delegated control updated it and both sources refreshed;
+a cold offline reload retained the new value. 1440×1000, 390×844 and 320×844 CSS
+viewports had no horizontal overflow. The complete recorded update/reload interval
+had zero mutation requests. Only disposable local fixture Things were changed.
+Evidence: `tmp/local-sources-ui/verification.json` and `offline-sources-*.png`.
+
+Regression coverage: 445 automated checks passed across webpages, Actions,
+workspace/offline shell and hooks, plus one real-browser lifecycle regression
+(`sourceWorkspace.browser.test.ts`) against Vite. It covers anonymous execution,
+sibling deduplication, refresh, inert mode, malformed collection output and
+workspace retirement with all API requests refused. Cache tests cover account,
+origin and data-plane isolation. Raw TypeScript retains the same 91 baseline
+diagnostics; changed-file lint is clean. Client build: 237 verified offline assets.
+These are local checks; deployed and full-suite acceptance remain incomplete.
