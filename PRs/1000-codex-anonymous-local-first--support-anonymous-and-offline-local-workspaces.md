@@ -158,3 +158,8 @@ This is the file-transfer/storage checkpoint, not complete attachment support.
 Normal uploads, media URL rendering, draft copies, linked galleries and account
 sync remain required, alongside the broader coverage matrix, before merge.
 CI and deployed verification must be tied to the eventual pushed commit.
+
+Review integration retains the bot's orphaned-sync quarantine and non-negative
+usage cleanup in the shared JSON/binary deletion helper. Focused workspace tests,
+typecheck baseline comparison and client build are rerun on the integrated tree;
+the graph's structural snapshot is refreshed after the merge.

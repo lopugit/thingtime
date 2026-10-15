@@ -61,6 +61,9 @@ checks against existing personal data. Full feature coverage is tracked in
       Component media/dependencies rebind to the copied bytes. A folder holding
       standalone files requires explicit recursive deletion; target-bound files
       cascade with their target. Clear all disposable test data afterward.
+- [ ] A missing local Thing with a remaining account sync entry becomes a
+      visible error; it cannot stall unrelated pending writes. Deletion with a
+      missing usage row must not throw or create negative quota totals.
 - [ ] All local feature families, queue deletion/import/move semantics and
       multi-tab UI refresh require separate acceptance before rollout merge.
 
