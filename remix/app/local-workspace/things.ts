@@ -31,6 +31,7 @@ export const localThingProjection = (thing: LocalThing, ownerId: string) => ({
 	acl: ['tt:user'], visibility: 'private' as const, folderId: thing.folderId || null, targetId: thing.targetId || null,
 	tags: thing.tags || [], extended: thing.extended ?? null, localOnly: true
 });
+const isLocalActivity = (row: Pick<LocalThing, 'thingtime'>) => isLocalInteraction(row) || row.thingtime.includes('action-run');
 const fail = (code: string, message: string, status = 400): never => { throw new WorkspaceError(code, message, status); };
 const content = (thing: TransferThing): TransferThing => ({
 	id: thing.id, thingtime: thing.thingtime, crystal: isLocalAttachment(thing as LocalThing) ? { recordingFileId: localAttachmentFileId(thing.id), ...((thing as LocalAttachment).localAttachment.purpose === 'file' ? { filePurpose: 'file' } : {}) } : isTransferAlgorithm(thing) ? snapshotTransferValue(algorithmTransferContent(thing.crystal)) as TransferThing['crystal'] : thing.crystal,
@@ -185,7 +186,7 @@ export class LocalThings {
 	async get(id: string): Promise<LocalThing> {
 		return this.transaction('readonly', async tx => {
 			const found = await tx.get<LocalThing>('things', id);
-			if (!found) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
+			if (!found || found.thingtime.includes('action-run')) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
 			return found;
 		});
 	}
@@ -197,7 +198,7 @@ export class LocalThings {
 		const kinds = typeof query.thingtime === 'string' ? query.thingtime.split(',') : query.thingtime || [];
 		return this.transaction('readonly', async tx => {
 			let rows = (await tx.list<LocalThing>('things')).map(({ value }) => value)
-				.filter(row => !isLocalInteraction(row) && (!isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!query.target && row.targetId === query.target))) && kinds.every(kind => row.thingtime.includes(kind)) &&
+				.filter(row => !isLocalActivity(row) && (!isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!query.target && row.targetId === query.target))) && kinds.every(kind => row.thingtime.includes(kind)) &&
 					(!query.folder || (query.folder === 'root' ? !row.folderId : row.folderId === query.folder)) &&
 					(!query.target || row.targetId === query.target))
 				.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
@@ -228,12 +229,16 @@ export class LocalThings {
 		if (!Array.isArray(ids) || !ids.length || ids.length > 200) fail('INVALID_IDS', 'Choose between 1 and 200 Things');
 		return this.transaction('readwrite', async tx => {
 			const all = await tx.list<LocalThing>('things'); const selected = new Set(ids);
-			for (const id of selected) if (!all.some(row => row.id === id)) fail('NOT_FOUND', 'Thing is not in this workspace', 404);
+			for (const id of selected) {
+ const row = all.find(row => row.id === id)?.value;
+ if (!row) fail('NOT_FOUND', 'Thing is not in this workspace', 404);
+ if (row!.thingtime.includes('action-run')) fail('MANAGED_KIND', 'Delete the Action to remove its protected run history');
+ }
 			let changed = true;
 			while (changed) {
 				changed = false;
 				for (const { value: row } of all) if (!selected.has(row.id) && ((row.folderId && selected.has(row.folderId)) || (row.targetId && selected.has(row.targetId)))) {
-					if (!recursive && !((isLocalAttachment(row) || isLocalInteraction(row) || row.thingtime.includes('comment')) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
+					if (!recursive && !((isLocalAttachment(row) || isLocalActivity(row) || row.thingtime.includes('comment')) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
 					selected.add(row.id); changed = true;
 				}
 			}
@@ -248,7 +253,7 @@ export class LocalThings {
 			for (const id of ids) {
 				const previous = await tx.get<LocalThing>('things', id);
 				if (!previous) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
-				if (isLocalInteraction(previous)) fail('MANAGED_KIND', 'Interactions cannot be filed or moved');
+				if (isLocalActivity(previous)) fail('MANAGED_KIND', 'Interactions cannot be filed or moved');
 				const row = { ...previous, revision: previous.revision + 1, updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString() };
 				if (folderId) row.folderId = folderId; else delete row.folderId;
 				await this.placement(tx, row); await tx.put('things', id, row); rows.push(row);
@@ -259,12 +264,12 @@ export class LocalThings {
 	async export(ids: string[], options: CollectTransferOptions = {}) {
 		// Take one consistent snapshot, then collect outside the IDB transaction.
 		const saved = await this.snapshot();
-		if (saved.some(row => ids.includes(row.id) && isLocalInteraction(row))) fail('MANAGED_KIND', 'Export the content Thing; local interaction state is not portable account authority');
+		if (saved.some(row => ids.includes(row.id) && isLocalActivity(row))) fail('MANAGED_KIND', 'Export the content Thing; local interaction and run state is not portable account authority');
 		const attachments = saved.filter(isLocalAttachment);
 		const mediaCopies = new Map(attachments.map(row => [row.id, localAttachmentFileId(row.id)]));
 		const readBytes = (id: string) => this.transaction('readonly', tx => tx.getBytes(id));
 		const lease = this.lease;
-		const docs = new Map([...this.builtins.map(doc => [doc.id, content(doc)] as const), ...saved.filter(row => !isLocalInteraction(row)).map(value => [value.id, content(value)] as const)]);
+		const docs = new Map([...this.builtins.map(doc => [doc.id, content(doc)] as const), ...saved.filter(row => !isLocalActivity(row)).map(value => [value.id, content(value)] as const)]);
 		const timestamps = new Map(saved.map(row => [row.id, row.updatedAt]));
 		const builtinIds = new Set(this.builtins.map(row => row.id));
 		const componentCandidates = [...docs.values()].filter(row => row.thingtime.includes('component'))

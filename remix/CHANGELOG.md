@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous Actions reuse the canonical bounded
+  executor against device storage, with local authoring/editing, scoped nested
+  data operations and protected execution details. Offline browser JSON
+  round-trip and desktop/mobile checks pass; the live server regression remains
+  100/100. Suite/request adapters and full rollout acceptance remain unfinished.
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Native local reactions, Saved and poll voting now
   work offline through scoped relational Things and shared validators. Saved is
   discoverable without login and caches are separated by workspace. Local browser

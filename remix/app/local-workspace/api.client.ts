@@ -138,6 +138,8 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		getShared: ({ id }: { id: string }) => { lease.assertCurrent(); return id.startsWith('local-') ? themes().get(id) : publicWorkspaceRead(`/api/v1/themes/shared?id=${encodeURIComponent(id)}`, 'api.themes-shared', '1.0.0'); },
 		listShared: (args?: { limit?: number }) => { lease.assertCurrent(); return publicWorkspaceRead(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`, 'api.themes-shared', '1.0.0'); }
 	};
+	const actions = async () => { lease.assertCurrent(); const { LocalActions } = await import('./actions'); lease.assertCurrent(); return new LocalActions(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, lease); };
+	local.actions = { ...local.actions, run: async (input: { action: string; inputs?: unknown; source?: string }) => changed(await (await actions()).run(input)), runs: async (query: { action?: string; limit?: number }) => (await actions()).runs(query) };
 	local.algorithms = {
 		list: () => algorithms().list(),
 		create: async (input: Parameters<LocalAlgorithms['create']>[0]) => changed(await algorithms().create(input)),

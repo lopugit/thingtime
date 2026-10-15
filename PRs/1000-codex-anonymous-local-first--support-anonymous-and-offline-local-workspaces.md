@@ -236,3 +236,31 @@ checks pass (539 total). Targeted lint has no errors and six warnings. Client bu
 passes with 231 verified assets / 11,053,377 bytes. Raw tsc matches the existing
 91-diagnostic baseline exactly, with no added signatures. This is local evidence,
 not a deployed/full-suite completion claim. The coverage matrix still gates merge.
+
+
+## Anonymous Actions checkpoint — 2026-10-16
+
+- Extracted the existing data interpreter behind storage/service ports. Server
+  ACL, Vault, Timeline and notification wrappers remain in place; the anonymous
+  host has only local storage, shared pure packs and bounded interpreter access.
+- Native Action create/edit/run, cold offline reload, input/JSON validation,
+  execution errors, protected run details and canonical export/import work
+  without an account. Full workspace identity scopes the list and inspector.
+  Shared definition editing uses local drafts without requiring account History.
+- Local schema-scoped CRUD, nested/each budgets, deterministic keys, missing-input
+  equality predicates, history retention/cascade, identity retirement, concurrency
+  and zero-network facade behavior are covered by automated tests. Details-save
+  failure preserves the completed result and never reruns its effects.
+- Local verification: 678 passing automated checks plus the live disposable
+  server Action suite 100/100; one opt-in integration skip. Raw TypeScript remains
+  the exact 91-diagnostic baseline. Lint has zero errors and two existing warnings.
+- Native browser evidence: `tmp/local-actions-ui/verification.json`,
+  `action.transfer.json`, `offline-action-1440.png`, `offline-action-390.png`,
+  `offline-action-320.png` and `offline-action-error-320.png`. Normal import remapped
+  the Action ID and preserved behavior; both disposable copies were removed.
+  Initial create/run capture is complete with zero mutation requests; the longer
+  edit/import capture was truncated, although the browser was offline throughout.
+- Still required: browser request adapters, local suite installation, automatic
+  component/collection sources, canonical local Timeline and account execution/
+  sync. Generic Thing-page local Action comments/owner menus also remain incomplete.
+  This checkpoint does not satisfy the full-suite merge gate.

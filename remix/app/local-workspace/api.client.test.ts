@@ -14,11 +14,14 @@ test('anonymous API writes and exports use no network and a retired facade canno
 	const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote call'); };
 	bindLocalWorkspace(true, rootIdentity.read().generation);
 	try {
-		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
+		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { remove: remote, create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
 		const created = await api.things.create({ thingtime: ['data'], crystal: { name: 'Offline' } });
 		assert.equal((await api.things.get({ id: created.id })).thing.crystal.name, 'Offline');
 		assert.equal((await api.things.export({ ids: [created.id] })).plan.things.length, 1);
-		await assert.rejects(api.actions.run({}), /signed-in account/);
+		await assert.rejects(api.actions.run({}), /Which action/);
+  const action = await api.things.create({ thingtime: ['action'], crystal: { name: 'Local', inputs: [], capabilities: [], steps: [{ op: 'return', value: 'offline' }] } });
+  assert.equal((await api.actions.run({ action: action.id })).result, 'offline');
+  await api.things.remove({ id: action.id });
 		assert.equal(api.login, remote, 'Explicit sign-in remains available from a local workspace');
 		assert.equal(remoteCalls, 0);
 		const component = await api.things.create({ thingtime: ['component'], crystal: { name: 'Card', componentKey: 'card', version: 1, render: { tag: 'p', children: 'Offline component' } } });

@@ -38,6 +38,7 @@ test('a stale recovered definition never flushes or publishes over newer content
 test('a server conflict preserves both account and Timeline drafts', async () => {
 	let submitted: any, error = '', cleared = false, released = false;
 	await evaluate('save', {
+        localOnly: false,
 		pending: { current: false }, active: { current: true }, thing: { thingtime: ['component'], updatedAt: 'new-version' },
 		parsed: { name: 'Recovered' }, parseError: '', staleDraft: false, draftBase: 'old-version', id: 'component-id', actor: 'owner-id',
 		validateThingtimeCrystal: () => ({ ok: true }), setSaving: () => {}, setError: (value: string) => { error = value; },
@@ -54,10 +55,26 @@ test('a server conflict preserves both account and Timeline drafts', async () =>
 test('starting from the latest definition cannot drop a recovered draft if its History backup fails', async () => {
 	let cleared = false, error = '';
 	await evaluate('selectSavedVersion', {
+        localOnly: false,
 		pending: { current: false }, active: { current: true }, thing: { crystal: {}, updatedAt: 'latest', thingtime: ['component'] },
 		source: 'Recovered text', sourceSnapshot: (source: string) => ({ source }), setSaving: () => {}, setError: (value: string) => { error = value; },
 		draft: { record: async () => { throw new Error('Device storage is full'); } }, accountDraft: { clear: async () => { cleared = true; } }
 	})();
 	assert.equal(cleared, false);
 	assert.equal(error, 'Device storage is full');
+});
+
+test('local definition saves retain conditional writes and local drafts without requiring account Timeline', async () => {
+ let submitted: any, cleared = false, saved = false, closed = false, error = '';
+ const history = () => { throw new Error('Account Timeline must not be used by anonymous editor'); };
+ await evaluate('save', {
+  localOnly: true, pending: { current: false }, active: { current: true }, thing: { thingtime: ['action'], updatedAt: 'old' },
+  parsed: { name: 'Offline', steps: [{ op: 'return', value: true }] }, parseError: '', staleDraft: false, draftBase: 'old', id: 'local-action', actor: 'local-workspace',
+  validateThingtimeCrystal: () => ({ ok: true }), setSaving() {}, setError(value: string) { error = value; },
+  accountDraft: { flush: async () => {}, clear: async () => { cleared = true; } }, draft: { flush: history, release: history },
+  apiRef: { current: { v1: { things: { update: async (input: unknown) => { submitted = input; return { ok: true }; }, get: async () => ({ ok: true, thing: { id: 'local-action' } }) } } } },
+  onSaved: () => { saved = true; }, onClose: () => { closed = true; }
+ })();
+ assert.equal(error,''); assert.equal(submitted.expectedUpdatedAt,'old'); assert.equal(submitted.replaceCrystal,true);
+ assert.equal(cleared,true); assert.equal(saved,true); assert.equal(closed,true);
 });

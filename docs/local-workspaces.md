@@ -71,7 +71,7 @@ change this pointer; logout/account changes revoke it.
 | Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Finish bundled catalog availability, copies, argument editing, schema forms and offline creation. |
-| Actions and app suites | Reuse existing bounded executors and suite definitions. Local data/pure/browser operations still need local host integration; remote services must remain explicitly remote. |
+| Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Finish local browser request adapters, collection/component sources, suite installation and account execution/sync. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
@@ -419,3 +419,61 @@ remote-ID refusal, cross-tab transactions, rollback and portable-export exclusio
 are covered by `interactions.test.ts`; `api.client.test.ts` proves the facade
 uses no remote calls and rejects retired callers. Signed-in sync and the full
 matrix remain required before merge. CI/deployment evidence is separate.
+
+
+## Anonymous Action execution checkpoint — 2026-10-16
+
+`app/actions/runtime.ts` is the existing bounded data interpreter extracted behind
+storage/service ports. The account host in `api/utils/actions/execute.ts` retains
+its authentication, ACL, Vault, public/system query, Timeline admission/outcome
+and notification boundaries. The anonymous host in `local-workspace/actions.ts`
+uses only its isolated workspace and the normal local Thing validator/writer.
+It re-sanitizes stored programs, resolves schemas and latest Action keys locally,
+shares nested operation/expression budgets, pins writes to a current lease and
+deadline, and allows at most four concurrent runs per browser database instance.
+No Action is queued for remote replay.
+
+The native Actions list, inspector, full program composer and shared definition
+editor accept local content ownership. Views and caches are keyed by the full
+workspace partition. Definition drafts use the existing local draft adapter;
+anonymous edits do not require an account Timeline. Delegated clicks can run
+locally owned Actions, but cannot reach cloud install fallbacks. Automatic
+component/collection source gates and local suite installation still need work.
+
+Execution details are protected relational `action-run` children, capped at 50
+per Action and omitted from ordinary reads/lists, imports and portable exports.
+Deleting an Action cascades its details. A run finishing after deletion cannot
+recreate orphan history. Failure to save execution details reports `historyError`
+without retrying the already completed program. This debug trail is not yet
+canonical local Timeline history.
+
+Pure browser Actions use `executeBrowserAction`. Browser request steps explicitly
+refuse until their dedicated local endpoint adapter exists. Public/system data
+searches and Vault lookups also refuse locally without a request or credential
+fallback. Account Actions retain their existing authenticated execution path;
+account offline execution/sync remains incomplete.
+
+Local automated checks: 80 workspace/offline-shell, 156 Action (one opt-in skip),
+56 hooks, 44 autosave, 27 draft and 315 Things checks passed. The existing live
+`verify-actions.mjs` passed 100/100 against the disposable local server, covering
+account permissions, private creation, nested budgets, recursion and protected
+history. Raw TypeScript retains the 91-diagnostic parent baseline; it is not clean.
+
+The production-build browser at the isolated local origin verified no-login
+creation, pure execution, cold offline reload, definition editing, invalid JSON,
+a deliberate execution failure and persisted details. Normal JSON download and
+import produced a new local ID; the copied Action returned the same expected
+failure. The canonical validator accepted the download with one editable Action,
+no account authority and no run history. Desktop 1440×1000, 390×844 and 320×844
+had no horizontal overflow. Both disposable Actions were deleted and a fresh
+Actions list confirmed cleanup. Evidence lives in `tmp/local-actions-ui/`.
+The complete initial create/run network interval contained zero mutation
+requests; the longer edit/import event buffer was truncated, so it is not a
+complete network transcript. Those operations ran with networking disabled.
+Browser overrides were restored and task-created tabs closed.
+
+The generic Thing page still reports unavailable comments and omits owner menu
+operations for local Action Things; the Things library supports their deletion.
+Those shared-surface gaps remain in the broader rollout. CI and branch-preview
+checks are separate from this local acceptance; this checkpoint is not deployed
+feature acceptance and does not make the full-suite PR merge-ready.

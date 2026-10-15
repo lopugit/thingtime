@@ -331,3 +331,17 @@ The generic local writer still rejects protected kinds. Local transfer imports
 validate and normalize themes, remap IDs and enforce the shared theme quota in
 one transaction; imports never select or publish a theme. Account theme sync and
 local Timeline integration remain outstanding (see `docs/local-workspaces.md`).
+
+
+## Anonymous Action execution
+
+`app/actions/runtime.ts` owns the shared bounded data interpreter. The server
+adapter remains in `app/api/utils/actions/execute.ts`; the isolated anonymous
+adapter is `app/local-workspace/actions.ts`. Both retain the canonical saved
+Action grammar and capability envelopes. Browser pure flows reuse the existing
+browser interpreter; local request adapters and suite/source integration remain
+pending. Protected local `action-run` children are bounded and excluded from
+transfer; they do not substitute for canonical Timeline history.
+`useWorkspaceScope` partitions Action view/cache identity, while the shared
+`ThingDefinitionEditor` uses local drafts for anonymous definitions. See
+[local workspace coverage](../local-workspaces.md) for the remaining merge gate.

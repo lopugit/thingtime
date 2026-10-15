@@ -2,6 +2,17 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Anonymous Actions: create in the native editor, cold-reload offline, run,
+      edit in Fields/Source, save and reload. Invalid JSON cannot save; execution
+      failures show their actual error. Local definition drafts do not require an
+      account Timeline. Export/import through Transfer remaps IDs and omits run
+      records; deleting an Action removes its protected details. Check 1440,
+      390 and 320px, current-workspace cache separation and no account mutation.
+- [ ] Action host refactors must preserve missing-input search predicates:
+      `where: { field: "$input.optional" }` still filters null/missing values;
+      resolving an omitted input must never erase the filter. Run the live
+      server Action suite and local nested/scope/history/identity tests.
+
 Use a disposable account and an isolated local Mongo instance; do not run mutation
 checks against existing personal data. Full feature coverage is tracked in
 [docs/local-workspaces.md](docs/local-workspaces.md).
