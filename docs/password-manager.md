@@ -21,7 +21,9 @@ account again before filling and requires device-owner verification.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped
-with the user's password (scrypt) and with each live session (HKDF). A separate
+with the user's password (scrypt) after successful password sign-in, and with
+each live session (HKDF). Existing or SSO-only sessions can establish the
+recovery/session wrappers before a password wrapper exists. A separate
 server recovery wrapper is deliberately retained for the requested background
 access and account recovery. This is **server-assisted encryption**, not a
 zero-knowledge vault. A deployment administrator with both the recovery key and
@@ -99,5 +101,8 @@ formats, TOTP and HTTP boundaries. `node remix/scripts/verify-password-manager.m
 http://localhost:<web-port>` exercises a disposable replica through HTTP only.
 `swift test --package-path apple/Passwords` verifies real passkey signatures,
 TOTP test vectors and session/domain validation. Builds alone do not establish
-that signed OS registration or a third-party login ceremony works; record those
-separately in the delivery PR.
+that signed OS registration or a third-party login ceremony works. iOS provider
+ceremonies require a physical device; the simulator is a compile/UI check.
+Record actual OS/device results separately in the delivery PR.
+
+Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Closing the editor aborts its pending scan; a stream returned by a late browser picker is immediately stopped.

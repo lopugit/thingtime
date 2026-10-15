@@ -21,18 +21,36 @@ export async function scanQrFile(file: File): Promise<string> {
   const bitmap = await createImageBitmap(file);
   try { return decodeImage(bitmap, bitmap.width, bitmap.height); } finally { bitmap.close(); }
 }
-export async function scanQrScreen(): Promise<string> {
+function waitForCapture<T>(pending: Promise<T>, signal?: AbortSignal, timeoutMs?: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const aborted = () => finish(() => reject(new DOMException('Cancelled', 'AbortError')));
+    const timer = timeoutMs === undefined ? undefined : setTimeout(() => finish(() => reject(new Error('Screen capture timed out.'))), timeoutMs);
+    const finish = (done: () => void) => { clearTimeout(timer); signal?.removeEventListener('abort', aborted); done(); };
+    signal?.addEventListener('abort', aborted, { once: true });
+    pending.then(value => finish(() => resolve(value)), error => finish(() => reject(error)));
+    if (signal?.aborted) aborted();
+  });
+}
+export async function scanQrScreen(signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted();
   if (!navigator.mediaDevices?.getDisplayMedia) throw new Error('Screen capture is unavailable here. Upload a screenshot of the QR code instead.');
-  const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+  // Browsers cannot cancel an open chooser. If it resolves after the editor
+  // closes, stop its stream before creating a video or reading any pixels.
+  const pending = navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then(stream => {
+    if (signal?.aborted) { stream.getTracks().forEach(track => track.stop()); signal.throwIfAborted(); }
+    return stream;
+  });
+  const stream = await waitForCapture(pending, signal);
   const video = document.createElement('video');
+  let frame: number | undefined, finished = false;
   try {
     video.srcObject = stream; video.muted = true;
-    await video.play();
-    await new Promise<void>((resolve, reject) => {
-      const timer = window.setTimeout(() => reject(new Error('Screen capture timed out.')), 5000);
-      if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(() => { clearTimeout(timer); resolve(); });
-      else { clearTimeout(timer); resolve(); }
-    });
+    await waitForCapture(video.play().then(() => new Promise<void>((resolve, reject) => {
+      if (finished) { reject(new DOMException('Cancelled', 'AbortError')); return; }
+      if ('requestVideoFrameCallback' in video) frame = video.requestVideoFrameCallback(() => resolve());
+      else resolve();
+    })), signal, 5000);
+    signal?.throwIfAborted();
     return decodeImage(video, video.videoWidth, video.videoHeight);
-  } finally { stream.getTracks().forEach(track => track.stop()); video.pause(); video.srcObject = null; }
+  } finally { finished = true; if (frame !== undefined) video.cancelVideoFrameCallback(frame); stream.getTracks().forEach(track => track.stop()); video.pause(); video.srcObject = null; }
 }

@@ -35,6 +35,23 @@ final class CoreTests: XCTestCase {
         // Public ceremony outputs only; the private key never leaves this test.
         try JSONSerialization.data(withJSONObject: fixture).write(to: URL(fileURLWithPath: path), options: .atomic)
     }
+    func testConfiguredHTTPSPreview() async throws {
+        guard let path = ProcessInfo.processInfo.environment["THINGTIME_PASSWORD_TEST_SESSION"] else { throw XCTSkip("HTTPS preview session is opt-in.") }
+        let decoded = try JSONDecoder().decode(ProviderSession.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+        let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
+        let client = PasswordClient(account: session), catalog = try await client.catalog()
+        let fixture = try XCTUnwrap(catalog.first { $0.title == "Preview QA account" })
+        let login = try await client.read(fixture.id)
+        XCTAssertEqual(login.value("username"), "fixture@example.test")
+        let key = try PasskeyMaterial(relyingParty: "passkeys.example.test", userHandle: Data([1, 2, 3]), username: "fixture@example.test")
+        let id = UUID().uuidString.lowercased()
+        _ = try await client.save(key.entry, id: id, writeId: UUID().uuidString.lowercased())
+        let restored = try PasskeyMaterial(entry: try await client.read(id))
+        XCTAssertEqual(restored.privateKey, key.privateKey)
+        XCTAssertEqual(restored.credentialID, key.credentialID)
+        let updated = try await client.catalog()
+        XCTAssertEqual(updated.first { $0.id == id }?.credentialId, key.credentialID.base64URL)
+    }
     func testSessionOriginAndExactDomainBinding() throws {
         XCTAssertThrowsError(try ProviderSession(origin: URL(string:"http://example.test")!, ownerId:"user", cookie:"tt_auth=fixture"))
         XCTAssertThrowsError(try ProviderSession(origin: URL(string:"https://example.test/other")!, ownerId:"user", cookie:"tt_auth=fixture"))

@@ -9863,6 +9863,7 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 - [ ] On desktop and 390px, add two entries for one website, edit/reorder custom
   fields, mask/reveal, close/reopen and delete one without changing the other.
+  The heading clears the fixed navigation and device safe area.
   Labels and controls wrap without overflow. Tab switching or a capture picker
   must mask secrets without discarding an unfinished entry.
 - [ ] Upload a synthetic TOTP QR; compare rotating codes to RFC 6238 vectors.
@@ -9899,3 +9900,5 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   mismatched host/extension Keychain groups or teams, and expired profiles.
 - Vercel functions retain image binaries for their target CPU/OS and stay below
   the function size limit even when local dependencies include other platforms.
+
+- Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.

@@ -5,10 +5,13 @@ import { hasNativePasswordProvider, nativePasswordProvider } from '~/passwords/n
 // reads only its own first-party HttpOnly cookie and verifies owner via the API.
 export function PasswordBridgeHost() {
   const user = useCurrentUser();
+  const ownerId = user?.id, temporary = user?.temporary;
   React.useEffect(() => {
-    const sync = () => { if (hasNativePasswordProvider()) nativePasswordProvider(user && !user.temporary ? 'sync' : 'disconnect', user?.id).catch(() => {}); };
-    sync(); window.addEventListener('thingtime:native-bridge-ready', sync);
-    return () => window.removeEventListener('thingtime:native-bridge-ready', sync);
-  }, [user?.id, user?.temporary]);
+    let timer: ReturnType<typeof setTimeout>;
+    const sync = () => { clearTimeout(timer); timer = setTimeout(() => { if (hasNativePasswordProvider()) nativePasswordProvider(ownerId && !temporary ? 'sync' : 'disconnect', ownerId).catch(() => {}); }, 150); };
+    const events = ['thingtime:native-bridge-ready', 'thingtime:passwords-changed', 'focus'];
+    sync(); events.forEach(event => window.addEventListener(event, sync));
+    return () => { clearTimeout(timer); events.forEach(event => window.removeEventListener(event, sync)); };
+  }, [ownerId, temporary]);
   return null;
 }

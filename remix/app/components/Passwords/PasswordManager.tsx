@@ -12,10 +12,11 @@ import { scanQrFile, scanQrScreen } from '~/passwords/qr.client';
 import { hasNativePasswordProvider, nativePasswordProvider } from '~/passwords/native.client';
 
 type Draft = { id: string; revision: number; entry: PasswordEntry };
+const changed = () => window.dispatchEvent(new Event('thingtime:passwords-changed'));
 const card = { border: '1px solid var(--tt-border, #e6e6eb)', borderRadius: '12px', p: 4, background: 'var(--tt-card, #fff)' };
 export function PasswordManager() {
   const user = useCurrentUser(), location = useLocation();
-  return user && !user.temporary ? <PasswordManagerScope key={`${user.id}:${location.key}`} ownerId={user.id} /> : <Box p={6}><Heading size="md">Passwords</Heading><Text mt={3}>Sign in to unlock your password manager.</Text><Button as={Link} to="/login" mt={3}>Sign in</Button></Box>;
+  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{user && !user.temporary ? <PasswordManagerScope key={`${user.id}:${location.key}`} ownerId={user.id} /> : <Box p={6}><Heading size="md">Passwords</Heading><Text mt={3}>Sign in to unlock your password manager.</Text><Button as={Link} to="/login" mt={3}>Sign in</Button></Box>}</Box>;
 }
 function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const lopu = useLopu();
@@ -62,7 +63,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const refresh = React.useCallback(async (next?: string) => {
     const result = await request(undefined, next); setRecords(prev => next ? [...prev.filter(item => !result.entries.some((entry: PasswordMetadata) => entry.id === item.id)), ...result.entries] : result.entries); setCursor(result.nextCursor); setConfigured(result.configured);
   }, [request]);
-  const showError = React.useCallback((reason: any) => { if (reason?.name === 'AbortError' || !active.current) return; if (reason?.status === 401 || reason?.status === 409 && /account/.test(reason.message)) { clear(); setRecords([]); } setError(reason instanceof Error ? reason.message : 'Please try again.'); }, [clear]);
+  const showError = React.useCallback((reason: any) => { if (reason?.name === 'AbortError' || !active.current) return; if (reason?.status === 401 || (reason?.status === 409 && /account/.test(reason.message))) { clear(); setRecords([]); } setError(reason instanceof Error ? reason.message : 'Please try again.'); }, [clear]);
   React.useEffect(() => { refresh().catch(showError); const check = () => refresh().catch(showError); window.addEventListener('focus', check); return () => window.removeEventListener('focus', check); }, [refresh, showError]);
   const run = async (work: () => Promise<void>) => { if (busy) return; const version = generation.current; setBusy(true); setError(''); try { await work(); } catch (reason) { if (version === generation.current) showError(reason); } finally { if (active.current && version === generation.current) setBusy(false); } };
   const updateEntry = (entry: PasswordEntry) => setDraft(prev => prev ? { ...prev, entry } : prev);
@@ -72,7 +73,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
     const payload = JSON.stringify(draft); if (retry.current?.payload !== payload) retry.current = { payload, writeId: crypto.randomUUID() };
     const result = await request({ operation: 'save', ...draft, writeId: retry.current.writeId });
     retry.current = null; setDraft(prev => prev?.id === draft.id ? { ...prev, revision: result.record.revision } : prev);
-    setRecords(prev => [...prev.filter(item => item.id !== result.record.id), result.record]); lopu({ title: 'Password entry saved', status: 'success' });
+    setRecords(prev => [...prev.filter(item => item.id !== result.record.id), result.record]); changed(); lopu({ title: 'Password entry saved', status: 'success' });
   });
   const read = (record: PasswordMetadata) => run(async () => { const result = await request({ operation: 'read', id: record.id }); setDraft({ id: result.id, revision: result.revision, entry: result.entry }); retry.current = null; setDeleteConfirm(false); });
   const loadImport = async (file?: File) => {
@@ -84,7 +85,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const commitImport = () => run(async () => {
     const total = importPending.current.length;
     while (importPending.current.length) { const item = importPending.current[0]; await request({ operation: 'save', ...item, revision: 0 }); importPending.current.shift(); setProgress(`${total - importPending.current.length} of ${total} saved`); }
-    setImported(null); setTransfer(null); await refresh(); lopu({ title: 'Password import complete', status: 'success' });
+    setImported(null); setTransfer(null); await refresh(); changed(); lopu({ title: 'Password import complete', status: 'success' });
   });
   const download = () => run(async () => {
     const values: PasswordEntry[] = []; let next: string | undefined;
@@ -114,9 +115,9 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
         {draft.entry.passwordType === 'passkey-reference' && <Text fontSize="sm" mb={4}>Record the site and where an existing passkey is stored. This reference does not contain a passkey. New passkeys use the native credential provider.</Text>}
         <Thingtime thing={Object.fromEntries(draft.entry.fields.map(field => [field.id, field.value]))} mods={{ layout: 'fields', fields: draft.entry.fields.map(({ value: _value, ...field }) => field), sortable: true, removable: true, revealSecrets: true }} onChange={(values: Record<string, string>) => updateEntry({ ...draft.entry, fields: draft.entry.fields.map(field => ({ ...field, value: values[field.id] ?? '' })) })} onModsChange={(mods: ThingMods) => updateEntry({ ...draft.entry, fields: mods.fields.map(field => ({ ...field, value: draft.entry.fields.find(item => item.id === field.id)?.value ?? '' })) })} />
         <Flex gap={2} flexWrap="wrap" mt={5}><Input flex="1 1 150px" aria-label="Custom field label" placeholder="Custom field label" maxLength={120} value={customLabel} onChange={event => setCustomLabel(event.target.value)} /><Select flex="1 1 120px" aria-label="Custom field type" value={customType} onChange={event => setCustomType(event.target.value as FieldType)}>{FIELD_TYPES.map(type => <option key={type}>{type}</option>)}</Select><Button isDisabled={!customLabel.trim() || draft.entry.fields.length >= 64} onClick={() => { updateEntry({ ...draft.entry, fields: [...draft.entry.fields, { id: crypto.randomUUID(), label: customLabel.trim(), type: customType, value: '' }] }); setCustomLabel(''); }}>Add custom field</Button></Flex>
-        <Box mt={5}><Text fontWeight={600}>Authenticator setup</Text><Text fontSize="sm" mt={1}>Import a TOTP setup QR code. Screen scanning asks you to choose the screen or tab to capture; images are processed on this device.</Text><Flex gap={2} mt={2} flexWrap="wrap"><Button size="sm" onClick={() => run(async () => { const version = generation.current, result = await scanQrScreen(); if (version === generation.current) addTotp(result); })}>Scan QR code on screen</Button><Button as="label" size="sm" cursor="pointer">Upload QR code<Input type="file" accept="image/png,image/jpeg,image/webp" display="none" aria-label="Upload QR code" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) run(async () => { const version = generation.current, result = await scanQrFile(file); if (version === generation.current) addTotp(result); }); }} /></Button></Flex></Box>
+        <Box mt={5}><Text fontWeight={600}>Authenticator setup</Text><Text fontSize="sm" mt={1}>Import a TOTP setup QR code. Screen scanning asks you to choose the screen or tab to capture; images are processed on this device.</Text><Flex gap={2} mt={2} flexWrap="wrap"><Button size="sm" onClick={() => run(async () => { const version = generation.current, controller = new AbortController(); controllers.current.add(controller); try { const result = await scanQrScreen(controller.signal); if (version === generation.current) addTotp(result); } finally { controllers.current.delete(controller); } })}>Scan QR code on screen</Button><Button as="label" size="sm" cursor="pointer">Upload QR code<Input type="file" accept="image/png,image/jpeg,image/webp" display="none" aria-label="Upload QR code" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) run(async () => { const version = generation.current, result = await scanQrFile(file); if (version === generation.current) addTotp(result); }); }} /></Button></Flex></Box>
         <Flex gap={2} mt={6} justifyContent="space-between" flexWrap="wrap"><Button isLoading={busy} onClick={save}>Save entry</Button>{draft.revision > 0 && <Button colorScheme="red" variant="ghost" onClick={() => setDeleteConfirm(true)}>Delete entry</Button>}</Flex>
-        {deleteConfirm && <Box mt={3}><Text>Delete this entry and its saved secrets?</Text><Flex gap={2} mt={2}><Button size="sm" onClick={() => run(async () => { await request({ operation: 'delete', id: draft.id, revision: draft.revision }); setRecords(prev => prev.filter(record => record.id !== draft.id)); clear(); })}>Confirm delete</Button><Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(false)}>Keep entry</Button></Flex></Box>}
+        {deleteConfirm && <Box mt={3}><Text>Delete this entry and its saved secrets?</Text><Flex gap={2} mt={2}><Button size="sm" onClick={() => run(async () => { await request({ operation: 'delete', id: draft.id, revision: draft.revision }); setRecords(prev => prev.filter(record => record.id !== draft.id)); changed(); clear(); })}>Confirm delete</Button><Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(false)}>Keep entry</Button></Flex></Box>}
       </Box>}
     </Flex>
     <Modal isOpen={transfer !== null} onClose={clear} size="xl"><ModalOverlay /><ModalContent mx={3}><ModalHeader>{transfer === 'import' ? 'Import passwords' : 'Export passwords'}</ModalHeader><ModalCloseButton /><ModalBody>
