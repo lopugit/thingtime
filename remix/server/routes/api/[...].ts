@@ -1,3 +1,4 @@
+import { resolvePublicOrigin } from '../../../app/api/utils/auth/publicOrigin';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
 import { enforceExpectedActor } from '../../../app/api/utils/auth/expectedActor';
@@ -272,6 +273,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/get': () => import('../../../app/routes/api/v1/get/_get'),
   'v1/groups': () => import('../../../app/routes/api/v1/groups/_groups'),
   'v1/groups/audience-sources': () => import('../../../app/routes/api/v1/groups/audience-sources/_audience-sources'),
+  'v1/passwords': () => import('../../../app/routes/api/v1/passwords/_passwords'),
   'v1/drafts': () => import('../../../app/routes/api/v1/drafts/_drafts'),
   'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
   'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),
@@ -382,6 +384,23 @@ export default defineHandler(async (event) => {
     // forward passwords/assertions to a fallback origin or reveal its keys.
     if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
       return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+    }
+    if (path === 'v1/passwords') {
+      // The installed desktop shell deliberately serves its UI on loopback and
+      // pins the account API through its endpoint settings. Ordinary websites
+      // and incomplete dev deployments must never silently forward vault data.
+      const local = new URL(event.req.url);
+      const configured = process.env.THINGTIME_API_FALLBACK_ORIGIN || '';
+      const desktop = process.env.THINGTIME_DESKTOP === '1' && local.hostname === '127.0.0.1';
+      let upstream: URL | null = null;
+      try { upstream = new URL(configured); } catch { /* fail closed */ }
+      if (!desktop || !upstream || upstream.protocol !== 'https:' || upstream.username || upstream.password)
+        return jsonResponse({ ok: false, error: 'Configure password encryption on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
+      if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== resolvePublicOrigin(event.req).origin))
+        return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
+      const headers = new Headers(event.req.headers);
+      headers.delete('x-forwarded-host'); headers.delete('x-forwarded-proto');
+      return proxyApiRequestToFallback(new Request(event.req, { headers }));
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.

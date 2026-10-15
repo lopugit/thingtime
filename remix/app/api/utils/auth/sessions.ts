@@ -1,3 +1,4 @@
+import type { Binary } from 'mongodb';
 import { getSessionsCollection } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
@@ -17,6 +18,7 @@ export type SessionDoc = {
   // 'device-pairing'/'watch-pairing'/'device' — native device handshakes and the long-lived
   // credential it upgrades into, revocable the same way
   purpose?: 'browser' | 'service' | 'app' | 'app-sandbox' | 'pat' | 'deployment-link' | 'device-pairing' | 'watch-pairing' | 'device' | 'oauth-code' | 'chatgpt-oauth-code' | 'chatgpt-oauth-relay' | 'chatgpt-mcp' | 'chatgpt-mcp-refresh' | 'chatgpt-mcp-connection';
+  secureVaultKey?: Binary;
   meta?: Record<string, any>;
 };
 
@@ -79,7 +81,7 @@ const revokedSessionSet = (revokedAt: Date) => ({
 
 // The pipeline form — safe to hand straight to updateOne/updateMany/
 // findOneAndUpdate, and to spread when a caller needs extra stages after it.
-export const revokedSessionPipeline = (revokedAt: Date) => [{ $set: revokedSessionSet(revokedAt) }];
+export const revokedSessionPipeline = (revokedAt: Date) => [{ $set: revokedSessionSet(revokedAt) }, { $unset: 'secureVaultKey' }];
 
 export const revokeSession = async (jti: string) => {
   await (await getSessionsCollection()).updateOne({ jti }, revokedSessionPipeline(new Date()));

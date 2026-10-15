@@ -52,7 +52,14 @@ const getWorktreeName = (dir = __dirname) => {
 
   const toplevel = git('rev-parse --show-toplevel', dir);
 
-  return toplevel ? path.basename(toplevel) : undefined;
+  if (!toplevel) return undefined;
+  // Managed checkouts use <worktrees>/<task>/<repository>. The parent task
+  // distinguishes them; hashing only the shared repository basename would
+  // make starting one checkout stop another checkout's PM2 process.
+  const repositoryName = path.basename(path.dirname(path.resolve(dir, gitCommonDir)));
+  return path.basename(toplevel) === repositoryName
+    ? path.basename(path.dirname(toplevel)) + '-' + repositoryName
+    : path.basename(toplevel);
 };
 
 // FNV-1a: deterministic, so a worktree keeps the same ports across restarts.
