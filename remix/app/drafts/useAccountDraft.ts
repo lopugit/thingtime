@@ -20,6 +20,7 @@ export function useAccountDraft({
 	const key = `tt-account-draft:${typeof location === 'undefined' ? '' : location.origin}:${actor || 'guest'}:${context}`;
 	const [status, setStatus] = React.useState<DraftSaveState>('idle');
 	const [error, setError] = React.useState('');
+	const [deviceError, setDeviceError] = React.useState('');
 	const scope = React.useMemo(() => ({ key, active: true, touched: false, restoring: false, baseline: null as string | null }), [key]);
 	const restore = React.useRef(onRestore);
 	restore.current = onRestore;
@@ -40,12 +41,17 @@ export function useAccountDraft({
 					if (!actor) return;
 					if (!value) {
 						clearLocalCache(key);
+						// Retirement/clear leaves no draft to recover, so a stale device
+						// warning would only offer a retry that can never do anything.
+						// A still-failing retirement re-reports once its cleanup settles.
+						if (scope.active) setDeviceError('');
 						return;
 					}
 					try {
 						window.localStorage.setItem(key, JSON.stringify(value));
+						if (scope.active) setDeviceError('');
 					} catch {
-						if (scope.active) setError('Device recovery storage is full; keep this page open until the account save finishes.');
+						if (scope.active) setDeviceError('Device recovery storage is unavailable; keep this page open until posting or account saving finishes.');
 					}
 				},
 				changed: (next, message) => {
@@ -75,13 +81,28 @@ export function useAccountDraft({
 		const retryRetired = async () => {
 			const prefix = `${key}:retired:`;
 			for (const savedKey of Object.keys(localStorage).filter((entry) => entry.startsWith(prefix))) {
-				const retired = readLocalCache<{ id: string; revision: number }>(savedKey);
-				if (!retired || !actor) continue;
+				const retired = readLocalCache<{ id: string; revision: number; completed?: boolean; conflicted?: boolean }>(savedKey);
+				// A conflicted completion is already settled: the marker only has to keep
+				// suppressing resume, so stop re-sending a delete that can never apply.
+				if (!retired || !actor || retired.conflicted) continue;
 				try {
-					await draftRequest(actor, { operation: 'delete', ...retired });
+					await draftRequest(actor, { operation: 'delete', id: retired.id, revision: retired.revision });
 					localStorage.removeItem(savedKey);
 				} catch (failure) {
-					if ([404, 409, 410].includes((failure as any)?.status)) localStorage.removeItem(savedKey);
+					const status = (failure as any)?.status;
+					if ([404, 410].includes(status)) localStorage.removeItem(savedKey);
+					// 409 means a newer remote revision exists. Never delete that newer
+					// work; for a completed post, retain the marker so the published draft
+					// still cannot auto-resume, but retire the doomed retry.
+					else if (status === 409) {
+						if (!retired.completed) localStorage.removeItem(savedKey);
+						else
+							try {
+								localStorage.setItem(savedKey, JSON.stringify({ ...retired, conflicted: true }));
+							} catch {
+								/* Resume suppression already relies on the marker that is present. */
+							}
+					}
 				}
 			}
 		};
@@ -165,7 +186,21 @@ export function useAccountDraft({
 		});
 		scope.baseline = null;
 	}, [actor, key, session, scope]);
+	const retire = React.useCallback(async () => {
+		scope.baseline = null;
+		return session.retire(async (id, revision) => {
+			await draftRequest(actor!, { operation: 'delete', id, revision });
+			localStorage.removeItem(`${key}:retired:${id}`);
+		}, draft => {
+			try {
+				localStorage.setItem(`${key}:retired:${draft.id}`, JSON.stringify({ id: draft.id, revision: draft.revision, completed: true }));
+			} catch {
+				if (scope.active) setDeviceError('Posted successfully, but device storage could not record draft cleanup.');
+			}
+		});
+	}, [actor, key, session, scope]);
 	return {
+		retire,
 		forget: async (id: string) => {
 			if (session.current()?.id === id) {
 				await session.clear(async () => {});
@@ -173,7 +208,7 @@ export function useAccountDraft({
 			}
 		},
 		status,
-		error,
+		error: deviceError || error,
 		capture,
 		load: accept,
 		clear,
