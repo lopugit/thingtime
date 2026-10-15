@@ -129,3 +129,16 @@ test('a definitive validation refusal can be corrected, while ambiguous outcomes
  await f.sync.retry(row.id); await f.sync.sync(f.transport);
  assert.equal(f.remote.get(row.id)!.crystal.name, 'Corrected'); assert.equal(f.calls.length, 1); await f.db.close();
 });
+test('an orphaned queue entry is quarantined instead of stalling every other pending write', async () => {
+ const f = setup(), orphan = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Orphan' } });
+ // Content that is gone while its queue entry remains must not block the pass.
+ await f.db.transaction(f.scope, 'readwrite', f.lease, tx => tx.delete('things', orphan.id));
+ await f.sync.sync(f.transport);
+ assert.equal(f.calls.length, 0);
+ assert.deepEqual((await f.sync.status()).map(entry => entry.state), ['error']);
+ const row = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Still syncs' } });
+ await f.sync.sync(f.transport);
+ assert.equal(f.remote.get(row.id)!.crystal.name, 'Still syncs');
+ assert.equal((await f.sync.status()).find(entry => entry.id === row.id)!.state, 'synced');
+ await f.db.close();
+});

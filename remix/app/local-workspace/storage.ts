@@ -120,10 +120,13 @@ export class WorkspaceDatabase {
 			delete: async (collection, id) => {
 				check(collection, id); const previous = await request(records.get([scopeKey, collection, id])) as WorkspaceRecord | undefined;
 				if (!previous) return;
-				const usage: Usage = await request(usageStore.get(scopeKey));
+				// Default the row exactly as put() does, and never let damaged accounting
+				// go negative: a negative total would silently raise the effective
+				// workspace quota instead of reporting a full workspace.
+				const usage: Usage = await request(usageStore.get(scopeKey)) || { scope: scopeKey, records: 1, bytes: previous.bytes };
 				lease.assertCurrent();
 				await request(records.delete([scopeKey, collection, id]));
-				await request(usageStore.put({ ...usage, records: usage.records - 1, bytes: usage.bytes - previous.bytes }));
+				await request(usageStore.put({ ...usage, records: Math.max(0, usage.records - 1), bytes: Math.max(0, usage.bytes - previous.bytes) }));
 			}
 		};
 		// Quota is read-modify-write state. Serialize mutations even if a caller
