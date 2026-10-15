@@ -60,10 +60,13 @@ test('stdio agent: no-login native PNGs, canonical dependencies and failures', {
       assert.equal(rejected.isError, true);
       assert.ok(rejected.content.every((item: any) => item.type === 'text'));
     }
-    const hidden = structuredClone(fixture); hidden.things[1].crystal.render.props.style.color = 'rgba(10, 20, 30, 0)';
-    const blank: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content: hidden } });
-    assert.equal(blank.isError, true);
-    assert.match(blank.content[0].text, /Invisible/);
+    for (const invisibleStyle of [{ color: 'rgba(10, 20, 30, 0)' }, { color: 'color(display-p3 1 0 0 / 0)' }, { fontSize: '0px' }]) {
+      const hidden = structuredClone(fixture); Object.assign(hidden.things[1].crystal.render.props.style, invisibleStyle);
+      const blank: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content: hidden } });
+      assert.equal(blank.isError, true);
+      assert.match(blank.content[0].text, /Invisible/);
+      assert.ok(blank.content.every((item: any) => item.type === 'text'));
+    }
     const overflow = structuredClone(fixture);
     overflow.things[1].crystal.render.props.style.width = '3000px';
     const failed: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content: overflow } });

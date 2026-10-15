@@ -1,8 +1,10 @@
 # PR #998 — No-login native draft rendering and MCP artifact export
 
 2026-10-15. Branch `codex/anonymous-render-export`, based on main
-`b9ffa847e64f667a74a91070a39ae51d0ceebdbc`; PR targets develop under repository
-policy. Draft status intentionally prevents automatic preview deployment.
+`b9ffa847e64f667a74a91070a39ae51d0ceebdbc`. Initially a develop-targeted draft;
+the subsequent explicit user instruction authorizes completing and merging this
+PR into main. It now targets main and incorporates main `998bdb83c` while
+preserving both features in shared documentation and test-script lists.
 
 ## Outcome and boundaries
 
@@ -64,8 +66,9 @@ asserts storage denial. Existing application headers remain unchanged.
 
 Local acceptance is complete for the documented scope. CI status is available
 on the PR and is separate from local verification. No deployment, publication,
-merge or existing-account mutation was performed. Keep the PR draft until
-separate deployment approval. No preview URL is claimed.
+merge or existing-account mutation was performed during the initial acceptance
+run. The follow-up authorizes the main merge; current CI, preview, merge and
+deployment status are recorded on PR #998 and must be verified separately.
 
 The tool is usable by a configured local stdio MCP host. This chat/web-only
 ChatGPT is not automatically connected: hosts without stdio need a separately
@@ -79,3 +82,17 @@ were verified in the graph and manifest. Existing legacy-cache, duplicate-ID
 and Swift-parser warnings remain repository-wide indexing limitations. No force
 overwrite or manual graph merge was used. The final note is included in the
 subsequent incremental refresh.
+
+## Main integration review — 2026-10-15
+
+The updated native bundle, stdio protocol and live clean-browser tests passed
+after integrating current main. The normal importer round-trip also passed on
+the disposable replica. Review reproduced a blank-output defect with transparent
+CSS Color 4 text against the previous worker; the worker now checks actual color
+alpha through a one-pixel probe and rejects zero-size fonts. The opt-in protocol
+test covers both cases and confirms that failed responses contain no artifacts.
+Client/MCP builds, MCP typecheck, 4 draft units, 62 transfer/resolver regressions,
+37 MCP units, 14 packaging tests and both live tests passed. Raw Remix TypeScript
+remains at 91 diagnostics; the warning-only ratchet baseline is 89, so its exit
+status alone does not mean a clean typecheck. A fresh archived `998bdb83c` main
+tree with the same dependencies produces the identical 91 diagnostics.

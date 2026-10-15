@@ -55,7 +55,18 @@ process.once('message', async (input: RenderInput) => {
         });
         if (overflow) throw new Error('Rendered content overflows the viewport; no incomplete screenshots returned');
         if (rect.width < 1 || rect.height < 1 || !preview.textContent?.trim()) throw new Error('Blank render or crop');
-        if (nodes.some(element => element.textContent?.trim() && (Number(getComputedStyle(element).opacity) === 0 || getComputedStyle(element).visibility === 'hidden' || getComputedStyle(element).display === 'none' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(getComputedStyle(element).color) || !element.getBoundingClientRect().height))) throw new Error('Invisible content cannot be exported');
+        const colorProbe = document.createElement('canvas');
+        colorProbe.width = colorProbe.height = 1;
+        const paint = colorProbe.getContext('2d', { willReadFrequently: true })!;
+        if (nodes.some(element => {
+          if (!element.textContent?.trim()) return false;
+          const style = getComputedStyle(element);
+          paint.clearRect(0, 0, 1, 1);
+          paint.fillStyle = style.color;
+          paint.fillRect(0, 0, 1, 1);
+          return Number(style.opacity) === 0 || style.visibility === 'hidden' || style.display === 'none' ||
+            Number.parseFloat(style.fontSize) === 0 || paint.getImageData(0, 0, 1, 1).data[3] === 0 || !element.getBoundingClientRect().height;
+        })) throw new Error('Invisible content cannot be exported');
         return { crop: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, text: preview.textContent, nodeCount: nodes.length, overflow: false };
       }, { blockId: input.crop.blockId });
       if (errors.length || forbidden.length || await page.getAttribute('body', 'data-csp-failure')) throw new Error(`Native render failed: ${errors[0] || forbidden[0] || 'blocked asset or capability'}`);

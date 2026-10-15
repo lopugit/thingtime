@@ -298,3 +298,17 @@ HTML/page renderers without an account runtime or storage. The static entry is
 stdio MCP. See [connection, security scope and acceptance](../no-login-draft-preview.md).
 `test:draft`, the opt-in MCP browser tests and `draft-roundtrip.integration.mts`
 cover this boundary; existing account drafts and import permissions are unchanged.
+
+
+## Password manager
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+private, session-bound home-plane API over protected `password-manager-entry`
+Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
+fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
+`vaultKeys.ts` own password/session/recovery key wrapping. `passwords/client.ts`
+intentionally bypasses general request diagnostics and automatic origin fallback
+so decrypted fields never enter shared client history/cache. The reusable
+`Thingtime` fields mod renders the entry without global Thing persistence.
+Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
+`iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.

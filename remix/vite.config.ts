@@ -296,6 +296,7 @@ export default defineConfig({
       port: devPorts.hmr
     },
     proxy: {
+      '/api/v1/passwords': forwardHostProxy(localApiTarget),
       '/api/v1/vault/reveal': {
         // Never send fresh verification material to the production fallback.
         target: localApiTarget,

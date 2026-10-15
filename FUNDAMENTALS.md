@@ -403,6 +403,18 @@ reject late saves. Templates clone their media through the canonical storage
 service, and only working drafts can donate media to a published target. See
 [the draft feature map](docs/feature-map/account-drafts-and-templates.md).
 
+### Private password entries
+
+`password-manager-entry` records use the existing versioned home `things`
+collection, one account-owned document per credential. The dedicated password
+API uses canonical storage accounting and excludes this protected kind from
+generic Things and Timeline. Only title/type metadata is plaintext; ordered
+fields and secrets are authenticated ciphertext. The existing
+thingtime/ownerId/createdAt/shareId index serves bounded vault pages; immutable
+creation time and shareId form the cursor. No additional index is needed.
+Password resets preserve the per-user data key through the approved recovery
+wrapper. [Contract and limits](docs/password-manager.md).
+
 ## 4. One MongoDB connection source
 
 The connection string comes from exactly one place:
