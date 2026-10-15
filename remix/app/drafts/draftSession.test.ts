@@ -198,3 +198,66 @@ test('conflict copy remaps files and retains edits typed while copying', async (
 	assert.deepEqual(calls.at(-1).content.attachmentIds, ['independent']);
 	session.dispose();
 });
+
+test('retiring a posted draft never waits for a hung save and isolates the next post', async () => {
+	const blocked = deferred();
+	const calls: any[] = [], removed: any[] = [], retired: any[] = [];
+	const { session, local } = setup(async input => {
+		calls.push(input);
+		if (calls.length === 1) await blocked.promise;
+		return saved(input);
+	});
+	session.capture(content('posted'));
+	const saving = session.flush();
+	await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+	const firstId = session.current()!.id;
+	const cleanup = session.retire(async (id, revision) => { removed.push({ id, revision }); }, value => retired.push(structuredClone(value)));
+	assert.equal(session.current(), null);
+	assert.equal(local.at(-1), null);
+	assert.equal(retired[0].id, firstId);
+	session.capture(content('next post'));
+	await session.flush();
+	const next = structuredClone(session.current());
+	assert.notEqual(next!.id, firstId);
+	assert.equal(next!.revision, 1);
+	blocked.resolve();
+	await saving; await cleanup;
+	assert.deepEqual(session.current(), next);
+	assert.deepEqual(local.at(-1), next);
+	assert.deepEqual(removed, [{ id: firstId, revision: 1 }]);
+	session.dispose();
+});
+
+test('failed draft saving and failed cleanup do not prevent local retirement or new editing', async () => {
+	let failSave = true;
+	const { session, local } = setup(async input => {
+		if (failSave) throw new Error('draft service unavailable');
+		return saved(input);
+	});
+	session.capture(content('post succeeded while draft saving failed'));
+	await assert.rejects(session.flush());
+	await session.retire(async () => { throw new Error('should not delete an unconfirmed revision'); }, () => {});
+	assert.equal(session.current(), null);
+	assert.equal(local.at(-1), null);
+	failSave = false;
+	session.capture(content('second post'));
+	await session.flush();
+	const cleanup = session.retire(async () => { throw new Error('cleanup unavailable'); }, () => {});
+	assert.equal(session.current(), null);
+	session.capture(content('third post'));
+	await assert.rejects(cleanup, /cleanup unavailable/);
+	await session.flush();
+	assert.equal(session.current()!.content.name, 'third post');
+	session.dispose();
+});
+
+test('retirement cancels an unsent draft rather than saving it before cleanup', async () => {
+	let saves = 0, removals = 0;
+	const { session } = setup(async input => { saves++; return saved(input); });
+	session.capture(content('already posted'));
+	await session.retire(async () => { removals++; }, () => {});
+	assert.equal(saves, 0);
+	assert.equal(removals, 0);
+	assert.equal(session.current(), null);
+	session.dispose();
+});
