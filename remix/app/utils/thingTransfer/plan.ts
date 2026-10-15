@@ -4,6 +4,9 @@ import type { TransferThing, TransferLink, TransferAnnotations } from './format'
  * File bytes and checksums are obtained before creating a portable bundle.
  */
 export type TransferPlan = {
+  /** In-process local adapter only. JSON from a remote server cannot supply a
+   * callable reader. This capability is scoped and excluded from the bundle. */
+  readLocalFile?: (id: string, signal?: AbortSignal) => Promise<Uint8Array>;
   roots: string[];
   things: TransferThing[];
   files: (TransferAnnotations & { id: string; sourceId?: string; inlineBase64?: string; targetId: string; name: string; mime: string; bytes: number; sharedRoot?: string })[];

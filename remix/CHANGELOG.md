@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous Things ZIP import/export/copy/delete
+  now keeps real file bytes and metadata atomically on the device, with canonical
+  validation, dependency remapping and bounded quotas. Offline browser round-trip
+  retained exact bytes after original deletion; uploads/media rendering/account
+  sync remain unfinished. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous algorithm profiles save, branch, train
   and transfer locally using canonical profile validation and ranking maths.
   Public feed pages rank on the device; training no longer bypasses the workspace

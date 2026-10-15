@@ -129,3 +129,32 @@ API; that read-only check is not acceptance of the unpushed theme changes.
 Full cross-tab/account-switch browser coverage, account algorithms sync and
 remaining matrix rows are still required before rollout merge. CI/deployment
 verification must be tied to the eventual pushed commit, not these local checks.
+
+## Anonymous attachment transfer checkpoint — 2026-10-16
+
+- Added scoped binary storage sharing one atomic transaction and quota ledger
+  with JSON metadata: 16 MiB/file, 1 MiB/JSON record, 64 MiB/workspace.
+- Reused canonical file/recording metadata, archive validation/checksums,
+  dependency collection and composition-media remapping. Normal Things ZIP
+  import/export/copy/delete now works locally without an upload stage or HTTP
+  byte fallback. Account import rejects local byte maps before networking.
+- Missing/corrupt bytes and quota failures cannot produce partial imports or
+  exports. Copies retain independent bytes after original deletion. Generic
+  mutations cannot write protected attachments. Non-recursive folder deletion
+  still refuses standalone child files; target-bound attachments cascade.
+- Local production-build browser: no account, disabled network, normal ZIP
+  import/export, offline cold reload, actual-download reimport, original deletion
+  and independent-copy re-export passed. Canonical decoding/serialization and
+  SHA-256 verified exact 82-byte content and fresh IDs in both browser downloads.
+  Import at 390px and export at 320px fit without horizontal overflow. Disposable
+  files and browser overrides were cleaned up; task tab closed.
+- Evidence: `tmp/local-attachments/browser-export.zip`, `browser-roundtrip.zip`,
+  corresponding JSON manifests and `offline-import-390.png`.
+- Local validation: 54 workspace/offline-shell and 315 Things checks passed;
+  client build passed with 231 verified assets (11,022,887 bytes). Raw TypeScript
+  exactly matched the independent parent baseline of 91 diagnostics.
+
+This is the file-transfer/storage checkpoint, not complete attachment support.
+Normal uploads, media URL rendering, draft copies, linked galleries and account
+sync remain required, alongside the broader coverage matrix, before merge.
+CI and deployed verification must be tied to the eventual pushed commit.

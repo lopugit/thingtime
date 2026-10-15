@@ -1039,7 +1039,8 @@ export function useApi() {
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
-      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
+      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; localFiles?: Map<string, Uint8Array>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
+        if (args.localFiles !== undefined) throw new Error('Local file bytes require the local workspace importer; they cannot be sent to an account endpoint');
         await requireThingtimeCapability('api.things-import', '1.11.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),

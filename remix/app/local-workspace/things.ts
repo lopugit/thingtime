@@ -1,16 +1,21 @@
+import { compositionAttachmentIds } from '../api/utils/actions/compositionMediaCore';
+import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
+import { verifyTransferFiles, transferChecksum } from '../utils/thingTransfer/archive';
+import { isTransferRecording, recordingTransferFile } from '../utils/thingTransfer/recording';
+import { createLocalAttachment, isLocalAttachment, localAttachmentFileId, type LocalAttachment } from './attachments';
 import { sanitizeTags } from '../schemas/thingTags';
 import { selectComponent } from '../api/utils/webpages/componentResolutionCore';
 import { isProtectedThingtime, sanitizeExtended, validateThingtimeCrystal } from '../schemas/registry';
 import { compositionReferences } from '../api/utils/actions/sharedCompositionCore';
 import { rewriteComposition } from '../api/utils/actions/forkCompositionCore';
 import { collectTransfer, type CollectTransferOptions } from '../utils/thingTransfer/collect';
-import { serializeTransfer, validateTransfer, type JsonValue, type TransferThing } from '../utils/thingTransfer/format';
+import { serializeTransfer, validateTransfer, transferAnnotations, type JsonValue, type TransferThing } from '../utils/thingTransfer/format';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
-import { WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { WorkspaceDatabase, WorkspaceError, WORKSPACE_LIMITS, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number };
 export type LocalThingMutation = (tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: ThingWrite) => Promise<void>;
@@ -25,7 +30,7 @@ export const localThingProjection = (thing: LocalThing, ownerId: string) => ({
 });
 const fail = (code: string, message: string, status = 400): never => { throw new WorkspaceError(code, message, status); };
 const content = (thing: TransferThing): TransferThing => ({
-	id: thing.id, thingtime: thing.thingtime, crystal: isTransferAlgorithm(thing) ? snapshotTransferValue(algorithmTransferContent(thing.crystal)) as TransferThing['crystal'] : thing.crystal,
+	id: thing.id, thingtime: thing.thingtime, crystal: isLocalAttachment(thing as LocalThing) ? { recordingFileId: localAttachmentFileId(thing.id), ...((thing as LocalAttachment).localAttachment.purpose === 'file' ? { filePurpose: 'file' } : {}) } : isTransferAlgorithm(thing) ? snapshotTransferValue(algorithmTransferContent(thing.crystal)) as TransferThing['crystal'] : thing.crystal,
 	...(thing.extended === undefined ? {} : { extended: thing.extended }),
 	...(thing.tags === undefined ? {} : { tags: thing.tags }),
 	...(thing.folderId ? { folderId: thing.folderId } : {}), ...(thing.targetId ? { targetId: thing.targetId } : {})
@@ -90,7 +95,7 @@ export class LocalThings {
 		const kinds = typeof query.thingtime === 'string' ? query.thingtime.split(',') : query.thingtime || [];
 		return this.transaction('readonly', async tx => {
 			let rows = (await tx.list<LocalThing>('things')).map(({ value }) => value)
-				.filter(row => kinds.every(kind => row.thingtime.includes(kind)) &&
+				.filter(row => (!isLocalAttachment(row) || !row.targetId || !!query.target) && kinds.every(kind => row.thingtime.includes(kind)) &&
 					(!query.folder || (query.folder === 'root' ? !row.folderId : row.folderId === query.folder)) &&
 					(!query.target || row.targetId === query.target))
 				.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
@@ -126,11 +131,11 @@ export class LocalThings {
 			while (changed) {
 				changed = false;
 				for (const { value: row } of all) if (!selected.has(row.id) && ((row.folderId && selected.has(row.folderId)) || (row.targetId && selected.has(row.targetId)))) {
-					if (!recursive) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
+					if (!recursive && !(isLocalAttachment(row) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
 					selected.add(row.id); changed = true;
 				}
 			}
-			for (const id of selected) await tx.delete('things', id);
+			for (const id of selected) { if (isLocalAttachment(all.find(row => row.id === id)!.value)) await tx.deleteBytes(id); await tx.delete('things', id); }
 			return { ok: true, deleted: [...selected] };
 		});
 	}
@@ -151,6 +156,10 @@ export class LocalThings {
 	async export(ids: string[], options: CollectTransferOptions = {}) {
 		// Take one consistent snapshot, then collect outside the IDB transaction.
 		const saved = await this.snapshot();
+		const attachments = saved.filter(isLocalAttachment);
+		const mediaCopies = new Map(attachments.map(row => [row.id, localAttachmentFileId(row.id)]));
+		const readBytes = (id: string) => this.transaction('readonly', tx => tx.getBytes(id));
+		const lease = this.lease;
 		const docs = new Map([...this.builtins.map(doc => [doc.id, content(doc)] as const), ...saved.map(value => [value.id, content(value)] as const)]);
 		const timestamps = new Map(saved.map(row => [row.id, row.updatedAt]));
 		const builtinIds = new Set(this.builtins.map(row => row.id));
@@ -166,34 +175,63 @@ export class LocalThings {
 		// dependencies may not depend on a database's seeded key resolution.
 		for (const doc of docs.values()) doc.crystal = rewriteComposition(doc.thingtime, doc.crystal, (kind, ref) => resolve(kind, ref)?.id || ref);
 		const bundle = await collectTransfer(ids, {
-			read: async id => { this.lease.assertCurrent(); return docs.get(id) || fail('MISSING_DEPENDENCY', `Missing Thing: ${id}`, 404); },
-			children: async id => ({ ids: [...docs.values()].filter(doc => doc.folderId === id).map(doc => doc.id) }),
+			read: async id => { this.lease.assertCurrent(); const file = attachments.find(row => row.id === id); if (file && (file.targetId || options.includeFiles === false)) fail('FILE_EXPORT_REQUIRED', 'Export the containing Thing, or include file bytes in a ZIP for a standalone file'); return docs.get(id) || fail('MISSING_DEPENDENCY', `Missing Thing: ${id}`, 404); },
+			children: async id => ({ ids: [...docs.values()].filter(doc => doc.folderId === id && !doc.targetId).map(doc => doc.id) }),
 			dependencies: async doc => compositionReferences(doc.thingtime, doc.crystal).flatMap(ref => {
 				const found = resolve(ref.kind, ref.ref);
 				if (!found && !ref.optional) fail('MISSING_DEPENDENCY', `Missing ${ref.kind}: ${ref.ref}`, 404);
 				return found ? [found.id] : [];
 			}),
-			files: async function* () {}
+			files: async function* (doc) {
+				const ids = new Set(attachments.filter(row => row.targetId === doc.id || row.id === doc.id).sort((a,b) => a.localAttachment.order-b.localAttachment.order || a.id.localeCompare(b.id)).map(row => row.id));
+				for (const id of compositionAttachmentIds(doc.thingtime, doc.crystal, { component: ref => resolve('component', ref)?.crystal })) ids.add(id);
+				for (const id of ids) {
+					lease.assertCurrent(); options.signal?.throwIfAborted();
+					const row = attachments.find(row => row.id === id);
+					if (!row) fail('MISSING_LOCAL_FILE', `File ${id} is not stored in this workspace`, 404);
+					const data = await readBytes(id);
+					if (!data || data.byteLength !== row!.crystal.size || await transferChecksum(data) !== row!.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed; no partial export was created');
+					lease.assertCurrent();
+					yield { id: localAttachmentFileId(id), name: String(row!.crystal.name), mime: String(row!.crystal.contentType), data: data!, ...transferAnnotations(row!.crystal as any) };
+				}
+			}
 		}, options);
+		const includedCopies = new Map([...mediaCopies].filter(([, fileId]) => bundle.files.has(fileId)));
+		const crystals = rewriteTransferMedia(bundle.manifest.things, includedCopies);
+		for (const row of bundle.manifest.things) row.crystal = crystals.get(row.id)!;
+		serializeTransfer(bundle.manifest);
 		this.lease.assertCurrent(); return bundle;
 	}
-	async import(input: unknown, folderId?: string | null) {
+	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array>(), signal?: AbortSignal) {
+		this.lease.assertCurrent(); signal?.throwIfAborted();
 		const manifest = validateTransfer(input); serializeTransfer(manifest);
-		if (manifest.files.length || manifest.links?.length) fail('ATTACHMENT_IMPORT_REQUIRED', 'Import attached files through the workspace attachment importer');
+		if (manifest.links?.length) fail('ATTACHMENT_IMPORT_REQUIRED', 'Linked galleries require the workspace linked-attachment adapter');
+		if (manifest.files.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+		// Snapshot caller-owned bytes before asynchronous hashing or persistence.
+		if (!(fileBytes instanceof Map) || fileBytes.size !== manifest.files.length) fail('INVALID_LOCAL_FILE', 'The transfer has missing or unexpected file bytes');
+		if (manifest.files.some(file => file.bytes > WORKSPACE_LIMITS.binaryBytes) || manifest.files.reduce((total, file) => total+file.bytes, 0) > WORKSPACE_LIMITS.bytes) fail('LOCAL_QUOTA', 'Local files exceed the 16 MiB per-file or 64 MiB workspace limit', 413);
+		const bytes = new Map(manifest.files.map(file => { const value = fileBytes.get(file.id); if (!(value instanceof Uint8Array) || value.byteLength !== file.bytes) return fail('INVALID_LOCAL_FILE', 'Transferred bytes do not match the manifest'); return [file.id, Uint8Array.from(value)] as const; }));
+		await verifyTransferFiles({ manifest, files: bytes }, signal); this.lease.assertCurrent();
+		const recordings = manifest.things.filter(isTransferRecording);
+		for (const row of recordings) recordingTransferFile(row, manifest);
 		const map = new Map(manifest.things.map(row => [row.id, `local-${this.uuid()}`]));
+		const fileMap = new Map(manifest.files.map(file => [file.id, `local-${this.uuid()}`]));
+		for (const recording of recordings) { const id = fileMap.get(String(recording.crystal.recordingFileId))!; map.set(recording.id, id); fileMap.set(recording.id, id); }
+		const crystals = rewriteTransferMedia(manifest.things, fileMap);
 		const stamp = this.now();
 		const importedAlgorithms = manifest.things.filter(isTransferAlgorithm);
 		if (importedAlgorithms.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account algorithms require their dedicated sync adapter');
-		for (const algorithm of importedAlgorithms) { validateTransferAlgorithm(algorithm); if (manifest.things.some(row => row.targetId === algorithm.id || row.folderId === algorithm.id)) fail('INVALID_ALGORITHM', 'Algorithm transfers cannot contain child Things'); }
+		for (const algorithm of importedAlgorithms) { validateTransferAlgorithm(algorithm); if (manifest.files.some(file => file.targetId === algorithm.id) || manifest.things.some(row => row.targetId === algorithm.id || row.folderId === algorithm.id)) fail('INVALID_ALGORITHM', 'Algorithm transfers cannot contain child Things'); }
 		const importedThemes = manifest.things.filter(isTransferTheme);
 		if (importedThemes.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
 		for (const theme of importedThemes) {
 			validateTransferTheme(theme);
-			if (manifest.things.some(row => row.targetId === theme.id || row.folderId === theme.id)) fail('INVALID_THEME', 'Theme transfers cannot contain child Things');
+			if (manifest.files.some(file => file.targetId === theme.id) || manifest.things.some(row => row.targetId === theme.id || row.folderId === theme.id)) fail('INVALID_THEME', 'Theme transfers cannot contain child Things');
 		}
 		const importedContent = (original: TransferThing) => {
+			if (isTransferRecording(original)) { const file = recordingTransferFile(original, manifest); return createLocalAttachment(map.get(original.id)!, file, stamp, original.crystal.filePurpose === 'file' ? 'file' : 'recording', 0); }
 			if (isTransferAlgorithm(original)) return { thingtime: ['feed-algorithm'], crystal: snapshotTransferValue(algorithmTransferContent(original.crystal)) as TransferThing['crystal'] };
-			if (!isTransferTheme(original)) return validated({ ...original, crystal: rewriteComposition(original.thingtime, original.crystal, (_kind, ref) => map.get(ref) || ref) });
+			if (!isTransferTheme(original)) return validated({ ...original, crystal: rewriteComposition(original.thingtime, crystals.get(original.id)!, (_kind, ref) => map.get(ref) || ref) });
 			const normalized = normalizeSavedTheme(original.crystal);
 			if (!normalized.ok) return fail('INVALID_THEME', normalized.error);
 			return { thingtime: ['theme'], crystal: snapshotTransferValue({ name: normalized.name, theme: normalized.theme }) as TransferThing['crystal'] };
@@ -204,12 +242,17 @@ export class LocalThings {
 			...(original.folderId ? { folderId: map.get(original.folderId)! } : folderId && manifest.roots.includes(original.id) ? { folderId } : {}),
 			...(original.targetId ? { targetId: map.get(original.targetId)! } : {})
 		}));
+		const standaloneTargets = new Set(recordings.map(row => row.id));
+		for (const [order, file] of manifest.files.entries()) if (!standaloneTargets.has(file.targetId)) rows.push(createLocalAttachment(fileMap.get(file.id)!, file, stamp, 'post', manifest.attachmentOrder?.indexOf(file.id) ?? order, { targetId: map.get(file.targetId)! }));
+		signal?.throwIfAborted();
 		await this.transaction('readwrite', async tx => {
+			signal?.throwIfAborted();
 			if (importedAlgorithms.length && importedAlgorithms.length + (await tx.list<LocalThing>('things')).filter(row => isTransferAlgorithm(row.value)).length > MAX_SAVED_ALGORITHMS) fail('LOCAL_QUOTA', 'This import exceeds the algorithm limit', 413);
 			if (importedThemes.length && importedThemes.length + (await tx.list<LocalThing>('things')).filter(row => isTransferTheme(row.value)).length > MAX_SAVED_THEMES) fail('LOCAL_QUOTA', 'This import exceeds the saved-theme limit', 413);
 			// All IDs exist before relationship checks, including forward refs.
 			for (const row of rows) await tx.put('things', row.id, row);
-			for (const row of rows) { await this.placement(tx, row); await tx.put('things', row.id, row); }
+			for (const row of rows) { signal?.throwIfAborted(); await this.placement(tx, row); await tx.put('things', row.id, row); }
+			for (const file of manifest.files) { signal?.throwIfAborted(); await tx.putBytes(fileMap.get(file.id)!, bytes.get(file.id)!); }
 		});
 		return { ok: true, roots: manifest.roots.map(id => map.get(id)!), idMap: Object.fromEntries(map), things: rows };
 	}

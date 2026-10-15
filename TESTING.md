@@ -52,6 +52,15 @@ checks against existing personal data. Full feature coverage is tracked in
       Switch accounts with queued/in-flight events: clear the old session, never
       seed or train the new owner's profile, and ignore stale completion toasts.
       Built-in sorts never train. Storage failures must be visible.
+- [ ] Logged out and offline, import a canonical ZIP with actual file bytes;
+      no Upload step or network request is needed. Cold-reload, export through
+      the normal dialog, import that download and delete the original. The copy
+      must export identical bytes with fresh IDs. Verify 390/320px controls.
+- [ ] Missing/corrupt/oversized local bytes fail before metadata is committed;
+      quota rollback/refund and identity changes never expose another scope.
+      Component media/dependencies rebind to the copied bytes. A folder holding
+      standalone files requires explicit recursive deletion; target-bound files
+      cascade with their target. Clear all disposable test data afterward.
 - [ ] All local feature families, queue deletion/import/move semantics and
       multi-tab UI refresh require separate acceptance before rollout merge.
 

@@ -7,7 +7,7 @@ export const workspaceScopeKey = (scope: WorkspaceScope): string => {
 	return JSON.stringify(['account', scope.origin, scope.ownerId, scope.dataPlane]);
 };
 
-export const WORKSPACE_LIMITS = { records: 10000, recordBytes: 1024 * 1024, bytes: 64 * 1024 * 1024 } as const;
+export const WORKSPACE_LIMITS = { records: 10000, recordBytes: 1024 * 1024, binaryBytes: 16 * 1024 * 1024, bytes: 64 * 1024 * 1024 } as const;
 export class WorkspaceError extends Error {
 	readonly ok = false;
 	get error() { return this.message; }
@@ -20,7 +20,11 @@ export type WorkspaceLease = {
 };
 export type WorkspaceRecord<T = unknown> = { scope: string; collection: string; id: string; value: T; bytes: number };
 type Usage = { scope: string; records: number; bytes: number };
+const BINARY_COLLECTION = '@bytes';
 export type WorkspaceTransaction = {
+	getBytes(id: string): Promise<Uint8Array | undefined>;
+	putBytes(id: string, bytes: Uint8Array): Promise<void>;
+	deleteBytes(id: string): Promise<void>;
 	get<T>(collection: string, id: string): Promise<T | undefined>;
 	list<T>(collection: string): Promise<{ id: string; value: T }[]>;
 	put(collection: string, id: string, value: unknown): Promise<void>;
@@ -93,7 +97,25 @@ export class WorkspaceDatabase {
 		// Attach immediately, including when validation throws before awaiting done.
 		void done.catch(() => {});
 		const unsubscribe = lease.onInvalidate(() => { try { native.abort(); } catch {} });
-		const check = (collection: string, id?: string) => { lease.assertCurrent(); validKey(collection); if (id !== undefined) validKey(id); };
+		const check = (collection: string, id?: string, binary = false) => { lease.assertCurrent(); validKey(collection); if (collection === BINARY_COLLECTION && !binary) throw new WorkspaceError('BINARY_OPERATION_REQUIRED', 'File bytes require the binary storage operation'); if (id !== undefined) validKey(id); };
+		const persist = async (collection: string, id: string, value: unknown, bytes: number) => {
+			const previous = await request(records.get([scopeKey, collection, id])) as WorkspaceRecord | undefined;
+			const usage: Usage = await request(usageStore.get(scopeKey)) || { scope: scopeKey, records: 0, bytes: 0 };
+			usage.records += previous ? 0 : 1; usage.bytes += bytes - (previous?.bytes || 0);
+			if (usage.records > WORKSPACE_LIMITS.records || usage.bytes > WORKSPACE_LIMITS.bytes) throw new WorkspaceError('LOCAL_QUOTA', 'Local workspace is full. Export or remove some content before saving.', 413);
+			lease.assertCurrent();
+			await request(records.put({ scope: scopeKey, collection, id, value, bytes } satisfies WorkspaceRecord));
+			await request(usageStore.put(usage));
+		};
+		const removeRecord = async (collection: string, id: string, binary = false) => {
+			check(collection, id, binary); const previous = await request(records.get([scopeKey, collection, id])) as WorkspaceRecord | undefined;
+			if (!previous) return;
+			const usage: Usage = await request(usageStore.get(scopeKey));
+			lease.assertCurrent();
+			await request(records.delete([scopeKey, collection, id]));
+			await request(usageStore.put({ ...usage, records: usage.records - 1, bytes: usage.bytes - previous.bytes }));
+		};
+
 		const tx: WorkspaceTransaction = {
 			get: async <V>(collection: string, id: string) => {
 				check(collection, id); const found = await request(records.get([scopeKey, collection, id])) as WorkspaceRecord<V> | undefined;
@@ -109,28 +131,31 @@ export class WorkspaceDatabase {
 				if (encoded === undefined) throw new WorkspaceError('INVALID_RECORD', 'Local records must contain JSON');
 				const bytes = new TextEncoder().encode(encoded).byteLength;
 				if (bytes > WORKSPACE_LIMITS.recordBytes) throw new WorkspaceError('LOCAL_QUOTA', 'This local record exceeds 1 MB', 413);
-				const previous = await request(records.get([scopeKey, collection, id])) as WorkspaceRecord | undefined;
-				const usage: Usage = await request(usageStore.get(scopeKey)) || { scope: scopeKey, records: 0, bytes: 0 };
-				usage.records += previous ? 0 : 1; usage.bytes += bytes - (previous?.bytes || 0);
-				if (usage.records > WORKSPACE_LIMITS.records || usage.bytes > WORKSPACE_LIMITS.bytes) throw new WorkspaceError('LOCAL_QUOTA', 'Local workspace is full. Export or remove some content before saving.', 413);
-				lease.assertCurrent();
-				await request(records.put({ scope: scopeKey, collection, id, value: JSON.parse(encoded), bytes } satisfies WorkspaceRecord));
-				await request(usageStore.put(usage));
+				await persist(collection, id, JSON.parse(encoded), bytes);
 			},
-			delete: async (collection, id) => {
-				check(collection, id); const previous = await request(records.get([scopeKey, collection, id])) as WorkspaceRecord | undefined;
-				if (!previous) return;
-				const usage: Usage = await request(usageStore.get(scopeKey));
+			getBytes: async id => {
+				check(BINARY_COLLECTION, id, true);
+				const found = await request(records.get([scopeKey, BINARY_COLLECTION, id])) as WorkspaceRecord<Uint8Array> | undefined;
 				lease.assertCurrent();
-				await request(records.delete([scopeKey, collection, id]));
-				await request(usageStore.put({ ...usage, records: usage.records - 1, bytes: usage.bytes - previous.bytes }));
-			}
+				if (found && (!(found.value instanceof Uint8Array) || found.value.byteLength !== found.bytes)) throw new WorkspaceError('INVALID_LOCAL_FILE', 'Stored file bytes are invalid');
+				return found?.value;
+			},
+			putBytes: async (id, value) => {
+				check(BINARY_COLLECTION, id, true);
+				if (!(value instanceof Uint8Array)) throw new WorkspaceError('INVALID_LOCAL_FILE', 'File bytes must be a byte array');
+				if (value.byteLength > WORKSPACE_LIMITS.binaryBytes) throw new WorkspaceError('LOCAL_QUOTA', 'A local file cannot exceed 16 MiB', 413);
+				await persist(BINARY_COLLECTION, id, Uint8Array.from(value), value.byteLength);
+			},
+			deleteBytes: async id => removeRecord(BINARY_COLLECTION, id, true),
+			delete: (collection, id) => removeRecord(collection, id)
 		};
 		// Quota is read-modify-write state. Serialize mutations even if a caller
 		// batches puts with Promise.all inside one native transaction.
-		let writes = Promise.resolve(); const put = tx.put; const remove = tx.delete;
+		let writes = Promise.resolve(); const put = tx.put; const remove = tx.delete; const putBytes = tx.putBytes; const deleteBytes = tx.deleteBytes;
 		tx.put = (...args) => writes = writes.then(() => put(...args));
 		tx.delete = (...args) => writes = writes.then(() => remove(...args));
+		tx.putBytes = (...args) => { const [id, bytes] = args; if (!(bytes instanceof Uint8Array) || bytes.byteLength > WORKSPACE_LIMITS.binaryBytes) return writes = writes.then(() => putBytes(id, bytes)); const copy = Uint8Array.from(bytes); return writes = writes.then(() => putBytes(id, copy)); };
+		tx.deleteBytes = (...args) => writes = writes.then(() => deleteBytes(...args));
 		try {
 			const result = await run(tx); await writes; lease.assertCurrent(); await done; lease.assertCurrent(); return result;
 		} catch (error) {

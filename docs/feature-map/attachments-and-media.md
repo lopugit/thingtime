@@ -110,3 +110,20 @@ private draft API, editor recovery, account isolation and independent media copi
 `ComponentUpload.tsx` commits selected bytes through `componentUploadCommit.ts`: a valid private text Post and a non-reserved retry ID hold the upload. `copyStoredAttachment.ts` also supports owner-private `file` copies for Lopu's `save_attachment` in `chatTools.ts`. It reads an authorized pinned source version, reserves quota, copies bytes and uses normal moderation/finalization. The returned file ID and content URL can be used as Thing properties; `managedPlacement.ts` files it in an owned folder. Request replay returns the existing file. Rollback only claims unfinished private uploads, so concurrent retries cannot delete a committed file. Shared/public copy revocation still removes its draft.
 
 Run `test:attachments`, `test:components`, `test:lopu` and the isolated real-byte `scripts/verify-schema-files.ts` acceptance flow. See the public-schema/upload/Lopu checklist in `TESTING.md`.
+
+## Anonymous workspace bytes and transfer
+
+`app/local-workspace/attachments.ts` is the dedicated local metadata adapter;
+`storage.ts` stores bounded byte arrays and JSON atomically under the same scope
+and quota ledger. `things.ts` imports/exports/copies/deletes canonical ZIP content
+using the existing transfer validators and composition-media rewriter. The normal
+`ThingImportDialog` bypasses uploading only for local-only workspaces, while
+`thingTransfer/browser.ts` accepts an identity-scoped in-process byte reader.
+No server storage key, approval, ownership or moderation verdict is synthesized.
+
+Bounds: 16 MiB per file, 1 MiB per JSON record, 64 MiB total and 10,000 records.
+Missing bytes or checksum failures reject the operation. Account file import is
+not enabled by this adapter; account access gates above remain authoritative.
+Normal uploads, native media URLs, draft copies, linked galleries and account
+sync are still separate work. Run `test:local-workspace` and `test:things`; see
+[the coverage matrix](../local-workspaces.md) for local browser evidence.

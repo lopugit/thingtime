@@ -41,7 +41,7 @@ Identity changes invalidate outstanding local operations and abort transactions.
 Anonymous work is never implicitly adopted by or uploaded to a later login.
 
 Writes and quota accounting are transactional across tabs. Current bounds are
-10,000 records, 1 MiB per record and 64 MiB per workspace. Failed saves report an
+10,000 records, 1 MiB per JSON record, 16 MiB per file and 64 MiB per workspace (metadata and bytes together). Failed saves report an
 error; failed imports roll back. Optimistic concurrency checks retain an editor's
 base timestamp. Files require the dedicated local attachment adapter rather than
 reusing account attachment IDs.
@@ -73,7 +73,7 @@ change this pointer; logout/account changes revoke it.
 | Components and schemas | Local storage and public discovery adapter started. Finish bundled catalog availability, copies, argument editing, schema forms and offline creation. |
 | Actions and app suites | Reuse existing bounded executors and suite definitions. Local data/pure/browser operations still need local host integration; remote services must remain explicitly remote. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
-| Attachments and media | Add local blob lifecycle, metadata, rendering, import/export and quota accounting. Never treat a cached cloud attachment as locally authorized bytes. |
+| Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Finish normal uploads, media URL rendering, draft copies, linked galleries and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Enable local content authoring/drafts and local relationships. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
@@ -264,3 +264,39 @@ published. The actual trained JSON and imported re-export had identical profile
 content and different IDs. Browser overrides were restored and all four test
 profiles deleted. Evidence is in `tmp/draft-qa/anonymous-algorithm-*.json` and
 `anonymous-algorithms-offline-*.png`. These are local checks, not deployed proof.
+
+## Anonymous file transfer checkpoint
+
+Canonical ZIP imports store attachment metadata and actual bytes in the same
+scoped IndexedDB transaction. The dedicated attachment writer reuses canonical
+metadata sanitization, recording/file validation, checksums and composition media
+remapping. Generic Thing mutation cannot write attachment bookkeeping. Binary
+records share the workspace quota ledger and are inaccessible through generic
+JSON collection operations. Imports validate and snapshot all bytes before any
+write; failures roll back metadata, placement and bytes together.
+
+The normal Things importer saves local bytes without an upload stage. Export
+uses the existing canonical collector, validator and serializer, including
+component dependencies and referenced media. Its in-process byte reader is
+identity-scoped and never falls back to HTTP. Missing/corrupt bytes fail the
+whole export. Copies have independent IDs and bytes; deleting a target cascades
+its bound attachments, while deleting a folder containing standalone files still
+requires explicit recursive deletion. Portable JSON contains no local storage or
+server approval fields. Account file imports remain refused until their dedicated
+sync adapter is complete.
+
+A logged-out production-build browser imported a disposable ZIP with networking
+disabled, downloaded it through the normal Transfer dialog, cold-reloaded offline,
+imported that actual download, deleted the original and exported the surviving
+copy. Both downloads passed the canonical archive decoder and serializer with
+identical 82-byte content and different root IDs. Observed import/export requests
+were empty. The local import notice and controls fit 390px, and the export dialog
+fit 320px without horizontal overflow. Test files were removed and browser
+network/viewport overrides restored. Evidence: `tmp/local-attachments/` contains
+`browser-export.zip`, `browser-roundtrip.zip`, their canonical JSON manifests and
+`offline-import-390.png`. These are local results, not deployed acceptance.
+
+Normal uploads, media URLs/native attachment rendering, draft attachment copying,
+linked galleries and account attachment synchronization remain unfinished. The
+existing account upload permissions, access checks, moderation and signed byte
+URLs are unchanged.

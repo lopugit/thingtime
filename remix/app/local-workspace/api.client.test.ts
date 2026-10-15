@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { anonymousApi, resolveLocalWebpage } from './api.client';
 import { anonymousWorkspaceDatabase, bindLocalWorkspace } from './runtime.client';
+import { transferChecksum } from '../utils/thingTransfer/archive';
+import { bundleFromPlan } from '../utils/thingTransfer/browser';
 import { rootIdentity } from '../utils/rootIdentity';
 
 test('anonymous API writes and exports use no network and a retired facade cannot switch to an account', async () => {
@@ -46,8 +48,19 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		await api.algorithms.track({ algorithmId: algorithm.id, events: [{ thingId: 'unknown', signal: 'view' }] });
 		assert.equal((await api.things.export({ ids: [algorithm.id] })).plan.things[0].thingtime[0], 'feed-algorithm');
 		await api.algorithms.remove({ id: algorithm.id }); assert.equal(remoteCalls, 0);
+		const fileBytes = new TextEncoder().encode('Scoped offline bytes');
+		const fileImport = await api.things.import({ manifest: { format: 'thingtime.transfer', version: 1, roots: ['file'],
+			things: [{ id: 'file', thingtime: ['attachment'], crystal: { recordingFileId: 'bytes', filePurpose: 'file' } }],
+			files: [{ id: 'bytes', targetId: 'file', path: 'files/000000', name: 'local.txt', mime: 'text/plain', bytes: fileBytes.length, sha256: await transferChecksum(fileBytes) }] }, localFiles: new Map([['bytes', fileBytes]]) });
+		const filePlan = (await api.things.export({ ids: fileImport.roots })).plan;
+		assert.deepEqual([...((await bundleFromPlan(filePlan, { fetch: remote })).files.values())][0], fileBytes);
+		const fileCopy = await api.things.bulk({ op: 'copy', ids: fileImport.roots });
+		await api.things.bulk({ op: 'delete', ids: fileImport.roots });
+		assert.deepEqual([...((await bundleFromPlan((await api.things.export({ ids: fileCopy.roots })).plan, { fetch: remote })).files.values())][0], fileBytes);
+		assert.equal(remoteCalls, 0);
 		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
 		await assert.rejects(api.things.create({ crystal: { name: 'Late callback' } }), /Workspace changed/);
+		await assert.rejects(filePlan.readLocalFile(filePlan.files[0].id), /Workspace changed/);
 		assert.equal(remoteCalls, 0);
 	} finally {
 		await anonymousWorkspaceDatabase().close();

@@ -70,13 +70,14 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		create: (input: ThingWrite) => write(input), update: (input: ThingWrite) => write(input, true),
 		renameLibrary: ({ id, displayTitle, expectedUpdatedAt }: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => write({ id, crystal: { title: displayTitle }, expectedUpdatedAt }, true),
 		export: async ({ ids, ...options }: { ids: string[] }, request?: { signal?: AbortSignal }) => {
-			const { manifest } = await service().export(ids, { ...options, signal: request?.signal });
-			return { ok: true, plan: { roots: manifest.roots, things: manifest.things, files: [] } };
+			const { manifest, files } = await service().export(ids, { ...options, signal: request?.signal });
+			return { ok: true, plan: { roots: manifest.roots, things: manifest.things, files: manifest.files,
+				readLocalFile: async (id: string, signal?: AbortSignal) => { lease.assertCurrent(); signal?.throwIfAborted(); const bytes = files.get(id); if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not in this export'); return Uint8Array.from(bytes); } } };
 		},
-		import: async ({ manifest, folderId }: { manifest: unknown; folderId?: string | null }) => changed(await service().import(manifest, folderId)),
+		import: async ({ manifest, folderId, localFiles }: { manifest: unknown; folderId?: string | null; localFiles?: Map<string, Uint8Array> }, request?: { signal?: AbortSignal }) => changed(await service().import(manifest, folderId, localFiles, request?.signal)),
 		bulk: async ({ op, ids, recursive, folderId = null }: { op: string; ids: string[]; recursive?: boolean; folderId?: string | null }) => {
 			if (op === 'move') return changed(await service().move(ids, folderId));
-			if (op === 'copy') { const bundle = await service().export(ids); return changed(await service().import(bundle.manifest, folderId)); }
+			if (op === 'copy') { const bundle = await service().export(ids); return changed(await service().import(bundle.manifest, folderId, bundle.files)); }
 			if (op !== 'delete') throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', `Local bulk ${op} is not available yet`);
 			return changed(await service().remove(ids, recursive));
 		}
