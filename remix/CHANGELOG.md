@@ -75,7 +75,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Keep native providers in a separate release so Apple provisioning does not
   block the web vault or existing native packaging. Correct managed worktree
   port identity and prune non-target image binaries from Vercel functions.
-  [Setup and security model](../docs/password-manager.md).
+  [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
 
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new
