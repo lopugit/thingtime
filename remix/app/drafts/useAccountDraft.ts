@@ -20,6 +20,7 @@ export function useAccountDraft({
 	const key = `tt-account-draft:${typeof location === 'undefined' ? '' : location.origin}:${actor || 'guest'}:${context}`;
 	const [status, setStatus] = React.useState<DraftSaveState>('idle');
 	const [error, setError] = React.useState('');
+	const [deviceError, setDeviceError] = React.useState('');
 	const scope = React.useMemo(() => ({ key, active: true, touched: false, restoring: false, baseline: null as string | null }), [key]);
 	const restore = React.useRef(onRestore);
 	restore.current = onRestore;
@@ -44,8 +45,9 @@ export function useAccountDraft({
 					}
 					try {
 						window.localStorage.setItem(key, JSON.stringify(value));
+						if (scope.active) setDeviceError('');
 					} catch {
-						if (scope.active) setError('Device recovery storage is full; keep this page open until the account save finishes.');
+						if (scope.active) setDeviceError('Device recovery storage is unavailable; keep this page open until posting or account saving finishes.');
 					}
 				},
 				changed: (next, message) => {
@@ -75,13 +77,13 @@ export function useAccountDraft({
 		const retryRetired = async () => {
 			const prefix = `${key}:retired:`;
 			for (const savedKey of Object.keys(localStorage).filter((entry) => entry.startsWith(prefix))) {
-				const retired = readLocalCache<{ id: string; revision: number }>(savedKey);
+				const retired = readLocalCache<{ id: string; revision: number; completed?: boolean }>(savedKey);
 				if (!retired || !actor) continue;
 				try {
-					await draftRequest(actor, { operation: 'delete', ...retired });
+					await draftRequest(actor, { operation: 'delete', id: retired.id, revision: retired.revision });
 					localStorage.removeItem(savedKey);
 				} catch (failure) {
-					if ([404, 409, 410].includes((failure as any)?.status)) localStorage.removeItem(savedKey);
+					if ([404, 410].includes((failure as any)?.status) || (!retired.completed && (failure as any)?.status === 409)) localStorage.removeItem(savedKey);
 				}
 			}
 		};
@@ -165,7 +167,21 @@ export function useAccountDraft({
 		});
 		scope.baseline = null;
 	}, [actor, key, session, scope]);
+	const retire = React.useCallback(async () => {
+		scope.baseline = null;
+		return session.retire(async (id, revision) => {
+			await draftRequest(actor!, { operation: 'delete', id, revision });
+			localStorage.removeItem(`${key}:retired:${id}`);
+		}, draft => {
+			try {
+				localStorage.setItem(`${key}:retired:${draft.id}`, JSON.stringify({ id: draft.id, revision: draft.revision, completed: true }));
+			} catch {
+				if (scope.active) setDeviceError('Posted successfully, but device storage could not record draft cleanup.');
+			}
+		});
+	}, [actor, key, session, scope]);
 	return {
+		retire,
 		forget: async (id: string) => {
 			if (session.current()?.id === id) {
 				await session.clear(async () => {});
@@ -173,7 +189,7 @@ export function useAccountDraft({
 			}
 		},
 		status,
-		error,
+		error: deviceError || error,
 		capture,
 		load: accept,
 		clear,

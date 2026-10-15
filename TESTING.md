@@ -2468,6 +2468,14 @@ email whose link points at the attacker.
 
 ## Account drafts and reusable post templates
 
+- [ ] Block, reject and stall only `/api/v1/drafts`, leaving the post API online.
+      Submit a post, edit, rich comment, plain comment and nested reply: each
+      completes independently of draft saving/cleanup. Reload to confirm the
+      successful post; uncertain retries retain the exact frozen shareId/payload.
+      Start another post while old draft cleanup is pending: late save responses
+      cannot restore the completed draft or overwrite the new editor. Keep
+      attachment ownership/binding and concurrent-device revision checks intact.
+
 - [ ] Signed in, type rich text, partial marketplace values, tags, an audience,
       empty poll options and a nested Thing. Wait for “Saved to your drafts”,
       close/reopen and reload: all values recover. No post is published by typing.

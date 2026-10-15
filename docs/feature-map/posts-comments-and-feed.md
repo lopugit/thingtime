@@ -34,6 +34,8 @@ Moderation actions require subspace moderator roles (`canModerateSubspace`).
   route/body validation → `createThing`/`updateThing` → storage → public
   projection → `PostCard`. Adding a field to one layer is not enough.
 - Await the live Editor.js snapshot before freezing a create/edit payload.
+  Draft account sync and cleanup run independently: neither may block a post,
+  edit, comment or reply. Retire only the completed draft, preserving newer input.
 - Optimistic rendering: paint cached state, reconcile in the background, revert
   on failure; never flash a spinner when prior state exists.
 - Retries after an uncertain write reuse the original operation identity
