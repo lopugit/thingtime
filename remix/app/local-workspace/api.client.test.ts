@@ -40,3 +40,30 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory });
 	}
 });
+
+test('endpoints the server serves logged out stay reachable, account surfaces stay blocked', async () => {
+	const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB;
+	Object.assign(globalThis, { window: { dispatchEvent() {} }, indexedDB: new IDBFactory() });
+	bindLocalWorkspace(true, rootIdentity.read().generation);
+	try {
+		const online = async (..._args: any[]): Promise<any> => ({ ok: true });
+		const api = anonymousApi({
+			waitlist: { join: online },
+			profile: { get: online, activity: online, search: online, update: online },
+			themes: { getShared: online, listShared: online, list: online, save: online, setActive: online },
+			admin: { users: online }
+		});
+		// A visitor with no account must still reach the public landing form,
+		// public profiles, the people rail and the public theme gallery.
+		for (const call of [api.waitlist.join({ email: 'a@b.co' }), api.profile.get({ username: 'lopu' }),
+			api.profile.activity({ username: 'lopu' }), api.profile.search({ q: 'lo' }),
+			api.themes.getShared({ id: 't' }), api.themes.listShared()]) assert.deepEqual(await call, { ok: true });
+		// Everything that needs the account stays denied rather than falling through.
+		for (const call of [() => api.profile.update({ bio: 'x' }), () => api.themes.save({ id: 't' }),
+			() => api.themes.setActive({ themeId: null }), () => api.admin.users({})])
+			await assert.rejects(call(), /signed-in account/);
+	} finally {
+		await anonymousWorkspaceDatabase().close();
+		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory });
+	}
+});

@@ -24,6 +24,18 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	// Public discovery and explicit authentication remain available online.
 	local.auth = remote.auth;
 	local.login = remote.login;
+	// Endpoints the server already serves logged out must keep working for a
+	// visitor who has no account at all. Deny-by-default above would otherwise
+	// turn the public landing form and every public profile into an error.
+	// Only unauthenticated reads and the public waitlist pass through; every
+	// account, mutation and admin surface stays blocked.
+	const publicOnline = (group: string, methods: string[]) => {
+		if (!remote[group]) return;
+		local[group] = { ...local[group], ...Object.fromEntries(methods.filter(name => remote[group][name]).map(name => [name, remote[group][name]])) };
+	};
+	publicOnline('waitlist', ['join']);
+	publicOnline('profile', ['get', 'activity', 'search']);
+	publicOnline('themes', ['getShared', 'listShared']);
 	local.drafts = (input?: Record<string, unknown>, query?: Record<string, string>) => { lease.assertCurrent(); return draftRequest(LOCAL_WORKSPACE_OWNER, input, query); };
 	local.things = { ...local.things,
 		feed: async (args: Record<string, unknown> = {}) => {
