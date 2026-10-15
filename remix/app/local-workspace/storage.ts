@@ -110,10 +110,11 @@ export class WorkspaceDatabase {
 		const removeRecord = async (collection: string, id: string, binary = false) => {
 			check(collection, id, binary); const previous = await request(records.get([scopeKey, collection, id])) as WorkspaceRecord | undefined;
 			if (!previous) return;
-			const usage: Usage = await request(usageStore.get(scopeKey));
+			// Damaged accounting must not throw during cleanup or become negative.
+			const usage: Usage = await request(usageStore.get(scopeKey)) || { scope: scopeKey, records: 1, bytes: previous.bytes };
 			lease.assertCurrent();
 			await request(records.delete([scopeKey, collection, id]));
-			await request(usageStore.put({ ...usage, records: usage.records - 1, bytes: usage.bytes - previous.bytes }));
+			await request(usageStore.put({ ...usage, records: Math.max(0, usage.records - 1), bytes: Math.max(0, usage.bytes - previous.bytes) }));
 		};
 
 		const tx: WorkspaceTransaction = {

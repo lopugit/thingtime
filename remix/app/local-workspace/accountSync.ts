@@ -166,7 +166,15 @@ export class AccountThingSync {
 				for (const candidate of rows) {
 					if (!['pending', 'syncing'].includes(candidate.state) || candidate.retryAt > this.now() || (candidate.claim && candidate.claim.expiresAt > this.now())) continue;
 					const content = await tx.get<LocalThing>('things', candidate.id);
-					if (!content) throw new WorkspaceError('SYNC_CONTENT_MISSING', 'Pending content is missing', 409);
+					// Aborting the pass here would re-select this same orphan on every
+					// later drain, silently stalling every other pending write behind a
+					// queue entry that can never progress. Quarantine it as a visible
+					// error instead, so status/retry surface it and the queue drains on.
+					if (!content) {
+						await tx.put(COLLECTION, candidate.id, { ...candidate, state: 'error', claim: undefined, pending: undefined,
+							error: 'The local content for this pending change is missing on this device.' });
+						continue;
+					}
 					// Skip blocked children so their parents can progress first.
 					if ([content.folderId, content.targetId].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
 					record = candidate; row = content; break;

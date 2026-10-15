@@ -93,3 +93,24 @@ for (const failure of ['blocked', 'timeout', 'error', 'close'] as const) {
 		await db.close();
 	});
 }
+
+test('deleting a record with damaged usage accounting neither throws nor goes negative', async () => {
+	const factory = new IDBFactory(), db = new WorkspaceDatabase(factory), { lease } = testLease();
+	await db.transaction(anonymous, 'readwrite', lease, tx => tx.put('things', 'one', { text: 'a' }));
+	// Drop the usage row behind the adapter's back to simulate damaged accounting.
+	const raw = await new Promise<IDBDatabase>((resolve, reject) => {
+		const request = factory.open('thingtime.local-workspaces.v1', 1);
+		request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+	});
+	await new Promise<void>((resolve, reject) => {
+		const native = raw.transaction(['usage'], 'readwrite');
+		native.objectStore('usage').delete(workspaceScopeKey(anonymous));
+		native.oncomplete = () => resolve(); native.onabort = () => reject(native.error);
+	});
+	raw.close();
+	await db.transaction(anonymous, 'readwrite', lease, tx => tx.delete('things', 'one'));
+	// Accounting is rebuilt at zero rather than negative, so the quota still holds.
+	await db.transaction(anonymous, 'readwrite', lease, tx => tx.put('things', 'two', { text: 'b' }));
+	assert.deepEqual(await db.transaction(anonymous, 'readonly', lease, tx => tx.list('things')), [{ id: 'two', value: { text: 'b' } }]);
+	await db.close();
+});
