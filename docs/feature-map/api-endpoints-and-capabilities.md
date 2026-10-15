@@ -372,3 +372,17 @@ entries; old clients refuse versions with retained dependencies. Metadata is
 preflighted before up to 360 unique captures are read in batches of 128, with
 aggregate 4 MiB/200,000-node response bounds. No new route, collection or schema;
 both manifests and conditional client negotiation use the canonical docs entry.
+
+
+## Password manager
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+private, session-bound home-plane API over protected `password-manager-entry`
+Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
+fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
+`vaultKeys.ts` own password/session/recovery key wrapping. `passwords/client.ts`
+intentionally bypasses general request diagnostics and automatic origin fallback
+so decrypted fields never enter shared client history/cache. The reusable
+`Thingtime` fields mod renders the entry without global Thing persistence.
+Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
+`iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.

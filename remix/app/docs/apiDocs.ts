@@ -642,6 +642,15 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
+    id: 'passwords', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'auth', title: 'Private password manager', endpoint: '/api/v1/passwords',
+    summary: 'Manage encrypted credentials using the current full account session.',
+    detail: 'GET pages metadata with an opaque cursor. POST export returns up to 50 decrypted entries per page for an explicit backup. POST catalog pages native AutoFill names, exact HTTPS domains and public passkey identifiers without secret values. POST read unlocks one owned entry through the live session; save uses a stable id, writeId and revision; delete leaves a value-free tombstone. All POST requests require expectedOwnerId. Values never enter generic Thing APIs or history. Server-assisted recovery preserves entries after password reset.',
+    auth: { mode: 'session-or-bearer', description: 'Full user session only; scoped credentials and service accounts are refused.' }, methods: ['GET', 'POST'],
+    steps: ['Sign in to a full Thingtime account.', 'GET metadata, then POST read, save or delete with expectedOwnerId.'],
+    requestExamples: [{ name: 'Passwords', description: 'List owned entry metadata.', method: 'GET' }],
+    responseExamples: [{ status: 200, description: 'Private metadata.', body: { ok: true, entries: [], nextCursor: null, configured: true } }]
+  }),
+  endpoint({
     id: 'drafts', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Private drafts and templates', endpoint: '/api/v1/drafts',
     summary: 'Autosave unfinished Things and posts to the current account; reuse post templates.',
     detail: 'Owner-only, quota-accounted snapshots. Writes use an expected actor, revision and stable write id. Files stay private and durable until the draft is discarded or published. Templates are copied into fresh working drafts and never consumed. Generic Thing CRUD cannot access this protected kind.',

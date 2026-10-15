@@ -1,6 +1,7 @@
 # Multi-account third-party service library
 
-Status: draft implementation checkpoint. Do not treat this as production or positive provider OAuth acceptance.
+Status: draft implementation checkpoint. Google identity and refresh are verified
+locally; production delivery and other providers' positive acceptance remain pending.
 
 ## Behavior
 
@@ -61,8 +62,35 @@ remained readable on a second reveal after migration.
 
 ## Remaining acceptance
 
+### October 16 integration and refresh checkpoint
+
+- Integrated current `develop`, including the released password manager. Both
+  features retain the same account-key envelope implementation; request context
+  and the password route's private-origin protections are preserved together.
+- The real saved Google access token had expired on October 14. Selecting
+  **Check connection** refreshed it without sign-in and persisted a new expiry
+  on October 15. A subsequent `account.profile` request returned HTTP 200 with
+  only display-name/handle fields. No provider token was exposed to the browser.
+- Connection tests: 137 pass; password tests: 36 pass; capabilities: 95 pass.
+  The live HTTP verifiers pass 21 account-library and 18 recovery checks against
+  the local stack. Test credentials and links are removed through their APIs.
+- Client and Nitro builds and changed dispatcher lint pass. The typecheck
+  ratchet remains at 91 diagnostics versus the stored 89 baseline, with no
+  OAuth feature diagnostics. The code graph refresh succeeds after selecting
+  develop's complete graph snapshot during merge reconciliation; semantic
+  documentation extraction is not claimed refreshed.
+- Meta's saved production callback is visible in its Facebook Login settings.
+  App-secret access now reaches a normal password-verification prompt. 1Password
+  is locked and the Thingtime password library has no supplied credentials, so
+  that verification is pending. No provider account password was reset.
+- The local PM2 stack uses the new worktree-specific identity with explicit
+  `TT_WEB_PORT=18280 TT_HMR_PORT=18281 TT_API_PORT=18282` overrides to retain its
+  already-registered Google callback. Other worktree processes are preserved.
+
+### Remaining provider and delivery gates
+
 - Finish the remaining real-provider acceptance and final review.
-- Google web client created on October 14 with production and localhost callbacks; secret stored only in ignored local configuration. A real Google OAuth callback and account.profile API request passed. Second-account passkey verification is pending. Facebook callback save encounters an empty provider verification dialog; save and client-secret setup are not confirmed.
-- Finish Google multi-account/refresh and Facebook positive authorization testing. Mocked OAuth tests alone do not establish these.
+- Google web client created on October 14 with production and localhost callbacks; secret stored only in ignored local configuration. A real Google OAuth callback, expired-token refresh and account.profile API request passed. Second-account passkey verification and Facebook client-secret setup are pending.
+- Finish two-distinct-Google-account and Facebook positive authorization testing. Mocked OAuth tests alone do not establish these.
 - The OpenAI partner inquiry page confirms receipt. Hosted ChatGPT still requires an approved partner client. Local subscription-token enrollment is not implemented. Direct browser Claude enrollment is unavailable; the current adapter accepts a Claude Code setup token.
 - Review preview behavior and required CI. Production promotion requires separate approval for the exact PR.

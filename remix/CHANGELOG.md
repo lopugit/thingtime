@@ -68,6 +68,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Reconcile the OAuth account library with the
+  released password vault and preserve shared encryption/session boundaries.
+  Verify refresh of a genuinely expired Google grant and successful subsequent
+  profile API reuse. Keep the existing local callback while adopting isolated
+  worktree PM2 names. [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-15 — **Codex (AI)**: Add isolated no-login native draft previews and the stdio MCP `thingtime_render_and_export` tool, reusing canonical transfers, schema validation and native renderers. Return bounded JSON/PNG artifacts with diagnostics, rejecting transparent CSS Color 4 text and zero-size fonts; keep Actions, account data, assets and publishing unavailable. Local clean-browser and disposable importer verification: [PR #998 evidence](../PRs/998-codex-anonymous-render-export--no-login-native-draft-rendering.md).
+
+
+- 2026-10-15 — **Codex (AI)**: Add a private password library using reusable
+  Thing field mods, account/session encryption and server-assisted recovery,
+  TOTP QR imports and capture cleanup, and 1Password/Chrome/Apple import/export.
+  Reject internal Action principals at the vault boundary even when they carry
+  an Authorization header.
+  Keep native providers in a separate release so Apple provisioning does not
+  block the web vault or existing native packaging. Correct managed worktree
+  port identity and prune non-target image binaries from Vercel functions.
+  [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
+
 - **Account credential encryption**: integrated stable per-user keys, exact-password and live-session wrappers, server-assisted background/recovery access, guarded legacy migration and password-reset preservation. Local API acceptance verifies two saved accounts survive recovery while old sessions and reset replay fail. Google client creation and a real account API request are verified; remaining provider acceptance is tracked in [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-14
 
 - **Third-party account library**: grouped service/subservice cards, multiple owner-private encrypted OAuth accounts, Google readonly subservices, new-tab sign-in with env-pinned callbacks, one-use session-bound state, safe server-side reuse, refresh serialization, and owner-scoped caches. Facebook identity and posts have separate grants; ChatGPT hosted identity is gated by an approved OpenAI client. OpenAI API and Claude Code OAuth cards reuse Secure Vault. Fork setup and manual QA are documented in README/TESTING. Password/session encryption and real-provider acceptance remain pending; see [draft PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13

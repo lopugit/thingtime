@@ -109,3 +109,18 @@ Run `test:connections` (envelopes, registry, concurrency, scope isolation),
 `test:sensitive-reveal`, `test:collections`, and the local-only
 `scripts/verify-vault-recovery.mjs` acceptance script. Existing legacy entries
 migrate only under canonical revision guards; corrupt key records fail closed.
+
+
+## Password manager
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+private, session-bound home-plane API over protected `password-manager-entry`
+Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
+fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
+`vaultKeys.ts` own password/session/recovery key wrapping. `passwords/client.ts`
+intentionally bypasses general request diagnostics and automatic origin fallback
+so decrypted fields never enter shared client history/cache. The reusable
+`Thingtime` fields mod renders the entry without global Thing persistence.
+Native provider implementation and signed release are tracked separately in
+[PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
+private catalog and negotiates an optional supported native bridge.
