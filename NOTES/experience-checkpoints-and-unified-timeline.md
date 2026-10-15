@@ -14,12 +14,12 @@ The contract's delivery ledger is still in progress. This note therefore treats 
 
 ## Boundary to keep clear
 
-| Concern | Unified Timeline | Experience checkpoints (TODO 20) |
-| --- | --- | --- |
-| Primary question | What changed on this Thing, by whom or what, and what recovery/merge path exists? | What view did I experience, and can I revisit its captured results and position? |
-| Durable identity | Immutable event and relationship records linked to affected Things and branches. | A versioned, bounded view-state adapter with ordered result references, pages, and a stable viewport anchor. |
-| Shared work | Account/origin/data-plane isolation, event validation, local persistence, sync receipts, paging, and safe history integration. | Must not create a competing event log, outbox, or synchronization protocol; retain its own view-state and redaction semantics. |
-| Not implied | A complete replay of search inputs, feed ordering, loaded-page depth, or viewport state. | Permission to restore deleted/private content, execute code, replay external effects, or rerun an old algorithm as if it were historical truth. |
+| Concern          | Unified Timeline                                                                                                               | Experience checkpoints (TODO 20)                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Primary question | What changed on this Thing, by whom or what, and what recovery/merge path exists?                                              | What view did I experience, and can I revisit its captured results and position?                                                                |
+| Durable identity | Immutable event and relationship records linked to affected Things and branches.                                               | A versioned, bounded view-state adapter with ordered result references, pages, and a stable viewport anchor.                                    |
+| Shared work      | Account/origin/data-plane isolation, event validation, local persistence, sync receipts, paging, and safe history integration. | Must not create a competing event log, outbox, or synchronization protocol; retain its own view-state and redaction semantics.                  |
+| Not implied      | A complete replay of search inputs, feed ordering, loaded-page depth, or viewport state.                                       | Permission to restore deleted/private content, execute code, replay external effects, or rerun an old algorithm as if it were historical truth. |
 
 The distinction is useful even if both experiences appear in a shared History surface: a Thing mutation is not a snapshot of the surrounding feed or search results. A checkpoint must continue to distinguish historical captured membership from a fresh query against current data.
 
