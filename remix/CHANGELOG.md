@@ -74,7 +74,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   separately confirmed remote authority. Local disposable-fixture outage,
   reload/edit/reconnect and desktop/320px/390px checks passed; other feature
   families and full integration remain incomplete. See
-  [coverage and evidence](../docs/local-workspaces.md). No rollout merge or
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md)
+  and [coverage matrix](../docs/local-workspaces.md). No rollout merge or
   deployment is implied by this checkpoint.
 
 
