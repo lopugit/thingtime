@@ -24,11 +24,12 @@ Third-party OAuth work remains in [PR #992](https://github.com/lopugit/thingtime
 - Production environment metadata confirms the existing `THINGTIME_ADMIN_VAULT_KEY`
   secret is present for the documented compatibility path; no key was exposed,
   rotated or replaced.
-- This web branch: 35 focused password tests pass. Focused lint has zero errors
+- This web branch: 36 focused password tests pass. Focused lint has zero errors
   and two ref-cleanup warnings. No private env files or real credentials added.
 - The equivalent web implementation in #996 passed the complete Web CI build,
   typecheck ratchet, unit and HTTP API suites, plus both CodeQL analyses.
   This PR runs its own required checks before merge.
+- Internal Action principals are explicitly rejected for list/read/catalog/export/save/delete even with a bearer header; the regression exercises the real internal-actor binding.
 - Live disposable HTTP replica: 31 checks, including two owners, 52 entries,
   catalog/export pagination, owner isolation, retry/revision fencing, deletion
   isolation, password recovery, logout and immediate session revocation.

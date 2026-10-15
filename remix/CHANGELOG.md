@@ -72,6 +72,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-15 — **Codex (AI)**: Add a private password library using reusable
   Thing field mods, account/session encryption and server-assisted recovery,
   TOTP QR imports and capture cleanup, and 1Password/Chrome/Apple import/export.
+  Reject internal Action principals at the vault boundary even when they carry
+  an Authorization header.
   Keep native providers in a separate release so Apple provisioning does not
   block the web vault or existing native packaging. Correct managed worktree
   port identity and prune non-target image binaries from Vercel functions.

@@ -9891,3 +9891,5 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   the function size limit even when local dependencies include other platforms.
 
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
+
+- Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.

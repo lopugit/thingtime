@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPasswordHandler } from './_passwords';
+import { withInternalRequestActor } from '~/api/utils/auth/internalRequestActor';
 const owner = { id: 'owner', temporary: false } as any;
 const defaults = {
   getCurrentUser: async () => owner,
@@ -28,6 +29,13 @@ test('password endpoint rejects absent credentials, temporary users and account 
     assert.equal((await createPasswordHandler({ ...defaults, ...overrides })({ request: request() })).status, 401);
   }
   assert.equal((await createPasswordHandler(defaults)({ request: request({}, { expectedOwnerId: 'other', operation: 'read' }) })).status, 409);
+});
+test('internal Action actors cannot borrow vault access even when a bearer header is present', async () => {
+  for (const operation of ['list', 'read', 'catalog', 'export', 'save', 'delete']) {
+    const incoming = operation === 'list' ? new Request('https://thingtime.example/api/v1/passwords', { headers: { Authorization: 'Bearer fixture-session' } }) : request({ Authorization: 'Bearer fixture-session' }, { operation, expectedOwnerId: 'owner', id: 'fixture' });
+    const response = await withInternalRequestActor(incoming, async () => owner, () => createPasswordHandler(defaults)({ request: incoming }));
+    assert.equal(response.status, 401, operation);
+  }
 });
 test('revocation before decrypted response blocks both selected reads and native catalog', async () => {
   for (const operation of ['read', 'catalog', 'export']) {
