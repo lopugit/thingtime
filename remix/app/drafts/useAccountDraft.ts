@@ -41,6 +41,10 @@ export function useAccountDraft({
 					if (!actor) return;
 					if (!value) {
 						clearLocalCache(key);
+						// Retirement/clear leaves no draft to recover, so a stale device
+						// warning would only offer a retry that can never do anything.
+						// A still-failing retirement re-reports once its cleanup settles.
+						if (scope.active) setDeviceError('');
 						return;
 					}
 					try {
