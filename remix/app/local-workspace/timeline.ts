@@ -1,3 +1,6 @@
+import { parseTimelineBranchCommand, parseTimelineBranchLookup, type TimelineBranchCommand } from '../timeline/branches';
+import { parseBranchCheckoutRequest, type BranchCheckoutRequest } from '../timeline/branchCheckout';
+import { readLocalBranch, readLocalBranches, writeLocalBranch, checkoutLocalBranch } from './timelineBranches';
 import { parseTimelineVersionNameCommand, type TimelineVersionName, type TimelineVersionNameCommand } from '../timeline/versionNames';
 import { transferChecksum } from '../utils/thingTransfer/archive';
 import { readLocalVersionNames, localNamesForEntry, writeLocalVersionName } from './timelineVersionNames';
@@ -126,6 +129,24 @@ export class LocalTimeline {
   const event = parseTimelineEvent(input);
   if (event.ownerId !== LOCAL_TIMELINE_OWNER || event.actorId !== LOCAL_TIMELINE_OWNER || event.source !== 'client' || event.mode !== 'draft' || !event.clientId) fail('Only authored local drafts can be submitted.');
   return { ok: true as const, entry: await this.transaction('readwrite', tx => appendLocalTimeline(tx, event), signal) };
+ }
+ async branch(input: TimelineBranchCommand, signal?: AbortSignal) {
+  this.lease.assertCurrent(); signal?.throwIfAborted();
+  const command = parseTimelineBranchCommand(input);
+  const signature = await transferChecksum(new TextEncoder().encode(JSON.stringify(command)));
+  return this.transaction('readwrite', tx => writeLocalBranch(tx, LOCAL_TIMELINE_OWNER, command, signature,
+   id => localTimelineEntry(tx, id), event => appendLocalTimeline(tx, event), this.now()), signal);
+ }
+ async branches(thingId: string, before: number | null = null, limit = 40, signal?: AbortSignal) {
+  return this.transaction('readonly', tx => readLocalBranches(tx, LOCAL_TIMELINE_OWNER, thingId, before, limit), signal);
+ }
+ async branchHead(branchId: string, thingId: string, signal?: AbortSignal) {
+  const lookup = parseTimelineBranchLookup({ branchId, thingId });
+  return this.transaction('readonly', tx => readLocalBranch(tx, LOCAL_TIMELINE_OWNER, lookup.branchId, lookup.thingId), signal);
+ }
+ async checkoutBranch(input: BranchCheckoutRequest, signal?: AbortSignal) {
+  const request = parseBranchCheckoutRequest(input);
+  return this.transaction('readonly', tx => checkoutLocalBranch(tx, LOCAL_TIMELINE_OWNER, request, id => localTimelineEntry(tx, id)), signal);
  }
  async nameVersion(input: TimelineVersionNameCommand, signal?: AbortSignal) {
   this.lease.assertCurrent(); signal?.throwIfAborted();

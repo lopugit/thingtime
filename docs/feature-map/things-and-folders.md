@@ -398,7 +398,7 @@ UI and draft queue to this isolated authority and captures its connection API
 facade. No account Timeline requests or authority are borrowed. Run
 `test:timeline`, `test:local-workspace`, `test:things` and the opt-in
 `timeline.browser.test.ts`. See the dated Timeline checkpoint and still-open
-branches/version-names/restore/account-sync matrix in [local workspaces](../local-workspaces.md).
+restore/merge/export/account-sync matrix in [local workspaces](../local-workspaces.md).
 
 
 Anonymous contextual owner notes use `local-workspace/timelineNotes.ts` with the
@@ -420,3 +420,15 @@ ordinary offline History browser test includes name/rename/clear/reload. Run
 `test:timeline:versions` against its disposable replica for server regression;
 the script now binds the response to the exact sent operation ID and cleans up
 only Things it created, including after a test failure.
+
+
+Anonymous variations use `local-workspace/timelineBranches.ts` behind the
+existing Timeline facade and durable working-copy queue. Canonical branch/head
+records and effect receipts are unchanged. Shared `timeline/branchMutation.ts`
+and `timeline/versionGraph.ts` enforce replay, CAS, bounded ancestry and fixed
+historical checkout for both authorities. `BranchWebpage` accepts the exact
+local owner/plane pair via content identity; global account data-plane validation
+is unchanged. Native Builder edits remain isolated from the current Thing, and
+branch Actions/live data stay paused. Run the local branch tests, offline History
+browser test and disposable `scripts/timeline-branches.integration.mts` for
+account writer parity. Branch merging and account offline sync remain pending.

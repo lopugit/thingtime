@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous variations now create, checkout and
+  save offline through History and the native Builder, sharing canonical branch
+  and ancestry rules with account Timeline. Conflict/retry/rollback and clean
+  offline desktop/phone checks passed; account API regression passed locally.
+  The full local-first matrix still blocks merge. See the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous saved versions can be named, renamed
   and cleared offline through the existing Versions tab and a mutation planner
   shared with account Timeline. Canonical replay/concurrency, native offline UI

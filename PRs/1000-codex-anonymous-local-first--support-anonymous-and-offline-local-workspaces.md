@@ -488,3 +488,32 @@ TypeScript parser. TypeScript: the same 91 pre-existing diagnostic identities.
 Local evidence is separate from CI/deployed verification. Branches, restore,
 historical export, protected history, account sync and the full matrix remain
 unfinished; this checkpoint does not authorize merge.
+
+
+## Canonical local variations — 2026-10-16
+
+History and the native Builder now create, checkout and edit anonymous named
+variations offline. Shared branch planning and ancestry/materialization helpers
+retain account semantics; protected server writers and authorization remain.
+Canonical branch/head records, immutable effects and stable creation indices
+commit atomically in the anonymous namespace. Exact retry receipts, stale-head
+CAS, divergence refusal, quota rollback and retired/foreign scope checks pass.
+Checkout uses recorded content/components, with live data and Actions paused.
+The current Thing remains unchanged. UI copy accurately describes device saves.
+
+Verification: 116 workspace/offline-shell + 238 shared Timeline tests, three
+focused Builder tests, five ordinary opt-in skips. Explicit production browser
+acceptance passes offline creation, field edits, native Builder save/reload,
+recorded component preview and 1440/390/320px without HTTP mutations, account
+Timeline calls, page errors or document overflow. Manual in-app Browser checks
+confirm saved/reopened edits. Evidence: `tmp/local-branches-ui/`.
+The new real API branch integration passed create/replay/CAS/ancestry/checkout,
+stale-head refusal and anonymous 401s against the disposable loopback replica.
+It cleans its own Thing in `finally`; the new test account and immutable audit
+history remain only in that fixture DB. Existing account data was untouched.
+
+Build: 245 verified assets / 21,173,785 bytes. Application lint: zero errors,
+one existing constructor warning; integration script lint uses the TypeScript
+parser. Raw TypeScript retains 91 baseline diagnostics. CI/deployed validation
+is separate. Restore, merge, historical export, protected histories, account
+sync and the rest of the full coverage matrix remain unfinished; do not merge.

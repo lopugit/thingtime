@@ -239,7 +239,7 @@ test('anonymous Timeline uses local authority, canonical component responses, an
  const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote Timeline'); };
  bindLocalWorkspace(true, rootIdentity.read().generation);
  try {
-  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote }, things: { create: remote } });
+  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote, branchHead: remote, branches: remote, checkoutBranch: remote }, things: { create: remote } });
   const row = await api.things.create({ thingtime: ['data'], crystal: { name: 'Local history adapter' } });
   const scope = { ownerId: 'local-workspace', dataPlane: 'local-workspace', apiOrigin: 'https://thingtime.example' };
   assert.equal((await api.timeline.discover(scope.ownerId)).dataPlane, scope.dataPlane);
@@ -247,7 +247,15 @@ test('anonymous Timeline uses local authority, canonical component responses, an
   assert.equal(page.ok, true); assert.equal(page.entries.length, 1);
   assert.equal((await api.timeline.entry(scope, page.entries[0].event.id)).entry.event.thingId, row.id);
   assert.deepEqual(await api.timeline.componentBindings(scope, page.entries[0].event.id), { ok: true, eventId: page.entries[0].event.id, entries: [] });
-  await assert.rejects(api.timeline.branch(scope, {}), (error: any) => error.status === 422 && error.code === 'LOCAL_TIMELINE_UNAVAILABLE');
+  await assert.rejects(api.timeline.branch(scope, {}), /Invalid/);
+  const branchCommand = { command: 'create-branch', operationId: crypto.randomUUID(), branchId: `branch-${crypto.randomUUID()}`, thingId: row.id, eventId: page.entries[0].event.id, expectedRevision: 0, name: 'Local variation' };
+  const branched = await api.timeline.branch(scope, branchCommand);
+  assert.equal((await api.timeline.branches(scope, row.id)).branches[0].branch.id, branchCommand.branchId);
+  assert.deepEqual(await api.timeline.branchHead(scope, branchCommand.branchId, row.id), { branch: branched.branch, head: branched.head });
+  const checkout = { command: 'checkout-branch', branchId: branchCommand.branchId, thingId: row.id, expectedHeadId: branched.head.eventId, expectedRevision: branched.head.revision };
+  assert.equal((await api.timeline.checkoutBranch(scope, checkout)).checkout.entry.event.id, branchCommand.eventId);
+  await assert.rejects(async () => api.timeline.branch({ ...scope, dataPlane: 'home' }, branchCommand), /another workspace/);
+  await assert.rejects(async () => api.timeline.checkoutBranch({ ...scope, ownerId: 'foreign' }, checkout), /another workspace/);
   await assert.rejects(async () => api.timeline.page({ ...scope, dataPlane: 'home' }, { thingId: null, before: null, after: null, limit: 40 }), /another workspace/);
   const command = { command: 'add-note', operationId: crypto.randomUUID(), eventId: page.entries[0].event.id, thingId: row.id, text: 'Local API note' };
   await api.timeline.note(scope, command);
@@ -259,6 +267,8 @@ test('anonymous Timeline uses local authority, canonical component responses, an
   await assert.rejects(async () => api.timeline.nameVersion({ ...scope, dataPlane: 'home' }, named), /another workspace/);
   rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(async () => api.timeline.nameVersion(scope, named), /Workspace changed/);
+  await assert.rejects(async () => api.timeline.branch(scope, branchCommand), /Workspace changed/);
+  await assert.rejects(async () => api.timeline.checkoutBranch(scope, checkout), /Workspace changed/);
   await assert.rejects(async () => api.timeline.note(scope, command), /Workspace changed/);
   await assert.rejects(async () => api.timeline.entry(scope, page.entries[0].event.id), /Workspace changed/);
   assert.equal(remoteCalls, 0);

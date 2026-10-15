@@ -615,7 +615,7 @@ export default function SeamlessPageEditor({
 							audienceAcl={displayedAcl}
 							onAudienceAcl={changeAcl}
 							onUploadToBlock={builder.uploadToBlock}
-							helpText={draft.branch ? 'Edit this branch and save to your account. Published content stays unchanged. Recorded component definitions are used when available; live data and actions are paused.' : localOnly && mode === 'edit' ? 'Click text to edit, drag handles to arrange, or use + to add blocks. Save keeps changes on this device.' : HELP[mode]}
+							helpText={draft.branch ? `Edit this branch and save ${localOnly ? 'on this device' : 'to your account'}. The current Thing stays unchanged. Recorded component definitions are used when available; live data and actions are paused.` : localOnly && mode === 'edit' ? 'Click text to edit, drag handles to arrange, or use + to add blocks. Save keeps changes on this device.' : HELP[mode]}
 							footerSpace="var(--tt-builder-toolbar-clearance, 160px)"
 						/>
 					)}

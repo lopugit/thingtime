@@ -122,8 +122,44 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByRole('tab', { name: 'Changes', exact: true }).click();
   await page.getByRole('button', { name: 'Preview page', exact: true }).click();
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('button', { name: 'Try a variation', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Variation name', exact: true }).fill('Offline variation');
+  await page.getByRole('button', { name: 'Create variation', exact: true }).click();
+  await page.getByText('Branch saved on this device. It will never be uploaded.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Edit variation', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Edit branch', exact: true });
+  await editor.getByRole('textbox', { name: 'name value', exact: true }).fill('Edited variation fields');
+  await editor.getByRole('button', { name: 'Save to branch', exact: true }).click();
+  await editor.getByText('Saved to Offline variation on this device.', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Open in Builder', exact: true }).click();
+  await page.getByText('Branch: Offline variation', { exact: true }).waitFor();
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  await page.getByText('Using recorded component definitions. Live data and actions are paused.', { exact: true }).waitFor();
+  const branchUrl = page.url();
+  assert.equal(new URL(branchUrl).searchParams.get('dataPlane'), 'local-workspace');
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Edited variation fields');
+  await page.getByRole('textbox').fill('Native Builder variation edit');
+  await page.getByRole('toolbar', { name: 'Page controls' }).getByRole('button', { name: 'Save to branch', exact: true }).click();
+  await page.getByText('Saved to Offline variation on this device.', { exact: true }).waitFor();
+  await page.reload();
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Native Builder variation edit');
+  const branchBounds = [];
+  for (const [width, height] of [[1440, 1000], [390, 844], [320, 844]]) {
+   await page.setViewportSize({ width, height });
+   if (width < 768 && await page.getByRole('button', { name: 'Close builder', exact: true }).isVisible()) await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+   const measured = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+   assert.equal(measured.width, measured.scrollWidth); branchBounds.push(measured);
+   if (artifacts) await page.screenshot({ path: resolve(artifacts, `branch-builder-${width}.png`), fullPage: false, animations: 'disabled' });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(new URL(`/builder?page=${encodeURIComponent(thingId)}&mode=edit`, base).href);
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Offline renamed history page', 'branch saves never replace the current Thing');
   assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, mutations, timelineRequests, failures, bounds }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
   if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); }
   throw error;
