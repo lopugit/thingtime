@@ -68,6 +68,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+
+- 2026-10-15 — **Codex (AI)**: Add a private password library using reusable
+  Thing field mods, account/session encryption and server-assisted recovery,
+  TOTP QR imports and capture cleanup, and 1Password/Chrome/Apple import/export.
+  Reject internal Action principals at the vault boundary even when they carry
+  an Authorization header.
+  Keep native providers in a separate release so Apple provisioning does not
+  block the web vault or existing native packaging. Correct managed worktree
+  port identity and prune non-target image binaries from Vercel functions.
+  [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
+
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new
   `timeline-version-name` relational records behind the `name-version`
