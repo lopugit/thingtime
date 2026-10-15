@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Bundled suites install atomically in anonymous
+  workspaces using the shared canonical install plan. Browser Actions can use
+  bounded local Things/data-Action adapters without HTTP. Offline gallery/edit/
+  save/reload and JSON round-trip pass locally; isolated Web Platform execution
+  offline remains unfinished. Vite preview preserves the existing runtime CSP.
+  [PR #1000 checkpoint and verification](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous page Components and Collections now run
   local source Actions and refresh after native controls, including cold offline
   reload. Source caches and local form state use complete workspace identity;

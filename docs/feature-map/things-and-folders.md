@@ -338,9 +338,10 @@ local Timeline integration remain outstanding (see `docs/local-workspaces.md`).
 `app/actions/runtime.ts` owns the shared bounded data interpreter. The server
 adapter remains in `app/api/utils/actions/execute.ts`; the isolated anonymous
 adapter is `app/local-workspace/actions.ts`. Both retain the canonical saved
-Action grammar and capability envelopes. Browser pure flows reuse the existing
-browser interpreter; local request adapters and suite/source integration remain
-pending. Protected local `action-run` children are bounded and excluded from
+Action grammar and capability envelopes. Browser flows reuse the existing interpreter. `local-workspace/actionRequests.ts`
+adapts supported Things CRUD and data-Action requests without HTTP; unsupported
+services fail explicitly. Remaining endpoint adapters and offline Web Platform
+execution are still pending. Protected local `action-run` children are bounded and excluded from
 transfer; they do not substitute for canonical Timeline history.
 `useWorkspaceScope` partitions Action view/cache identity, while the shared
 `ThingDefinitionEditor` uses local drafts for anonymous definitions. See
@@ -353,3 +354,16 @@ execute through the existing API adapter. `sourceWorkspace.browser.test.ts`
 verifies real local Action execution/refresh and inert/identity boundaries;
 `webpageRuntime.test.ts` covers account/origin/data-plane cache separation.
 See [the local source checkpoint](../local-workspaces.md#local-page-sources-checkpoint--2026-10-16).
+
+
+Bundled suite installation shares `schemas/suiteInstallation.ts` between the
+existing server adapter and `local-workspace/suites.ts`. `LocalThings.atomic`
+reuses normal validators/quota checks for one install transaction. The gallery
+and control fallbacks use `Builder/installSuite.ts` to choose the current
+workspace. `suites.test.ts` covers all bundles, concurrent install, normalization,
+edit preservation, rollback and canonical transfer. `actionRequests.test.ts`
+covers the closed no-network request host; `suites.browser.test.ts` is the opt-in
+clean offline gallery/edit/save/reload test. It explicitly records unavailable
+offline sandbox execution, which remains a merge gate. Vite dev and preview
+share the existing runtime CSP middleware. See the dated checkpoint in
+[local-workspaces.md](../local-workspaces.md).

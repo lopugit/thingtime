@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { useActionRunConfirm } from '~/components/Actions/ActionRunConfirm';
 import type { TtActionConfirmHandler, TtActionUnownedHandler } from '~/components/Actions/useTtActionClicks';
-import { installSuiteOnServer, suiteKeyFromActionKey } from '~/components/Builder/installSuite';
+import { installSuiteForWorkspace, suiteKeyFromActionKey } from '~/components/Builder/installSuite';
 import { LiveTemplate, useComponentArgValues, useThingSource } from '~/components/Builder/liveComponent';
 import type { ThingSourceBinding } from '~/components/Builder/liveComponent';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
@@ -623,7 +623,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
         return null;
       }
       lopuRef.current({ title: `Installing ${target.emoji} ${target.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
-      const installed = await installSuiteOnServer(target.key, { onlyMissing });
+      const installed = await installSuiteForWorkspace(target.key, { onlyMissing });
       const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
       lopuRef.current({
         title: `${target.emoji} ${target.title} installed ✨`,

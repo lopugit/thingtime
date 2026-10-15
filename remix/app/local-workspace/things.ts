@@ -18,7 +18,7 @@ import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorith
 import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
-import { WorkspaceDatabase, WorkspaceError, WORKSPACE_LIMITS, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { type WorkspaceDatabase, WorkspaceError, WORKSPACE_LIMITS, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
 export type LocalThingMutation = (tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: ThingWrite) => Promise<void>;
@@ -77,12 +77,22 @@ export class LocalThings {
 		}
 	}
 	async create(input: ThingWrite) {
+		return this.transaction('readwrite', tx => this.createIn(tx, input));
+	}
+	private async createIn(tx: WorkspaceTransaction, input: ThingWrite) {
 		const checked = validated(input); const stamp = this.now();
 		const row: LocalThing = { ...checked, id: this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid(), createdAt: stamp, updatedAt: stamp, revision: 1,
 			...(input.folderId ? { folderId: input.folderId } : {}), ...(input.targetId ? { targetId: input.targetId } : {}) };
-		return this.transaction('readwrite', async tx => {
-			await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, null, input); return row;
-		});
+		await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, null, input); return row;
+	}
+	/** Trusted composition adapters can reuse ordinary validation and writes in
+	 * one transaction. The callback may await only these storage operations. */
+	async atomic<T>(run: (writer: Pick<LocalThings, 'snapshot' | 'create' | 'update'>) => Promise<T>): Promise<T> {
+		return this.transaction('readwrite', tx => run({
+			snapshot: async () => (await tx.list<LocalThing>('things')).map(row => row.value),
+			create: input => this.createIn(tx, input),
+			update: input => this.updateIn(tx, input)
+		}));
 	}
 	/** Local post content uses the normal schema and relational attachments. No
 	 * audience setting here can publish or authorize a remote operation. */
@@ -211,7 +221,9 @@ export class LocalThings {
 		});
 	}
 	async update(input: ThingWrite & { id: string }) {
-		return this.transaction('readwrite', async tx => {
+		return this.transaction('readwrite', tx => this.updateIn(tx, input));
+	}
+	private async updateIn(tx: WorkspaceTransaction, input: ThingWrite & { id: string }) {
 			const previous = await tx.get<LocalThing>('things', input.id);
 			if (!previous) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
 			if (input.expectedUpdatedAt !== undefined && input.expectedUpdatedAt !== previous.updatedAt) fail('WRITE_CONFLICT', 'This Thing changed in another editor. Reload before saving.', 409);
@@ -223,7 +235,6 @@ export class LocalThings {
 				if (input[field]) row[field] = input[field]!; else delete row[field];
 			}
 			await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, previous, input); return row;
-		});
 	}
 	async remove(ids: string[], recursive = false) {
 		if (!Array.isArray(ids) || !ids.length || ids.length > 200) fail('INVALID_IDS', 'Choose between 1 and 200 Things');

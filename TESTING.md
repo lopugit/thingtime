@@ -10059,3 +10059,25 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.
+
+
+### Anonymous bundled suite and browser-request boundaries (2026-10-16)
+
+- [ ] Install each bundled suite twice and concurrently in a clean anonymous
+  workspace. Require one set of IDs, no partial writes on validation/quota error,
+  canonical normalized no-op reinstall, preserved sample edits, and preserved
+  authored definitions when installing only missing parts.
+- [ ] Run saved browser Actions through local Things create/read/update/delete
+  and local data-Action requests. Require zero fetches, normal validators and
+  budgets, identity/cancellation fences, and explicit errors for remote IDs,
+  ownership/public ACLs, protected-kind writes/deletes and unsupported services.
+- [ ] In a clean production-build browser, wait for verified offline cache
+  readiness, disconnect, install Web Standards from the gallery, edit Content,
+  save/open the Component and cold-reload. Verify exact text and zero mutation
+  requests. Export/import normally with fresh IDs and complete dependencies.
+- [ ] Check 1440×1000, 390×844 and 320px native views for overflow. Record the
+  remaining offline isolated-runtime load error separately from editable-save
+  success; reconnect and verify the actual native runtime output. Do not weaken
+  iframe sandbox/CSP to make the check pass. Verify Vite preview uses the same
+  canonical isolated-runtime headers as dev. Local Component comments remain an
+  outstanding adapter gap, not a completed checklist.

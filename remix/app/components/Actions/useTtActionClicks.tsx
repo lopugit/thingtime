@@ -161,10 +161,6 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				return;
 			}
 			if (action === INSTALL_ACTION) {
-				if (user?.localOnly) {
-					lopuRef.current({ title: 'Local suite installation is not available yet', description: 'Import the editable definitions into this workspace to run their local Actions.', status: 'info' });
-					return;
-				}
 				const install = runtimeRef.current.install;
 				if (!install) return;
 				busyRef.current = true;
@@ -226,11 +222,9 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 						},
 						onUnowned: async (key, fields) => {
 							if (!mountedRef.current || identity !== identityRef.current) return false;
-							// Cloud install hooks must never be reached by a local delegated run.
-							if (user?.localOnly) return false;
 							if (key === CATALOG_RECORD_ACTION) {
-								const { installSuiteOnServer } = await import('../Builder/installSuite');
-								await installSuiteOnServer('catalog-records', { onlyMissing: true });
+								const { installSuiteForWorkspace } = await import('../Builder/installSuite');
+								await installSuiteForWorkspace('catalog-records', { onlyMissing: true });
 								return true;
 							}
 							return onUnowned?.(key, fields) ?? false;
@@ -278,6 +272,6 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				}
 			})();
 		},
-		[navigate, hasWorkspace, user?.localOnly]
+		[navigate, hasWorkspace]
 	);
 };

@@ -550,7 +550,7 @@ function GenericThingPage() {
 			}
 			lopuRef.current({ title: `Installing ${suite.emoji} ${suite.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
 			if (suite.app) {
-				const installed = await kit.install.installSuiteOnServer(suite.key);
+				const installed = await kit.install.installSuiteForWorkspace(suite.key);
 				const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
 				lopuRef.current({
 					title: `${suite.emoji} ${suite.title} installed ✨`,

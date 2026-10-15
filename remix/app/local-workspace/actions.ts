@@ -24,6 +24,7 @@ import {
 } from '../schemas/registry';
 import { MAX_EXPRESSION_NODES_PER_RUN } from '../schemas/actionExpressions';
 import type { PreparedBrowserAction } from '../schemas/browserActions';
+import { localActionRequests } from './actionRequests';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { LocalThings, localThingProjection, type LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
@@ -228,9 +229,12 @@ export class LocalActions {
 					if (id !== actorId) fail('Workspace changed', 409);
 					return this.prepare(reference, values);
 				},
-				// Each endpoint requires a dedicated local adapter. Never reuse the cloud
-				// host or fallback to fetch, even for a same-origin authored request.
-				request: async () => fail('This browser Action requests a service without a local adapter; no network request was made', 409)
+				request: localActionRequests(this.db, this.scope, this.lease, async (body, lease) => {
+					const child = new LocalActions(this.db, this.scope, lease);
+					const target = await child.resolve(body.action);
+					if (target.crystal.runtime === 'browser') fail('Use actions.invoke for browser composition so its shared budgets are retained');
+					return child.run(body);
+				})
 			});
 		} else {
 			let result: unknown = null,

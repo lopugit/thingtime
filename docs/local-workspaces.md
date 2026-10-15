@@ -70,8 +70,8 @@ change this pointer; logout/account changes revoke it.
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
 | Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. Grid checkbox mouse clicks navigated into a Thing during local acceptance; keyboard Space selection worked and needs a focused regression/fix. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
-| Components and schemas | Local storage and public discovery adapter started. Finish bundled catalog availability, copies, argument editing, schema forms and offline creation. |
-| Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Finish local browser request adapters, dedicated component surfaces, suite installation and account execution/sync. External lookups and public/system searches remain explicit remote requirements. |
+| Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Local Component details still show a comments-read error. |
+| Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The opaque-origin Web Platform runtime still cannot cold-load offline; editing and saving remain available with an explicit execution error. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
@@ -512,3 +512,69 @@ workspace retirement with all API requests refused. Cache tests cover account,
 origin and data-plane isolation. Raw TypeScript retains the same 91 baseline
 diagnostics; changed-file lint is clean. Client build: 237 verified offline assets.
 These are local checks; deployed and full-suite acceptance remain incomplete.
+
+
+## Bundled suites and local browser requests — 2026-10-16
+
+`schemas/suiteInstallation.ts` shares the existing materialization and installation
+plan between the authorized server and anonymous storage. The local adapter runs
+the entire install in one transaction, reuses the normal validators/quotas, binds
+page component IDs, and preserves seeded sample edits on reinstall. Only-missing
+installation preserves authored definitions. Canonical normalization happens
+before comparison so repeated installs do not rewrite unchanged content.
+
+The normal demo gallery installs bundled definitions without an account or a
+catalog request. Browser Actions reuse their existing interpreter and saved
+capability grammar. The local request host accepts only supported versions of
+Things CRUD (editable definitions, Data and folders) and data-Action execution.
+It never fetches; remote IDs, public ACLs, ownership fields, protected-kind writes
+and unsupported services fail explicitly. Identity retirement and cancellation
+fence writes. Browser composition keeps its existing shared budgets. Account
+installation still uses the authorized endpoint, with expected actor/data-plane
+headers, identity cancellation and a bounded request. Account offline installation
+and suite sync remain unfinished.
+
+A clean production-build browser with `user: null` installed Web Standards while
+fully offline, edited a button, saved it through the suite's browser Action,
+opened the native Component and cold-reloaded it with the edited input intact.
+The complete automated request capture contained zero network mutations. Normal
+Transfer downloaded an eight-Thing JSON bundle; canonical validation and isolated
+normal import remapped every ID, preserved the input and ran the catalogue Action.
+Re-exporting the page collected its six referenced dependencies/root; the older
+unreferenced save-component Action and independently saved button remain separate.
+Manual 1440×1000, 390×844 and 320px checks found no horizontal overflow.
+
+**Remaining runtime gate:** Chromium's opaque-origin Web Platform iframe cannot
+load through the app service worker while disconnected. Run example reports the
+existing runtime-load error; it does not return a fabricated result. With network
+restored, the actual isolated runtime rendered the button and returned an
+HTMLButtonElement. Sandbox permissions and CSP were not relaxed. Vite preview now
+applies the same existing isolated-runtime CSP as development. Local Component
+comments still show a read error and need their own adapter work.
+
+Local verification: 456 passing workspace/offline-shell, webpage, Action, hook
+and media-cache tests, plus two explicit browser tests; seven opt-in skips in
+the ordinary suites. The existing server app-suite fixture passed 53/53 against
+disposable local Mongo. Targeted lint has no errors (one pre-existing constructor
+warning). Raw TypeScript retains the 91-diagnostic baseline. The production
+client build has 243 verified offline assets. These are local results, not CI
+or deployed acceptance of the complete feature matrix.
+
+Run the opt-in browser test against a production client served on an isolated
+localhost origin, with its normal API pointing at disposable test data:
+
+```sh
+TT_LOCAL_SUITE_URL=http://127.0.0.1:22470 \
+TT_SHARED_PLAYWRIGHT_PATH=/absolute/path/to/playwright/index.mjs \
+TT_SHARED_CHROME_PATH=/absolute/path/to/chrome \
+TT_LOCAL_SUITE_ARTIFACTS=../tmp/local-suites-ui \
+  corepack pnpm --dir remix exec node --import tsx --test app/local-workspace/suites.browser.test.ts
+```
+
+Evidence: `tmp/local-suites-ui/native-suite-export.transfer.json`,
+`roundtrip-verification.json`, `browser-verification.json`,
+`offline-saved-component.png`, `offline-component-1440.png`,
+`offline-component-390.png`, `offline-component-320.png` and
+`online-native-runtime.png`. Manual PNGs are lossless format conversions of the
+actual browser JPEG captures, without resizing or redrawing. The eight manual
+production-origin fixture Things were deleted; the pre-existing page was retained.

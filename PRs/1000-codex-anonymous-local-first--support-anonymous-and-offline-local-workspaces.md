@@ -283,3 +283,38 @@ changed-file lint is clean, raw tsc remains exactly 91 baseline diagnostics and
 the client build contains 237 verified assets. Dedicated Component surfaces,
 browser request adapters, local suite installation, Timeline and account execution/
 sync still require work; the full-suite merge gate remains unmet.
+
+
+## Bundled suites and browser requests checkpoint — 2026-10-16
+
+The existing server installation plan is now shared with a transactional local
+adapter. All bundled suites install without login; repeat/concurrent installs,
+canonical normalization, sample preservation and only-missing edit preservation
+are covered. Existing server authority remains in its adapter. Account install
+requests are pinned to actor/data plane and cancelled on identity retirement.
+
+The browser interpreter has a closed local request host for supported Things
+CRUD and data-Action execution. It never fetches or forwards unknown operations;
+normal validators, quotas, cancellation and byte/runtime budgets remain. Protected
+kind deletion is refused alongside protected create/update.
+
+Clean offline browser acceptance installed Web Standards, edited/saved a native
+button Component and cold-reloaded its exact input, with no network mutations.
+Normal Transfer exported eight Things; isolated canonical import remapped every
+ID, ran the catalogue Action and preserved the saved input. Page-only re-export
+collected its six referenced records. 1440/390/320px checks show no overflow.
+Evidence is retained locally under `tmp/local-suites-ui/`; eight disposable
+manual fixture Things were deleted while preserving the pre-existing page.
+
+Local checks: 456 passing ordinary tests, two explicit browser tests, seven
+opt-in skips; the real server app-suite regression passes 53/53. Changed-file lint
+has no errors and one existing constructor warning. Raw TypeScript remains the
+91-diagnostic baseline; production build has 243 verified offline assets.
+
+The isolated Web Platform iframe still cannot cold-load offline through the app
+service worker. The browser check asserts its explicit failure while editing and
+saving succeed; the real runtime renders correctly after reconnection. Existing
+sandbox/CSP were retained, and Vite preview now serves the canonical isolated
+headers. Local Component comments, remaining request adapters and account suite
+sync are still unfinished. The full matrix in `docs/local-workspaces.md` remains
+the merge gate. No merge, manual deployment or production account mutation.

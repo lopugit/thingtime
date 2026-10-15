@@ -1,0 +1,114 @@
+import type { BrowserActionHost } from '../components/Actions/browserActionRuntime';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
+import { localThingProjection, LocalThings, type ThingWrite } from './things';
+import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
+
+const refuse = (message: string): never => {
+	throw new WorkspaceError('LOCAL_ACTION_REQUEST', message, 409);
+};
+const object = (value: unknown): Record<string, unknown> =>
+	value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : refuse('This local request requires an object');
+const fields = (value: Record<string, unknown>, allowed: string[]) => {
+	for (const key of Object.keys(value)) if (!allowed.includes(key)) refuse(`The local adapter does not support the ${key} request field`);
+};
+const editableKinds = (kinds: unknown) => {
+	if (!Array.isArray(kinds) || !kinds.length || kinds.some((kind) => !['data', 'schema', 'component', 'action', 'webpage', 'folder'].includes(kind)))
+		refuse('This local request supports editable definitions, Data and folders; other kinds need their dedicated adapter');
+};
+const id = (value: unknown): string =>
+	typeof value === 'string' && value.startsWith('local-') && value.length <= 200
+		? value
+		: refuse('This request requires an ID from the local workspace');
+
+/** Closed endpoint adapter for the existing browser interpreter. These saved
+ * http.request steps describe operations; this host never performs HTTP. */
+export function localActionRequests(
+	db: WorkspaceDatabase,
+	scope: WorkspaceScope,
+	lease: WorkspaceLease,
+	runData: (body: { action: string; inputs?: unknown }, lease: WorkspaceLease) => Promise<unknown>
+): BrowserActionHost['request'] {
+	return async (step, actor, signal) => {
+		const active: WorkspaceLease = {
+			assertCurrent() {
+				lease.assertCurrent();
+				signal.throwIfAborted();
+				if (scope.kind !== 'anonymous' || actor !== 'local-workspace') refuse('Workspace changed');
+			},
+			onInvalidate(callback) {
+				const unsubscribe = lease.onInvalidate(callback);
+				signal.addEventListener('abort', callback, { once: true });
+				return () => {
+					unsubscribe();
+					signal.removeEventListener('abort', callback);
+				};
+			}
+		};
+		active.assertCurrent();
+		const things = new LocalThings(db, scope, active);
+		const query = object(step.query || {});
+		let result: unknown;
+		if (
+			step.path === '/api/v1/actions/run' &&
+			step.method === 'POST' &&
+			step.feature === 'api.actions-run' &&
+			capabilitySatisfies('1.10.0', step.minimumVersion)
+		) {
+			fields(query, []);
+			const body = object(step.body);
+			fields(body, ['action', 'inputs', 'source']);
+			if (typeof body.action !== 'string') refuse('Choose a saved local Action');
+			result = await runData({ action: body.action as string, inputs: body.inputs }, active);
+		} else if (step.path === '/api/v1/things' && step.feature === 'api.things' && capabilitySatisfies('1.33.0', step.minimumVersion)) {
+			if (step.method === 'GET') {
+				if (step.body !== undefined) refuse('GET requests cannot contain a body');
+				if ('id' in query) {
+					fields(query, ['id']);
+					result = { ok: true, thing: localThingProjection(await things.get(id(query.id)), actor) };
+				} else {
+					fields(query, ['thingtime', 'folder', 'target', 'cursor', 'limit']);
+					for (const key of ['thingtime', 'folder', 'target', 'cursor'])
+						if (query[key] !== undefined && typeof query[key] !== 'string') refuse(`Invalid ${key} query`);
+					if (query.limit !== undefined && (!/^\d+$/.test(String(query.limit)) || Number(query.limit) < 1 || Number(query.limit) > 200))
+						refuse('List limit must be between 1 and 200');
+					const page = await things.list(query);
+					result = { ok: true, ...page, things: page.things.map((row) => localThingProjection(row, actor)) };
+				}
+			} else if (step.method === 'POST' || step.method === 'PATCH') {
+				fields(query, []);
+				const body = object(step.body);
+				fields(body, [
+					'thingtime',
+					'crystal',
+					'extended',
+					'tags',
+					'folderId',
+					'targetId',
+					'acl',
+					...(step.method === 'PATCH' ? ['id', 'expectedUpdatedAt'] : [])
+				]);
+				if (body.acl !== undefined && JSON.stringify(body.acl) !== '["tt:user"]') refuse('A local Action cannot grant account or public access');
+				const { acl: _acl, ...input } = body;
+				const previous = step.method === 'PATCH' ? await things.get(id(body.id)) : null;
+				const kinds = previous?.thingtime || body.thingtime;
+				editableKinds(kinds);
+				if (previous && body.thingtime !== undefined && JSON.stringify(body.thingtime) !== JSON.stringify(previous.thingtime))
+					refuse('An update cannot change a Thing kind');
+				const row = previous ? await things.update({ ...input, id: previous.id } as ThingWrite & { id: string }) : await things.create(input);
+				result = { ok: true, id: row.id, thing: localThingProjection(row, actor) };
+			} else if (step.method === 'DELETE') {
+				const body = step.body === undefined ? {} : object(step.body);
+				fields(body, ['id']);
+				fields(query, ['id']);
+				if (body.id && query.id && body.id !== query.id) refuse('Conflicting delete IDs');
+				const target = await things.get(id(body.id ?? query.id));
+				editableKinds(target.thingtime);
+				result = await things.remove([target.id]);
+			} else refuse('This method has no local adapter; no network request was made');
+		} else refuse('This browser Action requests a service or version without a local adapter; no network request was made');
+		active.assertCurrent();
+		if (new TextEncoder().encode(JSON.stringify(result)).byteLength > step.maxResultBytes)
+			refuse('The local request response exceeds this Action’s byte budget');
+		return result;
+	};
+}
