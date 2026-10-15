@@ -13,7 +13,7 @@ export type LocalDraft = {
 };
 export type DraftSaveState = 'idle' | 'saving' | 'saved' | 'offline' | 'conflict';
 /** Serializes writes, retaining the exact uncertain request across retries. */
-export function createDraftSession(options: {
+function createSession(options: {
 	seed?: LocalDraft | null;
 	uuid: () => string;
 	save: (input: { id: string; revision: number; writeId: string; content: DraftContent }) => Promise<AccountDraft>;
@@ -167,6 +167,55 @@ export function createDraftSession(options: {
 				.flush()
 				.catch(() => {})
 				.finally(() => queue.dispose());
+		}
+	};
+}
+
+/** Keeps a completed post's draft lifecycle separate from the next composer. */
+export function createDraftSession(options: Parameters<typeof createSession>[0]) {
+	let generation = 0;
+	const start = (seed: LocalDraft | null | undefined) => {
+		const ownGeneration = generation;
+		return createSession({
+			...options, seed,
+			persist: value => { if (ownGeneration === generation) options.persist(value); },
+			changed: (status, error) => { if (ownGeneration === generation) options.changed(status, error); },
+			recovered: value => { if (ownGeneration === generation) options.recovered?.(value); }
+		});
+	};
+	let active = start(options.seed);
+	return {
+		capture: (content: DraftContent) => active.capture(content),
+		current: () => active.current(),
+		flush: () => active.flush(),
+		load: (draft: AccountDraft) => active.load(draft),
+		clear: (remove: (id: string, revision: number) => Promise<void>) => active.clear(remove),
+		retry: () => active.retry(),
+		saveCopy: () => active.saveCopy(),
+		suspend: () => active.suspend(),
+		dispose: () => active.dispose(),
+		/**
+		 * Retire locally now. An already-started save may settle, but it cannot
+		 * restore this draft or modify the next editor. Cleanup is independent
+		 * of posting and never starts another draft save.
+		 */
+		retire(remove: (id: string, revision: number) => Promise<void>, retired: (draft: LocalDraft) => void) {
+			const previous = active;
+			const draft = previous.current();
+			previous.suspend();
+			generation++;
+			active = start(null);
+			if (draft) retired(draft);
+			options.persist(null);
+			options.changed('idle');
+			const settled = previous.flush();
+			previous.dispose();
+			return settled.catch(() => {}).then(async () => {
+				const final = previous.current();
+				if (!final) return;
+				retired(final);
+				if (final.revision) await remove(final.id, final.revision);
+			});
 		}
 	};
 }
