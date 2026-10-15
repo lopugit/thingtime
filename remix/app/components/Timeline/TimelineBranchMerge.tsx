@@ -29,6 +29,7 @@ function BranchMergeReview({
 }: Props & { connection: NonNullable<ReturnType<typeof useTimelineSession>['connection']> }) {
 	const api = useApi();
 	const apiRef = React.useRef(api);
+	apiRef.current = api;
 	const localOnly = connection.scope.dataPlane === 'local-workspace';
 	const [preview, setPreview] = React.useState<BranchMergePreview | null>(null);
 	const [choices, setChoices] = React.useState<VersionChoices>({});
