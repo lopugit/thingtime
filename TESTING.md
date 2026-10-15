@@ -9857,3 +9857,37 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   canonical public projection, a cold local branch cache, queued push retention,
   delayed-reply revision protection and cancellation after an identity change.
   No visual Builder behavior is introduced by this increment.
+
+
+## Password manager and native AutoFill
+
+- [ ] On desktop and 390px, add two entries for one website, edit/reorder custom
+  fields, mask/reveal, close/reopen and delete one without changing the other.
+  The heading clears the fixed navigation and device safe area.
+  Labels and controls wrap without overflow. Tab switching or a capture picker
+  must mask secrets without discarding an unfinished entry.
+- [ ] Upload a synthetic TOTP QR; compare rotating codes to RFC 6238 vectors.
+  Screen scan uses the selected screen/tab and stops all tracks afterwards.
+  Invalid images, oversized images, HOTP and FIDO handoff codes fail clearly.
+- [ ] Preview/import 1Password 1PUX/CSV, Chrome CSV and Apple CSV; test quoted,
+  multiline and whitespace-sensitive passwords, Unicode, custom fields, TOTP,
+  cancellation, malformed ZIP and bounded expansion. Export acknowledgement
+  is required; 1PUX re-import preserves complete ordered Thingtime entries.
+  More than 2,000 accounts export as numbered parts that all import successfully.
+- [ ] Use the HTTP fixture with two owners: session unlock, other-owner denial,
+  account-switch fence, same-origin proxy handling, no-store, exact retry,
+  stale revision, delete tombstones, password recovery and immediate revocation.
+  Generic Thing reads/search/export and Timeline must not expose credentials.
+- [ ] Native catalog contains no passwords, TOTP secrets or private keys. Reject
+  scoped/temporary/service identities, unavailable vault configuration, wrong
+  origin, bad body, stale session and revoked access before decrypted responses.
+- [ ] Check a configured desktop endpoint against a signed native app. Ordinary
+  unconfigured web servers must not forward passwords to production; desktop
+  forwarding is restricted to its loopback UI and selected HTTPS endpoint.
+- [ ] Managed worktrees sharing a repository basename must have distinct PM2
+  names/ports; starting this checkout must not remove another checkout's stack.
+
+- Vercel functions retain image binaries for their target CPU/OS and stay below
+  the function size limit even when local dependencies include other platforms.
+
+- Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
