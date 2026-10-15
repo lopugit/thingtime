@@ -1,5 +1,5 @@
 import { LocalInteractions, localSavedPage } from './interactions';
-import { localPostInput, localPostProjection, localTargetIndex } from './posts';
+import { localPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
 import { publicWorkspaceRead } from './publicRead.client';
 import { draftRequest } from '../drafts/draftClient';
@@ -73,20 +73,27 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		},
 		trending: async () => { lease.assertCurrent(); return publicWorkspaceRead('/api/v1/things/trending?anon=1', 'api.things-trending', '1.0.0'); },
 		get: async ({ id, key, sharedRoot, commentProjection }: { id: string; key?: string; sharedRoot?: string; commentProjection?: boolean }, options?: { signal?: AbortSignal }) => {
-			lease.assertCurrent();
+			lease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (id.startsWith('local-')) {
 				const things = service(), row = await things.get(id), all = await things.snapshot();
-				const post = row.thingtime.includes('post') ? localPostProjection(row, all, LOCAL_WORKSPACE_OWNER, true) : undefined;
-				return { ok: true, thing: { ...project(row), ...(post ? { attachments: post.attachments } : {}) }, ...(post ? { post, ...(commentProjection ? { comment: post } : {}) } : {}) };
+				options?.signal?.throwIfAborted();
+				return localThingReadProjection(row, all, LOCAL_WORKSPACE_OWNER, commentProjection);
 			}
-			const query = new URLSearchParams({ id, ...(key ? { key } : {}), ...(sharedRoot ? { sharedRoot } : {}) });
+			const query = new URLSearchParams({ id, ...(key ? { key } : {}), ...(sharedRoot ? { sharedRoot } : {}), ...(commentProjection ? { commentProjection: 'true' } : {}) });
 			return publicWorkspaceRead(`/api/v1/things?${query}`, 'api.things', '1.31.0', options?.signal);
 		},
-		list: async (query: Parameters<ReturnType<typeof anonymousThings>['list']>[0] & { commentProjection?: boolean }, options?: { signal?: AbortSignal }) => {
+		list: async (query: Parameters<ReturnType<typeof anonymousThings>['list']>[0] & { commentProjection?: boolean; key?: string }, options?: { signal?: AbortSignal }) => {
+			lease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (query.commentProjection && query.target?.startsWith('local-')) {
 				const things = service(); await things.get(query.target);
-				const page = await things.list({ ...query, thingtime: 'comment' }), all = await things.snapshot();
-				return { ok: true, comments: page.things.map(row => localPostProjection(row, all, LOCAL_WORKSPACE_OWNER)), nextCursor: page.nextCursor };
+				const page = await things.list({ ...query, thingtime: 'comment' }), all = await things.snapshot(), index = localTargetIndex(all);
+				options?.signal?.throwIfAborted();
+				return { ok: true, comments: page.things.map(row => localPostProjection(row, all, LOCAL_WORKSPACE_OWNER, false, index)), nextCursor: page.nextCursor };
+			}
+			if (query.commentProjection && query.target) {
+				const params = new URLSearchParams({ target: query.target, thingtime: 'comment', commentProjection: 'true', limit: String(query.limit || 20),
+					...(query.key ? { key: query.key } : {}), ...(query.cursor ? { cursor: query.cursor } : {}) });
+				return publicWorkspaceRead(`/api/v1/things?${params}`, 'api.things', '1.31.0', options?.signal);
 			}
 			options?.signal?.throwIfAborted(); const result = await service().list(query); options?.signal?.throwIfAborted();
 			return { ok: true, ...result, things: result.things.map(project) };

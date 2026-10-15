@@ -68,9 +68,9 @@ change this pointer; logout/account changes revoke it.
 | --- | --- |
 | Local storage and account boundaries | Unit-tested persistence, atomic rollback, concurrent edits, scope isolation and identity invalidation. Add browser multi-tab and account-switch regressions. |
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
-| Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. Grid checkbox mouse clicks navigated into a Thing during local acceptance; keyboard Space selection worked and needs a focused regression/fix. |
+| Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. The global Things search returned no matches for the renamed local Component during discussion acceptance; track that separately from working comment search. Grid checkbox mouse clicks navigated into a Thing during local acceptance; keyboard Space selection worked and needs a focused regression/fix. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
-| Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Local Component details still show a comments-read error. |
+| Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
@@ -639,3 +639,40 @@ anonymous 404s and canonical re-export. Both imported Things were deleted and th
 synthetic fixture logged out. Current artifacts: `tmp/offline-platform-affirmation/`.
 This does not connect a web-only agent host to local stdio; the documented host
 bridge requirement remains.
+
+
+## Generic Thing discussions and rename checkpoint — 2026-10-16
+
+Local Component, Action and Data reads now supply the same separate discussion
+companion as ordinary server Thing reads. Comments remain relational child Things,
+read in bounded cursor pages rather than embedded recursively. One target index
+is shared across each comment page. Anonymous public discussion reads continue
+through the credential-omitting public adapter, including share keys and cursors;
+local identities still cannot comment on remote Things.
+
+The shared detail menu uses workspace content ownership for local rename and
+lets the selected API adapter negotiate remote capabilities. Local rename no
+longer waits for a remote manifest or triggers an account root refresh. History
+and recording handoff continue to require real account authentication. Discussion
+and menu state retire on full workspace identity changes, including data plane.
+
+Local verification: 536 passing workspace, feed, Things and hooks checks, two
+opt-in browser skips, plus the explicitly enabled production-browser regression
+in `app/local-workspace/details.browser.test.ts`. The clean context had no account
+session. Import, comment, nested reply, rename, cold reload and comment search
+completed offline with zero mutation requests. Measured 1440×1000, 390×844 and
+320×844 views had no horizontal overflow. Evidence lives in
+`tmp/local-details-ui/` (native PNGs and `browser-verification.json`). Changed-file
+lint has no errors; raw TypeScript retains the same 91 baseline diagnostics.
+The production client build passed. These are local results, not deployed proof.
+
+Run that opt-in regression with `TT_LOCAL_DETAILS_URL` pointing to the isolated
+loopback production preview, `TT_SHARED_PLAYWRIGHT_PATH` to the installed
+Playwright module, and `TT_SHARED_CHROME_PATH` to its Chromium executable; set
+`TT_LOCAL_DETAILS_ARTIFACTS` to an output directory. Use the same production CSP
+and offline-shell setup as the existing browser checks above.
+
+This closes the Component comments-read error. Account discussion sync, local
+Timeline authority and other matrix items remain unfinished. Saved currently
+lists post-shaped targets, matching the server's existing contract; generic
+Component/Data bookmarks are not yet surfaced in that list.

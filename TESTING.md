@@ -10084,7 +10084,24 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   mask violations: the opaque frame must reject parent/cookie/storage access,
   arbitrary inline scripts and same-origin fetch. Keep sandbox permissions and
   canonical child CSP. Verify external embed/inert draft bundles still use the
-  standalone URL. Local Component comments remain an outstanding adapter gap.
+  standalone URL. Check local Component discussions with the regression below.
 - [ ] Rebuild the platform runtime during managed development and verify the
   virtual document reloads. A missing build must give the build:platform recovery
   instruction; production verification must reject a runtime/CSP hash mismatch.
+
+
+### Local generic Thing discussions and owner rename (2026-10-16)
+
+- [ ] In a clean anonymous production-build browser, import a Component, go
+  offline, create a comment and nested reply, rename from the owner menu, then
+  cold-reload. Require preserved content and zero remote mutation requests.
+- [ ] Search and clear comments; check 1440×1000, 390×844 and 320×844 layouts
+  without horizontal overflow. Run `app/local-workspace/details.browser.test.ts`
+  with the documented local preview/Playwright environment variables.
+- [ ] Page more than twenty local comments without duplicates or recursively
+  embedded replies. Deleting the target cascades its comments. Aborted reads
+  and retired workspace facades must reject instead of exposing old content.
+- [ ] Anonymous public discussions forward the projection, share key and cursor
+  through credential-omitting reads. They cannot acquire an account session or
+  write comments to a remote Thing. Local owner rename must not require a remote
+  capability request; History and recording handoff still require real auth.

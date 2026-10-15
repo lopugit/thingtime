@@ -365,3 +365,21 @@ anonymous 404s and canonical re-export. Both imported Things were deleted and th
 synthetic fixture logged out. Current artifacts: `tmp/offline-platform-affirmation/`.
 This does not connect a web-only agent host to local stdio; the documented host
 bridge requirement remains.
+
+
+## Generic Thing discussion checkpoint — 2026-10-16
+
+Fixed the anonymous Component/Action/Data comments-read error by supplying the
+normal discussion companion through the existing local API adapter. Replies
+remain paginated relational Things. Anonymous public discussion reads preserve
+projection/key/cursor without credentials. Owner rename works through local
+workspace ownership, without a remote capability lookup; cloud History and
+recording handoff keep real-account authentication.
+
+Local checks: 536 automated passes, two opt-in skips, and one separately enabled
+clean production-browser pass. Native import, comment/reply, rename, cold offline
+reload and search completed with zero mutations sent to the network. Desktop,
+390px and 320px screenshots/bounds are in `tmp/local-details-ui/`. Changed-file
+lint has no errors, the client build passed, and raw TypeScript matches the same
+91 pre-existing diagnostics. No merge or manual deployment. The full matrix,
+including account discussion sync and local Timeline, remains the merge gate.

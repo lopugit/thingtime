@@ -36,6 +36,14 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Account/database-qualified History links and Thing caches | `app/utils/dataPlane.ts`, `app/hooks/useDataPlane.ts`, `app/routes/thing.tsx`; root identity invalidation also handles database selection across tabs |
 | Approved saved-theme content history, home transaction and retained deletion accounting | `app/timeline/themeContent.ts`, `app/api/utils/timeline/themeContent.ts`, dedicated `app/api/utils/themes/themes.ts` writer |
 
+Local-capable details use `local-workspace/posts.ts` for the separate generic
+Thing discussion projection and `api.client.ts` for paged local comments.
+`ThingComments.tsx` keys its state by the full workspace identity.
+`PersistedThingMenu.tsx` uses workspace ownership for rename while retaining real
+account authentication for History and recording handoff. The API adapter owns
+capability negotiation; local rename makes no remote manifest request. See
+[the local workspace matrix](../local-workspaces.md) for remaining coverage.
+
 ## Authorization helper
 
 - Reads: `findViewableThing` / `canViewInherited` (see

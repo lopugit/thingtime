@@ -20,6 +20,16 @@ export function localTargetIndex(all: LocalThing[]) {
  for (const child of all) if (child.targetId) { const list = indexed.get(child.targetId) || []; list.push(child); indexed.set(child.targetId, list); }
  return indexed;
 }
+/** The normal Thing read has a separate discussion companion for non-posts.
+ * Discussion reads contain only the direct body; children are cursor-paged. */
+export function localThingReadProjection(row: LocalThing, all: LocalThing[], owner: string, commentProjection = false) {
+ const isPost = row.thingtime.includes('post') || row.thingtime.includes('comment');
+ const projected = localPostProjection(row, all, owner, isPost && !commentProjection);
+ return { ok: true, thing: { ...localThingProjection(row, owner), attachments: projected.attachments },
+  post: isPost ? projected : null,
+  discussion: isPost ? null : { ...projected, sourceThingId: row.id },
+  ...(isPost && commentProjection ? { comment: projected } : {}), parent: null, root: null };
+}
 /** Client projection only: local identity is a workspace label, never a server
  * author or ACL grant. The persisted/exported Thing remains canonical content. */
 export function localPostProjection(row: LocalThing, all: LocalThing[], owner: string, includeComments = false, byTarget?: ReadonlyMap<string, LocalThing[]>): PublicPost & { localOnly: true; targetId: string | null; repliesLoaded?: false } {

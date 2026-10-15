@@ -91,7 +91,7 @@ test('endpoints the server serves logged out stay reachable, account surfaces st
 	const origin = 'https://thingtime.example';
 	let publicReads = 0, remoteCalls = 0;
 	Object.assign(globalThis, { window: { dispatchEvent() {}, location: { origin } }, indexedDB: new IDBFactory(), fetch: async (_input: RequestInfo | URL, options?: RequestInit) => {
-		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: Object.fromEntries(['users-profile', 'users-activity', 'users-search', 'themes-shared', 'things-feed'].map(id => [`api.${id}`, { version: id === 'users-profile' ? '1.1.0' : id === 'things-feed' ? '1.8.0' : '1.0.0' }])) });
+		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: Object.fromEntries(['users-profile', 'users-activity', 'users-search', 'themes-shared', 'things-feed', 'things'].map(id => [`api.${id}`, { version: id === 'users-profile' ? '1.1.0' : id === 'things-feed' ? '1.8.0' : id === 'things' ? '1.31.0' : '1.0.0' }])) });
 		assert.equal(options?.credentials, 'omit'); assert.equal(options?.redirect, 'error'); publicReads++;
 		const url = new URL(String(_input), origin);
 		if (url.pathname === '/api/v1/things/feed') { assert.equal(url.searchParams.get('algorithm'), 'latest'); return Response.json({ ok: true, posts: [{ id: 'public-post', type: 'text', author: { id: 'author' }, tags: ['art'], createdAt: '2026-10-16T00:00:00.000Z' }], nextCursor: null }); }
@@ -127,6 +127,74 @@ test('endpoints the server serves logged out stay reachable, account surfaces st
 		for (const call of [() => api.profile.activity({ username: 'lopu' }), () => api.themes.listShared(), () => api.waitlist.join({ email: 'a@b.co' })])
 			await assert.rejects(async () => call(), /Workspace changed/);
 		assert.equal(publicReads, 6); assert.equal(remoteCalls, 1);
+	} finally {
+		await anonymousWorkspaceDatabase().close();
+		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
+	}
+});
+
+test('generic local Things have paged discussions and retired or aborted reads cannot continue', async () => {
+	const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+	let requests = 0;
+	const remote = async (..._args: any[]): Promise<any> => { requests++; throw new Error('Unexpected network request'); };
+	Object.assign(globalThis, { window: { dispatchEvent() {} }, indexedDB: new IDBFactory(), fetch: remote });
+	bindLocalWorkspace(true, rootIdentity.read().generation);
+	try {
+		const api = anonymousApi({ things: { get: remote, list: remote, create: remote, comment: remote, remove: remote } });
+		const root = await api.things.create({ thingtime: ['component'], crystal: { name: 'Discuss me', render: { tag: 'p', children: 'Native editable component' } } });
+		for (let index = 0; index < 25; index++) await api.things.comment({ id: root.id, text: `Comment ${index}` });
+		const read = await api.things.get({ id: root.id, commentProjection: true });
+		assert.equal(read.post, null);
+		assert.equal(read.discussion.sourceThingId, root.id);
+		assert.equal(read.discussion.localOnly, true);
+		assert.equal(read.discussion.commentCount, 25);
+		assert.deepEqual(read.discussion.comments, []);
+		assert.equal(read.discussion.repliesLoaded, false);
+		assert.equal(read.thing.crystal.name, 'Discuss me');
+		const first = await api.things.list({ target: root.id, thingtime: 'comment', commentProjection: true, limit: 20 });
+		const second = await api.things.list({ target: root.id, thingtime: 'comment', commentProjection: true, limit: 20, cursor: first.nextCursor });
+		assert.equal(first.comments.length, 20); assert.equal(second.comments.length, 5); assert.equal(second.nextCursor, null);
+		assert.equal(new Set([...first.comments, ...second.comments].map(row => row.id)).size, 25);
+		const child = first.comments[0];
+		await api.things.comment({ id: child.id, text: 'Nested reply' });
+		const direct = await api.things.get({ id: child.id, commentProjection: true });
+		assert.deepEqual(direct.post.comments, []); assert.equal(direct.comment.commentCount, 1);
+		const replies = await api.things.list({ target: child.id, thingtime: 'comment', commentProjection: true });
+		assert.equal(replies.comments[0].text, 'Nested reply');
+		const controller = new AbortController(); controller.abort();
+		await assert.rejects(api.things.get({ id: root.id }, { signal: controller.signal }), /abort/i);
+		await assert.rejects(api.things.list({ target: root.id, commentProjection: true }, { signal: controller.signal }), /abort/i);
+		await assert.rejects(api.things.comment({ id: 'private-account-thing', text: 'No remote authority' }), /not in this workspace/);
+		assert.equal(requests, 0);
+		await api.things.remove({ id: root.id });
+		await assert.rejects(api.things.get({ id: child.id }), /not in this workspace/);
+		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+		await assert.rejects(api.things.list({ target: root.id, commentProjection: true }), /Workspace changed/);
+		assert.equal(requests, 0);
+	} finally {
+		await anonymousWorkspaceDatabase().close();
+		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
+	}
+});
+
+test('anonymous public discussion reads preserve bounded projection and omit account credentials', async () => {
+	const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+	const origin = 'https://thingtime.example'; // One document's capability cache keeps one origin.
+	const queries: URLSearchParams[] = [];
+	Object.assign(globalThis, { window: { dispatchEvent() {}, location: { origin } }, indexedDB: new IDBFactory(), fetch: async (input: RequestInfo | URL, options?: RequestInit) => {
+		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: { 'api.things': { version: '1.31.0' } } });
+		assert.equal(options?.credentials, 'omit'); assert.equal(options?.redirect, 'error');
+		const url = new URL(String(input), origin); assert.equal(url.pathname, '/api/v1/things'); queries.push(url.searchParams);
+		return Response.json(url.searchParams.has('target') ? { ok: true, comments: [{ id: 'public-comment' }], nextCursor: null } : { ok: true, discussion: { id: 'public-thing' } });
+	} });
+	bindLocalWorkspace(true, rootIdentity.read().generation);
+	try {
+		const api = anonymousApi({ things: { get: async (..._args: any[]): Promise<any> => {}, list: async (..._args: any[]): Promise<any> => {} } });
+		assert.equal((await api.things.get({ id: 'public-thing', key: 'explicit-link', commentProjection: true })).discussion.id, 'public-thing');
+		assert.equal((await api.things.list({ target: 'public-thing', key: 'explicit-link', thingtime: 'comment', commentProjection: true, cursor: 'bounded-cursor', limit: 20 })).comments[0].id, 'public-comment');
+		assert.equal(queries.length, 2);
+		for (const query of queries) { assert.equal(query.get('commentProjection'), 'true'); assert.equal(query.get('key'), 'explicit-link'); }
+		assert.equal(queries[1].get('cursor'), 'bounded-cursor'); assert.equal(queries[1].get('thingtime'), 'comment');
 	} finally {
 		await anonymousWorkspaceDatabase().close();
 		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });

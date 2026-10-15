@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Local Component/Action/Data details now load native
+  discussions and support owner rename without remote capability calls. Comments,
+  nested replies, search and renamed titles survive a cold offline reload;
+  anonymous public reads omit credentials. Local browser evidence covers
+  desktop, 390px and 320px. Cloud History/handoff retain real authentication.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Web Platform Components now run the real compiled
   sandbox renderer after a cold offline reload. Build-produced srcdoc and an exact
   CSP script hash retain opaque-origin isolation and existing network restrictions;
