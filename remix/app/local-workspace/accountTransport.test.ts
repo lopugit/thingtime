@@ -33,6 +33,14 @@ test('transport pins account and database on reads and writes and retires mismat
   await transport.get('thing', new AbortController().signal);
   await transport.write({ id: 'thing', operationId: 'write', version: 1, method: 'update', body: { id: 'thing' } }, new AbortController().signal);
   for (const { init } of calls) { assert.equal(init.headers['X-Thingtime-Expected-Actor'], 'owner'); assert.equal(init.headers['X-Thingtime-Expected-Data-Plane'], 'home'); assert.equal(init.credentials, 'same-origin'); assert.equal(init.redirect, 'error'); }
+  // An HTML refusal from an edge/WAF must keep its HTTP status so the sync
+  // queue can classify it, instead of degrading to a status-less retry.
+  for (const status of [403, 409]) {
+   result = new Response('<html><body>Forbidden</body></html>', { status, headers: { 'Content-Type': 'text/html' } });
+   await assert.rejects(transport.get('thing', new AbortController().signal), (error: any) => {
+    assert.equal(error.status, status); assert.match(String(error.message), /could not be completed/); return true;
+   }, `status ${status}`);
+  }
   result = Response.json({ ok: false, code: 'ACTOR_CHANGED' }, { status: 409 });
   await assert.rejects(transport.get('thing', new AbortController().signal), /session changed/);
   assert.deepEqual(events, ['thingtime:root-data-refresh']); const count = calls.length;

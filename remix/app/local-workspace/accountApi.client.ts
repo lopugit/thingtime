@@ -12,6 +12,9 @@ type Owner = { id: string; username?: string; displayName?: string; avatarUrl?: 
 const LOCAL_KINDS = new Set(['data', 'folder', 'webpage', 'component', 'schema', 'action']);
 export const accountThingCanCache = (row: any): row is AccountThing => Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind));
 const workers = new Map<string, ReturnType<typeof createWorker>>();
+/** Matches the sync claim window: the longest a blocked pass must wait before
+ * a crashed tab's lease expires and this tab can replay the frozen write. */
+const BLOCKED_RETRY_MS = 60_000;
 function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
 	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease);
@@ -28,11 +31,21 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		try {
 			lease.assertCurrent();
 			const before = JSON.stringify(await sync.status());
-			await sync.sync(transport, controller.signal);
+			const { completed } = await sync.sync(transport, controller.signal);
 			const status = await sync.status();
 			if (JSON.stringify(status) !== before) announceLocalWorkspaceChange();
 			const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
-			if (pending.length && !stopped) timer = setTimeout(wake, Math.max(1000, Math.min(60_000, Math.min(...pending.map(row => row.retryAt)) - Date.now())));
+			if (pending.length && !stopped) {
+				// A row whose retryAt has already passed is not schedulable work: the
+				// pass that just ran either claimed it or skipped it because another
+				// tab holds the lease, or because its parent has no server version
+				// yet. Re-polling those every second cannot unblock them, so only
+				// keep the fast cadence while writes are actually completing and
+				// otherwise wait out the claim window or an online/focus/bind event.
+				const waits = pending.map(row => row.retryAt - Date.now()).filter(wait => wait > 0);
+				const soonest = completed ? 0 : waits.length ? Math.min(...waits) : BLOCKED_RETRY_MS;
+				timer = setTimeout(wake, Math.max(1000, Math.min(60_000, soonest)));
+			}
 		} catch { /* Identity changes retire this worker; durable writes stay scoped. */ }
 		finally { running = false; }
 	};
