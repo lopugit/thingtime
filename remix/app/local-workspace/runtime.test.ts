@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { bindLocalWorkspace, accountWorkspaceLease, accountRemoteWorkspaceLease, assertAccountSyncAllowed, canSyncAccountWorkspace, isAnonymousWorkspace } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
+import { createRootDataLoader } from '../utils/rootDataLoader';
+import { RootDataUnavailableError } from '../utils/rootDataRecovery';
+import type { LoaderFunctionArgs } from 'react-router';
 const scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'owner', dataPlane: 'home' } as const;
 test('offline account content remains editable but cannot authorize remote requests', () => {
  bindLocalWorkspace(false, rootIdentity.read().generation, scope, false);
@@ -20,4 +23,19 @@ test('offline account content remains editable but cannot authorize remote reque
  assert.throws(() => local.assertCurrent(), /workspace changed/i); assert.throws(() => fresh.assertCurrent(), /workspace changed/i);
  bindLocalWorkspace(true, rootIdentity.read().generation);
  assert.equal(canSyncAccountWorkspace(scope), false); assert.equal(isAnonymousWorkspace(), true);
+});
+
+test('authoritative root refusal permanently retires local editors and remote operations', async () => {
+ bindLocalWorkspace(false, rootIdentity.read().generation, scope, true);
+ const local = accountWorkspaceLease(scope), remote = accountRemoteWorkspaceLease(scope);
+ let aborted = false; const stop = remote.onInvalidate(() => { aborted = true; });
+ const load = createRootDataLoader(async () => { throw new RootDataUnavailableError(false); }, rootIdentity);
+ await assert.rejects(load({ request: new Request(scope.origin), params: {}, context: {} } as LoaderFunctionArgs), RootDataUnavailableError);
+ assert.equal(aborted, true); assert.equal(canSyncAccountWorkspace(scope), false);
+ assert.throws(local.assertCurrent, /workspace changed/i);
+ const generation = rootIdentity.read().generation;
+ bindLocalWorkspace(false, generation, scope, true); rootIdentity.confirm(generation);
+ accountWorkspaceLease(scope).assertCurrent();
+ assert.throws(local.assertCurrent, /workspace changed/i); assert.throws(remote.assertCurrent, /workspace changed/i);
+ stop();
 });

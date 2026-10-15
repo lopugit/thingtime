@@ -6,6 +6,8 @@ import { rewriteComposition } from '../api/utils/actions/forkCompositionCore';
 import { collectTransfer, type CollectTransferOptions } from '../utils/thingTransfer/collect';
 import { serializeTransfer, validateTransfer, type JsonValue, type TransferThing } from '../utils/thingTransfer/format';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
+import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
+import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
 import { WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number };
@@ -178,13 +180,26 @@ export class LocalThings {
 		if (manifest.files.length || manifest.links?.length) fail('ATTACHMENT_IMPORT_REQUIRED', 'Import attached files through the workspace attachment importer');
 		const map = new Map(manifest.things.map(row => [row.id, `local-${this.uuid()}`]));
 		const stamp = this.now();
+		const importedThemes = manifest.things.filter(isTransferTheme);
+		if (importedThemes.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
+		for (const theme of importedThemes) {
+			validateTransferTheme(theme);
+			if (manifest.things.some(row => row.targetId === theme.id || row.folderId === theme.id)) fail('INVALID_THEME', 'Theme transfers cannot contain child Things');
+		}
+		const importedContent = (original: TransferThing) => {
+			if (!isTransferTheme(original)) return validated({ ...original, crystal: rewriteComposition(original.thingtime, original.crystal, (_kind, ref) => map.get(ref) || ref) });
+			const normalized = normalizeSavedTheme(original.crystal);
+			if (!normalized.ok) return fail('INVALID_THEME', normalized.error);
+			return { thingtime: ['theme'], crystal: snapshotTransferValue({ name: normalized.name, theme: normalized.theme }) as TransferThing['crystal'] };
+		};
 		const rows: LocalThing[] = manifest.things.map(original => ({
-			...validated({ ...original, crystal: rewriteComposition(original.thingtime, original.crystal, (_kind, ref) => map.get(ref) || ref) }),
+			...importedContent(original),
 			id: map.get(original.id)!, revision: 1, createdAt: stamp, updatedAt: stamp,
 			...(original.folderId ? { folderId: map.get(original.folderId)! } : folderId && manifest.roots.includes(original.id) ? { folderId } : {}),
 			...(original.targetId ? { targetId: map.get(original.targetId)! } : {})
 		}));
 		await this.transaction('readwrite', async tx => {
+			if (importedThemes.length && importedThemes.length + (await tx.list<LocalThing>('things')).filter(row => isTransferTheme(row.value)).length > MAX_SAVED_THEMES) fail('LOCAL_QUOTA', 'This import exceeds the saved-theme limit', 413);
 			// All IDs exist before relationship checks, including forward refs.
 			for (const row of rows) await tx.put('things', row.id, row);
 			for (const row of rows) { await this.placement(tx, row); await tx.put('things', row.id, row); }

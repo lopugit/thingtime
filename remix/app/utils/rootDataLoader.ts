@@ -38,6 +38,10 @@ export const createRootDataLoader = <T>(
 		} catch (error) {
 			assertCurrent();
 			rejected?.(error);
+			// An authoritative refusal retires in-flight editors and sync workers,
+			// not only the last root response. Pending identities are already fenced;
+			// do not keep broadcasting invalidations when several tabs retry.
+			if (error instanceof RootDataUnavailableError && !error.retryable && !identity.read().pending) identity.changed();
 			if (error instanceof RootDataUnavailableError && error.retryable && previous && !identity.read().pending) {
 				return previous.data;
 			}

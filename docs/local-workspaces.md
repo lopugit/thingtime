@@ -75,7 +75,7 @@ change this pointer; logout/account changes revoke it.
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
 | Attachments and media | Add local blob lifecycle, metadata, rendering, import/export and quota accounting. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Enable local content authoring/drafts and local relationships. Public posting, remote reactions and recipient delivery remain authenticated operations. |
-| Themes, visual settings and algorithms | Existing browser preferences work; finish local library CRUD, active selection and portable transfer using the existing validators. |
+| Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Account theme sync, local Timeline history and algorithm library support remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Provider inference, external delivery and hosted scheduled execution still need their real services. |
@@ -199,3 +199,34 @@ workspace/offline shell, root data, webpages, autosave and drafts. The client
 build succeeded with 230 verified offline assets. Raw TypeScript still reports
 91 existing baseline diagnostics; none matched the changed files. Full feature
 acceptance, CI and deployment remain outstanding.
+
+
+## Anonymous saved themes and storage recovery — 2026-10-16
+
+Theme Studio now saves named themes in the anonymous workspace, using the same
+`normalizeSavedTheme` token sanitizer as the account writer. Generic mutations
+still refuse the protected theme kind. Dedicated save/delete/active operations
+stay local; canonical imports validate theme-only content, mint fresh local IDs,
+and enforce the 100-theme limit transactionally. Imports do not change the active
+selection. Export excludes local identity and visibility bookkeeping.
+
+A production-build browser check with no account session verified save, reload,
+fully offline cold load, edit/save and a second offline reload. The standard
+Transfer UI downloaded valid canonical JSON and imported a second editable copy;
+apply and delete also worked offline. Save/delete network captures contained no
+mutation requests. The library fit 1440×1000, 390×844 and 320px with no horizontal
+overflow. Disposable local themes and browser overrides were cleaned up. Evidence:
+`tmp/draft-qa/anonymous-theme-export.json`, `anonymous-themes-offline-desktop.png`
+and `anonymous-themes-offline-390.png` in the same directory.
+
+Public profiles, activity, people search and shared themes remain available
+without login through credential-free public reads; the explicit public waitlist
+writer remains available. Retired anonymous API facades cannot run those callbacks
+under a later account. Account theme synchronization and local Timeline history
+are still separate outstanding work; this is not full theme-family acceptance.
+
+Authoritative root refusals now invalidate active local editors and remote
+workers as well as the saved fallback pointer. Reconfirming the same account
+cannot revive a retired operation. IndexedDB opening has a ten-second bound,
+clear blocked/error/closed diagnostics, retry after failure and cleanup of late
+upgrade/success callbacks. Focused regression tests cover these failure paths.

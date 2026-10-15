@@ -34,6 +34,15 @@ checks against existing personal data. Full feature coverage is tracked in
 - [ ] Older overlapping root reads (including failed ones) cannot change the
       newest accepted workspace pointer. Logout removes offline access to the
       previous account pointer; anonymous content is not adopted on login.
+- [ ] A definitive root/session refusal retires old editors and sync leases;
+      re-confirming the same account never revives their pending callbacks.
+- [ ] Block or stall IndexedDB opening: report a bounded storage error, retry
+      after recovery, and close late connections without committing abandoned work.
+- [ ] Logged out on `/themes`, save/edit/reload a named theme, then cold-reload
+      offline. Download JSON through Transfer, import a new copy, apply and delete
+      it. Verify no account mutation, unchanged active selection after import,
+      private local labels, and usable controls at 1440, 390 and 320px. Public
+      profiles/gallery remain readable without borrowing account credentials.
 - [ ] All local feature families, queue deletion/import/move semantics and
       multi-tab UI refresh require separate acceptance before rollout merge.
 

@@ -74,13 +74,17 @@ test('account invalidation discards fallback and old requests cannot repopulate 
 
 test('authoritative failure clears fallback, including for subsequent transient errors', async () => {
 	let mode = 'success';
+	const identity = createRootIdentityState();
 	const load = createRootDataLoader(async () => {
 		if (mode === 'denied') throw new RootDataUnavailableError();
 		return mode === 'failure' ? transient() : original;
-	}, createRootIdentityState());
+	}, identity);
 	await load(args());
 	mode = 'denied';
 	await assert.rejects(load(args()), RootDataUnavailableError);
+	assert.deepEqual(identity.read(), { generation: 1, pending: true });
+	await assert.rejects(load(args()), RootDataUnavailableError);
+	assert.deepEqual(identity.read(), { generation: 1, pending: true });
 	mode = 'failure';
 	await assert.rejects(load(args()), RootDataUnavailableError);
 });
@@ -132,4 +136,5 @@ test('only the latest accepted root request may bind persistent offline identity
  await assert.rejects(old, { name: 'AbortError' }); assert.deepEqual(accepted, ['new']);
  delayed = true; const stale = load(args()); delayed = false; await load(args()); reject(new RootDataUnavailableError(false));
  await assert.rejects(stale, { name: 'AbortError' }); assert.deepEqual(denied, []); assert.deepEqual(accepted, ['new', 'new']);
+ assert.deepEqual(identity.read(), { generation: 0, pending: false });
 });

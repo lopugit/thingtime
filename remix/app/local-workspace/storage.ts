@@ -38,24 +38,48 @@ const validKey = (value: string) => {
  * rolls back the complete transaction; it cannot leave half an import behind. */
 export class WorkspaceDatabase {
 	private opening: Promise<IDBDatabase> | null = null;
-	constructor(private factory: IDBFactory, private name = 'thingtime.local-workspaces.v1') {}
+	private cancelOpen: (() => void) | null = null;
+	constructor(private factory: IDBFactory, private name = 'thingtime.local-workspaces.v1', private openTimeoutMs = 10_000) {}
 	private open() {
-		return this.opening ??= new Promise<IDBDatabase>((resolve, reject) => {
+		if (this.opening) return this.opening;
+		const opening = new Promise<IDBDatabase>((resolve, reject) => {
 			const req = this.factory.open(this.name, 1);
+			let settled = false;
+			const finish = () => { settled = true; clearTimeout(timer); this.cancelOpen = null; };
+			const fail = (code: string, message: string) => {
+				if (settled) return;
+				finish();
+				// IDB open requests cannot be cancelled. Abort any upgrade and close
+				// a late success below so an abandoned request never owns the DB.
+				try { req.transaction?.abort(); } catch {}
+				reject(new WorkspaceError(code, message, 503));
+			};
+			const timer = setTimeout(() => fail('LOCAL_STORAGE_TIMEOUT', 'Opening browser storage timed out. Retry saving when site storage is available.'), this.openTimeoutMs);
+			this.cancelOpen = () => fail('LOCAL_STORAGE_CLOSED', 'Browser storage was closed before it finished opening. Retry the operation.');
 			req.onupgradeneeded = () => {
+				if (settled) { try { req.transaction?.abort(); } catch {} return; }
 				const records = req.result.createObjectStore('records', { keyPath: ['scope', 'collection', 'id'] });
 				records.createIndex('collection', ['scope', 'collection']);
 				req.result.createObjectStore('usage', { keyPath: 'scope' });
 			};
-			req.onerror = () => { this.opening = null; reject(req.error); };
-			req.onblocked = () => { /* Existing tabs close on versionchange below. */ };
+			req.onerror = () => fail('LOCAL_STORAGE_UNAVAILABLE', 'Browser storage could not be opened. Check site storage permissions and retry.');
+			req.onblocked = () => fail('LOCAL_STORAGE_BLOCKED', 'Another Thingtime tab is blocking browser storage. Close that tab and retry.');
 			req.onsuccess = () => {
-				req.result.onversionchange = () => { req.result.close(); this.opening = null; };
+				if (settled) { req.result.close(); return; }
+				finish();
+				req.result.onversionchange = () => { req.result.close(); if (this.opening === opening) this.opening = null; };
 				resolve(req.result);
 			};
+		}).catch(error => {
+			if (this.opening === opening) this.opening = null;
+			throw error;
 		});
+		return this.opening = opening;
 	}
-	async close() { const db = await this.opening; db?.close(); this.opening = null; }
+	async close() {
+		const opening = this.opening; this.opening = null; this.cancelOpen?.();
+		try { (await opening)?.close(); } catch { /* Pending opens are cancelled above. */ }
+	}
 	async transaction<T>(scope: WorkspaceScope, mode: IDBTransactionMode, lease: WorkspaceLease, run: (tx: WorkspaceTransaction) => Promise<T>): Promise<T> {
 		lease.assertCurrent();
 		const scopeKey = workspaceScopeKey(scope); const db = await this.open(); lease.assertCurrent();

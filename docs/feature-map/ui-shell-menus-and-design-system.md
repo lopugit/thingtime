@@ -115,3 +115,14 @@ shared nav clearance. It distinguishes device saves, retries, refusals and
 conflicts. Comparison uses bounded scrollable content and explicit keep-device /
 keep-account choices; stale review must fail instead of overwriting new edits.
 Verify at 1440, 390 and 320 CSS pixels, including expanded comparison and long IDs.
+
+## Anonymous theme library
+
+`ThemeSettings/ThemeStudio.tsx` uses content identity from `useWorkspaceUser`.
+Anonymous saves show device-only wording and use the dedicated `local-workspace/themes.ts`
+writer; account routes retain their authentication and publication rules.
+`theme/savedTheme.ts` is the shared token sanitizer. Normal Transfer controls
+reuse `utils/thingTransfer/theme.ts` validation and the local import transaction.
+Verify offline save/reload/apply/delete and transfer at desktop/390/320px with
+`test:local-workspace`, `test:things` and `test:theme`. Account theme sync and
+local history remain tracked in [the local coverage matrix](../local-workspaces.md).

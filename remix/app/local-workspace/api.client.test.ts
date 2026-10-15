@@ -12,7 +12,7 @@ test('anonymous API writes and exports use no network and a retired facade canno
 	const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote call'); };
 	bindLocalWorkspace(true, rootIdentity.read().generation);
 	try {
-		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote }, actions: { run: remote }, schemas: { list: remote } });
+		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote }, actions: { run: remote }, schemas: { list: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
 		const created = await api.things.create({ thingtime: ['data'], crystal: { name: 'Offline' } });
 		assert.equal((await api.things.get({ id: created.id })).thing.crystal.name, 'Offline');
 		assert.equal((await api.things.export({ ids: [created.id] })).plan.things.length, 1);
@@ -32,6 +32,14 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		assert.equal(exported.things.find((row: any) => row.id === page.id).crystal.blocks[0].component, newer.id);
 		assert.ok(exported.things.some((row: any) => row.id === newer.id));
 		assert.equal(remoteCalls, 0);
+		const savedTheme = (await api.themes.save({ name: 'Local peach', theme: { colors: { accent: '#cc8866' } }, visibility: 'private' })).theme;
+		await api.themes.setActive({ themeId: savedTheme.id });
+		assert.equal((await api.themes.list()).activeThemeId, savedTheme.id);
+		assert.equal((await api.themes.getShared({ id: savedTheme.id })).theme.name, 'Local peach');
+		assert.equal((await api.things.export({ ids: [savedTheme.id] })).plan.things[0].thingtime[0], 'theme');
+		await api.themes.remove({ id: savedTheme.id });
+		assert.equal((await api.themes.list()).themes.length, 0);
+		assert.equal(remoteCalls, 0);
 		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
 		await assert.rejects(api.things.create({ crystal: { name: 'Late callback' } }), /Workspace changed/);
 		assert.equal(remoteCalls, 0);
@@ -42,11 +50,17 @@ test('anonymous API writes and exports use no network and a retired facade canno
 });
 
 test('endpoints the server serves logged out stay reachable, account surfaces stay blocked', async () => {
-	const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB;
-	Object.assign(globalThis, { window: { dispatchEvent() {} }, indexedDB: new IDBFactory() });
+	const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+	const origin = 'https://thingtime.example';
+	let publicReads = 0, remoteCalls = 0;
+	Object.assign(globalThis, { window: { dispatchEvent() {}, location: { origin } }, indexedDB: new IDBFactory(), fetch: async (_input: RequestInfo | URL, options?: RequestInit) => {
+		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: Object.fromEntries(['users-profile', 'users-activity', 'users-search', 'themes-shared'].map(id => [`api.${id}`, { version: id === 'users-profile' ? '1.1.0' : '1.0.0' }])) });
+		assert.equal(options?.credentials, 'omit'); assert.equal(options?.redirect, 'error'); publicReads++;
+		return Response.json({ ok: true });
+	} });
 	bindLocalWorkspace(true, rootIdentity.read().generation);
 	try {
-		const online = async (..._args: any[]): Promise<any> => ({ ok: true });
+		const online = async (..._args: any[]): Promise<any> => { remoteCalls++; return { ok: true }; };
 		const api = anonymousApi({
 			waitlist: { join: online },
 			profile: { get: online, activity: online, search: online, update: online },
@@ -58,12 +72,18 @@ test('endpoints the server serves logged out stay reachable, account surfaces st
 		for (const call of [api.waitlist.join({ email: 'a@b.co' }), api.profile.get({ username: 'lopu' }),
 			api.profile.activity({ username: 'lopu' }), api.profile.search({ q: 'lo' }),
 			api.themes.getShared({ id: 't' }), api.themes.listShared()]) assert.deepEqual(await call, { ok: true });
-		// Everything that needs the account stays denied rather than falling through.
-		for (const call of [() => api.profile.update({ bio: 'x' }), () => api.themes.save({ id: 't' }),
-			() => api.themes.setActive({ themeId: null }), () => api.admin.users({})])
+		assert.equal(publicReads, 5); assert.equal(remoteCalls, 1, 'only the explicit public waitlist uses its existing writer');
+		// Theme content now has a dedicated local writer; account surfaces stay denied.
+		const saved = await api.themes.save({ name: 'Local', theme: {} });
+		await api.themes.setActive({ themeId: saved.theme.id });
+		for (const call of [() => api.profile.update({ bio: 'x' }), () => api.admin.users({})])
 			await assert.rejects(call(), /signed-in account/);
+		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+		for (const call of [() => api.profile.activity({ username: 'lopu' }), () => api.themes.listShared(), () => api.waitlist.join({ email: 'a@b.co' })])
+			await assert.rejects(async () => call(), /Workspace changed/);
+		assert.equal(publicReads, 5); assert.equal(remoteCalls, 1);
 	} finally {
 		await anonymousWorkspaceDatabase().close();
-		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory });
+		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
 	}
 });

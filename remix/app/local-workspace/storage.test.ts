@@ -65,3 +65,28 @@ test('committed local records survive closing and reopening the database', async
 	const reopened = new WorkspaceDatabase(factory);
 	assert.deepEqual(await reopened.transaction(anonymous, 'readonly', lease, tx => tx.get('drafts', 'draft')), { text: 'offline' }); await reopened.close();
 });
+
+for (const failure of ['blocked', 'timeout', 'error', 'close'] as const) {
+	test(`a ${failure} opening fails clearly, closes late connections and permits retry`, async () => {
+		const real = new IDBFactory();
+		let opened = 0, lateCloses = 0, lateUpgrades = 0;
+		const stalled = { result: { close: () => { lateCloses++; } }, transaction: { abort: () => { lateUpgrades++; } } } as unknown as IDBOpenDBRequest;
+		const factory = { open: (name: string, version: number) => opened++ ? real.open(name, version) : stalled } as IDBFactory;
+		const db = new WorkspaceDatabase(factory, `open-${failure}`, 10);
+		const { lease } = testLease();
+		const pending = db.transaction(anonymous, 'readwrite', lease, tx => tx.put('things', 'first', { text: 'abandoned' }));
+		const rejected = assert.rejects(pending, (error: any) => error.code === `LOCAL_STORAGE_${failure === 'error' ? 'UNAVAILABLE' : failure === 'close' ? 'CLOSED' : failure.toUpperCase()}`);
+		if (failure === 'blocked') stalled.onblocked!.call(stalled, new Event('blocked') as IDBVersionChangeEvent);
+		if (failure === 'error') stalled.onerror!.call(stalled, new Event('error'));
+		if (failure === 'close') await db.close();
+		await rejected;
+		// A late old request must neither create stores nor clear a newer open.
+		stalled.onupgradeneeded!.call(stalled, new Event('upgradeneeded') as IDBVersionChangeEvent);
+		const retry = db.transaction(anonymous, 'readwrite', lease, tx => tx.put('things', 'retry', { text: 'saved' }));
+		stalled.onsuccess!.call(stalled, new Event('success'));
+		await retry;
+		assert.equal(lateCloses, 1); assert.ok(lateUpgrades >= 1);
+		assert.deepEqual(await db.transaction(anonymous, 'readonly', lease, tx => tx.list('things')), [{ id: 'retry', value: { text: 'saved' } }]);
+		await db.close();
+	});
+}

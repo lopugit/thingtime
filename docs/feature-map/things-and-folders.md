@@ -324,3 +324,10 @@ must never be silently dropped. Anonymous storage has no account sync transport.
 The completion matrix and exact local verification limits are in
 [local-workspaces.md](../local-workspaces.md). Run `npm run test:local-workspace`
 from `remix/` alongside the existing Things suites.
+
+Anonymous themes use the dedicated `app/local-workspace/themes.ts` writer, with
+shared `app/theme/savedTheme.ts` normalization and portable theme validation.
+The generic local writer still rejects protected kinds. Local transfer imports
+validate and normalize themes, remap IDs and enforce the shared theme quota in
+one transaction; imports never select or publish a theme. Account theme sync and
+local Timeline integration remain outstanding (see `docs/local-workspaces.md`).

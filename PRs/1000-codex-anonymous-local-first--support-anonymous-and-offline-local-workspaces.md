@@ -66,3 +66,24 @@ and automation surfaces, account delete/move/import and dedicated adapters,
 online cache refresh/pagination, and cross-tab/account-switch acceptance.
 The current transfer adapter also needs explicit handling of referenced media
 before its export can be considered complete for attachment-bearing content.
+
+
+## Anonymous themes and retirement recovery checkpoint — 2026-10-16
+
+- Anonymous Theme Studio has dedicated local save/apply/delete and canonical
+  import/export, reusing the account token sanitizer and protected-kind boundary.
+  Imports receive fresh IDs, remain local and do not change the active selection.
+- Production-build browser acceptance passed no-login save/reload, offline cold
+  startup/edit/save/reload, normal JSON download/import, apply/delete and responsive
+  1440/390/320px checks. Save/delete network observations contained no mutations.
+  JSON was independently checked by `validateTransfer`; local evidence is in
+  `tmp/draft-qa/anonymous-theme-export.json` and the anonymous-themes-offline PNGs.
+- Authoritative root rejection retires existing local/remote leases; repeated
+  rejection does not broadcast another invalidation while already pending.
+  IndexedDB blocked/error/timeout/close failures permit retry and discard late
+  upgrade/success callbacks.
+- Incorporated the repository review bot's public profile/waitlist fix. Public
+  profile/activity/search and theme gallery reads use the credential-free public
+  reader, and callbacks from a retired anonymous facade fail before networking.
+- Account theme synchronization, local history and algorithms remain incomplete;
+  this checkpoint does not change the full rollout's merge boundary.

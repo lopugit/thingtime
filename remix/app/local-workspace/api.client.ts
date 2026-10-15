@@ -2,7 +2,8 @@ import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResoluti
 import { publicWorkspaceRead } from './publicRead.client';
 import { draftRequest } from '../drafts/draftClient';
 import { localThingProjection, type ThingWrite } from './things';
-import { anonymousThings, anonymousWorkspaceLease, announceLocalWorkspaceChange, LOCAL_WORKSPACE_OWNER } from './runtime.client';
+import { anonymousThings, anonymousWorkspaceDatabase, anonymousWorkspaceLease, announceLocalWorkspaceChange, LOCAL_WORKSPACE_OWNER } from './runtime.client';
+import { LocalThemes } from './themes';
 import { WorkspaceError } from './storage';
 import { crystalSchemas } from '../schemas/registry';
 
@@ -31,11 +32,18 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	// account, mutation and admin surface stays blocked.
 	const publicOnline = (group: string, methods: string[]) => {
 		if (!remote[group]) return;
-		local[group] = { ...local[group], ...Object.fromEntries(methods.filter(name => remote[group][name]).map(name => [name, remote[group][name]])) };
+		local[group] = { ...local[group], ...Object.fromEntries(methods.filter(name => remote[group][name]).map(name => [name, async (...args: unknown[]) => {
+			lease.assertCurrent(); const result = await remote[group][name](...args); lease.assertCurrent(); return result;
+		}])) };
 	};
 	publicOnline('waitlist', ['join']);
-	publicOnline('profile', ['get', 'activity', 'search']);
-	publicOnline('themes', ['getShared', 'listShared']);
+	// Public profile reads must not acquire a later session's viewer privileges.
+	const profileRead = (path: string, version = '1.0.0') => (args: Record<string, unknown> = {}) => {
+		lease.assertCurrent();
+		const query = new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+		return publicWorkspaceRead(`/api/v1/users/${path}?${query}`, `api.users-${path}`, version);
+	};
+	local.profile = { ...local.profile, get: profileRead('profile', '1.1.0'), activity: profileRead('activity'), search: profileRead('search') };
 	local.drafts = (input?: Record<string, unknown>, query?: Record<string, string>) => { lease.assertCurrent(); return draftRequest(LOCAL_WORKSPACE_OWNER, input, query); };
 	local.things = { ...local.things,
 		feed: async (args: Record<string, unknown> = {}) => {
@@ -79,6 +87,15 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	};
 	local.schemas = { ...local.schemas, list: async () => ({ ok: true, schemas: crystalSchemas() }), browse: browse('schema') };
 	local.components = { ...local.components, browse: browse('component') };
+	const themes = () => { lease.assertCurrent(); return new LocalThemes(anonymousWorkspaceDatabase(), lease); };
+	local.themes = {
+		list: () => themes().list(),
+		save: async (input: Parameters<LocalThemes['save']>[0]) => changed(await themes().save(input)),
+		remove: async ({ id }: { id: string }) => changed(await themes().remove(id)),
+		setActive: async ({ themeId }: { themeId: string | null }) => changed(await themes().setActive(themeId)),
+		getShared: ({ id }: { id: string }) => { lease.assertCurrent(); return id.startsWith('local-') ? themes().get(id) : publicWorkspaceRead(`/api/v1/themes/shared?id=${encodeURIComponent(id)}`, 'api.themes-shared', '1.0.0'); },
+		listShared: (args?: { limit?: number }) => { lease.assertCurrent(); return publicWorkspaceRead(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`, 'api.themes-shared', '1.0.0'); }
+	};
 	return local as T;
 }
 

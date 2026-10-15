@@ -7,7 +7,7 @@ import { WorkspaceError } from './storage';
 export async function publicWorkspaceRead(path: string, feature: string, version: string, signal?: AbortSignal) {
 	const lease = anonymousWorkspaceLease(); lease.assertCurrent(); signal?.throwIfAborted();
 	const url = new URL(path, window.location.origin);
-	if (url.origin !== window.location.origin || !['/api/v1/things', '/api/v1/things/feed', '/api/v1/things/trending', '/api/v1/components/browse', '/api/v1/schemas/browse', '/api/v1/webpages/resolve'].includes(url.pathname)) throw new WorkspaceError('INVALID_PUBLIC_READ', 'Unsupported public catalog read');
+	if (url.origin !== window.location.origin || !['/api/v1/things', '/api/v1/things/feed', '/api/v1/things/trending', '/api/v1/components/browse', '/api/v1/schemas/browse', '/api/v1/webpages/resolve', '/api/v1/themes/shared', '/api/v1/users/profile', '/api/v1/users/activity', '/api/v1/users/search'].includes(url.pathname)) throw new WorkspaceError('INVALID_PUBLIC_READ', 'Unsupported public catalog read');
 	const key = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url.pathname + url.search)).then(bytes => [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join(''));
 	const cacheable = !url.searchParams.has('key') && !url.searchParams.has('sharedRoot');
 	const db = anonymousWorkspaceDatabase();

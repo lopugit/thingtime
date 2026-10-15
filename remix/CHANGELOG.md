@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous Theme Studio saves, applies, deletes
+  and round-trips named themes offline through canonical transfer validation.
+  Root-session refusals retire outstanding workspace operations; browser storage
+  opening now fails within a bound and permits retry. Local browser evidence and
+  remaining account-sync/history gaps are in the
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Local workspace rollout in progress: atomic
   account-scoped Thing writes, immutable retries, native Builder pending-page
   resolution, explicit conflict review and offline account cold startup with
