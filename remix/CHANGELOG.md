@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous History owner notes now save/remove
+  offline with canonical relational records, atomic limits, safe deletion
+  retries and device-only status. Clean-browser reload/refusal/viewport checks
+  passed; full local-first rollout remains unmerged. See the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-16 — **Codex (AI)**: Anonymous ordinary content now retains canonical
   local Timeline versions and recorded native page previews, verified through
   offline import/rename/reload at desktop and phone widths. History uses isolated

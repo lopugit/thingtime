@@ -46,7 +46,10 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 			let alive = true;
 			const flush = async () => {
 				try { guard.assertCurrent(); const count = await next.sync.pushPending(); if (alive) { setError(''); if (count) window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); } }
-				catch (failure) { if (alive) setError(failureMessage(failure)); }
+				catch (failure) { if (alive) {
+					if (failure instanceof TimelineBranchCommandRefusal || failure instanceof TimelineNoteCommandRefusal) { setError(''); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
+					else setError(failureMessage(failure));
+				} }
 			};
 			retry.current = flush; redact.current = async () => {};
 			window.addEventListener(TIMELINE_CHANGED_EVENT, flush); void flush();

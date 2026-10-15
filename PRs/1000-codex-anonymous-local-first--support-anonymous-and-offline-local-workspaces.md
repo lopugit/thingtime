@@ -434,3 +434,27 @@ including account discussion sync and local Timeline, remains the merge gate.
   notes/names, restore/merge, version export, related history, protected-kind
   adapters, all editor draft lifecycles and account local-first synchronization
   are still required. The full acceptance matrix is unchanged as the merge gate.
+
+
+## Canonical local History owner notes — 2026-10-16
+
+The Message tab now uses the anonymous local Timeline adapter for canonical
+owner notes. Saves/removals remain device-only. Separate relational records,
+shared validation, atomic eight-note limits, scoped leases and content-free
+removal markers protect concurrent tabs and uncertain retries. Page budgets
+include multibyte note text. Definitive refusals retain Retry/Dismiss controls
+without turning healthy History into a connection failure. No account adapter,
+authentication requirement or Lopu provider credential is bypassed.
+
+Verification: 105 workspace/offline-shell + 238 shared Timeline tests passed;
+five opt-in skips, with the affected browser test explicitly enabled and passing.
+The clean anonymous production-browser fixture verifies offline note save,
+reload, removal, ninth-note refusal/dismissal and native recorded page previews
+at 1440/390/320px. Zero mutation requests, account Timeline calls and page errors.
+Manual in-app Browser confirmation also passed. Evidence:
+`tmp/local-timeline-notes-ui/`. Build: 245 verified assets / 21,159,536 bytes.
+Changed-file lint: zero errors / one constructor warning. Raw TypeScript:
+91 pre-existing diagnostics, identical diagnostic identities to the prior check.
+This is local verification; CI and deployed behavior are separate. Version names,
+branches, restore/merge, protected histories, account sync and the full remaining
+coverage matrix still block completion and merge.

@@ -48,6 +48,13 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.goto(new URL(`/history?thing=${encodeURIComponent(thingId)}`, base).href);
   await page.getByText('Saved on this device · never uploaded', { exact: true }).waitFor();
   await page.getByRole('button', { name: /Created Thing Offline history page/ }).click();
+  await page.getByRole('tab', { name: 'Message', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Add a note to this change', exact: true }).fill('Kept locally, even without a connection.');
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await page.getByText('Note saved on this device. It will never be uploaded.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Ask Lopu to explain', exact: true }).isDisabled(), true);
+  if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'note-saved-desktop.png'), fullPage: false }); }
+  await page.getByRole('tab', { name: 'Changes', exact: true }).click();
   await page.getByRole('button', { name: 'Preview page', exact: true }).click();
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
   await page.getByText(/Using the component definitions recorded with this version/).waitFor();
@@ -56,6 +63,7 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByRole('button', { name: /Created Thing Offline history page/ }).click();
   await page.getByRole('button', { name: 'Preview page', exact: true }).click();
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  await page.getByText('Kept locally, even without a connection.', { exact: true }).first().waitFor();
   const bounds = [];
   for (const [width, height] of [[1440, 1000], [390, 844], [320, 844]]) {
    await page.setViewportSize({ width, height });
@@ -69,8 +77,33 @@ test('clean anonymous offline import, rename, history reload and native recorded
    assert.equal(measured.width, measured.scrollWidth); bounds.push(measured);
    if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, `history-${width}.png`), fullPage: false }); }
   }
+  await page.getByRole('tab', { name: 'Message', exact: true }).click();
+  if (artifacts) await page.screenshot({ path: resolve(artifacts, 'note-saved-320.png'), fullPage: false });
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.getByText('Note removed from this device.', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Kept locally, even without a connection.', { exact: true }).count(), 0);
+  await page.reload();
+  await page.getByRole('button', { name: /Created Thing Offline history page/ }).click();
+  await page.getByRole('tab', { name: 'Message', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Add a note to this change', exact: true }).waitFor();
+  assert.equal(await page.getByText('Kept locally, even without a connection.', { exact: true }).count(), 0);
+  for (let n = 0; n < 8; n++) {
+   await page.getByRole('textbox', { name: 'Add a note to this change', exact: true }).fill(`Bounded offline note ${n}`);
+   await page.getByRole('button', { name: 'Save note', exact: true }).click();
+   await page.getByText(`Bounded offline note ${n}`, { exact: true }).first().waitFor();
+   await page.getByText('Note saved on this device. It will never be uploaded.', { exact: true }).waitFor();
+  }
+  await page.getByRole('textbox', { name: 'Add a note to this change', exact: true }).fill('Ninth note stays available for review.');
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await page.getByText(/Needs attention · This change already has 8 notes/).first().waitFor();
+  await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await page.getByText('Note command cancelled. Your change remains in History.', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Ninth note stays available for review.', { exact: true }).count(), 0);
+  await page.getByRole('tab', { name: 'Changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Preview page', exact: true }).click();
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
   assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, mutations, timelineRequests, failures, bounds }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
   if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); }
   throw error;

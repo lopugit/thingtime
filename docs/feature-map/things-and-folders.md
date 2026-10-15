@@ -398,4 +398,13 @@ UI and draft queue to this isolated authority and captures its connection API
 facade. No account Timeline requests or authority are borrowed. Run
 `test:timeline`, `test:local-workspace`, `test:things` and the opt-in
 `timeline.browser.test.ts`. See the dated Timeline checkpoint and still-open
-branches/notes/restore/account-sync matrix in [local workspaces](../local-workspaces.md).
+branches/version-names/restore/account-sync matrix in [local workspaces](../local-workspaces.md).
+
+
+Anonymous contextual owner notes use `local-workspace/timelineNotes.ts` with the
+shared note validators and the existing Timeline queue. They are separate scoped
+records, batched with History pages and included in their byte budget. Atomic
+caps and content-free deletion markers prevent cross-tab overfill and delayed
+retry resurrection. `timelineNotes.test.ts` covers those boundaries and
+`timeline.browser.test.ts` covers offline save/reload/remove and actionable
+refusals. Lopu explanations retain their real account/provider requirements.

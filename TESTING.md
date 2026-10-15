@@ -2,6 +2,15 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Anonymous History notes: open Message on a saved change while offline;
+      save plain text, cold-reload and remove it. Confirm device-only copy and
+      zero account/mutation HTTP calls. Eight concurrent notes must be the cap;
+      a ninth retains its text with Retry/Dismiss without breaking History.
+      A delayed add after removal cannot resurrect text. Failed deletion-marker
+      storage must roll back deletion and quota together. Batch page limits
+      must count multibyte notes and exclude notes from unselected events.
+      Run `timelineNotes.test.ts` and the normal offline History browser test.
+
 - [ ] Anonymous History: normal-import a page and component, rename offline,
       open its recorded native preview, then cold-reload offline. Content and
       canonical history must commit together; no account Timeline/mutation

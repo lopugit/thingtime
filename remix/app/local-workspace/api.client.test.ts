@@ -239,7 +239,7 @@ test('anonymous Timeline uses local authority, canonical component responses, an
  const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote Timeline'); };
  bindLocalWorkspace(true, rootIdentity.read().generation);
  try {
-  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote }, things: { create: remote } });
+  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote }, things: { create: remote } });
   const row = await api.things.create({ thingtime: ['data'], crystal: { name: 'Local history adapter' } });
   const scope = { ownerId: 'local-workspace', dataPlane: 'local-workspace', apiOrigin: 'https://thingtime.example' };
   assert.equal((await api.timeline.discover(scope.ownerId)).dataPlane, scope.dataPlane);
@@ -249,7 +249,12 @@ test('anonymous Timeline uses local authority, canonical component responses, an
   assert.deepEqual(await api.timeline.componentBindings(scope, page.entries[0].event.id), { ok: true, eventId: page.entries[0].event.id, entries: [] });
   await assert.rejects(api.timeline.branch(scope, {}), (error: any) => error.status === 422 && error.code === 'LOCAL_TIMELINE_UNAVAILABLE');
   await assert.rejects(async () => api.timeline.page({ ...scope, dataPlane: 'home' }, { thingId: null, before: null, after: null, limit: 40 }), /another workspace/);
+  const command = { command: 'add-note', operationId: crypto.randomUUID(), eventId: page.entries[0].event.id, thingId: row.id, text: 'Local API note' };
+  await api.timeline.note(scope, command);
+  assert.equal((await api.timeline.entry(scope, command.eventId)).notes[0].text, command.text);
+  await assert.rejects(async () => api.timeline.note({ ...scope, ownerId: 'another' }, command), /another workspace/);
   rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+  await assert.rejects(async () => api.timeline.note(scope, command), /Workspace changed/);
   await assert.rejects(async () => api.timeline.entry(scope, page.entries[0].event.id), /Workspace changed/);
   assert.equal(remoteCalls, 0);
  } finally { await anonymousWorkspaceDatabase().close(); Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory }); }
