@@ -122,6 +122,12 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		readLocalFile: async ({ id }: { id: string }, request?: { signal?: AbortSignal }) => {
 			const { row, bytes } = await service().readFile(id, request?.signal); return { ok: true, attachment: { id: row.id, ...row.crystal }, bytes };
 		},
+		// Local files are renamed/annotated in place. Without this the shared media
+		// and Thing menus offer rename for an owned local file and then fail closed
+		// on the blocked cloud method.
+		annotate: async ({ id, ...patch }: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) => {
+			const row = await service().annotateFile({ id, ...patch }); return changed({ ok: true, attachment: { id: row.id, ...row.crystal } });
+		},
 		remove: async ({ id }: { id: string }) => { const row = await service().get(id); if (!isLocalAttachment(row)) throw new WorkspaceError('INVALID_ATTACHMENT', 'This Thing is not a local attachment'); if (row.localAttachment.draftId) return { ok: true, deferred: true }; const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); }
 	};
 	const browse = (kind: 'component' | 'schema') => async (args: Record<string, unknown> = {}) => {

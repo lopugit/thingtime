@@ -6,6 +6,7 @@ import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { verifyTransferFiles, transferChecksum } from '../utils/thingTransfer/archive';
 import { isTransferRecording, recordingTransferFile } from '../utils/thingTransfer/recording';
 import { createLocalAttachment, isLocalAttachment, localAttachmentFileId, localAttachmentExpired, reapLocalAttachmentDrafts, LOCAL_ATTACHMENT_DRAFT_MS, type LocalAttachment } from './attachments';
+import { applyAttachmentAnnotationPatch, type AttachmentAnnotationPatch } from '../api/utils/attachments/attachmentCore';
 import { sanitizeTags } from '../schemas/thingTags';
 import { selectComponent } from '../api/utils/webpages/componentResolutionCore';
 import { isProtectedThingtime, sanitizeExtended, validateThingtimeCrystal } from '../schemas/registry';
@@ -179,6 +180,32 @@ export class LocalThings {
 			}
 			await this.placement(tx, row); await tx.put('things', id, row); await tx.putBytes(id, bytes);
 			signal?.throwIfAborted(); return row;
+		});
+	}
+	/** Owner display text on a stored local file, reusing the shared canonical
+	 * annotation patch. Bytes, purpose, placement and device bookkeeping are
+	 * untouched; the file's immutable original name stays the download name. */
+	async annotateFile(input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) {
+		this.lease.assertCurrent();
+		if (this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+		// Same patch contract as the account route: undefined leaves a field
+		// alone, null or '' clears it, and a non-string is a caller error.
+		const field = (value: string | null | undefined, label: string) => {
+			if (value === undefined) return undefined;
+			if (value !== null && typeof value !== 'string') fail('INVALID_ATTACHMENT', `Attachment ${label} must be text`);
+			return value;
+		};
+		const patch: AttachmentAnnotationPatch = { title: field(input.title, 'title'),
+			description: field(input.description, 'description'), filenamePreview: field(input.filenamePreview, 'filename preview') };
+		if (patch.title === undefined && patch.description === undefined && patch.filenamePreview === undefined) fail('INVALID_ATTACHMENT', 'Provide a filename preview, title or description to update');
+		return this.transaction('readwrite', async tx => {
+			const previous = await tx.get<LocalThing>('things', input.id);
+			if (!previous || !isLocalAttachment(previous) || localAttachmentExpired(previous, Date.parse(this.now()))) return fail('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);
+			const annotated = applyAttachmentAnnotationPatch(previous.crystal, patch);
+			if (annotated.ok === false) return fail('INVALID_ATTACHMENT', annotated.error);
+			const row: LocalAttachment = { ...previous, crystal: { ...annotated.crystal },
+				updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString(), revision: previous.revision + 1 };
+			await tx.put('things', row.id, row); return row;
 		});
 	}
 	async readFile(id: string, signal?: AbortSignal) {

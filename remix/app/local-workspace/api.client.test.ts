@@ -57,6 +57,14 @@ test('anonymous API writes and exports use no network and a retired facade canno
 			files: [{ id: 'bytes', targetId: 'file', path: 'files/000000', name: 'local.txt', mime: 'text/plain', bytes: fileBytes.length, sha256: await transferChecksum(fileBytes) }] }, localFiles: new Map([['bytes', fileBytes]]) });
 		const filePlan = (await api.things.export({ ids: fileImport.roots })).plan;
 		assert.deepEqual([...((await bundleFromPlan(filePlan, { fetch: remote })).files.values())][0], fileBytes);
+		// Renaming an owned local file is a local write, not a cloud account call.
+		const annotated = await api.attachments.annotate({ id: fileImport.roots[0], title: 'Renamed offline file' });
+		assert.equal(annotated.attachment.title, 'Renamed offline file');
+		assert.equal(annotated.attachment.name, 'local.txt', 'the immutable download name is untouched');
+		assert.equal((await api.things.get({ id: fileImport.roots[0] })).thing.crystal.title, 'Renamed offline file');
+		await assert.rejects(api.attachments.annotate({ id: fileImport.roots[0] }), /filename preview, title or description/);
+		await assert.rejects(api.attachments.annotate({ id: created.id, title: 'Not a file' }), /not stored in this workspace/);
+		assert.equal(remoteCalls, 0);
 		const fileCopy = await api.things.bulk({ op: 'copy', ids: fileImport.roots });
 		const deleted = await api.things.bulk({ op: 'delete', ids: fileImport.roots });
 		assert.equal(deleted.succeeded, 1); assert.equal(deleted.results[0].ok, true);
