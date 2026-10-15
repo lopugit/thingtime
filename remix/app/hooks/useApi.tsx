@@ -787,7 +787,7 @@ export function useApi() {
       )
     },
 		attachments: {
-			saveLocalFile: useCallback(async (_input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null }, _options?: { signal?: AbortSignal }): Promise<any> => { throw new Error('Local file bytes require a local workspace; account uploads use the existing upload service'); }, []),
+			saveLocalFile: useCallback(async (_input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null; purpose?: 'file' | 'post' | 'comment' }, _options?: { signal?: AbortSignal }): Promise<any> => { throw new Error('Local file bytes require a local workspace; account uploads use the existing upload service'); }, []),
 			readLocalFile: useCallback(async (_input: { id: string }, _options?: { signal?: AbortSignal }): Promise<any> => { throw new Error('Local file bytes are unavailable in this account workspace'); }, []),
 
 			// "download all" ZIP manifests: what a post/folder/media archive would

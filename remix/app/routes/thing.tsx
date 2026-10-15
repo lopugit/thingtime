@@ -1,3 +1,4 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { audienceDescription, audienceOfAcl, THING_AUDIENCE_META } from '~/components/Sharing/audienceCore';
 import React from 'react';
 import { ChatArchivePage } from '~/components/Things/ChatArchivePage';
@@ -287,7 +288,8 @@ function GenericThingPage() {
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const { v1 } = api;
-	const currentUser = useCurrentUser();
+	const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
+	const currentUser = id.startsWith('local-') && workspace?.localOnly ? workspace : accountUser;
 	const dataPlane = useDataPlane();
 	const lopu = useLopu();
 	const lopuRef = React.useRef(lopu);

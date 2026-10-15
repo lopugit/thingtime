@@ -8,7 +8,7 @@ import { PictureInPicture2, Plus, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { withPostRequestDeadline } from '~/hooks/postRequest';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import {
 	MediaLayoutCanvas,
@@ -162,7 +162,7 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
   return <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
 };
 const AccountPostComposer = (props: PostComposerProps) => {
@@ -176,7 +176,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 	const attachmentPurpose = isComment || (isEdit && (editPost?.thingtime || []).includes('comment')) ? 'comment' : 'post';
 
   const api = useApi();
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
   const lopu = useLopu();
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
@@ -211,7 +211,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   const [condition, setCondition] = React.useState<string>(editPost?.listing?.condition || '');
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
-  const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
+  const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || (user?.localOnly ? 'private' : 'public'));
   // subspace vocabulary: headline + destination + flair. Locked to the page's
   // subspace when one is passed; otherwise the feed composer offers the
   // viewer's joined subspaces (lazy-loaded on first expand).
@@ -231,7 +231,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   // …and the circle to come back to when the picker is abandoned. Seeded like
   // `visibility` above so a brand-new post still falls back to 🌐 Public,
   // while an edit falls back to whatever the post actually was.
-  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || 'public');
+  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || (user?.localOnly ? 'private' : 'public'));
 	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
@@ -498,7 +498,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
   // the viewer's joined subspaces for the destination picker — loaded once,
   // only for a top-level composer with no page-provided subspace
   React.useEffect(() => {
-    if (!expanded || isComment || subspace || mySubspaces || !user) return;
+    if (!expanded || isComment || subspace || mySubspaces || !user || user.localOnly) return;
     let cancelled = false;
     api.v1.subspaces
       .list({ mine: true, limit: 50 })
@@ -543,7 +543,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
       else setPostEditorValue({ kind: 'rich-text', blocks: textToBlocks(value.text || '') });
       setTitle(value.title || ''); setPrice(value.price || ''); setCurrency(value.currency || 'AUD');
       setCategory(value.category || 'other'); setCondition(value.condition || ''); setListingLocation(value.listingLocation || '');
-      setTagsInput(value.tagsInput || ''); setVisibility(value.visibility || 'public'); setCustomAcl(value.customAcl || null);
+      setTagsInput(value.tagsInput || ''); setVisibility(user?.localOnly ? 'private' : value.visibility || 'public'); setCustomAcl(value.customAcl || null);
       audienceAppliedRef.current = !!value.customAcl;
       setPostTitle(value.postTitle || ''); setSubspaceId(subspace?.id || value.subspaceId || null); setFlairId(value.flairId || null);
       setLayoutMode(value.layoutMode || 'auto'); setLayoutPattern(value.layoutPattern || [1, 2]); setLayoutColumns(value.layoutColumns || 3); setLayoutSpans(value.layoutSpans || {});
@@ -596,7 +596,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
     setCondition('');
     setListingLocation('');
     setTagsInput('');
-    setVisibility('public');
+    setVisibility(user?.localOnly ? 'private' : 'public');
     setPostTitle('');
     setFlairId(null);
     if (!subspace) setSubspaceId(null);
@@ -619,7 +619,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 			}
 		}
 		const currentAttachmentIds = [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds];
-		const currentPostShareId = crypto.randomUUID();
+		const currentPostShareId = `${user?.localOnly ? 'local-post-' : ''}${crypto.randomUUID()}`;
 		// polls publish as thingtime posts; the question lives on the thing (the
 		// poll card renders it), so the post text stays empty — no double render
 		const apiType: PostType = type === 'poll' ? 'thingtime' : type;
@@ -750,7 +750,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 				attachmentComposerRef.current?.markCommitted(attachmentIds);
 			}
       lopu({
-        title: isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
+        title: user?.localOnly ? 'Saved on this device' : isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
         status: 'success',
         duration: 6000
       });
@@ -1248,6 +1248,8 @@ const AccountPostComposer = (props: PostComposerProps) => {
         </Flex>
       )}
 
+      {user?.localOnly && <Text fontSize="sm" role="status">Saved on this device only. This post is not published or synced to an account.</Text>}
+
       {/* photos + media — the whole media suite lives under the Photos
       toggle: the post's existing bound media (edit mode, reorderable), the
       secure uploader (live in edit mode too — new uploads bind through the
@@ -1440,7 +1442,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
             </Text>
           </Flex>
         )}
-        {!isComment && !subspace && user && (
+        {!isComment && !subspace && user && !user.localOnly && (
           <Select
             size="sm"
             width="170px"
@@ -1484,7 +1486,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
             ))}
           </Select>
         )}
-        {!isComment && (
+        {!isComment && !user?.localOnly && (
           <>
             <Select
               size="sm"
@@ -1533,7 +1535,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
           isLoading={posting}
           onClick={handlePost}
         >
-          {isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
+          {user?.localOnly ? 'Save on this device' : isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
       </Flex>
 			</Box>

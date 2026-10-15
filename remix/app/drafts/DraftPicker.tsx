@@ -3,6 +3,7 @@ import { Button, Flex, Input, Modal, ModalBody, ModalCloseButton, ModalContent, 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { LOCAL_WORKSPACE_OWNER } from '../local-workspace/runtime.client';
 import { draftRequest, listAccountDrafts } from './draftClient';
 import type { AccountDraft, DraftSummary, DraftSurface } from './draftCore';
 
@@ -52,6 +53,7 @@ export function DraftPicker({
 	onDeleted?: (id: string) => Promise<void>;
 	onLoad: (draft: AccountDraft) => Promise<void>;
 }) {
+	const localOnly = actor === LOCAL_WORKSPACE_OWNER;
 	const [open, setOpen] = React.useState(false),
 		[filter, setFilter] = React.useState<'all' | 'draft' | 'template'>('all');
 	const [search, setSearch] = React.useState(''),
@@ -171,7 +173,7 @@ export function DraftPicker({
 					<ModalCloseButton isDisabled={busy} />
 					<ModalBody paddingBottom={6}>
 						<Text fontSize="sm" mb={3}>
-							Private to your account. Templates stay here when you use them.
+							{localOnly ? 'Stored on this device only.' : 'Private to your account.'} Templates stay here when you use them.
 						</Text>
 						<Flex gap={2} align="center" mb={2}>
 							<Switch
@@ -183,11 +185,11 @@ export function DraftPicker({
 								}}
 							/>
 							<Text as="label" htmlFor="draft-auto-resume" fontSize="sm">
-								Automatically resume my latest account draft
+								Automatically resume my latest {localOnly ? 'saved' : 'account'} draft
 							</Text>
 						</Flex>
 						<Text fontSize="xs" mb={3}>
-							Drafts on this device always recover. Turn this off to choose account drafts yourself.
+							{localOnly ? 'Your current editor recovers on this device. Turn this off to choose other saved drafts yourself.' : 'Drafts on this device always recover. Turn this off to choose account drafts yourself.'}
 						</Text>
 						<Flex gap={2} mb={3} flexWrap="wrap">
 							{(['all', 'draft', 'template'] as const).map((kind) => (

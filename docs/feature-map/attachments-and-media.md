@@ -124,8 +124,7 @@ No server storage key, approval, ownership or moderation verdict is synthesized.
 Bounds: 16 MiB per file, 1 MiB per JSON record, 64 MiB total and 10,000 records.
 Missing bytes or checksum failures reject the operation. Account file import is
 not enabled by this adapter; account access gates above remain authoritative.
-Normal uploads, native media URLs, draft copies, linked galleries and account
-sync are still separate work. Run `test:local-workspace` and `test:things`; see
+Linked galleries, annotation and account sync remain separate work. Run `test:local-workspace` and `test:things`; see
 [the coverage matrix](../local-workspaces.md) for local browser evidence.
 
 
@@ -140,5 +139,8 @@ renderer. Pending src/href values are omitted. Account media access is unchanged
 `apiIdentity.ts` keeps workspace API callbacks stable without retargeting retired
 account closures. Run `test:local-workspace`, `test:attachments`, `test:things` and
 `test:webpages`; see the local-workspace manual checklist for offline browser and
-identity-retirement checks. Composer uploads, annotations, gallery/draft copies
-and account byte synchronization still need their own adapters and acceptance.
+identity-retirement checks. The normal composer queue now supports local post/comment files; restored edit
+previews use `SharedMedia` as well. `LocalDrafts` owns atomic independent media
+copies and draft binding; unbound post/comment files expire after 24 hours and
+are reaped on later file/draft writes. Annotation, linked galleries, audio/video
+acceptance and account byte synchronization still need their adapters/checks.

@@ -69,12 +69,12 @@ change this pointer; logout/account changes revoke it.
 | Local storage and account boundaries | Unit-tested persistence, atomic rollback, concurrent edits, scope isolation and identity invalidation. Add browser multi-tab and account-switch regressions. |
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
 | Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. |
-| Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Finish template UI, attachment copying, definition/schema recovery. |
+| Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Finish bundled catalog availability, copies, argument editing, schema forms and offline creation. |
 | Actions and app suites | Reuse existing bounded executors and suite definitions. Local data/pure/browser operations still need local host integration; remote services must remain explicitly remote. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
-| Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Finish composer uploads, draft copies, linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
-| Posts, comments and saved items | Enable local content authoring/drafts and local relationships. Public posting, remote reactions and recipient delivery remain authenticated operations. |
+| Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
+| Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, reactions, polls, linked Things and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
@@ -344,3 +344,48 @@ verification, not CI or deployed acceptance. Normal Things checkbox selection an
 folder deletion semantics still need complete UI acceptance; the local adapter
 currently refuses a nonempty folder unless explicitly recursive, while the generic
 confirmation describes reparenting. Cleanup removed child files before folders.
+
+
+## Anonymous composer, media drafts and posts — 2026-10-16
+
+The normal PostComposer and attachment queue now use the anonymous workspace
+identity and byte adapter. Save on this device validates the canonical post,
+binds files and commits it atomically without waiting for draft saving. Account
+posting still uses the existing authorized transport. Local posts are private
+projections, do not enter the public feed and cannot target remote subspaces.
+Local identity labels do not link to an unrelated `/profile/local` account.
+
+Draft snapshots use the existing revision/write-id/tombstone protocol. Media
+metadata and bytes share the workspace transaction and quota. Templates and
+recovery copies receive new file IDs and remapped layout references. Only active
+working drafts can donate their files to a post; cleanup preserves committed
+files. Released unbound files expire after 24 hours and are reaped on later local
+file/draft writes. No temporary account, server upload or publication is created.
+
+Local production-build browser verification, no account and network disabled:
+normal picker upload, draft autosave, post create/edit, cold reload, comment and
+nested reply creation/reload, template creation/reuse and independent image
+survival after original deletion passed. Existing-image editor tiles reuse the
+native shared/local media resolver. Post GET restores relational comments; deeper
+replies load on demand through the normal list adapter. 1440×1000, 390×844 and
+320×844 had no document horizontal overflow. The audited template-edit/save
+interval had zero network mutations; cached static assets and normal shell GETs
+remain observable. Disposable posts/comments/template were removed and browser
+overrides restored. Evidence: `tmp/local-composer-ui/verification.json` and native
+screenshots in that directory.
+
+Local checks: 68 workspace/offline, 26 drafts, 78 feed, 56 hooks and 295 attachments
+passed. Canonical post/file export/import preserves exact bytes with fresh IDs.
+TypeScript retains the same 91 baseline diagnostics, with no added signatures.
+Client build verifies 231 assets (11,047,709 bytes). These are local results;
+CI and preview acceptance must be tied to the pushed revision. Linked-media
+minting, annotation, reactions/saves/polls, full signed-in offline posting and
+account byte synchronization remain unfinished. The full matrix above still
+blocks merge.
+
+The normal offline import/export dialogs also passed an image-post ZIP with the
+actual 14,451-byte PNG. Its browser download validated canonically and round-tripped
+through the isolated normal importer with fresh IDs and identical bytes. The
+validator receives verified attachment context; imported comment files retain
+comment purpose. Evidence: `tmp/local-composer-ui/browser-image-post.zip`,
+`browser-image-post.json` and `roundtrip-verification.json`.

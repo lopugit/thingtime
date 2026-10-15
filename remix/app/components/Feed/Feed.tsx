@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Button, Flex, Input, Text } from '@chakra-ui/react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
@@ -43,6 +43,7 @@ const readCachedScope = (loggedIn: boolean): FeedScope => feedScopeOf(readLocalC
 const PAGE_SIZE = 20;
 
 export const FeedPage = () => {
+  const navigate = useNavigate();
   const api = useApi();
   const user = useCurrentUser();
   const workspaceUser = useWorkspaceUser();
@@ -404,8 +405,9 @@ export const FeedPage = () => {
   // your own fresh post beats strict filter fidelity, and the next Apply or
   // page reload reconciles the list
   const handlePosted = React.useCallback((post: PublicPost) => {
+    if (post.id.startsWith('local-')) { navigate(`/post/${encodeURIComponent(post.id)}`); return; }
     setPosts((prev) => [post, ...prev]);
-  }, []);
+  }, [navigate]);
 
   // hook the engagement observer onto every rendered card wrapper
   const listRef = React.useRef<HTMLDivElement | null>(null);
@@ -631,7 +633,7 @@ export const FeedPage = () => {
           />
         )}
 
-        {user && (
+        {workspaceUser && (
           <Box ref={composerBoxRef}>
             <PostComposer onPosted={handlePosted} />
           </Box>

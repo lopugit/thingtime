@@ -1,3 +1,4 @@
+import { localPostInput, localPostProjection } from './posts';
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
 import { publicWorkspaceRead } from './publicRead.client';
 import { draftRequest } from '../drafts/draftClient';
@@ -20,8 +21,11 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	const project = (row: Parameters<typeof localThingProjection>[0]) => localThingProjection(row, LOCAL_WORKSPACE_OWNER);
 	const changed = <V>(result: V) => { lease.assertCurrent(); announceLocalWorkspaceChange(); return result; };
 	const write = async (input: ThingWrite, update = false) => {
-		const things = service(); const row = update ? await things.update(input as ThingWrite & { id: string }) : await things.create(input);
-		return changed({ ok: true, id: row.id, thing: project(row) });
+		const things = service(); const kinds = input.thingtime || (update && input.id ? (await things.get(input.id)).thingtime : undefined);
+		const post = (!update && !Array.isArray(kinds)) || (Array.isArray(kinds) && kinds.includes('post'));
+		const row = post ? await things.savePost(update ? input : localPostInput(input as Record<string, unknown>), update) : update ? await things.update(input as ThingWrite & { id: string }) : await things.create(input);
+		const projection = post ? localPostProjection(row, await things.snapshot(), LOCAL_WORKSPACE_OWNER) : undefined;
+		return changed({ ok: true, id: row.id, thing: { ...project(row), ...(projection ? { attachments: projection.attachments } : {}) }, ...(projection ? { post: projection } : {}) });
 	};
 	const local = blocked(remote);
 	const algorithms = () => { lease.assertCurrent(); return new LocalAlgorithms(anonymousWorkspaceDatabase(), lease); };
@@ -60,16 +64,25 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		trending: async () => { lease.assertCurrent(); return publicWorkspaceRead('/api/v1/things/trending?anon=1', 'api.things-trending', '1.0.0'); },
 		get: async ({ id, key, sharedRoot, commentProjection }: { id: string; key?: string; sharedRoot?: string; commentProjection?: boolean }, options?: { signal?: AbortSignal }) => {
 			lease.assertCurrent();
-			if (id.startsWith('local-') && commentProjection) throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Device-only comments are not available yet.');
-			if (id.startsWith('local-')) return { ok: true, thing: project(await service().get(id)) };
+			if (id.startsWith('local-')) {
+				const things = service(), row = await things.get(id), all = await things.snapshot();
+				const post = row.thingtime.includes('post') ? localPostProjection(row, all, LOCAL_WORKSPACE_OWNER, true) : undefined;
+				return { ok: true, thing: { ...project(row), ...(post ? { attachments: post.attachments } : {}) }, ...(post ? { post, ...(commentProjection ? { comment: post } : {}) } : {}) };
+			}
 			const query = new URLSearchParams({ id, ...(key ? { key } : {}), ...(sharedRoot ? { sharedRoot } : {}) });
 			return publicWorkspaceRead(`/api/v1/things?${query}`, 'api.things', '1.31.0', options?.signal);
 		},
 		list: async (query: Parameters<ReturnType<typeof anonymousThings>['list']>[0] & { commentProjection?: boolean }, options?: { signal?: AbortSignal }) => {
-			if (query.commentProjection && query.target?.startsWith('local-')) throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Device-only comments are not available yet.');
+			if (query.commentProjection && query.target?.startsWith('local-')) {
+				const things = service(); await things.get(query.target);
+				const page = await things.list({ ...query, thingtime: 'comment' }), all = await things.snapshot();
+				return { ok: true, comments: page.things.map(row => localPostProjection(row, all, LOCAL_WORKSPACE_OWNER)), nextCursor: page.nextCursor };
+			}
 			options?.signal?.throwIfAborted(); const result = await service().list(query); options?.signal?.throwIfAborted();
 			return { ok: true, ...result, things: result.things.map(project) };
 		},
+		comment: async ({ id, ...input }: { id: string } & Record<string, unknown>) => { const things = service(); await things.get(id); const result = await write({ ...localPostInput({ type: 'text', ...input }), thingtime: ['post', 'comment'], targetId: id }); return { ...result, comment: result.post, commentCount: (await things.snapshot()).filter(row => row.thingtime.includes('comment') && row.targetId === id).length }; },
+		remove: async ({ id }: { id: string }) => { const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); },
 		create: (input: ThingWrite) => write(input), update: (input: ThingWrite) => write(input, true),
 		renameLibrary: ({ id, displayTitle, expectedUpdatedAt }: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => write({ id, crystal: { title: displayTitle }, expectedUpdatedAt }, true),
 		export: async ({ ids, ...options }: { ids: string[] }, request?: { signal?: AbortSignal }) => {
@@ -92,7 +105,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		readLocalFile: async ({ id }: { id: string }, request?: { signal?: AbortSignal }) => {
 			const { row, bytes } = await service().readFile(id, request?.signal); return { ok: true, attachment: { id: row.id, ...row.crystal }, bytes };
 		},
-		remove: async ({ id }: { id: string }) => { const row = await service().get(id); if (!isLocalAttachment(row)) throw new WorkspaceError('INVALID_ATTACHMENT', 'This Thing is not a local attachment'); const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); }
+		remove: async ({ id }: { id: string }) => { const row = await service().get(id); if (!isLocalAttachment(row)) throw new WorkspaceError('INVALID_ATTACHMENT', 'This Thing is not a local attachment'); if (row.localAttachment.draftId) return { ok: true, deferred: true }; const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); }
 	};
 	const browse = (kind: 'component' | 'schema') => async (args: Record<string, unknown> = {}) => {
 		lease.assertCurrent();

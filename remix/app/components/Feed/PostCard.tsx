@@ -1,3 +1,4 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { PostLinkedThings } from './PostLinkedThings';
 import { CollectionList } from '~/components/Collections/CollectionList';
 import { createDiscussionCommentPager, mergeDiscussionComments, discussionCommentSearchText } from './discussionCommentPages';
@@ -750,6 +751,7 @@ const viewerAsAuthor = (user: any): FeedAuthor | null =>
         id: user.id,
         username: user.username,
         displayName: user.displayName ?? null,
+        ...(user.localOnly ? { localOnly: true as const } : {}),
         avatarUrl: user.avatarUrl ?? null
       }
     : null;
@@ -852,7 +854,8 @@ const CommentRow = (props: {
 
   const api = useApi();
   const sharedAccess = useSharedAccess();
-  const user = useCurrentUser();
+  const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
+  const user = comment.id.startsWith('local-') && workspace?.localOnly ? workspace : accountUser;
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
@@ -1489,7 +1492,9 @@ function PostCardImpl(props: PostCardProps) {
         : null;
 
   const api = useApi();
-  const user = useCurrentUser();
+  const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
+  const localOnly = post.id.startsWith('local-') && workspace?.localOnly === true;
+  const user = localOnly ? workspace : accountUser;
   const lopu = useLopu();
 
   const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
@@ -2536,7 +2541,7 @@ function PostCardImpl(props: PostCardProps) {
           )}
 
           {/* repost: instant repost OR quote (caption + circle) */}
-			{!mediaThing && !discussionOnly && (user ? (
+			{!mediaThing && !discussionOnly && !localOnly && (user ? (
             <Box position="relative" display="flex">
               <Menu placement="top" autoSelect={false}>
 									<MenuButton as={ActionIcon} icon={<Repeat2 size={18} strokeWidth={2.2} />} count={post.shareCount} label="Repost" />
@@ -2617,7 +2622,7 @@ function PostCardImpl(props: PostCardProps) {
 			))}
 
           {/* outward share: native sheet / copy link */}
-          <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
+          {!localOnly && <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />}
 
           {/* bookmark: save to the viewer's private library (/saved) —
           filled/accent when saved, hidden logged-out (nothing to save into) */}

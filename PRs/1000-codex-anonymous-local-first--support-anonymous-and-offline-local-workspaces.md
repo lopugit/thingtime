@@ -186,3 +186,31 @@ passed; webpages/shared media passed 152 with four existing skips. Client build:
 diagnostics, no added signatures. CI/preview status must be checked against the
 pushed revision. Composer uploads, local comments/annotations, draft/gallery
 copies, account byte sync and the complete coverage matrix still block merge.
+
+
+## Anonymous native composer checkpoint — 2026-10-16
+
+Native post/file selection, create/edit, comments/replies and template reuse now
+work in the anonymous scoped workspace. Post commit remains independent of draft
+save. Media binding/copies/quota are atomic; draft retirement cannot remove
+committed post bytes. Templates retain independent media after original deletion.
+Restored edit tiles now use local object URLs, and local post reads restore saved
+relational comments. Local labels never link to an unrelated account profile.
+
+No-session production-build browser with networking disabled verified upload,
+autosave, post edit/cold reload, comment/reply reload, template copy independence
+and cleanup at 1440/390/320px. Evidence: `tmp/local-composer-ui/`. Checks: 68 local
+workspace/offline, 26 drafts, 78 feed, 56 hooks, 295 attachments; client build
+231 assets/11,047,709 bytes. Raw tsc matches 91 baseline diagnostics with no added
+signatures. Canonical post/file round-trip remaps IDs and preserves exact bytes.
+
+Still not merge-ready: linked media/annotations, local saves/reactions/polls,
+account byte/post synchronization and the full feature matrix remain. Local
+verification is not CI or deployed acceptance; report those against the exact SHA.
+
+The normal offline import/export dialogs also passed an image-post ZIP with the
+actual 14,451-byte PNG. Its browser download validated canonically and round-tripped
+through the isolated normal importer with fresh IDs and identical bytes. The
+validator receives verified attachment context; imported comment files retain
+comment purpose. Evidence: `tmp/local-composer-ui/browser-image-post.zip`,
+`browser-image-post.json` and `roundtrip-verification.json`.

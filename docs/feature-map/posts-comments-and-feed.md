@@ -84,3 +84,15 @@ facade; identity changes discard queued/session events. Canonical exports omit
 lineage and authority and imports do not change active selection. Account profile
 sync and full multi-tab acceptance remain outstanding in
 [the coverage matrix](../local-workspaces.md).
+
+
+## Anonymous post authoring
+
+`local-workspace/posts.ts` and `LocalThings.savePost` map and validate native
+composer inputs, bind local attachments atomically and project native PostCards.
+`anonymousApi` supplies local post GET, comment/reply list and mutation adapters.
+Feed creation navigates to the local permalink without injecting it into public
+feed results. Local identity and audience never grant server access. Run
+`test:local-workspace`, `test:feed`, `test:drafts` and `test:hooks`; verify cold
+reload of images and relational comments with the network disabled. Local saves,
+reactions, polls and full account sync are still tracked in the coverage matrix.

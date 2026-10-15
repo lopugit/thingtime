@@ -75,6 +75,21 @@ checks against existing personal data. Full feature coverage is tracked in
 - [ ] Re-render the native Thing page without changing workspace identity:
       API callback identities stay stable and no repeated-fetch/update-depth loop
       occurs. Retired callbacks cannot target the next account's API cell.
+- [ ] Logged out with networking disabled, use the normal composer to select
+      an image, autosave a draft, save/edit a post and cold-reload it. Reopened
+      edit/template media tiles must decode local object URLs, never request a
+      server attachment URL. Posting must succeed without a saved draft.
+- [ ] Create a local comment and nested reply, cold-reload and expand replies:
+      persisted children must reappear through native post/list projections.
+      Local author labels cannot link to an unrelated account profile.
+- [ ] Save a local post as a template, instantiate an independent working copy,
+      save it, delete the original and cold-reload the copy's actual image.
+      The reusable template remains. Cleanup/tombstones preserve committed files;
+      corrupt bytes, quota failures and wrong-purpose files roll back atomically.
+      Export/import image posts and image comments with fresh IDs: verified
+      attached-file context must reach the canonical validator, and comment
+      files retain comment purpose so later edits succeed. Check desktop/390/320px
+      and clear only disposable test fixtures.
 - [ ] All local feature families, queue deletion/import/move semantics and
       multi-tab UI refresh require separate acceptance before rollout merge.
 
