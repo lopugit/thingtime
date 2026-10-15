@@ -2,6 +2,19 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Anonymous History: offline, undo one saved edit while preserving later
+      independent fields, merge a variation into current content, and restore an
+      earlier page with recorded components. Verify native previews and Builder
+      cold reload at desktop/390/320px with no mutation/account Timeline HTTP.
+      Recorded copies must not change shared components or sibling pages. Recover
+      a deleted ordinary Thing with its original identity; a deleted folder falls
+      back to Things. Replays must return the original receipt; stale heads and
+      component edits between review/commit must fail. Inject an aborted or failed
+      receipt write and verify content, copies, history and quota roll back.
+      Retained drafts must still pass normal schema validation on apply. Run
+      `timelineVersions.test.ts`, the offline History browser test and both
+      guarded version/component API integrations against a disposable replica.
+
 - [ ] Anonymous branch merges: offline, select a version and use the variation
       row's Review and combine control. Resolve all content/component conflicts,
       preview recorded definitions, save, and cold-reload in Builder. Verify

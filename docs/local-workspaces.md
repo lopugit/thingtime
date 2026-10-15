@@ -72,7 +72,7 @@ change this pointer; logout/account changes revoke it.
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
-| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Current-content restore/undo/merge, historical export, related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. |
+| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical export, related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
@@ -932,3 +932,52 @@ baseline diagnostics. This is local verification; CI and deployed evidence are
 separate. Current-content restore/undo/merge, historical export, related history,
 protected histories/folder, account sync and the full remaining local-first
 matrix are unfinished. PR #1000 remains open; do not merge this checkpoint.
+
+
+## Canonical local restore, undo and current-content merge — 2026-10-16
+
+Anonymous History now applies saved ordinary Thing versions offline, including
+restore, undo of one saved edit, current-content three-way merge and deleted
+Thing recovery. `timeline/versionPlan.ts` extracts the existing account planner;
+`publishedComponentTools.ts` shares component choices, bounded hash preimages,
+copy identities and composition rewriting. The canonical request signature and
+receipt format are unchanged. Account authentication, protected writers and
+transactional component rechecks remain in the server adapter.
+
+`local-workspace/timelineVersions.ts` plans through anonymous readers, performs
+WebCrypto hashing outside IndexedDB transactions, then rechecks the content head,
+updated timestamp and complete component comparison preimage in the write
+transaction. `LocalThings.versionTransaction` reuses normal validation, placement,
+quota and canonical capture. Restored components are independent validated Things
+with the same deterministic SHA-256 identities as the account planner. Content,
+copies, events and head changes commit together. Retries return the original
+receipt even after later edits; stale revisions or components never overwrite
+newer content. Abort or receipt failure rolls back the complete operation.
+Deleted recovery uses a recorded main deletion and the original identity; a
+missing folder falls back to Things. Anonymous content stays on this device.
+
+Verification: 134 workspace/offline-shell and 238 Timeline tests passed, five
+ordinary opt-in skips. Thirteen new local cases cover restore/replay/CAS, undo
+choices, independent merges, recorded copies/cold storage reopen, current mode,
+missing definitions, deleted recovery, concurrent submissions, component changes
+between plan and commit, schema validation, rollback and cancellation. The clean
+production-shell browser passes offline undo, current merge, recorded restore and
+native Builder cold reload at 1440/390/320px with zero HTTP mutations, account
+Timeline requests, page errors or document overflow. Manual in-app Browser restore
+and native Builder reload also passed. Evidence: `tmp/local-restore-ui/`.
+
+Both guarded real API integrations (`timeline-versions` and
+`timeline-published-components`) passed against the disposable loopback replica,
+including undo/export parity, independent component copies, stale fences, exact
+retries and atomic copy rollback. They create synthetic accounts and clean up
+only their own Things; test accounts and immutable audit remain in that fixture
+DB. No existing account data was changed. Replica host/name can be supplied
+explicitly; defaults retain the original test replica. See README.
+
+Build: 245 verified offline assets / 21,198,448 bytes. Raw TypeScript retains
+exactly the same 91 baseline diagnostics. Targeted lint has zero errors and three
+constructor warnings (two existing, one new TypeScript parameter-property
+constructor). These are local checks, separate from CI and deployment. Historical
+export, related history, protected-kind adapters/folder/storage controls, account
+Timeline sync and the remaining local-first matrix are still unfinished. Do not
+merge this checkpoint.

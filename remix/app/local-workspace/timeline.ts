@@ -56,6 +56,21 @@ export async function localTimelineEntry(tx: WorkspaceTransaction, id: string): 
  return entry;
 }
 
+export async function localTimelineHead(tx: WorkspaceTransaction, thingId: string) {
+ const id = await tx.get<string>(META, `head:${thingId}`);
+ if (!id) return null;
+ const entry = await localTimelineEntry(tx, id);
+ if (!entry || entry.event.thingId !== thingId || entry.event.mode !== 'revision' || entry.event.branchId !== 'main') fail('The previous local version is unavailable.');
+ return entry;
+}
+export async function localRecordedComponents(tx: WorkspaceTransaction, wanted: Parameters<typeof readRecordedComponents>[0]['wanted'], maxBytes?: number) {
+ return readRecordedComponents({ ownerId: LOCAL_TIMELINE_OWNER, wanted, maxBytes,
+  readSizes: async ids => { const sizes = []; for (const id of ids) sizes.push({ timelineEntryBytes: parseHeader(await tx.get<Header>(INDEX, id), id).bytes }); return sizes; },
+  readEntries: async ids => { const found = []; for (const id of ids) { const entry = await localTimelineEntry(tx, id); if (entry) found.push(entry); } return found; },
+  error: (status, message) => new WorkspaceError('LOCAL_VERSION', message, status)
+ });
+}
+
 export async function appendLocalTimeline(tx: WorkspaceTransaction, input: TimelineEvent): Promise<TimelineEntry> {
  const event = parseTimelineEvent(input);
  if (event.ownerId !== LOCAL_TIMELINE_OWNER || event.actorId !== LOCAL_TIMELINE_OWNER) fail('This event belongs to another workspace.');
@@ -79,20 +94,22 @@ export async function appendLocalTimeline(tx: WorkspaceTransaction, input: Timel
 /** Track successful ordinary content writes inside their own transaction.
  * Protected families need their dedicated snapshot adapters; never copy vault,
  * attachment bookkeeping or Action outcomes through the generic projection. */
-export async function recordLocalThingChanges(tx: WorkspaceTransaction, changes: Map<string, { before: LocalThing | null; after: LocalThing | null }>, now: () => string, uuid: () => string) {
+export type LocalMutationCapture = Pick<TimelineEvent, 'id' | 'operationId' | 'source' | 'clientId' | 'label' | 'operation' | 'parentIds'>;
+
+export async function recordLocalThingChanges(tx: WorkspaceTransaction, changes: Map<string, { before: LocalThing | null; after: LocalThing | null }>, now: () => string, uuid: () => string, captures = new Map<string, LocalMutationCapture>()) {
  let things: LocalThing[] | null = null;
  for (const [id, { before, after }] of changes) {
   const target = after || before;
   if (!target || isProtectedThingtime(target.thingtime) || ['reaction', 'save', 'vote', 'updown', 'action-run'].some(kind => target.thingtime.includes(kind)) || id.startsWith('timeline-')) continue;
   const previous = thingContentSnapshot(before && { ...before, acl: [] }), next = thingContentSnapshot(after && { ...after, acl: [] });
-  if (JSON.stringify(previous) === JSON.stringify(next)) continue;
+  if (JSON.stringify(previous) === JSON.stringify(next) && !captures.has(id)) continue;
   const parent = await tx.get<string>(META, `head:${id}`);
   const prior = parent ? await localTimelineEntry(tx, parent) : null;
   if (parent && (!prior || prior.event.thingId !== id)) fail('The previous local version is unavailable.');
   let event = parseTimelineEvent({ formatVersion: 1, id: `local-event-${uuid()}`, ownerId: LOCAL_TIMELINE_OWNER, actorId: LOCAL_TIMELINE_OWNER,
    thingId: id, branchId: 'main', parentIds: parent ? [parent] : [], operationId: uuid(), source: 'client', clientId: 'local-workspace',
    occurredAt: now(), mode: 'revision', operation: !before ? 'create' : !after ? 'delete' : 'update',
-   label: !before ? 'Created Thing' : !after ? 'Deleted Thing' : 'Edited Thing', before: previous, after: next, dependencies: [] });
+   label: !before ? 'Created Thing' : !after ? 'Deleted Thing' : 'Edited Thing', before: previous, after: next, dependencies: [], ...captures.get(id) });
   if (!after && before?.thingtime.includes('webpage') && prior) event = parseTimelineEvent({ ...event, dependencies: prior.event.dependencies });
   if (after?.thingtime.includes('webpage')) {
    const bindings: ComponentBindings = Object.create(null);
@@ -141,9 +158,7 @@ export class LocalTimeline {
     entries: (_owner, ids) => entries(ids),
     nodes: async (_owner, ids) => (await entries(ids)).map(({ event }) => ({ id: event.id, thingId: event.thingId, parentIds: event.parentIds, afterAdapter: event.after?.adapter ?? null })),
     snapshot: async (_owner, entry) => entry.event.after,
-    recorded: (ownerId, wanted, maxBytes) => readRecordedComponents({ ownerId, wanted, maxBytes,
-     readSizes: async ids => { const sizes = []; for (const id of ids) { const header = parseHeader(await tx.get<Header>(INDEX, id), id); sizes.push({ timelineEntryBytes: header.bytes }); } return sizes; },
-     readEntries: entries, error: (status, message) => new WorkspaceError('LOCAL_BRANCH_MERGE', message, status) }),
+    recorded: (_owner, wanted, maxBytes) => localRecordedComponents(tx, wanted, maxBytes),
     refuse: (status, message) => fail(message, status)
    })(LOCAL_TIMELINE_OWNER, input);
   }, signal);

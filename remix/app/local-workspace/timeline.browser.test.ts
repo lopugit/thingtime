@@ -192,8 +192,49 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.goto(new URL(`/builder?page=${encodeURIComponent(thingId)}&mode=edit`, base).href);
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox').inputValue(), 'Offline renamed history page', 'merging the branch never writes current content');
+  await page.goto(new URL(`/history?thing=${encodeURIComponent(thingId)}`, base).href);
+  await page.getByRole('button', { name: /Edited Thing Offline renamed history page/ }).click();
+  await page.getByRole('button', { name: 'Undo this change…', exact: true }).click();
+  await page.getByRole('heading', { name: 'Review undo', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Undo this change', exact: true }).click();
+  await page.getByText('Undid this change. Every version is still in your Timeline.', { exact: true }).waitFor();
+  await page.goto(new URL(`/builder?page=${encodeURIComponent(thingId)}&mode=edit`, base).href);
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Offline history page');
+  await page.goto(new URL(`/history?thing=${encodeURIComponent(thingId)}`, base).href);
+  await page.getByRole('button', { name: /Edit Offline variation Native Builder variation edit/ }).click();
+  await page.getByRole('button', { name: 'Review and combine…', exact: true }).click();
+  await page.getByRole('button', { name: 'Apply merge', exact: true }).click();
+  await page.getByText('Version saved. The previous versions are still in your Timeline.', { exact: true }).waitFor();
+  await page.goto(new URL(`/builder?page=${encodeURIComponent(thingId)}&mode=edit`, base).href);
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Native Builder variation edit');
+  await page.goto(new URL(`/history?thing=${encodeURIComponent(thingId)}`, base).href);
+  await page.getByRole('button', { name: /Created Thing Offline history page/ }).click();
+  const restoreBounds = [];
+  for (const [width, height] of [[1440, 1000], [390, 844], [320, 844]]) {
+   await page.setViewportSize({ width, height });
+   const openRestore = page.getByRole('button', { name: 'Restore this version…', exact: true });
+   if (await openRestore.isVisible()) await openRestore.click();
+   await page.getByRole('heading', { name: 'Review restore', exact: true }).waitFor();
+   const native = page.getByText('A saved local version stays here.', { exact: true });
+   if (!await native.isVisible()) await page.getByRole('button', { name: 'Preview result', exact: true }).click();
+   await native.waitFor(); await native.scrollIntoViewIfNeeded();
+   const measured = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+   assert.equal(measured.width, measured.scrollWidth); restoreBounds.push(measured);
+   if (artifacts) await page.screenshot({ path: resolve(artifacts, `restore-${width}.png`), fullPage: false, animations: 'disabled' });
+  }
+  await page.getByRole('button', { name: 'Restore this version', exact: true }).click();
+  await page.getByText('Version saved. The previous versions are still in your Timeline.', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(new URL(`/builder?page=${encodeURIComponent(thingId)}&mode=edit`, base).href);
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Offline history page');
+  await page.reload();
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Offline history page');
   assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
   if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); }
   throw error;

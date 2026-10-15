@@ -1,4 +1,4 @@
-import { recordLocalThingChanges } from './timeline';
+import { recordLocalThingChanges, type LocalMutationCapture } from './timeline';
 import { isLocalInteraction } from './interactions';
 import { attachmentCountLimit } from '../schemas/attachmentLimits';
 import type { StoredDraft } from './drafts';
@@ -63,8 +63,9 @@ const validated = (input: ThingWrite, postAttachments?: { hasAny: boolean; hasVi
 export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation) {}
-	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) {
-		return this.db.transaction(this.scope, mode, this.lease, async tx => {
+	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
+		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
+		return this.db.transaction(this.scope, mode, lease, async tx => {
 			if (mode !== 'readwrite' || this.scope.kind !== 'anonymous') return run(tx);
 			const before = new Map<string, Promise<LocalThing | undefined>>();
 			const capture = (collection: string, id: string) => { if (collection === 'things' && !before.has(id)) before.set(id, tx.get<LocalThing>(collection, id)); };
@@ -75,7 +76,7 @@ export class LocalThings {
 			const result = await run(tracked);
 			const changes = new Map<string, { before: LocalThing | null; after: LocalThing | null }>();
 			for (const [id, previous] of before) changes.set(id, { before: await previous || null, after: await tx.get<LocalThing>('things', id) || null });
-			await recordLocalThingChanges(tx, changes, this.now, this.uuid);
+			await recordLocalThingChanges(tx, changes, this.now, this.uuid, captures);
 			return result;
 		});
 	}
@@ -97,9 +98,10 @@ export class LocalThings {
 	async create(input: ThingWrite) {
 		return this.transaction('readwrite', tx => this.createIn(tx, input));
 	}
-	private async createIn(tx: WorkspaceTransaction, input: ThingWrite) {
+	private async createIn(tx: WorkspaceTransaction, input: ThingWrite, identity?: string) {
+		if (identity && await tx.get('things', identity)) fail('WRITE_CONFLICT', 'This Thing is already present. Refresh before restoring.', 409);
 		const checked = validated(input); const stamp = this.now();
-		const row: LocalThing = { ...checked, id: this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid(), createdAt: stamp, updatedAt: stamp, revision: 1,
+		const row: LocalThing = { ...checked, id: identity ?? (this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()), createdAt: stamp, updatedAt: stamp, revision: 1,
 			...(input.folderId ? { folderId: input.folderId } : {}), ...(input.targetId ? { targetId: input.targetId } : {}) };
 		await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, null, input); return row;
 	}
@@ -111,6 +113,20 @@ export class LocalThings {
 			create: input => this.createIn(tx, input),
 			update: input => this.updateIn(tx, input)
 		}));
+	}
+	/** Trusted Timeline adapter: normal validators, quota, content and canonical
+	 * revision capture share one transaction. Public writes cannot supply captures. */
+	async versionTransaction<T>(run: (writer: {
+		tx: WorkspaceTransaction;
+		create(input: ThingWrite, id: string, capture: LocalMutationCapture): Promise<LocalThing>;
+		update(input: ThingWrite & { id: string }, capture: LocalMutationCapture): Promise<LocalThing>;
+	}) => Promise<T>, signal?: AbortSignal): Promise<T> {
+		if (this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account versions require their sync adapter');
+		const captures = new Map<string, LocalMutationCapture>();
+		return this.transaction('readwrite', tx => run({ tx,
+			create: async (input, id, capture) => { captures.set(id, capture); return this.createIn(tx, input, id); },
+			update: async (input, capture) => { captures.set(input.id, capture); return this.updateIn(tx, input); }
+		}), captures, signal);
 	}
 	/** Local post content uses the normal schema and relational attachments. No
 	 * audience setting here can publish or authorize a remote operation. */

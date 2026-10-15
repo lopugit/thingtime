@@ -439,4 +439,12 @@ binds both to one readonly workspace transaction. `timelineBranchMerge.test.ts`
 covers conflict choices, exact captures, preflight byte limits, stale heads and
 scope refusal; the offline browser and real API branch checks cover canonical
 merge save/reload without changing the current Thing. Current-content
-restore/undo/merge remains a separate unfinished path.
+restore/undo/merge now shares `timeline/versionPlan.ts` and
+`publishedComponentTools.ts` with account Timeline. `timelineVersions.ts` supplies
+anonymous readers and uses `LocalThings.versionTransaction` for normal validation,
+placement, quota and atomic content/copy/capture writes. Hashing stays outside IDB;
+head/timestamp/component preimages are rechecked inside the write transaction.
+`timelineVersions.test.ts` covers replay, recovery, races, copy isolation,
+validation and rollback. The ordinary offline browser test and both guarded
+version/component API integrations cover the native flow and account parity.
+Historical export, protected histories and account sync remain pending.

@@ -1,3 +1,4 @@
+import { LocalTimelineVersions } from './timelineVersions';
 import { LocalTimeline } from './timeline';
 import { searchLocalLibrary } from './librarySearch';
 import { LocalInteractions, localSavedPage } from './interactions';
@@ -37,6 +38,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		discover: (ownerId: string) => history.discover(ownerId),
 		page: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.page(request, options?.signal); },
 		push: (scope: any, event: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.push(event, options?.signal); },
+		version: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return new LocalTimelineVersions(anonymousWorkspaceDatabase(), lease, service()).request(request, options?.signal).then(result => request.command === 'apply-version' ? changed(result) : result); },
 		branchMerge: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branchMerge(request, options?.signal); },
 		branch: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branch(command, options?.signal).then(changed); },
 		branches: (scope: any, thingId: string, before?: number, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branches(thingId, before ?? null, 40, options?.signal); },

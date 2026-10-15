@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous History now restores, undoes and merges
+  ordinary content offline through the shared account planner and atomic local
+  writer, preserving independent recorded components and retry/CAS guarantees.
+  Offline native UI and real local account API regressions passed. Full rollout
+  remains unmerged; [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous variations now review and save merges
   offline using the canonical account comparison and recorded-component rules.
   Native preview, conflict choices, cold reload and account API parity passed

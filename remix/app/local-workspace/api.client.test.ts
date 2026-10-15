@@ -239,7 +239,7 @@ test('anonymous Timeline uses local authority, canonical component responses, an
  const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote Timeline'); };
  bindLocalWorkspace(true, rootIdentity.read().generation);
  try {
-  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote, branchHead: remote, branches: remote, checkoutBranch: remote, branchMerge: remote }, things: { create: remote } });
+  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote, branchHead: remote, branches: remote, checkoutBranch: remote, branchMerge: remote, version: remote }, things: { create: remote } });
   const row = await api.things.create({ thingtime: ['data'], crystal: { name: 'Local history adapter' } });
   const scope = { ownerId: 'local-workspace', dataPlane: 'local-workspace', apiOrigin: 'https://thingtime.example' };
   assert.equal((await api.timeline.discover(scope.ownerId)).dataPlane, scope.dataPlane);
@@ -256,6 +256,8 @@ test('anonymous Timeline uses local authority, canonical component responses, an
   assert.equal((await api.timeline.checkoutBranch(scope, checkout)).checkout.entry.event.id, branchCommand.eventId);
   await assert.rejects(async () => api.timeline.branch({ ...scope, dataPlane: 'home' }, branchCommand), /another workspace/);
   await assert.rejects(async () => api.timeline.branchMerge({ ...scope, dataPlane: 'home' }, {}), /another workspace/);
+  await assert.rejects(async () => api.timeline.version({ ...scope, ownerId: 'foreign' }, {}), /another workspace/);
+  await assert.rejects(api.timeline.version(scope, { command: 'preview-version', mode: 'restore', eventId: 'missing' }), /Version not found/);
   await assert.rejects(api.timeline.branchMerge(scope, { command: 'preview-branch-merge', branchId: branchCommand.branchId, thingId: row.id, expectedHeadId: branched.head.eventId, expectedRevision: 1, eventId: 'missing', choices: {}, componentChoices: {} }), /unavailable/);
   await assert.rejects(async () => api.timeline.checkoutBranch({ ...scope, ownerId: 'foreign' }, checkout), /another workspace/);
   await assert.rejects(async () => api.timeline.page({ ...scope, dataPlane: 'home' }, { thingId: null, before: null, after: null, limit: 40 }), /another workspace/);
@@ -271,6 +273,7 @@ test('anonymous Timeline uses local authority, canonical component responses, an
   await assert.rejects(async () => api.timeline.nameVersion(scope, named), /Workspace changed/);
   await assert.rejects(async () => api.timeline.branch(scope, branchCommand), /Workspace changed/);
   await assert.rejects(async () => api.timeline.branchMerge(scope, {}), /Workspace changed/);
+  await assert.rejects(async () => api.timeline.version(scope, {}), /Workspace changed/);
   await assert.rejects(async () => api.timeline.checkoutBranch(scope, checkout), /Workspace changed/);
   await assert.rejects(async () => api.timeline.note(scope, command), /Workspace changed/);
   await assert.rejects(async () => api.timeline.entry(scope, page.entries[0].event.id), /Workspace changed/);

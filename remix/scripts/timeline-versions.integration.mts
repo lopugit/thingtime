@@ -15,8 +15,8 @@ const base = process.env.TIMELINE_TEST_BASE;
 if (!base) throw new Error('Set TIMELINE_TEST_BASE to the isolated local test server');
 if (!['127.0.0.1', 'localhost'].includes(new URL(base).hostname)) throw new Error('Timeline integration only runs on a disposable local server');
 const status = await fetch(`${base}/api/v1/mongodb/status`).then(response => response.json());
-assert.equal(status.host, '127.0.0.1:20337');
-assert.equal(status.replicaSet, 'timeline-rs');
+assert.equal(status.host, process.env.TIMELINE_TEST_MONGO_HOST || '127.0.0.1:20337');
+assert.equal(status.replicaSet, process.env.TIMELINE_TEST_REPLICA_SET || 'timeline-rs');
 assert.equal(status.custom, false);
 assert.equal(status.connected, true);
 
