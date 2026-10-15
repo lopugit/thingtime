@@ -1,3 +1,4 @@
+import ThingPage from './thing';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
 import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
@@ -40,7 +41,13 @@ type MediaResponse = {
 	parent: PublicPost | null;
 };
 
+// Local attachments have canonical Thing metadata, not a fabricated remote
+// social-post projection. Reuse the universal native Thing preview at this alias.
 export const MediaPage = () => {
+ const { id } = useParams();
+ return id?.startsWith('local-') ? <ThingPage /> : <AccountMediaPage />;
+};
+const AccountMediaPage = () => {
 	const { id } = useParams();
 	const [searchParams] = useSearchParams();
 	const linkKey = searchParams.get('key') || '';

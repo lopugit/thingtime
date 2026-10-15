@@ -1,3 +1,4 @@
+import { LocalMediaDiagnostics } from './local-workspace/media.client';
 import { AccountSyncStatus } from './local-workspace/AccountSyncStatus';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
@@ -158,6 +159,7 @@ export default function App() {
         ) : (
           <Main>
             <AccountSyncStatus />
+            <LocalMediaDiagnostics />
             {/* every page is a block-based site: per-route + global blocks
                 render around the native screen; the ✏️ pill enters edit mode */}
             <SiteBlocksHost>

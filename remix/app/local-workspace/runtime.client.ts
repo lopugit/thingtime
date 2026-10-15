@@ -34,7 +34,7 @@ export function anonymousWorkspaceDatabase() {
 	return database ??= new WorkspaceDatabase(indexedDB);
 }
 export function anonymousThings() { return new LocalThings(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, anonymousWorkspaceLease()); }
-export function announceLocalWorkspaceChange() { window.dispatchEvent(new Event(LOCAL_WORKSPACE_CHANGED)); }
+export function announceLocalWorkspaceChange(removedIds?: string[]) { window.dispatchEvent(Object.assign(new Event(LOCAL_WORKSPACE_CHANGED), { removedIds })); }
 
 export function accountWorkspaceLease(scope: Extract<WorkspaceScope, { kind: 'account' }>): WorkspaceLease {
 	const generation = rootIdentity.read().generation;

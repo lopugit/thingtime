@@ -106,7 +106,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 					</Box>
 					<Button
 						as="a"
-						href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true))}
+						href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true)) || undefined}
 						{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 						size="sm"
 						variant="outline"

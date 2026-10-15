@@ -127,3 +127,18 @@ not enabled by this adapter; account access gates above remain authoritative.
 Normal uploads, native media URLs, draft copies, linked galleries and account
 sync are still separate work. Run `test:local-workspace` and `test:things`; see
 [the coverage matrix](../local-workspaces.md) for local browser evidence.
+
+
+## Anonymous normal file UI and media URLs
+
+`FilesystemThingsBrowser` uses the existing workspace API for anonymous file-picker
+saves, downloads, folders and copy/move. `LocalThings.saveFile/readFile` atomically
+store canonical metadata with bytes and validate checksums. `media.ts` owns bounded,
+reference-counted object URLs; `media.client.tsx` connects them to `SharedMedia` and
+root diagnostics. Local media routes reuse `ThingPage` and its native attachment
+renderer. Pending src/href values are omitted. Account media access is unchanged.
+`apiIdentity.ts` keeps workspace API callbacks stable without retargeting retired
+account closures. Run `test:local-workspace`, `test:attachments`, `test:things` and
+`test:webpages`; see the local-workspace manual checklist for offline browser and
+identity-retirement checks. Composer uploads, annotations, gallery/draft copies
+and account byte synchronization still need their own adapters and acceptance.

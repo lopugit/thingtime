@@ -55,7 +55,9 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		const filePlan = (await api.things.export({ ids: fileImport.roots })).plan;
 		assert.deepEqual([...((await bundleFromPlan(filePlan, { fetch: remote })).files.values())][0], fileBytes);
 		const fileCopy = await api.things.bulk({ op: 'copy', ids: fileImport.roots });
-		await api.things.bulk({ op: 'delete', ids: fileImport.roots });
+		const deleted = await api.things.bulk({ op: 'delete', ids: fileImport.roots });
+		assert.equal(deleted.succeeded, 1); assert.equal(deleted.results[0].ok, true);
+		assert.equal(fileCopy.succeeded, 1); assert.equal(fileCopy.results[0].newId, fileCopy.roots[0]);
 		assert.deepEqual([...((await bundleFromPlan((await api.things.export({ ids: fileCopy.roots })).plan, { fetch: remote })).files.values())][0], fileBytes);
 		assert.equal(remoteCalls, 0);
 		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);

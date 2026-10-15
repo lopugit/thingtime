@@ -163,3 +163,26 @@ Review integration retains the bot's orphaned-sync quarantine and non-negative
 usage cleanup in the shared JSON/binary deletion helper. Focused workspace tests,
 typecheck baseline comparison and client build are rerun on the integrated tree;
 the graph's structural snapshot is refreshed after the merge.
+
+
+## Anonymous normal file UI checkpoint — 2026-10-16
+
+Normal file-picker save/download, folders, copy/cut/paste and native image previews
+now use the scoped browser bytes. Atomic checksum/idempotency checks, empty files,
+bounded object URLs, cancellation and identity retirement preserve isolation.
+Local media pages reuse the native Thing renderer; unsupported device-only comments
+report a clear error. Stable workspace API callback identities also fix the
+repeated-fetch/React update-depth failure found by native preview acceptance.
+
+Local production-build browser, logged out and network disabled: saved PNG/text/
+empty files, downloaded exact text and PNG bytes, copied and moved an independent
+file, and cold-reloaded its native preview. 1440/390/320px layouts had no horizontal
+overflow. Removed only the disposable files/folders and restored browser overrides.
+Evidence: `tmp/local-file-ui/` (downloads and native-preview PNGs).
+
+Validation: 62 workspace/offline, 295 attachment, 315 Things and 48 component tests
+passed; webpages/shared media passed 152 with four existing skips. Client build:
+231 verified assets, 11,032,140 bytes. Raw TypeScript: the same 91 parent-baseline
+diagnostics, no added signatures. CI/preview status must be checked against the
+pushed revision. Composer uploads, local comments/annotations, draft/gallery
+copies, account byte sync and the complete coverage matrix still block merge.

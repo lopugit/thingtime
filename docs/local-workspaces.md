@@ -73,7 +73,7 @@ change this pointer; logout/account changes revoke it.
 | Components and schemas | Local storage and public discovery adapter started. Finish bundled catalog availability, copies, argument editing, schema forms and offline creation. |
 | Actions and app suites | Reuse existing bounded executors and suite definitions. Local data/pure/browser operations still need local host integration; remote services must remain explicitly remote. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
-| Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Finish normal uploads, media URL rendering, draft copies, linked galleries and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
+| Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Finish composer uploads, draft copies, linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Enable local content authoring/drafts and local relationships. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
@@ -296,7 +296,51 @@ network/viewport overrides restored. Evidence: `tmp/local-attachments/` contains
 `browser-export.zip`, `browser-roundtrip.zip`, their canonical JSON manifests and
 `offline-import-390.png`. These are local results, not deployed acceptance.
 
-Normal uploads, media URLs/native attachment rendering, draft attachment copying,
-linked galleries and account attachment synchronization remain unfinished. The
+Composer uploads, draft attachment copying, linked galleries and account
+attachment synchronization remain unfinished. Normal file-picker saving and native
+image preview are covered by the checkpoint below. The
 existing account upload permissions, access checks, moderation and signed byte
 URLs are unchanged.
+
+
+## Anonymous normal file UI and native preview — 2026-10-16
+
+The existing Files browser now uses the anonymous workspace for **Add files**,
+folders, downloads, copy and cut/paste. Each file is saved with canonical
+attachment metadata and checksum-verified bytes in one transaction. A stable
+request ID makes exact retries idempotent; changed retries, missing/corrupt bytes,
+invalid placement, quota failures and cancelled writes fail explicitly. Empty
+files are supported. Local limits remain 16 MiB per file and 64 MiB per workspace.
+Paired-device discovery/commands require an account and never run in this adapter.
+
+The existing shared-media URL resolver reads canonical local attachment references
+from that same scoped store. It creates reference-counted object URLs for native
+Thing/HTML/image/audio/video consumers without HTTP fallback. It bounds reads to
+three concurrent files, 64 active references and 64 MiB, revokes URLs on release,
+deletion and identity retirement, and reports missing bytes. HTML/SVG and other
+non-preview files use opaque download MIME. Local `/media/:id` routes reuse the
+normal Thing detail renderer; they do not invent a server social-post projection.
+Local comments and media annotations remain unfinished.
+
+Workspace API callback identities now remain stable within one identity. This
+fixes repeated Thing detail fetches and React's update-depth failure, while
+retired callbacks retain their original forwarding cell and workspace lease.
+
+Local browser evidence: networking disabled, no account session, normal folder
+creation and file picker saved a PNG, text file and zero-byte file. Downloaded
+text and PNG matched the selected files exactly. Copy, cut/paste into another
+folder, native image rendering and cold offline reload passed. The decoded PNG
+was 360×240; its native preview fit 1440, 390 and 320 CSS-pixel widths with no
+horizontal document overflow. Test data was deleted through normal Things menus;
+network/viewport overrides were restored and the task tab closed. Evidence is in
+`tmp/local-file-ui/`, including `browser-download.png`, `browser-download.txt`
+and `offline-native-preview-390.png`. No account or public content was created.
+
+Checks: 62 workspace/offline, 295 attachment, 315 Things and 48 component tests
+passed; webpage/shared-media tests passed 152 with four existing skips. The client
+build verified 231 assets (11,032,140 bytes). Raw TypeScript still reports the
+same 91 baseline diagnostics, with no added diagnostic signatures. This is local
+verification, not CI or deployed acceptance. Normal Things checkbox selection and
+folder deletion semantics still need complete UI acceptance; the local adapter
+currently refuses a nonempty folder unless explicitly recursive, while the generic
+confirmation describes reparenting. Cleanup removed child files before folders.

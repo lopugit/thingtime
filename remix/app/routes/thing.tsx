@@ -1006,7 +1006,7 @@ function GenericThingPage() {
 							</Stack>
 						) : null}
 
-						{sections.preview && thing && !post ? (
+						{sections.preview && thing && !post && !attachment ? (
 							// The page runtime is what makes a live surface live: sources
 							// load and refetch after every run, `$refresh`/`$install` work.
 							// Its source is the viewer's ownership; its installer exists only

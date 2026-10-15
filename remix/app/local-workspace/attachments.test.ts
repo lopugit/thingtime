@@ -118,3 +118,21 @@ test('a folder containing standalone files still requires explicit recursive del
   assert.equal(await db.transaction(scope, 'readonly', lease, tx => tx.getBytes(created.roots[0])), undefined);
  } finally { await db.close(); }
 });
+
+test('normal file saves are atomic, scoped, idempotent and preserve empty files', async () => {
+ const {db,things}=fixture();
+ try {
+  const folder=await things.create({thingtime:['folder'],crystal:{name:'Files'}});
+  const input={requestId:'12345678-1234-1234-1234-123456789abc',name:'normal.txt',contentType:'text/plain',bytes,folderId:folder.id};
+  const first=await things.saveFile(input), retry=await things.saveFile(input);assert.equal(first.id,retry.id);
+  assert.deepEqual((await things.readFile(first.id)).bytes,bytes);
+  assert.equal((await things.snapshot()).length,2);
+  await assert.rejects(things.saveFile({...input,name:'changed.txt'}),/different content/);
+  await assert.rejects(things.saveFile({...input,requestId:'12345678-1234-1234-1234-123456789def',folderId:'missing'}),/Destination folder/);
+  assert.equal((await things.snapshot()).length,2);
+  const empty=await things.saveFile({...input,requestId:'12345678-1234-1234-1234-123456789000',bytes:new Uint8Array()});
+  assert.equal((await things.readFile(empty.id)).bytes.length,0);
+  const controller=new AbortController();controller.abort();await assert.rejects(things.saveFile(input,controller.signal),/abort/i);
+  await db.transaction(scope,'readwrite',lease,tx=>tx.deleteBytes(first.id));await assert.rejects(things.saveFile(input),/missing or changed/);
+ } finally {await db.close();}
+});

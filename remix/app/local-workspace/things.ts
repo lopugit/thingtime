@@ -80,6 +80,41 @@ export class LocalThings {
 			await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, null, input); return row;
 		});
 	}
+	async saveFile(input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null }, signal?: AbortSignal) {
+		this.lease.assertCurrent(); signal?.throwIfAborted();
+		if (this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+		if (!/^[a-zA-Z0-9-]{16,80}$/.test(input.requestId)) fail('INVALID_REQUEST', 'A stable file save request ID is required');
+		if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength > WORKSPACE_LIMITS.binaryBytes) fail('LOCAL_QUOTA', 'A local file cannot exceed 16 MiB', 413);
+		const bytes = Uint8Array.from(input.bytes), sha256 = await transferChecksum(bytes);
+		this.lease.assertCurrent(); signal?.throwIfAborted();
+		const id = `local-file-${input.requestId}`;
+		const row = createLocalAttachment(id, { id: 'bytes', targetId: id, path: 'files/000000', name: input.name, mime: input.contentType, bytes: bytes.byteLength, sha256 }, this.now(), 'file', 0, input.folderId ? { folderId: input.folderId } : {});
+		row.localAttachment.requestId = input.requestId;
+		return this.transaction('readwrite', async tx => {
+			signal?.throwIfAborted();
+			const previous = await tx.get<LocalThing>('things', id);
+			if (previous) {
+				if (!isLocalAttachment(previous) || previous.localAttachment.requestId !== input.requestId || previous.localAttachment.sha256 !== sha256 || previous.crystal.name !== row.crystal.name || previous.crystal.contentType !== row.crystal.contentType || previous.folderId !== row.folderId) fail('WRITE_CONFLICT', 'This file save request was already used for different content', 409);
+				const stored = await tx.getBytes(id);
+				if (!stored || stored.length !== bytes.length || !stored.every((byte, index) => byte === bytes[index])) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
+				return previous as LocalAttachment;
+			}
+			await this.placement(tx, row); await tx.put('things', id, row); await tx.putBytes(id, bytes);
+			signal?.throwIfAborted(); return row;
+		});
+	}
+	async readFile(id: string, signal?: AbortSignal) {
+		this.lease.assertCurrent(); signal?.throwIfAborted();
+		const result = await this.transaction('readonly', async tx => {
+			const row = await tx.get<LocalThing>('things', id);
+			if (!row || !isLocalAttachment(row)) return fail('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);
+			const bytes = await tx.getBytes(id);
+			if (!bytes || bytes.byteLength !== row.crystal.size) return fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
+			return { row, bytes };
+		});
+		if (await transferChecksum(result.bytes) !== result.row.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
+		this.lease.assertCurrent(); signal?.throwIfAborted(); return result;
+	}
 	async get(id: string): Promise<LocalThing> {
 		return this.transaction('readonly', async tx => {
 			const found = await tx.get<LocalThing>('things', id);

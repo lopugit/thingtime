@@ -1,3 +1,4 @@
+import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
 import { useOfflineWorkspace } from './useWorkspaceUser';
 import { accountApi, startAccountWorkspaceSync } from '../local-workspace/accountApi.client';
 import { anonymousApi } from '../local-workspace/api.client';
@@ -786,6 +787,9 @@ export function useApi() {
       )
     },
 		attachments: {
+			saveLocalFile: useCallback(async (_input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null }, _options?: { signal?: AbortSignal }): Promise<any> => { throw new Error('Local file bytes require a local workspace; account uploads use the existing upload service'); }, []),
+			readLocalFile: useCallback(async (_input: { id: string }, _options?: { signal?: AbortSignal }): Promise<any> => { throw new Error('Local file bytes are unavailable in this account workspace'); }, []),
+
 			// "download all" ZIP manifests: what a post/folder/media archive would
 			// hold (count, bytes, paths) without streaming any bytes. The download
 			// itself is a plain navigation to attachmentArchiveUrl().
@@ -1608,9 +1612,13 @@ export function useApi() {
   useEffect(() => {
     if (actionUser?.id && !actionUser.temporary && dataPlane) startAccountWorkspaceSync({ kind: 'account', origin: window.location.origin, ownerId: actionUser.id, dataPlane });
   }, [actionUser?.id, actionUser?.temporary, dataPlane]);
-  const ret = {
-    v1: offlineWorkspace ? accountApi(v1, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane) : actionUser && !actionUser.temporary && dataPlane ? accountApi(v1, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane) : actionUser && !actionUser.temporary ? v1 : anonymousApi(v1)
-  };
-
-  return ret;
+  const workspaceApi = useRef(new WorkspaceApiIdentity<typeof v1>());
+  const identity = rootIdentity.read();
+  const workspaceKey = JSON.stringify([identity.generation, identity.pending, offlineWorkspace || null,
+    actionUser?.id || null, actionUser?.temporary || false, dataPlane || null,
+    actionUser?.username, actionUser?.displayName, actionUser?.avatarUrl]);
+  return { v1: workspaceApi.current.resolve(workspaceKey, v1, remote =>
+    offlineWorkspace ? accountApi(remote, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane)
+    : actionUser && !actionUser.temporary && dataPlane ? accountApi(remote, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane)
+    : actionUser && !actionUser.temporary ? remote : anonymousApi(remote)) };
 }

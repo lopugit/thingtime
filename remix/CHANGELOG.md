@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous Files supports normal picker saves,
+  exact-byte downloads and copy/move offline. Native media resolves scoped local
+  bytes with bounded, revoked object URLs; stable workspace API callbacks prevent
+  repeated Thing-page loads. Local browser/test evidence and remaining rollout
+  gaps: [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous Things ZIP import/export/copy/delete
   now keeps real file bytes and metadata atomically on the device, with canonical
   validation, dependency remapping and bounded quotas. Offline browser round-trip

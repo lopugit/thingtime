@@ -64,6 +64,17 @@ checks against existing personal data. Full feature coverage is tracked in
 - [ ] A missing local Thing with a remaining account sync entry becomes a
       visible error; it cannot stall unrelated pending writes. Deletion with a
       missing usage row must not throw or create negative quota totals.
+- [ ] Logged out and offline in Browse files, add PNG/text/empty files through
+      the normal picker. Download exact bytes, copy and cut/paste between folders,
+      cold-reload a native media page and verify the decoded image at 1440/390/320px.
+      No paired-device discovery, account request or HTTP byte fallback may run.
+- [ ] Local media URLs revoke after deletion, unmount and identity retirement;
+      late reads cannot recreate them. Corrupt/missing bytes and preview capacity
+      failures show errors, not blank-success previews. HTML/SVG downloads remain
+      opaque and empty pending src/href values are omitted.
+- [ ] Re-render the native Thing page without changing workspace identity:
+      API callback identities stay stable and no repeated-fetch/update-depth loop
+      occurs. Retired callbacks cannot target the next account's API cell.
 - [ ] All local feature families, queue deletion/import/move semantics and
       multi-tab UI refresh require separate acceptance before rollout merge.
 

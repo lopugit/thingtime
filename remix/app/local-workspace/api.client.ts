@@ -5,6 +5,7 @@ import { localThingProjection, type ThingWrite } from './things';
 import { anonymousThings, anonymousWorkspaceDatabase, anonymousWorkspaceLease, announceLocalWorkspaceChange, LOCAL_WORKSPACE_OWNER } from './runtime.client';
 import { LocalAlgorithms } from './algorithms';
 import { LocalThemes } from './themes';
+import { isLocalAttachment } from './attachments';
 import { WorkspaceError } from './storage';
 import { crystalSchemas } from '../schemas/registry';
 
@@ -57,13 +58,15 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 			return localAlgorithm ? { ...result, posts: await algorithms().rankPage(localAlgorithm, result.posts || []), ranked: true, localRanking: true } : result;
 		},
 		trending: async () => { lease.assertCurrent(); return publicWorkspaceRead('/api/v1/things/trending?anon=1', 'api.things-trending', '1.0.0'); },
-		get: async ({ id, key, sharedRoot }: { id: string; key?: string; sharedRoot?: string }, options?: { signal?: AbortSignal }) => {
+		get: async ({ id, key, sharedRoot, commentProjection }: { id: string; key?: string; sharedRoot?: string; commentProjection?: boolean }, options?: { signal?: AbortSignal }) => {
 			lease.assertCurrent();
+			if (id.startsWith('local-') && commentProjection) throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Device-only comments are not available yet.');
 			if (id.startsWith('local-')) return { ok: true, thing: project(await service().get(id)) };
 			const query = new URLSearchParams({ id, ...(key ? { key } : {}), ...(sharedRoot ? { sharedRoot } : {}) });
 			return publicWorkspaceRead(`/api/v1/things?${query}`, 'api.things', '1.31.0', options?.signal);
 		},
-		list: async (query: Parameters<ReturnType<typeof anonymousThings>['list']>[0], options?: { signal?: AbortSignal }) => {
+		list: async (query: Parameters<ReturnType<typeof anonymousThings>['list']>[0] & { commentProjection?: boolean }, options?: { signal?: AbortSignal }) => {
+			if (query.commentProjection && query.target?.startsWith('local-')) throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Device-only comments are not available yet.');
 			options?.signal?.throwIfAborted(); const result = await service().list(query); options?.signal?.throwIfAborted();
 			return { ok: true, ...result, things: result.things.map(project) };
 		},
@@ -76,11 +79,20 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		},
 		import: async ({ manifest, folderId, localFiles }: { manifest: unknown; folderId?: string | null; localFiles?: Map<string, Uint8Array> }, request?: { signal?: AbortSignal }) => changed(await service().import(manifest, folderId, localFiles, request?.signal)),
 		bulk: async ({ op, ids, recursive, folderId = null }: { op: string; ids: string[]; recursive?: boolean; folderId?: string | null }) => {
-			if (op === 'move') return changed(await service().move(ids, folderId));
-			if (op === 'copy') { const bundle = await service().export(ids); return changed(await service().import(bundle.manifest, folderId, bundle.files)); }
+			if (op === 'move') { const result = await service().move(ids, folderId); return changed({ ...result, succeeded: ids.length, failed: 0, results: ids.map(id => ({ id, ok: true })) }); }
+			if (op === 'copy') { const bundle = await service().export(ids); const result = await service().import(bundle.manifest, folderId, bundle.files); return changed({ ...result, succeeded: ids.length, failed: 0, results: ids.map(id => ({ id, ok: true, newId: result.idMap[id] })) }); }
 			if (op !== 'delete') throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', `Local bulk ${op} is not available yet`);
-			return changed(await service().remove(ids, recursive));
+			const result = await service().remove(ids, recursive); announceLocalWorkspaceChange(result.deleted); return changed({ ...result, succeeded: ids.length, failed: 0, results: ids.map(id => ({ id, ok: true })) });
 		}
+	};
+	local.attachments = { ...local.attachments,
+		saveLocalFile: async (input: Parameters<ReturnType<typeof anonymousThings>['saveFile']>[0], request?: { signal?: AbortSignal }) => {
+			const row = await service().saveFile(input, request?.signal); return changed({ ok: true, attachment: { id: row.id, ...row.crystal } });
+		},
+		readLocalFile: async ({ id }: { id: string }, request?: { signal?: AbortSignal }) => {
+			const { row, bytes } = await service().readFile(id, request?.signal); return { ok: true, attachment: { id: row.id, ...row.crystal }, bytes };
+		},
+		remove: async ({ id }: { id: string }) => { const row = await service().get(id); if (!isLocalAttachment(row)) throw new WorkspaceError('INVALID_ATTACHMENT', 'This Thing is not a local attachment'); const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); }
 	};
 	const browse = (kind: 'component' | 'schema') => async (args: Record<string, unknown> = {}) => {
 		lease.assertCurrent();
