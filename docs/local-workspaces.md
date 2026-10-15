@@ -68,7 +68,7 @@ change this pointer; logout/account changes revoke it.
 | --- | --- |
 | Local storage and account boundaries | Unit-tested persistence, atomic rollback, concurrent edits, scope isolation and identity invalidation. Add browser multi-tab and account-switch regressions. |
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
-| Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. The global Things search returned no matches for the renamed local Component during discussion acceptance; track that separately from working comment search. Grid checkbox mouse clicks navigated into a Thing during local acceptance; keyboard Space selection worked and needs a focused regression/fix. |
+| Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Library text search now works across folders offline, with bounded cursor pages and visible error/retry states. Clean-browser acceptance covers 61 matches, kind filters, rename/reload and grid/list mouse selection at 1440/390/320px. The earlier checkbox report came from targeting its hidden input; clicking the visible label works, and descriptive labels/regressions now cover it. Structured/public search and remaining normal UI flows still require completion. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
@@ -676,3 +676,52 @@ This closes the Component comments-read error. Account discussion sync, local
 Timeline authority and other matrix items remain unfinished. Saved currently
 lists post-shaped targets, matching the server's existing contract; generic
 Component/Data bookmarks are not yet surfaced in that list.
+
+
+## Library search checkpoint — 2026-10-16
+
+The existing Things library search now calls the current workspace adapter with
+an explicit `workspace: true` option. Anonymous search reads only the scoped local
+snapshot and never sends an account request. It searches authored crystal/tag
+strings literally, case-insensitively with Unicode normalization, across folders.
+It excludes activity rows and draft/attached files using the same visibility
+predicate as normal library listing. Text is limited to 200 characters, kinds to
+20, and pages to 50; cursors bind the query and kind filter. This is library text
+search, not the separate public/structured search contract.
+
+Confirmed account searches paint cached owned content first and refresh through
+the existing owner-filtered API. Only supported owned kinds enter the local cache;
+unsynced edits win over older remote hits. Pending and server results retain
+independent continuations, so neither truncates the other. Offline results are
+explicitly incomplete. Failed refresh keeps existing content visible with Retry;
+query, workspace, data-plane and identity changes retire old responses. Local
+substring matching and server relevance matching retain their existing different
+semantics. The shared search transport strips the client-only workspace flag.
+
+Clean production-browser verification passed both anonymous and disposable
+account paths. Anonymous import of 61 nested Things, two-page search, kind filter,
+offline rename, cold reload, oversized-query error and visible checkbox selection
+made zero mutation/search requests. Native 1440×1000, 390×844 and 320×844 views
+had no horizontal overflow. Account search loaded two private synthetic Things,
+retained them under an injected 503, and found them after a cold offline reload;
+the final run deleted both through the normal API and logged out. An earlier
+cleanup-test failure left two synthetic Things in its separate disposable local
+account; no existing account or public content was modified. Empty fixture accounts
+remain in the disposable replica. The account offline screen still shows the
+existing remote-computer refresh error; native/remote device work is a separate
+matrix item.
+
+Evidence: `tmp/local-search-ui/` (native PNGs and separate anonymous/account
+verification reports). Run `app/local-workspace/search.browser.test.ts` with
+`TT_LOCAL_SEARCH_URL` set to the isolated loopback production preview and the
+shared Playwright/Chromium variables above. Set `TT_LOCAL_SEARCH_ACCOUNT=1` only
+for the disposable local account fixture; `TT_LOCAL_SEARCH_ARTIFACTS` chooses its
+output directory. Ordinary suites skip these browser checks.
+
+Local validation: 463 passing workspace/offline-shell, Things and hooks tests,
+four opt-in skips, plus both explicitly enabled browser tests. Changed-file lint
+has no errors. Raw TypeScript retains 91 existing diagnostics; the new file
+annotation test's missing typed stub was repaired. The production client build
+passed with 245 verified assets (21,148,320 bytes). This checkpoint also preserves
+the review bot's local-file annotation adapter and regression. Full account sync,
+canonical local Timeline and other matrix items remain required before merge.

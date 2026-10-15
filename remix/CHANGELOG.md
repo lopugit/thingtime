@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Things library text search now reads local content
+  first, including anonymous/offline folders, with bounded pagination, visible
+  errors and Retry. Account refresh preserves pending edits and scope isolation.
+  Clean production-browser checks cover anonymous 61-row paging, account outage
+  recovery, cold reload and mouse selection at 1440/390/320px. Full local-first
+  completion remains open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Local Component/Action/Data details now load native
   discussions and support owner rename without remote capability calls. Comments,
   nested replies, search and renamed titles survive a cold offline reload;

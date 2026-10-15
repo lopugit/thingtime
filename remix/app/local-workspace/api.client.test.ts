@@ -14,7 +14,7 @@ test('anonymous API writes and exports use no network and a retired facade canno
 	const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote call'); };
 	bindLocalWorkspace(true, rootIdentity.read().generation);
 	try {
-		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { remove: remote, create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
+		const api = anonymousApi({ attachments: { annotate: remote }, login: remote, auth: { login: remote }, things: { remove: remote, create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
 		const created = await api.things.create({ thingtime: ['data'], crystal: { name: 'Offline' } });
 		assert.equal((await api.things.get({ id: created.id })).thing.crystal.name, 'Offline');
 		assert.equal((await api.things.export({ ids: [created.id] })).plan.things.length, 1);
@@ -207,4 +207,27 @@ test('anonymous public discussion reads preserve bounded projection and omit acc
 		await anonymousWorkspaceDatabase().close();
 		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
 	}
+});
+
+test('anonymous library search stays scoped, supports paging, and never falls through to account search', async () => {
+ const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+ let requests = 0;
+ const remote = async (..._args: any[]): Promise<any> => { requests++; throw new Error('Unexpected network'); };
+ Object.assign(globalThis, { window: { dispatchEvent() {} }, indexedDB: new IDBFactory(), fetch: remote });
+ bindLocalWorkspace(true, rootIdentity.read().generation);
+ try {
+  const api = anonymousApi({ things: { create: remote, search: remote } });
+  for (let n = 0; n < 3; n++) await api.things.create({ thingtime: ['data'], crystal: { name: `Find me ${n}` } });
+  const page = await api.things.search({ workspace: true, q: 'find me', limit: 2 });
+  const rest = await api.things.search({ workspace: true, q: 'find me', limit: 2, cursor: page.nextCursor });
+  assert.equal(page.things.length, 2); assert.equal(rest.things.length, 1); assert.equal(page.total, 3);
+  assert.equal(page.things[0].author.username, 'local');
+  await assert.rejects(api.things.search({ workspace: true, q: 'find me', author: 'other-account' }), /filters/);
+  await assert.rejects(api.things.search({ workspace: true, conditions: [{ field: 'name', value: 'find me' }] }), /filters/);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(api.things.search({ workspace: true }, { signal: controller.signal }), /abort/i);
+  rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+  await assert.rejects(api.things.search({ workspace: true }), /Workspace changed/);
+  assert.equal(requests, 0);
+ } finally { await anonymousWorkspaceDatabase().close(); Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch }); }
 });

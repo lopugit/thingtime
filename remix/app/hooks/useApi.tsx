@@ -1072,13 +1072,13 @@ export function useApi() {
       // only on the URL). `mode` is meaningless without conditions, so the GET
       // URL drops it to keep cache keys stable.
       search: useCallback(
-        async (args) => {
-          const { conditions, mode, ...rest } = args || {};
+        async (args, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
+          const { conditions, mode, workspace: _workspace, ...rest } = args || {};
           if (rest.near !== undefined) await requireThingtimeCapability('api.things-search', '1.3.0');
           if (rest.anon && !conditions && rest.near === undefined) {
             return getJson(`/api/v1/things/search${toQuery(rest)}`);
           }
-          return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
+          return asyncFetcher.submit({ ...rest, conditions, mode }, { action: '/api/v1/things/search', signal: options?.signal });
         },
         [asyncFetcher]
       ),

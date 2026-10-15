@@ -10105,3 +10105,24 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   through credential-omitting reads. They cannot acquire an account session or
   write comments to a remote Thing. Local owner rename must not require a remote
   capability request; History and recording handoff still require real auth.
+
+
+### Local-first library search and selection (2026-10-16)
+
+- [ ] In a clean anonymous production-build browser, import at least 61 nested
+  Things, go offline and search across folders. Load both pages without missing
+  or duplicate rows, filter kinds, rename a result and cold-reload. Require zero
+  mutation/search requests. Invalid text/cursors report an error, not empty success.
+- [ ] Select a visible grid/list checkbox by mouse and keyboard without opening
+  the Thing. Check 1440×1000, 390×844 and 320×844 for overflow and usable selection
+  controls. Target the visible label rather than Chakra's hidden input.
+- [ ] In an isolated disposable account, search private owned Things, inject a
+  failed remote refresh and verify cached rows plus Retry. Cold-reload offline
+  and verify the explicit partial-results notice. Delete synthetic content through
+  the normal API and log out. Never use existing user data for this fixture.
+- [ ] Page remote and pending local matches independently; edits racing a remote
+  response must not restore old matches. Query, origin/account/data-plane changes
+  and aborts retire prior responses. Unicode cursors survive paging, while changed
+  scope/filter and missing anchors require a fresh search. Advanced/public search
+  keeps its separate contract. Run the opt-in `search.browser.test.ts` as documented
+  in `docs/local-workspaces.md`.

@@ -377,3 +377,14 @@ compiled renderer as a virtual document; `scripts/platform-runtime.mjs` pins its
 only script by hash. Embed/draft bundles keep the standalone URL. Vite preview
 uses the production app CSP plus the existing isolated-runtime CSP middleware. See the dated checkpoint in
 [local-workspaces.md](../local-workspaces.md).
+
+
+Library text search uses `local-workspace/librarySearch.ts` behind the explicit
+`workspace: true` API option. `accountApi.client.ts` returns local content first,
+then owner-filtered remote results with separate remote/pending continuations in
+`searchCursor.ts`; identity leases and aborts retire stale results. The Things UI
+keeps content on errors, offers Retry and load-more, and labels visible selection
+checkboxes. Structured/public search is a separate unfinished local adapter.
+`librarySearch.test.ts`, `searchCursor.test.ts`, adapter tests and the opt-in
+`search.browser.test.ts` cover this path. See the dated search checkpoint and
+remaining matrix in [local workspaces](../local-workspaces.md).

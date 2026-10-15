@@ -1,3 +1,4 @@
+import { searchLocalLibrary } from './librarySearch';
 import { LocalInteractions, localSavedPage } from './interactions';
 import { localPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
@@ -55,6 +56,14 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	local.profile = { ...local.profile, get: profileRead('profile', '1.1.0'), activity: profileRead('activity'), search: profileRead('search') };
 	local.drafts = (input?: Record<string, unknown>, query?: Record<string, string>) => { lease.assertCurrent(); return draftRequest(LOCAL_WORKSPACE_OWNER, input, query); };
 	local.things = { ...local.things,
+		search: async (args: Record<string, unknown> = {}, options?: { signal?: AbortSignal }) => {
+			lease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (args.workspace !== true) return unavailable();
+			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
+			const page = searchLocalLibrary(await service().snapshot(), args);
+			lease.assertCurrent(); options?.signal?.throwIfAborted();
+			return { ...page, things: page.things.map(project) };
+		},
 		react: ({ id, emoji }: { id: string; emoji?: unknown }) => interact('reaction', id, emoji ?? null),
 		save: ({ id }: { id: string }) => interact('save', id),
 		vote: ({ id, optionIndex }: { id: string; optionIndex: number }) => interact('vote', id, optionIndex),

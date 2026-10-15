@@ -33,6 +33,7 @@ export const localThingProjection = (thing: LocalThing, ownerId: string) => ({
 	tags: thing.tags || [], extended: thing.extended ?? null, localOnly: true
 });
 const isLocalActivity = (row: Pick<LocalThing, 'thingtime'>) => isLocalInteraction(row) || row.thingtime.includes('action-run');
+export const isLocalLibraryThing = (row: LocalThing, target?: string) => !isLocalActivity(row) && (!isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!target && row.targetId === target)));
 const fail = (code: string, message: string, status = 400): never => { throw new WorkspaceError(code, message, status); };
 const content = (thing: TransferThing): TransferThing => ({
 	id: thing.id, thingtime: thing.thingtime, crystal: isLocalAttachment(thing as LocalThing) ? { recordingFileId: localAttachmentFileId(thing.id), ...((thing as LocalAttachment).localAttachment.purpose === 'file' ? { filePurpose: 'file' } : {}) } : isTransferAlgorithm(thing) ? snapshotTransferValue(algorithmTransferContent(thing.crystal)) as TransferThing['crystal'] : thing.crystal,
@@ -235,7 +236,7 @@ export class LocalThings {
 		const kinds = typeof query.thingtime === 'string' ? query.thingtime.split(',') : query.thingtime || [];
 		return this.transaction('readonly', async tx => {
 			let rows = (await tx.list<LocalThing>('things')).map(({ value }) => value)
-				.filter(row => !isLocalActivity(row) && (!isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!query.target && row.targetId === query.target))) && kinds.every(kind => row.thingtime.includes(kind)) &&
+				.filter(row => isLocalLibraryThing(row, query.target) && kinds.every(kind => row.thingtime.includes(kind)) &&
 					(!query.folder || (query.folder === 'root' ? !row.folderId : row.folderId === query.folder)) &&
 					(!query.target || row.targetId === query.target))
 				.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));

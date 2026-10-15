@@ -383,3 +383,30 @@ reload and search completed with zero mutations sent to the network. Desktop,
 lint has no errors, the client build passed, and raw TypeScript matches the same
 91 pre-existing diagnostics. No merge or manual deployment. The full matrix,
 including account discussion sync and local Timeline, remains the merge gate.
+
+
+## Library search checkpoint — 2026-10-16
+
+- Anonymous library search now covers authored content across local folders with
+  bounded literal matching, kind filters and 50-row cursor pages. Account search
+  returns scoped cached content first, refreshes only its owner and retains
+  independent server/pending continuations. Errors preserve rows with Retry;
+  abort, account and data-plane changes retire old responses.
+- Corrected the earlier checkbox diagnosis: visible label clicks select normally;
+  the earlier automation targeted Chakra's hidden input. Added descriptive labels
+  and real mouse regression in grid/list at desktop, 390px and 320px.
+- Preserved review commit `5edad32ca` (local-file annotation) and repaired its
+  missing typed remote test stub. No cloud or anonymous account authority changed.
+- Local validation: 463 workspace/offline-shell, Things and hooks passes, four
+  opt-in skips, plus two explicit clean production-browser passes. Anonymous import,
+  61-row search, kind filter, rename, cold reload and error handling made zero
+  mutation/search requests. Account synthetic private search survived 503 and cold
+  offline reload; final fixture content was removed through normal API cleanup.
+- An earlier failed cleanup run left two synthetic records in its own disposable
+  local fixture account; no existing account/public content was changed. The
+  existing offline remote-computer refresh toast remains outside this search scope.
+- Client build: 245 verified offline assets / 21,148,320 bytes. Changed-file lint
+  has no errors; raw TypeScript retains 91 baseline diagnostics. Evidence is in
+  `tmp/local-search-ui/`. Advanced/public search, dedicated account adapters,
+  Timeline, native tools and other matrix rows still prevent merge. These checks
+  are local; they do not establish deployed behavior or full rollout completion.

@@ -1,9 +1,11 @@
+import { readWorkspaceSearchCursor, workspaceSearchCursor } from './searchCursor';
+import { searchLocalLibrary } from './librarySearch';
 import { validateThingtimeCrystal } from '../schemas/registry';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
 import { accountWriteSupported, AccountThingSync, type AccountThing, type AccountThingWrite } from './accountSync';
 import { accountThingTransport } from './accountTransport.client';
-import { assertAccountSyncAllowed, canSyncAccountWorkspace, subscribeWorkspaceBinding, accountWorkspaceLease, announceLocalWorkspaceChange, workspaceDatabase } from './runtime.client';
+import { assertAccountSyncAllowed, canSyncAccountWorkspace, subscribeWorkspaceBinding, accountWorkspaceLease, accountRemoteWorkspaceLease, announceLocalWorkspaceChange, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceScope } from './storage';
 
@@ -99,6 +101,50 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const changed = () => { announceLocalWorkspaceChange(); worker().wake(); };
 	// Explicit login/logout establish or revoke identity; other remote features require confirmation.
 	return { ...online, auth: remote.auth, login: remote.login, things: { ...online.things,
+		search: async (args: Record<string, any> = {}, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
+			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (args.workspace !== true) return online.things.search(args, options);
+			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
+			const { sync } = worker();
+			const localCursor = typeof args.cursor === 'string' && args.cursor.startsWith('local-search:');
+			const canReadRemote = navigator.onLine !== false && canSyncAccountWorkspace(scope) && !!owner.username && !localCursor;
+			if (!canReadRemote && args.cursor && !localCursor) throw new WorkspaceError('LOCAL_CURSOR_REQUIRED', 'Reload this search to browse saved device content while offline.');
+			const continuation = readWorkspaceSearchCursor(args.cursor, workspaceScopeKey(scope), args);
+			const page = searchLocalLibrary(await sync.things.snapshot(), { ...args, cursor: canReadRemote ? undefined : args.cursor });
+			const local = { ...page, things: continuation ? [] : (await sync.views(page.things.map(row => row.id))).map(project), incomplete: true };
+			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (!canReadRemote) return local;
+			const readRemote = async () => {
+				const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
+				const { workspace: _workspace, ...query } = args;
+				const result = continuation && continuation.remote === null ? { ok: true, things: [], nextCursor: null, total: null } : await online.things.search({ ...query, cursor: continuation?.remote || undefined, author: owner.username }, { signal: options?.signal });
+				remoteLease.assertCurrent(); options?.signal?.throwIfAborted();
+				if (result?.ok === false) throw new WorkspaceError('SEARCH_FAILED', result.error || 'Could not refresh search results.', result.status || 503);
+				const pending = new Set((await sync.status()).filter(row => row.state !== 'synced').map(row => row.id));
+				const fresh = [];
+				for (const row of result.things || []) {
+					if (accountThingCanCache(row) && row.author?.id === owner.id) {
+						await sync.remember(row);
+						const current = await sync.view(row.id);
+						if (current && (!pending.has(row.id) || searchLocalLibrary([current], { ...args, cursor: undefined }).things.length)) fresh.push(project(current));
+					} else fresh.push(row);
+				}
+				let pendingCursor: string | null = null;
+				if (!continuation || continuation.pending !== null) {
+					const latest = searchLocalLibrary((await sync.things.snapshot()).filter(row => pending.has(row.id)), { ...args, cursor: continuation?.pending || undefined });
+					pendingCursor = latest.nextCursor;
+					for (const row of await sync.views(latest.things.map(item => item.id))) if (!fresh.some(item => item.id === row.id)) fresh.unshift(project(row));
+				}
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				remoteLease.assertCurrent();
+				return { ...result, things: fresh, nextCursor: workspaceSearchCursor(workspaceScopeKey(scope), args, result.nextCursor || null, pendingCursor), total: pending.size ? null : result.total, localWorkspace: true, incomplete: false };
+			};
+			if (!options?.onRefresh) return readRemote();
+			void readRemote().then(result => options.onRefresh?.(result)).catch(error => {
+				try { facadeLease.assertCurrent(); options.signal?.throwIfAborted(); options.onError?.(error); } catch { /* retired view */ }
+			});
+			return { ...local, refreshing: true };
+		},
 		create: async (input: AccountThingWrite) => {
 			facadeLease.assertCurrent();
 			if (!accountThingCanCache(input) || !accountWriteSupported(input)) return online.things.create(input);
