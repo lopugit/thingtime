@@ -13,7 +13,12 @@ export async function publicWorkspaceRead(path: string, feature: string, version
 	const db = anonymousWorkspaceDatabase();
 	try {
 		await requireThingtimeCapability(feature, version); lease.assertCurrent(); signal?.throwIfAborted();
-		const response = await fetch(url, { credentials: 'omit', redirect: 'error', signal: signal || AbortSignal.timeout(20_000), headers: { Accept: 'application/json' } });
+		// Compose the caller's signal with this read's own deadline, as the account
+		// transport does. Replacing the timeout with a supplied signal left every
+		// cancellable caller (things.get, the component/schema browsers) able to
+		// hang forever, and never reached the cached-fallback path below.
+		const response = await fetch(url, { credentials: 'omit', redirect: 'error', headers: { Accept: 'application/json' },
+			signal: AbortSignal.any([AbortSignal.timeout(20_000), ...(signal ? [signal] : [])]) });
 		lease.assertCurrent();
 		if (!response.ok) throw new WorkspaceError('PUBLIC_READ_FAILED', `Public content is unavailable (${response.status})`, response.status);
 		const data = await response.json(); lease.assertCurrent(); signal?.throwIfAborted();
