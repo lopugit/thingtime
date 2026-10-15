@@ -941,6 +941,8 @@ const ComponentBlockView = ({
 };
 
 export type WebpageBlocksRendererProps = {
+  // Inert addresses for caller-supplied draft crops; no behavior or authority.
+  draftAddresses?: boolean;
 	// Keep the live DOM mounted as editor overlays appear or change modes.
 	seamless?: boolean;
 	blocks: WebpageBlock[];
@@ -1210,7 +1212,7 @@ const BlockView = (
 		// defeat page-owned shells that center their children (e.g. /welcome)
 		if (block.type === 'native') return <>{body}</>;
 		return (
-			<Box {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
+			<Box data-draft-block={props.draftAddresses ? block.id : undefined} {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
 				{body}
 			</Box>
 		);

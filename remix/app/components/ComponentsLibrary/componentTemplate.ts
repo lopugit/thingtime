@@ -527,10 +527,11 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 // Server media discovery resolves several stored render positions on ONE
 // budget. Unknown runtime tokens must not collapse into another attachment id.
 // Ordinary UI resolution retains its existing empty-token behavior.
-export const createTemplateResolver = (options: { preserveUnboundTokens?: boolean } = {}) => {
+export const createTemplateResolver = (options: { preserveUnboundTokens?: boolean; onExhausted?: () => void } = {}) => {
 	const budget: ResolveBudget = { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS, ...options };
 	return (template: unknown, scope: ComponentScope = {}): unknown => {
 		const resolved = resolveNode(template, scope, budget);
+		if (budget.left <= 0 || budget.chars <= 0) options.onExhausted?.();
 		const refs = copiedMediaRefs(isPlainObject(template) ? template.ttMediaRefs : undefined);
 		return mapResolvedCopiedMedia(resolved, refs, budget);
 	};
