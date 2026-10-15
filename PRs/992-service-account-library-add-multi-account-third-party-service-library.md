@@ -87,6 +87,25 @@ remained readable on a second reveal after migration.
   `TT_WEB_PORT=18280 TT_HMR_PORT=18281 TT_API_PORT=18282` overrides to retain its
   already-registered Google callback. Other worktree processes are preserved.
 
+### October 16 provider-response review
+
+- Reproduced HTTP 200 with malformed JSON being returned as `{ ok: true,
+  data: null }` by the shared authenticated provider transport. It now fails
+  with a bounded 502 message. Non-JSON 401/403 responses still request reconnect,
+  and valid empty JSON responses remain usable. Focused regressions cover these
+  cases without sending credentials or calling a real provider.
+- Validation: the malformed-success regression fails before the fix; all 140
+  connection tests pass after it. The 21 live account-library checks, changed
+  file lint (zero errors; existing test warnings), and Nitro build pass. The
+  browser's saved real Google account again completes **Check connection**.
+- GitGuardian's three findings on `39a2c4a2d` point to the password format
+  selector (`PasswordManager.tsx:28`) and synthetic TOTP import fixtures
+  (`passwords.test.ts:7,49`). These files are identical to `develop`; the
+  reported values are code/test data, not deployed credentials. An independent
+  Gitleaks scan of `origin/develop..HEAD` reported no leaks (five non-merge
+  commits scanned). The GitGuardian check remains failed pending its own
+  false-positive disposition; no scanner rule or finding was suppressed.
+
 ### Remaining provider and delivery gates
 
 - Finish the remaining real-provider acceptance and final review.

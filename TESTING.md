@@ -7727,6 +7727,10 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 - [ ] Google reuse API: exercise a permitted read, missing-scope denial,
       wrong-provider operation, another owner's link, and arbitrary-URL input.
       Result, error, logs, and client caches must not contain credentials.
+- [ ] Provider transport regression: an HTTP 200 with HTML, empty, or truncated
+      JSON must fail rather than report a successful empty result. Non-JSON
+      401/403 responses still request reconnect; valid empty JSON stays valid.
+      Never include the rejected response body in the error.
 - [ ] Add separate OpenAI API and Claude Code OAuth connections from their cards, reload,
       and find the same entries in Secure Vault and Lopu's provider picker.
       No duplicate credential store; cancelled forms erase typed secrets.

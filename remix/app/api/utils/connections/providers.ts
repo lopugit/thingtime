@@ -615,9 +615,8 @@ const postForm = async (
   }
 };
 
-// Authenticated JSON GET/POST for provider data APIs. Provider error bodies
-// surface as bounded messages so a revoked token reads as "reconnect", never
-// as a silent empty feed.
+// Authenticated JSON GET/POST for provider data APIs. Status-based errors never
+// echo provider bodies; malformed successes must not become empty results.
 export const authedJson = async (
   url: string,
   opts: { token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string> } = {}
@@ -637,17 +636,15 @@ export const authedJson = async (
     });
     const text = await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
     if (text === null) return fail(502, 'The provider response was too large to process');
-    let data: any = null;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
-    }
     if (!resp.ok) {
       const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
       return fail(status, status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`);
     }
-    return { ok: true, data };
+    try {
+      return { ok: true, data: JSON.parse(text) };
+    } catch {
+      return fail(502, 'The provider returned malformed JSON');
+    }
   } catch (err: any) {
     const blocked = blockedFail(err);
     if (blocked) return blocked;

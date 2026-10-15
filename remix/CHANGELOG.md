@@ -68,6 +68,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Reject malformed successful provider JSON instead
+  of reporting an empty connection result; retain safe reconnect errors for
+  non-JSON authorization refusals. [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
 - 2026-10-16 — **Codex (AI)**: Reconcile the OAuth account library with the
   released password vault and preserve shared encryption/session boundaries.
   Verify refresh of a genuinely expired Google grant and successful subsequent
