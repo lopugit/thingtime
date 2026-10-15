@@ -81,6 +81,7 @@ test('clean anonymous offline import, rename, history reload and native recorded
   if (artifacts) await page.screenshot({ path: resolve(artifacts, 'note-saved-320.png'), fullPage: false });
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
   await page.getByText('Note removed from this device.', { exact: true }).waitFor();
+  await page.getByText('Kept locally, even without a connection.', { exact: true }).first().waitFor({ state: 'hidden' });
   assert.equal(await page.getByText('Kept locally, even without a connection.', { exact: true }).count(), 0);
   await page.reload();
   await page.getByRole('button', { name: /Created Thing Offline history page/ }).click();
@@ -158,8 +159,41 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.goto(new URL(`/builder?page=${encodeURIComponent(thingId)}&mode=edit`, base).href);
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox').inputValue(), 'Offline renamed history page', 'branch saves never replace the current Thing');
+  await page.goto(new URL(`/history?thing=${encodeURIComponent(thingId)}`, base).href);
+  await page.getByRole('button', { name: /Edited Thing Offline renamed history page/ }).click();
+  await page.getByRole('button', { name: 'Try a variation', exact: true }).click();
+  // Wait for the cached branch row; the selected version also has a separate
+  // current-content merge button while the branch list is loading.
+  await page.getByRole('button', { name: 'Edit variation', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Review and combine…', exact: true }).first().click();
+  const mergeReview = page.getByRole('region', { name: 'Review branch merge', exact: true });
+  await mergeReview.getByText(/Both versions changed/).waitFor();
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
+  assert.equal(await mergeReview.getByRole('button', { name: 'Review choices', exact: true }).isDisabled(), true);
+  await mergeReview.getByRole('button', { name: 'Use this version', exact: true }).click();
+  await mergeReview.getByRole('button', { name: 'Review choices', exact: true }).click();
+  await mergeReview.getByRole('button', { name: 'Save merge to branch', exact: true }).waitFor();
+  await mergeReview.getByRole('button', { name: 'Preview merge result', exact: true }).click();
+  await mergeReview.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  const mergeBounds = [];
+  for (const [width, height] of [[1440, 1000], [390, 844], [320, 844]]) {
+   await page.setViewportSize({ width, height });
+   await mergeReview.getByText('A saved local version stays here.', { exact: true }).scrollIntoViewIfNeeded();
+   const measured = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+   assert.equal(measured.width, measured.scrollWidth); mergeBounds.push(measured);
+   if (artifacts) await page.screenshot({ path: resolve(artifacts, `branch-merge-${width}.png`), fullPage: false, animations: 'disabled' });
+  }
+  await mergeReview.getByRole('button', { name: 'Save merge to branch', exact: true }).click();
+  await mergeReview.getByText('Merge saved to Offline variation on this device.', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(branchUrl);
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Offline renamed history page', 'the explicitly chosen incoming title survives a cold branch reload');
+  await page.goto(new URL(`/builder?page=${encodeURIComponent(thingId)}&mode=edit`, base).href);
+  await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').inputValue(), 'Offline renamed history page', 'merging the branch never writes current content');
   assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
   if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); }
   throw error;

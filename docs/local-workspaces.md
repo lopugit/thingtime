@@ -72,7 +72,7 @@ change this pointer; logout/account changes revoke it.
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
-| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout and edit offline in History and the native Builder. Restore/merge, historical export, related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. |
+| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Current-content restore/undo/merge, historical export, related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
@@ -894,3 +894,41 @@ the prior 91 diagnostics; application lint has zero errors and one existing
 constructor warning. These are local checks, not deployed acceptance. Account
 Timeline synchronization, branch merging, restore/export and the full remaining
 coverage matrix still block completion and merge.
+
+
+## Canonical local branch merges — 2026-10-16
+
+Anonymous History can now compare a selected saved version with a named variation,
+resolve content and recorded-component conflicts, preview through the native
+renderer, and save through the existing durable event/branch queue. The shared
+`timeline/branchMergePreview.ts` contains the existing account comparison rules;
+`recordedComponentReader.ts` preflights the complete component byte budget before
+payload reads. Account readers remain owner-scoped and authenticated. The local
+adapter uses one read-only anonymous workspace transaction and never reads live
+account Things or executes Actions. Applying retains the canonical merge event
+before the existing revision-fenced branch command. A stale head preserves the
+proposal without overwriting the newer branch or current Thing.
+
+Local verification: 121 workspace/offline-shell and 238 shared Timeline tests
+pass, with five ordinary opt-in skips. The explicit production-shell browser
+check passes offline conflict review, native preview, save and cold reload at
+1440/390/320px with zero HTTP mutations, account Timeline requests, page errors or
+document overflow. Manual in-app Browser review/save also passed. Evidence:
+`tmp/local-branch-merge-ui/verification.json`, `branch-merge-1440.png`,
+`branch-merge-390.png`, `branch-merge-320.png`, and manual phone screenshots in
+that directory. The browser test now waits for the branch row before choosing
+its merge control and waits for asynchronous note removal to finish repainting.
+
+The guarded real API branch regression also passes comparison, explicit conflict
+choices, canonical merge upload, idempotent head advance, cold checkout, stale
+preview refusal, unchanged current Thing and anonymous 401s. It uses only a new
+synthetic account on the disposable loopback replica and cleans up its created
+Thing in `finally`; that test account and immutable audit remain in the fixture
+DB. No existing account data was changed.
+
+Build: 245 verified assets / 21,181,018 bytes. Targeted lint has zero errors and
+one existing constructor warning. Raw TypeScript retains the exact same 91
+baseline diagnostics. This is local verification; CI and deployed evidence are
+separate. Current-content restore/undo/merge, historical export, related history,
+protected histories/folder, account sync and the full remaining local-first
+matrix are unfinished. PR #1000 remains open; do not merge this checkpoint.

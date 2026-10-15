@@ -517,3 +517,41 @@ one existing constructor warning; integration script lint uses the TypeScript
 parser. Raw TypeScript retains 91 baseline diagnostics. CI/deployed validation
 is separate. Restore, merge, historical export, protected histories, account
 sync and the rest of the full coverage matrix remain unfinished; do not merge.
+
+
+## Canonical local branch merges — 2026-10-16
+
+Anonymous History can now compare a selected saved version with a named variation,
+resolve content and recorded-component conflicts, preview through the native
+renderer, and save through the existing durable event/branch queue. The shared
+`timeline/branchMergePreview.ts` contains the existing account comparison rules;
+`recordedComponentReader.ts` preflights the complete component byte budget before
+payload reads. Account readers remain owner-scoped and authenticated. The local
+adapter uses one read-only anonymous workspace transaction and never reads live
+account Things or executes Actions. Applying retains the canonical merge event
+before the existing revision-fenced branch command. A stale head preserves the
+proposal without overwriting the newer branch or current Thing.
+
+Local verification: 121 workspace/offline-shell and 238 shared Timeline tests
+pass, with five ordinary opt-in skips. The explicit production-shell browser
+check passes offline conflict review, native preview, save and cold reload at
+1440/390/320px with zero HTTP mutations, account Timeline requests, page errors or
+document overflow. Manual in-app Browser review/save also passed. Evidence:
+`tmp/local-branch-merge-ui/verification.json`, `branch-merge-1440.png`,
+`branch-merge-390.png`, `branch-merge-320.png`, and manual phone screenshots in
+that directory. The browser test now waits for the branch row before choosing
+its merge control and waits for asynchronous note removal to finish repainting.
+
+The guarded real API branch regression also passes comparison, explicit conflict
+choices, canonical merge upload, idempotent head advance, cold checkout, stale
+preview refusal, unchanged current Thing and anonymous 401s. It uses only a new
+synthetic account on the disposable loopback replica and cleans up its created
+Thing in `finally`; that test account and immutable audit remain in the fixture
+DB. No existing account data was changed.
+
+Build: 245 verified assets / 21,181,018 bytes. Targeted lint has zero errors and
+one existing constructor warning. Raw TypeScript retains the exact same 91
+baseline diagnostics. This is local verification; CI and deployed evidence are
+separate. Current-content restore/undo/merge, historical export, related history,
+protected histories/folder, account sync and the full remaining local-first
+matrix are unfinished. PR #1000 remains open; do not merge this checkpoint.

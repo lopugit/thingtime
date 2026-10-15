@@ -37,6 +37,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		discover: (ownerId: string) => history.discover(ownerId),
 		page: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.page(request, options?.signal); },
 		push: (scope: any, event: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.push(event, options?.signal); },
+		branchMerge: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branchMerge(request, options?.signal); },
 		branch: (scope: any, command: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branch(command, options?.signal).then(changed); },
 		branches: (scope: any, thingId: string, before?: number, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branches(thingId, before ?? null, 40, options?.signal); },
 		branchHead: (scope: any, branchId: string, thingId: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.branchHead(branchId, thingId, options?.signal); },

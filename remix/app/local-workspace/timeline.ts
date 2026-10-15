@@ -1,3 +1,6 @@
+import { createBranchMergePreviewService } from '../timeline/branchMergePreview';
+import type { BranchMergeRequest } from '../timeline/branchMerge';
+import { readRecordedComponents } from '../timeline/recordedComponentReader';
 import { parseTimelineBranchCommand, parseTimelineBranchLookup, type TimelineBranchCommand } from '../timeline/branches';
 import { parseBranchCheckoutRequest, type BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { readLocalBranch, readLocalBranches, writeLocalBranch, checkoutLocalBranch } from './timelineBranches';
@@ -129,6 +132,21 @@ export class LocalTimeline {
   const event = parseTimelineEvent(input);
   if (event.ownerId !== LOCAL_TIMELINE_OWNER || event.actorId !== LOCAL_TIMELINE_OWNER || event.source !== 'client' || event.mode !== 'draft' || !event.clientId) fail('Only authored local drafts can be submitted.');
   return { ok: true as const, entry: await this.transaction('readwrite', tx => appendLocalTimeline(tx, event), signal) };
+ }
+ async branchMerge(input: BranchMergeRequest, signal?: AbortSignal) {
+  return this.transaction('readonly', tx => {
+   const entries = async (ids: string[]) => { const found: TimelineEntry[] = []; for (const id of ids) { const entry = await localTimelineEntry(tx, id); if (entry) found.push(entry); } return found; };
+   return createBranchMergePreviewService({
+    branch: (owner, branchId, thingId) => readLocalBranch(tx, owner, branchId, thingId),
+    entries: (_owner, ids) => entries(ids),
+    nodes: async (_owner, ids) => (await entries(ids)).map(({ event }) => ({ id: event.id, thingId: event.thingId, parentIds: event.parentIds, afterAdapter: event.after?.adapter ?? null })),
+    snapshot: async (_owner, entry) => entry.event.after,
+    recorded: (ownerId, wanted, maxBytes) => readRecordedComponents({ ownerId, wanted, maxBytes,
+     readSizes: async ids => { const sizes = []; for (const id of ids) { const header = parseHeader(await tx.get<Header>(INDEX, id), id); sizes.push({ timelineEntryBytes: header.bytes }); } return sizes; },
+     readEntries: entries, error: (status, message) => new WorkspaceError('LOCAL_BRANCH_MERGE', message, status) }),
+    refuse: (status, message) => fail(message, status)
+   })(LOCAL_TIMELINE_OWNER, input);
+  }, signal);
  }
  async branch(input: TimelineBranchCommand, signal?: AbortSignal) {
   this.lease.assertCurrent(); signal?.throwIfAborted();

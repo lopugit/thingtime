@@ -431,4 +431,12 @@ local owner/plane pair via content identity; global account data-plane validatio
 is unchanged. Native Builder edits remain isolated from the current Thing, and
 branch Actions/live data stay paused. Run the local branch tests, offline History
 browser test and disposable `scripts/timeline-branches.integration.mts` for
-account writer parity. Branch merging and account offline sync remain pending.
+account writer parity. Account offline sync remains pending.
+
+Branch comparison is shared in `timeline/branchMergePreview.ts`; bounded recorded
+component reads use `timeline/recordedComponentReader.ts`. Anonymous `LocalTimeline`
+binds both to one readonly workspace transaction. `timelineBranchMerge.test.ts`
+covers conflict choices, exact captures, preflight byte limits, stale heads and
+scope refusal; the offline browser and real API branch checks cover canonical
+merge save/reload without changing the current Thing. Current-content
+restore/undo/merge remains a separate unfinished path.

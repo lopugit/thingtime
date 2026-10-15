@@ -2,6 +2,15 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Anonymous branch merges: offline, select a version and use the variation
+      row's Review and combine control. Resolve all content/component conflicts,
+      preview recorded definitions, save, and cold-reload in Builder. Verify
+      desktop/390/320px and zero account/mutation HTTP requests. The current Thing
+      must remain unchanged. Invalid choices and retired/foreign scopes fail;
+      stale-head pushes retain the proposal; oversized captures fail before
+      payload decoding. Run `timelineBranchMerge.test.ts`, the offline History
+      browser test and guarded `timeline-branches.integration.mts` account parity.
+
 - [ ] Anonymous variations: while offline, select a saved version, create a
       variation, edit its fields, open it in Builder, save and cold-reload.
       Recorded components must render with Actions/live data paused, and the
