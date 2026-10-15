@@ -43,6 +43,15 @@ checks against existing personal data. Full feature coverage is tracked in
       it. Verify no account mutation, unchanged active selection after import,
       private local labels, and usable controls at 1440, 390 and 320px. Public
       profiles/gallery remain readable without borrowing account credentials.
+- [ ] Logged out, create/select an algorithm, cold-reload Settings → Things
+      offline, rename/branch it, download/import/re-export JSON and delete it.
+      Preserve weights/statistics with fresh IDs and unchanged active selection;
+      show private-interest warnings and usable 1440/390/320px controls.
+- [ ] Train from a disposable public-feed response fixture without publishing a
+      post. No anonymous track request or page-hide beacon may reach the server.
+      Switch accounts with queued/in-flight events: clear the old session, never
+      seed or train the new owner's profile, and ignore stale completion toasts.
+      Built-in sorts never train. Storage failures must be visible.
 - [ ] All local feature families, queue deletion/import/move semantics and
       multi-tab UI refresh require separate acceptance before rollout merge.
 

@@ -24,6 +24,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { LopuSettingsRows } from '~/components/Lopu/LopuHost';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl, ThingsBadgePaddingControl } from '~/components/ThemeSettings/controls';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import type { CurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -275,6 +276,7 @@ export const SettingsContent = ({
 }) => {
 	const contentRef = React.useRef<HTMLDivElement>(null);
 	const user = useCurrentUser();
+	const workspaceUser = useWorkspaceUser();
 	const api = useApi();
 	const lopu = useLopu();
 	const routerNavigate = useNavigate();
@@ -634,13 +636,13 @@ export const SettingsContent = ({
 						<ThingsSettings />
 						{/* subspaces — vote pills + default sort (per-browser preferences) */}
 						<SubspacePreferencesSection />
-						{/* 3 · feed algorithms (auth only) */}
-						{user && (
+						{/* Feed algorithms use workspace content identity. */}
+						{workspaceUser && (
 							<SettingsSection
 								eyebrow="Feed algorithms"
 								description="Algorithms learn from what you linger on in the feed — the active one trains as you scroll. Keep a few for different moods, branch the ones you like, and switch anytime."
 							>
-								<AlgorithmManager key={user.id} />
+								<AlgorithmManager key={workspaceUser.id} />
 							</SettingsSection>
 						)}
 						<DesktopSettings />

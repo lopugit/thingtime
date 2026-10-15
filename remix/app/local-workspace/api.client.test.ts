@@ -12,7 +12,7 @@ test('anonymous API writes and exports use no network and a retired facade canno
 	const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote call'); };
 	bindLocalWorkspace(true, rootIdentity.read().generation);
 	try {
-		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote }, actions: { run: remote }, schemas: { list: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
+		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
 		const created = await api.things.create({ thingtime: ['data'], crystal: { name: 'Offline' } });
 		assert.equal((await api.things.get({ id: created.id })).thing.crystal.name, 'Offline');
 		assert.equal((await api.things.export({ ids: [created.id] })).plan.things.length, 1);
@@ -40,6 +40,12 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		await api.themes.remove({ id: savedTheme.id });
 		assert.equal((await api.themes.list()).themes.length, 0);
 		assert.equal(remoteCalls, 0);
+		const algorithm = (await api.algorithms.create({ name: 'Local art' })).algorithm;
+		await api.algorithms.setActive({ algorithmId: algorithm.id });
+		assert.equal((await api.algorithms.list()).activeAlgorithmId, algorithm.id);
+		await api.algorithms.track({ algorithmId: algorithm.id, events: [{ thingId: 'unknown', signal: 'view' }] });
+		assert.equal((await api.things.export({ ids: [algorithm.id] })).plan.things[0].thingtime[0], 'feed-algorithm');
+		await api.algorithms.remove({ id: algorithm.id }); assert.equal(remoteCalls, 0);
 		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
 		await assert.rejects(api.things.create({ crystal: { name: 'Late callback' } }), /Workspace changed/);
 		assert.equal(remoteCalls, 0);
@@ -54,8 +60,10 @@ test('endpoints the server serves logged out stay reachable, account surfaces st
 	const origin = 'https://thingtime.example';
 	let publicReads = 0, remoteCalls = 0;
 	Object.assign(globalThis, { window: { dispatchEvent() {}, location: { origin } }, indexedDB: new IDBFactory(), fetch: async (_input: RequestInfo | URL, options?: RequestInit) => {
-		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: Object.fromEntries(['users-profile', 'users-activity', 'users-search', 'themes-shared'].map(id => [`api.${id}`, { version: id === 'users-profile' ? '1.1.0' : '1.0.0' }])) });
+		if (options?.credentials === 'same-origin') return Response.json({ schemaVersion: 1, origin, features: Object.fromEntries(['users-profile', 'users-activity', 'users-search', 'themes-shared', 'things-feed'].map(id => [`api.${id}`, { version: id === 'users-profile' ? '1.1.0' : id === 'things-feed' ? '1.8.0' : '1.0.0' }])) });
 		assert.equal(options?.credentials, 'omit'); assert.equal(options?.redirect, 'error'); publicReads++;
+		const url = new URL(String(_input), origin);
+		if (url.pathname === '/api/v1/things/feed') { assert.equal(url.searchParams.get('algorithm'), 'latest'); return Response.json({ ok: true, posts: [{ id: 'public-post', type: 'text', author: { id: 'author' }, tags: ['art'], createdAt: '2026-10-16T00:00:00.000Z' }], nextCursor: null }); }
 		return Response.json({ ok: true });
 	} });
 	bindLocalWorkspace(true, rootIdentity.read().generation);
@@ -63,6 +71,7 @@ test('endpoints the server serves logged out stay reachable, account surfaces st
 		const online = async (..._args: any[]): Promise<any> => { remoteCalls++; return { ok: true }; };
 		const api = anonymousApi({
 			waitlist: { join: online },
+			things: { feed: online }, algorithms: { create: online, track: online, list: online },
 			profile: { get: online, activity: online, search: online, update: online },
 			themes: { getShared: online, listShared: online, list: online, save: online, setActive: online },
 			admin: { users: online }
@@ -73,6 +82,11 @@ test('endpoints the server serves logged out stay reachable, account surfaces st
 			api.profile.activity({ username: 'lopu' }), api.profile.search({ q: 'lo' }),
 			api.themes.getShared({ id: 't' }), api.themes.listShared()]) assert.deepEqual(await call, { ok: true });
 		assert.equal(publicReads, 5); assert.equal(remoteCalls, 1, 'only the explicit public waitlist uses its existing writer');
+		const algorithm = (await api.algorithms.create({ name: 'Private interests' })).algorithm;
+		const feed = await api.things.feed({ algorithm: algorithm.id });
+		assert.equal(feed.localRanking, true); assert.equal(feed.posts[0].id, 'public-post');
+		const trained = await api.algorithms.track({ algorithmId: algorithm.id, events: [{ thingId: 'public-post', signal: 'react' }] });
+		assert.equal(trained.applied, 1); assert.equal(publicReads, 6); assert.equal(remoteCalls, 1);
 		// Theme content now has a dedicated local writer; account surfaces stay denied.
 		const saved = await api.themes.save({ name: 'Local', theme: {} });
 		await api.themes.setActive({ themeId: saved.theme.id });
@@ -81,7 +95,7 @@ test('endpoints the server serves logged out stay reachable, account surfaces st
 		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
 		for (const call of [() => api.profile.activity({ username: 'lopu' }), () => api.themes.listShared(), () => api.waitlist.join({ email: 'a@b.co' })])
 			await assert.rejects(async () => call(), /Workspace changed/);
-		assert.equal(publicReads, 5); assert.equal(remoteCalls, 1);
+		assert.equal(publicReads, 6); assert.equal(remoteCalls, 1);
 	} finally {
 		await anonymousWorkspaceDatabase().close();
 		Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });

@@ -6,6 +6,8 @@ import { rewriteComposition } from '../api/utils/actions/forkCompositionCore';
 import { collectTransfer, type CollectTransferOptions } from '../utils/thingTransfer/collect';
 import { serializeTransfer, validateTransfer, type JsonValue, type TransferThing } from '../utils/thingTransfer/format';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
+import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorithm } from '../utils/thingTransfer/algorithm';
+import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
 import { WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
@@ -23,7 +25,7 @@ export const localThingProjection = (thing: LocalThing, ownerId: string) => ({
 });
 const fail = (code: string, message: string, status = 400): never => { throw new WorkspaceError(code, message, status); };
 const content = (thing: TransferThing): TransferThing => ({
-	id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal,
+	id: thing.id, thingtime: thing.thingtime, crystal: isTransferAlgorithm(thing) ? snapshotTransferValue(algorithmTransferContent(thing.crystal)) as TransferThing['crystal'] : thing.crystal,
 	...(thing.extended === undefined ? {} : { extended: thing.extended }),
 	...(thing.tags === undefined ? {} : { tags: thing.tags }),
 	...(thing.folderId ? { folderId: thing.folderId } : {}), ...(thing.targetId ? { targetId: thing.targetId } : {})
@@ -180,6 +182,9 @@ export class LocalThings {
 		if (manifest.files.length || manifest.links?.length) fail('ATTACHMENT_IMPORT_REQUIRED', 'Import attached files through the workspace attachment importer');
 		const map = new Map(manifest.things.map(row => [row.id, `local-${this.uuid()}`]));
 		const stamp = this.now();
+		const importedAlgorithms = manifest.things.filter(isTransferAlgorithm);
+		if (importedAlgorithms.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account algorithms require their dedicated sync adapter');
+		for (const algorithm of importedAlgorithms) { validateTransferAlgorithm(algorithm); if (manifest.things.some(row => row.targetId === algorithm.id || row.folderId === algorithm.id)) fail('INVALID_ALGORITHM', 'Algorithm transfers cannot contain child Things'); }
 		const importedThemes = manifest.things.filter(isTransferTheme);
 		if (importedThemes.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
 		for (const theme of importedThemes) {
@@ -187,6 +192,7 @@ export class LocalThings {
 			if (manifest.things.some(row => row.targetId === theme.id || row.folderId === theme.id)) fail('INVALID_THEME', 'Theme transfers cannot contain child Things');
 		}
 		const importedContent = (original: TransferThing) => {
+			if (isTransferAlgorithm(original)) return { thingtime: ['feed-algorithm'], crystal: snapshotTransferValue(algorithmTransferContent(original.crystal)) as TransferThing['crystal'] };
 			if (!isTransferTheme(original)) return validated({ ...original, crystal: rewriteComposition(original.thingtime, original.crystal, (_kind, ref) => map.get(ref) || ref) });
 			const normalized = normalizeSavedTheme(original.crystal);
 			if (!normalized.ok) return fail('INVALID_THEME', normalized.error);
@@ -199,6 +205,7 @@ export class LocalThings {
 			...(original.targetId ? { targetId: map.get(original.targetId)! } : {})
 		}));
 		await this.transaction('readwrite', async tx => {
+			if (importedAlgorithms.length && importedAlgorithms.length + (await tx.list<LocalThing>('things')).filter(row => isTransferAlgorithm(row.value)).length > MAX_SAVED_ALGORITHMS) fail('LOCAL_QUOTA', 'This import exceeds the algorithm limit', 413);
 			if (importedThemes.length && importedThemes.length + (await tx.list<LocalThing>('things')).filter(row => isTransferTheme(row.value)).length > MAX_SAVED_THEMES) fail('LOCAL_QUOTA', 'This import exceeds the saved-theme limit', 413);
 			// All IDs exist before relationship checks, including forward refs.
 			for (const row of rows) await tx.put('things', row.id, row);

@@ -10,6 +10,7 @@ relational children aggregated on read (`FUNDAMENTALS.md` §3).
 | Concern | Path |
 | --- | --- |
 | Public projections (`PublicPost`, attachments, counts, audiences) | `app/api/utils/things/things.ts` (`resolvePostAttachments`, post projection block) |
+| Anonymous local algorithm profiles | `app/local-workspace/algorithms.ts`, `api.client.ts`; canonical `api/utils/algorithms/algorithmContent.ts`, `algorithmTransferCore.ts` and `utils/thingTransfer/algorithm.ts` |
 | Feed ranking / algorithms | `app/api/utils/things/feedRanking.ts`, `app/components/Feed/defaultAlgorithms.ts`, `AlgorithmMenu.tsx` |
 | Engagement | `app/api/utils/things/updown.ts`, `vote.ts`, `saved.ts`, `views.ts`; routes under `app/routes/api/v1/things/{react,save,vote,updown,views,comment,share}` |
 | Client types | `app/components/Feed/feedTypes.ts` (`PublicPost`, `PublicComment`, `CIRCLE_META`) |
@@ -72,3 +73,14 @@ projection or changes target permissions.
 
 See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
 private draft API, editor recovery, account isolation and independent media copies.
+
+## Device-only algorithms (rollout in progress)
+
+The workspace adapter stores protected algorithm Things locally, trains only on
+bounded credential-free public-feed features and ranks each returned page on the
+device. Settings and the feed menu use content identity without changing account
+authentication. Training flushes, including page-hide, use the captured workspace
+facade; identity changes discard queued/session events. Canonical exports omit
+lineage and authority and imports do not change active selection. Account profile
+sync and full multi-tab acceptance remain outstanding in
+[the coverage matrix](../local-workspaces.md).

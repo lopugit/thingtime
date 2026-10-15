@@ -75,7 +75,7 @@ change this pointer; logout/account changes revoke it.
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
 | Attachments and media | Add local blob lifecycle, metadata, rendering, import/export and quota accounting. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Enable local content authoring/drafts and local relationships. Public posting, remote reactions and recipient delivery remain authenticated operations. |
-| Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Account theme sync, local Timeline history and algorithm library support remain outstanding. |
+| Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Provider inference, external delivery and hosted scheduled execution still need their real services. |
@@ -231,3 +231,36 @@ workers as well as the saved fallback pointer. Reconfirming the same account
 cannot revive a retired operation. IndexedDB opening has a ten-second bound,
 clear blocked/error/closed diagnostics, retry after failure and cleanup of late
 upgrade/success callbacks. Focused regression tests cover these failure paths.
+
+## Anonymous algorithm checkpoint
+
+`LocalAlgorithms` uses the existing canonical profile parser and feed scoring /
+training functions. Named profiles are protected `feed-algorithm` Things; generic
+Thing updates cannot bypass their writer. The shared limit is 50 profiles, with
+atomic import quota checks. Portable exports contain only the canonical name,
+emoji, weights and training statistics; imports get fresh IDs, no sharing or
+lineage, and never change the active selection.
+
+Only credential-free public feed observations supply training features. This
+bounded cache stores at most 1,000 post feature records (not complete posts),
+200 observations per fetched page and 100 tags per post. Training batches use
+the existing 100-event limit. Feed session and pending buffers are bounded,
+identity invalidation clears them, and built-in sorts do not train. All flushes
+use the workspace facade, including page-hide flushes; no direct beacon can
+borrow another account's cookies. Failed training reports a visible error.
+
+Local weights and IDs never go into the feed request. The browser requests the
+public chronological feed and ranks each available page locally; this is not a
+global ranked cursor. The UI states that limit. Community discovery remains a
+credential-free online read; branching remote profiles still requires account
+authority. Account profile sync and full offline public-feed pagination remain
+separate unfinished work.
+
+Local production-build browser verification covered logged-out create/select,
+offline cold reload, rename/branch, canonical download/import/re-export, deletion
+and 1440/390/320px layout. A synthetic public-feed response rendered through the
+normal feed card and trained the profile with no server mutation; no post was
+published. The actual trained JSON and imported re-export had identical profile
+content and different IDs. Browser overrides were restored and all four test
+profiles deleted. Evidence is in `tmp/draft-qa/anonymous-algorithm-*.json` and
+`anonymous-algorithms-offline-*.png`. These are local checks, not deployed proof.

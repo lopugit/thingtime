@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous algorithm profiles save, branch, train
+  and transfer locally using canonical profile validation and ranking maths.
+  Public feed pages rank on the device; training no longer bypasses the workspace
+  facade through a beacon, and identity changes retire queued session events.
+  Offline browser and transfer evidence, plus remaining account-sync and global
+  ranking limits, are in the
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous Theme Studio saves, applies, deletes
   and round-trips named themes offline through canonical transfer validation.
   Root-session refusals retire outstanding workspace operations; browser storage

@@ -1,8 +1,10 @@
 import React from 'react';
 
 import { useApi } from '~/hooks/useApi';
+import { rootIdentity } from '~/utils/rootIdentity';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { crossedGrowthStage } from './algorithmGrowth';
+import { isDefaultAlgorithm } from './defaultAlgorithms';
 import type { EngagementEvent } from './feedTypes';
 
 // Doomscroll telemetry for feed algorithms. Watches post cards with an
@@ -35,7 +37,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
 
   const sessionEventsRef = React.useRef<EngagementEvent[]>([]);
   const [sessionEventCount, setSessionEventCount] = React.useState(0);
-  const getSessionEvents = React.useCallback(() => sessionEventsRef.current.slice(), []);
+
 
   // pending events awaiting a training flush
   const queueRef = React.useRef<EngagementEvent[]>([]);
@@ -49,6 +51,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
 
   // refs so the interval/observer callbacks always see the latest values
   const algorithmIdRef = React.useRef<string | null>(activeAlgorithmId);
+  if (algorithmIdRef.current !== activeAlgorithmId) queueRef.current = [];
   algorithmIdRef.current = activeAlgorithmId;
   const apiRef = React.useRef(api);
   apiRef.current = api;
@@ -56,8 +59,29 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
   const lopuRef = React.useRef(lopu);
   lopuRef.current = lopu;
 
+  // Identity invalidation can happen before React rerenders. Clear immediately,
+  // and never hand a previous visitor's session to the new API facade.
+  const generationRef = React.useRef(rootIdentity.read().generation);
+  const renderedGenerationRef = React.useRef(rootIdentity.read().generation);
+  renderedGenerationRef.current = rootIdentity.read().generation;
+  const ensureSession = React.useCallback(() => {
+    const identity = rootIdentity.read();
+    if (generationRef.current !== identity.generation) {
+      generationRef.current = identity.generation;
+      sessionEventsRef.current = [];
+      queueRef.current = [];
+      viewSentRef.current.clear();
+      dwellSentRef.current.clear();
+      dwellStartRef.current.clear();
+      setSessionEventCount(0);
+    }
+    return !identity.pending && renderedGenerationRef.current === identity.generation;
+  }, []);
+  React.useEffect(() => rootIdentity.subscribe(ensureSession), [ensureSession]);
+  const getSessionEvents = React.useCallback(() => ensureSession() ? sessionEventsRef.current.slice() : [], [ensureSession]);
+
   const recordEvent = React.useCallback((event: EngagementEvent) => {
-    if (!event?.thingId || !event?.signal) return;
+    if (!ensureSession() || !event?.thingId || !event?.signal) return;
 
     let next = event;
     if (next.signal === 'view') {
@@ -74,30 +98,34 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
     }
 
     queueRef.current.push(next);
+    if (queueRef.current.length > 500) queueRef.current.shift();
     sessionEventsRef.current.push(next);
-    setSessionEventCount((prev) => prev + 1);
-  }, []);
+    if (sessionEventsRef.current.length > 2000) sessionEventsRef.current.shift();
+    setSessionEventCount(sessionEventsRef.current.length);
+  }, [ensureSession]);
 
   // end an in-progress dwell for a post (left the viewport / page hidden)
   const closeDwell = React.useCallback(
     (thingId: string) => {
+      if (!ensureSession()) return;
       const startedAt = dwellStartRef.current.get(thingId);
       if (startedAt === undefined) return;
       dwellStartRef.current.delete(thingId);
       recordEvent({ thingId, signal: 'dwell', dwellMs: Date.now() - startedAt });
     },
-    [recordEvent]
+    [recordEvent, ensureSession]
   );
 
   const closeAllDwells = React.useCallback(() => {
     Array.from(dwellStartRef.current.keys()).forEach((thingId) => closeDwell(thingId));
   }, [closeDwell]);
 
-  const flush = React.useCallback((options?: { beacon?: boolean }) => {
-    if (!queueRef.current.length) return;
+  const flush = React.useCallback(() => {
+    if (!ensureSession() || !queueRef.current.length) return;
+    const generation = generationRef.current;
 
     // no active algorithm — the session still remembers, nothing to train
-    if (!algorithmIdRef.current) {
+    if (!algorithmIdRef.current || isDefaultAlgorithm(algorithmIdRef.current)) {
       queueRef.current = [];
       return;
     }
@@ -106,36 +134,26 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
     const batch = events.slice(0, TRACK_BATCH_LIMIT);
     queueRef.current = events.slice(TRACK_BATCH_LIMIT);
 
-    if (options?.beacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-      try {
-        const sent = navigator.sendBeacon(
-          '/api/v1/algorithms/track',
-          new Blob([JSON.stringify({ algorithmId: algorithmIdRef.current, events: batch })], {
-            type: 'application/json'
-          })
-        );
-        if (sent) return;
-      } catch {
-        // fall through to the api method
-      }
-    }
-
+    // Always use the workspace facade. A direct sendBeacon would bypass the
+    // anonymous/offline routing and could borrow a later account's cookies.
     apiRef.current.v1.algorithms
       .track({ algorithmId: algorithmIdRef.current, events: batch })
       .then((resp: any) => {
+        if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) return;
         // growth milestones (🥚→🐣→🐥→🧠): the server returns the
         // authoritative post-flush eventCount, so a crossing is detected from
         // before/after totals — monotonic, so each toast fires exactly once.
-        // (A crossing inside a page-hide beacon flush has no readable
-        // response and goes uncelebrated — rare and harmless.)
         if (!resp?.trained || typeof resp.eventCount !== 'number' || !resp.applied) return;
         const reached = crossedGrowthStage(resp.eventCount - resp.applied, resp.eventCount);
         if (reached) {
           lopuRef.current({ title: reached.toast, description: reached.tip, status: 'success', duration: 8000 });
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        if (rootIdentity.read().pending || rootIdentity.read().generation !== generation) return;
+        lopuRef.current({ title: 'Algorithm training was not saved', description: 'Your feed is still available. Check your connection or device storage before training again.', status: 'error', duration: 6000 });
+      });
+  }, [ensureSession]);
 
   const observeCard = React.useCallback((element: Element | null, thingId: string) => {
     if (!element || !thingId) return;
@@ -155,6 +173,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
   React.useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
+        if (!ensureSession()) return;
         entries.forEach((entry) => {
           const thingId = elementIdsRef.current.get(entry.target);
           if (!thingId) return;
@@ -179,7 +198,7 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
       observer.disconnect();
       observerRef.current = null;
     };
-  }, [recordEvent, closeDwell]);
+  }, [recordEvent, closeDwell, ensureSession]);
 
   React.useEffect(() => {
     const interval = window.setInterval(() => flush(), FLUSH_INTERVAL_MS);
@@ -187,12 +206,12 @@ export const useFeedEngagement = ({ activeAlgorithmId }: UseFeedEngagementArgs):
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'hidden') return;
       closeAllDwells();
-      flush({ beacon: true });
+      flush();
     };
 
     const onPageHide = () => {
       closeAllDwells();
-      flush({ beacon: true });
+      flush();
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);

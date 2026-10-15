@@ -3,6 +3,7 @@ import { publicWorkspaceRead } from './publicRead.client';
 import { draftRequest } from '../drafts/draftClient';
 import { localThingProjection, type ThingWrite } from './things';
 import { anonymousThings, anonymousWorkspaceDatabase, anonymousWorkspaceLease, announceLocalWorkspaceChange, LOCAL_WORKSPACE_OWNER } from './runtime.client';
+import { LocalAlgorithms } from './algorithms';
 import { LocalThemes } from './themes';
 import { WorkspaceError } from './storage';
 import { crystalSchemas } from '../schemas/registry';
@@ -22,6 +23,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		return changed({ ok: true, id: row.id, thing: project(row) });
 	};
 	const local = blocked(remote);
+	const algorithms = () => { lease.assertCurrent(); return new LocalAlgorithms(anonymousWorkspaceDatabase(), lease); };
 	// Public discovery and explicit authentication remain available online.
 	local.auth = remote.auth;
 	local.login = remote.login;
@@ -47,8 +49,12 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	local.drafts = (input?: Record<string, unknown>, query?: Record<string, string>) => { lease.assertCurrent(); return draftRequest(LOCAL_WORKSPACE_OWNER, input, query); };
 	local.things = { ...local.things,
 		feed: async (args: Record<string, unknown> = {}) => {
-			lease.assertCurrent(); const query = new URLSearchParams(Object.entries({ ...args, anon: 1 }).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
-			return publicWorkspaceRead(`/api/v1/things/feed?${query}`, 'api.things-feed', '1.8.0');
+			lease.assertCurrent(); const localAlgorithm = typeof args.algorithm === 'string' && args.algorithm.startsWith('local-') ? args.algorithm : null;
+			const query = new URLSearchParams(Object.entries({ ...args, ...(localAlgorithm ? { algorithm: 'latest' } : {}), anon: 1 }).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+			const result = await publicWorkspaceRead(`/api/v1/things/feed?${query}`, 'api.things-feed', '1.8.0');
+			// Training storage must not prevent reading an otherwise healthy public feed.
+			try { await algorithms().observePublicPosts(result.posts || []); } catch (error) { lease.assertCurrent(); result.localTrainingError = error instanceof Error ? error.message : 'Local training storage is unavailable'; }
+			return localAlgorithm ? { ...result, posts: await algorithms().rankPage(localAlgorithm, result.posts || []), ranked: true, localRanking: true } : result;
 		},
 		trending: async () => { lease.assertCurrent(); return publicWorkspaceRead('/api/v1/things/trending?anon=1', 'api.things-trending', '1.0.0'); },
 		get: async ({ id, key, sharedRoot }: { id: string; key?: string; sharedRoot?: string }, options?: { signal?: AbortSignal }) => {
@@ -96,6 +102,17 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		getShared: ({ id }: { id: string }) => { lease.assertCurrent(); return id.startsWith('local-') ? themes().get(id) : publicWorkspaceRead(`/api/v1/themes/shared?id=${encodeURIComponent(id)}`, 'api.themes-shared', '1.0.0'); },
 		listShared: (args?: { limit?: number }) => { lease.assertCurrent(); return publicWorkspaceRead(`/api/v1/themes/shared${args?.limit ? `?limit=${encodeURIComponent(args.limit)}` : ''}`, 'api.themes-shared', '1.0.0'); }
 	};
+	local.algorithms = {
+		list: () => algorithms().list(),
+		create: async (input: Parameters<LocalAlgorithms['create']>[0]) => changed(await algorithms().create(input)),
+		update: async (input: Parameters<LocalAlgorithms['update']>[0]) => changed(await algorithms().update(input)),
+		remove: async ({ id }: { id: string }) => changed(await algorithms().remove(id)),
+		setActive: async ({ algorithmId }: { algorithmId: string | null }) => changed(await algorithms().setActive(algorithmId)),
+		track: (input: Parameters<LocalAlgorithms['track']>[0]) => algorithms().track(input),
+		search: (args: Record<string, unknown> = {}) => { lease.assertCurrent(); const query = new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)])); return publicWorkspaceRead(`/api/v1/algorithms/search?${query}`, 'api.algorithms-search', '1.0.0'); },
+		getShared: ({ id }: { id: string }) => { lease.assertCurrent(); return publicWorkspaceRead(`/api/v1/algorithms/shared?id=${encodeURIComponent(id)}`, 'api.algorithms-shared', '1.0.0'); }
+	};
+
 	return local as T;
 }
 

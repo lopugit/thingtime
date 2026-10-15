@@ -99,3 +99,33 @@ account publishing.
 Web CI build/unit and API suites passed on prior pushed revision `2e6ea34db`.
 The PR preview root and Nitro health now return the real application and ready
 API; that read-only check is not acceptance of the unpushed theme changes.
+
+## Anonymous algorithms checkpoint — 2026-10-16
+
+- Reused canonical profile parsing, name/emoji normalization, training and ranking
+  for device-only algorithms. Dedicated writers enforce the 50-profile limit,
+  stale-update conflicts and atomic quota rollback. Exports omit authority and
+  lineage; imports preserve profile content with fresh IDs and unchanged active
+  selection. Remote shared-profile branching continues to require an account.
+- Normal Settings and feed UI now expose local creation, selection, branching,
+  renaming and transfer. The feed states that ranking is per available public
+  page; no global ranking or account algorithm sync is claimed.
+- All engagement flushes use the workspace facade, replacing direct beacons.
+  Identity invalidation clears pending/session events and suppresses stale
+  completion notifications. Built-in sorts do not train; failures are visible.
+- Local production-build browser: logged-out create/select, offline cold reload,
+  rename/branch/download/import/re-export/delete, and 1440/390/320px checks passed.
+  A synthetic browser public-feed response exercised the native card observer
+  and local training without publishing content. Observed operations sent no
+  server mutations. Export validation passed, learned profile content matched
+  exactly after UI round-trip, and the imported Thing had a fresh ID.
+- Evidence: `tmp/draft-qa/anonymous-algorithm-trained-export.json`,
+  `anonymous-algorithm-roundtrip.json`, and `anonymous-algorithms-offline-*.png`.
+  All four disposable profiles were deleted; browser overrides restored/tab closed.
+- Focused suites: 48 workspace/offline-shell, 78 feed and 315 Things checks
+  passed. Raw TypeScript retained the exact 91-diagnostic independent parent
+  baseline. The client build passed with 230 verified offline assets.
+
+Full cross-tab/account-switch browser coverage, account algorithms sync and
+remaining matrix rows are still required before rollout merge. CI/deployment
+verification must be tied to the eventual pushed commit, not these local checks.
