@@ -72,7 +72,10 @@ for (const failure of ['blocked', 'timeout', 'error', 'close'] as const) {
 		let opened = 0, lateCloses = 0, lateUpgrades = 0;
 		const stalled = { result: { close: () => { lateCloses++; } }, transaction: { abort: () => { lateUpgrades++; } } } as unknown as IDBOpenDBRequest;
 		const factory = { open: (name: string, version: number) => opened++ ? real.open(name, version) : stalled } as IDBFactory;
-		const db = new WorkspaceDatabase(factory, `open-${failure}`, 10);
+		// Only the stalled first open may decide the failure mode. The retry below
+		// is a real open that runs the v1 upgrade, so a budget tight enough to
+		// race it turns every other variant into a spurious LOCAL_STORAGE_TIMEOUT.
+		const db = new WorkspaceDatabase(factory, `open-${failure}`, 250);
 		const { lease } = testLease();
 		const pending = db.transaction(anonymous, 'readwrite', lease, tx => tx.put('things', 'first', { text: 'abandoned' }));
 		const rejected = assert.rejects(pending, (error: any) => error.code === `LOCAL_STORAGE_${failure === 'error' ? 'UNAVAILABLE' : failure === 'close' ? 'CLOSED' : failure.toUpperCase()}`);
