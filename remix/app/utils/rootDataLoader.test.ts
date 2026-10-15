@@ -121,3 +121,15 @@ test('same-origin identity messages invalidate once, do not echo, and refresh th
 	identity.changed();
 	assert.equal(sent.length, 1);
 });
+
+test('only the latest accepted root request may bind persistent offline identity', async () => {
+ const identity = createRootIdentityState(), accepted: string[] = [], denied: unknown[] = [];
+ let release!: (value: { account: string }) => void, reject!: (reason: unknown) => void;
+ let delayed = true;
+ const load = createRootDataLoader(async () => delayed ? new Promise<{ account: string }>((resolve, fail) => { release = resolve; reject = fail; }) : { account: 'new' }, identity,
+  data => { accepted.push(data.account); }, error => { denied.push(error); });
+ const old = load(args()); delayed = false; await load(args()); release({ account: 'old' });
+ await assert.rejects(old, { name: 'AbortError' }); assert.deepEqual(accepted, ['new']);
+ delayed = true; const stale = load(args()); delayed = false; await load(args()); reject(new RootDataUnavailableError(false));
+ await assert.rejects(stale, { name: 'AbortError' }); assert.deepEqual(denied, []); assert.deepEqual(accepted, ['new', 'new']);
+});

@@ -1,5 +1,42 @@
 # TESTING.md — per-area manual test checklists
 
+## Local workspaces and account sync (in-progress rollout)
+
+Use a disposable account and an isolated local Mongo instance; do not run mutation
+checks against existing personal data. Full feature coverage is tracked in
+[docs/local-workspaces.md](docs/local-workspaces.md).
+
+- [ ] Anonymous create/edit/export must make no account write. Login/logout and
+      account/database switches never adopt or expose another workspace's data.
+- [ ] Block Things + webpage resolve endpoints: create a private Builder page,
+      edit and save text, then reload. The native renderer retains the page and
+      the sync panel says it is saved on the device. Reconnect and verify exactly
+      one private Thing with the latest text through the real API.
+- [ ] Save again after a sync acknowledgement without reloading: the server's
+      timestamp must not cause a false local editor conflict.
+- [ ] Edit the server copy concurrently. Reconnect: preserve local edits, stop
+      replay and show comparison. Keep either reviewed version; type or change
+      the server after review and verify the stale choice is refused.
+- [ ] Unsupported attachment/control fields must use their complete adapter or
+      fail clearly; never report a successful partial local write.
+- [ ] A definitive validation failure can be corrected and retried. A lost
+      response replays its original immutable body and does not duplicate data.
+- [ ] Check expanded sync details at 1440×1000, 390×844 and 320px: nav clearance,
+      long IDs, scrollable comparisons and all choice buttons remain usable.
+- [ ] Cold-reload a previously loaded account page with all networking disabled;
+      edit/save/reload again. Restore networking with root verification blocked:
+      no account mutation may occur. Unblock root verification, reconnect, and
+      verify the same private Thing receives the queued edit. A dirty editor
+      must retain its content across this transition.
+- [ ] Open Builder offline without a cached server list page. Show locally saved
+      pages/components, distinct device pagination and an incomplete-library
+      notice. Never mistake the known local subset for the full account library.
+- [ ] Older overlapping root reads (including failed ones) cannot change the
+      newest accepted workspace pointer. Logout removes offline access to the
+      previous account pointer; anonymous content is not adopted on login.
+- [ ] All local feature families, queue deletion/import/move semantics and
+      multi-tab UI refresh require separate acceptance before rollout merge.
+
 ## History timeline design concept (`docs/design/thingtime-history-timeline/`, `/docs/design`)
 
 Fictional-data design concept for unified Thing history (TODO 56). Nothing is
@@ -9889,6 +9926,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Keep local protocol/browser/import acceptance distinct from CI and deployed
   verification. Setup and commands: [draft workflow](docs/no-login-draft-preview.md).
 
+
+- Builder offline reconnection: reopen a saved account library fully offline,
+  then restore connectivity. Keep its saved rows visible while confirming the
+  account; restart pagination from the first page and clear the device-only
+  notice after account results arrive. Do not flash a spinner over cached rows.
 
 ## Password manager and native AutoFill
 

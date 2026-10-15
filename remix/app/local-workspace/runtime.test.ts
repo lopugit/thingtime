@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { bindLocalWorkspace, accountWorkspaceLease, accountRemoteWorkspaceLease, assertAccountSyncAllowed, canSyncAccountWorkspace, isAnonymousWorkspace } from './runtime.client';
+import { rootIdentity } from '../utils/rootIdentity';
+const scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'owner', dataPlane: 'home' } as const;
+test('offline account content remains editable but cannot authorize remote requests', () => {
+ bindLocalWorkspace(false, rootIdentity.read().generation, scope, false);
+ const local = accountWorkspaceLease(scope); local.assertCurrent();
+ assert.equal(isAnonymousWorkspace(), false); assert.equal(canSyncAccountWorkspace(scope), false);
+ assert.throws(() => assertAccountSyncAllowed(scope), /offline/);
+ bindLocalWorkspace(false, rootIdentity.read().generation, scope, true);
+ local.assertCurrent(); const remote = accountRemoteWorkspaceLease(scope); remote.assertCurrent();
+ let retired = false; const stop = remote.onInvalidate(() => { retired = true; });
+ bindLocalWorkspace(false, rootIdentity.read().generation, scope, false);
+ assert.equal(retired, true); local.assertCurrent();
+ bindLocalWorkspace(false, rootIdentity.read().generation, scope, true);
+ assert.throws(() => remote.assertCurrent(), /confirmation changed/); stop();
+ const fresh = accountRemoteWorkspaceLease(scope); fresh.assertCurrent();
+ bindLocalWorkspace(false, rootIdentity.read().generation, { ...scope, ownerId: 'other' }, true);
+ assert.throws(() => local.assertCurrent(), /workspace changed/i); assert.throws(() => fresh.assertCurrent(), /workspace changed/i);
+ bindLocalWorkspace(true, rootIdentity.read().generation);
+ assert.equal(canSyncAccountWorkspace(scope), false); assert.equal(isAnonymousWorkspace(), true);
+});

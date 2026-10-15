@@ -68,6 +68,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Local workspace rollout in progress: atomic
+  account-scoped Thing writes, immutable retries, native Builder pending-page
+  resolution, explicit conflict review and offline account cold startup with
+  separately confirmed remote authority. Local disposable-fixture outage,
+  reload/edit/reconnect and desktop/320px/390px checks passed; other feature
+  families and full integration remain incomplete. See
+  [coverage and evidence](../docs/local-workspaces.md). No rollout merge or
+  deployment is implied by this checkpoint.
+
+
 - 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain
   comments/replies no longer await account draft sync or cleanup. Completed
   drafts retire locally immediately; late saves cannot overwrite the next

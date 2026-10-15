@@ -109,3 +109,9 @@ browser acceptance also checks reload and repeated search through the renderer.
 expanded transfer dialog without changing the ordinary library defaults.
 Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
 only intercepts events inside the browser and leaves editable inputs alone.
+
+`app/local-workspace/AccountSyncStatus.tsx` sits in normal page flow with the
+shared nav clearance. It distinguishes device saves, retries, refusals and
+conflicts. Comparison uses bounded scrollable content and explicit keep-device /
+keep-account choices; stale review must fail instead of overwriting new edits.
+Verify at 1440, 390 and 320 CSS pixels, including expanded comparison and long IDs.

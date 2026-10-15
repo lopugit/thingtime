@@ -1,3 +1,4 @@
+import { AccountSyncStatus } from './local-workspace/AccountSyncStatus';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
 import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
@@ -7,7 +8,8 @@ import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
 import { pageTitle } from './utils/pageTitle';
 
-import type { RootLoaderData } from './root-data.server';
+import type { ClientRootData } from './local-workspace/rootFallback';
+import { LOCAL_WORKSPACE_OWNER } from './local-workspace/runtime.client';
 import { GlobalStyles } from './globals/GlobalStyles';
 import { Main } from './components/Layout/Main';
 import { Nav } from './components/Nav/Nav';
@@ -62,7 +64,8 @@ try {
 }
 
 export default function App() {
-  const rootData = useLoaderData() as RootLoaderData & { clientIdentityGeneration: number };
+  const rootData = useLoaderData() as ClientRootData & { clientIdentityGeneration: number };
+  const contentOwnerId = rootData.offlineWorkspace?.ownerId || (rootData.user && !rootData.user.temporary ? rootData.user.id : undefined);
   const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
   React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
   const { envFromCookie, titlePrefix } = rootData;
@@ -71,8 +74,8 @@ export default function App() {
   const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
-  React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
-    [rootData.user?.id, rootData.clientIdentityGeneration]);
+  React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, contentOwnerId || LOCAL_WORKSPACE_OWNER, rootData.clientIdentityGeneration),
+    [contentOwnerId, rootData.dataPlane, rootData.clientIdentityGeneration]);
 
   React.useEffect(() => {
     setMounted(true);
@@ -132,7 +135,7 @@ export default function App() {
         html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
         html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
       `}</style>
-      <ThingtimeProvider key={rootData.user?.id || 'guest'} accountId={rootData.user?.id} storageKey={rootData.user?.id ? `thingtime:account:${rootData.user.id}` : 'thingtime'}>
+      <ThingtimeProvider key={contentOwnerId || 'guest'} accountId={contentOwnerId} storageKey={contentOwnerId ? `thingtime:account:${contentOwnerId}` : 'thingtime'}>
         <ThingDraftsProvider>
          <TimelineProvider>
          {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
@@ -154,6 +157,7 @@ export default function App() {
           <Outlet />
         ) : (
           <Main>
+            <AccountSyncStatus />
             {/* every page is a block-based site: per-route + global blocks
                 render around the native screen; the ✏️ pill enters edit mode */}
             <SiteBlocksHost>

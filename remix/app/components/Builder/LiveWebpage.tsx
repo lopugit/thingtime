@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams, useLocation, useRouteLoa
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 // the REGISTRY module (not just the lookups): importing it registers the app
 // suites, so a cold load of /p/pokeworld knows the page belongs to an app
 import { ALL_SUITES } from '~/schemas/appSuites/index';
@@ -63,7 +63,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 	const rootData = useRouteLoaderData('root') as { titlePrefix?: string } | undefined;
 	const runMode = !draft.branch && (standalone || requestedMode === 'run' || requestedMode === 'visit');
 	const linkKey = (searchParams.get('key') || '').trim();
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;

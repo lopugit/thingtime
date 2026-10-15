@@ -1,3 +1,6 @@
+import { useOfflineWorkspace } from './useWorkspaceUser';
+import { accountApi, startAccountWorkspaceSync } from '../local-workspace/accountApi.client';
+import { anonymousApi } from '../local-workspace/api.client';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
@@ -13,7 +16,7 @@ import { enqueueActionOutcomeRecovery } from '~/timeline/localBackend.client';
 import type { TimelinePageRequest } from '~/timeline/sync';
 import { announceTimelineScopeChange } from '~/timeline/clientEvents';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useCurrentUser } from './useCurrentUser';
 import { useDataPlane } from './useDataPlane';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
@@ -121,6 +124,7 @@ export function useApi() {
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
   const actionUser = useCurrentUser();
+  const offlineWorkspace = useOfflineWorkspace();
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;
 
@@ -1600,8 +1604,11 @@ export function useApi() {
     }
   };
 
+  useEffect(() => {
+    if (actionUser?.id && !actionUser.temporary && dataPlane) startAccountWorkspaceSync({ kind: 'account', origin: window.location.origin, ownerId: actionUser.id, dataPlane });
+  }, [actionUser?.id, actionUser?.temporary, dataPlane]);
   const ret = {
-    v1
+    v1: offlineWorkspace ? accountApi(v1, { id: offlineWorkspace.ownerId, displayName: 'Offline workspace' }, offlineWorkspace.dataPlane) : actionUser && !actionUser.temporary && dataPlane ? accountApi(v1, { id: actionUser.id, username: actionUser.username, displayName: actionUser.displayName, avatarUrl: actionUser.avatarUrl }, dataPlane) : actionUser && !actionUser.temporary ? v1 : anonymousApi(v1)
   };
 
   return ret;

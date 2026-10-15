@@ -312,3 +312,15 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+
+## Browser workspace adapter (in progress)
+
+`app/local-workspace/things.ts` reuses the canonical crystal, extended and tag
+validators, component selector and transfer collector. `accountSync.ts` adds an
+atomic account queue and conditional conflict resolution; `accountApi.client.ts`
+intercepts supported owned creates/updates/reads before the remote adapter.
+`accountTransport.client.ts` pins actor/data-plane headers. Unsupported fields
+must never be silently dropped. Anonymous storage has no account sync transport.
+The completion matrix and exact local verification limits are in
+[local-workspaces.md](../local-workspaces.md). Run `npm run test:local-workspace`
+from `remix/` alongside the existing Things suites.

@@ -8,7 +8,9 @@ import type { createRootIdentityState } from './rootIdentity';
  */
 export const createRootDataLoader = <T>(
 	load: (args: LoaderFunctionArgs) => Promise<T>,
-	identity: ReturnType<typeof createRootIdentityState>
+	identity: ReturnType<typeof createRootIdentityState>,
+	accepted?: (data: T) => void,
+	rejected?: (error: unknown) => void
 ) => {
 	let previous: { url: string; generation: number; data: T } | undefined;
 	let latest = 0;
@@ -29,10 +31,13 @@ export const createRootDataLoader = <T>(
 		try {
 			const data = await load(args);
 			assertCurrent();
+			// Persistent identity side effects belong after the latest-request fence.
+			accepted?.(data);
 			previous = { url: request.url, generation, data };
 			return data;
 		} catch (error) {
 			assertCurrent();
+			rejected?.(error);
 			if (error instanceof RootDataUnavailableError && error.retryable && previous && !identity.read().pending) {
 				return previous.data;
 			}

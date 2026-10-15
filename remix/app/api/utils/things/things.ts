@@ -1,3 +1,4 @@
+import { sanitizeTags, MAX_TAGS, MAX_TAG_CHARS } from '../../../schemas/thingTags';
 import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
 import { newThingMutationCapture, recordThingMutation, recordFolderPlacement, type ThingMutationCapture } from '../timeline/recordMutation';
 import { lockFolderDestination, MAX_FOLDER_DEPTH } from './folderPlacement';
@@ -725,8 +726,6 @@ export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'p
 // back to every default circle, i.e. the opposite filter.
 export const REQUESTABLE_VISIBILITIES: PostVisibility[] = [...VISIBILITIES, 'hidden', 'custom'];
 
-const MAX_TAGS = 12;
-const MAX_TAG_CHARS = 40;
 const MAX_SHARE_ID_CHARS = 128;
 const MAX_COMMENTS_PER_POST = 500;
 // Reactions are open-vocabulary (any emoji / multi-emoji token), so bound them:
@@ -1163,35 +1162,6 @@ export const thingtimeInClause = async (thingtime: string[]) => {
 export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
   return and.length > 1 ? { $and: and } : and[0] || {};
-};
-
-// The tag cap counts code points, never bisecting a surrogate pair, and lone
-// surrogates are dropped — stored tags must be well-formed UTF-16 so the
-// client's encodeURIComponent on a stored tag can never throw during render.
-// NFC normalization keeps composed and decomposed spellings of one visible
-// tag (NFD 'café' pasted from macOS vs typed NFC) in a single stored bucket.
-// components/Feed/hashtags.ts canonicalHashtag and Attachments/
-// attachmentUiCore.ts canonicalPostTags mirror this exactly.
-const canonicalTag = (value: string): string =>
-  Array.from(value.trim().toLowerCase().normalize('NFC'))
-    .filter((char) => {
-      const codePoint = char.codePointAt(0) ?? 0;
-      return codePoint < 0xd800 || codePoint > 0xdfff;
-    })
-    .slice(0, MAX_TAG_CHARS)
-    .join('');
-
-const sanitizeTags = (value: unknown): string[] | Fail => {
-  if (value === undefined || value === null) return [];
-  if (!Array.isArray(value)) return fail(400, 'tags must be a list');
-  const tags: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== 'string') continue;
-    const tag = canonicalTag(entry);
-    if (tag && !tags.includes(tag)) tags.push(tag);
-    if (tags.length >= MAX_TAGS) break;
-  }
-  return tags;
 };
 
 // The things v1→v2 migration mints deterministic reaction thing ids under this

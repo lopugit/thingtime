@@ -4543,3 +4543,20 @@ server exposes `thingtime_render_and_export`, returning desktop/mobile/card
 PNGs and JSON as inline resources without an account or HTTP access from the
 agent host. No private environment variables are needed. See the
 [fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
+
+### Local workspace development (in progress)
+
+The ordinary Builder now has a browser workspace adapter under
+`remix/app/local-workspace/`. See [coverage and limits](docs/local-workspaces.md)
+before treating the rollout as complete. IndexedDB requires a stable origin and
+available site storage. Clearing site data removes unsynced device content.
+Anonymous work never enters an account queue. Account sync uses the existing
+same-origin API and session; there is no new secret or alternate authentication
+setup. Unsupported dedicated features retain their current adapters.
+
+For offline shell checks, run `npm --prefix remix run build:client`; this generates
+an integrity-checked static asset manifest. Use the repository PM2 lifecycle for
+development, and an isolated local database/account fixture for mutation tests.
+Do not point a fixture preview at production API fallback URLs. Saved account pages now reopen and remain editable after a fully offline cold
+start; the server must verify the account before sync resumes. The remaining
+feature matrix is not yet complete.

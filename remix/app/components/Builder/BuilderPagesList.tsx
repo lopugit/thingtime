@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router';
 import { libraryBuilderHref } from '~/library/builderLinks';
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { CARD_STYLES } from '../../theme/card';
 import { PageHeader, PageShell } from '../Layout/PageShell';
@@ -14,7 +14,8 @@ import { useBuilderThings } from './useBuilderThings';
 
 const BuilderListStatus = ({ list, label }: { list: ReturnType<typeof useBuilderThings>; label: string }) => (
 	<>
-		{list.loading ? (
+		{list.deviceOnly ? <Text fontSize="sm">Showing {label} saved on this device. Reconnect to load the rest of your account.</Text> : null}
+		{list.loading && !list.loaded ? (
 			<Flex role="status" alignItems="center" gap={2} paddingY={2}>
 				<Spinner size="sm" aria-hidden="true" />
 				<Text>Loading {label}…</Text>
@@ -36,7 +37,7 @@ const BuilderListStatus = ({ list, label }: { list: ReturnType<typeof useBuilder
 );
 
 export const BuilderPagesList = () => {
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const dataPlane = useDataPlane();
 	return <AccountPagesList key={JSON.stringify([user?.id || 'anonymous', dataPlane])} />;
 };
@@ -46,12 +47,15 @@ const AccountPagesList = () => {
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const lopu = useLopu();
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const navigate = useNavigate();
 	const [creating, setCreating] = React.useState(false);
 	const [revision, refresh] = React.useReducer((value) => value + 1, 0);
-	const pages = useBuilderThings(api.v1.things.list, 'webpage', revision, !!user?.id);
-	const components = useBuilderThings(api.v1.things.list, 'component', revision, !!user?.id);
+	// Account confirmation changes transport authority without changing the
+	// content owner or remounting this list. Refresh after that transition too.
+	const listRevision = `${revision}:${user?.offline ? 'offline' : 'confirmed'}`;
+	const pages = useBuilderThings(api.v1.things.list, 'webpage', listRevision, !!user?.id);
+	const components = useBuilderThings(api.v1.things.list, 'component', listRevision, !!user?.id);
 
 	const createPage = async () => {
 		setCreating(true);
@@ -77,7 +81,7 @@ const AccountPagesList = () => {
 			<PageHeader
 				eyebrow="Thingtime · block by block"
 				title="Builder 🧱"
-				subtitle="Build webpages from Thingtime components and actions — manage their settings, privacy and content in one place."
+				subtitle={user?.localOnly ? "Build and save on this device. No account needed. Cloud sync and public sharing are off." : "Build webpages from Thingtime components and actions — manage their settings, privacy and content in one place."}
 				after={
 					<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
             <Button as="a" href="/draft-preview/index.html" size="sm" variant="outline">No-login draft preview</Button>
@@ -125,7 +129,7 @@ const AccountPagesList = () => {
 					<Text as="h2" fontWeight={700}>
 						Pages
 					</Text>
-					{pages.loaded && !pages.loading && !pages.error && !pages.nextCursor && pages.rows.length === 0 ? (
+					{pages.loaded && !pages.error && !pages.nextCursor && pages.rows.length === 0 ? (
 						<Flex {...CARD_STYLES} padding={6} flexDirection="column" rowGap={2}>
 							<Text color="var(--tt-ink, #16161a)" fontWeight={700}>
 								No pages yet 🌱
@@ -180,7 +184,7 @@ const AccountPagesList = () => {
 							</Button>
 						</Flex>
 					))}
-					{components.loaded && !components.loading && !components.error && !components.nextCursor && !components.rows.length ? (
+					{components.loaded && !components.error && !components.nextCursor && !components.rows.length ? (
 						<Text color="var(--tt-text, #5a5a66)">No components yet.</Text>
 					) : null}
 					<BuilderListStatus list={components} label="components" />
