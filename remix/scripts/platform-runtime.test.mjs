@@ -22,7 +22,9 @@ const directives = (policy) =>
 test('self-contained renderer preserves code and pins its only inline script by exact hash', () => {
 	const code = 'globalThis.value = "</ScRiPt><script>blocked</script>";';
 	const document = platformRuntimeDocument({ code, html }, platformRuntimeCsp);
-	const scripts = [...document.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+	// Case-insensitive like the HTML parser: a case-sensitive scan would miss a literal
+	// </ScRiPt> left unescaped by platformInlineSource and still report one script.
+	const scripts = [...document.matchAll(/<script>([\s\S]*?)<\/script>/gi)];
 	assert.equal(scripts.length, 1);
 	assert.equal(scripts[0][1], platformInlineSource(code));
 	const context = {};
