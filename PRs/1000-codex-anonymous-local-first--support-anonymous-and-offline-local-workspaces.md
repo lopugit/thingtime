@@ -311,10 +311,57 @@ opt-in skips; the real server app-suite regression passes 53/53. Changed-file li
 has no errors and one existing constructor warning. Raw TypeScript remains the
 91-diagnostic baseline; production build has 243 verified offline assets.
 
-The isolated Web Platform iframe still cannot cold-load offline through the app
-service worker. The browser check asserts its explicit failure while editing and
+At this checkpoint, the isolated Web Platform iframe could not cold-load offline
+through the app service worker (resolved in the following checkpoint). The browser check asserts its explicit failure while editing and
 saving succeed; the real runtime renders correctly after reconnection. Existing
 sandbox/CSP were retained, and Vite preview now serves the canonical isolated
 headers. Local Component comments, remaining request adapters and account suite
 sync are still unfinished. The full matrix in `docs/local-workspaces.md` remains
 the merge gate. No merge, manual deployment or production account mutation.
+
+
+## Offline native Web Platform checkpoint — 2026-10-16
+
+The same compiled Web Platform interpreter now reaches an opaque sandbox as a
+build-produced srcdoc. The application and child CSP authorize only its exact
+script hash; caller programs remain validated data in the existing message
+protocol. Existing network/resource/worker/form restrictions and iframe sandbox
+remain. Full workspace identity retires the frame. Embed and inert draft bundles
+retain their standalone URL. Missing build output reports the recovery command,
+and deployment verification checks runtime/CSP hash agreement.
+
+Clean production-CSP browser acceptance passes install/edit/run/save/cold offline
+reload, with a real HTMLButtonElement result and zero network mutations. Offline
+workers, native form events, authored failure reporting and Stop pass. After
+reconnection, parent/cookie/storage reads, arbitrary inline scripts and same-origin
+fetch remain blocked; no probe request escapes. Manual desktop/390/320 views have
+no horizontal overflow. Normal JSON download validates and round-trips through
+normal isolated import with a new ID and exact editable input. Disposable manual
+fixtures were removed, preserving the pre-existing page. Evidence is retained in
+`tmp/offline-platform-ui/`, including native PNGs and canonical transfer JSON.
+
+Component comments, remaining browser adapters, account execution/sync and the
+full local-first matrix remain open. No merge, manual deployment or production
+account mutation was performed for this checkpoint.
+
+Local verification for this checkpoint: 280 passing automated checks across Web
+Platform, workspace/offline shell, draft preview, embed and build/CSP suites,
+plus one explicit production-browser regression; two opt-in skips in ordinary
+suites. The watcher lifecycle test uses isolated real filesystem output and
+checks invalidation, reload and unchanged asset re-emission. Changed-file lint
+has no errors. Raw TypeScript matches the same 91 baseline diagnostics. The
+production client build contains 245 verified offline assets (21,139,396 bytes).
+The full client/server build, Vercel output patch and output verification also
+passed locally, including the packaged runtime/CSP hash check. No deployment was
+performed by that build.
+
+The original no-login acceptance also passed again after this build: two real
+MCP/running-app browser tests verified exact affirmation text, native desktop,
+390px and 320px PNGs, card crop, canonical dependencies and explicit invalid/
+invisible/overflow failures. The exported JSON is byte-identical to the previous
+acceptance export. The normal server importer round-trip passed against the
+isolated local draftPreview replica: fresh IDs, remapped dependency, private ACL,
+anonymous 404s and canonical re-export. Both imported Things were deleted and the
+synthetic fixture logged out. Current artifacts: `tmp/offline-platform-affirmation/`.
+This does not connect a web-only agent host to local stdio; the documented host
+bridge requirement remains.

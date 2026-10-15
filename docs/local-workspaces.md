@@ -71,7 +71,7 @@ change this pointer; logout/account changes revoke it.
 | Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Finish all normal UI flows and search. Grid checkbox mouse clicks navigated into a Thing during local acceptance; keyboard Space selection worked and needs a focused regression/fix. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Local Component details still show a comments-read error. |
-| Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The opaque-origin Web Platform runtime still cannot cold-load offline; editing and saving remain available with an explicit execution error. External lookups and public/system searches remain explicit remote requirements. |
+| Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
@@ -544,7 +544,7 @@ Re-exporting the page collected its six referenced dependencies/root; the older
 unreferenced save-component Action and independently saved button remain separate.
 Manual 1440×1000, 390×844 and 320px checks found no horizontal overflow.
 
-**Remaining runtime gate:** Chromium's opaque-origin Web Platform iframe cannot
+**Historical runtime gate (resolved by the next checkpoint):** Chromium's opaque-origin Web Platform iframe cannot
 load through the app service worker while disconnected. Run example reports the
 existing runtime-load error; it does not return a fabricated result. With network
 restored, the actual isolated runtime rendered the button and returned an
@@ -578,3 +578,64 @@ Evidence: `tmp/local-suites-ui/native-suite-export.transfer.json`,
 `online-native-runtime.png`. Manual PNGs are lossless format conversions of the
 actual browser JPEG captures, without resizing or redrawing. The eight manual
 production-origin fixture Things were deleted; the pre-existing page was retained.
+
+
+## Offline Web Platform execution — 2026-10-16
+
+The native `WebPlatformSurface` now embeds the exact compiled `runtimeEntry.ts`
+renderer as a build-produced `srcdoc`. Opaque-origin frames cannot load through
+the application service worker, so caching the old runtime URL was insufficient.
+Caller programs remain data sent through the existing validated message protocol;
+no caller content enters the document template. Workspace changes retire the frame.
+
+The iframe keeps its opaque origin and existing sandbox. Its CSP permits only
+the exact hash of the compiled script, preserving the existing connect, form,
+worker and resource restrictions. Production application CSP adds that same hash
+so the inherited policy permits the trusted renderer; it adds no inline, eval,
+blob-script or wildcard permission. Embed and inert draft bundles retain the
+standalone runtime URL. The build checks the deployed hash against its output.
+
+A clean browser using the production CSP installed, edited, ran, saved and
+cold-reloaded a Web Standards Component entirely offline. The actual runtime
+returned `HTMLButtonElement`. Worker execution returned 42; native form events
+cancelled navigation; authored failures were reported; Stop removed the frame
+and output. After reconnecting, security probes still could not access the parent,
+cookies or local storage, run arbitrary inline JavaScript or fetch a same-origin
+URL. The complete capture contained zero mutation requests and zero escaped
+probe requests. Manual 1440×1000, 390×844 and 320×844 viewports had no horizontal
+overflow. Eight disposable manual fixture Things were removed; the existing page
+was retained. Local Component comments still show a read error and remain open.
+
+Normal Transfer downloaded `tmp/offline-platform-ui/native-export.transfer.json`.
+Canonical validation and normal import in an isolated local fixture produced a
+fresh ID and preserved the editable program and exact “Running entirely offline”
+input. Native PNGs, `browser-verification.json` and `runtime-boundaries.json` live
+alongside it. Mobile PNGs are full-page captures at the documented CSS viewport;
+manual PNGs are format conversions of browser captures without resizing/redrawing.
+
+Run the existing `suites.browser.test.ts` command above with
+`TT_LOCAL_SUITE_ARTIFACTS=../tmp/offline-platform-ui` to repeat the production-CSP
+browser check. These are local results. Account suite sync, remaining request
+adapters and the full feature matrix are still required before merge.
+
+Local verification for this checkpoint: 280 passing automated checks across Web
+Platform, workspace/offline shell, draft preview, embed and build/CSP suites,
+plus one explicit production-browser regression; two opt-in skips in ordinary
+suites. The watcher lifecycle test uses isolated real filesystem output and
+checks invalidation, reload and unchanged asset re-emission. Changed-file lint
+has no errors. Raw TypeScript matches the same 91 baseline diagnostics. The
+production client build contains 245 verified offline assets (21,139,396 bytes).
+The full client/server build, Vercel output patch and output verification also
+passed locally, including the packaged runtime/CSP hash check. No deployment was
+performed by that build.
+
+The original no-login acceptance also passed again after this build: two real
+MCP/running-app browser tests verified exact affirmation text, native desktop,
+390px and 320px PNGs, card crop, canonical dependencies and explicit invalid/
+invisible/overflow failures. The exported JSON is byte-identical to the previous
+acceptance export. The normal server importer round-trip passed against the
+isolated local draftPreview replica: fresh IDs, remapped dependency, private ACL,
+anonymous 404s and canonical re-export. Both imported Things were deleted and the
+synthetic fixture logged out. Current artifacts: `tmp/offline-platform-affirmation/`.
+This does not connect a web-only agent host to local stdio; the documented host
+bridge requirement remains.

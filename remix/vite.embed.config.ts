@@ -1,3 +1,4 @@
+import { platformRuntimePlugin } from './scripts/platform-runtime-plugin.mjs';
 import { fileURLToPath, URL } from 'node:url';
 
 import react from '@vitejs/plugin-react';
@@ -5,7 +6,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	publicDir: false,
-	plugins: [react()],
+	plugins: [platformRuntimePlugin({ external: true }), react()],
 	resolve: {
 		alias: {
 			'~': fileURLToPath(new URL('./app', import.meta.url))

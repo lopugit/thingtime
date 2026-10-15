@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Web Platform Components now run the real compiled
+  sandbox renderer after a cold offline reload. Build-produced srcdoc and an exact
+  CSP script hash retain opaque-origin isolation and existing network restrictions;
+  embed/draft bundles keep standalone behavior. Production-CSP browser checks cover
+  native DOM, workers, form events, errors, Stop and isolation probes. The broader
+  local-first matrix remains unfinished. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-16 — **Codex (AI)**: Bundled suites install atomically in anonymous
   workspaces using the shared canonical install plan. Browser Actions can use
   bounded local Things/data-Action adapters without HTTP. Offline gallery/edit/

@@ -4560,3 +4560,15 @@ development, and an isolated local database/account fixture for mutation tests.
 Do not point a fixture preview at production API fallback URLs. Saved account pages now reopen and remain editable after a fully offline cold
 start; the server must verify the account before sync resumes. The remaining
 feature matrix is not yet complete.
+
+
+The offline Web Platform renderer uses the same compiled runtime as the standalone
+sandbox. `build:client` runs `build:platform` first, then includes that static code
+in a sandboxed document and authorizes its exact hash in production CSP. Use the
+normal build command; if running main Vite directly in a clean checkout, first run
+`npm --prefix remix run build:platform`. The managed dev stack already builds and
+watches the platform runtime; the app reloads its virtual document when that output
+changes. No additional environment values or secrets are needed. Embed and inert
+draft bundles retain the standalone runtime URL and their existing policies. Keep
+`patch:vercel-output` and `verify:vercel-output` in deployment builds so runtime
+bytes and CSP remain paired. See [the offline execution checks](docs/local-workspaces.md#offline-web-platform-execution--2026-10-16).

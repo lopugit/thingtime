@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 
 import { draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
+import { platformScriptHash } from './platform-runtime.mjs';
 import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
@@ -86,9 +87,9 @@ for (const host of ['https://maps.googleapis.com', 'https://maps.gstatic.com'])
 for (const host of ['https://maps.googleapis.com', 'https://mapsresources-pa.googleapis.com'])
 	if (!getDirectiveSources(prodCsp, 'connect-src').includes(host)) throw new Error('Missing Maps service host: ' + host);
 
-// Every executable script must be external and same-origin. The policy has no
-// inline hash/nonce allowance, so an inline bootstrap would be present in the
-// HTML but silently blocked by the browser.
+// App-shell scripts stay external and same-origin. The sole generated hash
+// authorizes the shipped renderer inside an opaque srcdoc, never bootstraps or
+// caller content in the application document.
 const inlineExecutableScripts = (html) =>
 	[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)].filter(([, attributes]) => {
 		if (/\bsrc\s*=/i.test(attributes)) return false;
@@ -384,4 +385,5 @@ for (const extension of ['html', 'js']) {
  if (!headers?.continue || headers.headers?.['Cache-Control'] !== 'no-store' || routes.indexOf(headers) < cspHeadersIndex || routes.indexOf(headers) > filesystemIndex) throw new Error(`Web Platform runtime ${extension} must be no-store before filesystem routing.`);
 }
 const runtimeDigest = createHash('sha256').update(readFileSync('.vercel/output/static/platform/runtime.js')).digest('hex');
+if (!appScriptSources.includes(platformScriptHash(readFileSync('.vercel/output/static/platform/runtime.js', 'utf8')))) throw new Error('Application CSP must authorize the exact built offline Web Platform renderer.');
 if (!readFileSync('.vercel/output/static/platform/runtime.html', 'utf8').includes(`src="/platform/runtime.js?v=${runtimeDigest}"`)) throw new Error('Web Platform document must reference its exact runtime digest to bypass previously cached compiler code.');

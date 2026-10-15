@@ -10075,9 +10075,16 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   readiness, disconnect, install Web Standards from the gallery, edit Content,
   save/open the Component and cold-reload. Verify exact text and zero mutation
   requests. Export/import normally with fresh IDs and complete dependencies.
-- [ ] Check 1440×1000, 390×844 and 320px native views for overflow. Record the
-  remaining offline isolated-runtime load error separately from editable-save
-  success; reconnect and verify the actual native runtime output. Do not weaken
-  iframe sandbox/CSP to make the check pass. Verify Vite preview uses the same
-  canonical isolated-runtime headers as dev. Local Component comments remain an
-  outstanding adapter gap, not a completed checklist.
+- [ ] Check 1440×1000, 390×844 and 320px native views for overflow. Run the native
+  Web Platform renderer before and after a cold offline reload; require the real
+  DOM result, offline worker result and native form event cancellation. Stop must
+  clear frame/output; a throwing program must report its error without a fake result.
+- [ ] Serve the production app CSP (no unsafe-inline/eval) and verify its exact
+  compiled runtime hash. Reconnect before security probes so connectivity cannot
+  mask violations: the opaque frame must reject parent/cookie/storage access,
+  arbitrary inline scripts and same-origin fetch. Keep sandbox permissions and
+  canonical child CSP. Verify external embed/inert draft bundles still use the
+  standalone URL. Local Component comments remain an outstanding adapter gap.
+- [ ] Rebuild the platform runtime during managed development and verify the
+  virtual document reloads. A missing build must give the build:platform recovery
+  instruction; production verification must reject a runtime/CSP hash mismatch.

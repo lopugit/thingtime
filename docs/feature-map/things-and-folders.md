@@ -340,8 +340,8 @@ adapter remains in `app/api/utils/actions/execute.ts`; the isolated anonymous
 adapter is `app/local-workspace/actions.ts`. Both retain the canonical saved
 Action grammar and capability envelopes. Browser flows reuse the existing interpreter. `local-workspace/actionRequests.ts`
 adapts supported Things CRUD and data-Action requests without HTTP; unsupported
-services fail explicitly. Remaining endpoint adapters and offline Web Platform
-execution are still pending. Protected local `action-run` children are bounded and excluded from
+services fail explicitly. Remaining endpoint adapters and account execution/sync are still pending.
+Web Platform execution now uses the same compiled runtime in a sandboxed offline document. Protected local `action-run` children are bounded and excluded from
 transfer; they do not substitute for canonical Timeline history.
 `useWorkspaceScope` partitions Action view/cache identity, while the shared
 `ThingDefinitionEditor` uses local drafts for anonymous definitions. See
@@ -363,7 +363,9 @@ and control fallbacks use `Builder/installSuite.ts` to choose the current
 workspace. `suites.test.ts` covers all bundles, concurrent install, normalization,
 edit preservation, rollback and canonical transfer. `actionRequests.test.ts`
 covers the closed no-network request host; `suites.browser.test.ts` is the opt-in
-clean offline gallery/edit/save/reload test. It explicitly records unavailable
-offline sandbox execution, which remains a merge gate. Vite dev and preview
-share the existing runtime CSP middleware. See the dated checkpoint in
+clean offline gallery/edit/save/reload test. It verifies cold offline native execution, workers, form events and error/Stop
+behavior under production CSP. `scripts/platform-runtime-plugin.mjs` packages the
+compiled renderer as a virtual document; `scripts/platform-runtime.mjs` pins its
+only script by hash. Embed/draft bundles keep the standalone URL. Vite preview
+uses the production app CSP plus the existing isolated-runtime CSP middleware. See the dated checkpoint in
 [local-workspaces.md](../local-workspaces.md).

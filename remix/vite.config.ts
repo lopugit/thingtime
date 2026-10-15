@@ -10,7 +10,8 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
-import { draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
+import { draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp, prodCsp } from './scripts/csp.mjs';
+import { platformRuntimePlugin } from './scripts/platform-runtime-plugin.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
@@ -273,6 +274,7 @@ const librarySandboxPlugin = (): Plugin => ({
 });
 
 export default defineConfig({
+  preview: { headers: { 'Content-Security-Policy': prodCsp } },
   build: {
     outDir: 'dist',
     sourcemap: true
@@ -368,5 +370,5 @@ export default defineConfig({
       }
     }
   },
-  plugins: [librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
+  plugins: [platformRuntimePlugin(),librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });
