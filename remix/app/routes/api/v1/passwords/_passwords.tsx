@@ -1,6 +1,7 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { getAuthToken } from '~/api/utils/auth/authCookie';
+import { internalRequestActor } from '~/api/utils/auth/internalRequestActor';
 import { resolvePublicOrigin } from '~/api/utils/auth/publicOrigin';
 import { withVaultRequest } from '~/api/utils/auth/vaultRequest';
 import { ownerVaultConfigured } from '~/api/utils/auth/vaultCipher';
@@ -15,7 +16,7 @@ export function createPasswordHandler(overrides: Partial<typeof defaults> = {}) 
   return async ({ request }: { request: Request }) => withVaultRequest(request, async () => {
     // Internal Action identities, scoped app/PAT credentials and temporary users
     // are not browser vault sessions. Never fall back to a different API origin.
-    const token = await deps.getAuthToken(request);
+    const token = internalRequestActor(request) ? null : await deps.getAuthToken(request);
     const user = token ? await deps.getCurrentUser(request) : null;
     if (!user || user.temporary || user.accountKind === 'service') return json({ ok: false, error: 'Sign in to your Thingtime account.' }, { status: 401, headers });
     if (!['GET', 'POST'].includes(request.method)) return json({ ok: false, error: 'Method not allowed.' }, { status: 405, headers: { ...headers, Allow: 'GET, POST' } });

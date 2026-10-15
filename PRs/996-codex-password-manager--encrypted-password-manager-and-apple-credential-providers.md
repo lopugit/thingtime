@@ -5,7 +5,7 @@ Branch: `codex/password-manager` (base `main`)
 
 ## Release split
 
-The web vault is delivered independently by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It stays a draft until provisioning and actual OS ceremonies can be validated. The evidence below includes the shared web prerequisite.
+The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It stays a draft until provisioning and actual OS ceremonies can be validated. The evidence below includes the shared web prerequisite.
 
 ## Product and security contract
 
@@ -25,7 +25,7 @@ large backups split into individually restorable parts.
 ## Evidence — 2026-10-15
 
 - Full unit suite passed during implementation: 4,453 tests, 9 skipped.
-- Final focused password tests: 35 pass, including 2,001-account backup restore.
+- Final focused password tests: 36 pass, including 2,001-account backup restore.
 - Schema 265, capability 94, collections 60, Vercel 16 and desktop bridge 2 pass.
 - Live HTTP-only replica fixture: 31 checks, including two owners, 52-entry
   pagination, catalog/export, deletion isolation, password recovery and logout.
