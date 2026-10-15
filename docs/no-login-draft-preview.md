@@ -125,7 +125,7 @@ sanitization remains active. No account runtime is mounted. The local capture
 worker additionally denies every request except shipped HTML/JS. Fonts and two
 animation frames settle before measuring; zero-size, invisible, overflowing,
 failed, CSP-blocked or blank-text output fails with **no partial artifacts**.
-The preview retains its last good image on an edit error but disables export of
+The preview retains its last good render on an edit error but disables export of
 that stale result. A crop uses the selected block's first authored component
 root; without `blockId`, the first component, or the root element for a single
 component. It is captured at the first requested viewport.
