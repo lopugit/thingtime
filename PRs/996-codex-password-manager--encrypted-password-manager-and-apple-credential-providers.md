@@ -3,6 +3,10 @@
 PR: https://github.com/lopugit/thingtime/pull/996
 Branch: `codex/password-manager` (base `main`)
 
+## Release split
+
+The web vault is delivered independently by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It stays a draft until provisioning and actual OS ceremonies can be validated. The evidence below includes the shared web prerequisite.
+
 ## Product and security contract
 
 The signed-in user can own multiple independent credential Things for one
