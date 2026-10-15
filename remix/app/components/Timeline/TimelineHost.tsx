@@ -328,7 +328,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 												</Text>
 												<Text fontSize="xs" fontWeight="400" color="var(--tt-muted)" overflowWrap="anywhere">
 													{row.event.branchId === 'main' ? 'Saved version' : 'Private variation'} · {date(row.event.occurredAt)} ·{' '}
-													{row.status === 'accepted' ? 'Synced to your account' : 'Saved on this device'}
+													{row.status === 'accepted' && !timeline.localOnly ? 'Synced to your account' : 'Saved on this device'}
 												</Text>
 											</Box>
 										</Button>
@@ -367,11 +367,11 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 			<Flex gap={2} wrap="wrap" align="center">
 				<Text flex="1" fontSize="sm" color="var(--tt-muted)">
 					{pending
-						? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting to sync`
+						? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting to ${timeline.localOnly ? 'save on this device' : 'sync'}`
 						: timeline.error
 						? 'Could not refresh history'
 						: timeline.ready
-						? 'Saved to your account'
+						? timeline.localOnly ? 'Saved on this device · never uploaded' : 'Saved to your account'
 						: 'Opening history…'}
 				</Text>
 
@@ -411,6 +411,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 			<Flex direction={{ base: 'column', lg: selected ? 'row' : 'column' }} gap={4} minW={0} align="stretch">
 				<Box flex={selected ? '0 0 48%' : '1'} minW={0}>
 					<TimelineEventBrowser
+						localOnly={timeline.localOnly}
 						rows={timeline.rows}
 						notes={timeline.notes}
 						names={timeline.names}
@@ -482,7 +483,7 @@ export function TimelineLibrary({ folderId, storage = 'selected' }: { folderId: 
 				← Things
 			</Button>
 			<PageHeader eyebrow="Thingtime · Things" title="Timeline" variant="ink" subtitle="Your changes across Thingtime, saved in one place." />
-			{selected.connection?.scope.dataPlane !== 'home' ? (
+			{selected.connection?.scope.dataPlane !== 'home' && selected.connection?.scope.dataPlane !== 'local-workspace' ? (
 				<Flex gap={2} wrap="wrap" role="group" aria-label="History location">
 					<Button
 						size="sm"
@@ -517,7 +518,7 @@ export function HistoryPage() {
 	return (
 		<PageShell width={1180} columnProps={{ pt: 4 }}>
 			<PageHeader eyebrow="Thingtime" title="History" variant="ink" subtitle="Every change, in its place. Explore your Things as they were." />
-			{selected.connection?.scope.dataPlane !== 'home' ? (
+			{selected.connection?.scope.dataPlane !== 'home' && selected.connection?.scope.dataPlane !== 'local-workspace' ? (
 				<Flex gap={2} wrap="wrap" role="group" aria-label="History location">
 					{(['home', 'selected'] as const).map((value) => (
 						<Button

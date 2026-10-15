@@ -2,6 +2,16 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Anonymous History: normal-import a page and component, rename offline,
+      open its recorded native preview, then cold-reload offline. Content and
+      canonical history must commit together; no account Timeline/mutation
+      requests may occur. Verify saved-on-device labels and 1440/390/320px.
+      Run `local-workspace/timeline.browser.test.ts` against the loopback
+      production preview with `TT_LOCAL_TIMELINE_URL` and shared browser paths.
+      Unit coverage must retain old component captures after edits/deletion,
+      roll back content when history fails, page large records, reject damaged
+      links/indexes and fence old identities across concurrent connections.
+
 - [ ] Anonymous page sources: normal-import an editable schema/Data/Action/
       Component/page bundle. Both source-bound Components and native Collections
       must load without sign-in, refresh after a local control, and survive a

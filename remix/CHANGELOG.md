@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous ordinary content now retains canonical
+  local Timeline versions and recorded native page previews, verified through
+  offline import/rename/reload at desktop and phone widths. History uses isolated
+  browser authority and never claims account sync. The full local-first matrix
+  remains incomplete; see [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Things library text search now reads local content
   first, including anonymous/offline folders, with bounded pagination, visible
   errors and Retry. Account refresh preserves pending edits and scope isolation.

@@ -231,3 +231,26 @@ test('anonymous library search stays scoped, supports paging, and never falls th
   assert.equal(requests, 0);
  } finally { await anonymousWorkspaceDatabase().close(); Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch }); }
 });
+
+test('anonymous Timeline uses local authority, canonical component responses, and retires with its API facade', async () => {
+ const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB;
+ Object.assign(globalThis, { window: { dispatchEvent() {}, location: { origin: 'https://thingtime.example' } }, indexedDB: new IDBFactory() });
+ let remoteCalls = 0;
+ const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote Timeline'); };
+ bindLocalWorkspace(true, rootIdentity.read().generation);
+ try {
+  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote }, things: { create: remote } });
+  const row = await api.things.create({ thingtime: ['data'], crystal: { name: 'Local history adapter' } });
+  const scope = { ownerId: 'local-workspace', dataPlane: 'local-workspace', apiOrigin: 'https://thingtime.example' };
+  assert.equal((await api.timeline.discover(scope.ownerId)).dataPlane, scope.dataPlane);
+  const page = await api.timeline.page(scope, { thingId: row.id, before: null, after: null, limit: 40 });
+  assert.equal(page.ok, true); assert.equal(page.entries.length, 1);
+  assert.equal((await api.timeline.entry(scope, page.entries[0].event.id)).entry.event.thingId, row.id);
+  assert.deepEqual(await api.timeline.componentBindings(scope, page.entries[0].event.id), { ok: true, eventId: page.entries[0].event.id, entries: [] });
+  await assert.rejects(api.timeline.branch(scope, {}), (error: any) => error.status === 422 && error.code === 'LOCAL_TIMELINE_UNAVAILABLE');
+  await assert.rejects(async () => api.timeline.page({ ...scope, dataPlane: 'home' }, { thingId: null, before: null, after: null, limit: 40 }), /another workspace/);
+  rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+  await assert.rejects(async () => api.timeline.entry(scope, page.entries[0].event.id), /Workspace changed/);
+  assert.equal(remoteCalls, 0);
+ } finally { await anonymousWorkspaceDatabase().close(); Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory }); }
+});

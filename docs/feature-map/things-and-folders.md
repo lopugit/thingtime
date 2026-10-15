@@ -388,3 +388,14 @@ checkboxes. Structured/public search is a separate unfinished local adapter.
 `librarySearch.test.ts`, `searchCursor.test.ts`, adapter tests and the opt-in
 `search.browser.test.ts` cover this path. See the dated search checkpoint and
 remaining matrix in [local workspaces](../local-workspaces.md).
+
+
+Anonymous ordinary content mutations now append canonical history through
+`local-workspace/timeline.ts` in the same workspace transaction. It reuses
+`timeline/thingContent.ts`, normalized event/link records, the local page resolver
+and shared component captures. `TimelineProvider` connects the existing history
+UI and draft queue to this isolated authority and captures its connection API
+facade. No account Timeline requests or authority are borrowed. Run
+`test:timeline`, `test:local-workspace`, `test:things` and the opt-in
+`timeline.browser.test.ts`. See the dated Timeline checkpoint and still-open
+branches/notes/restore/account-sync matrix in [local workspaces](../local-workspaces.md).

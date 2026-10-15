@@ -1,3 +1,4 @@
+import { recordLocalThingChanges } from './timeline';
 import { isLocalInteraction } from './interactions';
 import { attachmentCountLimit } from '../schemas/attachmentLimits';
 import type { StoredDraft } from './drafts';
@@ -62,7 +63,22 @@ const validated = (input: ThingWrite, postAttachments?: { hasAny: boolean; hasVi
 export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation) {}
-	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) { return this.db.transaction(this.scope, mode, this.lease, run); }
+	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) {
+		return this.db.transaction(this.scope, mode, this.lease, async tx => {
+			if (mode !== 'readwrite' || this.scope.kind !== 'anonymous') return run(tx);
+			const before = new Map<string, Promise<LocalThing | undefined>>();
+			const capture = (collection: string, id: string) => { if (collection === 'things' && !before.has(id)) before.set(id, tx.get<LocalThing>(collection, id)); };
+			const tracked: WorkspaceTransaction = { ...tx,
+				put: async (collection, id, value) => { capture(collection, id); await before.get(id); await tx.put(collection, id, value); },
+				delete: async (collection, id) => { capture(collection, id); await before.get(id); await tx.delete(collection, id); }
+			};
+			const result = await run(tracked);
+			const changes = new Map<string, { before: LocalThing | null; after: LocalThing | null }>();
+			for (const [id, previous] of before) changes.set(id, { before: await previous || null, after: await tx.get<LocalThing>('things', id) || null });
+			await recordLocalThingChanges(tx, changes, this.now, this.uuid);
+			return result;
+		});
+	}
 	private async placement(tx: WorkspaceTransaction, row: TransferThing) {
 		const seen = new Set([row.id]); let parent = row.folderId;
 		while (parent) {

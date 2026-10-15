@@ -1,3 +1,4 @@
+import { TIMELINE_CHANGED_EVENT } from '../timeline/clientEvents';
 import { rootIdentity } from '../utils/rootIdentity';
 import { WorkspaceDatabase, WorkspaceError, workspaceScopeKey, type WorkspaceScope, type WorkspaceLease } from './storage';
 import { LocalThings } from './things';
@@ -34,7 +35,7 @@ export function anonymousWorkspaceDatabase() {
 	return database ??= new WorkspaceDatabase(indexedDB);
 }
 export function anonymousThings() { return new LocalThings(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, anonymousWorkspaceLease()); }
-export function announceLocalWorkspaceChange(removedIds?: string[]) { window.dispatchEvent(Object.assign(new Event(LOCAL_WORKSPACE_CHANGED), { removedIds })); }
+export function announceLocalWorkspaceChange(removedIds?: string[]) { window.dispatchEvent(Object.assign(new Event(LOCAL_WORKSPACE_CHANGED), { removedIds })); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
 
 export function accountWorkspaceLease(scope: Extract<WorkspaceScope, { kind: 'account' }>): WorkspaceLease {
 	const generation = rootIdentity.read().generation;

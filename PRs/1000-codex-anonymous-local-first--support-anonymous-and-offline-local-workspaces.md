@@ -410,3 +410,27 @@ including account discussion sync and local Timeline, remains the merge gate.
   `tmp/local-search-ui/`. Advanced/public search, dedicated account adapters,
   Timeline, native tools and other matrix rows still prevent merge. These checks
   are local; they do not establish deployed behavior or full rollout completion.
+
+
+## Canonical anonymous Timeline checkpoint — 2026-10-16
+
+- Ordinary local content and canonical event/link history commit atomically.
+  Shared snapshot projection and recorded component definitions are reused;
+  captures survive live edits and page deletion. Bounded header-first paging
+  checks stored metadata against canonical events. Local receipts never sync.
+- The normal History browser and inert native page preview work logged out and
+  offline. Transports retain their creating API facade across identity changes;
+  unsupported local commands fail explicitly rather than falling into account
+  routes. Local status labels never claim account synchronization.
+- Local evidence: 652 unit/contract passes, five opt-in skips, and one explicit
+  clean production-browser pass. Import, rename, cold reload and recorded preview
+  make zero mutation/Timeline requests, with zero page errors. 1440/390/320px
+  layouts have no horizontal overflow. In-app Browser manually confirmed native
+  History and its phone drawer. Artifacts: `tmp/local-timeline-ui/`.
+- Changed-file lint: zero errors, three constructor warnings. Raw TypeScript: the
+  same 91 diagnostic identities. Production client build passes. CI/deployment
+  evidence is separate. No merge or manual deployment was performed.
+- Timeline remains partial: real protected folder/storage controls, branches,
+  notes/names, restore/merge, version export, related history, protected-kind
+  adapters, all editor draft lifecycles and account local-first synchronization
+  are still required. The full acceptance matrix is unchanged as the merge gate.

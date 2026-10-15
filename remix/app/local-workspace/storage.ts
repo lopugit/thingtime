@@ -1,3 +1,4 @@
+import { TIMELINE_EVENT_MAX_BYTES } from '../timeline/contract';
 /** Browser persistence boundary for local content. Account scopes never confer
  * server authority and are never inferred from a record supplied by a caller. */
 export type WorkspaceScope = { kind: 'anonymous' } | { kind: 'account'; origin: string; ownerId: string; dataPlane: string };
@@ -34,7 +35,7 @@ const request = <T>(req: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
 	req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
 });
 const validKey = (value: string) => {
-	if (typeof value !== 'string' || !value || value.length > 200) throw new WorkspaceError('INVALID_KEY', 'Invalid local record key');
+	if (typeof value !== 'string' || !value || value.length > 256) throw new WorkspaceError('INVALID_KEY', 'Invalid local record key');
 };
 
 /** One record per Thing/draft/event, with atomic quota accounting across tabs.
@@ -131,7 +132,8 @@ export class WorkspaceDatabase {
 				const encoded = JSON.stringify(value);
 				if (encoded === undefined) throw new WorkspaceError('INVALID_RECORD', 'Local records must contain JSON');
 				const bytes = new TextEncoder().encode(encoded).byteLength;
-				if (bytes > WORKSPACE_LIMITS.recordBytes) throw new WorkspaceError('LOCAL_QUOTA', 'This local record exceeds 1 MB', 413);
+				const limit = collection === 'timeline-events' ? TIMELINE_EVENT_MAX_BYTES + 2048 : WORKSPACE_LIMITS.recordBytes;
+				if (bytes > limit) throw new WorkspaceError('LOCAL_QUOTA', collection === 'timeline-events' ? 'This Timeline record exceeds 4 MiB' : 'This local record exceeds 1 MB', 413);
 				await persist(collection, id, JSON.parse(encoded), bytes);
 			},
 			getBytes: async id => {

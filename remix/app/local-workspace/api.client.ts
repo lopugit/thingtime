@@ -1,3 +1,4 @@
+import { LocalTimeline } from './timeline';
 import { searchLocalLibrary } from './librarySearch';
 import { LocalInteractions, localSavedPage } from './interactions';
 import { localPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
@@ -30,6 +31,15 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		return changed({ ok: true, id: row.id, thing: { ...project(row), ...(projection ? { attachments: projection.attachments } : {}) }, ...(projection ? { post: projection } : {}) });
 	};
 	const local = blocked(remote);
+	const history = new LocalTimeline(anonymousWorkspaceDatabase(), lease, window.location?.origin || 'http://localhost');
+	const timelineUnavailable = async () => { lease.assertCurrent(); throw new WorkspaceError('LOCAL_TIMELINE_UNAVAILABLE', 'This local History operation is not available yet. Your saved history remains on this device.', 422); };
+	local.timeline = { ...Object.fromEntries(Object.keys(remote.timeline || {}).map(key => [key, timelineUnavailable])),
+		discover: (ownerId: string) => history.discover(ownerId),
+		page: (scope: any, request: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.page(request, options?.signal); },
+		push: (scope: any, event: any, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.push(event, options?.signal); },
+		entry: (scope: any, id: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.entry(id, options?.signal); },
+		componentBindings: (scope: any, id: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.componentBindings(id, options?.signal); }
+	};
 	const interact = (kind: Parameters<LocalInteractions['toggle']>[0], id: unknown, value?: unknown) => new LocalInteractions(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, lease).toggle(kind, id, value).then(changed);
 	const algorithms = () => { lease.assertCurrent(); return new LocalAlgorithms(anonymousWorkspaceDatabase(), lease); };
 	// Public discovery and explicit authentication remain available online.

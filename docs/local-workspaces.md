@@ -12,8 +12,8 @@ rollout is **not ready to merge** until the outstanding rows below are verified.
   claim is removed; existing account keys are preserved and anonymous data stays
   in its original namespace until an explicit transfer.
 - Timeline already has canonical event/link records, IndexedDB recovery, branch
-  and note queues. Its provider currently discovers an authenticated remote
-  scope before connecting those facilities to editors.
+  and note queues. Account history discovers an authenticated remote scope; the anonymous
+  adapter now has a separate browser-local authority (checkpoint below).
 - Account drafts already have bounded snapshots, immutable write IDs, revision
   conflicts, discard tombstones and independent template copies.
 - `/things` previously created a server temporary account automatically. That
@@ -41,7 +41,7 @@ Identity changes invalidate outstanding local operations and abort transactions.
 Anonymous work is never implicitly adopted by or uploaded to a later login.
 
 Writes and quota accounting are transactional across tabs. Current bounds are
-10,000 records, 1 MiB per JSON record, 16 MiB per file and 64 MiB per workspace (metadata and bytes together). Failed saves report an
+10,000 records, 1 MiB per ordinary JSON record, 16 MiB per file and 64 MiB per workspace (metadata and bytes together). Canonical Timeline event records alone allow the shared 4 MiB event ceiling plus receipt overhead; their relational links and headers count toward the same workspace quota. Failed saves report an
 error; failed imports roll back. Optimistic concurrency checks retain an editor's
 base timestamp. Files require the dedicated local attachment adapter rather than
 reusing account attachment IDs.
@@ -72,7 +72,7 @@ change this pointer; logout/account changes revoke it.
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
-| Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
+| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Full local notes, version names, branches, restore/merge, historical export, related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
@@ -725,3 +725,56 @@ annotation test's missing typed stub was repaired. The production client build
 passed with 245 verified assets (21,148,320 bytes). This checkpoint also preserves
 the review bot's local-file annotation adapter and regression. Full account sync,
 canonical local Timeline and other matrix items remain required before merge.
+
+
+## Canonical local Timeline checkpoint — 2026-10-16
+
+Ordinary anonymous Thing create/update/delete/import changes append the existing
+canonical Timeline event, receipt and individual relationship records in the
+same browser transaction as content. The shared `thingContentSnapshot` projection
+is now browser-safe; the server keeps its existing behavior. Anonymous snapshots
+carry no account audience. The local authority uses `local-workspace` for its
+owner and data plane; these local ordering receipts are never uploaded or treated
+as account authorization. No account writer has been redirected to this namespace.
+
+`local-workspace/timeline.ts` reads authoritative history from scoped workspace
+records, while the existing Timeline IndexedDB store remains an evictable view
+and pending queue. Corrupt/missing links, mismatched index metadata, changed retry
+payloads, missing ancestry, wrong scope, retired identities and aborted requests
+fail explicitly. Pages contain at most 40 entries within the shared event-size
+budget; component batches have a 4 MiB ceiling. Workspace record/byte quotas still
+apply. A history write failure rolls back the associated content write.
+
+Page versions use the same local component resolver as live pages and the shared
+component-capture contract. Unchanged captures are reused, and deleted pages keep
+their saved dependencies. The native preview stays inert. Local History labels
+say saved on this device, never synced to account. Connection transports retain
+the API facade that created them; a later login cannot redirect an anonymous
+queue into account APIs. Unsupported commands return explicit 422 refusals, not
+an authentication prompt or a cloud fallback.
+
+Local verification: 652 passing workspace/offline-shell, Things and shared
+Timeline tests, five ordinary opt-in skips, plus one explicitly enabled clean
+production-browser test. It imports a page/component through the normal importer,
+renames offline, opens the recorded native preview, and repeats after a cold
+offline reload. It observes zero mutation requests, zero account Timeline calls
+and zero page errors. Native 1440×1000, 390×844 and 320×844 views have no horizontal
+overflow. The in-app Browser separately verified the logged-out History UI and
+recorded preview. Evidence: `tmp/local-timeline-ui/` (PNGs, manual JPEGs and
+`verification.json`). Changed-file lint has zero errors and three constructor
+warnings; raw TypeScript has exactly the same 91 diagnostic identities as the
+preceding checkpoint. Production client build succeeds. These are local checks,
+not proof of CI or deployed behavior.
+
+Run `app/local-workspace/timeline.browser.test.ts` with `TT_LOCAL_TIMELINE_URL`
+pointing at the isolated loopback production preview, the shared Playwright and
+Chromium variables used above, and optional `TT_LOCAL_TIMELINE_ARTIFACTS`. The
+test owns a clean anonymous context and writes no account data.
+
+This is not the completed Timeline feature: the folder ID currently identifies
+the History route, not a persisted protected Timeline folder. Named branches,
+notes/version names, restore/merge, version export, related composition history,
+protected-kind histories, full account local-first synchronization and storage
+cleanup at quota remain on the merge gate. Ordinary draft admission is covered
+by adapter tests; every editor's draft-recovery lifecycle still needs its own
+acceptance coverage. Existing history is not reconstructed retroactively.
