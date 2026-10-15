@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain
+  comments/replies no longer await account draft sync or cleanup. Completed
+  drafts retire locally immediately; late saves cannot overwrite the next
+  composer, and uncertain post retries keep their frozen identity. Verified
+  private post/reload and mobile comment/reply against a disposable local API
+  account with draft requests blocked; no production account data changed.
+  Details: [PR #999](../PRs/999-codex-independent-post-draft-saving--fix-posting-blocked-by-draft-saving-failures.md).
+
 - 2026-10-15 — **Codex (AI)**: Native Password AutoFill explicitly uses the
   data-protection Keychain so macOS enforces the shared access group and
   device-only accessibility. Missing signing-group configuration fails closed.
