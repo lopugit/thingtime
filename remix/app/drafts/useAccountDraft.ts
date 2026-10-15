@@ -77,13 +77,28 @@ export function useAccountDraft({
 		const retryRetired = async () => {
 			const prefix = `${key}:retired:`;
 			for (const savedKey of Object.keys(localStorage).filter((entry) => entry.startsWith(prefix))) {
-				const retired = readLocalCache<{ id: string; revision: number; completed?: boolean }>(savedKey);
-				if (!retired || !actor) continue;
+				const retired = readLocalCache<{ id: string; revision: number; completed?: boolean; conflicted?: boolean }>(savedKey);
+				// A conflicted completion is already settled: the marker only has to keep
+				// suppressing resume, so stop re-sending a delete that can never apply.
+				if (!retired || !actor || retired.conflicted) continue;
 				try {
 					await draftRequest(actor, { operation: 'delete', id: retired.id, revision: retired.revision });
 					localStorage.removeItem(savedKey);
 				} catch (failure) {
-					if ([404, 410].includes((failure as any)?.status) || (!retired.completed && (failure as any)?.status === 409)) localStorage.removeItem(savedKey);
+					const status = (failure as any)?.status;
+					if ([404, 410].includes(status)) localStorage.removeItem(savedKey);
+					// 409 means a newer remote revision exists. Never delete that newer
+					// work; for a completed post, retain the marker so the published draft
+					// still cannot auto-resume, but retire the doomed retry.
+					else if (status === 409) {
+						if (!retired.completed) localStorage.removeItem(savedKey);
+						else
+							try {
+								localStorage.setItem(savedKey, JSON.stringify({ ...retired, conflicted: true }));
+							} catch {
+								/* Resume suppression already relies on the marker that is present. */
+							}
+					}
 				}
 			}
 		};
