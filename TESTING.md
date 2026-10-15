@@ -9858,6 +9858,29 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   delayed-reply revision protection and cancellation after an identity change.
   No visual Builder behavior is introduced by this increment.
 
+## No-login draft preview and agent export
+
+- In a clean browser, open Builder's no-login draft link; paste the affirmation
+  transfer, render, edit the argument, render again, download JSON and reload.
+  Confirm no login/temporary-user/API traffic, no persistence on reload, opaque
+  origin storage denial, and exact text/line breaks through the real renderer.
+- Call `thingtime_render_and_export` through the stdio SDK client. Save the
+  inline JSON/PNG resources; validate the JSON and dependency closure. Capture
+  1440×1000, 390×844, 320×844 and the first viewport's card-only crop. Check
+  400×560 desktop card bounds, 24px phone margins, no overflow and stable hash.
+- Reject malformed/oversized input, duplicate/ambiguous/missing references,
+  unknown schema, remote CSS/assets, Actions in inactive branches, unsafe props,
+  expansion exhaustion, invisible/overflowing content (including zero font size
+  and transparent CSS Color 4 colors), invalid crop/viewport,
+  render exceptions and overlapping requests. Failed exports return no images.
+  A failed editor render retains the last good preview without allowing export.
+- Run the opt-in browser tests, not only their default skip. Round-trip the
+  actual exported JSON through the normal importer on the dedicated disposable
+  `draftPreview` replica; allow fresh IDs, verify dependency remapping/private
+  ACLs/anonymous 404, normal reexport and cleanup. Never use existing accounts.
+- Keep local protocol/browser/import acceptance distinct from CI and deployed
+  verification. Setup and commands: [draft workflow](docs/no-login-draft-preview.md).
+
 
 ## Password manager and native AutoFill
 

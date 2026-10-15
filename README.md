@@ -4534,3 +4534,12 @@ apply. For an isolated verification without model billing:
 
 This checks runtime and storage behavior, not live provider reasoning or
 production gear migration. See [Lopu Action access](docs/lopu-action-access.md).
+
+### No-login native draft preview and export
+
+Use **Builder → No-login draft preview** (`/draft-preview/index.html`) for
+in-memory editable JSON previews and canonical downloads. The local stdio MCP
+server exposes `thingtime_render_and_export`, returning desktop/mobile/card
+PNGs and JSON as inline resources without an account or HTTP access from the
+agent host. No private environment variables are needed. See the
+[fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).

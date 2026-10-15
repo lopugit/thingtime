@@ -80,6 +80,7 @@ const AccountPagesList = () => {
 				subtitle="Build webpages from Thingtime components and actions — manage their settings, privacy and content in one place."
 				after={
 					<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
+            <Button as="a" href="/draft-preview/index.html" size="sm" variant="outline">No-login draft preview</Button>
 						<Button as={Link} to={libraryBuilderHref()} size="sm" variant="outline">
 							Integration library
 						</Button>
