@@ -87,3 +87,15 @@ before its export can be considered complete for attachment-bearing content.
   reader, and callbacks from a retired anonymous facade fail before networking.
 - Account theme synchronization, local history and algorithms remain incomplete;
   this checkpoint does not change the full rollout's merge boundary.
+
+The checkpoint's workspace/offline-shell, root, Things and theme tests passed
+408 checks. The client build passed with 230 verified offline assets; raw
+TypeScript exactly matched the 91-diagnostic parent baseline. Graphify structural
+and semantic extraction completed for 31 changed files (439,374 input / 21,826
+output tokens), retaining warnings about legacy cache provenance and duplicate
+nodes. Public gallery empty-state wording now distinguishes device saves from
+account publishing.
+
+Web CI build/unit and API suites passed on prior pushed revision `2e6ea34db`.
+The PR preview root and Nitro health now return the real application and ready
+API; that read-only check is not acceptance of the unpushed theme changes.

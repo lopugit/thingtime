@@ -95,7 +95,8 @@ against a production client build, using an isolated test origin and clean
 browser profile. Keep Mongo/account fixtures disposable and use the real APIs
 for any authenticated test setup.
 
-No CI, deployment or merge verification has been completed for this branch yet.
+The browser evidence in this document is local. Consult PR #1000 checks for the
+exact pushed revision; the full rollout has not been merged.
 
 
 Posting independence is delivered separately in [PR #999](https://github.com/lopugit/thingtime/pull/999).
