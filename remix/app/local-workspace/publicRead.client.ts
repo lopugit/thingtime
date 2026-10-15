@@ -23,7 +23,10 @@ export async function publicWorkspaceRead(path: string, feature: string, version
 	} catch (error) {
 		lease.assertCurrent(); signal?.throwIfAborted();
 		// Authoritative refusals must never resurrect a previously visible row.
-		if (error instanceof WorkspaceError && error.status < 500) {
+		// A timeout or a rate limit is not such a refusal: it says nothing about
+		// whether the content still exists, so it keeps the cache and falls back
+		// to it, using the same transient classification as the account queue.
+		if (error instanceof WorkspaceError && error.status < 500 && error.status !== 408 && error.status !== 429) {
 			if (cacheable) await db.transaction({ kind: 'anonymous' }, 'readwrite', lease, tx => tx.delete('public-catalog', key));
 			throw error;
 		}

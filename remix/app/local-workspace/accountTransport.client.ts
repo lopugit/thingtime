@@ -42,7 +42,13 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 			signal: AbortSignal.any([retired.signal, AbortSignal.timeout(20_000), ...(signal ? [signal] : [])]),
 			headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane },
 			...(method === 'GET' ? {} : { body: JSON.stringify(args) }) });
-		const result = await readBoundedJson(response); lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted();
+		// An edge/WAF refusal answers a 4xx with an HTML body. Letting that parse
+		// error escape would drop the HTTP status, and the sync queue classifies
+		// a status-less failure as retryable, so a refused or conflicting write
+		// would retry forever instead of surfacing as error/conflict for review.
+		let result: any = null;
+		try { result = await readBoundedJson(response); } catch (error) { if (response.ok) throw error; }
+		lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted();
 		if (response.status === 401 || (response.status === 409 && (['ACTOR_CHANGED', 'DATA_PLANE_CHANGED'].includes(result?.code) || result?.error === 'The active account changed. Run the action again.'))) {
 			rootIdentity.changed();
 			window.dispatchEvent(new Event('thingtime:root-data-refresh'));
