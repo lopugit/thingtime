@@ -25,6 +25,9 @@ group on both. iOS uses `iOS/project.yml`, `THINGTIME_IOS_BUNDLE_IDENTIFIER` and
 `$(AppIdentifierPrefix)com.thingtime.passwords` by default; change the suffix
 consistently when forking. Accept pending Apple Developer agreements before
 requesting profiles. Keep all real signing values out of git.
+The shared session uses the data-protection Keychain on both platforms, with
+device-only accessibility and synchronization disabled. A missing or unresolved
+Keychain group fails closed; it must not fall back to the macOS legacy Keychain.
 
 `npm --prefix electron run build:resources` embeds the macOS provider. The build
 requires `THINGTIME_PASSWORD_SIGNING_IDENTITY=<Apple signing identity>` (or the

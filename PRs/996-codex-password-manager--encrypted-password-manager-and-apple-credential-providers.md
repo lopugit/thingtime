@@ -53,6 +53,19 @@ large backups split into individually restorable parts.
 
 ## Outstanding gates
 
+- Follow-up native audit fixed a macOS Keychain integration bug: all session
+  operations now explicitly target the data-protection Keychain with the shared
+  access group and synchronization disabled. Missing/unexpanded group settings
+  fail closed. Apple's [Keychain documentation](https://developer.apple.com/documentation/security/ksecusedataprotectionkeychain)
+  explains why the macOS legacy store cannot enforce these attributes.
+  The updated Swift run has six passes and one explicit HTTPS-fixture skip;
+  independent WebAuthn verification, the full macOS provider build and the full
+  iOS/Watch simulator build pass. The rebuilt iOS app was installed and launched
+  on iPhone 17 Pro with its built `ThingtimeWebURL` verified as
+  `https://thingtime.com`. The optional fixture reports a skip when absent.
+  A fresh signed build still fails with `PLA Update available` and missing host
+  and extension provisioning profiles; no unsigned build replaces the installed app.
+
 - Apple signing returned `PLA Update available`: account holder must review the
   latest Apple Developer Program License Agreement. No signed provider install,
   system-provider registration or live password/OTP/passkey ceremony claimed.

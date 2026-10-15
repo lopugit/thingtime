@@ -78,8 +78,10 @@ contains the AuthenticationServices extension used by iOS and the macOS
 Thingtime Passwords companion embedded in Electron. The containing app needs
 Apple's AutoFill entitlement and the same Keychain group as its extension.
 Only the selected first-party HttpOnly session cookie is stored in the device's
-unlocked-only, non-synchronizing Keychain. No vault passwords or signing keys
-are persistently cached on the device. Logout/account or endpoint changes clear
+unlocked-only, non-synchronizing data-protection Keychain. Every session operation
+requires the configured shared access group; the macOS legacy Keychain is never
+used. No vault passwords or signing keys are persistently cached on the device.
+Logout/account or endpoint changes clear
 the link; expired/revoked sessions fail at the server.
 
 Open Passwords in the native app, choose **Connect Password AutoFill**, then

@@ -9904,5 +9904,10 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
 
 - Native Password AutoFill: while connecting, focus the app to trigger background sync; the connection must finish. Switching accounts/logout cancels it, settles the request, and queues identity removal after any outstanding catalog update.
+- Native Keychain: session save/read/delete must use the data-protection store,
+  the same explicit access group and no synchronization. Missing or unexpanded
+  group configuration must fail closed. On a signed macOS build, connect in the
+  host, read from its extension, disconnect, and confirm the extension cannot
+  read the removed session; no legacy Keychain access prompt should appear.
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.

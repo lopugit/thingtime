@@ -1,7 +1,19 @@
 import XCTest
 import CryptoKit
+import Security
 @testable import ThingtimePasswordCore
 final class CoreTests: XCTestCase {
+    func testSessionKeychainRequiresProtectedSharedStorage() throws {
+        // Missing or unexpanded signing configuration must never fall back to
+        // a private/default Keychain that the provider cannot safely share.
+        for group in [nil, "", " ", "TEAM.com.thingtime.passwords ", "$(AppIdentifierPrefix)com.thingtime.passwords"] as [String?] {
+            XCTAssertThrowsError(try PasswordSessionStore.query(accessGroup: group))
+        }
+        let query = try PasswordSessionStore.query(accessGroup: "TESTTEAM.com.thingtime.passwords")
+        XCTAssertEqual(query[kSecUseDataProtectionKeychain as String] as? Bool, true)
+        XCTAssertEqual(query[kSecAttrSynchronizable as String] as? Bool, false)
+        XCTAssertEqual(query[kSecAttrAccessGroup as String] as? String, "TESTTEAM.com.thingtime.passwords")
+    }
     @MainActor func testLogoutClearsAfterPendingIdentitySync() async throws {
         let operations = PasswordIdentityOperations()
         var calls: [String] = []
@@ -44,7 +56,7 @@ final class CoreTests: XCTestCase {
         XCTAssertNotEqual(key.credentialID, try PasskeyMaterial(relyingParty: key.relyingParty, userHandle: key.userHandle, username: key.username).credentialID)
     }
     func testWebAuthnInteroperabilityFixture() throws {
-        guard let path = ProcessInfo.processInfo.environment["THINGTIME_PASSKEY_FIXTURE_PATH"] else { return }
+        guard let path = ProcessInfo.processInfo.environment["THINGTIME_PASSKEY_FIXTURE_PATH"] else { throw XCTSkip("WebAuthn interoperability fixture is opt-in.") }
         let challenge = Data(repeating: 7, count: 32).base64URL, origin = "https://passkeys.example.test"
         let registration = try JSONSerialization.data(withJSONObject: ["type": "webauthn.create", "challenge": challenge, "origin": origin, "crossOrigin": false], options: .sortedKeys)
         let authentication = try JSONSerialization.data(withJSONObject: ["type": "webauthn.get", "challenge": challenge, "origin": origin, "crossOrigin": false], options: .sortedKeys)
