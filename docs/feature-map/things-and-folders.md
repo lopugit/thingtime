@@ -408,3 +408,15 @@ caps and content-free deletion markers prevent cross-tab overfill and delayed
 retry resurrection. `timelineNotes.test.ts` covers those boundaries and
 `timeline.browser.test.ts` covers offline save/reload/remove and actionable
 refusals. Lopu explanations retain their real account/provider requirements.
+
+
+Version name mutation/replay semantics are shared in
+`timeline/versionNameMutation.ts`. The existing server adapter retains its
+transactions and protected writer; `local-workspace/timelineVersionNames.ts`
+commits canonical names/effects and clear-revision metadata atomically in the
+anonymous namespace. `timelineVersionNames.test.ts` covers replay after later
+changes, concurrent CAS, rollback, damaged metadata and scope isolation. The
+ordinary offline History browser test includes name/rename/clear/reload. Run
+`test:timeline:versions` against its disposable replica for server regression;
+the script now binds the response to the exact sent operation ID and cleans up
+only Things it created, including after a test failure.

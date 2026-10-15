@@ -239,7 +239,7 @@ test('anonymous Timeline uses local authority, canonical component responses, an
  const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote Timeline'); };
  bindLocalWorkspace(true, rootIdentity.read().generation);
  try {
-  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote }, things: { create: remote } });
+  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote }, things: { create: remote } });
   const row = await api.things.create({ thingtime: ['data'], crystal: { name: 'Local history adapter' } });
   const scope = { ownerId: 'local-workspace', dataPlane: 'local-workspace', apiOrigin: 'https://thingtime.example' };
   assert.equal((await api.timeline.discover(scope.ownerId)).dataPlane, scope.dataPlane);
@@ -253,7 +253,12 @@ test('anonymous Timeline uses local authority, canonical component responses, an
   await api.timeline.note(scope, command);
   assert.equal((await api.timeline.entry(scope, command.eventId)).notes[0].text, command.text);
   await assert.rejects(async () => api.timeline.note({ ...scope, ownerId: 'another' }, command), /another workspace/);
+  const named = { command: 'name-version', operationId: crypto.randomUUID(), eventId: command.eventId, thingId: row.id, name: 'Local named version', expectedRevision: 0 };
+  await api.timeline.nameVersion(scope, named);
+  assert.equal((await api.timeline.entry(scope, command.eventId)).names[0].name, named.name);
+  await assert.rejects(async () => api.timeline.nameVersion({ ...scope, dataPlane: 'home' }, named), /another workspace/);
   rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+  await assert.rejects(async () => api.timeline.nameVersion(scope, named), /Workspace changed/);
   await assert.rejects(async () => api.timeline.note(scope, command), /Workspace changed/);
   await assert.rejects(async () => api.timeline.entry(scope, page.entries[0].event.id), /Workspace changed/);
   assert.equal(remoteCalls, 0);

@@ -458,3 +458,33 @@ Changed-file lint: zero errors / one constructor warning. Raw TypeScript:
 This is local verification; CI and deployed behavior are separate. Version names,
 branches, restore/merge, protected histories, account sync and the full remaining
 coverage matrix still block completion and merge.
+
+
+## Canonical local version names — 2026-10-16
+
+The normal Versions tab now names, renames and clears anonymous saved versions
+offline. The server and browser share `timeline/versionNameMutation.ts`;
+canonical records, stable command hashes, exact retry receipts, monotonic
+revisions across clears and immutable effect events stay consistent. Local
+name/effect/link/metadata writes are atomic and scoped. The mounted editor keeps
+an uncertain command identity for retry. This does not yet provide durable
+account offline name synchronization or process-loss recovery.
+
+Verification: 110 workspace/offline-shell + 238 shared Timeline tests passed,
+five opt-in skips, plus the explicitly enabled clean offline browser test and
+the real local server version integration. Offline naming/rename/reload/clear,
+notes, native preview and 1440/390/320px checks observed no mutation requests,
+account Timeline calls or page errors. Manual in-app Browser verification passed.
+Artifacts: `tmp/local-version-names-ui/`; server log:
+`tmp/local-version-names-server.log`. The integration harness previously sent
+one operation ID and validated against another; it now uses one command and
+cleans its created Things in `finally`. The initial failed attempt predating
+that cleanup left two synthetic private Things in the disposable fixture DB.
+The final passing attempt cleaned its Things; no existing account data changed.
+
+Build: 245 verified assets / 21,163,888 bytes. Application lint: zero errors,
+one constructor warning. The `.mts` integration script lint uses the explicit
+TypeScript parser. TypeScript: the same 91 pre-existing diagnostic identities.
+Local evidence is separate from CI/deployed verification. Branches, restore,
+historical export, protected history, account sync and the full matrix remain
+unfinished; this checkpoint does not authorize merge.

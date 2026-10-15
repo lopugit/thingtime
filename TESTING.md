@@ -2,6 +2,15 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Anonymous version names: use Versions offline to name, rename, reload,
+      clear and reload again. Verify the pinned badge and immutable effects,
+      no HTTP mutations, and desktop/390/320px controls. Concurrent tabs must
+      reject stale revisions; retries after later changes return their original
+      receipt without overwriting the newer name. Failed name storage must roll
+      back its effect and ordering. Run `timelineVersionNames.test.ts` and the
+      offline History browser test. Server integration must validate against the
+      exact operation ID sent and clean up its own created Things on failure.
+
 - [ ] Anonymous History notes: open Message on a saved change while offline;
       save plain text, cold-reload and remove it. Confirm device-only copy and
       zero account/mutation HTTP calls. Eight concurrent notes must be the cap;

@@ -1,3 +1,6 @@
+import { parseTimelineVersionNameCommand, type TimelineVersionName, type TimelineVersionNameCommand } from '../timeline/versionNames';
+import { transferChecksum } from '../utils/thingTransfer/archive';
+import { readLocalVersionNames, localNamesForEntry, writeLocalVersionName } from './timelineVersionNames';
 import { parseTimelineEntry, parseTimelineEvent, timelineEventText, TIMELINE_EVENT_MAX_BYTES, type TimelineEvent, type TimelineEntry, type TimelineScope } from '../timeline/contract';
 import { splitTimelineEvent, joinTimelineEvent, parseTimelineEventRecord, timelineLinkId, type TimelineEventRecord, type TimelineLink } from '../timeline/records';
 import { parseTimelineNoteCommand, type TimelineNote, type TimelineNoteCommand } from '../timeline/notes';
@@ -124,12 +127,21 @@ export class LocalTimeline {
   if (event.ownerId !== LOCAL_TIMELINE_OWNER || event.actorId !== LOCAL_TIMELINE_OWNER || event.source !== 'client' || event.mode !== 'draft' || !event.clientId) fail('Only authored local drafts can be submitted.');
   return { ok: true as const, entry: await this.transaction('readwrite', tx => appendLocalTimeline(tx, event), signal) };
  }
+ async nameVersion(input: TimelineVersionNameCommand, signal?: AbortSignal) {
+  this.lease.assertCurrent(); signal?.throwIfAborted();
+  const command = parseTimelineVersionNameCommand(input);
+  // Hash before opening IDB: WebCrypto must never suspend a live transaction.
+  // The canonical parser sorts keys, exactly matching the server signature.
+  const signature = await transferChecksum(new TextEncoder().encode(JSON.stringify(command)));
+  return this.transaction('readwrite', tx => writeLocalVersionName(tx, LOCAL_TIMELINE_OWNER, command, signature,
+   id => localTimelineEntry(tx, id), event => appendLocalTimeline(tx, event), this.now()), signal);
+ }
  async note(input: TimelineNoteCommand, signal?: AbortSignal) {
   const command = parseTimelineNoteCommand(input);
   return this.transaction('readwrite', tx => writeLocalTimelineNote(tx, LOCAL_TIMELINE_OWNER, command, id => localTimelineEntry(tx, id), this.now), signal);
  }
  async entry(id: string, signal?: AbortSignal) {
-  return this.transaction('readonly', async tx => { const entry = await localTimelineEntry(tx, id); if (!entry) fail('This version is not stored in this workspace.', 404); return { ok: true as const, entry: entry!, notes: localNotesForEntry(await readLocalTimelineNotes(tx, LOCAL_TIMELINE_OWNER), entry!), names: [] }; }, signal);
+  return this.transaction('readonly', async tx => { const entry = await localTimelineEntry(tx, id); if (!entry) fail('This version is not stored in this workspace.', 404); return { ok: true as const, entry: entry!, notes: localNotesForEntry(await readLocalTimelineNotes(tx, LOCAL_TIMELINE_OWNER), entry!), names: localNamesForEntry(await readLocalVersionNames(tx, LOCAL_TIMELINE_OWNER), entry!) }; }, signal);
  }
  async page(request: TimelinePageRequest, signal?: AbortSignal) {
   if (request.related) fail('Related local history is not available yet.', 503);
@@ -137,20 +149,22 @@ export class LocalTimeline {
   return this.transaction('readonly', async tx => {
    const rows = (await tx.list<Header>(INDEX)).map(row => parseHeader(row.value, row.id)).filter(row => (!request.thingId || row.thingId === request.thingId) && (request.before === null || row.position < request.before) && (request.after === null || row.position > request.after))
     .sort((a, b) => request.after === null ? b.position - a.position : a.position - b.position);
-   const entries: TimelineEntry[] = [], notes: TimelineNote[] = []; let bytes = 512;
+   const entries: TimelineEntry[] = [], notes: TimelineNote[] = [], names: TimelineVersionName[] = []; let bytes = 512;
    const allNotes = await readLocalTimelineNotes(tx, LOCAL_TIMELINE_OWNER);
+   const allNames = await readLocalVersionNames(tx, LOCAL_TIMELINE_OWNER);
    const limit = request.limit;
    for (const row of rows) {
     if (entries.length >= limit || bytes + row.bytes + 1 > PAGE_BYTES) break;
     const entry = await localTimelineEntry(tx, row.id); if (!entry) fail('Local Timeline is incomplete.');
     const attached = localNotesForEntry(allNotes, entry!);
-    const size = row.bytes + byteLength(attached) + 2;
+    const named = localNamesForEntry(allNames, entry!);
+    const size = row.bytes + byteLength(attached) + byteLength(named) + 3;
     if (bytes + size > PAGE_BYTES) break;
-    entries.push(entry!); notes.push(...attached); bytes += size;
+    entries.push(entry!); notes.push(...attached); names.push(...named); bytes += size;
    }
    if (rows.length && !entries.length) fail('This history entry exceeds the page limit.', 413);
    const next = rows.length > entries.length ? entries.at(-1)!.receipt.position : null;
-   return { ok: true as const, entries, nextBefore: request.after === null ? next : null, nextAfter: request.after === null ? null : next, notes, names: [] };
+   return { ok: true as const, entries, nextBefore: request.after === null ? next : null, nextAfter: request.after === null ? null : next, notes, names };
   }, signal);
  }
  async componentBindings(id: string, signal?: AbortSignal) {

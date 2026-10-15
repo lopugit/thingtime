@@ -99,11 +99,31 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
   await page.getByText('Note command cancelled. Your change remains in History.', { exact: true }).waitFor();
   assert.equal(await page.getByText('Ninth note stays available for review.', { exact: true }).count(), 0);
+  await page.getByRole('tab', { name: 'Versions', exact: true }).click();
+  const namedForm = page.locator('form.history-version-controls').filter({ has: page.locator('input[aria-label="Version name"]:enabled') }).first();
+  await namedForm.getByRole('textbox', { name: 'Version name', exact: true }).fill('Offline checkpoint');
+  await namedForm.getByRole('button', { name: 'Save', exact: true }).click();
+  await namedForm.getByText('Named this version “Offline checkpoint”.', { exact: true }).waitFor();
+  await namedForm.getByRole('textbox', { name: 'Version name', exact: true }).fill('Renamed offline checkpoint');
+  await namedForm.getByRole('button', { name: 'Save', exact: true }).click();
+  await namedForm.getByText('Renamed this version “Renamed offline checkpoint”.', { exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole('button', { name: /Created Thing Offline history page/ }).click();
+  await page.getByRole('tab', { name: 'Versions', exact: true }).click();
+  assert.equal(await namedForm.getByRole('textbox', { name: 'Version name', exact: true }).inputValue(), 'Renamed offline checkpoint');
+  if (artifacts) await page.screenshot({ path: resolve(artifacts, 'named-version-320.png'), fullPage: false, animations: 'disabled' });
+  await namedForm.getByRole('button', { name: 'Clear', exact: true }).click();
+  await namedForm.getByText('Removed the version name.', { exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole('button', { name: /Created Thing Offline history page/ }).click();
+  await page.getByRole('tab', { name: 'Versions', exact: true }).click();
+  assert.equal(await namedForm.getByRole('textbox', { name: 'Version name', exact: true }).inputValue(), '');
+  assert.equal(await namedForm.getByRole('button', { name: 'Clear', exact: true }).count(), 0);
   await page.getByRole('tab', { name: 'Changes', exact: true }).click();
   await page.getByRole('button', { name: 'Preview page', exact: true }).click();
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
   assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, mutations, timelineRequests, failures, bounds }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
   if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); }
   throw error;

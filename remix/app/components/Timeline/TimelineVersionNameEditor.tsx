@@ -10,7 +10,7 @@ import { normalizeVersionName, versionControlState } from './timelineVersionCont
 
 /** The control strip under one Versions-tab row: 📌 name form (Save, Clear
  * when a name exists) and Export. It is a sibling of the row's select button,
- * never nested in it. Names are online only and the server is authoritative:
+ * never nested in it. The selected Timeline authority owns each name:
  * every write sends the revision this editor last saw and a 409 offers Refresh.
  * `drafts` outlives this editor (the mobile sheet unmounts the whole panel on
  * Escape), so a typed name is still there when the row is reopened. */
@@ -26,6 +26,9 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 	const [notice, setNotice] = React.useState(''); const [error, setError] = React.useState<{ message: string; stale: boolean } | null>(null);
 	const input = React.useRef<HTMLInputElement>(null);
 	const alive = React.useRef(true); const working = React.useRef(false);
+	// Keep an uncertain write identity until its exact result is known. A retry
+	// must not append another naming effect after a committed-but-lost reply.
+	const request = React.useRef<TimelineVersionNameCommand | null>(null);
 	React.useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 	// Focus returns after the operation ends: while saving the input is disabled and cannot take focus.
 	const wantFocus = React.useRef(false);
@@ -43,13 +46,14 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 	const unchanged = name === (live?.name ?? '');
 	const change = (next: string) => { setValue(next); if (next === (live?.name ?? '')) drafts.delete(draftKey); else drafts.set(draftKey, next); };
 	const settle = (fresh: TimelineVersionName | null, message: string) => {
-		drafts.delete(draftKey);
+		request.current = null; drafts.delete(draftKey);
 		if (alive.current) { setOverride({ name: fresh }); setValue(fresh?.name ?? ''); setNotice(message); }
 		window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 	};
 	const send = async (next: string | null) => {
 		if (!connection || working.current) return;
-		const command: TimelineVersionNameCommand = { command: 'name-version', operationId: crypto.randomUUID(), eventId: event.id, thingId: event.thingId, name: next, expectedRevision: live?.revision ?? 0 };
+		const command: TimelineVersionNameCommand = request.current?.name === next ? request.current : { command: 'name-version', operationId: crypto.randomUUID(), eventId: event.id, thingId: event.thingId, name: next, expectedRevision: live?.revision ?? 0 };
+		request.current = command;
 		working.current = true; wantFocus.current = true; setSaving(true); setError(null); setNotice('');
 		try {
 			const result = parseTimelineVersionNameResult(await api.v1.timeline.nameVersion(connection.scope, command), connection.scope.ownerId, command);
@@ -58,6 +62,7 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 			connection.names.accept(result.name ? [result.name] : [], { events: [event.id] });
 			settle(result.name, next === null ? 'Removed the version name.' : live ? `Renamed this version “${result.name?.name ?? next}”.` : `Named this version “${result.name?.name ?? next}”.`);
 		} catch (failure: any) {
+			if ([400, 401, 403, 404, 409, 413, 422].includes(failure?.status)) request.current = null;
 			if (alive.current) setError({ message: failure?.error || failure?.message || 'Could not save this version name.', stale: failure?.status === 409 });
 		} finally { working.current = false; if (alive.current) setSaving(false); }
 	};

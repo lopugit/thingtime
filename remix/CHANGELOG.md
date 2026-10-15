@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous saved versions can be named, renamed
+  and cleared offline through the existing Versions tab and a mutation planner
+  shared with account Timeline. Canonical replay/concurrency, native offline UI
+  and real local API regression checks passed. Full local-first rollout remains
+  unmerged; see the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-16 — **Codex (AI)**: Anonymous History owner notes now save/remove
   offline with canonical relational records, atomic limits, safe deletion
   retries and device-only status. Clean-browser reload/refusal/viewport checks

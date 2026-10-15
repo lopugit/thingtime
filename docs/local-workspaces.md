@@ -72,7 +72,7 @@ change this pointer; logout/account changes revoke it.
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
-| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names, branches, restore/merge, historical export, related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. |
+| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Branches, restore/merge, historical export, related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
@@ -809,3 +809,43 @@ lint has zero errors and one constructor warning. Raw TypeScript remains at the
 same 91 diagnostic identities as the preceding checkpoint. These are local
 checks, not CI or deployed verification. Version names, branches and the other
 outstanding rows above remain on the full rollout's merge gate.
+
+
+## Local History version names checkpoint — 2026-10-16
+
+The normal Versions tab can name, rename and clear anonymous saved versions
+without network access. `timeline/versionNameMutation.ts` now holds the shared
+mutation planner and replay semantics used by both the existing server service
+and the browser adapter. Canonical version names remain separate relational
+records; each actual change appends the same immutable effect contract. Local
+`source: api` means the local API authority in the isolated local data plane,
+not an account receipt or permission. Anonymous receipts never sync to accounts.
+
+Commands use identical canonical SHA-256 signatures. Hashing finishes before
+opening the browser transaction. Names, effects, links, ordering and monotonic
+clear/recreate metadata commit together. Concurrent edits require the current
+revision; retries return the original receipt without overwriting a later name.
+No-op names/clears retain the existing server semantics and append no event.
+Name records are batched beside selected History entries and count toward page
+byte limits. The mounted name editor retains an uncertain request identity for
+retry; this is not a durable account name queue or lost-process recovery.
+
+Local verification: 110 workspace/offline-shell and 238 shared Timeline tests
+passed, with five ordinary opt-in skips. The explicitly enabled production
+browser test passed offline name/rename/reload/clear/reload, notes and recorded
+native previews, with zero account Timeline calls, mutation requests or page
+errors. Layout checks cover 1440/390/320px; the in-app Browser separately verified
+naming and all three layouts. Evidence: `tmp/local-version-names-ui/`.
+The real server version integration passed against the disposable loopback
+Mongo replica, including canonical naming, concurrency, replay, undo/export and
+private access. Its previously mismatched retry ID was corrected, and created
+Things now clean up in `finally`. The initial attempt before that cleanup fix
+left two synthetic private Things in a disposable test account; no existing
+account content was changed. The successful rerun cleaned its own Things.
+
+Production client build: 245 verified assets / 21,163,888 bytes. Application lint
+has zero errors and one constructor warning; the `.mts` integration test uses
+an explicit TypeScript ESLint parser. Raw TypeScript has the same 91 diagnostic
+identities as the previous checkpoint. These are local checks, not deployed
+acceptance. Account Timeline offline writes/synchronization and the remaining
+full coverage matrix still block completion and merge.

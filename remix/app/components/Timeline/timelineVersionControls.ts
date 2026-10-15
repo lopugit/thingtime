@@ -4,8 +4,9 @@ import { TIMELINE_UNDO_LABEL } from '../../timeline/publishedVersion';
 import { TIMELINE_VERSION_NAME_MAX_CHARS } from '../../timeline/versionNames';
 
 /** Why a Versions-tab control strip is inert, in the words the row shows.
- * Naming needs a synced saved version with content; export also covers synced
- * deletions (the server resolves their `before` content). Both are online only. */
+ * Naming needs a saved version with content at the verified Timeline authority;
+ * local authority also works offline. Export covers saved deletions when its
+ * adapter can resolve their `before` content. */
 export type VersionControlState = { name: boolean; export: boolean; title: string };
 export function versionControlState(row: Pick<LocalTimelineRow, 'status' | 'event'>, verified: boolean): VersionControlState {
 	const { event } = row;
