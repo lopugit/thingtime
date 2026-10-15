@@ -1,3 +1,4 @@
+import { pruneFunctionImagePlatforms } from './prune-function-platforms.mjs';
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -157,5 +158,6 @@ export async function packageClaudeOAuthArtifacts({ functionsRoot = '.vercel/out
 	} finally {
 		await rm(stage, { recursive: true, force: true });
 	}
+	for (const fn of functions) await pruneFunctionImagePlatforms(fn.path, { platform, arch });
 	return verifyClaudeOAuthArtifacts({ functionsRoot, platform, arch, maxFunctionBytes });
 }

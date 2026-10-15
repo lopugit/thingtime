@@ -1,3 +1,5 @@
+import { resetVaultPassword } from './vaultKeys';
+import { ownerVaultConfigured } from './vaultCipher';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 import {
@@ -9,7 +11,7 @@ import {
 import { hashPassword } from './passwords';
 import { revokedSessionPipeline } from './sessions';
 import { consumeSingleUseToken, createSingleUseToken, type ConsumeTokenResult } from './singleUseTokens';
-import { setUserPasswordHash } from './users';
+import { findUserById, readUserVaultKey, setUserPasswordHash } from './users';
 
 const ONE_HOUR_MS = 1000 * 60 * 60;
 
@@ -47,7 +49,14 @@ export const consumePasswordReset = (token: string): Promise<ConsumePasswordRese
 // so the caller must not report success.
 export const applyPasswordReset = async (userId: string, password: string): Promise<boolean> => {
   const now = new Date();
-  const rotated = await setUserPasswordHash(userId, await hashPassword(password));
+  if (!await findUserById(userId)) return false;
+  if (!ownerVaultConfigured() && await readUserVaultKey(userId)) {
+    throw new Error('Restore the configured vault recovery key before resetting this password.');
+  }
+  const hash = await hashPassword(password);
+  const rotated = ownerVaultConfigured()
+    ? await resetVaultPassword(userId, password, hash).then(() => true)
+    : await setUserPasswordHash(userId, hash);
   if (!rotated) return false;
   await Promise.all([
     // Revoke live sessions (stolen cookies/bearer tokens stop working). This is

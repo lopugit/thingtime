@@ -11,6 +11,8 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'passwords.read': { limit: 120, windowMs: 60_000, enabled: true },
+  'passwords.write': { limit: 240, windowMs: 60_000, enabled: true },
   'drafts.read': { limit: 180, windowMs: 60_000, enabled: true },
   'drafts.write': { limit: 240, windowMs: 60_000, enabled: true },
   'invites.create': { limit: 20, windowMs: 3_600_000, enabled: true },
