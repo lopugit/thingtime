@@ -289,6 +289,16 @@ recovery and the original ID. Existing component-copy, quota and receipt paths
 remain shared. Run `test:timeline:recovery`; see the acceptance boundaries in
 [Unified Timeline](../unified-timeline.md#deleted-thing-recovery--2026-09-30).
 
+## Anonymous draft preview
+
+`app/draftPreview/` hosts the canonical schema/transfer/resolver and native
+HTML/page renderers without an account runtime or storage. The static entry is
+`/draft-preview/index.html`, linked from Builder. `MCP/src/renderExport.ts` and
+`renderWorker.ts` expose bounded offline PNG/JSON artifacts through existing
+stdio MCP. See [connection, security scope and acceptance](../no-login-draft-preview.md).
+`test:draft`, the opt-in MCP browser tests and `draft-roundtrip.integration.mts`
+cover this boundary; existing account drafts and import permissions are unchanged.
+
 
 ## Password manager
 

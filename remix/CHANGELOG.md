@@ -73,6 +73,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   device-only accessibility. Missing signing-group configuration fails closed.
   See [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
+- 2026-10-15 — **Codex (AI)**: Add isolated no-login native draft previews and the stdio MCP `thingtime_render_and_export` tool, reusing canonical transfers, schema validation and native renderers. Return bounded JSON/PNG artifacts with diagnostics, rejecting transparent CSS Color 4 text and zero-size fonts; keep Actions, account data, assets and publishing unavailable. Local clean-browser and disposable importer verification: [PR #998 evidence](../PRs/998-codex-anonymous-render-export--no-login-native-draft-rendering.md).
+
 - 2026-10-15 — **Codex (AI)**: Deliver the web password vault separately from native Apple provisioning; reject internal Action principals at the vault boundary even with a bearer header. [Web release #997](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md); native providers remain in #996.
 
 - 2026-10-15 — **Codex (AI)**: Password-manager preview QA confirms encrypted HTTPS/native persistence and responsive layout; cancel pending QR scans on editor closure and refresh native credential catalogs after edits. Native identity updates are ordered through logout; iOS background sync preserves active connections for the same owner. Native signing remains gated by the Apple agreement/profiles. [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).

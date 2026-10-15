@@ -89,3 +89,9 @@ mesh section of `TESTING.md` includes the installed-app acceptance checklist.
 
 See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
 private draft API, editor recovery, account isolation and independent media copies.
+
+`build:draft` builds the isolated native renderer into `dist/draft-preview`;
+normal client builds and PM2 development include it. The generated policy is
+shared by Vite/Vercel headers and the offline MCP capture process. See
+[no-login draft setup](../no-login-draft-preview.md); its QA uses a uniquely
+named canonical PM2 app on ports 22460–22462 and a new disposable replica.

@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
-import { platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
+import { draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
@@ -358,6 +358,11 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 console.log(
 	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, Thingtime embed bundle and popup bridge, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
 );
+
+const draftHeaders = routes.find(route => route.src === '^/draft-preview(?:/.*)?$' && route.headers?.['Content-Security-Policy'] === draftPreviewCsp);
+if (!draftHeaders || draftHeaders.headers['Cache-Control'] !== 'no-store' || getDirectiveSources(draftPreviewCsp, 'sandbox').join(' ') !== 'allow-scripts allow-downloads' || getDirectiveSources(draftPreviewCsp, 'connect-src').join(' ') !== "'none'") throw new Error('Draft preview must retain opaque-origin offline containment.');
+for (const file of ['index.html', 'runner.js', 'policy.json']) if (!existsSync(`.vercel/output/static/draft-preview/${file}`)) throw new Error(`Missing draft preview asset: ${file}`);
+if (readJson('.vercel/output/static/draft-preview/policy.json').contentSecurityPolicy !== draftPreviewCsp) throw new Error('Draft policy differs from packaged headers.');
 
 const libraryHeaders = routes.find(route => route.src === '^/library/sandbox\\.html$' && route.headers?.['Content-Security-Policy'] === librarySandboxCsp);
 if (!libraryHeaders || routes.indexOf(libraryHeaders) < cspHeadersIndex || routes.indexOf(libraryHeaders) > spaIndex || !libraryHeaders.continue) throw new Error('Isolated library CSP must override only its document before filesystem routing.');
