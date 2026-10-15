@@ -214,3 +214,25 @@ through the isolated normal importer with fresh IDs and identical bytes. The
 validator receives verified attachment context; imported comment files retain
 comment purpose. Evidence: `tmp/local-composer-ui/browser-image-post.zip`,
 `browser-image-post.json` and `roundtrip-verification.json`.
+
+
+## Anonymous native interactions checkpoint — 2026-10-16
+
+Native emoji reactions, Saved and polls now work on local content through scoped
+relational child Things and shared validators/tallies. Up/down votes use the same
+adapter. Generic writes/imports cannot forge these managed slots; content export
+omits them and deleting the target cascades them. Saved is in the logged-out
+navigation, uses full workspace cache keys and retires old-scope reads. Account
+and remote-post authority remain unchanged; account interaction sync is pending.
+
+Local no-session/offline browser verified poll creation, cast/change/removal,
+reaction addition/removal, bookmarking, Saved navigation, cold reload, unsave and
+fixture deletion. 1440/390/320px layouts have no horizontal overflow. The complete
+recorded interaction interval had no mutation requests (background public-read
+attempts remained). Screenshots and metadata: `tmp/local-interactions-ui/`.
+
+Validation: 73 workspace/offline, 78 feed, 56 hooks, 17 navigation and 315 Things
+checks pass (539 total). Targeted lint has no errors and six warnings. Client build
+passes with 231 verified assets / 11,053,377 bytes. Raw tsc matches the existing
+91-diagnostic baseline exactly, with no added signatures. This is local evidence,
+not a deployed/full-suite completion claim. The coverage matrix still gates merge.

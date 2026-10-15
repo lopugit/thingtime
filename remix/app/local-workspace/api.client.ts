@@ -1,4 +1,5 @@
-import { localPostInput, localPostProjection } from './posts';
+import { LocalInteractions, localSavedPage } from './interactions';
+import { localPostInput, localPostProjection, localTargetIndex } from './posts';
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
 import { publicWorkspaceRead } from './publicRead.client';
 import { draftRequest } from '../drafts/draftClient';
@@ -28,6 +29,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		return changed({ ok: true, id: row.id, thing: { ...project(row), ...(projection ? { attachments: projection.attachments } : {}) }, ...(projection ? { post: projection } : {}) });
 	};
 	const local = blocked(remote);
+	const interact = (kind: Parameters<LocalInteractions['toggle']>[0], id: unknown, value?: unknown) => new LocalInteractions(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, lease).toggle(kind, id, value).then(changed);
 	const algorithms = () => { lease.assertCurrent(); return new LocalAlgorithms(anonymousWorkspaceDatabase(), lease); };
 	// Public discovery and explicit authentication remain available online.
 	local.auth = remote.auth;
@@ -53,6 +55,14 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	local.profile = { ...local.profile, get: profileRead('profile', '1.1.0'), activity: profileRead('activity'), search: profileRead('search') };
 	local.drafts = (input?: Record<string, unknown>, query?: Record<string, string>) => { lease.assertCurrent(); return draftRequest(LOCAL_WORKSPACE_OWNER, input, query); };
 	local.things = { ...local.things,
+		react: ({ id, emoji }: { id: string; emoji?: unknown }) => interact('reaction', id, emoji ?? null),
+		save: ({ id }: { id: string }) => interact('save', id),
+		vote: ({ id, optionIndex }: { id: string; optionIndex: number }) => interact('vote', id, optionIndex),
+		updown: ({ id, direction }: { id: string; direction: unknown }) => interact('updown', id, direction),
+		saved: async ({ cursor, limit = 30 }: { cursor?: string; limit?: number } = {}) => {
+			const all = await service().snapshot(), page = localSavedPage(all, cursor, limit), index = localTargetIndex(all);
+			return { ok: true, posts: page.things.map(row => localPostProjection(row, all, LOCAL_WORKSPACE_OWNER, false, index)), nextCursor: page.nextCursor };
+		},
 		feed: async (args: Record<string, unknown> = {}) => {
 			lease.assertCurrent(); const localAlgorithm = typeof args.algorithm === 'string' && args.algorithm.startsWith('local-') ? args.algorithm : null;
 			const query = new URLSearchParams(Object.entries({ ...args, ...(localAlgorithm ? { algorithm: 'latest' } : {}), anon: 1 }).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));

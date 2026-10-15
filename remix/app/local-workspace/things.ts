@@ -1,3 +1,4 @@
+import { isLocalInteraction } from './interactions';
 import { attachmentCountLimit } from '../schemas/attachmentLimits';
 import type { StoredDraft } from './drafts';
 import { compositionAttachmentIds } from '../api/utils/actions/compositionMediaCore';
@@ -43,7 +44,7 @@ const validated = (input: ThingWrite, postAttachments?: { hasAny: boolean; hasVi
 	const result = validateThingtimeCrystal(input.thingtime, crystal, { postAttachments });
 	if (result.ok === false) return fail('INVALID_THING', result.error, result.status);
 	if (result.requiresTarget && !input.targetId) return fail('INVALID_TARGET', 'This kind requires a target Thing');
-	if (isProtectedThingtime(result.thingtime)) return fail('MANAGED_KIND', 'This kind uses its dedicated workspace operation', 403);
+	if (isProtectedThingtime(result.thingtime) || isLocalInteraction({ thingtime: result.thingtime })) return fail('MANAGED_KIND', 'This kind uses its dedicated workspace operation', 403);
 	const extended = input.extended === undefined ? undefined : sanitizeExtended(snapshotTransferValue(input.extended));
 	if (extended?.ok === false) return fail('INVALID_THING', extended.error, extended.status);
 	const tags = sanitizeTags(input.tags);
@@ -196,7 +197,7 @@ export class LocalThings {
 		const kinds = typeof query.thingtime === 'string' ? query.thingtime.split(',') : query.thingtime || [];
 		return this.transaction('readonly', async tx => {
 			let rows = (await tx.list<LocalThing>('things')).map(({ value }) => value)
-				.filter(row => (!isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!query.target && row.targetId === query.target))) && kinds.every(kind => row.thingtime.includes(kind)) &&
+				.filter(row => !isLocalInteraction(row) && (!isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!query.target && row.targetId === query.target))) && kinds.every(kind => row.thingtime.includes(kind)) &&
 					(!query.folder || (query.folder === 'root' ? !row.folderId : row.folderId === query.folder)) &&
 					(!query.target || row.targetId === query.target))
 				.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
@@ -232,7 +233,7 @@ export class LocalThings {
 			while (changed) {
 				changed = false;
 				for (const { value: row } of all) if (!selected.has(row.id) && ((row.folderId && selected.has(row.folderId)) || (row.targetId && selected.has(row.targetId)))) {
-					if (!recursive && !((isLocalAttachment(row) || row.thingtime.includes('comment')) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
+					if (!recursive && !((isLocalAttachment(row) || isLocalInteraction(row) || row.thingtime.includes('comment')) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
 					selected.add(row.id); changed = true;
 				}
 			}
@@ -247,6 +248,7 @@ export class LocalThings {
 			for (const id of ids) {
 				const previous = await tx.get<LocalThing>('things', id);
 				if (!previous) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
+				if (isLocalInteraction(previous)) fail('MANAGED_KIND', 'Interactions cannot be filed or moved');
 				const row = { ...previous, revision: previous.revision + 1, updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString() };
 				if (folderId) row.folderId = folderId; else delete row.folderId;
 				await this.placement(tx, row); await tx.put('things', id, row); rows.push(row);
@@ -257,11 +259,12 @@ export class LocalThings {
 	async export(ids: string[], options: CollectTransferOptions = {}) {
 		// Take one consistent snapshot, then collect outside the IDB transaction.
 		const saved = await this.snapshot();
+		if (saved.some(row => ids.includes(row.id) && isLocalInteraction(row))) fail('MANAGED_KIND', 'Export the content Thing; local interaction state is not portable account authority');
 		const attachments = saved.filter(isLocalAttachment);
 		const mediaCopies = new Map(attachments.map(row => [row.id, localAttachmentFileId(row.id)]));
 		const readBytes = (id: string) => this.transaction('readonly', tx => tx.getBytes(id));
 		const lease = this.lease;
-		const docs = new Map([...this.builtins.map(doc => [doc.id, content(doc)] as const), ...saved.map(value => [value.id, content(value)] as const)]);
+		const docs = new Map([...this.builtins.map(doc => [doc.id, content(doc)] as const), ...saved.filter(row => !isLocalInteraction(row)).map(value => [value.id, content(value)] as const)]);
 		const timestamps = new Map(saved.map(row => [row.id, row.updatedAt]));
 		const builtinIds = new Set(this.builtins.map(row => row.id));
 		const componentCandidates = [...docs.values()].filter(row => row.thingtime.includes('component'))

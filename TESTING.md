@@ -7075,24 +7075,38 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       library 🔖", and the state survives a reload (`viewerSaved` rides the
       same batched projection as `viewerReactions` — one query per page, no
       N+1). Tapping again unfills instantly and toasts the removal; a failed
-      toggle reverts the icon and toasts the error. Logged OUT, no bookmark
-      button renders anywhere and `PublicPost` carries no `viewerSaved` field.
+      toggle reverts the icon and toasts the error. Logged OUT, remote posts have no bookmark
+      button or account `viewerSaved` field. Device-local posts retain the local
+      bookmark control without granting remote authority.
 - [ ] `/saved` lists the viewer's saved posts newest-SAVED-first (save time,
       not post time) as real PostCards — reactions, comments, polls, and the
       bookmark itself work in place; unsaving a card removes it from the list
       optimistically (a failed unsave restores it in place). Pagination loads
       ~30 per page via `nextCursor`. Optimistic first paint from the
-      per-viewer `tt-saved-<viewerId>` localStorage cache (no skeleton flash
+      workspace-scoped `tt-saved-<scope>` localStorage cache (no skeleton flash
       on revisit; skeleton only on a true cold start), and logout sweeps the
       `tt-saved-` prefix so another account on the same browser never sees a
       cached library.
 - [ ] Libraries are independent per user: two accounts saving different posts
       each see only their own on `/saved`, and `GET /api/v1/things/saved`
-      401s logged out (`/saved` shows the quiet log-in state instead). A
+      401s logged out (`/saved` uses only the device workspace instead). A
       saved post that is later DELETED (or its audience narrowed away from
       the viewer) silently disappears from `/saved` — fail closed, no error
-      rows. The drawer's Feed section shows "Saved 🔖" (auth-only) linking to
+      rows. The drawer's Feed section shows "Saved 🔖" (including logged-out local workspaces) linking to
       `/saved`.
+
+- [ ] Anonymous/offline native poll: create through the normal composer, react,
+      save, change/remove the vote, reload and visit Saved from the drawer.
+      All state survives without an account or mutation request; unsave disappears
+      after reload. Deleting the post removes its saved reference and activity.
+      Check 1440, 390 and 320px widths; no horizontal overflow. Remote-post
+      interactions remain authenticated. Account/data-plane changes must not show
+      the previous workspace's cached Saved entries or apply late responses.
+- [ ] Device interaction adapter: enforce normal emoji/poll/up-down validation,
+      reaction limits, scoped target lookup, serialized cross-tab toggles and
+      quota rollback. Generic writes/imports cannot mint activity slots; content
+      exports omit activity, and target deletion cleans it up. Run
+      `npm --prefix remix run test:local-workspace`.
 
 ## Public posts Atom feed (`remix/app/api/utils/things/rss.ts`, `GET /api/v1/things/rss`)
 

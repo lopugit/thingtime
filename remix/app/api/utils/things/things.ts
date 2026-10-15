@@ -48,7 +48,7 @@ import {
 } from '../moderation/analyzeText';
 import { hasModeratedContent, moderatedContentOf } from '../moderation/textModeration';
 import { attachmentIsBlocked, attachmentModerationStatus } from '../moderation/moderationCore';
-import { sanitizeReactionToken } from '~/utils/reactionTokens';
+import { sanitizeReactionToken, MAX_REACTION_KEYS_PER_POST, MAX_REACTIONS_PER_USER_PER_POST } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
   ACL_ALL,
@@ -731,8 +731,6 @@ const MAX_COMMENTS_PER_POST = 500;
 // Reactions are open-vocabulary (any emoji / multi-emoji token), so bound them:
 // a post holds at most this many DISTINCT tokens, and one user contributes at
 // most this many reaction things per post.
-const MAX_REACTION_KEYS_PER_POST = 100;
-const MAX_REACTIONS_PER_USER_PER_POST = 20;
 // Keep content + ledger delete transactions comfortably below MongoDB's
 // transaction duration/operation ceilings. Callers may hand us 500+ rows
 // (notably app-data cleanup and relationship cascades), so each bounded batch

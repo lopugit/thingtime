@@ -74,7 +74,7 @@ change this pointer; logout/account changes revoke it.
 | Actions and app suites | Reuse existing bounded executors and suite definitions. Local data/pure/browser operations still need local host integration; remote services must remain explicitly remote. |
 | Timeline | Reuse existing records, history UI, drafts, branches, notes, version names, restore and merge. Local authority/transport integration remains outstanding. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
-| Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, reactions, polls, linked Things and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
+| Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
@@ -389,3 +389,33 @@ through the isolated normal importer with fresh IDs and identical bytes. The
 validator receives verified attachment context; imported comment files retain
 comment purpose. Evidence: `tmp/local-composer-ui/browser-image-post.zip`,
 `browser-image-post.json` and `roundtrip-verification.json`.
+
+## Anonymous interactions checkpoint — 2026-10-16
+
+`LocalInteractions` uses the normal emoji validator and poll/up-down contracts.
+Each reaction, bookmark and vote is a separate scoped child Thing. Generic
+CRUD/import cannot mint the managed slots, content export omits local activity,
+and deleting content cascades its interaction children. Limits and replacements
+share the same atomic transaction/quota boundary as other local Things. Account
+interactions still use authenticated endpoints; this does not implement their
+future local-first sync adapter or let anonymous users mutate remote posts.
+
+The existing Saved page is available from the logged-out drawer. Its synchronous
+cache is keyed by anonymous/account origin, owner and data plane; changing the
+scope remounts its state and retires in-flight reads. Native PostCards keep their
+optimistic interaction behavior. One target index serves the whole saved page.
+
+Local production-build browser acceptance with no account and networking disabled
+covered native poll creation, vote changes/removal, emoji addition/removal,
+bookmarking, Saved navigation, reload and unsaving. Deleting the disposable post
+removed it from Saved. 1440×1000, 390×844 and 320×844 measurements show no document
+horizontal overflow. Evidence: `tmp/local-interactions-ui/verification.json` and
+`saved-{1440,390,320}.jpg`. The recorded interaction interval contains no mutation
+requests; offline public-marketing GET attempts are separate background reads.
+The fixture was removed and temporary browser overrides restored.
+
+Up/down semantics, reaction limits, invalid inputs, cursor behavior, account/
+remote-ID refusal, cross-tab transactions, rollback and portable-export exclusion
+are covered by `interactions.test.ts`; `api.client.test.ts` proves the facade
+uses no remote calls and rejects retired callers. Signed-in sync and the full
+matrix remain required before merge. CI/deployment evidence is separate.

@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Native local reactions, Saved and poll voting now
+  work offline through scoped relational Things and shared validators. Saved is
+  discoverable without login and caches are separated by workspace. Local browser
+  desktop/phone checks pass; account sync and full-suite completion remain gated.
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Continue anonymous local-workspace rollout with
   native composer file/post saves, relational comments/replies and independent
   draft/template media copies. Posting does not wait for draft saving. Fixed

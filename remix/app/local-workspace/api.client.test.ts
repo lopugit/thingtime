@@ -14,7 +14,7 @@ test('anonymous API writes and exports use no network and a retired facade canno
 	const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote call'); };
 	bindLocalWorkspace(true, rootIdentity.read().generation);
 	try {
-		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
+		const api = anonymousApi({ login: remote, auth: { login: remote }, things: { create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
 		const created = await api.things.create({ thingtime: ['data'], crystal: { name: 'Offline' } });
 		assert.equal((await api.things.get({ id: created.id })).thing.crystal.name, 'Offline');
 		assert.equal((await api.things.export({ ids: [created.id] })).plan.things.length, 1);
@@ -60,8 +60,21 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		assert.equal(fileCopy.succeeded, 1); assert.equal(fileCopy.results[0].newId, fileCopy.roots[0]);
 		assert.deepEqual([...((await bundleFromPlan((await api.things.export({ ids: fileCopy.roots })).plan, { fetch: remote })).files.values())][0], fileBytes);
 		assert.equal(remoteCalls, 0);
+		const poll = await api.things.create({ thingtime: ['post'], crystal: { type: 'thingtime', thing: { question: 'Offline API poll', options: ['Gold', 'Peach'] } } });
+		await api.things.react({ id: poll.id, emoji: '🥰' });
+		await api.things.save({ id: poll.id });
+		await api.things.vote({ id: poll.id, optionIndex: 1 });
+		await api.things.updown({ id: poll.id, direction: 'up' });
+		const saved = await api.things.saved();
+		assert.equal(saved.posts[0].id, poll.id); assert.equal(saved.posts[0].viewerSaved, true);
+		assert.equal(saved.posts[0].reactionCounts['🥰'], 1); assert.equal(saved.posts[0].pollVotes.viewerVote, 1);
+		assert.equal((await api.things.get({ id: poll.id })).post.votes.score, 1);
+		await assert.rejects(api.things.save({ id: 'private-remote-id' }), /device workspace/);
+		assert.equal(remoteCalls, 0);
 		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
 		await assert.rejects(api.things.create({ crystal: { name: 'Late callback' } }), /Workspace changed/);
+		await assert.rejects(api.things.save({ id: poll.id }), /Workspace changed/);
+		await assert.rejects(api.things.saved(), /Workspace changed/);
 		await assert.rejects(filePlan.readLocalFile(filePlan.files[0].id), /Workspace changed/);
 		assert.equal(remoteCalls, 0);
 	} finally {

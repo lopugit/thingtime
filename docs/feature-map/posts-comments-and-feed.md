@@ -94,5 +94,9 @@ composer inputs, bind local attachments atomically and project native PostCards.
 Feed creation navigates to the local permalink without injecting it into public
 feed results. Local identity and audience never grant server access. Run
 `test:local-workspace`, `test:feed`, `test:drafts` and `test:hooks`; verify cold
-reload of images and relational comments with the network disabled. Local saves,
-reactions, polls and full account sync are still tracked in the coverage matrix.
+reload of images and relational comments with the network disabled. `local-workspace/interactions.ts` supplies scoped relational saves, reactions,
+polls and up/down votes through the same facade, validators and tally helpers.
+The normal Saved page is discoverable without login and isolates caches by full
+workspace scope. Content export excludes these managed activity rows; deletion
+cascades them. Account interaction sync and full acceptance remain tracked in the
+coverage matrix.
