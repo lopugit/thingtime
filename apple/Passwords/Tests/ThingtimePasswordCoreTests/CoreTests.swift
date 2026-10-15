@@ -2,6 +2,27 @@ import XCTest
 import CryptoKit
 @testable import ThingtimePasswordCore
 final class CoreTests: XCTestCase {
+    @MainActor func testLogoutClearsAfterPendingIdentitySync() async throws {
+        let operations = PasswordIdentityOperations()
+        var calls: [String] = []
+        var release: CheckedContinuation<Void, Never>?
+        let sync = operations.submit {
+            calls.append("sync-start")
+            await withCheckedContinuation { release = $0 }
+            calls.append("sync-finish")
+        }
+        while release == nil { await Task.yield() }
+        let clear = operations.submit { calls.append("clear") }
+        await Task.yield()
+        XCTAssertEqual(calls, ["sync-start"])
+        release?.resume()
+        try await sync.value; try await clear.value
+        XCTAssertEqual(calls, ["sync-start", "sync-finish", "clear"])
+        let failure = operations.submit { throw PasswordProviderError.unavailable }
+        let next = operations.submit { calls.append("after-failure") }
+        _ = try? await failure.value; try await next.value
+        XCTAssertEqual(calls.last, "after-failure")
+    }
     func testTOTPVectorsAndHandoffRejection() throws {
         for (time, code) in [(59.0,"94287082"),(1111111109,"07081804"),(1111111111,"14050471"),(1234567890,"89005924"),(2000000000,"69279037"),(20000000000,"65353130")] {
             XCTAssertEqual(try TOTP.code("otpauth://totp/Test?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8", at: Date(timeIntervalSince1970: time)), code)

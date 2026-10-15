@@ -9902,3 +9902,5 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   the function size limit even when local dependencies include other platforms.
 
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
+
+- Native Password AutoFill: while connecting, focus the app to trigger background sync; the connection must finish. Switching accounts/logout cancels it, settles the request, and queues identity removal after any outstanding catalog update.

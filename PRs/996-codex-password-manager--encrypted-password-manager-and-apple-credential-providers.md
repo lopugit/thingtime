@@ -27,7 +27,7 @@ large backups split into individually restorable parts.
   pagination, catalog/export, deletion isolation, password recovery and logout.
 - Browser: CRUD/reordered custom fields, QR upload with live TOTP, Chrome/Apple
   CSV and 1PUX imports; downloaded 1PUX restores all four synthetic entries.
-- Shared Swift tests: 5 pass, including a real HTTPS preview client test that
+- Shared Swift tests: 6 pass, including a real HTTPS preview client test that
   saves a native passkey, reads its encrypted fields back and refreshes catalog. Independent `@simplewebauthn/server` verification
   accepts native ES256 registration/assertion and rejects a wrong RP.
 - Full iOS/Watch simulator and macOS provider builds pass. iOS simulator bundle
@@ -53,8 +53,8 @@ large backups split into individually restorable parts.
   latest Apple Developer Program License Agreement. No signed provider install,
   system-provider registration or live password/OTP/passkey ceremony claimed.
 - HTTPS preview is verified at https://pr-996.previews.dev.thingtime.com
-  (`8975762b`): configured encryption, synthetic account save/read/catalog and
-  Swift native passkey persistence pass. Latest UI fixes need redeployment.
+  (`196a9884f`): configured encryption, synthetic account save/read/catalog and
+  Swift native passkey persistence pass. Responsive/capture fixes are deployed.
 - 390px/1280px rendered QA passes after fixing fixed-nav clearance and centered
   width; controls do not overflow. A controlled browser canvas/video capture passes
   real TOTP QR decoding, blank-frame error cleanup, and cancellation/late-stream
@@ -65,6 +65,12 @@ large backups split into individually restorable parts.
   video playback/frame waits time out together. Three regression tests pass.
 - Native catalog sync refreshes after save/import/delete; the macOS companion
   opens the installed desktop app by bundle ID. The final macOS rebuild passes.
+- Native identity writes now run in order, including logout after an outstanding
+  catalog sync. A regression test also verifies the queue continues after failure.
+  Background iOS sync does not interrupt an in-progress connection for the same
+  owner; account changes cancel it and replaced requests settle promptly.
+  Updated iOS/Watch and macOS builds, six Swift tests, HTTPS persistence and
+  independent WebAuthn verification pass.
 - Merge and production deployment verification remain pending.
 
 The separate third-party OAuth implementation remains in PR #992. Real user
