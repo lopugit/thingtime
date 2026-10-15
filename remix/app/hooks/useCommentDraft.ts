@@ -17,7 +17,7 @@ export const useCommentDraft = (userId: string | null | undefined, targetId: str
       if (typeof restored.text === 'string') { setState({ scope, value: restored.text }); setRestored(true); }
     }
   });
-  const { capture, current, clear: clearDraft } = draft;
+  const { capture, current, retire: retireDraft } = draft;
   const setValue = React.useCallback((next: string) => {
     setState({ scope, value: next });
     capture({ name: (next || 'Comment draft').slice(0, 160), surface: 'comment', context: `comment:plain:${targetId}`,
@@ -34,9 +34,9 @@ export const useCommentDraft = (userId: string | null | undefined, targetId: str
   const clear = React.useCallback(async (submitted?: string) => {
     if (submitted !== undefined && live.current.value.trim() !== submitted) return;
     setState({ scope, value: '' });
-    await clearDraft().catch(() => {});
+    void retireDraft().catch(() => {});
     if (userId) void localforage.removeItem(`tt-draft:${userId}:${targetId}`);
-  }, [scope, userId, targetId, clearDraft]);
+  }, [scope, userId, targetId, retireDraft]);
   return { value, setValue, clear, hydrated: restored, flush: draft.flush,
     begin: () => { if (pending.current) return false; pending.current = true; return true; },
     end: () => { pending.current = false; }

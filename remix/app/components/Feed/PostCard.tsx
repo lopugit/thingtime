@@ -1151,7 +1151,7 @@ const CommentRow = (props: {
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
 
     try {
-      await flushReplyDraft();
+      void flushReplyDraft().catch(() => {});
       const resp = await api.v1.things.comment({ id: comment.id, text });
       await clearReplyDraft(text);
       freshReplies.swap(pendingReply.id, resp.comment.id);
@@ -2041,7 +2041,7 @@ function PostCardImpl(props: PostCardProps) {
     onEngagement?.({ thingId: post.id, signal: 'comment' });
 
     try {
-      await flushCommentDraft();
+      void flushCommentDraft().catch(() => {});
       const resp = await api.v1.things.comment({ id: post.id, text });
       await clearCommentDraft(text);
       freshComments.swap(pendingComment.id, resp.comment.id);
