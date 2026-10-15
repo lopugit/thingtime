@@ -484,12 +484,17 @@ const ThingsLibraryPage = () => {
       setSearching(false);
     };
     try {
+      // A signed-in account without a resolved data plane gets the plain remote
+      // facade, which has no owner to pin — keep sending the account scope so
+      // the library never widens into other authors' public Things. Local-only
+      // and offline workspaces are already single-owner and refuse the filter.
       const result = await apiRef.current.v1.things.search({ q: query, workspace: true,
+        author: user.localOnly || user.offline ? undefined : user.username,
         thingtime: kindFilter === 'all' ? undefined : kindFilter, limit: PAGE_SIZE, cursor },
         { signal: controller.signal, onRefresh: (resp: any) => { refreshed = true; accept(resp); }, onError: (error: unknown) => { refreshFailed = true; failed(error); } });
       if (!refreshed) accept(refreshFailed ? { ...result, refreshing: false } : result);
     } catch (error) { failed(error); }
-  }, [q, kindFilter, user?.id, user?.username, user?.offline]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, kindFilter, user?.id, user?.username, user?.offline, user?.localOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!q.trim() || !user?.id) {

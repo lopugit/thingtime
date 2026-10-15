@@ -86,6 +86,11 @@ test('account library search paints local content first, refreshes only its owne
   const third = await api.things.search({ workspace: true, q: 'Pending batch', limit: 1, cursor: second.nextCursor });
   assert.equal(new Set([...first.things, ...second.things, ...third.things].map((row: any) => row.id)).size, 3);
   assert.equal(third.nextCursor, null); assert.equal(batchReads, 1, 'pending-only continuation needs no remote page');
+  // The library sends its account scope so a plain-remote facade (signed in, no
+  // resolved data plane) stays owner-scoped. This adapter accepts that argument
+  // but must never let it widen or redirect the workspace's own remote read.
+  await api.things.search({ workspace: true, q: 'Pending batch', author: 'mallory', limit: 1 });
+  assert.equal(remoteQuery.author, 'alice'); assert.equal(remoteQuery.workspace, undefined);
   await assert.rejects(api.things.search({ workspace: true, q: 'Other query', cursor: first.nextCursor }), /scope or filters/);
   const remoteFirst = api.things.search({ workspace: true, q: 'card', limit: 1 });
   while (remoteQuery.q !== 'card') await new Promise(resolve => setTimeout(resolve, 0));
