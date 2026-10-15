@@ -75,7 +75,10 @@ large backups split into individually restorable parts.
   owner; account changes cancel it and replaced requests settle promptly.
   Updated iOS/Watch and macOS builds, six Swift tests, HTTPS persistence and
   independent WebAuthn verification pass.
-- Merge and production deployment verification remain pending.
+- Web prerequisite #997 is merged at `998bdb83c` and production-verified at
+  https://thingtime.com/passwords: synthetic two-account encrypted round trips,
+  catalog privacy and isolated deletion pass; test entries were removed.
+  Native merge, signed release and device ceremonies remain pending.
 
 The separate third-party OAuth implementation remains in PR #992. Real user
 credentials should be added only after the password manager is delivered and
