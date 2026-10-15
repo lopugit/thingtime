@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { verifyRegistrationResponse, verifyAuthenticationResponse } from '@simplewebauthn/server';
+if (!process.argv[2]) throw new Error('Pass the public fixture exported by the Swift interoperability test.');
+const fixture = JSON.parse(await readFile(process.argv[2], 'utf8'));
+const registration = await verifyRegistrationResponse({ response: fixture.registration, expectedChallenge: fixture.challenge, expectedOrigin: fixture.origin, expectedRPID: fixture.rp, requireUserVerification: true });
+assert.equal(registration.verified, true);
+assert.equal(registration.registrationInfo.credentialDeviceType, 'multiDevice');
+assert.equal(registration.registrationInfo.credentialBackedUp, true);
+const authentication = await verifyAuthenticationResponse({ response: fixture.authentication, expectedChallenge: fixture.challenge, expectedOrigin: fixture.origin, expectedRPID: fixture.rp, credential: registration.registrationInfo.credential, requireUserVerification: true });
+assert.equal(authentication.verified, true);
+await assert.rejects(verifyAuthenticationResponse({ response: fixture.authentication, expectedChallenge: fixture.challenge, expectedOrigin: fixture.origin, expectedRPID: 'attacker.test', credential: registration.registrationInfo.credential, requireUserVerification: true }));
+console.log('Native ES256 registration and authentication verified by the independent WebAuthn server; wrong RP rejected.');

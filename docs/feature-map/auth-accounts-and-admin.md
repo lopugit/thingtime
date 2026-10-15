@@ -72,3 +72,17 @@ private draft API, editor recovery, account isolation and independent media copi
 ## Lopu prompt settings
 
 `GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `settings/lopuPromptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` bounds inputs and composes enabled preferences. Revision comparisons reject stale writes. `LopuPromptSettings.tsx` serves Settings → Lopu and Settings → Admin; account-keyed mounting and private in-memory caching prevent cross-account drafts. Prompt text never grants server tool authority. Routes, concurrent save conflicts, disabled entries and private response handling are covered by `test:lopu` and `test:settings`.
+
+
+## Password manager
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.0.0 is a
+private, session-bound home-plane API over protected `password-manager-entry`
+Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
+fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
+`vaultKeys.ts` own password/session/recovery key wrapping. `passwords/client.ts`
+intentionally bypasses general request diagnostics and automatic origin fallback
+so decrypted fields never enter shared client history/cache. The reusable
+`Thingtime` fields mod renders the entry without global Thing persistence.
+Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
+`iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.

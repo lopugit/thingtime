@@ -42,7 +42,7 @@ import {
 	sanitizeAttachmentPublicMetadata
 } from '../api/utils/attachments/attachmentCore.ts';
 
-export type ThingtimeFieldType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
+export type ThingtimeFieldType = 'array' | 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
 
 export type ThingtimeSchemaField = {
   name: string;
@@ -4200,6 +4200,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'password-manager-entry',
   'draft',
   TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_NOTE_KIND, TIMELINE_VERSION_NAME_KIND,
   'post-discovery',
@@ -4402,6 +4403,19 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+  { id: 'password-manager-entry', version: 1, kind: 'crystal', collection: null, title: 'Password manager entry',
+    summary: 'An encrypted, private credential with ordered custom fields.',
+    detail: 'Created only through the password manager API. The title, password type, ordered fields and field types form an extensible document; field values are encrypted together with the account vault key. Generic Thing CRUD, search, sharing and history cannot disclose the entry. The Thing fields mod supplies the editor.',
+    createdVia: '/api/v1/passwords', fields: [
+      { name: 'title', type: 'string', required: true, description: 'Entry title.' },
+      { name: 'passwordType', type: 'enum', required: true, values: ['login', 'password', 'api-key', 'secure-note', 'passkey-reference', 'passkey'], description: 'Credential category. Native passkeys hold encrypted signing material.' },
+      { name: 'fields', type: 'array', required: true, max: 64, children: [
+        { name: 'id', type: 'string', required: true, max: 80, description: 'Stable field id.' },
+        { name: 'label', type: 'string', required: true, max: 120, description: 'Field label.' },
+        { name: 'type', type: 'enum', required: true, values: ['text', 'password', 'url', 'email', 'notes', 'totp'], description: 'Field editor.' },
+        { name: 'value', type: 'string', required: false, description: 'Encrypted field value. Native entries allow 16,384 characters; copied schemas use the ordinary schema string limits.' }
+      ], description: 'Ordered fields in the encrypted document: id, label, type and value. Defaults are username, password and website.' }
+    ], example: { title: 'Example login', passwordType: 'login', fields: [{ id: 'username', label: 'Username', type: 'text', value: '' }, { id: 'password', label: 'Password', type: 'password', value: '' }] } },
   { id: 'draft', version: 1, kind: 'crystal', collection: null, title: 'Draft or template',
     summary: 'Private account-backed editing snapshots and reusable templates.',
     detail: 'Owner-only, quota-accounted drafts, version-checked through the drafts API. Each is an atomic Thing; files are relational attachment children. Generic CRUD, feeds and search cannot publish drafts.',
@@ -5136,12 +5150,13 @@ const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record
   // would publish a machine-readable cap that rejects legal values
   const maxInDefaultUnit = typeof field.max === 'number' && !field.maxUnit;
   if (type === 'string' && maxInDefaultUnit) out.maxLength = field.max;
-  if (type === 'string[]' && maxInDefaultUnit) out.maxItems = field.max;
-  if (type === 'object') {
+  if ((type === 'string[]' || type === 'array') && maxInDefaultUnit) out.maxItems = field.max;
+  if (type === 'object' || type === 'array') {
     const children = (field.children || [])
       .map((child) => projectBuiltinField(child, depth + 1))
       .filter((child): child is Record<string, unknown> => child !== null);
-    if (children.length) out.children = children;
+    if (type === 'array') out.items = children.length ? { type: 'object', children } : { type: 'json' };
+    else if (children.length) out.children = children;
     else out.type = 'json';
   }
   return out;

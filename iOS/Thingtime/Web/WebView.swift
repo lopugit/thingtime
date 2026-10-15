@@ -50,7 +50,7 @@ struct WebView: UIViewRepresentable {
         // A destination switch always drops the previous origin's widget content
         // and detaches its queued uploads, even when a widget tap is delivered in
         // the same update. Widget navigation alone stays within the same origin.
-        if rootChanged { WidgetStore.clear(); context.coordinator.resetChatActivity() }
+        if rootChanged { WidgetStore.clear(); context.coordinator.resetChatActivity(); context.coordinator.passwordBridge.clear() }
         context.coordinator.cancelVoice()
         if rootChanged { context.coordinator.suspendRecordingUploads() }
         context.coordinator.loadedRootURL = url
@@ -64,6 +64,7 @@ struct WebView: UIViewRepresentable {
         var loadedRootURL: URL?
         private let lopuVoice = LopuVoiceSessionController()
         private let lopuChats = LopuChatActivityController()
+        let passwordBridge = PasswordBridge()
 
         func resetChatActivity() { lopuChats.reset() }
         private var pendingVoiceStart = UUID()
@@ -117,6 +118,16 @@ struct WebView: UIViewRepresentable {
                 } else if type == "widget-clear" { WidgetStore.clear() }
                 else if type == "widget-snapshot", let payload = body["payload"] as? [String: Any] {
                     WidgetStore.save(payload, origin: root.absoluteString)
+                }
+                return
+            }
+            if type == "password-provider" {
+                guard message.frameInfo.isMainFrame, let webView, let root = loadedRootURL,
+                      let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
+                      let frameURL = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frameURL, root),
+                      let payload = body["payload"] as? [String: Any], let action = payload["action"] as? String else { return }
+                passwordBridge.handle(action: action, ownerId: payload["ownerId"] as? String, webView: webView, root: root) { [weak self] ok, message in
+                    self?.sendToWeb(type: "password-provider-result", payload: ["ok": ok, "message": message, "requestId": payload["requestId"] as? String ?? ""])
                 }
                 return
             }

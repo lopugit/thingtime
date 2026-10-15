@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-15 — **Codex (AI)**: Add a private password library using Thing field
+  mods, account/session encryption with approved server-assisted recovery,
+  TOTP QR imports, 1Password/Chrome/Apple transfer and shared Apple credential
+  provider targets. Restrict desktop credential forwarding to the selected
+  HTTPS account endpoint; distinguish managed worktree names to prevent PM2
+  collisions. Prune non-target image binaries from server packages so local
+  cross-platform installs fit Vercel function limits. Setup and validation: [password manager](../docs/password-manager.md).
+
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new
   `timeline-version-name` relational records behind the `name-version`

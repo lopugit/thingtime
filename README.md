@@ -2,6 +2,49 @@
 
 https://thingtime.com
 
+### Password manager setup
+
+The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
+Use a Mongo replica set for canonical storage transactions and configure the
+usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes
+encoded as base64url>` in ignored local env files and your deployment secret
+manager. The existing `THINGTIME_ADMIN_VAULT_KEY` is a compatibility fallback;
+reuse the already configured vault key when upgrading. Back up the vault key
+securely with your database. Replacing or losing it makes existing recovery
+wrappers unreadable; do not generate a new key on each deploy. The server-assisted
+recovery model is documented above. No provider developer accounts are required
+for storing passwords or importing TOTP setup codes.
+
+For native AutoFill, register your app and credential-provider extension bundle
+identifiers in your Apple Developer team, enable **AutoFill Credential Provider**
+for the containing app and extension, and provision the same Keychain access
+group on both. iOS uses `iOS/project.yml`, `THINGTIME_IOS_BUNDLE_IDENTIFIER` and
+`<your-ios-bundle-id>.password-provider`; macOS uses
+`macos/ThingtimePasswords/project.yml` and `com.thingtime.passwords{,.provider}`
+(change those identifiers for your fork). Both use
+`$(AppIdentifierPrefix)com.thingtime.passwords` by default; change the suffix
+consistently when forking. Accept pending Apple Developer agreements before
+requesting profiles. Keep all real signing values out of git.
+
+`npm --prefix electron run build:resources` embeds the macOS provider. The build
+requires `THINGTIME_PASSWORD_SIGNING_IDENTITY=<Apple signing identity>` (or the
+existing `THINGTIME_NODE_SIGNING_IDENTITY`) and `APPLE_TEAM_ID=<team>`; local
+Apple Development signing can request profiles through the signed-in Xcode
+account. For manual distribution signing, set
+`THINGTIME_PASSWORD_HOST_PROFILE=<host profile>` and
+`THINGTIME_PASSWORD_PROVIDER_PROFILE=<extension profile>`. Unsigned builds
+compile the feature but cannot provide the system's signed credential-provider
+access. iOS Fastlane syncs a separate provider profile; its override is
+`PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER=<profile name>`. Follow
+`iOS/AGENTS.md` for API-key-based TestFlight setup, use `xcodegen generate`
+before native builds, and pass preview URLs explicitly as the
+`THINGTIME_WEB_URL=https://<your-deployment>` Xcode build setting.
+
+Users connect their current native session from Passwords and enable Thingtime
+in **Settings → General → AutoFill & Passwords**. New passkeys are created through
+that system picker; uploaded passkey handoff QR images are not imported as keys.
+
+
 ### Unified Timeline (implementation in progress)
 
 History is available at `/history` and from a Thing's History menu. List, Cards,

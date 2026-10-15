@@ -1,10 +1,11 @@
+import { bindVaultPassword } from './vaultKeys';
 import { consumeOtpChallenge, createOtpChallenge, deleteOtpChallenge, generateOtpCode } from './authOtps';
 import { sendEmailOtp } from './email';
 import { signJwt } from './jwt';
 import { verifyPassword } from './passwords';
 import { createSession } from './sessions';
 import { emitLoginNotification } from '../notifications/notifications';
-import { findUserById, findUserByUsername, PublicUser, toPublicUserWithStorage } from './users';
+import { findUserById, findUserByUsername, type PublicUser, toPublicUserWithStorage } from './users';
 
 // Machine-readable failure reason for the 2FA (OTP) step, so the client decides
 // whether to abandon the challenge from a STABLE code instead of matching server
@@ -32,6 +33,9 @@ export const loginUser = async ({ username, password }: { username: string; pass
 
   const match = await verifyPassword(password || '', user.passwordHash);
   if (!match) return { ok: false, status: 401, error: 'Invalid username or password' };
+
+  try { await bindVaultPassword(String(user._id), password, user.passwordHash); }
+  catch { return { ok: false, status: 401, error: 'Invalid username or password' }; }
 
   // Opt-in email 2FA: a valid password alone doesn't mint a session — the
   // caller gets a challenge id and finishes login via completeOtpLogin.
