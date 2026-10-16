@@ -797,3 +797,46 @@ publication acceptance. Android/Mac receivers, retained conflict recovery,
 background scheduling, Photos, peer sync, rename/delete convergence, scalable
 roots, physical/reboot acceptance and release delivery remain open. The full
 goal remains active. Fork-safe commands are in the Android and root READMEs.
+
+### Android offline-folder publication backend (2026-10-17)
+
+`ManagedFileStore` adds the native storage backend for Thingtime-owned offline
+folders. It does not yet expose those folders in Android Files or enable the
+Download now control. Existing arbitrary SAF selections remain read/staging
+only; their providers are not assumed to support atomic replacement.
+
+The backend copies a completed stage through a read-only descriptor while the
+staging lock is held, verifies both the copied content and unchanged source,
+fsyncs the immutable candidate and its directory, then atomically commits the
+visible entry and immutable receipt in a synchronous SQLite transaction. It
+uses the existing shared request/entry/receipt formats. Editable connection
+Things and Timeline remain authoritative; this is a bounded native filesystem
+adapter, not a new cloud data plane or settings/history model.
+
+Conditional replacement checks the exact previous entry and its actual bytes,
+retains the old blob/version, and changes ancestor stamps. A repeated operation
+returns its historical receipt without rewriting a later edit. Owner/origin,
+managed root, selected grant, connection/device scope and immutable request
+remain bound. Case/Unicode aliases, missing parents, forged stages, changed
+source/target bytes and symlinked blobs fail closed. Two concurrent creates
+produce one visible file and one successful receipt. Uncertain commits never
+trigger blob deletion; unreferenced candidates are retained pending a bounded
+cleanup implementation.
+
+Validation on Android 15 / API 35: seven native backend tests plus the new
+stage-copy mutation test pass; the full fixture-backed run executes 35 tests
+(`OK (37 tests)` includes two skipped opt-in process tests). All 26 JVM tests,
+debug build and Android lint pass. Three actual process kills before commit,
+after commit and after replacement verify rollback/replay in a fresh process,
+all 8 MiB + 17 bytes, retained old content, and receipt replay after a later edit.
+The actual native receipts pass the production TypeScript mobile codec. Helper
+lint passes; full TypeScript still reports the same 91 baseline diagnostics,
+with none added.
+
+Remaining integration: Android DocumentsProvider exposure, explicit native root
+creation/removal, per-folder publication capability, current native approval
+checks and foreground download controls, followed by installed-app cloud-byte
+acceptance. OS Files edits, restore/retention, background workers, large-root
+partitioning, provider/physical-device/reboot tests and the rest of the full
+Drive/Photos/Resilio goal remain open. The current backend has a 10,000-blob
+safety bound and fully verifies reads; it is not the final large-file transport.

@@ -184,4 +184,15 @@ public class SyncStagingTest {
         }
         return count;
     }
+
+    @Test public void verifiedPayloadRejectsMutationDuringNativeCopy() throws Exception {
+        byte[] bytes={1,2,3};JSONObject request=request(bytes,false);store().begin(request,owner,grant);append(request,bytes);
+        JSONObject stage=store().finish(request,owner,grant).getJSONObject("stage");
+        assertThrows(Exception.class,()->store().withVerifiedPayload(request,owner,grant,stage,(fd,source)-> {
+            byte[] read=new byte[3];assertEquals(3,Os.pread(fd,read,0,3,0));assertArrayEquals(bytes,read);
+            assertThrows(android.system.ErrnoException.class,()->Os.pwrite(fd,new byte[]{9},0,1,0));
+            Files.write(payload(request).toPath(),new byte[]{3,2,1});
+            return new JSONObject().put("copied",true);
+        }));
+    }
 }

@@ -222,3 +222,43 @@ compare-and-swap contract: [DocumentsContract](https://developer.android.com/ref
 allows changed document IDs, and the [AOSP filesystem provider](https://android.googlesource.com/platform/frameworks/base.git/+/master/core/java/com/android/internal/content/FileSystemProvider.java)
 chooses an available destination name before rename. Publication still requires
 a supported adapter with explicit destination preconditions and durable recovery.
+
+## Offline-folder publication backend checks
+
+The app now contains `ManagedFileStore`, a native backend for future
+Thingtime-owned offline folders under `noBackupFilesDir/ManagedFiles-v1`.
+No Android Files root, broad storage permission or new web capability is exposed
+by this backend checkpoint. Generic selected SAF trees are never written by it.
+Normal sign-in and native write approval still need to be connected before any
+user-facing download can run.
+
+Completed stages are copied through read-only descriptors, independently
+verified and fsynced. Synchronous SQLite transactions commit conditional file
+entries and immutable operation receipts together. Displaced blobs and versions
+remain retained. Failed or uncertain operations keep unreferenced candidates
+until a future bounded cleanup can prove they are unused. Scans cap metadata at
+4 MiB / 10,000 entries; the store caps blobs at 10,000 and currently verifies
+whole files even for ranged reads. Do not treat this as finished retention,
+large-file performance, background sync or arbitrary-provider publication.
+
+With the same JDK/SDK/adb/Node setup, on a disposable emulator run:
+
+```sh
+THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-managed-process.sh
+```
+
+The origin override is optional; the default is the public HTTPS origin. This
+acceptance uses only generated app-private fixtures, no account credentials or
+selected folders. Three scenarios kill the actual instrumentation process
+inside the SQLite transaction, after commit and after replacement. A fresh
+process verifies rollback/replay, independent full bytes, retained originals and
+historical receipts after a later edit. It exports non-secret native receipts
+into ignored `android/build/managed-process/`; the shared TypeScript codec must
+accept them. Successful verification removes only this test's private fixture
+and exported device file. A failed prepare leaves its proof for investigation;
+do not delete it or start another prepare until that run is verified. Ordinary
+`test-mobile-devices.sh` runs skip the deliberate process-kill test.
+
+No dependency, secret, service or deployment variable is added. SQLite is the
+Android platform's local storage primitive; server file entities, settings and
+Timeline continue through the existing Thingtime APIs and shared contracts.

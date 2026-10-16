@@ -10343,3 +10343,28 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Verify wrong-folder and revoked-picker results, background/navigation
   during consent, Android 8.0 runtime, physical/third-party providers and
   process/reboot recovery before claiming full native write acceptance.
+
+### Android offline-folder publication backend (2026-10-17)
+
+- [x] Verify nested folders and an 8 MiB + 17-byte multipart file through real
+  native staging/publication; scan, ranged read and retry must preserve content
+  and the immutable receipt. Ancestor versions must change with descendants.
+- [x] Replace conditionally, verify retained original bytes/version, then replay
+  an older receipt after a later edit. Replay must not overwrite current bytes.
+- [x] Reject stale target versions, case aliases, missing parents, foreign
+  account/site/root, changed operations, forged stages and changed source bytes.
+  Corrupt or symlinked blobs must fail scans/reads and target preconditions.
+- [x] Race two creates and require one file / one receipt. Throw before commit
+  and after commit: recovery must distinguish rollback from accepted-response
+  loss, never expose a partial entry or delete an uncertain candidate.
+- [x] The native stage-copy callback receives a read-only descriptor; changing
+  its underlying source during copy must fail final stage verification.
+- [x] Run `android/scripts/test-mobile-managed-process.sh` on a disposable
+  Android 15 emulator: actual process kills before/after commit and after
+  replacement; verify from a fresh process and validate native receipts with
+  the production TypeScript codec. Keep the run-ID proof on failure.
+- [ ] Integrate the OS Files provider, native create/remove and existing write
+  approval, per-folder capabilities and Download now. Verify real cloud bytes
+  in the installed app before claiming user-facing Android download delivery.
+- [ ] Verify API 26/physical devices, reboot/power-loss, low storage, retention,
+  Files edits, background scheduling and large-root behavior separately.

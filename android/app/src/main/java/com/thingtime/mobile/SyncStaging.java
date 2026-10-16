@@ -299,4 +299,26 @@ final class SyncStaging {
             finally { Os.close(fd); }
         });
     }
+    interface VerifiedPayload { JSONObject copy(FileDescriptor payload,JSONObject source) throws Exception; }
+    /** A native sink may copy verified bytes while the stage lock is held.
+     * It must not publish until this method returns: the final verification
+     * rejects a source altered during the copy. No pathname crosses the bridge. */
+    JSONObject withVerifiedPayload(JSONObject input,DeviceScope owner,String grantId,JSONObject stage,VerifiedPayload sink) throws Exception {
+        return withRecord(input,owner,grantId,false,(folder,row,request)-> {
+            JSONObject offeredScope=stage.getJSONObject("scope"),boundScope=request.getJSONObject("scope");
+            for(String field:new String[]{"origin","ownerId","dataPlane","rootId","deviceId"})
+                if(!text(offeredScope,field,4096).equals(boundScope.getString(field)))throw changed();
+            // Project only the shared fields before canonical comparison; never
+            // recursively walk arbitrary extra objects supplied by a caller.
+            JSONObject offered=new JSONObject().put("operationId",uuid(stage,"operationId")).put("scope",boundScope)
+                .put("token",digest(stage,"token")).put("entry",entry(stage.getJSONObject("entry")));
+            if(row.isNull("stage") || !canonical(offered).equals(canonical(row.getJSONObject("stage")))) throw changed();
+            FileDescriptor fd=open(new File(folder,"payload"),OsConstants.O_RDONLY,source(request).getString("kind").equals("folder"));
+            try {
+                verify(folder,fd,row,request);
+                JSONObject copied=sink.copy(fd,new JSONObject(source(request).toString()));
+                verify(folder,fd,row,request);return copied;
+            } finally { Os.close(fd); }
+        });
+    }
 }

@@ -4888,3 +4888,20 @@ Run `THINGTIME_FOLDER_APPROVAL_TEST=1 android/scripts/test-mobile-devices.sh /ab
 Follow the native Cancel / Continue to Files / same-folder Allow / changed-config
 Cancel sequence. No production credentials, broad storage permission or extra
 service is needed. Safe Android publication and background sync remain open.
+
+### Android offline-folder publication backend checks
+
+The Android app now includes a transactional backend for Thingtime-owned offline
+folders. It uses verified immutable native blobs plus an atomic entry/receipt
+transaction, and retains displaced versions. It is not yet connected to Android
+Files, native root creation or Download now. Existing selected SAF folders are
+not silently converted to another storage model or written by this backend.
+
+On a disposable emulator, run
+`THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-managed-process.sh`
+with the normal JDK 17 / Android SDK 35 / adb / Node setup. The optional origin
+uses your checkout's port; no account fixture, new secret or service is needed.
+Three actual process-exit scenarios verify rollback, completed-receipt recovery
+and retained replacements through the production shared mobile codec. See the
+[Android runbook](android/README.md#offline-folder-publication-backend-checks)
+for boundaries, evidence and fixture cleanup.

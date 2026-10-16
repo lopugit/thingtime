@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add the Android offline-folder publication
+  backend with verified immutable bytes, atomic conditional entry/receipt
+  transactions and retained replacements. Verify three real process-exit
+  recovery scenarios and shared native receipt compatibility; document
+  fork-safe checks. Android Files and download UI integration remain pending.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Add Android native write approval with exact
   folder re-selection, account/configuration binding and shared OS grant
   cleanup. Verify cancellation, real Files write permission, retry and
