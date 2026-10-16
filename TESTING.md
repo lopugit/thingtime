@@ -540,6 +540,17 @@ persisted; every check is client-side.
 
 ## Remote brightness and files
 
+- [ ] Mobile device contract: pair signed synthetic iOS and Android descriptors,
+  list/read them through the owner API and reload Things. Their platform must
+  survive server and client projections without becoming macOS or acquiring
+  desktop controls. Changed proof fields and foreign owners must be refused.
+- [ ] Persistent sync (acceptance pending native adapters): edit both copies,
+  delete one while editing the other, interrupt after accepted publication,
+  restart with the same operation IDs and fill the journal disk. No file may
+  be overwritten/deleted from an incomplete scan or unconfirmed receipt. Change
+  account/origin/data plane during each async stage. Run `test:file-sync`; its
+  simulated transport tests do not replace real native/cloud byte checks.
+
 - [ ] A running macOS app with an empty or whitespace-only name must use its
   bundle identifier in the heartbeat. Blank identifiers are skipped before the
   64-app limit; the full state update must still reach the server.

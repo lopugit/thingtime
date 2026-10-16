@@ -1,5 +1,11 @@
 # API endpoints and capabilities
 
+Mobile device descriptors use `app/devices/platform.ts` across validation,
+projection, schemas and client types. `api.devices` 1.10.0 and
+`api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
+protocol. Run `test:devices`, `test:schemas` and `test:api-capabilities`.
+See [mobile sync acceptance](../mobile-file-sync.md) for pending native clients.
+
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
 shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),

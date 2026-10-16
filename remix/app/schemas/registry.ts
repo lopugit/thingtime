@@ -1,4 +1,5 @@
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
+import { DEVICE_PLATFORMS } from '../devices/platform.ts';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
 import { TIMELINE_NOTE_KIND } from '../timeline/notes.ts';
 import { TIMELINE_VERSION_NAME_KIND } from '../timeline/versionNames.ts';
@@ -3789,7 +3790,7 @@ const deviceSchema: ThingtimeSchema = {
 	fields: [
 		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
 		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
-		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux', 'watchos'], description: 'Operating-system family.' },
+		{ name: 'platform', type: 'enum', required: true, values: [...DEVICE_PLATFORMS], description: 'Operating-system family; capabilities are negotiated separately.' },
 		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
 		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
 		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },

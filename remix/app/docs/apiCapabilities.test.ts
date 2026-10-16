@@ -1,3 +1,4 @@
+import { MOBILE_DEVICE_REQUIREMENTS } from '../devices/platform';
 import { SUBSPACE_MEDIA_REQUIREMENTS } from '../utils/subspaceMediaCapabilities';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -209,7 +210,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
-	assert.equal(manifest.features['api.devices'], '1.9.0');
+	assert.equal(manifest.features['api.devices'], '1.10.0');
 	assert.equal(manifest.features['api.attachment-uploads'], '1.5.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
 	assert.equal(manifest.features['api.attachment-upload-complete'], '1.4.0');
@@ -675,3 +676,15 @@ test('range programs require the additive owned-boundary contract', () => {
   assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.0.0');
   assert.equal(typeof routeModules['v1/passwords'], 'function');
  });
+
+test('mobile pairing requirements are advertised by both manifests and reject desktop-only claims', () => {
+ const route = createApiCapabilitiesManifest().features;
+ const manifest = thingtimeCapabilityManifest('https://thingtime.test').features;
+ for (const [feature, minimum] of Object.entries(MOBILE_DEVICE_REQUIREMENTS)) {
+  assert.equal(capabilitySatisfies(route[feature], minimum), true, feature);
+  assert.equal(capabilitySatisfies(manifest[feature].version, minimum), true, feature);
+ }
+ assert.equal(route['api.devices-pairing-claim'], '1.1.0');
+ assert.equal(manifest['api.devices-pairing-claim'].version, '1.1.0');
+ for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, MOBILE_DEVICE_REQUIREMENTS['api.devices-pairing-claim']), false);
+});

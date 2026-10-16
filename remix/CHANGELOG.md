@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Added iOS/Android device descriptor contracts
+  and safe projections, plus file-sync reconciliation, conditional execution
+  and a durable browser operation journal. Native pairing, folder/photo
+  workers and product integration remain in progress; see the
+  [acceptance ledger](../docs/mobile-file-sync.md).
+
 - 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
 
 - 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain

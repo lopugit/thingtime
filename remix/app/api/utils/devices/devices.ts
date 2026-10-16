@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDevicePlatform } from '../../../devices/platform';
 
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { createSession, type SessionDoc } from '../auth/sessions';
@@ -329,13 +330,10 @@ type ClaimDeviceResult =
 	| { ok: true; op: 'prepare'; proof: { pairingId: string; serverNonce: string; expiresAt: string } }
 	| { ok: true; device: PublicDevice; credentialStored: true };
 
-const minimalPublicDevice = (doc: any): PublicDevice => ({
+export const minimalPublicDevice = (doc: any): PublicDevice => ({
 	id: String(doc.shareId),
 	name: String(doc.crystal?.name || 'Computer'),
-	platform:
-		doc.crystal?.platform === 'windows' || doc.crystal?.platform === 'linux' || doc.crystal?.platform === 'watchos'
-			? doc.crystal.platform
-			: 'macos',
+	platform: isDevicePlatform(doc.crystal?.platform) ? doc.crystal.platform : 'macos',
 	model: typeof doc.crystal?.model === 'string' ? doc.crystal.model : null,
 	osVersion: typeof doc.crystal?.osVersion === 'string' ? doc.crystal.osVersion : null,
 	appVersion: typeof doc.crystal?.appVersion === 'string' ? doc.crystal.appVersion : null,

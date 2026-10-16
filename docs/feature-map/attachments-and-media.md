@@ -1,5 +1,12 @@
 # Attachments and media
 
+Persistent file sync work lives in `app/fileSync/`: `reconcile.ts` plans bounded
+three-way inventory reconciliation, `execute.ts` persists stable operations and
+resolves uncertain receipts, and `journal.client.ts` stores the browser queue.
+Run `test:file-sync`. Native/cloud adapters and product integration are pending;
+see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
+through the canonical attachment and Timeline paths described below.
+
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).
 Every attachment is bound to exactly one target (post, comment, page, message,

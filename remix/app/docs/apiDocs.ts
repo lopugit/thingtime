@@ -65,14 +65,14 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.9.0',
-		featureVersion: '1.9.0',
+		contractVersion: '1.10.0',
+		featureVersion: '1.10.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
-		summary: 'Lists safe paired-device summaries or one detailed computer mirror.',
+		summary: 'Lists safe paired-device summaries or one detailed device mirror, including iOS and Android.',
 		detail:
-			'Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Generic /things never exposes protected device credentials, hashes, paths, arguments, or screen transport data.',
+			'Returns protected dedicated projections for the caller’s computers, iOS, Android and Apple Watch devices. The platform label never grants capabilities. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Generic /things never exposes protected device credentials, hashes, paths, arguments, or screen transport data.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
 		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
@@ -206,17 +206,20 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-pairing-claim',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'devices',
 		title: 'Claim device pairing',
 		endpoint: '/api/v1/devices/pairing/claim',
 		summary: 'Atomically pairs one node with a locally generated opaque credential.',
 		detail:
-			'The node generates a ttnode_ credential with at least 256 random bits and retains it in Keychain or an equivalent OS vault. Thingtime stores only its hash. Device creation, quota admission, credential session creation and challenge consumption commit together. Exact retries recover; changed retries return 409.',
+			'Accepts macos, windows, linux, watchos, ios and android descriptors. The node generates a ttnode_ credential with at least 256 random bits and retains it in Keychain or an equivalent OS vault. Thingtime stores only its hash. The existing prepare/complete Ed25519 proof binds both nonces, descriptor and capabilities. Device creation, quota admission, credential session creation and challenge consumption commit together. Exact retries recover; changed retries return 409.',
 		auth: { mode: 'none', description: 'One-time pairing secret in the JSON body; fail-closed IP rate limit.' },
 		methods: ['POST'],
 		steps: [
 			'Generate and persist the node credential locally.',
-			'POST the challenge, credential, descriptor and capabilities once.',
+			'POST op=prepare with the pairing secret, Ed25519 public key and client nonce; persist the returned server proof.',
+			'POST op=complete with the challenge, credential, descriptor, capabilities and signed proof; recover uncertain responses with exactly the same body.',
 			'Use the credential only as Bearer auth on node routes.'
 		],
 		requestExamples: [
@@ -225,10 +228,12 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 				description: 'Pair a macOS node.',
 				method: 'POST',
 				body: {
+					op: 'complete',
 					pairingSecret: 'ttpair_…',
 					credential: 'ttnode_…',
 					device: { name: 'MacBook Pro', platform: 'macos', model: 'MacBookPro', osVersion: '15.6', appVersion: '1.0' },
-					capabilities: ['session.read', 'session.send']
+					capabilities: ['session.read', 'session.send'],
+					proof: { pairingId: 'pair-id', publicKey: '<base64url-32-bytes>', nonce: '<base64url-32-bytes>', serverNonce: '<base64url-32-bytes>', signature: '<base64url-64-bytes>' }
 				}
 			}
 		],
