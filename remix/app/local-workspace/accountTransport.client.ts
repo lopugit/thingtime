@@ -1,3 +1,4 @@
+import type { AccountFileTransport } from './accountFiles';
 import { interactionState, type InteractionWrite } from '../utils/interactionState';
 import type { InteractionTransport } from './accountInteractions';
 import { accountRemoteWorkspaceLease } from './runtime.client';
@@ -26,20 +27,22 @@ export const readBoundedJson = async (response: Response) => {
 };
 export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountSyncTransport & {
 	interactions: InteractionTransport;
+	files: AccountFileTransport;
 	browse(kind: 'schema' | 'component', args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	read(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	resolve(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	fork(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' = 'things') => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' = 'things') => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		const capability = endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0'];
+		const uploadCapability = ({ 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'] } as Record<string, string[]>)[endpoint];
+		const capability = uploadCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
 		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', '1.10.0');
@@ -62,11 +65,31 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 			window.dispatchEvent(new Event('thingtime:root-data-refresh'));
 			throw new WorkspaceError('WORKSPACE_CHANGED', 'Account session changed. Local edits remain in their original workspace.', 409);
 		}
-		if (!response.ok || result?.ok !== true) throw new WorkspaceError('SYNC_REFUSED', 'The account request could not be completed', response.status);
+		if (!response.ok || result?.ok !== true) {
+			const error = new WorkspaceError(uploadCapability && typeof result?.code === 'string' ? result.code : 'SYNC_REFUSED', 'The account request could not be completed', response.status);
+			const seconds = Number(response.headers.get('Retry-After'));
+			throw Object.assign(error, { retryable: result?.retryable === true, retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? Math.min(86400,seconds)*1000 : 0 });
+		}
 		return result;
 		} finally { unsubscribe(); }
 	};
 	return {
+		files: {
+			start: async (input, signal) => (await request('POST', input, signal, 'attachments/uploads')).upload,
+			parts: async (uploadId, parts, signal) => (await request('POST', { uploadId, parts }, signal, 'attachments/uploads/parts')).parts,
+			complete: async (uploadId, signal) => (await request('POST', { uploadId }, signal, 'attachments/uploads/complete')).attachment,
+			put: async (part, bytes, signal) => {
+				lease.assertCurrent(); const remote = accountRemoteWorkspaceLease(scope); remote.assertCurrent();
+				const url = new URL(part.url, scope.origin), retired = new AbortController();
+				if (url.username || url.password || !(url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname)))) throw new WorkspaceError('INVALID_UPLOAD_URL','The account returned an invalid storage URL.',502);
+				const off = remote.onInvalidate(() => retired.abort());
+				try {
+					const response = await fetch(url, { method: 'PUT', body: Uint8Array.from(bytes), headers: part.headers, credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', signal: AbortSignal.any([signal, retired.signal, AbortSignal.timeout(20_000)]) });
+					lease.assertCurrent(); remote.assertCurrent();
+					if (!response.ok) throw new WorkspaceError('UPLOAD_PART_FAILED','File bytes could not reach storage.',response.status);
+				} finally { off(); }
+			}
+		},
 		interactions: { read: async (ids, signal) => { const result = await request('GET', { id: ids }, signal, 'things/interactions'); if (!Array.isArray(result.states) || result.states.length !== ids.length || new Set(result.states.map((s: any) => s.id)).size !== ids.length || result.states.some((s: any) => !ids.includes(s.id))) throw new WorkspaceError('INVALID_INTERACTIONS', 'Invalid account interaction response', 502); return result.states.map(interactionState); }, write: async (command: InteractionWrite, signal) => interactionState((await request('POST', command, signal, 'things/interactions')).state) },
 		browse: (kind, args, signal) => request('GET', args, signal, kind === 'component' ? 'components/browse' : 'schemas/browse'),
 		read: (args, signal) => request('GET', args, signal),

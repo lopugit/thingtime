@@ -25,7 +25,7 @@ test('transport pins account and database on reads and writes and retires mismat
  const lease = { assertCurrent() { if (rootIdentity.read().generation !== generation) throw new Error('Retired workspace'); }, onInvalidate: () => () => {} };
  let result = Response.json({ ok: true, thing: { id: 'thing' } });
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent(event: Event) { events.push(event.type); } }, fetch: async (url: string, init: RequestInit) => {
-  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.15.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.15.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url, init }); return result.clone();
  } });
  try {
@@ -57,5 +57,44 @@ test('transport pins account and database on reads and writes and retires mismat
   await assert.rejects(transport.get('thing', new AbortController().signal), /session changed/);
   assert.deepEqual(events, ['thingtime:root-data-refresh']); const count = calls.length;
   await assert.rejects(transport.get('thing', new AbortController().signal), /Retired workspace/); assert.equal(calls.length, count);
+ } finally { Object.assign(globalThis, saved); }
+});
+
+test('file transport negotiates uploads, preserves retry codes, and sends signed bytes without credentials', async () => {
+ const saved = { window: globalThis.window, fetch: globalThis.fetch };
+ const origin = 'https://thingtime.example', scope = { kind: 'account', origin, ownerId: 'file-owner', dataPlane: 'home' } as const;
+ const calls: any[] = [];
+ let response = Response.json({ ok: true, upload: { id: 'remote-file' } });
+ Object.assign(globalThis, { window: { location: { origin }, dispatchEvent() {} }, fetch: async (url: string | URL, init: RequestInit) => {
+  if (String(url).includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  calls.push({ url: String(url), init }); return response.clone();
+ } });
+ try {
+  rootIdentity.confirm(rootIdentity.read().generation);
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope);
+  const transport = accountThingTransport(scope, { assertCurrent() {}, onInvalidate: () => () => {} }).files, signal = new AbortController().signal;
+  assert.deepEqual(await transport.start({ requestId: 'immutable-request', filename: 'file.txt', contentType: 'text/plain', sizeBytes: 3, purpose: 'file' }, signal), { id: 'remote-file' });
+  response = Response.json({ ok: true, parts: [{ partNumber: 1 }] });
+  assert.deepEqual(await transport.parts('remote-file', [{ partNumber: 1, checksumSha256: 'hash' }], signal), [{ partNumber: 1 }]);
+  response = Response.json({ ok: false, code: 'upload_parts_retryable', retryable: true }, { status: 409, headers: { 'Retry-After': '30' } });
+  await assert.rejects(transport.complete('remote-file', signal), (error: any) => error.code === 'upload_parts_retryable' && error.status === 409 && error.retryable === true && error.retryAfterMs === 30000);
+  for (const { init } of calls) { assert.equal(init.headers['X-Thingtime-Expected-Actor'], scope.ownerId); assert.equal(init.headers['X-Thingtime-Expected-Data-Plane'], 'home'); }
+  response = new Response(null, { status: 200 });
+  const part = { partNumber: 1, url: '/api/v1/attachments/local-object?signature=opaque', headers: { 'x-amz-checksum-sha256': 'hash' }, expiresAt: '' };
+  const bytes = Uint8Array.of(1,2,3);
+  await transport.put(part, bytes, signal);
+  assert.equal(calls.at(-1).url, origin + part.url);
+  await transport.put({ ...part, url: 'https://bucket.s3.example/object?signed=opaque' }, bytes, signal);
+  for (const { init } of calls.filter(call => call.init.method === 'PUT')) {
+   assert.equal(init.credentials, 'omit'); assert.equal(init.redirect, 'error'); assert.equal(init.referrerPolicy, 'no-referrer');
+   assert.deepEqual(init.headers, part.headers); assert.deepEqual(init.body, bytes);
+  }
+  const count = calls.length;
+  // eslint-disable-next-line no-script-url -- hostile URL is an inert refusal fixture.
+  for (const url of ['file:///etc/passwd','javascript:alert(1)','http://example.test/file','https://user:pass@example.test/file'])
+   await assert.rejects(transport.put({ ...part, url }, bytes, signal), /invalid storage URL/);
+  bindLocalWorkspace(true, rootIdentity.read().generation);
+  await assert.rejects(transport.put(part, bytes, signal), /workspace changed/);
+  assert.equal(calls.length, count);
  } finally { Object.assign(globalThis, saved); }
 });

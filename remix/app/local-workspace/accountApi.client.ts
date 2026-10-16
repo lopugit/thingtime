@@ -1,3 +1,4 @@
+import { AccountFileSync } from './accountFiles';
 import { clearLocalCache } from '../hooks/localCache';
 import { AccountPostCache, overlayAccountPost } from './accountPosts';
 import { AccountInteractionSync } from './accountInteractions';
@@ -27,7 +28,7 @@ const workers = new Map<string, ReturnType<typeof createWorker>>();
 const BLOCKED_RETRY_MS = 60_000;
 function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
-	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
+	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease), files = new AccountFileSync(db, scope, lease);
 	const controller = new AbortController();
 	let running = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
 	const wake = () => {
@@ -40,16 +41,16 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		running = true;
 		try {
 			lease.assertCurrent();
-			const before = JSON.stringify([await sync.status(), await interactions.status()]);
+			const before = JSON.stringify([await sync.status(), await interactions.status(), await files.status()]);
 			const targets = new Map((await sync.exportSnapshot()).records.map(row => [row.id, row]));
 			const outcomes = await Promise.all([sync.sync(transport, controller.signal), interactions.sync(transport.interactions, controller.signal, async id => {
 				const record = targets.get(id);
 				if (record?.deleted) { await interactions.discard([id]); return false; }
 				return !record || record.remote;
-			})]);
+			}), files.sync(transport.files, controller.signal)]);
 			const completed = outcomes.reduce((sum, result) => sum + result.completed, 0);
-			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), status = [...contentStatus, ...interactionStatus];
-			if (JSON.stringify([contentStatus, interactionStatus]) !== before) announceLocalWorkspaceChange();
+			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), fileStatus = await files.status(), status = [...contentStatus, ...interactionStatus, ...fileStatus];
+			if (JSON.stringify([contentStatus, interactionStatus, fileStatus]) !== before) announceLocalWorkspaceChange();
 			const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
 			if (pending.length && !stopped) {
 				// A row whose retryAt has already passed is not schedulable work: the
@@ -73,7 +74,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
-	return { sync, interactions, posts, transport, db, lease, wake, stop };
+	return { sync, interactions, posts, files, transport, db, lease, wake, stop };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
@@ -268,6 +269,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: 0, linksImported: 0, savedLocally: true };
 		};
 	return { ...online, auth: remote.auth, login: remote.login,
+		attachments: { ...online.attachments,
+			saveLocalFile: async (input: Parameters<AccountFileSync['things']['saveFile']>[0], options?: { signal?: AbortSignal }) => {
+				const row = await worker().files.things.saveFile(input, options?.signal); changed();
+				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
+			},
+			readLocalFile: async ({ id }: { id: string }, options?: { signal?: AbortSignal }) => {
+				const { row, bytes } = await worker().files.things.readFile(id, options?.signal);
+				return { ok: true, attachment: { id: row.id, ...row.crystal }, bytes };
+			}
+		},
 		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
 		save: (args: any) => interact('save', args), react: (args: any) => interact('reaction', args),
 		feed: async (...args: any[]) => { const startedAt = Date.now(); return retainPosts(await online.things.feed(...args), startedAt); },

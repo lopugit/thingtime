@@ -4587,3 +4587,33 @@ at an existing account database for these checks. All three scripts clean up the
 created Things, including restored component copies, in `finally`; synthetic
 accounts and immutable audit remain in the disposable database. Run each from
 `remix` with `node --import tsx scripts/<script-name>.integration.mts`.
+
+
+### Durable account file adapter regression
+
+From `remix`, run `node --import tsx --test
+app/local-workspace/accountFiles.browser.test.ts` with
+`TT_LOCAL_FILE_SYNC_URL=http://127.0.0.1:<vite-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, and optional
+`TT_LOCAL_FILE_SYNC_ARTIFACTS=/path/to/local-evidence`. Set
+`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` to installed Playwright and
+its matching Chromium executable. Use the PM2-managed Vite dev origin: this
+adapter-focused test loads actual source modules and does not assert offline
+cold reload. The account file picker is not switched to this adapter yet.
+
+Use only an explicitly disposable local Mongo replica. Register a disposable
+administrator through the normal API, add its username to ignored
+`remix/.env` as `ADMIN_USERNAMES=<fixture-admin>`, then store its username/password
+in the ignored JSON fixture (restrict it to mode 0600). Enable the existing
+filesystem object-store stand-in with
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<ignored-directory>`. If setting
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, use the **same Vite origin** the
+browser opens; a different Nitro port is a different origin and is correctly
+blocked by the normal CSP. The default root-relative signed URLs also work.
+Restart this checkout using `npm run web-pms` after environment changes.
+
+The test creates its own ordinary account, proves private upload refusal, then
+uses the disposable admin's normal API to approve only that new account. It
+cleans up its completed file and sessions; fixture accounts remain only in the
+disposable database. Never substitute an existing account or production database,
+weaken CSP, alter rate limits, or commit credentials/evidence storage.

@@ -1289,3 +1289,52 @@ API to create/register its fixtures and never weakens registration rate limits.
 Broader feed/discovery cache membership, account post/comment writes, private
 media recovery, dedicated adapters, cross-device coverage and the remaining
 matrix still gate main. Posting and draft completion remain independent.
+
+
+## Durable account file upload adapter — 2026-10-16
+
+`AccountFileSync` commits immutable upload intent, a local file Thing and its
+exact bytes in one scoped IndexedDB transaction. Queue admission failure rolls
+back all three. It reuses the canonical attachment start/parts/complete services,
+part ranges, checksum requirements, completion retry classifier and public
+attachment projection. The original request identity, acknowledged parts and
+completion phase survive reload; a lost completion response retries completion
+without starting a new upload. Only the server's explicit retryable-parts codes
+return an uncertain finalization to byte upload.
+
+The account worker drains file, content and interaction queues concurrently after
+verified account/origin/data-plane binding. Anonymous content cannot enter this
+queue. Account API calls negotiate capabilities and pin actor and data plane;
+signed byte PUTs omit cookies and referrers, refuse redirects, and retain the
+normal CSP. No signed storage URLs are persisted. Three files per normal pass,
+45-second attempts, 60-second cross-tab claims, existing workspace byte quotas,
+and server Retry-After/backoff bound work. Permission refusals preserve bytes and
+surface a native retry panel; identity retirement fences late completions.
+
+This is an **internal adapter foundation**, exposed through the account facade's
+`attachments.saveLocalFile/readLocalFile`. The ordinary account file picker still
+uses its existing upload path. Account file listing/media previews, annotation,
+delete/cleanup reconciliation, post attachment binding, expired-upload recovery
+and complete account post authoring remain acceptance work. This change does
+not make publishing depend on drafts, or claim full offline account file UI.
+
+Local verification: eight queue tests and the upload transport regression cover
+atomic quota rollback, malformed plans, account/origin/plane isolation, persisted
+reopen, tab claims, cancellation, preserved retry timing, permission refusal,
+receipt mismatch and uncertain completion. The opt-in browser test exercises the
+actual app and private upload service on a disposable replica: exact bytes save
+offline with zero mutations, a normal upload approval refusal leaves them intact,
+a local fixture admin grants private uploads through the real admin API, and a
+lost successful completion response recovers with exactly one byte PUT. Guest
+content reads return 404. The open retry panel has no horizontal overflow at
+1440/390/320px. Evidence is in `tmp/local-file-sync-ui/verification.json` and
+`file-sync-*.png`. This is local adapter/service acceptance, not deployed or
+full native account file-authoring acceptance. Setup is in README's local
+workspace section; the test imports real Vite modules and needs the dev origin.
+
+The focused checkpoint passes 233 workspace tests plus four offline-shell,
+295 attachment and 95 capability tests (627 total). The general workspace
+command skips 27 opt-in scenarios; the account file browser scenario is enabled
+separately. Raw TypeScript has the same 91 pre-existing diagnostics and none in
+the changed local-workspace files. No main merge or production verification is
+claimed; full native account files/posts and the wider acceptance matrix remain.

@@ -2,6 +2,21 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Durable account file adapter: `accountFiles.test.ts` and
+      `accountTransport.test.ts` cover atomic metadata/bytes/intent quota rollback,
+      original request identity, checksum-locked parts, permission refusals,
+      malformed plans, tab claims, cancellation, credentialless signed PUTs and
+      completion-only retry after a lost response. Enable
+      `accountFiles.browser.test.ts` against the disposable Vite/replica fixture
+      documented in README. Save bytes with the browser fully offline; verify
+      zero mutations, normal approval refusal, private upload after fixture-admin
+      approval, one byte PUT after a dropped completion reply, exact owner bytes,
+      guest 404, and the open retry panel at 1440/390/320px. Relative signed URLs
+      resolve at the current origin; do not loosen CSP for a different local
+      storage port. This checks the internal adapter, not the pending account
+      file picker/media/post-binding implementation.
+
+
 - [ ] Search → This device: normal-import more than 20 local Things, disconnect,
       search and page them, add numeric/nested/tag/date field filters, and reload.
       Invalid paths/operators/types must show errors while keeping prior results.

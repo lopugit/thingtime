@@ -63,7 +63,8 @@ const validated = (input: ThingWrite, postAttachments?: { hasAny: boolean; hasVi
  * No fetch, credentials, remote IDs, publication, or account migration here. */
 export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
-		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation) {}
+		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
+		private onFileWrite?: (tx: WorkspaceTransaction, row: LocalAttachment) => Promise<void>) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -192,7 +193,7 @@ export class LocalThings {
 	}
 	async saveFile(input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null; purpose?: 'file' | 'post' | 'comment' }, signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
-		if (this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+		if (this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		if (!/^[a-zA-Z0-9-]{16,80}$/.test(input.requestId)) fail('INVALID_REQUEST', 'A stable file save request ID is required');
 		if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength > WORKSPACE_LIMITS.binaryBytes) fail('LOCAL_QUOTA', 'A local file cannot exceed 16 MiB', 413);
 		const bytes = Uint8Array.from(input.bytes), sha256 = await transferChecksum(bytes);
@@ -214,6 +215,7 @@ export class LocalThings {
 				return previous as LocalAttachment;
 			}
 			await this.placement(tx, row); await tx.put('things', id, row); await tx.putBytes(id, bytes);
+			await this.onFileWrite?.(tx, row);
 			signal?.throwIfAborted(); return row;
 		});
 	}

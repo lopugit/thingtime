@@ -14,7 +14,7 @@ export function AccountSyncStatus() {
  const user = useCurrentUser(), dataPlane = useDataPlane(), offline = useOfflineWorkspace();
  const ownerId = offline?.ownerId || (user && !user.temporary ? user.id : null);
  if (!ownerId || !dataPlane) return null;
- return <React.Fragment key={JSON.stringify([ownerId, dataPlane])}><WorkspaceStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><InteractionStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /></React.Fragment>;
+ return <React.Fragment key={JSON.stringify([ownerId, dataPlane])}><WorkspaceStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><InteractionStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><FileSyncStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /></React.Fragment>;
 }
 function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
  const [rows, setRows] = React.useState<Status>([]), [error, setError] = React.useState('');
@@ -192,6 +192,93 @@ function InteractionStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: strin
 				</Box>
 			) : null}
 			{error ? <Text role="alert">{error}</Text> : null}
+		</Box>
+	);
+}
+
+
+function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
+	const [rows, setRows] = React.useState<Awaited<ReturnType<ReturnType<typeof accountWorkspaceWorker>['files']['status']>>>([]);
+	const [error, setError] = React.useState(''),
+		[busy, setBusy] = React.useState(false),
+		[online, setOnline] = React.useState(navigator.onLine);
+	const service = React.useRef<ReturnType<typeof accountWorkspaceWorker> | null>(null);
+	const mounted = React.useRef(true);
+	React.useEffect(() => {
+		mounted.current = true;
+		const current = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, origin: location.origin });
+		service.current = current;
+		const update = () => {
+			setOnline(navigator.onLine);
+			void current.files
+				.status()
+				.then((value) => {
+					if (mounted.current) setRows(value.filter((row) => row.state !== 'synced'));
+				})
+				.catch(() => {});
+		};
+		update();
+		for (const event of [LOCAL_WORKSPACE_CHANGED, 'online', 'offline']) window.addEventListener(event, update);
+		return () => {
+			mounted.current = false;
+			for (const event of [LOCAL_WORKSPACE_CHANGED, 'online', 'offline']) window.removeEventListener(event, update);
+		};
+	}, [ownerId, dataPlane]);
+	if (!rows.length && !error) return null;
+	const retry = async (id: string) => {
+		const current = service.current;
+		if (!current) return;
+		setBusy(true);
+		setError('');
+		try {
+			await current.files.retry(id);
+			if (mounted.current) {
+				setRows((await current.files.status()).filter((row) => row.state !== 'synced'));
+				announceLocalWorkspaceChange();
+				current.wake();
+			}
+		} catch (failure) {
+			if (mounted.current) setError(failure instanceof Error ? failure.message : 'Could not retry account upload.');
+		} finally {
+			if (mounted.current) setBusy(false);
+		}
+	};
+	return (
+		<Box
+			as="section"
+			aria-label="Account file sync"
+			maxW="900px"
+			w="calc(100% - 32px)"
+			mx="auto"
+			mt="var(--tt-nav-clearance, 72px)"
+			mb={4}
+			px={4}
+			py={3}
+			borderWidth="1px"
+			borderRadius="lg"
+		>
+			<Text role="status">
+				{rows.length} file{rows.length === 1 ? '' : 's'} saved on this device.{' '}
+				{unconfirmed || !online
+					? 'Waiting for verified account sync.'
+					: rows.some((row) => row.state === 'error')
+					? 'Account upload needs attention.'
+					: 'Uploading to your account.'}
+			</Text>
+			<details>
+				<summary>Review file sync</summary>
+				{rows.slice(0, 20).map((row) => (
+					<Flex key={row.id} gap={3} align="center" flexWrap="wrap" py={2}>
+						<Text fontSize="sm" flex="1" minW={0} overflowWrap="anywhere">
+							{row.name}: {row.error || (row.state === 'syncing' ? 'Uploading' : 'Waiting to upload')}
+						</Text>
+						<Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void retry(row.id)}>
+							Retry upload
+						</Button>
+					</Flex>
+				))}
+			</details>
+			{error && <Text role="alert">{error}</Text>}
 		</Box>
 	);
 }

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Add the durable account file upload foundation:
+  atomic device bytes/intent, scoped multipart recovery, permission-preserving
+  retries, and native sync status. Local browser verification covers offline
+  admission and lost completion without duplicate byte uploads; ordinary account
+  file/post UI wiring remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-account-file-upload-adapter--2026-10-16).
+
+
 - 2026-10-16 — **Codex (AI)**: Account post bookmarks/reactions now complete
   locally for read-only retained posts; native Saved/permalink recovery works
   offline and across tabs, with conditional independent sync, scope isolation,

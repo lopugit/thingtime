@@ -144,3 +144,16 @@ previews use `SharedMedia` as well. `LocalDrafts` owns atomic independent media
 copies and draft binding; unbound post/comment files expire after 24 hours and
 are reaped on later file/draft writes. Annotation, linked galleries, audio/video
 acceptance and account byte synchronization still need their adapters/checks.
+
+
+## Durable account upload foundation
+
+`app/local-workspace/accountFiles.ts` supplies scoped atomic file/byte/intent
+admission and durable multipart recovery. `accountTransport.client.ts` negotiates
+the existing upload capabilities and fences account/data-plane requests and
+credentialless signed PUTs. `accountApi.client.ts` drains it alongside content and
+interaction queues; `AccountSyncStatus.tsx` renders its retry panel. This is not
+yet the ordinary account picker/list/media adapter. Run `test:local-workspace`
+and the opt-in `accountFiles.browser.test.ts` (README local workspace setup),
+plus the attachment suite. Preserve start identity and completion phase on lost
+responses; never restart uncertain completion as a fresh upload.
