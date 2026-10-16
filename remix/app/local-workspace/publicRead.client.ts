@@ -4,11 +4,12 @@ import { WorkspaceError } from './storage';
 
 /** Anonymous public discovery never borrows a newly signed-in tab's cookies.
  * Cache only public, non-bearer reads. Cached content grants no write authority. */
-export async function publicWorkspaceRead(path: string, feature: string, version: string, signal?: AbortSignal) {
+export async function publicWorkspaceRead(path: string, feature: string, version: string, signal?: AbortSignal, searchBody?: string) {
 	const lease = anonymousWorkspaceLease(); lease.assertCurrent(); signal?.throwIfAborted();
 	const url = new URL(path, window.location.origin);
-	if (url.origin !== window.location.origin || !['/api/v1/things', '/api/v1/things/feed', '/api/v1/things/trending', '/api/v1/components/browse', '/api/v1/schemas/browse', '/api/v1/webpages/resolve', '/api/v1/themes/shared', '/api/v1/algorithms/search', '/api/v1/algorithms/shared', '/api/v1/users/profile', '/api/v1/users/activity', '/api/v1/users/search'].includes(url.pathname)) throw new WorkspaceError('INVALID_PUBLIC_READ', 'Unsupported public catalog read');
-	const key = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url.pathname + url.search)).then(bytes => [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join(''));
+	if (url.origin !== window.location.origin || !['/api/v1/things', '/api/v1/things/search', '/api/v1/things/feed', '/api/v1/things/trending', '/api/v1/components/browse', '/api/v1/schemas/browse', '/api/v1/webpages/resolve', '/api/v1/themes/shared', '/api/v1/algorithms/search', '/api/v1/algorithms/shared', '/api/v1/users/profile', '/api/v1/users/activity', '/api/v1/users/search'].includes(url.pathname)) throw new WorkspaceError('INVALID_PUBLIC_READ', 'Unsupported public catalog read');
+	if (searchBody !== undefined && (url.pathname !== '/api/v1/things/search' || new TextEncoder().encode(searchBody).byteLength > 32 * 1024)) throw new WorkspaceError('INVALID_PUBLIC_READ', 'Search must be at most 32 KiB.');
+	const key = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(searchBody === undefined ? url.pathname + url.search : JSON.stringify([url.pathname, url.search, searchBody]))).then(bytes => [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join(''));
 	const cacheable = !url.searchParams.has('key') && !url.searchParams.has('sharedRoot');
 	const db = anonymousWorkspaceDatabase();
 	try {
@@ -17,7 +18,8 @@ export async function publicWorkspaceRead(path: string, feature: string, version
 		// transport does. Replacing the timeout with a supplied signal left every
 		// cancellable caller (things.get, the component/schema browsers) able to
 		// hang forever, and never reached the cached-fallback path below.
-		const response = await fetch(url, { credentials: 'omit', redirect: 'error', headers: { Accept: 'application/json' },
+		const response = await fetch(url, { credentials: 'omit', redirect: 'error', headers: { Accept: 'application/json', ...(searchBody !== undefined ? { 'Content-Type': 'application/json' } : {}) },
+			...(searchBody !== undefined ? { method: 'POST', body: searchBody } : {}),
 			signal: AbortSignal.any([AbortSignal.timeout(20_000), ...(signal ? [signal] : [])]) });
 		lease.assertCurrent();
 		if (!response.ok) throw new WorkspaceError('PUBLIC_READ_FAILED', `Public content is unavailable (${response.status})`, response.status);

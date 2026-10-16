@@ -1,3 +1,5 @@
+import { searchLocalThings } from './structuredSearch';
+import { workspaceScopeKey } from './storage';
 import { LocalTimelineVersions } from './timelineVersions';
 import { LOCAL_TIMELINE_FOLDER, LocalTimeline } from './timeline';
 import { searchLocalLibrary } from './librarySearch';
@@ -78,7 +80,15 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	local.things = { ...local.things,
 		search: async (args: Record<string, unknown> = {}, options?: { signal?: AbortSignal }) => {
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
-			if (args.workspace !== true) return unavailable();
+			if (args.workspace !== true) {
+				const { workspace: _workspace, device: _device, anon: _anon, ...query } = args;
+				return publicWorkspaceRead('/api/v1/things/search', 'api.things-search', '1.3.0', options?.signal, JSON.stringify(query));
+			}
+			if (args.device === true) {
+				const all = await service().snapshot(), page = await searchLocalThings(all, args, workspaceScopeKey({ kind: 'anonymous' })), index = localTargetIndex(all);
+				lease.assertCurrent(); options?.signal?.throwIfAborted();
+				return { ...page, things: page.things.map(project), posts: Object.fromEntries(page.things.filter(row => row.thingtime.includes('post')).map(row => [row.id, localPostProjection(row, all, LOCAL_WORKSPACE_OWNER, false, index)])), incomplete: false };
+			}
 			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
 			const page = searchLocalLibrary(await service().librarySnapshot(), args);
 			lease.assertCurrent(); options?.signal?.throwIfAborted();

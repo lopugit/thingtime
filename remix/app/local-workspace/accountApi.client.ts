@@ -1,3 +1,4 @@
+import { searchLocalThings } from './structuredSearch';
 import { readWorkspaceSearchCursor, workspaceSearchCursor } from './searchCursor';
 import { searchLocalLibrary } from './librarySearch';
 import { validateThingtimeCrystal } from '../schemas/registry';
@@ -143,6 +144,12 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		search: async (args: Record<string, any> = {}, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
 			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (args.workspace !== true) return online.things.search(args, options);
+			if (args.device === true) {
+				const { sync } = worker(), page = await searchLocalThings(await sync.things.snapshot(), args, workspaceScopeKey(scope));
+				const things = (await sync.views(page.things.map(row => row.id))).map(project);
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				return { ...page, things, posts: {}, incomplete: true };
+			}
 			// `author` is accepted but never trusted: the remote read below pins it
 			// to this workspace's own owner, so a caller cannot widen or redirect it.
 			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace', 'author'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');

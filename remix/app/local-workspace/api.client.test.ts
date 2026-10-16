@@ -14,9 +14,11 @@ test('anonymous API writes and exports use no network and a retired facade canno
 	const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote call'); };
 	bindLocalWorkspace(true, rootIdentity.read().generation);
 	try {
-		const api = anonymousApi({ attachments: { annotate: remote }, login: remote, auth: { login: remote }, things: { remove: remote, create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
+		const api = anonymousApi({ attachments: { annotate: remote }, login: remote, auth: { login: remote }, things: { search: remote, remove: remote, create: remote, update: remote, get: remote, list: remote, export: remote, import: remote, bulk: remote, feed: remote, trending: remote, react: remote, save: remote, saved: remote, vote: remote, updown: remote }, actions: { run: remote }, schemas: { list: remote }, algorithms: { list: remote, create: remote, update: remote, remove: remote, setActive: remote, track: remote }, themes: { list: remote, save: remote, getShared: remote, setActive: remote, remove: remote } });
 		const created = await api.things.create({ thingtime: ['data'], crystal: { name: 'Offline' } });
 		assert.equal((await api.things.get({ id: created.id })).thing.crystal.name, 'Offline');
+		const device = await api.things.search({ workspace: true, device: true, conditions: [{ field: 'name', op: 'eq', value: 'Offline' }] });
+		assert.deepEqual(device.things.map((row: any) => row.id), [created.id]); assert.equal(device.incomplete, false);
 		assert.equal((await api.things.export({ ids: [created.id] })).plan.things.length, 1);
 		await assert.rejects(api.actions.run({}), /Which action/);
   const action = await api.things.create({ thingtime: ['action'], crystal: { name: 'Local', inputs: [], capabilities: [], steps: [{ op: 'return', value: 'offline' }] } });
@@ -86,6 +88,7 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		await assert.rejects(api.things.create({ crystal: { name: 'Late callback' } }), /Workspace changed/);
 		await assert.rejects(api.things.save({ id: poll.id }), /Workspace changed/);
 		await assert.rejects(api.things.saved(), /Workspace changed/);
+		await assert.rejects(api.things.search({ workspace: true, device: true }), /Workspace changed/);
 		await assert.rejects(filePlan.readLocalFile(filePlan.files[0].id), /Workspace changed/);
 		assert.equal(remoteCalls, 0);
 	} finally {

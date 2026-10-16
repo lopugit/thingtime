@@ -68,7 +68,7 @@ change this pointer; logout/account changes revoke it.
 | --- | --- |
 | Local storage and account boundaries | Unit-tested persistence, atomic rollback, concurrent edits, scope isolation and identity invalidation. Settings now shows scoped device usage and offers browser eviction protection without login, with offline reload, other-tab writes and failed-accounting browser checks. Finish broader multi-tab and account-switch regressions. |
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
-| Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Library text search now works across folders offline, with bounded cursor pages and visible error/retry states. Clean-browser acceptance covers 61 matches, kind filters, rename/reload and grid/list mouse selection at 1440/390/320px. The earlier checkbox report came from targeting its hidden input; clicking the visible label works, and descriptive labels/regressions now cover it. Structured/public search and remaining normal UI flows still require completion. |
+| Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Library text search now works across folders offline, with bounded cursor pages and visible error/retry states. Clean-browser acceptance covers 61 matches, kind filters, rename/reload and grid/list mouse selection at 1440/390/320px. The earlier checkbox report came from targeting its hidden input; clicking the visible label works, and descriptive labels/regressions now cover it. The native Search page now has a separate structured device view, with canonical field operators and credential-free anonymous online search (checkpoint below). Advanced shortcut filters/ranking, wider account discovery caching and remaining normal UI flows still require completion. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
@@ -1286,3 +1286,56 @@ row per event after verified reconnect, through both history views. Evidence:
 CI/preview status is reported separately. General offline-entry reliability,
 other notification kinds, cross-tab live refresh and the wider matrix remain
 open. The earlier account-move checkpoint's ancillary request is fixed here.
+
+
+## Structured device search checkpoint — 2026-10-16
+
+`/search?source=device` searches only saved Things in the current workspace,
+without login or a network connection. Anonymous/offline visitors default to
+this view. `Online search` explicitly selects the ordinary server search, with
+its existing authentication, visibility and rate-limit checks. Anonymous online
+requests use the existing read-only search POST with credentials omitted,
+redirects refused, a 20-second deadline and a 32 KiB body ceiling. Public query
+caches are separate from authored local content and never confer ownership.
+
+The device adapter reuses `api/utils/things/searchGrammar.ts`, extracted from
+the existing server compiler. All existing field operators, nested all/any
+groups, literal escaped string predicates, named emoji matches, primitive types,
+array membership and root dates use the same validation. Inherited JavaScript
+names are no longer accepted as datatype aliases. Device evaluation reads only
+own saved properties, excludes protected records and draft files, and cannot
+resolve another account or data plane. No Actions execute during search.
+
+Call the application adapter with `{ workspace: true, device: true, conditions,
+q, thingtime, sort, limit, cursor }`. Pages contain at most 50 rows; field groups
+retain the shared 32-condition/three-level bounds, filters cap at 32 KiB, and
+cursors bind a SHA-256 hash of the workspace and filters. A removed continuation
+anchor or changed scope/filter returns an error. Account device results explicitly
+remain incomplete: they are saved local content, not the whole remote account.
+The existing library's local-first account refresh/pagination is unchanged.
+
+Free text searches literal normalized authored values, not field names. Device
+sorts are newest/oldest; Mongo stemming/relevance, author/audience, geographic,
+engagement and shortcut filters remain outside this adapter and fail explicitly
+rather than silently changing the result set. The UI offers supported device
+controls and a local schema rail. Field filters can already express predicates
+such as schema ID, tags and date ranges. Schema creation/form UI and account
+schema dependency handling remain outstanding in the coverage matrix.
+
+Search caches include origin/account/data plane and source. Views remount on
+identity generation/source changes; outstanding results cannot repaint or write
+another view's cache. Invalid filters retain the last successful result set and
+show an explicit error. Normal source changes do not mix account and device
+pages or their cursors.
+
+Local verification: 173 workspace tests passed, with ten opt-in browser skips.
+The enabled production-build browser regression separately checks anonymous
+25-Thing import and two-page offline search, native numeric filtering, invalid
+path errors, cold reload, source changes, no mutation/upload and desktop,
+390px and 320px bounds. A disposable private account compares 25 canonical field
+queries against the real server API and verifies account device cold reload;
+a separate anonymous context cannot read those private fixtures. Evidence:
+`tmp/local-structured-search-ui-final/`. The client build contains 242 verified
+offline assets (21,512,349 bytes). Lint passes; raw TypeScript retains the same
+91 normalized diagnostics as the preceding branch checkpoint, with none added.
+These are local checks, not CI/deployed verification or full rollout completion.

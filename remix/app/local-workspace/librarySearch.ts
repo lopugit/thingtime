@@ -7,7 +7,7 @@ const fold = (text: string) => text.normalize('NFKC').toLowerCase();
 
 /** Search authored values, not JSON field names or local bookkeeping. The
  * workspace's record/byte quotas bound this scan; values were validated on write. */
-function textOf(row: LocalThing) {
+export function localSearchText(row: LocalThing) {
  const pending: unknown[] = [row.crystal, row.tags || []], text: string[] = [];
  while (pending.length) {
   const value = pending.pop();
@@ -39,7 +39,7 @@ export function searchLocalLibrary(rows: LocalThing[], query: LibrarySearchQuery
    after = cursor[1];
   } catch { invalid('Invalid or changed search cursor. Start a new search.'); }
  }
- let matches = rows.filter(row => isLocalLibraryThing(row) && (!kinds.length || kinds.some(kind => row.thingtime.includes(kind))) && (!q || textOf(row).includes(q)))
+ let matches = rows.filter(row => isLocalLibraryThing(row) && (!kinds.length || kinds.some(kind => row.thingtime.includes(kind))) && (!q || localSearchText(row).includes(q)))
   .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
  const total = matches.length;
  if (after) {

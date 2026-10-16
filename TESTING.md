@@ -2,6 +2,17 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Search → This device: normal-import more than 20 local Things, disconnect,
+      search and page them, add numeric/nested/tag/date field filters, and reload.
+      Invalid paths/operators/types must show errors while keeping prior results.
+      No local query sends an API search or mutation. Switch to Online search and
+      back: caches, pages and cursors stay separated. Check 1440/390/320px bounds.
+      In a disposable account compare field results with the real API, cold-reload
+      device search and confirm a separate anonymous context sees no private rows.
+      Also run `structuredSearch.test.ts`, `publicSearch.test.ts`, API facade tests
+      and opt-in `structuredSearch.browser.test.ts`. Prototype names must never
+      become datatype aliases; unsupported shortcuts/ranking fail explicitly.
+
 - [ ] In a disposable local account, move multiple ordinary Things into a folder
       offline, cold-navigate/reload that folder, then reconnect. The server must
       remain unchanged until the account is verified; sync must carry actor,

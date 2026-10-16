@@ -870,3 +870,28 @@ Artifacts/logs: `tmp/local-notifications-*`. Initial browser testing caught and
 fixed the parent nav login gate. This checkpoint does not complete remote social
 notification caching, manual retry controls, cross-tab live refresh or the full
 local-first matrix. No main merge or manual deployment was performed.
+
+
+## Structured device search — 2026-10-16
+
+The native `/search` now exposes This device and Online search. Device field
+filters reuse the canonical grammar; anonymous searches run only over their
+leased workspace snapshot. Account device results are explicitly limited to
+saved local content. Anonymous online discovery uses the existing read-only
+endpoint without credentials, bounded by body size and deadline. Workspace,
+filter and source binding prevent cross-scope cursor/cache reuse. Invalid
+filters retain prior results; prototype datatype names now reject explicitly.
+
+Local evidence: 173 workspace tests passed (ten opt-in browser skips); the two
+enabled structured-search browser flows cover anonymous offline import/paging/
+filtering/cold reload/source isolation and 25 real server/device predicate
+comparisons in a disposable private account. The separate anonymous view sees
+no private fixture content. Desktop 1440px, mobile 390px and narrow 320px views
+have no horizontal overflow. Artifacts: `tmp/local-structured-search-ui-final/`.
+Lint and the client build pass (242 offline assets, 21,512,349 bytes). Raw
+TypeScript retains the same 91 normalized baseline diagnostics; it is not clean.
+
+This checkpoint provides the search dependency needed by schema forms. Schema
+creation/recovery, schema dependency copies, advanced local shortcut filters,
+account discovery caching and the rest of the coverage matrix remain open.
+It is not authorization to merge or deploy the incomplete rollout.

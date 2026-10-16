@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: The native Search page now filters saved device
+  Things anonymously and offline using the shared canonical field grammar.
+  Source-scoped caches/cursors keep online and device results separate; anonymous
+  public search omits credentials. Local server comparison and responsive/cold
+  offline checks are documented in the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Lopu messages now save to scoped device history
   without login or network. Account messages queue the existing idempotent
   recorder after verified reconnect; failures retain local text. The normal nav

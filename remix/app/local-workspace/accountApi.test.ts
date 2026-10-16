@@ -32,6 +32,8 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal(secondPage.things.length, 1); assert.notEqual(secondPage.things[0].id, library.things[0].id);
   assert.equal((await api.things.list({ thingtime: 'webpage' }) as any).things[0].id, page.id);
   const matches: any = await api.things.search({ workspace: true, q: 'cold offline' });
+  const structured: any = await api.things.search({ workspace: true, device: true, conditions: [{ field: 'name', op: 'contains', value: 'cold' }] });
+  assert.equal(structured.things[0].id, page.id); assert.equal(structured.incomplete, true); assert.equal(structured.source, 'device');
   assert.equal(matches.things[0].id, page.id); assert.equal(matches.things[0].author.id, scope.ownerId); assert.equal(matches.incomplete, true);
   await assert.rejects(api.things.search({ workspace: true, q: 'cold offline', cursor: 'server-cursor' }), /Reload/);
   await assert.rejects(api.things.get({ id: 'not-cached' }), /offline/);
@@ -55,6 +57,7 @@ test('account local facade and native page resolution work offline without uploa
   rootIdentity.changed(); bindLocalWorkspace(true, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {} } as any), /workspace changed/i);
   await assert.rejects(api.things.get({ id: page.id, key: 'old-key' } as any), /workspace changed/i);
+  await assert.rejects(api.things.search({ workspace: true, device: true }), /workspace changed/i);
   assert.equal(remoteCalls, 1);
   const anonymous = await workspaceDatabase().transaction({ kind: 'anonymous' }, 'readonly', { assertCurrent() {}, onInvalidate: () => () => {} }, tx => tx.list('things'));
   assert.equal(anonymous.length, 0);
