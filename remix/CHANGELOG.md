@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Add conditional attachment deletion to the existing
+  cleanup lifecycle. Stale/racing edits are protected, deferred cleanup remains
+  retryable and billed, and built API discovery advertises delete 1.2.0. Real
+  local database/browser and built-server checks pass; durable upload cancellation
+  and local deletion wiring remain pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-attachment-deletion--2026-10-16).
+
 - 2026-10-16 — **Codex (AI)**: Persist account file annotations and folder choices
   locally with an independent conditional sync queue, folder dependencies and
   native conflict comparison. Verified offline edits, lost replies and responsive

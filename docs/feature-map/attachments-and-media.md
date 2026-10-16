@@ -9,6 +9,14 @@ must carry these versions. `accountTransport.client.ts` negotiates them;
 and canonical attachment cleanup. Durable metadata reconciliation now lives in `accountFileMetadata.ts`;
 delete reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
 
+Conditional deletion uses the same cleanup claims: delete 1.2.0 accepts
+`expectedUpdatedAt` and fences both ordinary and objectless initial claims.
+Retries of already-deleting rows retain owner/target/expiry checks but omit the
+pre-claim timestamp. `attachments.test.ts` covers racing/skipped claims and
+multipart deferral; the real account file browser test races annotation/deletion.
+Absence is not a durable late-start cancellation receipt; the local deletion
+queue remains pending.
+
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).
 Every attachment is bound to exactly one target (post, comment, page, message,

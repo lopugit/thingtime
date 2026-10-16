@@ -1444,6 +1444,70 @@ test('explicit edit deletion requires and claims the exact bound target', async 
 	});
 });
 
+test('conditional deletion rejects malformed and stale versions before storage access', async () => {
+	let reads = 0, storage = 0;
+	const doc = attachmentDoc({ attachmentState: 'ready', uploadId: undefined });
+	const service = createAttachmentService({
+		store: { getOwned: async () => { reads++; return doc; } } as any,
+		getS3: () => { storage++; throw Error('Must not access storage'); }
+	});
+	for (const expectedUpdatedAt of [null, 0, {}, '', 'not a date']) {
+		assert.deepEqual(await service.remove('user-1', { id: doc.shareId, expectedUpdatedAt }), {
+			ok: false, status: 400, error: 'expectedUpdatedAt must be an ISO timestamp'
+		});
+	}
+	assert.equal(reads, 0);
+	assert.deepEqual(await service.remove('user-1', { id: doc.shareId, expectedUpdatedAt: new Date(now.getTime() - 1).toISOString() }), {
+		ok: false, status: 409, error: 'Attachment changed; refresh before deleting'
+	});
+	assert.equal(storage, 0);
+});
+
+test('conditional deletion reports a racing edit instead of acknowledging a skipped claim', async () => {
+	for (const targetId of [undefined, 'post-1']) {
+		let doc = attachmentDoc({ attachmentState: 'ready', targetId, uploadId: undefined }), removals = 0;
+		const service = createAttachmentService({
+			store: {
+				getOwned: async () => doc,
+				claimDeleting: async (_owner: string, _id: string, _states: unknown, scope: any) => {
+					assert.equal(scope.expectedUpdatedAt.getTime(), now.getTime());
+					assert.equal(scope.targetId, targetId);
+					doc = { ...doc, updatedAt: new Date(now.getTime() + 1) };
+					return null; // The version predicate lost to the concurrent edit.
+				},
+				removeDeleting: async () => { removals++; return true; }
+			} as any,
+			getS3: () => noopS3({ deleteObject: async () => { removals++; } })
+		});
+		assert.deepEqual(await service.remove('user-1', { id: doc.shareId, targetId, expectedUpdatedAt: now.toISOString() }), {
+			ok: false, status: 409, error: 'Attachment changed; refresh before deleting'
+		});
+		assert.equal(removals, 0);
+	}
+});
+
+test('conditional deletion resumes a prior claim and keeps deferred multipart storage billed', async () => {
+	const deleting = attachmentDoc({ attachmentState: 'deleting', updatedAt: new Date(now.getTime() + 1), attachmentPartsIssuedAt: now });
+	let removed = 0, aborted = 0;
+	const service = createAttachmentService({ now: () => now,
+		store: { getOwned: async () => deleting, claimDeleting: async () => deleting, removeDeleting: async () => { removed++; return true; } } as any,
+		getS3: () => noopS3({ abortMultipartUpload: async () => { aborted++; } })
+	});
+	assert.deepEqual(await service.remove('user-1', { id: deleting.shareId, expectedUpdatedAt: now.toISOString() }), {
+		ok: true, deferred: true, retryAt: deleting.attachmentExpiresAt!.toISOString()
+	});
+	assert.equal(aborted, 1); assert.equal(removed, 0);
+});
+
+test('conditional deletion accepts absence but never acknowledges unfinished cleanup as complete', async () => {
+	let doc: AttachmentDoc | null = attachmentDoc({ attachmentState: 'deleting', uploadId: undefined, attachmentExpiresAt: undefined });
+	const service = createAttachmentService({ store: { getOwned: async () => doc, claimDeleting: async () => null } as any, getS3: () => noopS3() });
+	const input = { id: 'attachment-1', expectedUpdatedAt: now.toISOString() };
+	assert.deepEqual(await service.remove('user-1', input), { ok: false, status: 503, error: 'Attachment cleanup is still in progress; retry deletion' });
+	doc = null;
+	assert.deepEqual(await service.remove('user-1', input), { ok: true, deferred: false });
+});
+
 test('delete claim fences distinguish unattached drafts, expired drafts, and one exact target', () => {
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft' }), { targetId: { $exists: false } });
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'draft', expiredAtOrBefore: now }), {
@@ -1451,6 +1515,11 @@ test('delete claim fences distinguish unattached drafts, expired drafts, and one
 		attachmentExpiresAt: { $lte: now }
 	});
 	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'target', targetId: 'post-1' }), { targetId: 'post-1' });
+	assert.deepEqual(attachmentDeleteClaimFence({ kind: 'target', targetId: 'post-1', expectedUpdatedAt: now }), { targetId: 'post-1', updatedAt: now });
+	assert.deepEqual(attachmentObjectlessPendingDeleteFence({ kind: 'draft', expectedUpdatedAt: now }), {
+		targetId: { $exists: false }, updatedAt: now, attachmentState: 'pending', uploadId: { $exists: false },
+		objectVersionId: { $exists: false }, attachmentObjectlessDelete: { $exists: false }
+	});
 	assert.deepEqual(attachmentObjectlessPendingDeleteFence({ kind: 'draft', expiredAtOrBefore: now }), {
 		targetId: { $exists: false },
 		attachmentExpiresAt: { $lte: now },

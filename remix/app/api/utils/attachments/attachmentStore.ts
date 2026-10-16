@@ -117,16 +117,19 @@ type LinkedReadyInput = {
 	expiresAt: Date;
 };
 
-export type AttachmentDeleteClaimScope =
+export type AttachmentDeleteClaimScope = (
 	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date }
-	| { kind: 'target'; targetId: string };
+	| { kind: 'target'; targetId: string }
+) & { expectedUpdatedAt?: Date };
 export type AttachmentDraftDeleteClaimScope = Extract<AttachmentDeleteClaimScope, { kind: 'draft' }>;
 
 export const attachmentDeleteClaimFence = (scope: AttachmentDeleteClaimScope): Record<string, unknown> => {
-	if (scope.kind === 'target') return { targetId: scope.targetId };
 	return {
-		targetId: { $exists: false },
-		...(scope.expiredAtOrBefore ? { attachmentExpiresAt: { $lte: scope.expiredAtOrBefore } } : {})
+		...(scope.kind === 'target' ? { targetId: scope.targetId } : {
+			targetId: { $exists: false },
+			...(scope.expiredAtOrBefore ? { attachmentExpiresAt: { $lte: scope.expiredAtOrBefore } } : {})
+		}),
+		...(scope.expectedUpdatedAt ? { updatedAt: scope.expectedUpdatedAt } : {})
 	};
 };
 
@@ -594,7 +597,9 @@ export const attachmentStore: AttachmentStore = {
 		return (await things.findOne({
 			...attachmentMatch(id),
 			ownerId,
-			...attachmentDeleteClaimFence(scope),
+			// A previous claim already made deletion irreversible and advanced updatedAt.
+			// Resume its cleanup without requiring the pre-claim content version.
+			...attachmentDeleteClaimFence({ ...scope, expectedUpdatedAt: undefined }),
 			attachmentState: 'deleting',
 			attachmentObjectlessDelete: true,
 			uploadId: { $exists: false },
@@ -642,7 +647,8 @@ export const attachmentStore: AttachmentStore = {
 		return (await things.findOne({
 			...attachmentMatch(id),
 			ownerId,
-			...fence,
+			// Retry only the already-claimed deletion; retain owner/target/expiry fences.
+			...attachmentDeleteClaimFence({ ...scope, expectedUpdatedAt: undefined }),
 			attachmentState: 'deleting'
 		} as any)) as any as AttachmentDoc | null;
 	},

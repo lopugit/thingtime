@@ -2,6 +2,17 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Conditional file deletion: malformed versions fail 400, stale versions
+      fail 409 without touching bytes, and a real annotation/delete race using
+      one timestamp has exactly one winner. Repeat deletion after a lost reply;
+      content must remain 404. Existing deleting rows must resume cleanup with
+      the original timestamp, preserving multipart deferral and quota billing.
+      A skipped claim with a live row must not return completed success. Run
+      attachment/capability suites and the enabled account file browser fixture;
+      verify built manifests and docs advertise delete 1.2.0 and anonymous calls
+      remain 401. Missing rows are not proof of durable upload cancellation;
+      late-start fencing and local deletion queue acceptance remain separate.
+
 - [ ] Account file details: save annotations and a folder selection offline,
       reopen storage, reconnect, and wait for the file and folder dependencies.
       Drop a successful annotation reply; recovery must retain newer local edits

@@ -1984,3 +1984,34 @@ unbound singleton and are not valid runtime evidence. Screenshots and requests:
 paths; lint has zero errors and one existing LocalThings constructor warning.
 These are local results. CI/deployed verification and the full acceptance matrix
 remain separate; no main merge or manual deployment is claimed.
+
+
+## Conditional attachment deletion — 2026-10-16
+
+The existing `/api/v1/attachments/delete` now accepts optional
+`expectedUpdatedAt` (capability and contract `api.attachment-delete` 1.2.0).
+A stale read returns 409 before object storage is touched. The version also
+participates in the atomic deleting claim, so a concurrent annotation or move
+cannot be silently discarded between the read and claim. Owner, exact target,
+finalization, private access and existing quota/cleanup rules remain enforced.
+
+An already-claimed deletion resumes cleanup with the original precondition even
+though its lifecycle timestamp advanced. Deferred multipart cleanup remains
+billed until storage verification finishes. A skipped conditional claim reports
+409 for a live row or 503 for unfinished cleanup, rather than false completion.
+Absence remains idempotent success. It is **not** a cancellation receipt: a delayed
+upload start can still reserve an absent request ID. A durable cancellation fence
+is required before wiring offline file deletion, and that work remains pending.
+
+Local validation: 396 tests pass (299 attachment, 97 capability), including stale,
+malformed and racing versions, deferred cleanup and absence. The enabled real
+Vite/replica browser fixture passes in 11 seconds: it verifies offline metadata
+and conflict review at 1440/390/320px, then races a conditional deletion against an
+annotation and proves exactly one wins; stale deletion preserves the exact bytes,
+completed deletion yields content 404, and retrying the lost receipt succeeds.
+Evidence is in `tmp/account-file-delete-ui/verification.json`. The Node/Nitro build
+passes; both built-server manifests advertise 1.2.0, the docs route returns JSON,
+and anonymous deletion returns 401. TypeScript reports the same 91 baseline
+diagnostics with none in changed paths; focused lint has no errors or warnings.
+CI and deployed feature acceptance remain separate. No main merge, manual deploy,
+public publishing or existing-account mutation is included in these checks.

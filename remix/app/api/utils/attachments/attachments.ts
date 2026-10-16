@@ -36,6 +36,7 @@ import {
 	bindReadyAttachmentsToTarget,
 	syncBoundTargetAttachments,
 	type AttachmentDoc,
+	type AttachmentDeleteClaimScope,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
 	type AttachmentStore
@@ -371,7 +372,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	const cleanupClaimedDoc = async (
 		getS3: () => AttachmentS3,
 		doc: AttachmentDoc,
-		scope: { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date } | { kind: 'target'; targetId: string }
+		scope: AttachmentDeleteClaimScope
 	): Promise<AttachmentCleanupOutcome> => {
 		// Linked docs never touch S3. For everything else, resolve the client
 		// BEFORE the destructive deleting claim so an unconfigured/broken S3
@@ -1210,7 +1211,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment deletion request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => !['id', 'targetId'].includes(key))) return fail(400, 'Invalid attachment deletion request');
+			if (Object.keys(raw).some((key) => !['id', 'targetId', 'expectedUpdatedAt'].includes(key))) return fail(400, 'Invalid attachment deletion request');
+			if (raw.expectedUpdatedAt !== undefined && (typeof raw.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(raw.expectedUpdatedAt)))) {
+				return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
+			}
+			const expectedUpdatedAt = raw.expectedUpdatedAt === undefined ? undefined : new Date(raw.expectedUpdatedAt as string);
 			const id = normalizeId(raw.id);
 			const targetId = raw.targetId === undefined ? null : normalizeId(raw.targetId);
 			if (!id) return fail(400, 'Invalid attachment id');
@@ -1231,13 +1236,25 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const reason = existing.targetId ? { kind: 'target' as const, targetId: existing.targetId } : { kind: 'draft' as const };
+			// Once deleting, the original content version no longer applies: cleanup
+			// retries must still finish exact-version removal and quota settlement.
+			if (expectedUpdatedAt && existing.attachmentState !== 'deleting' && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+				return fail(409, 'Attachment changed; refresh before deleting');
+			}
+			const reason: AttachmentDeleteClaimScope = {
+				...(existing.targetId ? { kind: 'target', targetId: existing.targetId } : { kind: 'draft' }),
+				...(expectedUpdatedAt ? { expectedUpdatedAt } : {})
+			};
 			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, reason);
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
 				if (raced?.targetId && raced.targetId !== targetId) return fail(409, 'Attached files must be removed from their post');
 				if (raced?.attachmentState === 'finalizing') {
 					return fail(409, 'Attachment finalization is in progress — try again');
+				}
+				if (expectedUpdatedAt && raced) {
+					if (raced.attachmentState !== 'deleting') return fail(409, 'Attachment changed; refresh before deleting');
+					return deferredDeletingResponse(raced) || fail(503, 'Attachment cleanup is still in progress; retry deletion');
 				}
 				return deferredDeletingResponse(raced) || { ok: true, deferred: false };
 			}

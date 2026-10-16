@@ -285,6 +285,25 @@ test(
 				assert.equal(row.actor, owner.id);
 				assert.ok(row.plane);
 			}
+			// Exercise conditional deletion on the real database and storage lifecycle.
+			const deleteFile = (expectedUpdatedAt: unknown) => context.request.post(url('/api/v1/attachments/delete'), {
+				headers, data: { id: remoteId, expectedUpdatedAt }
+			});
+			assert.equal((await deleteFile(null)).status(), 400);
+			assert.equal((await deleteFile(original.updatedAt)).status(), 409);
+			assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text);
+			const [deleteRace, editRace] = await Promise.all([
+				deleteFile(reconciled.updatedAt),
+				context.request.post(url('/api/v1/attachments/annotate'), { headers, data: { id: remoteId, title: 'Concurrent deletion fixture', expectedUpdatedAt: reconciled.updatedAt } })
+			]);
+			assert.equal([deleteRace, editRace].filter(response => response.status() === 200).length, 1, 'Edit and conditional deletion cannot both win');
+			if (editRace.status() === 200) {
+				assert.equal(deleteRace.status(), 409);
+				assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text);
+				assert.equal((await deleteFile((await readRemote()).updatedAt)).status(), 200);
+			} else assert.ok([404,409].includes(editRace.status()));
+			assert.equal((await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}`))).status(), 404);
+			assert.equal((await deleteFile(reconciled.updatedAt)).status(), 200, 'Lost deletion receipt can be retried');
 			assert.deepEqual(errors, []);
 			if (artifacts)
 				await writeFile(
@@ -293,6 +312,8 @@ test(
 						{
 							adapterOnly: true,
 							conditionalAnnotation: true,
+							conditionalDeletion: true,
+							editDeleteSingleWinner: true,
 							concurrentEditSingleWinner: true,
 							conditionalPlacement: true,
 							durableOfflineMetadata: true,

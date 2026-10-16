@@ -5954,7 +5954,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
@@ -5968,7 +5969,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		methods: ['POST'],
 		steps: [
 			'POST the canonical attachment id; include the exact targetId when deleting from an existing post or comment.',
-			'On success, remove it from local draft state.',
+			'Optionally send expectedUpdatedAt from the current Thing read. A stale version returns 409 before claiming deletion, including a concurrent edit between read and claim.',
+			'After deletion is claimed, retrying resumes cleanup even if its lifecycle timestamp advanced. A deferred response includes retryAt; storage remains charged until cleanup is verified. Missing rows are idempotent success, not a durable cancellation fence against a delayed upload start.',
 			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
 		],
 		requestExamples: [
