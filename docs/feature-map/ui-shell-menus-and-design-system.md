@@ -116,6 +116,6 @@ only intercepts events inside the browser and leaves editable inputs alone.
 `components/Devices/MobileDeviceSetupCard.tsx` is shared by Things and Things
 settings. `mobileDeviceBridge.ts` negotiates the explicit native capability and
 fences responses by request, account and origin. iOS implements the bounded
-bridge in `iOS/Thingtime/Devices/`; native credentials never reach the renderer.
-Run `test:devices` and the opt-in iOS mobile-device acceptance script. See
+bridge in `iOS/Thingtime/Devices/`; Android uses `android/app/src/main/java/com/thingtime/mobile/`. Native credentials never reach the renderer.
+Run `test:devices` and the opt-in iOS/Android mobile-device acceptance scripts. See
 [full mobile and sync scope](../mobile-file-sync.md).

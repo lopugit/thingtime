@@ -64,7 +64,7 @@ never cross the JavaScript bridge. The initial capability list is empty.
 Things and Settings use the same `MobileDeviceSetupCard` and request codec.
 Foreground checks publish a bounded snapshot; app backgrounding and navigation
 cancel the worker. This is not a background file-sync scheduler. No file or photo
-permission is requested. Native Android still needs its own secure implementation.
+permission is requested. Android now implements the same capability with the origin-restricted AndroidX bridge and Keystore-encrypted records.
 
 The opt-in `iOS/scripts/test-mobile-devices.sh` uses a disposable API-created
 account on localhost to verify a real pairing, online readback, Keychain reload
@@ -76,8 +76,8 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 
 | Requirement | Required evidence | Current state |
 | --- | --- | --- |
-| Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS client, Keychain and Things/Settings control implemented; local API and simulator engine verified; signed-in app click-through, physical iOS and Android pending |
-| Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS uses the existing proof protocol with durable Keychain pending claims; Android Keystore adapter pending |
+| Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
+| Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
 | Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor foundation only |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal tests only; native schedulers and transfer adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Existing multipart attachments available; sync transport pending |
@@ -122,4 +122,31 @@ Do not promise continuously running mobile daemons.
   Browser component QA covered synthetic unpaired/pending/paired/revoked states
   at desktop and 390px widths without horizontal overflow. This does not yet
   prove a signed-in user clicking through the installed app or physical-device
-  behavior. Android and all real file-transfer acceptance remain pending.
+  behavior. All real file-transfer acceptance remains pending.
+
+## Android checkpoint — 2026-10-17
+
+`android/` provides a Java 17 / SDK 35 native shell (minimum API 26) with a
+main-frame, exact-origin AndroidX WebView bridge. Device credentials and signing
+seeds remain native; AES-GCM records in no-backup storage use a non-exportable
+Android Keystore wrapping key. This is software Ed25519 signing, not a claim of
+hardware signing. Pending completions are saved atomically before transmission.
+Only the selected origin receives account cookies; node credentials use explicit
+Bearer requests, redirects are rejected and responses are size bounded.
+
+Nine JVM protocol tests pass, including the shared iOS/server signing vector,
+exact replay after a lost completion response, cancellation, account isolation,
+revocation and version negotiation. Debug build and Android lint pass. Three
+Android 35 emulator tests pass: encrypted reload/tampering, cross-account
+ciphertext rejection, and real local API pairing/readback plus the installed
+Things connection control. The latter verifies the native bridge, paired card,
+Check connection publication, retained device ID and no horizontal overflow.
+Android status/navigation bar insets were visually checked on the installed app.
+Physical devices, app-store signing/distribution and real file/Photos transfers
+remain pending. See [Android setup and acceptance](../android/README.md).
+
+- Final Android checks also passed the minified unsigned release build and
+  release lint. The installed connection-control test passed at both foldable
+  and phone widths. Screenshots show duplicated device-card painting beneath
+  the existing Things filters; the new connection card and native insets are
+  verified, but broader Things rendering remains an open acceptance item.

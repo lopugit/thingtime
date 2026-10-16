@@ -9945,3 +9945,23 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.
+
+## Android native device pairing
+
+- [ ] Run `android/scripts/test-mobile-devices.sh` against a disposable local
+  account and a test emulator/device; inspect the installed Things card and
+  Check connection round-trip, then relaunch and confirm the same device ID.
+- [ ] Pause or navigate while prepare/complete is in flight; no stale bridge
+  reply may reach a new page/account. Retry the saved completion without
+  generating a duplicate device. Reject unsupported server capabilities.
+- [ ] Cross-origin frames/documents cannot invoke pairing; cookies and node
+  credentials never follow redirects. Responses and encrypted records are bounded.
+- [ ] Corrupt or transplant an encrypted record to another account/origin:
+  fail closed with no plaintext fallback. Verify no-backup storage and that
+  native secrets do not appear in bridge replies or logs.
+- [ ] Check Android system bars and keyboard at narrow and foldable widths.
+  Web controls must stay inside the native inset container; WebView padding
+  alone does not reliably move its rendered page away from status/navigation bars.
+- [ ] Revoke then explicitly reconnect; confirm a full account and selected
+  server are required. Pairing alone must not request storage/Photos permission
+  or advertise background sync/continuous presence.

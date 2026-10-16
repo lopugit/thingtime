@@ -68,11 +68,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Added the Android native shell and device pairing
+  through the shared Things controls, with Keystore-encrypted recovery and
+  origin/account fencing. Debug build, lint, protocol and real API/emulator
+  acceptance passed; fork setup and native inset checks are documented. File
+  and Photos workers remain pending. [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: iOS now advertises native device pairing, with
   Things/Settings controls, account/origin-scoped Keychain recovery and bounded
   foreground presence. Verified real local API pairing/readback and simulator
   installation; Android and file/Photos workers remain pending. Details:
-  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-ios-pairing-and-recoverable-file-sync-core.md).
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 
 - 2026-10-17 — **Codex (AI)**: Added iOS/Android device descriptor contracts
@@ -80,7 +86,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and a durable browser operation journal. Native pairing, folder/photo
   workers and product integration remain in progress; see the
   [acceptance ledger](../docs/mobile-file-sync.md) and
-  [PR #1002 verification note](../PRs/1002-codex-mobile-file-sync-add-native-ios-pairing-and-recoverable-file-sync-core.md).
+  [PR #1002 verification note](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
 
 - 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
 

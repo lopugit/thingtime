@@ -1,4 +1,4 @@
-# PR #1002 — Native iOS pairing and recoverable file sync core
+# PR #1002 — Native mobile pairing and recoverable file sync core
 
 Branch: `codex/mobile-file-sync` → `develop`.
 PR: https://github.com/lopugit/thingtime/pull/1002
@@ -7,7 +7,8 @@ This is the first implementation checkpoint toward the full mobile device and
 Drive/Photos/Resilio-style sync request. The authoritative requirement/evidence
 table and remaining work are in [mobile-file-sync.md](../docs/mobile-file-sync.md).
 The second checkpoint adds native iOS pairing and its Things/Settings control.
-Android and the full sync UI/worker acceptance remain incomplete.
+The third checkpoint adds Android pairing and installed Things acceptance.
+Full sync UI/worker acceptance remains incomplete.
 
 ## Delivered source
 
@@ -87,3 +88,39 @@ acceptance. Keep the full goal active until the evidence table is satisfied.
   changelog and broader docs. The last complete semantic graph is preserved;
   the final structural refresh covers source changes without claiming current
   semantic coverage of the edited documentation.
+
+## Android checkpoint — 2026-10-17
+
+- Added a native Android shell, exact-origin/main-frame bridge, bounded HTTP
+  transport, Ed25519 proof protocol and atomic Keystore-encrypted account records.
+  Uses the existing Things/Settings UI and advertises pairing only. No file or
+  Photos permission, background worker or release-signing claim is introduced.
+- Debug build and lint passed, with nine JVM tests and three emulator tests.
+  Shared signature vector matches iOS/server. Lost completion response resumes
+  exact bytes, cancellation/account changes block further mutation, revoked
+  nodes remain revoked, and tampered/transplanted ciphertext fails closed.
+- Real local API acceptance created one online Android device, reopened its
+  encrypted record and retained its ID. The installed Things screen rendered
+  the paired card and Check connection updated the native state revision.
+  Native system-bar insets were visually checked; no horizontal page overflow.
+- The existing local AVD image was incomplete. Testing used a separate temporary
+  Android 35 Google APIs image, verified against Google's published checksum,
+  without changing the original AVD data. The first live-test failure was the
+  Java test cookie jar's quoted cookie formatting; the harness now sends ordinary
+  name/value cookies. Production transport reads the WebView cookie manager.
+- Setup, fork origin selection and private-fixture acceptance are documented in
+  `android/README.md`. APK build output and test credentials remain untracked.
+  Physical Android/iOS tests, iOS installed click-through, real file/Photos
+  transfer adapters, background workers, sync configuration and release remain.
+
+- Final Android checks also passed the minified unsigned release build and
+  release lint. The installed connection-control test passed at both foldable
+  and phone widths. Screenshots show duplicated device-card painting beneath
+  the existing Things filters; the new connection card and native insets are
+  verified, but broader Things rendering remains an open acceptance item.
+
+- Android-checkpoint semantic extraction completed successfully (57,714 nodes
+  before final source reconciliation). Existing cache-vintage, duplicate entity
+  ID and out-of-scope extraction warnings remain; earlier checkpoint guard
+  failures above are historical. Final source/manifest consistency is checked
+  after the PR-note rename and activity-recreation serialization change.

@@ -4547,9 +4547,9 @@ agent host. No private environment variables are needed. See the
 
 ### Native mobile device pairing development
 
-The iOS app advertises `devicePairingVersion` 1.0.0. With a full account, open
+The iOS and Android apps advertise `devicePairingVersion` 1.0.0. With a full account, open
 Things or Settings → Things and choose **Add this device**. Pairing keys and
-pending claims stay in the device-only Keychain, scoped to account and server
+pending claims stay in the iOS device-only Keychain or Android Keystore-encrypted no-backup storage, scoped to account and server
 origin. A destination must advertise the mobile requirements in
 `remix/app/devices/platform.ts`; production or older previews may not support
 them yet. HTTPS is required except for loopback development. Pairing does not
@@ -4573,4 +4573,13 @@ runs protocol, destination and live API tests. Keep simulator signing enabled
 for Keychain acceptance. A normal native unit run skips the live test without
 its explicit test environment. No developer account or signing secret belongs
 in this fixture. See [the full sync acceptance ledger](docs/mobile-file-sync.md)
-for Android, Photos and transfer work that is still in progress.
+for Photos and transfer work that is still in progress.
+
+The Android shell lives in `android/`. It requires JDK 17, Android SDK 35 and
+an updated System WebView on API 26+. Run `android/gradlew -p android assembleDebug`
+and install the resulting debug APK. A fork can select its HTTPS server with
+`-PthingtimeWebUrl=https://your-thingtime.example`; local debug builds use
+loopback HTTP plus `adb reverse`. The opt-in Android test script also requires
+`userId` in the private fixture. See [Android build and acceptance](android/README.md)
+for exact commands, emulator tests and security boundaries. Release signing
+and store distribution remain separate setup; never commit signing keys.
