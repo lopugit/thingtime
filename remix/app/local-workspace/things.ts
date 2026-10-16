@@ -184,7 +184,7 @@ export class LocalThings {
 			for (const file of currentFiles as LocalAttachment[]) if (!(ids as string[]).includes(file.id)) {
 				const latest = await tx.get<LocalAttachment>('things', file.id);
 				if (latest?.targetId !== id) continue;
-				delete latest.targetId; latest.localAttachment.expiresAt = new Date(Date.now() + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
+				delete latest.targetId; latest.localAttachment.expiresAt = new Date(Date.parse(this.now()) + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
 				await tx.put('things', file.id, latest);
 			}
 			await tx.put('things', id, row); return row;
