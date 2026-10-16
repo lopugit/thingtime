@@ -540,6 +540,13 @@ persisted; every check is client-side.
 
 ## Remote brightness and files
 
+- [ ] Native iOS pairing: select a compatible local origin, sign in, add this
+      device from Things and Settings, reload/relaunch and verify exactly one
+      iOS device. Interrupt prepare/complete and retry; change accounts/origins
+      during requests; background/foreground the app; revoke the credential and
+      reconnect explicitly. Keys/credentials must never appear in bridge replies.
+      Run `iOS/scripts/test-mobile-devices.sh` with a disposable local fixture;
+      keep simulator signing enabled so secure-storage failures are not bypassed.
 - [ ] Mobile device contract: pair signed synthetic iOS and Android descriptors,
   list/read them through the owner API and reload Things. Their platform must
   survive server and client projections without becoming macOS or acquiring

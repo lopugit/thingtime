@@ -1,4 +1,4 @@
-# PR #1002 — Mobile device contracts and recoverable file sync core
+# PR #1002 — Native iOS pairing and recoverable file sync core
 
 Branch: `codex/mobile-file-sync` → `develop`.
 PR: https://github.com/lopugit/thingtime/pull/1002
@@ -6,7 +6,8 @@ PR: https://github.com/lopugit/thingtime/pull/1002
 This is the first implementation checkpoint toward the full mobile device and
 Drive/Photos/Resilio-style sync request. The authoritative requirement/evidence
 table and remaining work are in [mobile-file-sync.md](../docs/mobile-file-sync.md).
-No native pairing or sync UI is claimed complete by this checkpoint.
+The second checkpoint adds native iOS pairing and its Things/Settings control.
+Android and the full sync UI/worker acceptance remain incomplete.
 
 ## Delivered source
 
@@ -47,8 +48,42 @@ No native pairing or sync UI is claimed complete by this checkpoint.
 
 ## Next work
 
-Implement actual native device discovery/pairing with secure credential and
-pending-claim recovery; connect it to Things. Then add editable sync roots and
+Complete installed-app iOS click-through and Android native pairing. Then add editable sync roots and
 canonical guarded file-version/transfer APIs, native file/Photos workers,
 background scheduling, progress/conflict/settings surfaces and real cross-device
 acceptance. Keep the full goal active until the evidence table is satisfied.
+
+
+## Native iOS checkpoint — 2026-10-17
+
+- Implemented CryptoKit prepare/complete, a Keychain record per canonical
+  origin/account, exact completion replay, explicit revocation recovery and
+  foreground-only state reports. Native bridge 1.0.0 accepts only main-frame
+  selected-origin requests and returns public status/ID, never credentials.
+- Added one Things/Settings connection card. Browser QA of synthetic states at
+  desktop and 390px confirmed bounded controls and no horizontal overflow.
+- 28 selected native tests passed: eight protocol/recovery tests, 19 existing
+  destination tests and one opt-in real local API/Keychain test. The latter
+  created one online iOS device and proved repeat-pair/reload retained its ID.
+  A shared signing vector is verified independently by Swift and the server.
+- 88 device tests, targeted lint and full web/Vercel build passed. Raw TypeScript
+  diagnostics remain identical to the original outside-file baseline.
+- Built, installed and launched the iPhone 17 Pro iOS 26.5 simulator app from
+  `/tmp/thingtime-mobile-ios-build/Build/Products/Debug-iphonesimulator/Thingtime.app`.
+  Info.plist confirms `http://127.0.0.1:14900`; the installed app renders the
+  local web shell. Build version remains 1.0 (31), not a TestFlight release.
+- The first live test exposed missing simulator signing (Keychain access failed).
+  The canonical acceptance script retains normal simulator signing and now
+  passes without any secure-storage fallback. Account credentials are kept in
+  an ignored fixture and injected through a protected, temporary test-run file.
+- Remaining: actual signed-in installed-app click-through, physical iOS,
+  Android app and Keystore, editable sync roots, real cloud/native transfer and
+  Photos workers, offline/background recovery, conflict/settings UI and release.
+
+- Final executable hashes match between build and simulator installation; the
+  running executable was verified under simulator container
+  `96D01CDD-6002-489C-A42E-366DF3B04AD9/Thingtime.app` (PID 56028).
+- Native-checkpoint semantic extraction also hit Graphify's shrink guard on the
+  changelog and broader docs. The last complete semantic graph is preserved;
+  the final structural refresh covers source changes without claiming current
+  semantic coverage of the edited documentation.

@@ -4543,3 +4543,34 @@ server exposes `thingtime_render_and_export`, returning desktop/mobile/card
 PNGs and JSON as inline resources without an account or HTTP access from the
 agent host. No private environment variables are needed. See the
 [fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
+
+
+### Native mobile device pairing development
+
+The iOS app advertises `devicePairingVersion` 1.0.0. With a full account, open
+Things or Settings → Things and choose **Add this device**. Pairing keys and
+pending claims stay in the device-only Keychain, scoped to account and server
+origin. A destination must advertise the mobile requirements in
+`remix/app/devices/platform.ts`; production or older previews may not support
+them yet. HTTPS is required except for loopback development. Pairing does not
+request file or photo permissions or enable a background sync worker.
+
+For local acceptance, start this checkout with `npm run web-pms`, create a
+disposable account through `POST /api/v1/auth/register`, and put its test login
+outside the web root in a mode-0600 JSON fixture containing `base`, `username`, `password`.
+Use placeholders only in shared docs; never commit the fixture. The test uses
+real API pairing and Keychain storage, and leaves its device record under the
+disposable account for retry inspection; it signs the test browser session out.
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>' \
+  iOS/scripts/test-mobile-devices.sh /absolute/path/to/private-fixture.json
+```
+
+The script generates the Xcode project, builds for testing, injects the fixture
+only into a temporary protected test-run file, removes that file on exit, and
+runs protocol, destination and live API tests. Keep simulator signing enabled
+for Keychain acceptance. A normal native unit run skips the live test without
+its explicit test environment. No developer account or signing secret belongs
+in this fixture. See [the full sync acceptance ledger](docs/mobile-file-sync.md)
+for Android, Photos and transfer work that is still in progress.

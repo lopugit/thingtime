@@ -17,8 +17,7 @@ contract and engine work below does **not** establish end-to-end delivery.
 - Version history belongs in the existing Timeline. A sync journal contains
   pending transfer identities and acknowledgements, not an alternate history.
 - Mac currently provides bounded manual transfers (32 MiB per file), not a
-  persistent sync daemon. The iOS shell currently has recordings and Watch
-  attachment upload paths. There is no Android native application in this tree.
+  persistent sync daemon. The iOS shell has recordings, Watch attachment upload paths and native mobile pairing. There is no Android native application in this tree.
 
 ## Implemented contracts
 
@@ -52,12 +51,33 @@ must account for revision changes caused by its own completed child removals;
 the current executor safely refuses a stale parent revision. No platform worker
 or production UI invokes these modules yet.
 
+## Native iOS pairing
+
+`iOS/Thingtime/Devices/MobileDevicePairing.swift` implements the existing prepare/
+complete protocol with CryptoKit, an origin/account-scoped Keychain record and
+exact persisted completion bytes. A retry after an uncertain response resumes
+that claim. Missing capabilities, changed accounts, redirects and revoked
+credentials fail closed. Private keys, session cookies and device credentials
+never cross the JavaScript bridge. The initial capability list is empty.
+
+`MobileDeviceBridge.swift` exposes `devicePairingVersion` 1.0.0 only on iOS.
+Things and Settings use the same `MobileDeviceSetupCard` and request codec.
+Foreground checks publish a bounded snapshot; app backgrounding and navigation
+cancel the worker. This is not a background file-sync scheduler. No file or photo
+permission is requested. Native Android still needs its own secure implementation.
+
+The opt-in `iOS/scripts/test-mobile-devices.sh` uses a disposable API-created
+account on localhost to verify a real pairing, online readback, Keychain reload
+and repeat-pair identity. See the README for setup. Simulator builds must retain
+normal simulator signing: disabling signing also prevented Keychain access in
+this test environment. The runtime remains fail-closed on secure-storage errors.
+
 ## Remaining acceptance work
 
 | Requirement | Required evidence | Current state |
 | --- | --- | --- |
-| Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | Server vocabulary and projections implemented; native clients/UI pending |
-| Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | Existing Mac protocol retained; mobile adapters pending |
+| Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS client, Keychain and Things/Settings control implemented; local API and simulator engine verified; signed-in app click-through, physical iOS and Android pending |
+| Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS uses the existing proof protocol with durable Keychain pending claims; Android Keystore adapter pending |
 | Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor foundation only |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal tests only; native schedulers and transfer adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Existing multipart attachments available; sync transport pending |
@@ -95,3 +115,11 @@ Do not promise continuously running mobile daemons.
   pairing is not covered by that no-database smoke.
 - Raw TypeScript still reports errors outside the changed files; this is not a
   clean project typecheck. Native and browser acceptance remain in the table.
+
+- Native checkpoint: 28 selected simulator tests passed (8 protocol/recovery,
+  19 destination regression tests, 1 explicit live local API/Keychain test).
+  The simulator app was installed and launched with the selected local origin.
+  Browser component QA covered synthetic unpaired/pending/paired/revoked states
+  at desktop and 390px widths without horizontal overflow. This does not yet
+  prove a signed-in user clicking through the installed app or physical-device
+  behavior. Android and all real file-transfer acceptance remain pending.
