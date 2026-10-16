@@ -2730,3 +2730,15 @@ test('owned file retention descriptors reuse content gates and disclose no stora
  doc.objectSizeBytes=17*1024*1024;
  const large=await service.download({id:'user-1'},doc.shareId,true,true);assert.equal(large.ok,false);if(!large.ok)assert.equal(large.status,413);
 });
+
+
+test('post edit preflight admits additions alongside exact-target files without weakening creation replay', async () => {
+ const bound = attachmentDoc({ shareId: 'bound', attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'post', attachmentExpiresAt: undefined });
+ const draft = attachmentDoc({ shareId: 'new', attachmentState: 'ready', attachmentPurpose: 'post' });
+ const service = createAttachmentService({ store: { getOwnedMany: async () => [bound,draft] } as any, now: () => now, customMongoActive: () => false, ownedMediaDraftIds: async () => [] });
+ const updated = await service.inspectForUpdate('user-1', ['bound','new'], 'post', 'post');
+ assert.equal(updated.ok,true);
+ assert.equal((await service.inspectForPost('user-1',['bound','new'],'post')).ok,false);
+ assert.equal((await service.inspectForUpdate('user-1',['bound','new'],'post','other')).ok,false);
+ assert.equal((await service.inspectForUpdate('user-1',['bound','new'],'comment','post')).ok,false);
+});

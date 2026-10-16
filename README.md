@@ -4691,3 +4691,17 @@ It creates a disposable account and private post, verifies cold offline creation
 and subsequent account sync, and deletes the post during cleanup. Never point
 these fixtures at production or an existing account. Account draft sync and bound
 post media remain outside this checkpoint's acceptance.
+
+
+Account post media can be saved on the device before upload approval or a network
+connection. A submitted local post queues private file uploads and uses the normal
+account binding API after session verification. Unsubmitted selections remain
+local. To run the isolated native regression against a production client preview,
+set `TT_LOCAL_BOUND_MEDIA_URL=http://127.0.0.1:<preview-port>`,
+`TT_LOCAL_BOUND_MEDIA_ARTIFACTS=<output-directory>` and the same disposable admin
+fixture, Playwright and Chrome variables used by the local file-sync tests, then
+run `node --import tsx --test app/local-workspace/accountBoundMedia.browser.test.ts`
+from `remix/`. The test accepts loopback origins only and grants upload scope only
+to its newly registered test user. Follow the local attachment-storage setup above;
+never point this fixture at production or provide an existing user account.
+See [remaining local-workspace acceptance](docs/local-workspaces.md).

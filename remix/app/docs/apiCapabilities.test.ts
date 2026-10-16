@@ -31,7 +31,7 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const [feature, minimum, previous] of [
-		['api.things', '1.33.2', '1.32.0'], ['api.things-update', '1.10.0', '1.9.0'],
+		['api.things', '1.33.2', '1.32.0'], ['api.things-update', '1.11.0', '1.9.0'],
 		['api.actions-run', '1.37.0', '1.34.0'], ['api.webpages-suites-install', '1.3.0', '1.2.0']
 	]) {
 		assert.equal(route[feature], minimum);
@@ -98,8 +98,8 @@ test('shared dependency reads negotiate the additive Things contract on both man
 	assert.equal(capabilitySatisfies('1.8.2', '1.7.5'), true);
 	assert.equal(capabilitySatisfies('1.8.1', '1.8.2'), false);
 	assert.equal(capabilitySatisfies('1.8.3', '1.8.2'), true);
-	assert.equal(createApiCapabilitiesManifest().features['api.things-update'], '1.10.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-update'].version, '1.10.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.things-update'], '1.11.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-update'].version, '1.11.0');
 	assert.equal(capabilitySatisfies('1.7.1', '1.7.0'), true);
 	assert.equal(capabilitySatisfies('1.7.0', '1.7.1'), false);
 	assert.equal(capabilitySatisfies('1.6.0', '1.5.1'), true);

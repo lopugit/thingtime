@@ -1083,36 +1083,36 @@ export const reorderBoundTargetAttachments = async (ownerId: string, targetId: s
 // save. The target must be an owned post-family thing: binding to an
 // arbitrary target id would let an edit deface another owner's thread with
 // the editor's own inherit-acl media.
-export const syncBoundTargetAttachments = async (ownerId: string, targetId: string, requestedIds: readonly unknown[]): Promise<void> => {
+export const syncBoundTargetAttachments = async (ownerId: string, targetId: string, requestedIds: readonly unknown[], transactionSession?: any): Promise<void> => {
 	if (isCustomMongoEndpointActive()) {
 		throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 	}
 	if (!targetId.trim()) throw new AttachmentBindingError(400, 'Attachment target is required');
-	const things = await getHomeThingsCollection();
-	// post-family only (posts, rich AND plain comments) — message, emoji and
-	// profile targets keep their dedicated purpose-bound routes
-	const target = (await things.findOne({ shareId: targetId, ownerId, thingtime: { $in: ['post', 'comment'] } } as any, {
-		projection: { shareId: 1, thingtime: 1 }
-	})) as { shareId: string; thingtime?: unknown } | null;
-	if (!target) throw new AttachmentBindingError(404, 'Post not found');
-	const bound = (await things
-		.find({ ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId } as any, {
-			projection: { shareId: 1, moderation: 1, attachmentSortIndex: 1 }
-		})
-		.toArray()) as Array<{ shareId: string; moderation?: unknown; attachmentSortIndex?: unknown }>;
-	const hiddenBound = bound
-		.filter((doc) => attachmentModerationHidesFromPublic(doc.moderation))
-		.sort((left, right) => attachmentStoredSortValue(left.attachmentSortIndex) - attachmentStoredSortValue(right.attachmentSortIndex));
-	const purpose: BindableAttachmentPurpose = Array.isArray(target.thingtime) && target.thingtime.includes('comment') ? 'comment' : 'post';
-	const plan = planAttachmentSync(
-		requestedIds,
-		bound.map((doc) => String(doc.shareId)),
-		hiddenBound.map((doc) => String(doc.shareId)),
-		attachmentCountLimit(purpose)
-	);
-	if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
-	if (!plan.orderedIds.length && !plan.hiddenTrailingIds.length) return;
-	await withHomeMongoTransaction(async (session) => {
+	const run = async (session: any) => {
+		const things = await getHomeThingsCollection();
+		// post-family only (posts, rich AND plain comments) — message, emoji and
+		// profile targets keep their dedicated purpose-bound routes
+		const target = (await things.findOne({ shareId: targetId, ownerId, thingtime: { $in: ['post', 'comment'] } } as any, {
+			session, projection: { shareId: 1, thingtime: 1 }
+		})) as { shareId: string; thingtime?: unknown } | null;
+		if (!target) throw new AttachmentBindingError(404, 'Post not found');
+		const bound = (await things
+			.find({ ownerId, thingtime: ATTACHMENT_THINGTIME, attachmentState: 'ready', targetId } as any, {
+				session, projection: { shareId: 1, moderation: 1, attachmentSortIndex: 1 }
+			})
+			.toArray()) as Array<{ shareId: string; moderation?: unknown; attachmentSortIndex?: unknown }>;
+		const hiddenBound = bound
+			.filter((doc) => attachmentModerationHidesFromPublic(doc.moderation))
+			.sort((left, right) => attachmentStoredSortValue(left.attachmentSortIndex) - attachmentStoredSortValue(right.attachmentSortIndex));
+		const purpose: BindableAttachmentPurpose = Array.isArray(target.thingtime) && target.thingtime.includes('comment') ? 'comment' : 'post';
+		const plan = planAttachmentSync(
+			requestedIds,
+			bound.map((doc) => String(doc.shareId)),
+			hiddenBound.map((doc) => String(doc.shareId)),
+			attachmentCountLimit(purpose)
+		);
+		if (plan.ok === false) throw new AttachmentBindingError(plan.status, plan.error);
+		if (!plan.orderedIds.length && !plan.hiddenTrailingIds.length) return;
 		if (plan.orderedIds.length) {
 			await bindReadyAttachmentsForPurpose(ownerId, plan.orderedIds, targetId, session, purpose);
 		}
@@ -1131,7 +1131,8 @@ export const syncBoundTargetAttachments = async (ownerId: string, targetId: stri
 				throw new AttachmentBindingError(409, 'The attachments on this post changed — refresh and try again');
 			}
 		}
-	});
+	};
+	if (transactionSession) await run(transactionSession); else await withHomeMongoTransaction(run);
 };
 
 export const bindReadyAttachmentsToTarget = async (

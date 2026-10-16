@@ -1758,3 +1758,47 @@ Desktop/390/320px checks and zero offline mutation requests are recorded in the
 [checkpoint](../docs/local-workspaces.md#account-post-and-reply-authorship--2026-10-17).
 Bound media, full native mutation coverage, draft sync and the broader matrix stay
 open. CI/deployed acceptance is separate. No main merge or manual deployment.
+
+
+## Account post file admission and binding — 2026-10-17
+
+Normal post/comment file selection now saves bounded bytes in the active device
+workspace, independently of upload approval and account draft saving. Unsubmitted
+selections cannot start a remote upload. Post submission binds them atomically
+with local content; verified-account sync then uploads each immutable file and
+sends only receipt-confirmed IDs through the existing post/comment endpoints.
+Discarding an unsubmitted selection uses the composer's real `attachments.remove`
+method and cannot discard a bound or remotely started file.
+
+The content queue preserves ordered file IDs across uncertain retries, validates
+the actual post companion's binding receipt, and restores device media references
+for offline rendering. Local ZIP export includes bound files and exact bytes.
+Purpose mismatch, missing records and upload refusal preserve content and files;
+account-only or mixed selections cannot be silently dropped. Refused/deleted
+parents do not leave their file URLs readable. Anonymous storage never enters
+these queues.
+
+The normal PATCH attachment binding now runs in the same transaction as its
+content/version write. `api.things-update` 1.11.0 advertises this contract on both
+manifests. Stale versions, invalid content and failed bindings cannot partially
+reorder or add attachments. Existing removal, authentication, same-origin,
+moderation, quota and purpose checks remain authoritative.
+
+Local validation: 1,054 checks pass across workspace/offline-shell (319),
+attachments (316), Things (320) and capability (99) suites; 36 generic browser
+cases are skipped and are not acceptance. The enabled production-client fixture
+`accountBoundMedia.browser.test.ts` passes native offline post and rich-comment
+submission, cold reload, decoded images, three exact-byte uploads/downloads,
+private/inherited ACLs and anonymous read refusal. It verifies no offline mutations
+or pre-submission uploads, one copy of the comment, and unchanged attachment order
+on stale/invalid PATCH before a valid reorder. Viewports 1440×1000, 390×844 and
+320×844 have no horizontal overflow; desktop/narrow post and narrow comment
+screenshots were inspected. Evidence: `tmp/account-bound-media-browser/` and
+`tmp/account-media-*.log`. Client build passes (247 offline assets); lint has zero
+errors and three existing warnings. TypeScript retains 91 baseline diagnostics,
+none in the changed files.
+
+This is local verification, not current-head CI or deployed acceptance. Remaining
+work includes bound-media removal/deletion, conflict reconciliation of account
+media, existing bound-file retention and import, linked media and the rest of the
+matrix. No main merge, manual deployment or existing-account mutation occurred.

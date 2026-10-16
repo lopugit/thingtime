@@ -47,7 +47,7 @@ type FileRecord = {
 	error?: string;
 	claim?: { token: string; expiresAt: number };
 };
-const libraryFileVisible = (row: LocalAttachment | null, record: FileRecord | undefined | null): row is LocalAttachment => !!row && isLocalAttachment(row) && isStandaloneAttachmentPurpose(row.localAttachment.purpose) && !row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt && !!record && !record.cancelled && !record.cancelRequested && !record.deleteRequested;
+const libraryFileVisible = (row: LocalAttachment | null, record: FileRecord | undefined | null): boolean => !!row && isLocalAttachment(row) && isStandaloneAttachmentPurpose(row.localAttachment.purpose) && !row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt && !!record && !record.cancelled && !record.cancelRequested && !record.deleteRequested;
 export type AccountFileRetentionTransport = {
 	retention(id: string, signal: AbortSignal): Promise<unknown>;
 	bytes(id: string, cacheKey: string, size: number, signal: AbortSignal): Promise<Uint8Array>;
@@ -113,11 +113,13 @@ export class AccountFileSync {
 	 * confirmed upload receipts can rewrite a device file to an account ID. */
 	readonly contentHooks = {
 		mutate: (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => this.enqueue(tx, row, previous),
-		prepare: async (tx: WorkspaceTransaction, row: LocalThing): Promise<LocalThing | null> => {
+		prepare: async (tx: WorkspaceTransaction, row: LocalThing): Promise<(LocalThing & { attachmentIds?: string[] }) | null> => {
 			this.lease.assertCurrent();
 			const records = new Map((await tx.list<FileRecord>(COLLECTION)).map(({ value }) => [value.id, value]));
-			if (!records.size) return row;
-			const used = new Set([...compositionAttachmentIds(row.thingtime, row.crystal)].filter(id => records.has(id)));
+			const isPost = row.thingtime.includes('post');
+			const bound = isPost ? (await tx.list<LocalAttachment>('things')).map(item => item.value).filter(file => isLocalAttachment(file) && file.targetId === row.id).sort((a,b) => a.localAttachment.order - b.localAttachment.order) : [];
+			for (const file of bound) if (!records.has(file.id)) throw new WorkspaceError('MISSING_UPLOAD', 'A post file has no matching account upload intent.', 409);
+			const used = new Set([...bound.map(file => file.id), ...[...compositionAttachmentIds(row.thingtime, row.crystal)].filter(id => records.has(id))]);
 			// Track canonical rewriter lookups in saved args, CSS, authored HTML
 			// and late-bound templates. Only confirmed IDs enter the copy map.
 			class FileReferences extends Map<string, string> {
@@ -132,7 +134,11 @@ export class AccountFileSync {
 				if (file.cancelled || file.cancelRequested || file.deleteRequested) throw new WorkspaceError('FILE_REFERENCE_DELETED', 'A referenced device file was removed. Edit this Thing before retrying account sync.', 409);
 				if (!file.remote) return null;
 			}
-			return { ...row, crystal, ...(targetId ? { targetId } : {}) };
+			return { ...row, crystal, ...(targetId ? { targetId } : {}), ...(isPost ? { attachmentIds: bound.map(file => records.get(file.id)!.remote!.id) } : {}) };
+		},
+		restore: async <T extends LocalThing>(tx: WorkspaceTransaction, row: T): Promise<T> => {
+			const copies = new Map((await tx.list<FileRecord>(COLLECTION)).flatMap(({value}) => value.remote && !value.cancelled && !value.deleteRequested ? [[value.remote.id, value.id] as const] : []));
+			return { ...row, crystal: rewriteTransferMedia([row], copies).get(row.id)! };
 		}
 	};
 	private async enqueue(tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) {
@@ -224,16 +230,16 @@ export class AccountFileSync {
 
 	/** Device library and upload aliases come from one scoped snapshot. Closed
 	 * receipts suppress their remote alias without revealing recovery bytes. */
-	async library() {
+	async library(includeBound = false) {
 		return this.tx('readonly', async tx => {
 			const records = new Map((await tx.list<FileRecord>(COLLECTION)).map(({value}) => [value.id, value]));
 			const things = (await tx.list<LocalAttachment>('things')).map(({value}) => value).filter(row => {
 				const record = records.get(row.id);
-				return libraryFileVisible(row, record);
+				return libraryFileVisible(row, record) || (includeBound && isLocalAttachment(row) && !!row.targetId && ['post','comment'].includes(row.localAttachment.purpose) && !!record && !record.cancelled && !record.cancelRequested && !record.deleteRequested);
 			});
 			const visible = new Set(things.map(row => row.id));
 			const aliases = new Map<string, string | null>();
-			for (const record of records.values()) if (isStandaloneAttachmentPurpose(record.request.purpose) && record.remote) aliases.set(record.remote.id, visible.has(record.id) ? record.id : null);
+			for (const record of records.values()) if ((isStandaloneAttachmentPurpose(record.request.purpose) || (includeBound && visible.has(record.id))) && record.remote) aliases.set(record.remote.id, visible.has(record.id) ? record.id : null);
 			return { things, aliases };
 		});
 	}
@@ -245,18 +251,24 @@ export class AccountFileSync {
 			for (const id of ids) {
 				if (!id.startsWith('local-file-')) continue;
 				const row = await tx.get<LocalAttachment>('things', id), record = await tx.get<FileRecord>(COLLECTION, id);
-				if (libraryFileVisible(row, record)) result.push(row);
+				if (row && libraryFileVisible(row, record)) result.push(row);
 			}
 			return result;
 		});
 	}
 
 	async readFile(id: string, signal?: AbortSignal) {
-		if (!(await this.views([id])).length) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+		const readable = () => this.tx('readonly', async tx => {
+			const row = await tx.get<LocalAttachment>('things', id), record = await tx.get<FileRecord>(COLLECTION, id);
+			if (!row || !isLocalAttachment(row) || !record || record.cancelled || record.cancelRequested || record.deleteRequested) return false;
+			if (libraryFileVisible(row, record)) return true;
+			// Editor drafts and bound post files use the same scoped bytes. A
+			// refused/deleted parent must not leave its files readable through a URL.
+			return ['post','comment'].includes(record.request.purpose) && (!row.targetId || !!await tx.get('things', row.targetId));
+		});
+		if (!await readable()) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
 		const result = await this.things.readFile(id, signal);
-		// Cancellation keeps recovery bytes until the account acknowledges it,
-		// but those bytes must no longer be available to ordinary media sinks.
-		if (!(await this.views([id])).length) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+		if (!await readable()) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
 		this.lease.assertCurrent(); signal?.throwIfAborted(); return result;
 	}
 
@@ -280,6 +292,16 @@ export class AccountFileSync {
 		await tx.delete('things', row.id);
 		await this.metadata.discardUnuploaded(tx, row.id);
 		await this.putRecord(tx, { ...row, deletingLocal: undefined, deleteVersion: undefined, cancelled: true, cancelRequested: true, state: 'synced', claim: undefined, error: undefined, retryAt: 0 });
+	}
+	/** Discard an unsubmitted editor selection only while no remote request can exist. */
+	async discardSelection(id: string) {
+		return this.tx('readwrite', async tx => {
+			const record = await tx.get<FileRecord>(COLLECTION, id), local = await tx.get<LocalAttachment>('things', id);
+			if (!record || record.cancelled) return;
+			if (!local || !isLocalAttachment(local) || !['post','comment'].includes(record.request.purpose) || local.targetId || local.localAttachment.draftId || record.started !== false || record.remote || record.claim)
+				throw new WorkspaceError('BOUND_UPLOAD', 'Remove this file through its owning editor.', 409);
+			await this.finishCancellation(tx, record);
+		});
 	}
 	/** Records intent offline. Ambiguous uploads keep device bytes until the
 	 * account acknowledges a durable fence; finalized files require review. */
@@ -366,11 +388,18 @@ export class AccountFileSync {
 			this.lease.assertCurrent();
 			signal.throwIfAborted();
 			const claimed = await this.tx('readwrite', async (tx) => {
-				const row = (await tx.list<FileRecord>(COLLECTION))
-					.map((item) => item.value)
-					.find(
-						(row) => ['pending', 'syncing'].includes(row.state) && row.retryAt <= this.now() && (!row.claim || row.claim.expiresAt <= this.now())
-					);
+				let row: FileRecord | undefined;
+				for (const { value } of await tx.list<FileRecord>(COLLECTION)) {
+					if (!['pending','syncing'].includes(value.state) || value.retryAt > this.now() || (value.claim && value.claim.expiresAt > this.now())) continue;
+					// Editor selections are device drafts. Submission binds them locally;
+					// only then may this queue create an account upload. Once started,
+					// finish the same request even if a newer editor removes the file.
+					if (value.started === false && ['post','comment'].includes(value.request.purpose)) {
+						const local = await tx.get<LocalAttachment>('things', value.id);
+						if (!local?.targetId) continue;
+					}
+					row = value; break;
+				}
 				if (!row) return null;
 				const next = { ...row, state: 'syncing' as const, claim: { token: this.uuid(), expiresAt: this.now() + CLAIM_MS } };
 				await this.putRecord(tx, next);

@@ -11198,13 +11198,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-update',
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.10.0',
-    contractVersion: '1.10.0',
+    featureVersion: '1.11.0',
+    contractVersion: '1.11.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'In 1.11.0, PATCH /things attachmentIds bind additions and ordering in the same transaction as the conditional content write. Stale expectedUpdatedAt, invalid content or failed binding changes neither content nor attachments. Removals still use the attachment deletion endpoint. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +

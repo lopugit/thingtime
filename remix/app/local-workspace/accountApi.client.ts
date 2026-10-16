@@ -1,3 +1,4 @@
+import { isLocalAttachment } from './attachments';
 import { AccountDiscussionCache } from './accountDiscussions';
 import { accountPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
 import { accountImportSupported } from './accountImport';
@@ -153,7 +154,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		if (alias === null || await service.sync.isDeleted(id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
 		const row = alias ? (await service.files.views([alias]))[0] : await service.sync.view(id);
 		if (!row) return null;
-		const result = localThingReadProjection(row, [], owner.id, true), post = result.discussion || result.post;
+		const result = localThingReadProjection(row, await service.sync.things.snapshot(), owner.id, true), post = result.discussion || result.post;
 		if (post) { post.author = owner as any; post.id = id; }
 		const remoteId = alias ? await service.files.remoteId(alias) : (await service.sync.exportSnapshot()).records.find(record => record.id === id)?.remote ? id : null;
 		return { post, remoteId };
@@ -171,6 +172,17 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		for (const comment of authoredComments) comments.set(comment.id,comment as any);
 		return { ...post, author, localOnly: false, localWorkspace: true, acl: row.acl, visibility: row.visibility, syncState: row.syncState,
 			commentCount: Math.max(post.commentCount || 0,cached?.commentCount || 0,comments.size), comments: [...comments.values()] };
+	};
+	const mapPostInput = async (input: Record<string, unknown>, update = false) => {
+		const mapped = accountPostInput(input, update);
+		if (!mapped || !Array.isArray(mapped.attachmentIds) || !mapped.attachmentIds.length) return mapped;
+		const files = worker().files, rows = await files.things.snapshot();
+		const known = new Set(rows.filter(row => row.thingtime.includes('attachment')).map(row => row.id));
+		const aliases = (await files.library(true)).aliases;
+		const ids = mapped.attachmentIds.map(id => aliases.get(id as string) || id as string);
+		if (ids.every(id => known.has(id))) return { ...mapped, attachmentIds: ids };
+		if (ids.some(id => known.has(id) || id.startsWith('local-file-'))) throw new WorkspaceError('MISSING_LOCAL_FILE', 'Some selected files are not saved in this workspace. Keep device files and account-only files in separate submissions until they are retained.', 409);
+		return null;
 	};
 	const writePost = async (input: ReturnType<typeof accountPostInput>, update = false) => {
 		if (!input) throw new WorkspaceError('UNSUPPORTED_LOCAL_POST', 'This post needs its complete media or account adapter.', 409);
@@ -403,11 +415,14 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				const row = await worker().files.things.annotateFile({ ...input, id }); changed();
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
 			},
-			delete: async (input: { id: string; targetId?: string }) => {
+			remove: async (input: { id: string; targetId?: string }) => {
 				const id = await fileAlias(input.id);
-				if (id === undefined) return online.attachments.delete(input);
+				if (id === undefined) return online.attachments.remove(input);
 				if (Object.keys(input).some(key => key !== 'id')) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Remove bound media through its owning editor.');
-				if (id) { if (await worker().files.remoteId(id)) await worker().files.remove(id); else await worker().files.cancel(id); changed(); }
+				if (id) {
+					const file = await worker().files.things.get(id);
+					if (file && isLocalAttachment(file) && ['post','comment'].includes(file.localAttachment.purpose)) { await worker().files.discardSelection(id); changed(); return { ok: true, savedLocally: true }; }
+					if (await worker().files.remoteId(id)) await worker().files.remove(id); else await worker().files.cancel(id); changed(); }
 				return { ok: true, savedLocally: true };
 			},
 			deleteLocalFile: async ({ id }: { id: string }) => { await worker().files.remove(id); changed(); return { ok: true, savedLocally: true }; },
@@ -602,7 +617,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		comment: async ({ id, ...input }: { id: string } & Record<string, unknown>) => {
 			facadeLease.assertCurrent();
-			const mapped = accountPostInput({ type: 'text', ...input, thingtime: undefined });
+			const mapped = await mapPostInput({ type: 'text', ...input, thingtime: undefined });
 			if (!mapped || scope.dataPlane !== 'home') return online.things.comment({ id, ...input });
 			const service = worker();
 			let target = await ownedPost(id) || await service.discussions.get(id) || await service.posts.get(id) || (await localDiscussion(id))?.post;
@@ -612,7 +627,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		create: async (input: AccountThingWrite) => {
 			facadeLease.assertCurrent();
-			const mapped = accountPostInput(input as Record<string, unknown>);
+			const mapped = await mapPostInput(input as Record<string, unknown>);
 			if (mapped) return writePost(mapped);
 			if (!accountThingCanCache(input) || !accountWriteSupported(input)) return online.things.create(input);
 			const { sync } = worker();
@@ -624,7 +639,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			if (await sync.isDeleted(input.id)) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted. Restore it before editing.', 409);
 			let cached = await sync.view(input.id);
 			if (cached?.thingtime.includes('post')) {
-				const mapped = accountPostInput({ ...input, thingtime: cached.thingtime }, true);
+				const mapped = await mapPostInput({ ...input, thingtime: cached.thingtime }, true);
 				if (mapped) return writePost(mapped, true);
 			}
 			if (!accountWriteSupported(input, true)) {

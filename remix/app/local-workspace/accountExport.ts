@@ -41,7 +41,7 @@ export async function exportAccountThings(input: Input, deps: {
  let baseline = await tx<Snapshot | undefined>('readonly', tx => tx.get<Snapshot>(STORE, key));
  const attempted = new Set<string>();
  const collect = async (state: State) => {
-  const fileLibrary = await deps.files?.library(); check();
+  const fileLibrary = await deps.files?.library(true); check();
   const files = new Map(fileLibrary?.things.map(row => [row.id, row]) || []);
   const aliases = new Map([...fileLibrary?.aliases || []].filter((entry): entry is [string, string] => entry[1] !== null));
   const ids = args.ids.map(id => {
@@ -104,7 +104,7 @@ export async function exportAccountThings(input: Input, deps: {
    if (plan.files?.length || plan.links?.length || !plan.things?.every(accountThingCanCache)) {
     // Keep dedicated online exports working, but never replace pending local
     // content with an older server version just because it includes media.
-    const library = await deps.files?.library(), pendingFiles = new Set((await deps.files?.status())?.filter(row => row.state !== 'synced').map(row => row.id));
+    const library = await deps.files?.library(true), pendingFiles = new Set((await deps.files?.status())?.filter(row => row.state !== 'synced').map(row => row.id));
     const selected = new Set([...args.ids, ...plan.things.map((row: any) => row.id), ...(plan.files || []).map((row: any) => row.sourceId || row.id)]);
     for (const [remote, local] of library?.aliases || []) if (local && selected.has(remote)) selected.add(local);
     const affectedFiles = library?.things.some(row => pendingFiles.has(row.id) && (selected.has(row.id) || (args.includeChildren && row.folderId && selected.has(row.folderId))));

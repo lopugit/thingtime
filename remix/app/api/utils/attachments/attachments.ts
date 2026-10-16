@@ -1502,7 +1502,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		attachmentIds: readonly unknown[],
 		purpose: ContentAttachmentPurpose,
 		maxAttachments = attachmentCountLimit(purpose),
-		expectedTargetId?: unknown
+		expectedTargetId?: unknown, allowMixed = false
 	): Promise<AttachmentResult<InspectedAttachments>> => {
 		try {
 			if (dependencies.customMongoActive()) {
@@ -1541,7 +1541,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						!toAttachmentPublicMetadata(doc.shareId, doc.crystal)
 					);
 				}) ||
-				bindingStates.size > 1
+				(bindingStates.size > 1 && !allowMixed)
 			) {
 				return fail(409, 'One or more attachments are unavailable or already attached');
 			}
@@ -1563,11 +1563,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const inspectForPost = async (
 		ownerId: string,
-		attachmentIds: readonly unknown[]
+		attachmentIds: readonly unknown[], expectedTargetId?: unknown
 	): Promise<AttachmentResult<{ hasAny: boolean; hasVisual: boolean }>> => {
-		const inspected = await inspectForPurpose(ownerId, attachmentIds, 'post');
+		const inspected = await inspectForPurpose(ownerId, attachmentIds, 'post', attachmentCountLimit('post'), expectedTargetId);
 		return inspected.ok ? { ok: true, hasAny: inspected.hasAny, hasVisual: inspected.hasVisual } : inspected;
 	};
+
+	const inspectForUpdate = (ownerId: string, attachmentIds: readonly unknown[], purpose: 'post' | 'comment', targetId: string) =>
+		inspectForPurpose(ownerId, attachmentIds, purpose, attachmentCountLimit(purpose), targetId, true);
 
 	const inspectForComment = (ownerId: string, attachmentIds: readonly unknown[], expectedTargetId?: unknown) =>
 		inspectForPurpose(ownerId, attachmentIds, 'comment', MAX_ATTACHMENTS_PER_TARGET, expectedTargetId);
@@ -1630,6 +1633,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		describeTransfer,
 		copy,
 		inspectForPost,
+		inspectForUpdate,
 		inspectForComment,
 		inspectForMessage,
 		inspectForEmoji,
@@ -1652,6 +1656,7 @@ export const inspectAttachmentDownload = service.inspectDownload;
 export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;
+export const inspectReadyAttachmentsForUpdate = service.inspectForUpdate;
 export const inspectReadyAttachmentsForComment = service.inspectForComment;
 export const inspectReadyAttachmentsForMessage = service.inspectForMessage;
 export const inspectReadyAttachmentForEmoji = service.inspectForEmoji;

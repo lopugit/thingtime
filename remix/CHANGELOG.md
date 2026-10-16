@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Account post/comment media now stages device bytes
+  before upload and binds submitted content through confirmed file receipts.
+  Attachment order/additions share the normal conditional post transaction;
+  `api.things-update` 1.11.0 exposes the guarantee. Local verification and remaining
+  merge gates are in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Account post/comment/reply authorship commits locally
   with independent verified-account sync, stable retries and refusal cleanup.
   Native offline private post and nested reply checks pass; bound media/draft sync

@@ -10794,3 +10794,34 @@ Run `app/local-workspace/components.browser.test.ts` with
   Known offline authors must not render as Anonymous or `@undefined`.
 - [ ] Complete bound media, full native edit/privacy/delete/conflict flows,
   linked-Thing surfaces and account draft sync before the full merge gate closes.
+
+
+### Account post media saved on device
+
+- [ ] With a fresh disposable account, cold-reload offline; select media in the
+  normal composer without upload approval, submit a private post, reload its
+  permalink, and verify actual image pixels at 1440, 390 and 320px. No offline
+  mutation request may be made. Failed draft saving must not block submission.
+- [ ] Reconnect the matching verified account with approved upload scope; verify
+  one upload per file, canonical post binding/order, exact downloaded original
+  bytes, and anonymous denial of both the private post and its media.
+- [ ] A stale-version or invalid-content PATCH carrying a different file order
+  changes neither content nor binding; a valid conditional edit commits both.
+- [ ] Selecting then removing a file before submission must stay entirely local.
+  Missing/wrong-purpose files, refused uploads, lost replies and concurrent local
+  reordering preserve bytes and immutable request identity. Export the local post
+  and validate its file closure. Tests: `accountBoundMedia.test.ts` and the opt-in
+  `accountBoundMedia.browser.test.ts` with README's loopback fixture settings.
+- [ ] Finish bound-file removal/deletion, conflict reconciliation, retained remote
+  bound files, import, and complete native comment/media/identity acceptance before
+  considering the full local-first merge gate satisfied.
+
+- Create a rich comment with a selected image while offline; wait for the
+  composer to close after local completion, then cold reload. The comment and
+  decoded image must survive, upload after the pending parent, and retain the
+  parent's private audience. Seeing text still inside the editor is not proof
+  of a saved comment.
+- Refuse a synced parent read and verify direct media readers also reject its
+  own and descendant file IDs while recoverable device bytes remain intact.
+- A client must refuse attachment PATCH writes before transport when the origin
+  advertises `api.things-update` older than 1.11.0.

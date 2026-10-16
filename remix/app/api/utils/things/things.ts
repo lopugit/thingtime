@@ -5382,7 +5382,7 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
+  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; attachmentIds?: readonly unknown[]; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
@@ -5472,8 +5472,15 @@ export const updateThing = async (
 	// Post edits validate with the same trusted attachment context creates get:
 	// an attachment-only post's crystal has no text/images, and without this
 	// the sanitizer would reject every edit of it with "Say something first".
-	const postAttachments =
+	let postAttachments =
 		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId) : undefined;
+	if (options.attachmentIds !== undefined) {
+		if (doc.ownerId !== viewer.id || !thingtime.includes('post') || app) return fail(403, 'Only the owner can edit post attachments');
+		const service = await import('../attachments/attachments');
+		const result = await service.inspectReadyAttachmentsForUpdate(viewer.id, options.attachmentIds, thingtime.includes('comment') ? 'comment' : 'post', doc.shareId);
+		if (result.ok === false) return result;
+		postAttachments = result;
+	}
   const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
 	if (doc.ownerId !== viewer.id && validated.thingtime.includes('webpage')) {
@@ -5702,7 +5709,7 @@ export const updateThing = async (
   let writeResult;
   let afterCommit: (() => Promise<void>)[] = [];
   try {
-		if (wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture || (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction'))) {
+		if (options.attachmentIds !== undefined || wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture || (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction'))) {
 			await withMongoTransaction(async (session) => {
         // A retry owns a fresh effect list; aborted attempts cannot notify.
         afterCommit = [];
@@ -5717,13 +5724,19 @@ export const updateThing = async (
 						_id: (doc as any)._id,
 						...expectedSize,
 						...(options.timeline ? { timelineHeadId: options.timeline.expectedHeadId } : {}),
-						...((timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
+						...((options.attachmentIds !== undefined || timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
 					} as any,
 					{ $set: set, $unset: unset } as any,
 					{ session }
 				);
 				if (writeResult.matchedCount === 0) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Thing changed while it was being updated — try again');
+				}
+				// Attachment order/additions share the successful content version fence.
+				// A stale edit or failed binding rolls back both, including quota.
+				if (options.attachmentIds !== undefined) {
+					const { syncBoundTargetAttachments } = await import('../attachments/attachmentStore');
+					await syncBoundTargetAttachments(viewer.id!, doc.shareId, options.attachmentIds, session);
 				}
 				if (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction')) await things.updateOne({ shareId: doc.targetId } as any, { $set: { interactionRevision: randomUUID() } }, { session });
 				if (timelineCapture) {

@@ -38,6 +38,11 @@ export const readBoundedJson = async (response: Response) => {
 		return JSON.parse(new TextDecoder().decode(bytes));
 	} finally { await reader.cancel().catch(() => {}); }
 };
+/** Attachment metadata is on the canonical post companion, not PublicThing.
+ * Keep the two projections paired by ID; never infer binding from the request. */
+const withPostAttachments = (result: any) => result?.thing && result.post?.id === result.thing.id && Array.isArray(result.post.attachments)
+ ? { ...result, thing: { ...result.thing, attachments: result.post.attachments } } : result;
+
 export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountSyncTransport & {
 	interactions: InteractionTransport;
 	files: AccountFileTransport & AccountFileRetentionTransport & {
@@ -62,7 +67,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
-		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', '1.10.0');
+		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', args.attachmentIds !== undefined ? '1.11.0' : '1.10.0');
 		await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 		lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted(); signal?.throwIfAborted();
 		const query = method === 'GET' ? `?${new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, Array.isArray(value) ? value.join(',') : String(value)]))}` : '';
@@ -129,19 +134,23 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		},
 		interactions: { read: async (ids, signal) => { const result = await request('GET', { id: ids }, signal, 'things/interactions'); if (!Array.isArray(result.states) || result.states.length !== ids.length || new Set(result.states.map((s: any) => s.id)).size !== ids.length || result.states.some((s: any) => !ids.includes(s.id))) throw new WorkspaceError('INVALID_INTERACTIONS', 'Invalid account interaction response', 502); return result.states.map(interactionState); }, write: async (command: InteractionWrite, signal) => interactionState((await request('POST', command, signal, 'things/interactions')).state) },
 		browse: (kind, args, signal) => request('GET', args, signal, kind === 'component' ? 'components/browse' : 'schemas/browse'),
-		read: (args, signal) => request('GET', args, signal),
+		read: async (args, signal) => withPostAttachments(await request('GET', args, signal)),
 		resolve: (args, signal) => request('GET', args, signal, 'webpages/resolve'),
 		export: (args, signal) => request('POST', args, signal, 'things/export'),
 		fork: (args, signal) => request('POST', args, signal, 'things/fork'),
-		get: async (id, signal) => (await request('GET', { id }, signal)).thing as AccountThing,
+		get: async (id, signal) => withPostAttachments(await request('GET', { id }, signal)).thing as AccountThing,
 		remove: async (operation, signal) => { await request('DELETE', operation.body, signal); },
 		write: async (operation, signal) => {
 			if (operation.method === 'create' && Array.isArray(operation.body.thingtime) && operation.body.thingtime.includes('comment')) {
 				const crystal = operation.body.crystal as Record<string, unknown>;
-				await request('POST', { ...crystal, id: operation.body.targetId, shareId: operation.body.shareId, tags: operation.body.tags }, signal, 'things/comment');
-				return (await request('GET', { id: operation.id }, signal)).thing as AccountThing;
+				await request('POST', { ...crystal, id: operation.body.targetId, shareId: operation.body.shareId, tags: operation.body.tags, ...(operation.body.attachmentIds ? { attachmentIds: operation.body.attachmentIds } : {}) }, signal, 'things/comment');
+				return withPostAttachments(await request('GET', { id: operation.id }, signal)).thing as AccountThing;
 			}
-			return (await request(operation.method === 'create' ? 'POST' : 'PATCH', operation.body, signal)).thing as AccountThing;
+			const result = withPostAttachments(await request(operation.method === 'create' ? 'POST' : 'PATCH', operation.body, signal));
+			// Unified creates may return only PublicThing. Read the actual binding
+			// before acknowledging a request with files, including image-only posts.
+			if (operation.body.attachmentIds !== undefined && !Array.isArray(result.thing?.attachments)) return withPostAttachments(await request('GET', { id: operation.id }, signal)).thing as AccountThing;
+			return result.thing as AccountThing;
 		}
 	};
 }

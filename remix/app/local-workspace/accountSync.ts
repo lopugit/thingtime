@@ -1,3 +1,4 @@
+import { normalizePublicAttachment } from '../components/Attachments/attachmentUiCore';
 import { postThingReferences } from '../components/Feed/postThingReferences';
 import { accountReadRefusals, ACCOUNT_READ_COLLECTIONS } from './accountReadRevocation';
 import { LocalThings, type LocalThing, type ThingWrite, type LocalFileMutation } from './things';
@@ -15,7 +16,7 @@ export const accountWriteSupported = (input: unknown, update = false): boolean =
 type AccountScope = Extract<WorkspaceScope, { kind: 'account' }>;
 export type SyncState = 'pending' | 'syncing' | 'conflict' | 'error' | 'synced';
 export type AccountThingWrite = ThingWrite & { acl?: string[]; visibility?: string };
-export type AccountThing = LocalThing & { author: { id: string }; acl: string[]; visibility: string };
+export type AccountThing = LocalThing & { author: { id: string }; acl: string[]; visibility: string; accountAttachmentIds?: string[] };
 const LOCAL_KINDS = new Set(['data', 'folder', 'webpage', 'component', 'schema', 'action', 'post', 'comment']);
 export const accountThingCanCache = (row: any): row is AccountThing => (!Array.isArray(row?.attachments) || row.attachments.length === 0) && Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind));
 type FrozenWrite = { id: string; operationId: string; version: number; method: 'create' | 'update'; body: Record<string, unknown> };
@@ -41,7 +42,7 @@ const stable = (input: unknown): string => JSON.stringify(input, function (_key,
 });
 const sameContent = (remote: AccountThing, operation: FrozenWrite) =>
 	Object.entries(operation.body).filter(([key]) => !['shareId', 'id', 'expectedUpdatedAt', 'replaceCrystal'].includes(key))
-		.every(([key, value]) => stable((remote as any)[key] ?? (value === null ? null : undefined)) === stable(value));
+		.every(([key, value]) => stable((key === 'attachmentIds' ? remote.accountAttachmentIds || [] : (remote as any)[key]) ?? (value === null ? null : undefined)) === stable(value));
 export const accountSyncDeadline = async <T>(run: (signal: AbortSignal) => Promise<T>, parent: AbortSignal): Promise<T> => {
 	const controller = new AbortController();
 	const abort = () => controller.abort(parent.reason);
@@ -65,7 +66,7 @@ export class AccountThingSync {
 	readonly things: LocalThings;
 	constructor(private db: WorkspaceDatabase, readonly scope: AccountScope, private lease: WorkspaceLease,
 		private now = () => Date.now(), private uuid = () => crypto.randomUUID(),
-		private files?: { mutate: LocalFileMutation; prepare: (tx: WorkspaceTransaction, row: LocalThing) => Promise<LocalThing | null> }) {
+		private files?: { mutate: LocalFileMutation; prepare: (tx: WorkspaceTransaction, row: LocalThing) => Promise<(LocalThing & { attachmentIds?: string[] }) | null>; restore?: <T extends LocalThing>(tx: WorkspaceTransaction, row: T) => Promise<T> }) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous workspaces never sync', 403);
 		this.things = new LocalThings(db, scope, lease, [], () => new Date(now()).toISOString(), uuid,
 			(tx, row, previous, input) => this.enqueue(tx, row, previous, input as AccountThingWrite), files?.mutate, async (tx, id) => {
@@ -81,13 +82,17 @@ export class AccountThingSync {
 	private checked(input: AccountThing): AccountThing {
 		if (!input || input.author?.id !== this.scope.ownerId || typeof input.id !== 'string' || !Number.isFinite(Date.parse(input.updatedAt)))
 			throw new WorkspaceError('SYNC_IDENTITY', 'The remote Thing does not belong to this workspace', 409);
-		const checked = validateThingtimeCrystal(input.thingtime, snapshotTransferValue(input.crystal));
+		const rawAttachments = (input as any).attachments;
+		if (rawAttachments !== undefined && (!Array.isArray(rawAttachments) || rawAttachments.length > 4096)) throw new WorkspaceError('INVALID_SYNC_THING', 'Invalid account attachment receipt.', 502);
+		const attachments = (rawAttachments || []).map(normalizePublicAttachment);
+		if (attachments.some((file: unknown) => !file)) throw new WorkspaceError('INVALID_SYNC_THING', 'Invalid account attachment receipt.', 502);
+		const checked = validateThingtimeCrystal(input.thingtime, snapshotTransferValue(input.crystal), { postAttachments: { hasAny: attachments.length > 0, hasVisual: attachments.some((file: any) => ['image','video'].includes(file.mediaKind)) } });
 		if (checked.ok === false || isProtectedThingtime(input.thingtime)) throw new WorkspaceError('INVALID_SYNC_THING', 'This Thing requires its dedicated local adapter', 502);
 		// Whitelist the cache projection. Never retain hidden-link bearer keys,
 		// credentials, grants or arbitrary server envelope fields.
 		return snapshotTransferValue({ id: input.id, thingtime: checked.thingtime, crystal: checked.crystal,
 			extended: input.extended ?? null, tags: input.tags || [], folderId: input.folderId || null, targetId: input.targetId || null,
-			createdAt: input.createdAt, updatedAt: input.updatedAt, revision: 1,
+			createdAt: input.createdAt, updatedAt: input.updatedAt, revision: 1, ...(input.thingtime.includes('post') ? { accountAttachmentIds: attachments.map((file: any) => file.id) } : {}),
 			author: { id: this.scope.ownerId }, acl: input.acl || ['tt:user'], visibility: input.visibility || 'private' }) as unknown as AccountThing;
 	}
 	async remember(input: AccountThing, startedAt = this.now()) { return (await this.rememberMany([input], startedAt))[0]; }
@@ -118,7 +123,7 @@ export class AccountThingSync {
 		return cached;
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: AccountThingWrite) {
-		if (row.thingtime.some(kind => ['post','comment'].includes(kind)) && (await tx.list<LocalThing>('things')).some(item => item.value.thingtime.includes('attachment') && item.value.targetId === row.id)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_MEDIA', 'Bound post media requires its account binding adapter.', 409);
+		if (!this.files && row.thingtime.some(kind => ['post','comment'].includes(kind)) && (await tx.list<LocalThing>('things')).some(item => item.value.thingtime.includes('attachment') && item.value.targetId === row.id)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_MEDIA', 'Bound post media requires its account binding adapter.', 409);
 		if (!accountThingCanCache(row)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_CONTENT', 'This kind requires its dedicated account sync adapter.', 409);
 		if (row.thingtime.includes('comment') && Object.entries(row.crystal).some(([key,value]) => value != null && !['type','text','richText','images','listing','thing','mediaLayout'].includes(key))) throw new WorkspaceError('UNSUPPORTED_COMMENT_CONTENT', 'This comment includes fields its account endpoint cannot preserve.', 409);
 		const existing = await tx.get<SyncRecord>(COLLECTION, row.id);
@@ -246,7 +251,7 @@ export class AccountThingSync {
 			this.lease.assertCurrent(); signal.throwIfAborted();
 			const claimed = await this.tx('readwrite', async tx => {
 				const rows = (await tx.list<SyncRecord>(COLLECTION)).map(row => row.value);
-				let record: SyncRecord | undefined, row: LocalThing | undefined;
+				let record: SyncRecord | undefined, row: (LocalThing & { attachmentIds?: string[] }) | undefined;
 				for (const candidate of rows) {
 					if (!['pending', 'syncing'].includes(candidate.state) || candidate.retryAt > this.now() || (candidate.claim && candidate.claim.expiresAt > this.now())) continue;
 					if (candidate.deleted && !candidate.base && !candidate.pending) {
@@ -289,7 +294,7 @@ export class AccountThingSync {
 				const pending: FrozenWrite | FrozenDelete = record.pending || (record.deleted && record.base ? {
 					id: row.id, operationId: this.uuid(), version: row.revision, method: 'delete', body: { id: row.id, expectedUpdatedAt: record.base.updatedAt }
 				} : { id: row.id, operationId: this.uuid(), version: row.revision,
-					method: record.base ? 'update' : 'create', body: { ...writeContent(row), ...record.audience,
+					method: record.base ? 'update' : 'create', body: { ...writeContent(row), ...record.audience, ...(row.attachmentIds ? { attachmentIds: row.attachmentIds } : {}),
 						...(record.base ? { id: row.id, expectedUpdatedAt: record.base.updatedAt, replaceCrystal: true } : { shareId: row.id }) } });
 				const claim = { token: this.uuid(), expiresAt: this.now() + CLAIM_MS };
 				await tx.put(COLLECTION, row.id, { ...record, state: 'syncing', pending, claim });
@@ -337,12 +342,14 @@ export class AccountThingSync {
 					} catch { throw failure; }
 				}
 				if (remote.id !== pending.id) throw new WorkspaceError('SYNC_IDENTITY', 'Server returned a different Thing', 409);
+				if (pending.body.attachmentIds && stable(remote.accountAttachmentIds || []) !== stable(pending.body.attachmentIds)) throw new WorkspaceError('SYNC_ATTACHMENTS', 'Account attachment binding differs from this saved request. Your local files are preserved.', 409);
 				await this.tx('readwrite', async tx => {
 					const latest = await tx.get<SyncRecord>(COLLECTION, pending.id);
 					if (latest?.claim?.token !== claim.token) return;
 					const row = await tx.get<LocalThing>('things', pending.id);
 					const newer = !!latest.deleted || (row && row.revision !== pending.version);
-					if (!newer) await tx.put('things', pending.id, { ...remote, ...(row?.localSubmission ? { localSubmission: row.localSubmission } : {}), revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
+					const device = this.files?.restore ? await this.files.restore(tx, remote) : remote;
+					if (!newer) await tx.put('things', pending.id, { ...device, ...(row?.localSubmission ? { localSubmission: row.localSubmission } : {}), revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
 					await tx.put(COLLECTION, pending.id, { id: pending.id, state: newer ? 'pending' : 'synced', base: remote,
 						...(latest.deleted ? { deleted: latest.deleted } : {}),
 						audience: newer ? latest.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);

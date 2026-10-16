@@ -283,3 +283,22 @@ old snapshots do not grant file access. Run `accountFileExport.test.ts`, the
 opt-in `accountFileExport.browser.test.ts` and the extended cold-retention browser
 fixture. Account file import and complete remote-folder/managed transfer coverage
 remain pending; see [the transfer checkpoint](../local-workspaces.md#account-file-transfer-exports--2026-10-17).
+
+
+## Account post file binding
+
+`AccountFileSync` stages unsubmitted post/comment files without network work;
+`AccountThingSync` and `contentHooks.prepare` bind local content to confirmed upload
+receipts. `accountThingTransport` pairs PublicThing with the same-ID post companion
+for authoritative attachment receipts. `accountExport` includes live bound bytes.
+`attachments.remove` discards only unsubmitted device selections. The native
+composer saves locally even when the account upload scope has not been approved;
+remote upload still requires approval.
+
+PATCH `/things` passes validated attachment IDs to `updateThing`, which inspects
+purpose and applies `syncBoundTargetAttachments` inside the content transaction.
+Negotiate `api.things-update` 1.11.0 for this atomic behavior; the two manifests use
+the same docs entry. Tests: `accountBoundMedia.test.ts`, opt-in
+`accountBoundMedia.browser.test.ts`, workspace/attachments/Things/capability suites.
+See the [binding checkpoint](../local-workspaces.md#account-post-file-admission-and-binding--2026-10-17)
+for explicit remaining coverage.
