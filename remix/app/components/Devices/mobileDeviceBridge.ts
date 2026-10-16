@@ -15,7 +15,29 @@ export function parseMobileDeviceResult(value: unknown, expected: { requestId: s
 	return { state: result.state as MobileDeviceStatus['state'], ...(result.state === 'paired' ? { deviceId: result.deviceId as string } : {}) };
 }
 
+// The native controller intentionally handles one pairing operation at a time.
+// Serialize UI polling and foreground checks without sharing results across
+// callers or letting one caller cancel another caller's identity check.
+let deviceRequests: Promise<unknown> = Promise.resolve();
 export function requestMobileDevice(ownerId: string, action: 'status' | 'pair', signal: AbortSignal): Promise<MobileDeviceStatus> {
+    if (signal.aborted) return Promise.reject(new DOMException('Device request cancelled', 'AbortError'));
+    const bridge = getNativeBridge();
+    if (!supportsMobileDevice(bridge)) return Promise.reject(new Error('Mobile device pairing requires an updated Thingtime app.'));
+    const origin = window.location.origin;
+    const run = deviceRequests.then(() => {
+        if (signal.aborted || window.location.origin !== origin || getNativeBridge() !== bridge)
+            throw new DOMException('Device request cancelled', 'AbortError');
+        return requestMobileDeviceNow(ownerId, action, signal);
+    });
+    deviceRequests = run.catch(() => {});
+    return new Promise((resolve, reject) => {
+        const abort = () => { signal.removeEventListener('abort', abort); reject(new DOMException('Device request cancelled', 'AbortError')); };
+        signal.addEventListener('abort', abort, { once: true });
+        run.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+    });
+}
+
+function requestMobileDeviceNow(ownerId: string, action: 'status' | 'pair', signal: AbortSignal): Promise<MobileDeviceStatus> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileDevice(bridge)) return Promise.reject(new Error('Mobile device pairing requires an updated Thingtime app.'));
 	const expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };

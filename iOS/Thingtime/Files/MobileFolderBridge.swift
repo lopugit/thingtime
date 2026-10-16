@@ -123,7 +123,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                             let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
                             try approval.validate(owner: scope)
                             if try !self.store.isWriteApproved(scope, id: rootId, approval: approval) {
-                                guard try await self.approve(grant: grant, webView: webView) else { throw MobileFolderStore.Failure.unavailable }
+                                guard try await self.approve(grant: grant, webView: webView) else { throw MobileFolderStore.Failure.approvalCancelled }
                                 try check(); try await verifyOwner(scope, check); try check()
                                 try self.store.approveWrite(scope, grant: grant, approval: approval)
                             }

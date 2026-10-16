@@ -564,3 +564,30 @@ Build 32 is installed on the local iPhone 17 Pro / iOS 26.5 simulator from
 The installed executable, debug library and Info.plist match the rebuilt bundle;
 selected URL is `http://localhost:14900`. Launch rendering is checked separately
 from authenticated folder-transfer acceptance.
+
+
+### Installed iOS download and real process-exit acceptance (2026-10-17)
+
+Normal login plus production Things/Files/native consent controls completed
+nested cloud downloads in the installed simulator app. Independent hashes verify
+17-byte and 8 MiB + 17-byte files, then replacement with 8 MiB + 31 bytes; the
+original inode/bytes remain privately retained and unchanged files preserve
+inode/mtime. The opt-in installed test passed after external verification.
+Fresh-process native tests also pass deliberate exit-after-rename recovery for
+create, replace and local edit before recovery. Fixtures, manual acceptance and
+cleanup are documented in the root README and full sync ledger.
+
+UI-discovered follow-ups serialize background and foreground pairing checks and
+report cancelled native write approval separately from unavailable folders.
+These are bounded adapters around the same editable connection/receipt contracts.
+Physical/provider/reboot acceptance and the wider Drive/Photos/peer-sync scope
+remain unfinished.
+
+Build 33 follow-up: changing the saved connection required fresh native consent;
+Cancel displayed the corrected message, and approved retry completed without a
+polling collision. Installed executable, debug dylib and Info.plist hashes match
+the build; codesign verification and the running app path were checked. The
+updated process-exit runner passes all three scenarios, 31 selected native tests
+pass, 91 shared sync tests plus four pairing/queue tests pass, targeted lint and
+full web/Vercel build pass. TypeScript remains at 91 existing diagnostics / 47
+normalized messages, with no additions.

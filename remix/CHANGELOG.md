@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Verified installed iOS cloud downloads, retained
+  replacement bytes and real process-exit recovery; added opt-in fixture/runbook
+  tooling. Serialize mobile pairing checks so polling cannot interrupt transfer
+  setup, and distinguish cancelled native approval from unavailable folders.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Add approved foreground iOS downloads to the
   existing sync connection controls, with native scoped consent, verified
   same-volume publication, retained displaced files and durable receipt recovery.

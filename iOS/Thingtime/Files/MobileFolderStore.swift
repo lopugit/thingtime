@@ -24,9 +24,10 @@ final class MobileFolderStore {
         var writeApprovals: [WriteApproval]?
     }
     enum Failure: Error, LocalizedError {
-        case unavailable, invalid, limit, changed, storage
+        case unavailable, invalid, limit, changed, storage, approvalCancelled
         var errorDescription: String? {
             switch self {
+            case .approvalCancelled: return "Download approval cancelled. No folder write permission was granted."
             case .unavailable: return "This folder is unavailable. Check Files permissions or choose it again."
             case .invalid: return "This folder contains an unsupported path or item. No complete scan was produced."
             case .limit: return "This folder exceeds the current scan limit. Choose a smaller folder."

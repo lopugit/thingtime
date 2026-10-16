@@ -10269,3 +10269,25 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   protected storage locked, low disk space and physical devices. Unsupported
   providers must preserve both sides. Add conflict resolution/restore acceptance
   before describing these pending cases as automatic convergence.
+
+
+### Installed iOS download acceptance and real process exit (2026-10-17)
+
+- [x] In iPhone 17 Pro / iOS 26.5, pair through Things, choose only the empty
+  acceptance folder in Files, save an unpaused download connection with deletion
+  propagation off, cancel then approve the real native dialog. Cancellation
+  leaves the folder empty. Download nested real cloud files, independently verify
+  17-byte and 8 MiB + 17-byte SHA-256 values, repeat, then replace the cloud binary
+  with 8 MiB + 31 bytes. Verify the replacement hash, retained original hash/inode
+  and unchanged file inode/mtime. Relaunch retains completed progress.
+- [x] Deliberately exit the native test host after rename but before receipt;
+  recover in a different process for create, replace and edit-before-recovery.
+  The last case remains pending and retains both versions. This is process-exit
+  evidence, not reboot or physical storage-power-loss evidence.
+- [x] After the polling/cancellation fix, repeat native cancellation and retry
+  while periodic device status refresh runs. No "another device request" error
+  should interrupt the transfer; cancellation must not imply lost folder access.
+- [x] Edit the saved connection name/revision and require new native approval;
+  cancel, retry and approve in build 33, then complete the transfer.
+- [ ] Re-select the folder and require renewed native approval. Check wide
+  layouts and physical/iCloud/third-party providers separately.

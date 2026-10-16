@@ -248,3 +248,22 @@ synthetic authentication and a local test grant. Run it with `MobileFolderTests`
 and `MobileDevicePairingTests` after `xcodegen generate`. See the root README for
 the concrete simulator command and `docs/mobile-file-sync.md` for remaining
 cloud, provider, permission and physical-device acceptance.
+
+
+### Real installed download and process-exit checks
+
+`./scripts/test-mobile-publication-process.sh` runs opt-in
+`MobilePublicationProcessTests` across separate test-host processes. It exits
+after exclusive create/swap but before receipt persistence and checks original
+operation recovery, retained replacement bytes and edit-before-recovery refusal.
+The script requires a concrete simulator `DEST`; it touches only its private
+fixture directory.
+
+`./scripts/test-mobile-sync-installed.sh /private/account.json` prepares the
+actual installed Things UI with a disposable loopback account and empty Documents
+folder. Use the visible Files picker, connection editor and native consent
+controls, then independently verify the cloud file hashes before recording test
+completion. This is opt-in and never enables itself in ordinary test runs. See
+the root README for fixture preparation, replacement and cleanup. The native
+consent cancellation message is distinct from missing folder access; shared
+pairing requests serialize foreground checks with periodic status refresh.

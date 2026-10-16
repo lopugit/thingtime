@@ -4719,7 +4719,9 @@ choose a folder and save a private connection to an owned cloud folder. Select
 Upload or Backup, unpause it, then choose **Upload now**. Keep the app visible;
 **Stop upload** and **Retry upload** preserve the saved run. Wi-Fi/charging policy
 is checked between requests, not continuously enforced on an in-flight part.
-Two-way/download/background operation is not yet available. No new secrets,
+iOS builds advertising `filePublicationVersion` 1.0.0 also support foreground
+downloads after native approval, with deletion propagation disabled.
+Two-way and background operation remain unavailable. No new secrets,
 collections or environment variables are needed beyond existing pairing,
 Mongo transactions, upload approval and attachment storage setup.
 
@@ -4805,3 +4807,50 @@ xcodebuild -project Thingtime.xcodeproj -scheme Thingtime -destination "$DEST" \
 The byte and WebKit tests use disposable local files and a synthetic owner verifier;
 real account, file-provider, process-kill and physical-device acceptance remain
 separate. See the [full sync ledger](docs/mobile-file-sync.md).
+
+
+### Installed iOS download and process-exit acceptance
+
+Use a disposable loopback account with normal private-upload approval and the
+existing local attachment storage setup. Keep its `{base, username, password,
+userId}` fixture outside the repository with mode 0600. The `base` must match the
+iOS build exactly, including `localhost` versus `127.0.0.1`. No additional service
+credentials or collection are needed. From the repository root:
+
+```sh
+corepack pnpm --dir remix exec tsx scripts/mobile-sync-installed-fixture.mts /private/account.json /private/cloud-state.json prepare
+DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-sync-installed.sh /private/account.json
+```
+
+The native test signs the disposable account in through the normal login API and
+opens the production Things screen. It refuses to replace another account's
+session. It creates an empty `Download acceptance <id>` folder in app Documents
+and waits for manual/CUA acceptance; it does not fabricate native permissions,
+pairing, transfer replies or successful completion. Pair the device, select that
+folder in Files, save an unpaused Cloud to device connection to `Mobile download
+acceptance`, and leave deletion propagation off. Cancel the native dialog and
+confirm no files were written; retry and approve. Verify both downloaded files
+against the fixture's independent SHA-256 values. Repeat, then run the fixture
+helper with `replace` and download again. Verify the new hash and retained
+original bytes before writing `{"verified":true}` to the test's
+`Application Support/MobileSyncInstalledAcceptance/complete.json`.
+
+Record the created connection ID as `configurationId` in the private cloud
+state, remove its native folder access, then run the fixture helper with
+`cleanup`. It removes only its folders/connection through ordinary APIs and
+retains accounted file versions in private Trash. Sign out the simulator test
+account and remove the empty/test Documents folder. If temporary admin approval
+was enabled in ignored local env, restore that setting and use `npm run web-pms`.
+
+The separate process-exit suite needs no account or server:
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-publication-process.sh
+```
+
+It deliberately exits only the simulator test host after rename and before
+receipt persistence, then verifies create, replace and edit-before-recovery in
+a different process. It stops Xcode diagnostic collection only after durable
+proof and the publishing PID establish that the process really exited. These
+checks do not establish device reboot, iCloud/third-party provider or physical
+device acceptance. See [the full ledger](docs/mobile-file-sync.md).

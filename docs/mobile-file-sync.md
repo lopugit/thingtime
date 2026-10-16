@@ -694,3 +694,44 @@ owner/consent verification. They do not establish authenticated cloud-to-native,
 OS prompt click-through, physical-device/provider or actual process-kill/reboot
 acceptance. Those manual checks remain open, as do Android/Mac publication,
 background scheduling, Photos, peer sync, retention and conflict resolution.
+
+
+## Installed iOS download and process-exit acceptance — 2026-10-17
+
+The real iPhone 17 Pro / iOS 26.5 app was authenticated through normal login with
+a disposable loopback account. CUA operated production Things pairing, the Files
+folder picker, connection editor and native Cancel/Allow downloads controls. No
+native grant, approval, pairing response or transfer receipt was injected.
+Cancellation left the empty selected folder unchanged. The download completed
+for `hello.txt` (17 bytes) and `nested/sample.bin` (8 MiB + 17 bytes), independently
+matching cloud fixture SHA-256 values. A repeat finished; a new cloud revision
+(8 MiB + 31 bytes) replaced the binary. Its new hash matched, the displaced
+original retained its hash/inode privately, and the unchanged file retained its
+inode/mtime. Completed progress survived app relaunch. The opt-in installed
+XCTest finished with zero failures after external byte verification.
+
+A separate opt-in XCTest deliberately `_exit(77)`s after native rename and before
+receipt persistence. Fresh-process verification passed create, replacement and
+local-edit-before-recovery scenarios, preserving operation identity and both
+versions where required. This closes actual process-exit acceptance for the
+simulator's same-volume local provider, not reboot/power-loss acceptance.
+
+The real UI exposed overlapping periodic/foreground pairing checks and a
+misleading cancellation message. The shared bridge now serializes independent
+requests, permits queued cancellation without cancelling another caller, and
+refuses queued dispatch after origin/bridge changes. Native cancellation has a
+distinct readable error. Regression coverage exercises those queue boundaries.
+
+Physical devices, additional Files providers, wide-layout acceptance, Android/Mac
+publishers, background workers, Photos, peers, conflict/restore controls and
+retention remain open. Existing history/Timeline and editable connection formats
+remain unchanged.
+
+Build 33 follow-up: changing the saved connection required fresh native consent;
+Cancel displayed the corrected message, and approved retry completed without a
+polling collision. Installed executable, debug dylib and Info.plist hashes match
+the build; codesign verification and the running app path were checked. The
+updated process-exit runner passes all three scenarios, 31 selected native tests
+pass, 91 shared sync tests plus four pairing/queue tests pass, targeted lint and
+full web/Vercel build pass. TypeScript remains at 91 existing diagnostics / 47
+normalized messages, with no additions.

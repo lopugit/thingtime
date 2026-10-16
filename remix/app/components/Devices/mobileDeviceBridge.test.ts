@@ -27,3 +27,52 @@ test('iOS CryptoKit and the server share an independently signed canonical wire 
 	assert.equal(verifyDevicePairingClaim(vector.claim, Buffer.from(vector.signature, 'base64').toString('base64url')), true);
 	assert.equal(verifyDevicePairingClaim({ ...vector.claim, device: { ...vector.claim.device, platform: 'android' } }, Buffer.from(vector.signature, 'base64').toString('base64url')), false);
 });
+
+test('foreground pairing checks serialize with polling; cancellation does not cancel another caller', async () => {
+    const { requestMobileDevice } = await import('./mobileDeviceBridge');
+    const { nativeBridgeMessageEvent } = await import('../../utils/nativeBridge');
+    const messages: Array<{ payload: Record<string, string> }> = [];
+    const target = Object.assign(new EventTarget(), {
+        location: { origin: 'http://localhost:14900' },
+        thingtimeNativeBridge: { isNativeWebView: true, platform: 'ios', devicePairingVersion: '1.0.0',
+            postMessage: (message: { payload: Record<string, string> }) => messages.push(message) }
+    });
+    const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: target });
+    const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+    const reply = (index: number) => target.dispatchEvent(new CustomEvent(nativeBridgeMessageEvent, {
+        detail: { type: 'mobile-device-result', payload: { ...messages[index].payload, state: 'paired', deviceId: 'device' } }
+    }));
+    try {
+        const first = new AbortController(), queued = new AbortController(), third = new AbortController();
+        const a = requestMobileDevice('owner', 'status', first.signal);
+        const b = requestMobileDevice('owner', 'pair', queued.signal);
+        const cancelled = assert.rejects(b, { name: 'AbortError' });
+        const c = requestMobileDevice('owner', 'status', third.signal);
+        await tick(); assert.equal(messages.length, 1);
+        queued.abort(); await cancelled; assert.equal(messages.length, 1);
+        reply(0); assert.equal((await a).state, 'paired'); await tick();
+        assert.equal(messages.length, 2); assert.equal(messages[1].payload.action, 'status');
+        assert.notEqual(messages[0].payload.requestId, messages[1].payload.requestId);
+        reply(1); await c;
+
+        const active = new AbortController(), next = new AbortController();
+        const d = requestMobileDevice('owner', 'status', active.signal);
+        const stopped = assert.rejects(d, { name: 'AbortError' });
+        const e = requestMobileDevice('owner', 'pair', next.signal);
+        await tick(); active.abort(); await stopped; await tick();
+        assert.equal(messages[3].payload.action, 'suspend');
+        assert.equal(messages[3].payload.requestId, messages[2].payload.requestId);
+        assert.equal(messages[4].payload.action, 'pair'); reply(4); await e;
+
+        const beforeNavigation = requestMobileDevice('owner', 'status', new AbortController().signal);
+        const stale = requestMobileDevice('other-owner', 'pair', new AbortController().signal);
+        const rejected = assert.rejects(stale, { name: 'AbortError' });
+        await tick(); target.location.origin = 'http://localhost:14901';
+        reply(5); await beforeNavigation; await rejected; await tick();
+        assert.equal(messages.length, 6, 'No queued request crosses an origin change');
+    } finally {
+        if (previous) Object.defineProperty(globalThis, 'window', previous);
+        else Reflect.deleteProperty(globalThis, 'window');
+    }
+});
