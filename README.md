@@ -4942,3 +4942,16 @@ No new secret, permission or external dashboard setting is needed. Private test
 credentials/state stay outside Git with mode 0600. The media cache bypasses
 version-pinned, fingerprint and actor-scoped sync requests so their API headers
 and authorization checks reach the transfer runner unchanged.
+
+
+### Two-way foreground folder sync
+
+Approved iOS folders and Android Thingtime offline folders can use **Two-way**
+with **Sync now**, while the app stays open and deletion propagation is off.
+A run reconciles both directions using the shared journal and confirmed common
+baseline; conflicting edits preserve both copies and require review. Generic
+Android SAF folders remain upload sources. Mac, background scheduling, native
+trash propagation and conflict-resolution controls remain in progress.
+The [Android two-way acceptance runbook](android/README.md#two-way-foreground-acceptance)
+uses the same disposable loopback account, normal upload approval and local
+attachment backend; no new configuration or credentials are required.

@@ -759,3 +759,33 @@ The run exposed a media-worker interception boundary; pinned/actor-scoped reads
 now pass directly to the API. Regression suites pass 93 sync and seven media
 checks, plus four new native authorization adapter cases. Full TypeScript has
 91 unrelated diagnostics. No production release or full-sync completion claim.
+
+
+## Two-way foreground connections — 2026-10-17
+
+Eligible mobile roots now expose Sync now. The existing shared runner executes
+both directions in one recoverable run, with native folder approval and deletion
+propagation disabled. Mixed lost replies recover without duplicate effects;
+conflicting initial content stops before mutations and preserves both copies.
+No parallel storage or new server API is introduced.
+
+
+Installed Android 15 / API 35 acceptance passed the actual Sync now flow with
+native approval cancellation/retry. Initial cloud text (17 bytes), nested cloud
+content (8 MiB + 17 bytes) and a native upload (257 bytes) converged. Independent
+edits then replaced the cloud content with 8 MiB + 31 bytes and the native upload
+with 513 bytes. Full ContentResolver/download SHA-256 checks matched both sides;
+the uploaded cloud file kept its identity and advanced its revision. Repeated
+sync preserved cloud revision and canonical native entries. Android Files showed
+the final root/nested entries; removing access preserved the four catalog entries.
+Native edits used the production catalog fixture, not an external Files editor.
+
+The suite reported `OK (48 tests)` (46 executed, two opt-in process cases skipped).
+Debug build, Android lint and the 26-test JVM task passed (cached where unchanged).
+Shared sync tests pass 96/96 and targeted ESLint passes. Full TypeScript has the
+same 91 diagnostics as the preceding checkpoint, with byte-identical output and
+no changed-file errors. Temporary local admin configuration was restored before
+acceptance; cloud fixture cleanup retained accounted versions in private Trash.
+Native fixture cleanup removes its active records/blobs; retained replacement
+bytes and staging are not claimed to be fully erased. No production deployment,
+iOS mixed-direction acceptance or full-goal completion is implied.

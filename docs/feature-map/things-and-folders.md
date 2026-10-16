@@ -340,3 +340,11 @@ stable scan/read versions and shared publication receipts; provider notification
 refresh Android Files. `media-cache-core.mjs` excludes pinned ranges, fingerprint
 JSON and expected-actor/data-plane requests from media interception. See the
 [download acceptance ledger](../mobile-file-sync.md).
+
+
+`foregroundSync.ts` also executes two-way runs through the existing cloud and
+native adapters. `MobileSyncConnections` obtains scoped native approval and
+exposes Sync now only for publication-capable roots with deletes disabled.
+`foregroundSync.test.ts` covers mixed-direction recovery and pre-effect conflicts;
+Android's optional `THINGTIME_TWO_WAY_SYNC_TEST=1` checks actual mixed bytes and
+independent edits. Mac adapters and native workers remain in the mobile sync ledger.

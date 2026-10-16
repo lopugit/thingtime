@@ -227,7 +227,9 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 					syncScope,
 					async () => {
 						assertActive();
-						const localTarget = saved.configuration.mode === 'download' ? await approveMobileSyncTarget(saved, syncScope, active.signal) : undefined;
+						const localTarget = ['download', 'two-way'].includes(saved.configuration.mode)
+							? await approveMobileSyncTarget(saved, syncScope, active.signal)
+							: undefined;
 						assertActive();
 						await runForegroundCloudSync(
 							saved,
@@ -385,16 +387,17 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 				</Flex>
 			</Flex>
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				Transfer selected folders while this app stays open. Downloads require native folder approval and deletion propagation off. Two-way and
-				background transfers are still being added.
+				Transfer selected folders in either direction while this app stays open. Downloads and two-way sync require native folder approval and
+				deletion propagation off. Conflicting changes preserve both copies for review. Background transfers are still being added.
 			</Text>
 			{connections.map((saved) => {
 				const progress = transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
 				const running = busy && activeTransfer === saved.id;
 				const downloading = saved.configuration.mode === 'download';
+				const twoWay = saved.configuration.mode === 'two-way';
 				const supported =
 					['upload', 'backup'].includes(saved.configuration.mode) ||
-					(downloading &&
+					((downloading || twoWay) &&
 						supportsMobileFolderPublication(roots.find((root) => root.id === saved.configuration.localRootId)) &&
 						!saved.configuration.propagateDeletes);
 				const allowed =
@@ -413,11 +416,13 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 								{saved.configuration.paused
 									? 'Paused'
 									: !supported
-									? downloading
-										? 'Downloads need a supported device folder and deletion propagation off'
+									? downloading || twoWay
+										? 'Downloads and two-way sync need a supported device folder and deletion propagation off'
 										: 'This direction is not available yet'
 									: !supportsMobileSyncConditions()
 									? 'Update the mobile app to transfer files'
+									: twoWay
+									? 'Ready for two-way sync with folder approval'
 									: downloading
 									? 'Ready to download with folder approval'
 									: 'Ready for a foreground upload'}
@@ -447,7 +452,7 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 							</Button>
 						) : (
 							<Button size="sm" minHeight="40px" isDisabled={!allowed || busy || !!draft || !ready} onClick={() => transfer(saved)}>
-								{progress && progress.stage !== 'complete' ? 'Retry transfer' : downloading ? 'Download now' : 'Upload now'}
+								{progress && progress.stage !== 'complete' ? 'Retry transfer' : twoWay ? 'Sync now' : downloading ? 'Download now' : 'Upload now'}
 							</Button>
 						)}
 					</Flex>

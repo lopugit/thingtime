@@ -47,8 +47,9 @@ The executor cannot supply these guarantees for a blind-overwrite adapter.
 `cloudSyncPort.client.ts` now implements real cloud file upload/replace and remote
 Trash operations for explicitly pinned destinations. It also creates ordinary cloud folders before their child uploads, retaining
 preallocated parent IDs and exact canonical Timeline creation receipts. Its prepared metadata is
-retained with the existing journal run. The mobile connection controls now start
-explicit foreground upload/backup and approved iOS download runs, as described below.
+retained with the existing journal run. The mobile connection controls start explicit foreground upload/backup, approved
+downloads and two-way runs, as described below. Native delete propagation remains
+disabled until recoverable native trash is implemented.
 
 The current scan bound is 10,000 combined paths, and directories must appear
 alongside descendants. Large-root partitioning is still needed. Folder removal
@@ -81,7 +82,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads and actual Files acceptance verified; Mac publication, workers and full cross-device transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; iOS mixed-direction acceptance, Mac publication, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
@@ -932,3 +933,45 @@ settings reapproval acceptance, generic providers, Mac receivers, background
 workers, Photos, peer sync, deletion/rename convergence, restore/retention UI,
 physical/API 26 devices, reboot/low-storage and release acceptance remain open.
 The full requested goal remains active.
+
+
+## Two-way foreground connections — 2026-10-17
+
+The shared foreground runner now accepts two-way settings. The same immutable
+run contains both local-to-cloud and cloud-to-native operations, preserving
+preallocated identities, exact version checks, native staging, scoped consent,
+canonical file versions and Timeline history. Completion recovers each side's
+receipt into the common baseline. A mixed run resumes after lost replies without
+repeating uploads or native publication. Native write approval and per-folder
+capability are required even when the first observed plan contains only uploads;
+configuration changes cannot silently grant future downloads. Deletion propagation
+must remain off. Concurrent edits and delete/edit cases stop before new mutations.
+
+The mobile connection surface exposes Sync now for eligible two-way roots. iOS
+uses its existing selected-folder publication adapter; Android uses Thingtime
+offline folders. Generic Android SAF roots are not writable destinations. Android
+Files still exposes read-only snapshots; local fixture edits in acceptance are
+made through the production native catalog and are not proof of external editing.
+Mac receivers, background scheduling, native trash, conflict/restore controls,
+Photos, peer transport and full cross-device acceptance remain required.
+
+
+Installed Android 15 / API 35 acceptance passed the actual Sync now flow with
+native approval cancellation/retry. Initial cloud text (17 bytes), nested cloud
+content (8 MiB + 17 bytes) and a native upload (257 bytes) converged. Independent
+edits then replaced the cloud content with 8 MiB + 31 bytes and the native upload
+with 513 bytes. Full ContentResolver/download SHA-256 checks matched both sides;
+the uploaded cloud file kept its identity and advanced its revision. Repeated
+sync preserved cloud revision and canonical native entries. Android Files showed
+the final root/nested entries; removing access preserved the four catalog entries.
+Native edits used the production catalog fixture, not an external Files editor.
+
+The suite reported `OK (48 tests)` (46 executed, two opt-in process cases skipped).
+Debug build, Android lint and the 26-test JVM task passed (cached where unchanged).
+Shared sync tests pass 96/96 and targeted ESLint passes. Full TypeScript has the
+same 91 diagnostics as the preceding checkpoint, with byte-identical output and
+no changed-file errors. Temporary local admin configuration was restored before
+acceptance; cloud fixture cleanup retained accounted versions in private Trash.
+Native fixture cleanup removes its active records/blobs; retained replacement
+bytes and staging are not claimed to be fully erased. No production deployment,
+iOS mixed-direction acceptance or full-goal completion is implied.

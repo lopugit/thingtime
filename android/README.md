@@ -370,3 +370,30 @@ This installed cloud/Files sequence passed on Android 15 / API 35 on 2026-10-17:
 26 JVM checks, build and lint. Initial and repeated downloads retained matching
 bytes and identical native entries. This does not establish physical/API 26,
 background, reboot, throughput or real cloud replacement acceptance.
+
+
+### Two-way foreground acceptance
+
+Two-way connections expose **Sync now** for approved Thingtime offline folders,
+with deletion propagation off. One run uploads local additions/edits and downloads
+cloud additions/edits. Native Files is still read-only: this is not yet a general
+Android Files editor. Both-changed and delete/edit conflicts preserve both copies
+and stop before effects; conflict resolution and background scheduling remain open.
+
+Use the same disposable cloud fixture as the download runbook, then add
+`THINGTIME_TWO_WAY_SYNC_TEST=1` to its test command. This opt-in case seeds a
+synthetic native file through the production catalog, exercises the installed
+**Sync now** control and native Cancel/Allow consent, independently hashes both
+transfer directions and repeats the run. At `TWO_WAY_EDIT_READY`, run from `remix/`:
+
+```sh
+node --import tsx scripts/mobile-sync-installed-fixture.mts /absolute/path/private-fixture.json /absolute/path/download-state.json replace
+adb -s <test-device-id> shell run-as com.thingtime.mobile.dev sh -c '"cat > files/two-way-cloud-updated.json"' < /absolute/path/download-state.json
+```
+
+This changes a cloud file while the test separately edits its local fixture.
+The next run must replace each opposite copy, retain the uploaded file's stable
+identity, and converge without further revisions on a repeated run. Complete
+Files inspection and normal cleanup as above. No native grants or replies are
+fabricated, and all cloud writes use canonical APIs. Test fixture creation is
+not evidence of an Android Files editing UI.

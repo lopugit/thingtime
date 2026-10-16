@@ -10419,3 +10419,19 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   executed checks, two opt-in process cases skipped (`OK (48 tests)`).
 - [ ] Verify real cloud replacement/reapproval, physical/API 26 devices, low
   storage, system reboot, background scheduling and large-root performance.
+
+### Two-way foreground connections (2026-10-17)
+
+- [x] Mixed upload/download run survives lost cloud and native replies and
+  journal reload; confirmed operation identities and one publication per side
+  remain stable. A repeated converged run has zero mutations.
+- [x] Refuse two-way execution before scanning when native approval is absent
+  or deletion propagation is enabled. Conflicting initial bytes stop the whole
+  plan before cloud or native effects; preserve both copies.
+- [x] Installed Android: use the optional two-way runbook, cancel/allow native
+  consent, verify both transfer directions and independent replacements, repeat
+  without changing file identities/revisions, inspect Files and remove access.
+- [ ] Verify the same mixed-direction flow in installed iOS, including local
+  Files edits, settings reapproval, concurrent same-file edits and restart.
+- [ ] Add Mac receivers, recoverable native trash, explicit conflict resolution,
+  native background workers, Photos, peer sync and large-folder acceptance.

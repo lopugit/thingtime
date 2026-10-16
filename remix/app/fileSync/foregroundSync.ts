@@ -41,11 +41,8 @@ export async function runForegroundCloudSync(
 	signal: AbortSignal
 ) {
 	const configuration = parseFileSyncConfiguration(reviewed.configuration);
-	if (
-		!['upload', 'backup', 'download'].includes(configuration.mode) ||
-		(configuration.mode === 'download' && (!input.localTarget || configuration.propagateDeletes))
-	)
-		throw Error('Downloads require native write approval with deletion propagation disabled. Two-way sync is still being added.');
+	if (['download', 'two-way'].includes(configuration.mode) && (!input.localTarget || configuration.propagateDeletes))
+		throw Error('Downloads and two-way sync require native write approval with deletion propagation disabled.');
 	const approved = { ...structuredClone(reviewed), configuration, scope: { ...scope } };
 	const empty = { scope, complete: true, entries: [] };
 	const check = () => {

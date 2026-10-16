@@ -221,3 +221,71 @@ test('foreground downloads recover native receipts and checkpoint failure withou
 	);
 	journal.close();
 });
+
+test('two-way foreground recovers mixed upload/download receipts across reload without duplicating either side', async () => {
+	const f = await fixture();
+	const twoWay = { ...saved, configuration: { ...saved.configuration, mode: 'two-way' as const } };
+	f.rows.set('remote-folder', { id: 'remote-folder', folderId: 'cloud-root', name: 'Downloads', revision: 'r1' });
+	const local: any[] = [], receipts = new Map<string, any>();
+	let publications = 0, lose = true;
+	const input = () => {
+		const base = f.input();
+		return { ...base,
+			readConfiguration: async () => ({ ...(await base.readConfiguration()), crystal: twoWay.configuration }),
+			scanLocal: async () => [...await base.scanLocal(), ...structuredClone(local)],
+			localTarget: {
+				lookup: async (op: any) => receipts.has(op.id) ? { status: 'complete' as const, receipt: receipts.get(op.id) } : { status: 'missing' as const },
+				stage: async (op: any) => ({ scope, operationId: op.id, token: 'stage', entry: { ...op.mutation.source, id: 'downloaded-folder', version: 'local-1' } }),
+				publish: async (op: any, _scope: any, stage: any) => {
+					publications++; local.push(stage.entry);
+					const receipt = { scope, operationId: op.id, entry: stage.entry }; receipts.set(op.id, receipt);
+					if (lose) { lose = false; throw Error('lost native reply'); } return receipt;
+				}
+			}
+		};
+	};
+	f.lose();
+	await assert.rejects(runForegroundCloudSync(twoWay, scope, input(), new AbortController().signal), /lost accepted creation/);
+	const original = await f.journal().read(scope);
+	assert.deepEqual(original!.operations.map(op => op.mutation.kind === 'copy' && op.mutation.from), ['local', 'remote']);
+	await f.reload();
+	await assert.rejects(runForegroundCloudSync(twoWay, scope, input(), new AbortController().signal), /lost native reply/);
+	await f.reload();
+	const recovered = await runForegroundCloudSync(twoWay, scope, input(), new AbortController().signal);
+	assert.equal(recovered.id, original!.id); assert.ok(recovered.operations.every(op => op.confirmed));
+	assert.equal(f.creates(), 1); assert.equal(publications, 1);
+	assert.equal((await f.journal().checkpoint(scope))!.baseline.entries.length, 2);
+	const repeated = await runForegroundCloudSync(twoWay, scope, input(), new AbortController().signal);
+	assert.equal(repeated.operations.length, 0); assert.equal(f.creates(), 1); assert.equal(publications, 1);
+	f.journal().close();
+});
+
+test('two-way foreground refuses missing native approval and delete propagation before any scan', async () => {
+	const f = await fixture();
+	const unavailable = async (): Promise<never> => { throw Error('unexpected native operation'); };
+	for (const propagateDeletes of [false, true]) {
+		await assert.rejects(runForegroundCloudSync({ ...saved, configuration: { ...saved.configuration, mode: 'two-way', propagateDeletes } },
+			scope, { ...f.input(), scanLocal: unavailable,
+				localTarget: propagateDeletes ? { lookup: unavailable, stage: unavailable, publish: unavailable } : undefined
+			}, new AbortController().signal), /native write approval/);
+	}
+	assert.equal(await f.journal().read(scope), null); assert.equal(f.creates(), 0); f.journal().close();
+});
+
+test('two-way conflicting initial bytes stop the whole run before native or cloud mutations', async () => {
+	const f = await fixture(), base = f.input();
+	const twoWay = { ...saved, configuration: { ...saved.configuration, mode: 'two-way' as const } };
+	const fingerprint = (hash: string) => ({ algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: hash.repeat(64) });
+	const unavailable = async (): Promise<never> => { throw Error('unexpected native operation'); };
+	await assert.rejects(runForegroundCloudSync(twoWay, scope, {
+		...base,
+		readConfiguration: async () => ({ ...(await base.readConfiguration()), crystal: twoWay.configuration }),
+		scanLocal: async () => [...await base.scanLocal(), { path: 'same.bin', id: 'local-file', version: 'v1', kind: 'file' as const, size: 1, sha256: null, fingerprint: fingerprint('a') }],
+		inventory: async () => ({ ...await base.inventory(), nodes: [{ kind: 'file' as const, path: 'same.bin', file: {
+			id: 'remote-file', revision: 'r1', folderId: 'cloud-root', name: 'same.bin', trashed: false,
+			content: { attachmentId: 'attachment', version: 'b'.repeat(64), size: 1, fingerprint: fingerprint('b') }
+		} }] }),
+		localTarget: { lookup: unavailable, stage: unavailable, publish: unavailable }
+	}, new AbortController().signal), /sync conflict/);
+	assert.equal(await f.journal().read(scope), null); assert.equal(f.creates(), 0); f.journal().close();
+});

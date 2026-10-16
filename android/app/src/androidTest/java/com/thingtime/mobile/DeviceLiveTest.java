@@ -58,7 +58,7 @@ public class DeviceLiveTest {
         ManagedFileStoreTest fixture=new ManagedFileStoreTest();fixture.before();
         fixture.managed=new File(context.getNoBackupFilesDir(),"ManagedFiles-v1");fixture.root=root;fixture.fixture.owner=scope;fixture.fixture.grant=grantId;
         try {
-            if(download)verifyOfflineDownload(web,context,scope,grantId,root);
+            if(download)verifyOfflineDownload(web,context,scope,grantId,root,fixture);
             else {
             fixture.folder("nested");byte[] bytes=new byte[8*1024*1024+17];java.util.Arrays.fill(bytes,(byte)13);
             JSONObject receipt=fixture.publish(fixture.request("nested/original.bin",bytes,true),bytes);String document=root+":"+receipt.getJSONObject("entry").getString("id");
@@ -79,7 +79,7 @@ public class DeviceLiveTest {
             assertTrue("Confirm the rendered Files inspection",confirmed.exists());Files.delete(confirmed.toPath());
             folderRequest(web,scope,new JSONObject().put("action","remove").put("rootId",grantId));
             assertEquals(0,grants.list(scope).length());
-            try(ManagedFileStore store=fixture.store()){assertEquals(download?3:2,store.scan(scope,root).length());assertEquals(root,store.document(root).id);}
+            try(ManagedFileStore store=fixture.store()){assertEquals(download?("true".equals(InstrumentationRegistry.getArguments().getString("twoWaySync"))?4:3):2,store.scan(scope,root).length());assertEquals(root,store.document(root).id);}
             System.out.println("OFFLINE_FILES_QA_PASS: native creation, actual Files selection, scoped grant, nested provider bytes, bridge scan and non-destructive access removal.");
         } finally {
             grants.remove(scope,grantId);Files.deleteIfExists(confirmed.toPath());
@@ -95,32 +95,87 @@ public class DeviceLiveTest {
             OfflineDocumentsProvider.changed(context);fixture.after();
         }
     }
-    private static void verifyOfflineDownload(android.webkit.WebView web,Context context,DeviceScope scope,String grantId,String root) throws Exception {
+    private static void verifyOfflineDownload(android.webkit.WebView web,Context context,DeviceScope scope,String grantId,String root,ManagedFileStoreTest fixture) throws Exception {
         File source=new File(context.getFilesDir(),"download-test-cloud.json");JSONObject cloud=new JSONObject(new String(Files.readAllBytes(source.toPath()),StandardCharsets.UTF_8));Files.delete(source.toPath());
         assertEquals(scope.owner,cloud.getString("ownerId"));assertEquals(scope.origin,cloud.getString("origin"));
-        assertFalse(cloud.optBoolean("cleaned"));String connection=null;
+        assertFalse(cloud.optBoolean("cleaned"));String connection=null;JSONObject uploaded=null;
+        boolean twoWay="true".equals(InstrumentationRegistry.getArguments().getString("twoWaySync"));
+        String button=twoWay?"Sync now":"Download now";
+        byte[] localBytes=new byte[257];java.util.Arrays.fill(localBytes,(byte)41);
+        if(twoWay)fixture.publish(fixture.request("from-device.bin",localBytes,true),localBytes);
         try {
             String device=new KeystoreDeviceStore(context).load(scope).getString("deviceId");
             JSONObject config=new JSONObject().put("configurationVersion",1).put("name","Android cloud download acceptance").put("deviceId",device).put("localRootId",grantId).put("remoteFolderId",cloud.getString("rootId"))
-                .put("mode","download").put("paused",false).put("propagateDeletes",false).put("network","any").put("chargingOnly",false).put("excludedPaths",new JSONArray());
+                .put("mode",twoWay?"two-way":"download").put("paused",false).put("propagateDeletes",false).put("network","any").put("chargingOnly",false).put("excludedPaths",new JSONArray());
             connection=webApi(web,"/api/v1/things","POST",new JSONObject().put("thingtime",new JSONArray().put("file-sync")).put("crystal",config)).getJSONObject("thing").getString("id");
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Refresh'&&!b.disabled).click()");
-            awaitTrue(web,"document.body.innerText.includes('Android cloud download acceptance') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Download now'&&!b.disabled)");
-            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Download now'&&!b.disabled).click()");
+            awaitTrue(web,"document.body.innerText.includes('Android cloud download acceptance') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='"+button+"'&&!b.disabled)");
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='"+button+"'&&!b.disabled).click()");
             System.out.println("OFFLINE_DOWNLOAD_CANCEL: Cancel the native Allow downloads dialog.");
             awaitTrue(web,"document.body.innerText.includes('Download approval cancelled')",300000);
-            try(ManagedFileStore store=new ManagedFileStore(context,()->{})){assertEquals(0,store.scan(scope,root).length());}
+            try(ManagedFileStore store=new ManagedFileStore(context,()->{})){assertEquals(twoWay?1:0,store.scan(scope,root).length());}
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled).click()");
             System.out.println("OFFLINE_DOWNLOAD_ALLOW: Allow downloads in the native dialog.");
             awaitDownload(web);
-            JSONArray before=verifyCloudBytes(context,scope,root,cloud.getJSONArray("files"));
-            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Download now'&&!b.disabled).click()");
+            JSONArray expected=new JSONArray(cloud.getJSONArray("files").toString());
+            if(twoWay) {
+                uploaded=verifyUploadedBytes(web,cloud.getString("rootId"),localBytes);
+                expected.put(expectedFile("from-device.bin",localBytes));
+            }
+            JSONArray before=verifyCloudBytes(context,scope,root,expected);
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='"+button+"'&&!b.disabled).click()");
             awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Stop transfer')");
             awaitDownload(web);
-            JSONArray after=verifyCloudBytes(context,scope,root,cloud.getJSONArray("files"));assertEquals(before.length(),after.length());
+            JSONArray after=verifyCloudBytes(context,scope,root,expected);assertEquals(before.length(),after.length());
             for(int i=0;i<before.length();i++)assertEquals(SyncStaging.canonical(before.getJSONObject(i)),SyncStaging.canonical(after.getJSONObject(i)));
+            if(twoWay) {
+                // Independent native fixture edit; this is test setup, never a fake bridge response.
+                JSONObject entry=null;for(int i=0;i<after.length();i++)if(after.getJSONObject(i).getString("path").equals("from-device.bin"))entry=after.getJSONObject(i);
+                assertNotNull(entry);byte[] edited=new byte[513];java.util.Arrays.fill(edited,(byte)73);
+                JSONObject edit=fixture.request("from-device.bin",edited,true);edit.getJSONObject("operation").getJSONObject("mutation").put("expectedTarget",entry);fixture.publish(edit,edited);
+                File changed=new File(context.getFilesDir(),"two-way-cloud-updated.json");Files.deleteIfExists(changed.toPath());
+                System.out.println("TWO_WAY_EDIT_READY: Replace nested/sample.bin through the cloud fixture script, then copy its updated state into files/two-way-cloud-updated.json.");
+                long until=System.currentTimeMillis()+300000;while(!changed.exists()&&System.currentTimeMillis()<until)Thread.sleep(500);
+                assertTrue("Supply updated cloud fixture",changed.exists());
+                JSONObject updated=new JSONObject(new String(Files.readAllBytes(changed.toPath()),StandardCharsets.UTF_8));Files.delete(changed.toPath());
+                assertEquals(scope.owner,updated.getString("ownerId"));assertEquals(scope.origin,updated.getString("origin"));assertEquals(cloud.getString("rootId"),updated.getString("rootId"));
+                expected=new JSONArray(updated.getJSONArray("files").toString());expected.put(expectedFile("from-device.bin",edited));
+                evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Sync now'&&!b.disabled).click()");
+                awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Stop transfer')");awaitDownload(web);
+                JSONObject replaced=verifyUploadedBytes(web,cloud.getString("rootId"),edited);
+                assertEquals(uploaded.getString("id"),replaced.getString("id"));assertNotEquals(uploaded.getString("revision"),replaced.getString("revision"));uploaded=replaced;
+                JSONArray replacedEntries=verifyCloudBytes(context,scope,root,expected);
+                evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Sync now'&&!b.disabled).click()");
+                awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Stop transfer')");awaitDownload(web);
+                JSONArray repeated=verifyCloudBytes(context,scope,root,expected);assertEquals(replacedEntries.length(),repeated.length());
+                for(int i=0;i<repeated.length();i++)assertEquals(SyncStaging.canonical(replacedEntries.getJSONObject(i)),SyncStaging.canonical(repeated.getJSONObject(i)));
+                assertEquals(uploaded.getString("revision"),verifyUploadedBytes(web,cloud.getString("rootId"),edited).getString("revision"));
+                System.out.println("TWO_WAY_SYNC_PASS: mixed cloud/native creates and independent edits, stable uploaded identity, exact downloaded and uploaded hashes, repeated convergence.");
+            }
             System.out.println("OFFLINE_DOWNLOAD_PASS: actual Download now, native Cancel/Allow, cloud nested bytes, independent hashes and unchanged repeated transfer.");
-        }finally {if(connection!=null)webApi(web,"/api/v1/things?id="+connection,"DELETE",null);}
+        }finally {
+            if(twoWay) {
+                // Only the explicitly named synthetic local fixture belongs to this test.
+                JSONArray nodes=webApi(web,"/api/v1/files?rootId="+cloud.getString("rootId"),"GET",null).getJSONObject("inventory").getJSONArray("nodes");
+                for(int i=0;i<nodes.length();i++)if(nodes.getJSONObject(i).getString("path").equals("from-device.bin")) {
+                    JSONObject f=nodes.getJSONObject(i).getJSONObject("file"),c=f.getJSONObject("content");
+                    webApi(web,"/api/v1/files","POST",new JSONObject().put("id",f.getString("id")).put("operationId",java.util.UUID.randomUUID().toString()).put("expectedRevision",f.getString("revision")).put("name",f.getString("name")).put("folderId",f.get("folderId")).put("attachmentId",c.getString("attachmentId")).put("contentVersion",c.getString("version")).put("trashed",true));
+                }
+            }
+            if(connection!=null)webApi(web,"/api/v1/things?id="+connection,"DELETE",null);
+        }
+    }
+    private static JSONObject expectedFile(String path,byte[] bytes) throws Exception {
+        return new JSONObject().put("path",path).put("size",bytes.length).put("sha256",FolderReader.hex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+    }
+    private static JSONObject verifyUploadedBytes(android.webkit.WebView web,String root,byte[] expected) throws Exception {
+        JSONArray nodes=webApi(web,"/api/v1/files?rootId="+root,"GET",null).getJSONObject("inventory").getJSONArray("nodes");
+        JSONObject file=null;int count=0;
+        for(int i=0;i<nodes.length();i++)if(nodes.getJSONObject(i).getString("path").equals("from-device.bin")){file=nodes.getJSONObject(i).getJSONObject("file");count++;}
+        assertEquals(1,count);assertNotNull(file);assertEquals(expected.length,file.getJSONObject("content").getLong("size"));
+        String attachment=file.getJSONObject("content").getString("attachmentId");
+        evaluate(web,"window.__syncHash=null;(async()=>{try{const r=await fetch("+JSONObject.quote("/api/v1/attachments/content?id="+attachment+"&cache=bytes")+");if(!r.ok)throw Error('download');const digest=await crypto.subtle.digest('SHA-256',await r.arrayBuffer());window.__syncHash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');}catch(e){window.__syncHash='error'}})()");
+        awaitTrue(web,"window.__syncHash!==null");assertEquals(expectedFile("from-device.bin",expected).getString("sha256"),new JSONTokener(evaluate(web,"window.__syncHash")).nextValue());return file;
     }
     private static void awaitDownload(android.webkit.WebView web) throws Exception {
         awaitTrue(web,"document.body.innerText.includes('Last transfer finished.') || Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled)",300000);
