@@ -39,7 +39,7 @@ final class FolderBridge {
     private static final class Request {
         final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
-            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("scan"))?300000:30000);
+            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-finish"))?300000:30000);
             base=new JSONObject().put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         }
     }
@@ -69,7 +69,7 @@ final class FolderBridge {
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
         DeviceScope scope=new DeviceScope(payload.getString("ownerId"),origin,BuildConfig.DEBUG);
         if(action.equals("suspend")) { if(pending!=null && pending.id.equals(id)) suspend();return; }
-        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions").contains(action)) return;
+        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions","stage-begin","stage-append","stage-finish").contains(action)) return;
         if(pending!=null) { reply(new Request(payload,scope,reply,generation.get()),new JSONObject(),"Another folder request is running.");return; }
         Request request=new Request(payload,scope,reply,generation.incrementAndGet());pending=request;execute(request,null,false);
     }
@@ -119,6 +119,23 @@ final class FolderBridge {
                 } else if(!request.action.equals("list")) {
                     String rootId=request.payload.getString("rootId");if(!UUID.fromString(rootId).toString().equalsIgnoreCase(rootId)) throw new FolderReader.Failure("Invalid folder selection.");
                     if(request.action.equals("remove")) { store.remove(request.scope,rootId);proofs.clear(); }
+                    else if(request.action.startsWith("stage-")) {
+                        // Resolve this account's native grant on every chunk. A
+                        // remembered root ID or existing journal is not authority.
+                        FolderReader.Doc root=new SafFolderProvider(activity.getContentResolver(),store.grant(request.scope,rootId),signal).root();
+                        if(!root.directory)throw new FolderReader.Failure("Folder access is unavailable. Choose it again.");
+                        SyncStaging staging=new SyncStaging(activity,check);JSONObject transfer=request.payload.getJSONObject("transfer"),progress;
+                        if(request.action.equals("stage-begin"))progress=staging.begin(transfer,request.scope,rootId);
+                        else if(request.action.equals("stage-finish"))progress=staging.finish(transfer,request.scope,rootId);
+                        else {
+                            Object encoded=request.payload.get("data");
+                            if(!(encoded instanceof String) || ((String)encoded).length()>87384)throw new FolderReader.Failure("Invalid download chunk.");
+                            byte[] bytes=java.util.Base64.getDecoder().decode((String)encoded);
+                            if(!java.util.Base64.getEncoder().encodeToString(bytes).equals(encoded))throw new FolderReader.Failure("Invalid download chunk.");
+                            progress=staging.append(transfer,request.scope,rootId,SyncStaging.integer(request.payload,"offset",9007199254740991L),bytes);
+                        }
+                        result.put("rootId",rootId).put("staging",progress);
+                    }
                     else {
                         FolderReader reader=new FolderReader(new SafFolderProvider(activity.getContentResolver(),store.grant(request.scope,rootId),signal),check,proofs,request.scope.origin+"\0"+request.scope.owner+"\0"+rootId);
                         result.put("rootId",rootId);

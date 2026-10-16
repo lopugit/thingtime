@@ -129,4 +129,49 @@ an independently downloaded SHA-256, then removes its settings/root through
 normal APIs and retains the accounted file in private Trash. Remove temporary
 fixture admin settings and restart the managed server afterward. This optional
 path is compiled but still awaits successful picker/upload execution; the normal
-10-test emulator suite uses generated providers and does not prove that path.
+pairing/folder emulator suite uses generated providers and does not prove that path.
+
+### Private download staging and process recovery
+
+Android advertises `fileStagingVersion` 1.0.0 separately from publication. The
+foreground bridge accepts the shared `stage-begin`, `stage-append` and
+`stage-finish` requests only after authenticating the current owner and resolving
+that owner's selected readable folder. Each call rechecks authentication before
+responding. Native provider URIs and paths never cross the bridge.
+
+Bytes stay in app-private no-backup storage. An immutable operation binds owner,
+origin, device, connection and native grant. Chunks are at most 64 KiB; fsynced
+bytes precede an atomically replaced progress record. Interrupted extra tails
+are discarded only beyond the acknowledged offset, matching retries are
+idempotent, and completion verifies the entire SHA-256 or canonical multipart
+fingerprint. Private symlinks, nonregular files, hard links, altered operations
+and changed completed stages fail closed. Cancellable in-process serialization
+plus a kernel file lock protects concurrent callers; cancellation cannot close
+another thread's lock descriptor. Android 8.0 uses second-resolution stamps,
+while all completed stages still require full content verification.
+
+This does not write into the selected folder, request a write grant, or enable
+Download now. Android native consent/publication, retained conflicts, background
+transfers and staging retention cleanup remain required work. The receiver uses
+the existing editable connection and transfer shapes; it adds no service or
+secret configuration.
+
+With JDK 17, Android SDK 35, `adb`, Node and the installed `remix` dependencies:
+
+```sh
+ANDROID_SERIAL=<test-emulator-id> THINGTIME_WEB_URL=http://127.0.0.1:14900 \
+  android/scripts/test-mobile-staging-process.sh
+```
+
+Use a disposable emulator; the script rebuilds/installs the debug app and kills
+only its instrumentation host at two deliberate boundaries. It needs no account
+fixture or selected folder. One scenario dies after payload fsync before the
+progress checkpoint; the other dies after a verified stage is saved. A fresh
+process must resume the original operation, verify 8 MiB + 17 bytes, and pass the
+production TypeScript response codec. Successful checks remove their generated
+native fixtures. A failed check leaves `SyncStagingProcessAcceptance` under the
+test app's no-backup storage for inspection; do not discard it before verifying
+the failed operation. Logs and non-secret wire evidence are in
+`android/build/staging-process/` (ignored). This is Android 15 / API 35 emulator
+process-exit evidence, not reboot, low-disk, physical-device or provider-write
+acceptance. The ordinary suite skips this opt-in process test.

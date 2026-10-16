@@ -26,11 +26,13 @@ public class DeviceLiveTest {
         fail("Installed WebView did not satisfy: "+js);
     }
     private static JSONObject folderRequest(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
+        JSONObject result=folderReply(web,scope,request);assertFalse(result.optString("error"),result.has("error"));return result;
+    }
+    private static JSONObject folderReply(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
         String id=java.util.UUID.randomUUID().toString();request.put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         evaluate(web,"window.__folderTestReply=null;window.__folderTestListener=e=>{if(e.detail?.type==='mobile-files-result'&&e.detail?.payload?.requestId==="+JSONObject.quote(id)+"){window.__folderTestReply=e.detail.payload;window.removeEventListener('thingtime:native-message',window.__folderTestListener)}};window.addEventListener('thingtime:native-message',window.__folderTestListener);window.thingtimeNativeBridge.postMessage("+new JSONObject().put("type","mobile-files").put("payload",request)+");");
         awaitTrue(web,"window.__folderTestReply !== null");
-        JSONObject result=new JSONObject(new JSONTokener(evaluate(web,"JSON.stringify(window.__folderTestReply)")).nextValue().toString());
-        assertFalse(result.optString("error"),result.has("error"));return result;
+        return new JSONObject(new JSONTokener(evaluate(web,"JSON.stringify(window.__folderTestReply)")).nextValue().toString());
     }
     private static void verifySelectedFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
         awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.2.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
@@ -38,6 +40,14 @@ public class DeviceLiveTest {
         JSONObject conditions=folderRequest(web,scope,new JSONObject().put("action","conditions")).getJSONObject("conditions");
         assertTrue(java.util.Arrays.asList("wifi","cellular","ethernet","offline","unknown").contains(conditions.getString("network")));
         assertTrue(conditions.isNull("charging") || conditions.get("charging") instanceof Boolean);
+        awaitTrue(web,"window.thingtimeNativeBridge?.fileStagingVersion==='1.0.0' && window.thingtimeNativeBridge.filePublicationVersion===undefined");
+        // A full 64 KiB base64 envelope must reach the real handler, then fail
+        // on its missing native grant. This is not successful picker acceptance.
+        JSONObject denied=folderReply(web,scope,new JSONObject().put("action","stage-append")
+            .put("rootId",java.util.UUID.randomUUID().toString()).put("offset",0).put("transfer",new JSONObject())
+            .put("data",java.util.Base64.getEncoder().encodeToString(new byte[FolderReader.MAX_READ])));
+        assertEquals("Folder access is unavailable. Choose it again.",denied.getString("error"));
+        assertFalse(denied.toString().contains("content://"));
         if(!"true".equals(InstrumentationRegistry.getArguments().getString("folderSelection"))) return;
         System.out.println("FOLDER_QA_READY: Choose folder and select Documents/ThingtimeSyncQA in the system picker.");
         long deadline=System.currentTimeMillis()+300000;

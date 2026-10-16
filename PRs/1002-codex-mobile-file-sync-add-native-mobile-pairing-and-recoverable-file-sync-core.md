@@ -591,3 +591,37 @@ updated process-exit runner passes all three scenarios, 31 selected native tests
 pass, 91 shared sync tests plus four pairing/queue tests pass, targeted lint and
 full web/Vercel build pass. TypeScript remains at 91 existing diagnostics / 47
 normalized messages, with no additions.
+
+
+### Android private staging and real process-exit recovery (2026-10-17)
+
+`SyncStaging` implements the shared mobile request/progress/stage shapes with
+owner/origin/device/connection/native-grant bindings. Each authenticated bridge
+call resolves the current account's readable grant; staging never writes to its
+provider. App-private no-backup storage uses bounded 64 KiB chunks, fsync before
+atomic progress acknowledgement, exact replay checks and full SHA-256/canonical
+multipart verification before returning a stage. Empty folders and multipart
+files retain the required explicit null digest field. Symlinks, nonregular
+payloads, changed operations and corrupted stages fail closed. A cancellable
+in-process lock prevents a waiting caller from opening/closing another lock
+descriptor; the kernel lock also excludes other processes.
+
+Two opt-in Android 15 / API 35 scenarios kill the real instrumentation process:
+after byte fsync before its checkpoint, and after a finished-stage checkpoint.
+Fresh processes preserve the operation, resume only acknowledged bytes, verify
+8 MiB + 17 bytes and pass the production TypeScript response codec. Proofs are
+bound to a fresh runner ID so stale crash evidence cannot satisfy another run.
+The normal JVM suite passes 24 tests. The normal emulator suite executes 23
+tests, including live API pairing/installed bridge checks and 13 staging tests;
+the opt-in process test is skipped there and runs separately. Debug build and
+lint pass; 91 shared sync tests pass; TypeScript diagnostics are exactly the
+previous 91 existing diagnostics, with none added.
+
+The installed bridge advertises staging separately from publication and accepts
+a full 64 KiB chunk envelope before rejecting a missing grant. This verifies
+transport/authorization dispatch, not a successful system-picker staging run.
+Android 8.0 runtime compatibility, real picker staging, low disk/reboot/physical
+acceptance, native write consent, safe provider publication and retained conflicts
+remain open. Android Download now stays disabled. No new secret, collection or
+parallel history/settings format was introduced. Reproducible commands and
+cleanup are in the Android and root READMEs. The full goal remains in progress.

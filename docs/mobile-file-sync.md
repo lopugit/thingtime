@@ -79,10 +79,10 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 
 | Requirement | Required evidence | Current state |
 | --- | --- | --- |
-| Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
+| Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android/Mac writes, workers and full native transfer acceptance pending |
-| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging and real process-exit recovery verified; Android/Mac writes, workers and full cross-device transfer acceptance pending |
+| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain write approvals implemented; Android/Mac approvals, retention/selective settings and background workers remain pending |
@@ -735,3 +735,37 @@ updated process-exit runner passes all three scenarios, 31 selected native tests
 pass, 91 shared sync tests plus four pairing/queue tests pass, targeted lint and
 full web/Vercel build pass. TypeScript remains at 91 existing diagnostics / 47
 normalized messages, with no additions.
+
+
+### Android private staging and real process-exit recovery (2026-10-17)
+
+`SyncStaging` implements the shared mobile request/progress/stage shapes with
+owner/origin/device/connection/native-grant bindings. Each authenticated bridge
+call resolves the current account's readable grant; staging never writes to its
+provider. App-private no-backup storage uses bounded 64 KiB chunks, fsync before
+atomic progress acknowledgement, exact replay checks and full SHA-256/canonical
+multipart verification before returning a stage. Empty folders and multipart
+files retain the required explicit null digest field. Symlinks, nonregular
+payloads, changed operations and corrupted stages fail closed. A cancellable
+in-process lock prevents a waiting caller from opening/closing another lock
+descriptor; the kernel lock also excludes other processes.
+
+Two opt-in Android 15 / API 35 scenarios kill the real instrumentation process:
+after byte fsync before its checkpoint, and after a finished-stage checkpoint.
+Fresh processes preserve the operation, resume only acknowledged bytes, verify
+8 MiB + 17 bytes and pass the production TypeScript response codec. Proofs are
+bound to a fresh runner ID so stale crash evidence cannot satisfy another run.
+The normal JVM suite passes 24 tests. The normal emulator suite executes 23
+tests, including live API pairing/installed bridge checks and 13 staging tests;
+the opt-in process test is skipped there and runs separately. Debug build and
+lint pass; 91 shared sync tests pass; TypeScript diagnostics are exactly the
+previous 91 existing diagnostics, with none added.
+
+The installed bridge advertises staging separately from publication and accepts
+a full 64 KiB chunk envelope before rejecting a missing grant. This verifies
+transport/authorization dispatch, not a successful system-picker staging run.
+Android 8.0 runtime compatibility, real picker staging, low disk/reboot/physical
+acceptance, native write consent, safe provider publication and retained conflicts
+remain open. Android Download now stays disabled. No new secret, collection or
+parallel history/settings format was introduced. Reproducible commands and
+cleanup are in the Android and root READMEs. The full goal remains in progress.

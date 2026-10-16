@@ -10291,3 +10291,32 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   cancel, retry and approve in build 33, then complete the transfer.
 - [ ] Re-select the folder and require renewed native approval. Check wide
   layouts and physical/iCloud/third-party providers separately.
+
+### Android private download staging (2026-10-17)
+
+- [x] Run JVM contract tests and `SyncStagingTest` on Android 15 / API 35:
+  canonical multipart bytes, short tail, empty files/folders, explicit null
+  digest fields, reopen/replay, incomplete progress, changed immutable bindings,
+  foreign scopes, bad paths, oversized/gapped/altered chunks, corrupt checkpoints
+  and modified completed stages. Verify private symlink/directory/FIFO refusal;
+  hard links must be refused either by Android's platform policy or staging.
+- [x] Hold a writer after fsync and cancel a waiting caller. Assert only one
+  native lock descriptor exists before/after cancellation and the writer can
+  complete. Repeated successful calls must not leak private file descriptors.
+- [x] Run `android/scripts/test-mobile-staging-process.sh`: kill the actual
+  test host after payload fsync before progress save, then after finished-stage
+  save. Fresh-process verification must reuse the original operation, discard
+  only the unacknowledged tail, preserve the completed proof, verify all
+  8 MiB + 17 bytes, and pass the production shared TypeScript codec.
+- [x] On the authenticated installed WebView, assert staging capability is
+  present and publication capability is absent. Send a full 64 KiB base64 chunk
+  envelope for an unregistered grant and require the native permission error,
+  without a private URI in the response or a transport timeout.
+- [ ] Through the installed Android app's real picker, verify stage dispatch
+  with an actual account/grant, changed account, revoked grant, navigation and
+  cancellation. No private URI/path may appear in responses. Private staging
+  must leave the selected folder untouched and must not enable Download now.
+- [ ] Verify Android 8.0 compatibility on a supported runtime, low-disk failure,
+  reboot and physical storage behavior. Implement and separately verify native
+  write consent, publication recovery/retained conflicts and provider writes
+  before claiming Android download acceptance.

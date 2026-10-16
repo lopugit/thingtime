@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
           };
           window.thingtimeDeviceTransport.onmessage = event => { try { receive(JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.3.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.2.0',
+            version:'1.3.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.2.0', fileStagingVersion:'1.0.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },
             offMessage:listener => listeners.delete(listener)
@@ -81,7 +81,7 @@ public final class MainActivity extends Activity {
         });
         if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) WebViewCompat.addWebMessageListener(web,"thingtimeDeviceTransport",Collections.singleton(origin),(view,message,source,isMainFrame,reply)-> {
             if(!isMainFrame || !origin.equals(canonical(source.toString())) || !origin.equals(canonical(view.getUrl())) || !active || message.getType()!=WebMessageCompat.TYPE_STRING) return;
-            String data=message.getData(); if(data==null || data.length()>16384) return;
+            String data=message.getData(); if(data==null || data.length()>131072) return;
             try { JSONObject body=new JSONObject(data); if(!"mobile-files".equals(body.optString("type")) && data.length()>4096) return; handle(body,reply); } catch(Exception invalid) { /* Malformed messages have no effects. */ }
         });
         if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) WebViewCompat.addDocumentStartJavaScript(web,SCRIPT,Collections.singleton(origin));

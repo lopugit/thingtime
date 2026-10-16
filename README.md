@@ -4854,3 +4854,20 @@ a different process. It stops Xcode diagnostic collection only after durable
 proof and the publishing PID establish that the process really exited. These
 checks do not establish device reboot, iCloud/third-party provider or physical
 device acceptance. See [the full ledger](docs/mobile-file-sync.md).
+
+### Android private download staging checks
+
+Android now exposes the same private `fileStagingVersion` 1.0.0 contract. Native
+chunks and immutable progress records live in app-private no-backup storage;
+completed stages require full content verification. Folder grants remain
+read-only and Android does not yet advertise publication or enable downloads
+into selected folders. No new secret, service or environment variable is needed.
+
+With JDK 17, Android SDK 35, `adb`, Node and installed `remix` dependencies, run
+`ANDROID_SERIAL=<test-emulator-id> THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-staging-process.sh`
+on a disposable emulator. The origin override is optional; the default is the
+public HTTPS origin. No login fixture is used. The script rebuilds/installs the
+debug APKs, deliberately kills the test process after byte flush and after stage
+completion, verifies both recoveries in fresh processes and checks native wire
+responses with the shared TypeScript codec. See the [Android staging runbook](android/README.md#private-download-staging-and-process-recovery)
+for evidence, cleanup and remaining boundaries.
