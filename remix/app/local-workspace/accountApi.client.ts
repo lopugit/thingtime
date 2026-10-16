@@ -4,17 +4,18 @@ import { readWorkspaceSearchCursor, workspaceSearchCursor } from './searchCursor
 import { searchLocalLibrary } from './librarySearch';
 import { validateThingtimeCrystal } from '../schemas/registry';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
+import { parseTransfer, serializeTransfer, validateTransfer } from '../utils/thingTransfer/format';
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
-import { accountWriteSupported, AccountThingSync, type AccountThing, type AccountThingWrite } from './accountSync';
+import { accountWriteSupported, accountThingCanCache, AccountThingSync, type AccountThingWrite } from './accountSync';
 import { accountThingTransport } from './accountTransport.client';
 import { assertAccountSyncAllowed, canSyncAccountWorkspace, subscribeWorkspaceBinding, accountWorkspaceLease, accountRemoteWorkspaceLease, announceLocalWorkspaceChange, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceScope } from './storage';
 
+export { accountThingCanCache } from './accountSync';
+
 type AccountScope = Extract<WorkspaceScope, { kind: 'account' }>;
 type Owner = { id: string; username?: string; displayName?: string; avatarUrl?: string | null };
-const LOCAL_KINDS = new Set(['data', 'folder', 'webpage', 'component', 'schema', 'action']);
-export const accountThingCanCache = (row: any): row is AccountThing => Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind));
 const workers = new Map<string, ReturnType<typeof createWorker>>();
 /** Matches the sync claim window: the longest a blocked pass must wait before
  * a crashed tab's lease expires and this tab can replay the frozen write. */
@@ -154,6 +155,23 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	};
 	return { ...online, auth: remote.auth, login: remote.login,
 		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
+		import: async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array> }, options?: { signal?: AbortSignal }) => {
+			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (Object.keys(input || {}).some(key => !['manifest', 'folderId', 'files', 'localFiles'].includes(key))) throw new WorkspaceError('INVALID_IMPORT', 'Unsupported import options.');
+			const manifest = parseTransfer(serializeTransfer(validateTransfer(input.manifest))), folderId = input.folderId;
+			if (manifest.files.length || manifest.links?.length || !manifest.things.every(accountThingCanCache)) return online.things.import(input, options);
+			if ((input.files !== undefined && (!input.files || typeof input.files !== 'object' || Array.isArray(input.files) || Object.keys(input.files).length)) ||
+				(input.localFiles !== undefined && (!(input.localFiles instanceof Map) || input.localFiles.size))) throw new WorkspaceError('INVALID_IMPORT', 'This transfer contains no files.');
+			if (folderId != null && (typeof folderId !== 'string' || !folderId.trim())) throw new WorkspaceError('INVALID_FOLDER', 'Choose an import destination.');
+			const { sync } = worker();
+			if (folderId && !await sync.view(folderId)) {
+				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open the destination folder online once before importing offline.', 409);
+				await refresh({ id: folderId }, options?.signal);
+			}
+			const result = await sync.things.import(manifest, folderId, undefined, options?.signal);
+			changed();
+			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: 0, linksImported: 0, savedLocally: true };
+		},
 		remove: async (input: { id: string; expectedUpdatedAt?: string }) => {
 			if (Object.keys(input || {}).some(key => !['id', 'expectedUpdatedAt'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
 			return remove([input?.id], input?.expectedUpdatedAt, () => online.things.remove(input));

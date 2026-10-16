@@ -14,8 +14,9 @@ import { isProtectedThingtime, sanitizeExtended, validateThingtimeCrystal } from
 import { compositionReferences } from '../api/utils/actions/sharedCompositionCore';
 import { rewriteComposition } from '../api/utils/actions/forkCompositionCore';
 import { collectTransfer, type CollectTransferOptions } from '../utils/thingTransfer/collect';
-import { serializeTransfer, validateTransfer, transferAnnotations, type JsonValue, type TransferThing } from '../utils/thingTransfer/format';
+import { serializeTransfer, parseTransfer, validateTransfer, transferAnnotations, type JsonValue, type TransferThing } from '../utils/thingTransfer/format';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
+import { importedThingCrystal, orderTransferImports } from '../utils/thingTransfer/importContent';
 import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import { MAX_SAVED_ALGORITHMS } from '../api/utils/algorithms/algorithmContent';
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
@@ -406,7 +407,8 @@ export class LocalThings {
 	}
 	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array>(), signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
-		const manifest = validateTransfer(input); serializeTransfer(manifest);
+		const manifest = parseTransfer(serializeTransfer(validateTransfer(input)));
+		orderTransferImports(manifest);
 		if (manifest.links?.length) fail('ATTACHMENT_IMPORT_REQUIRED', 'Linked galleries require the workspace linked-attachment adapter');
 		if (manifest.files.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		// Snapshot caller-owned bytes before asynchronous hashing or persistence.
@@ -416,7 +418,8 @@ export class LocalThings {
 		await verifyTransferFiles({ manifest, files: bytes }, signal); this.lease.assertCurrent();
 		const recordings = manifest.things.filter(isTransferRecording);
 		for (const row of recordings) recordingTransferFile(row, manifest);
-		const map = new Map(manifest.things.map(row => [row.id, `local-${this.uuid()}`]));
+		const map = new Map(manifest.things.map(row => [row.id, this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()]));
+		const accountSuffix = this.scope.kind === 'account' ? this.uuid().slice(0, 8) : null;
 		const fileMap = new Map(manifest.files.map(file => [file.id, `local-${this.uuid()}`]));
 		for (const recording of recordings) { const id = fileMap.get(String(recording.crystal.recordingFileId))!; map.set(recording.id, id); fileMap.set(recording.id, id); }
 		const crystals = rewriteTransferMedia(manifest.things, fileMap);
@@ -443,7 +446,9 @@ export class LocalThings {
 					if (original.crystal.subspaceId || original.crystal.flairId) fail('REMOTE_ACCOUNT_REQUIRED', 'Local post imports cannot select a remote subspace');
 					if (bound.length > attachmentCountLimit(original.thingtime.includes('comment') ? 'comment' : 'post')) fail('INVALID_ATTACHMENT', 'Too many files for this local post');
 				}
-				return validated({ ...original, crystal: rewriteComposition(original.thingtime, crystals.get(original.id)!, (_kind, ref) => map.get(ref) || ref) },
+				const crystal = accountSuffix ? importedThingCrystal(original, crystals.get(original.id)!, map, accountSuffix)
+					: rewriteComposition(original.thingtime, crystals.get(original.id)!, (_kind, ref) => map.get(ref) || ref);
+				return validated({ ...original, crystal },
 					{ hasAny: bound.length > 0, hasVisual: bound.some(file => ['image', 'video'].includes(String(file.crystal.mediaKind))) });
 			}
 
@@ -454,7 +459,7 @@ export class LocalThings {
 		const rows: LocalThing[] = manifest.things.map(original => ({
 			...importedContent(original),
 			id: map.get(original.id)!, revision: 1, createdAt: stamp, updatedAt: stamp,
-			...(original.folderId ? { folderId: map.get(original.folderId)! } : folderId && manifest.roots.includes(original.id) ? { folderId } : {}),
+			...(original.folderId ? { folderId: map.get(original.folderId)! } : folderId && (this.scope.kind === 'account' || manifest.roots.includes(original.id)) ? { folderId } : {}),
 			...(original.targetId ? { targetId: map.get(original.targetId)! } : {})
 		}));
 		rows.push(...attachmentRows);
@@ -465,9 +470,9 @@ export class LocalThings {
 			if (importedThemes.length && importedThemes.length + (await tx.list<LocalThing>('things')).filter(row => isTransferTheme(row.value)).length > MAX_SAVED_THEMES) fail('LOCAL_QUOTA', 'This import exceeds the saved-theme limit', 413);
 			// All IDs exist before relationship checks, including forward refs.
 			for (const row of rows) await tx.put('things', row.id, row);
-			for (const row of rows) { signal?.throwIfAborted(); await this.placement(tx, row); await tx.put('things', row.id, row); }
+			for (const row of rows) { signal?.throwIfAborted(); await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, null, row); }
 			for (const file of manifest.files) { signal?.throwIfAborted(); await tx.putBytes(fileMap.get(file.id)!, bytes.get(file.id)!); }
-		});
+		}, undefined, signal);
 		return { ok: true, roots: manifest.roots.map(id => map.get(id)!), idMap: Object.fromEntries(map), things: rows };
 	}
 }

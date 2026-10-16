@@ -529,3 +529,13 @@ provides explicit review and restore/delete choices. `ThingsPage.tsx` refreshes
 visible folders on scoped local changes. `accountDelete.test.ts` and its browser
 counterpart cover failure/retry, scope and real offline UI behavior. Protected
 kinds retain their dedicated adapters; see the outstanding acceptance matrix.
+
+
+`utils/thingTransfer/importContent.ts` contains the shared account import ordering
+and independent-copy crystal preparation. `importTransfer.ts` reuses it on the
+server; `LocalThings.import` uses it for account copies and calls the existing
+mutation hook in the same transaction. `accountApi.client.ts` routes ordinary
+JSON imports into that queue, with managed/file imports retaining their dedicated
+adapters. `accountImport.test.ts` covers rollback, frozen retries and references;
+`accountImport.browser.test.ts` covers the normal dialog offline and a real server
+export/import round-trip. Offline account export completeness remains a separate gate.

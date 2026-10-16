@@ -1010,3 +1010,28 @@ browser scenarios pass; the deletion scenario was rerun after the final safety
 change. Client build: 247 verified static assets / 21,541,680 bytes. Raw
 TypeScript retains the same 91 normalized baseline diagnostics. Focused lint:
 zero errors and four existing ThingsPage hook warnings. No baseline was relaxed.
+
+
+## 2026-10-16 — Ordinary account import checkpoint
+
+The normal Things import dialog now commits ordinary account copies and their
+sync intent locally in one transaction. Canonical account import helpers are
+shared with the server: structural ordering, private-copy definition keys/schema
+names, remapped references and removal of source site placement. Definitions never
+execute during import. Caller content is snapshotted before async work; cancellation
+and invalid content roll back. Exact queued retries preserve newly allocated IDs.
+
+Local checks: 197 workspace + four offline-shell + 315 Things tests pass; 20
+workspace/browser cases are opt-in. Four enabled browser cases pass, including
+normal account import, native preview, offline edit/cold reload, zero offline
+mutations, 1440/390/320px bounds and actual private server readback after reconnect.
+The fixture also exports through the normal server API, validates portable JSON,
+and imports it through the normal server importer with independent IDs and full
+component/schema references. Existing anonymous/account site checks pass unchanged.
+Client build: 247 assets / 21,543,863 bytes. Raw TypeScript retains the same 91
+normalized baseline diagnostics. Lint: zero errors, one existing constructor warning.
+Artifacts: `tmp/local-account-import-ui/`; logs: `tmp/local-account-import-*.log`.
+
+Account file/managed imports, account export UI/cache completeness and the wider
+acceptance matrix remain open. Anonymous site/suite import semantics are unchanged;
+complete local/remote import parity is not claimed. No main merge or manual deployment.

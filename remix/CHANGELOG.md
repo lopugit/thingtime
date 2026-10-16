@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Ordinary account imports now create editable local
+  private copies and queue sync atomically, reusing canonical copy preparation
+  and stable retry identities. Verified native offline import/edit/reload and
+  a real server export/import round-trip. Managed/file imports and the wider
+  matrix remain open. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Ordinary account deletion and Builder reset now
   finish locally while offline and sync through conditional canonical deletes.
   Conflict review restores the account version immediately or deletes the

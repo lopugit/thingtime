@@ -7705,6 +7705,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Check 1440/390/320px widths with no horizontal overflow. Account page saves
       and confirmed sync must finish while `/api/v1/drafts` POSTs never settle.
       `siteBlocks.browser.test.ts` exercises the disposable production client.
+- [ ] Account offline import: use the normal Things dialog to import a folder,
+      page/component and schema/data bundle with no networking. Native preview,
+      edit and cold reload work locally; no mutation is sent. Reconnect only
+      after verified account identity, then read back independent private IDs,
+      definition keys, schema names/provenance and folder placement. Source
+      site routes/global keys must not become account site customization.
+      Canonically export via the normal server API and round-trip through its
+      importer in a disposable fixture; allow legitimate ID remapping. Exercise
+      1440/390/320px (`accountImport.browser.test.ts`). File/managed-kind offline
+      imports remain gated by their dedicated adapter; never drop their content.
+- [ ] Account import transactions: rejected rows, invalid destinations, aborted
+      signals and quota failures leave neither content nor queue fragments.
+      Mutating caller JSON after dispatch cannot change the imported copy.
+      Reopen after an ambiguous create and retry its exact request. Remap legal
+      Action cycles without executing them; reject structural/provenance cycles.
 - [ ] Account offline delete/reset: cache an owned folder, its child, a Data Thing
       and a global page in a disposable account. Go fully offline, delete the
       folder/Data Thing and reset the global page; reload. The child survives in

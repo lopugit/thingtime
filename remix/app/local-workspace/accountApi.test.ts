@@ -14,7 +14,7 @@ test('account local facade and native page resolution work offline without uploa
  let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; return { ok: true }; };
  try {
   bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
-  const api = accountApi({ actions: { run: remote }, things: { create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote } }, { id: scope.ownerId }, scope.dataPlane);
+  const api = accountApi({ actions: { run: remote }, things: { create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote } }, { id: scope.ownerId }, scope.dataPlane);
   const component: any = await api.things.create({ thingtime: ['component'], crystal: { name: 'Card', componentKey: 'card', version: 1, render: { tag: 'p', children: 'Locally rendered' } } } as any);
   const page: any = await api.things.create({ thingtime: ['webpage'], crystal: { name: 'Offline page', blocks: [{ id: 'card', type: 'component', component: 'card' }] } } as any);
   const resolved = await resolveAccountWebpage(scope, { kind: 'id', id: page.id });
@@ -64,6 +64,11 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal((await resolveAccountWebpage(scope, { kind: 'path', path: '/ode' })).page, null);
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
   assert.equal((await api.things.list({ thingtime: 'webpage' }) as any).things.length, 0);
+  const imported: any = await api.things.import({ manifest: { format: 'thingtime.transfer', version: 1, roots: ['note'], things: [{ id: 'note', thingtime: ['data'], crystal: { name: 'Offline imported copy' } }], files: [] }, files: {}, folderId: null });
+  assert.equal(imported.savedLocally, true); assert.equal(imported.imported, 1);
+  assert.equal((await api.things.get({ id: imported.roots[0] }) as any).thing.crystal.name, 'Offline imported copy');
+  assert.equal(remoteCalls, 1, 'ordinary account import requires no remote endpoint or draft write');
+  await assert.rejects(api.things.import({ manifest: { format: 'thingtime.transfer', version: 1, roots: ['post'], things: [{ id: 'post', thingtime: ['post'], crystal: { type: 'text', text: 'Dedicated adapter' } }], files: [] } }), /offline/);
   rootIdentity.changed(); bindLocalWorkspace(true, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {} } as any), /workspace changed/i);
   await assert.rejects(api.things.get({ id: page.id, key: 'old-key' } as any), /workspace changed/i);

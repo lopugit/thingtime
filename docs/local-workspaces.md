@@ -81,7 +81,7 @@ change this pointer; logout/account changes revoke it.
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
 | Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue update recovery, cross-account coverage and real-device startup verification. Chromium offline-emulation module cancellations remain under investigation; request blocking is no longer accepted without its root-read failure probe; the latest checkpoint defaults to actual offline emulation and retains failures as merge gates. |
-| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Complete imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
+| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Ordinary JSON imports now create private independent local copies with atomic queue intent and verified canonical server round-trip (checkpoint below). Complete file/managed imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
 
 ## Development verification
 
@@ -1528,3 +1528,52 @@ browser scenarios pass; the deletion scenario was rerun after the final safety
 change. Client build: 247 verified static assets / 21,541,680 bytes. Raw
 TypeScript retains the same 91 normalized baseline diagnostics. Focused lint:
 zero errors and four existing ThingsPage hook warnings. No baseline was relaxed.
+
+
+## Account import checkpoint — 2026-10-16
+
+The normal Things import dialog now imports ordinary account data, folders,
+webpages, components, schemas and Action definitions locally before networking.
+Caller JSON is validated, bounded and copied before asynchronous work. New IDs,
+rewritten references, content and sync intent commit atomically. Cancellation,
+unsupported kinds, quota or placement failures cannot leave a partial local batch.
+No Action runs during import, and legal executable cycles keep their remapped IDs;
+structural/provenance cycles use the canonical import rejection.
+
+`utils/thingTransfer/importContent.ts` shares the account server/device copy rules:
+fresh definition keys and schema names, no inherited site placement, and canonical
+reference remapping. Account destination folders also contain unparented dependencies,
+matching the normal importer. Anonymous import retains its existing local IDs and
+site/suite behavior; this checkpoint does not claim complete import-semantic parity.
+Account copies use the existing private ordinary-Thing queue and expected-actor/
+data-plane transport. Server synchronization can complete individual records at
+different times; unresolved sync stays visible and exact retries keep their IDs.
+Anonymous storage is never adopted by this queue. Files, linked media and managed
+kinds continue through their dedicated adapters and remain outstanding offline
+account work. Account export UI/cache completeness is also still outstanding;
+the export in the browser round-trip below deliberately uses the normal server API.
+
+Local checks: 197 workspace tests, four offline-shell tests and 315 Things tests
+pass (20 workspace/browser tests require explicit opt-in). Four enabled browser
+scenarios pass: the new normal-dialog account import plus the three existing site
+composition checks. The account fixture imports while fully offline, renders
+through the native page/component renderer, edits before sync, cold-reloads, fits
+1440/390/320px, sends zero offline mutations, and verifies private server copies
+after reconnect. A real server export then passes the canonical validator and
+normal importer with independent IDs and complete schema/component references.
+Evidence: `tmp/local-account-import-ui/`, including `exported.thingtime.json`.
+
+Client build: 247 verified assets / 21,543,863 bytes. Raw TypeScript retains the
+same 91 normalized baseline diagnostics. Focused lint has zero errors and one
+existing LocalThings constructor warning. These are local results, not deployed
+verification or completion of the full matrix.
+
+Run from `remix/` against the disposable production-client fixture:
+
+```sh
+TT_LOCAL_ACCOUNT_IMPORT_URL=http://127.0.0.1:22470 \
+TT_LOCAL_ACCOUNT_IMPORT_ARTIFACTS=../tmp/local-account-import-ui \
+TT_SHARED_PLAYWRIGHT_PATH=/absolute/path/to/playwright/index.mjs \
+TT_SHARED_CHROME_PATH=/absolute/path/to/chrome \
+node --import tsx --test app/local-workspace/accountImport.browser.test.ts
+```

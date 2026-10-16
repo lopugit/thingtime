@@ -14,6 +14,8 @@ type AccountScope = Extract<WorkspaceScope, { kind: 'account' }>;
 export type SyncState = 'pending' | 'syncing' | 'conflict' | 'error' | 'synced';
 export type AccountThingWrite = ThingWrite & { acl?: string[]; visibility?: string };
 export type AccountThing = LocalThing & { author: { id: string }; acl: string[]; visibility: string };
+const LOCAL_KINDS = new Set(['data', 'folder', 'webpage', 'component', 'schema', 'action']);
+export const accountThingCanCache = (row: any): row is AccountThing => Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind));
 type FrozenWrite = { id: string; operationId: string; version: number; method: 'create' | 'update'; body: Record<string, unknown> };
 type FrozenDelete = Omit<FrozenWrite, 'method'> & { method: 'delete' };
 type SyncRecord = {
@@ -99,6 +101,7 @@ export class AccountThingSync {
 		});
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: AccountThingWrite) {
+		if (!accountThingCanCache(row)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_CONTENT', 'This kind requires its dedicated account sync adapter.', 409);
 		const existing = await tx.get<SyncRecord>(COLLECTION, row.id);
 		if (existing?.deleted) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted. Restore it before editing.', 409);
 		if (previous && !existing) throw new WorkspaceError('SYNC_BASE_MISSING', 'Load the account Thing before editing it offline', 409);
