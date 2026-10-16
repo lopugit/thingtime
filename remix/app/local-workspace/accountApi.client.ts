@@ -109,10 +109,13 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		facadeLease.assertCurrent();
 		if (args.device !== true) return online[kind === 'schema' ? 'schemas' : 'components'].browse(args);
 		const { sync } = worker();
-		const result = await browseLocalDefinitions(await sync.things.snapshot(), kind, args, workspaceScopeKey(scope), row => ({ id: row.id }));
+		const bundled = kind === 'component' ? (await import('../components/ComponentsLibrary/bundledComponentCatalog')).bundledComponentEntries() : [];
+		facadeLease.assertCurrent();
+		const result = await browseLocalDefinitions(await sync.things.snapshot(), kind, args, workspaceScopeKey(scope), row => ({ id: row.id }), bundled);
 		const key = kind === 'schema' ? 'schemas' : 'components', entries = result[key];
 		const views = new Map((await sync.views(entries.map(row => row.id))).map(row => [row.id, project(row)]));
-		result[key] = entries.filter(row => views.has(row.id)).map(row => ({ ...row, ...views.get(row.id) }));
+		const bundledIds = new Set(bundled.map(row => row.id));
+		result[key] = entries.filter(row => views.has(row.id) || bundledIds.has(row.id)).map(row => views.has(row.id) ? { ...row, ...views.get(row.id) } : row);
 		facadeLease.assertCurrent(); return { ...result, incomplete: true };
 	};
 	return { ...online, auth: remote.auth, login: remote.login,

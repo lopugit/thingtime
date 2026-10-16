@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Device component catalogue, native argument
+  editing and independent version drafts now work offline. Saved copies open
+  their exact local IDs; content creation completes independently of draft
+  requests. Local browser coverage includes 1440/390/320px and stalled account
+  drafts. Full local-first acceptance remains open. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Schema catalogue, authoring, copying and data
   forms now work in anonymous/offline workspaces. Schema and Thing creation
   complete independently of draft saves; recovery stays scoped, malformed

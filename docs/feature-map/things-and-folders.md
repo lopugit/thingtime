@@ -497,3 +497,14 @@ server only), `TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH` and
 `TT_LOCAL_ACCOUNT_MOVE_ARTIFACTS`. It creates/cleans its own private fixture and
 checks normal Move UI, cold reload, server-before/after state and responsive
 bounds. See [account move acceptance](../local-workspaces.md#account-folder-moves--2026-10-16).
+
+## Device definition catalogues
+
+`app/local-workspace/definitionCatalog.ts` filters and pages local schema and
+component snapshots. `ComponentsLibrary/bundledComponentCatalog.ts` projects the
+existing bundled suites without persisting or assigning ownership. Catalogue and
+detail editors use `drafts/useComponentVersionDraft.ts`; canonical Thing creation
+is independent of ancillary draft saves. Run `test:components`, `test:drafts`,
+`test:local-workspace` and the opt-in `components.browser.test.ts` flow described
+in [local workspaces](../local-workspaces.md). Remote account authorization and
+component trust/source confirmation remain separate from local ownership.

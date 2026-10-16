@@ -10330,3 +10330,34 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   `app/local-workspace/schemas.browser.test.ts` using the local-workspaces runbook.
 - [ ] Complete account catalogue discovery, account draft/interaction sync and
   multi-tab UI acceptance before the full local-first rollout merges.
+
+## Local component catalogue and version drafts (2026-10-16)
+
+- [x] In a clean anonymous browser, load `/components`, finish installing the
+  production offline shell, disable networking and verify a root-data fetch
+  fails. Browse bundled definitions without creating owned Things; Mine stays
+  empty until a version is explicitly saved.
+- [x] Edit native detail arguments and the version name, reload, and confirm
+  both render panes use the recovered values. Save an independent component;
+  reload it and confirm the original bundled definition remains unchanged.
+- [x] Save that copy to Library; edit arguments/name in its catalogue card,
+  reload the draft, then save another version. Open each card and verify its
+  exact ID and saved arguments, even when both have the same component key.
+- [x] Measure catalogue, detail editor and card editor at 1440/390/320 CSS
+  pixels. No horizontal overflow. Anonymous writes never reach the network.
+- [x] In a disposable account, stall every draft mutation and verify component
+  creation still completes, syncs its canonical saved arguments and survives
+  offline reload. Existing trust, URL-source confirmation and renderer
+  sanitization tests must remain green.
+- [x] Interrupt an online component refresh in the disposable account: keep
+  the previously rendered preview, show Retry and recover when the endpoint
+  returns. A failed request must not become a not-found screen.
+- [ ] Finish account catalogue discovery, cross-tab refresh, source-control
+  editor recovery and bundled-only library bookmarks before the full rollout
+  merges. Bundled previews remain unowned; the UI requires saving a version
+  before local reactions/library membership.
+
+Run `app/local-workspace/components.browser.test.ts` with
+`TT_LOCAL_COMPONENTS_URL` pointing to the isolated production-client origin,
+`TT_SHARED_PLAYWRIGHT_PATH`, `TT_SHARED_CHROME_PATH`, and optionally
+`TT_LOCAL_COMPONENTS_ARTIFACTS`. See the local workspace runbook.

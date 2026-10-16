@@ -924,3 +924,33 @@ It is not authorization to merge or deploy the incomplete rollout.
 Preserved automated review commits `45b42c597` and `d1381d936`; the final local
 browser/workspace run includes their shared search constants and public-read
 error wording.
+
+## Component catalogue, arguments and independent versions — 2026-10-16
+
+The normal component catalogue now defaults to this device, combining existing
+bundled suite projections with saved workspace Things. Mine/Library exclude
+unowned bundled definitions. The online catalogue remains a separate explicit
+source. Shared filtering/family grouping runs before pagination; account device
+results are labelled as partial. Native detail/card argument editors recover
+arguments, version name and audience through the existing scoped draft session.
+Canonical version creation and account sync complete independently of stalled
+draft writes. Saved device copies open by exact ID, preserving separate versions
+with the same component key. A failed refresh retains a usable cached preview
+with Retry. Trust checks, source confirmation and sanitizing renderers remain.
+
+Local verification: components 48/48, drafts 32/32, workspace 176 passing with
+15 opt-in skips, offline-shell 4/4. Both enabled clean-browser flows pass:
+fully offline anonymous catalogue/detail/card editing, draft recovery, independent
+copies and library membership; and disposable-account creation/sync with two
+stalled draft requests, failed-refresh cache retention/retry, and offline reload.
+All three local surfaces fit 1440/390/320px. Anonymous mutation requests: zero.
+The client build contains 247 verified offline assets (21,528,619 bytes). Focused
+lint passes; raw TypeScript retains the identical 91 normalized diagnostics.
+Evidence: `tmp/local-component-workflow-ui-final/` and
+`tmp/local-component-browser-tests-final.log`. The live in-app browser also
+confirmed the seeded Action prompt remains explicit and Cancel executes nothing.
+
+Pending: wider account catalogue caching, cross-tab refresh, source-control
+editor recovery, bundled-only bookmarks, remaining Builder global/site block
+surfaces, and the rest of the local-first acceptance matrix. This checkpoint
+is local verification, not deployed verification or readiness to merge.

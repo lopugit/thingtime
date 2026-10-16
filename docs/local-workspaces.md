@@ -70,7 +70,7 @@ change this pointer; logout/account changes revoke it.
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
 | Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Library text search now works across folders offline, with bounded cursor pages and visible error/retry states. Clean-browser acceptance covers 61 matches, kind filters, rename/reload and grid/list mouse selection at 1440/390/320px. The earlier checkbox report came from targeting its hidden input; clicking the visible label works, and descriptive labels/regressions now cover it. The native Search page now has a separate structured device view, with canonical field operators and credential-free anonymous online search (checkpoint below). Advanced shortcut filters/ranking, wider account discovery caching and remaining normal UI flows still require completion. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Schema builder/form recovery now passes offline reload and malformed-copy preservation checks (checkpoint below). Finish other definition recovery, media kinds and account draft sync. |
-| Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. The schema catalogue, schema authoring, copies and data forms now pass offline browser checks (checkpoint below). Finish other component/catalog surfaces, argument editing, account discovery caching and cross-tab UI refresh. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
+| Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. The schema catalogue, schema authoring, copies and data forms now pass offline browser checks (checkpoint below). Component catalogue/detail and argument/version recovery now pass local offline browser checks (checkpoint below). Finish remaining Builder surfaces, account discovery caching and cross-tab UI refresh. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Scoped device usage and browser protection controls are available in Settings. Protected-kind adapters and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
@@ -1385,3 +1385,45 @@ node --import tsx --test app/local-workspace/schemas.browser.test.ts
 Run from `remix/`; only loopback targets are accepted. Evidence for this checkpoint
 is local, not CI or deployed verification. Broader catalogue caching, account
 interactions/draft sync, multi-tab refresh and the full matrix remain merge gates.
+
+## Component catalogue and version drafts — 2026-10-16
+
+`/components` defaults to **This device**, combining existing bundled suite
+components with this workspace's saved copies. Bundled projections remain
+unowned and are excluded from Mine/Library. Save a version before applying
+local library membership or reactions. **Online catalogue** is an explicit
+separate source; device account results do not claim a complete server catalogue.
+Library/category/family filters and family grouping run before bounded paging.
+
+Detail and card argument editors reuse the native template resolver and renderer.
+Arguments, version name and audience recover through the shared scoped draft
+session. Saving uses the canonical Thing writer and never waits for draft sync
+or retirement. Each saved device copy opens by its own ID. URL Action sources
+retain the existing confirmation and trust ladder; catalogue preview controls
+remain inert. Account content identity permits local editing but grants no
+remote authorization. Failed refreshes keep the prior preview with an explicit
+retry instead of reporting a network failure as a missing component.
+
+Local checks: components 48/48, drafts 32/32, workspace 176 passing with 15
+opt-in browser skips, offline shell 4/4; enabled browser scenarios cover fully
+offline anonymous browsing, native argument rendering, detail/card draft reload,
+independent copies, library membership and 1440/390/320px overflow checks. A
+separate disposable account completes and syncs its version while draft writes
+never finish, then reloads offline. Raw TypeScript retains the same 91 normalized
+baseline diagnostics; focused lint and client build pass (247 offline assets,
+21,528,619 bytes). Evidence lives in `tmp/local-component-workflow-ui-final/`.
+These are local results, not CI or deployed verification.
+
+Run from `remix` against the isolated production client:
+
+```sh
+TT_LOCAL_COMPONENTS_URL=http://127.0.0.1:22470 \
+TT_LOCAL_COMPONENTS_ARTIFACTS=../tmp/local-component-workflow-ui \
+TT_SHARED_PLAYWRIGHT_PATH=/absolute/path/to/playwright/index.mjs \
+TT_SHARED_CHROME_PATH=/absolute/path/to/chrome \
+node --import tsx --test app/local-workspace/components.browser.test.ts
+```
+
+Pending component coverage includes full account discovery caches, cross-tab
+refresh, source-control editing recovery, bundled-only bookmarks and remaining
+Builder global/site block surfaces. The broader merge gates above still apply.

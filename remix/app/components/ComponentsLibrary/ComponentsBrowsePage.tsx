@@ -1,3 +1,6 @@
+import { useComponentVersionDraft } from '~/drafts/useComponentVersionDraft';
+import { createWithDraft } from '~/drafts/createWithDraft';
+import { DraftSaveStatus } from '~/drafts/DraftPicker';
 import React from 'react';
 import {
   Badge,
@@ -17,7 +20,7 @@ import {
   Textarea
 } from '@chakra-ui/react';
 import { BookOpen, Braces, Columns3, LayoutGrid, Library, Plus, Rows3, Save, Search, SlidersHorizontal, Sparkles } from 'lucide-react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useLocation } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { ChakraThingRenderer, HtmlThingRenderer, isChakraThingNode } from '~/components/Kinds';
@@ -30,6 +33,9 @@ import { timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { useApi } from '~/hooks/useApi';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
+import { workspaceScopeKey } from '~/local-workspace/storage';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { getThingtimeSchema } from '~/schemas/registry';
@@ -174,6 +180,7 @@ const ArgInput = ({
 }) => {
   const label = spec.label || spec.name;
   const inputProps = {
+    'aria-label': label,
     background: 'var(--tt-card, #ffffff)',
     borderColor: 'var(--tt-border, #ececef)',
     fontSize: '13px',
@@ -194,7 +201,7 @@ const ArgInput = ({
         {label}
       </Text>
       {spec.type === 'boolean' && (
-        <Switch isChecked={!!value} onChange={(event) => onChange(spec, event.target.checked)} size="sm" />
+        <Switch aria-label={label} isChecked={!!value} onChange={(event) => onChange(spec, event.target.checked)} size="sm" />
       )}
       {spec.type === 'enum' && (
         <Select {...inputProps} onChange={(event) => onChange(spec, event.target.value)} value={String(value ?? '')}>
@@ -240,6 +247,8 @@ const ArgInput = ({
 
 type ComponentCardProps = {
   source: ComponentCardSource;
+  device: boolean;
+  localOnly: boolean;
   onReact: (source: ComponentCardSource, token: string) => void;
   onSave: (source: ComponentCardSource) => void;
   onSaveVersion: (source: ComponentCardSource, values: ComponentArgValues, name: string, acl: string[]) => Promise<boolean>;
@@ -250,7 +259,7 @@ type ComponentCardProps = {
 // card's link targets
 const stop = (event: React.SyntheticEvent) => event.stopPropagation();
 
-const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersion, loadFamily }: ComponentCardProps) => {
+const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, onSave, onSaveVersion, loadFamily }: ComponentCardProps) => {
   // `active` is the design currently on the card — the family's representative
   // until the designs click-through swaps in a sibling rendition. The rest of
   // the card body reads it through the `source` alias.
@@ -260,6 +269,7 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
     ...defaultsFromArgs(family.args),
     ...(family.savedArgs || {})
   }));
+  React.useEffect(() => { setActive(current => current.id === family.id ? family : current); }, [family]);
   const source = active;
   const entry = active.entry;
 
@@ -291,6 +301,10 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
   const [versionName, setVersionName] = React.useState('');
   const [versionAcl, setVersionAcl] = React.useState<string[]>(['tt:user']);
   const [savingVersion, setSavingVersion] = React.useState(false);
+  const creating = React.useRef(false);
+  const versionDraft = useComponentVersionDraft(active.id, { values, name: versionName, acl: versionAcl }, saved => {
+    setValues(saved.values); setVersionName(saved.name); setVersionAcl(saved.acl); setArgsOpen(true); setVersionOpen(true);
+  }, savingVersion, false);
   const { recent } = useRecentReactions();
   const [pickerOpen, setPickerOpen] = React.useState(false);
   // outside-tap close (NOT closeOnBlur): dismissing the mobile keyboard blurs
@@ -302,6 +316,7 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
   }, []);
 
   const systemFields = React.useMemo(systemThingFields, []);
+  const canInteract = !!entry && !(device && !entry.author);
   const reactionEntries = Object.entries(entry?.reactionCounts || {}).filter(([, count]) => count > 0);
   const libraryLabel = COMPONENT_LIBRARY_LABELS[source.library] || source.library;
 
@@ -310,10 +325,12 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
   // id when the family holds two renditions of one library — the same rule
   // the page's own design switcher writes).
   const pageHref = (suffix = '') => {
-    const base = `/components/${encodeURIComponent(deepLinkKeyFor(family))}${suffix}`;
-    if (active.id === family.id) return base;
+    const base = `/components/${encodeURIComponent(device ? active.id : deepLinkKeyFor(family))}${suffix}`;
+    const query = new URLSearchParams({ catalog: device ? 'device' : 'online' });
+    if (device || active.id === family.id) return `${base}?${query}`;
     const sameLibrary = family.designs.filter((design) => design.library === active.library).length;
-    return `${base}?design=${encodeURIComponent(sameLibrary > 1 ? active.id : active.library)}`;
+    query.set('design', sameLibrary > 1 ? active.id : active.library);
+    return `${base}?${query}`;
   };
 
   const openVersionPanel = () => {
@@ -323,10 +340,13 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
   };
 
   const submitVersion = async () => {
-    setSavingVersion(true);
-    const ok = await onSaveVersion(source, values, versionName, versionAcl);
-    setSavingVersion(false);
-    if (ok) setVersionOpen(false);
+    if (creating.current) return;
+    creating.current = true; setSavingVersion(true);
+    try {
+      await createWithDraft(versionDraft, async () => ({ ok: await onSaveVersion(source, values, versionName, versionAcl) }));
+      setVersionOpen(false);
+    } catch { /* The authoritative content writer already reported its error. */ }
+    finally { creating.current = false; setSavingVersion(false); }
   };
 
   return (
@@ -619,7 +639,7 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
         )}
       </Flex>
 
-      {entry && (
+      {canInteract && (
         <Flex align="center" gap={1.5} wrap="wrap">
           {reactionEntries.map(([token, count]) => {
             const mine = entry.viewerReactions.includes(token);
@@ -712,7 +732,7 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
       )}
 
       <Flex gap={2} wrap="wrap">
-        {entry && (
+        {canInteract && (
           <Button
             leftIcon={<Library size={14} />}
             onClick={(event) => {
@@ -742,6 +762,8 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
         </Button>
       </Flex>
 
+      {device && !entry.author && <Text fontSize="12px" color="var(--tt-muted, #9a9aa6)">Save your own version to add it to your library or react.</Text>}
+      {(argsOpen || versionOpen) && <DraftSaveStatus paused={!!versionDraft.recoveryError} status={versionDraft.status} error={versionDraft.error} retry={versionDraft.retry} />}
       {versionOpen && (
         <Flex
           align="center"
@@ -757,14 +779,14 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
             borderColor="var(--tt-border, #ececef)"
             flex={1}
             fontSize="13px"
-            minWidth="180px"
+            minWidth="0"
             onChange={(event) => setVersionName(event.target.value)}
             placeholder="Version name"
             size="sm"
             value={versionName}
           />
-          <Box flex="1 1 260px" minWidth="220px">
-            <ThingAudienceControl
+          <Box flex="1 1 220px" minWidth="0">
+            <ThingAudienceControl localOnly={localOnly}
               acl={versionAcl}
               label="Who can use this version?"
               onChange={setVersionAcl}
@@ -784,12 +806,20 @@ ComponentCard.displayName = 'ComponentCard';
 // ---------------------------------------------------------------------------
 
 export const ComponentsBrowsePage = () => {
+  const location = useLocation();
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  const device = new URLSearchParams(location.search).get('catalog') !== 'online';
+  return <ComponentsWorkspace key={`${identity}:${device}`} device={device} />;
+};
+const ComponentsWorkspace = ({ device }: { device: boolean }) => {
   const navigate = useNavigate();
   const api = useApi();
   const lopu = useLopu();
-  const user = useCurrentUser();
+  const user = useWorkspaceUser(), accountUser = useCurrentUser();
+  const binding = workspaceStorageBinding();
+  const cacheScope = binding ? JSON.stringify([workspaceScopeKey(binding.scope), device ? 'device' : 'online']) : undefined;
 
-  const cacheKey = cacheKeyFor(user?.id);
+  const cacheKey = cacheKeyFor(cacheScope);
   const cached = React.useMemo(
     () => (cacheKey ? readLocalCache<CachedComponents>(cacheKey) : null),
     [cacheKey]
@@ -835,11 +865,12 @@ export const ComponentsBrowsePage = () => {
       setLoading(true);
       try {
         const resp = (await apiRef.current.v1.components.browse({
-          q: scopeMode === 'all' ? query.trim() || undefined : undefined,
-          sort: scopeMode === 'all' ? sortMode : sortMode === 'oldest' ? 'oldest' : undefined,
+          device: device || undefined,
+          q: device || scopeMode === 'all' ? query.trim() || undefined : undefined,
+          sort: device || scopeMode === 'all' ? sortMode : sortMode === 'oldest' ? 'oldest' : undefined,
           // catalog filters ride no-q pages only — the server ignores them
           // during text search, so don't send a misleading param
-          lib: scopeMode === 'all' && !query.trim() && libMode !== 'all' ? libMode : undefined,
+          lib: (device || scopeMode === 'all') && (device || !query.trim()) && libMode !== 'all' ? libMode : undefined,
           // one card per family on the plain catalog view; q-search pages and
           // library-filtered views stay per-design (q collapses client-side)
           group:
@@ -873,22 +904,23 @@ export const ComponentsBrowsePage = () => {
             total: resp.total,
             totalCapped: resp.totalCapped
           };
-          // only persist when signed in, always under the per-user key
+          // Cache under the full workspace and catalogue identity.
           if (cacheKeyRef.current) writeLocalCache(cacheKeyRef.current, snapshot);
         }
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
-        lopuRef.current({ title: err?.error || 'Component browsing hiccuped — try again 🌈', status: 'error' });
+        lopuRef.current({ title: err?.error || err?.message || 'Component browsing hiccuped — try again 🌈', status: 'error' });
       } finally {
         if (seq === requestSeqRef.current) setLoading(false);
       }
     },
-    [view]
+    [view, device]
   );
 
   // reconcile cached paint with fresh data
   React.useEffect(() => {
     runBrowse();
+    return () => { requestSeqRef.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -910,7 +942,7 @@ export const ComponentsBrowsePage = () => {
     const cached = familyCacheRef.current.get(key);
     if (cached) return cached;
     try {
-      const resp = (await apiRef.current.v1.components.browse({ family: key })) as BrowseComponentsResponse;
+      const resp = (await apiRef.current.v1.components.browse({ family: key, device: device || undefined, limit: 50 })) as BrowseComponentsResponse;
       if (!resp?.ok) throw resp;
       familyCacheRef.current.set(key, resp.components);
       return resp.components;
@@ -918,7 +950,7 @@ export const ComponentsBrowsePage = () => {
       lopuRef.current({ title: err?.error || 'Couldn’t load this component’s designs 🌈', status: 'error' });
       return [];
     }
-  }, []);
+  }, [device]);
 
   // ---- actions ------------------------------------------------------------
 
@@ -1019,6 +1051,7 @@ export const ComponentsBrowsePage = () => {
             library: source.library,
             category: source.category,
             ...(source.componentKey ? { componentKey: source.componentKey } : {}),
+            ...(source.familyKey ? { familyKey: source.familyKey } : {}),
             version: (source.entry.usageCount || 0) + 2,
             args: source.args,
             savedArgs,
@@ -1030,14 +1063,16 @@ export const ComponentsBrowsePage = () => {
         });
         if (!resp?.ok) throw resp;
         patchEntry(source.id, (entry) => ({ ...entry, usageCount: (entry.usageCount || 0) + 1 }));
+        familyCacheRef.current.clear();
+        if (device) void runBrowse();
         lopuRef.current({ title: `Saved "${trimmed}" to your Things ✨`, status: 'success' });
         return true;
       } catch (err: any) {
-        lopuRef.current({ title: err?.error || 'Version didn’t save — try again 🌈', status: 'error' });
+        lopuRef.current({ title: err?.error || err?.message || 'Version didn’t save — try again 🌈', status: 'error' });
         return false;
       }
     },
-    [user, patchEntry]
+    [user, patchEntry, device, runBrowse]
   );
 
   // ---- infinite scroll ----------------------------------------------------
@@ -1071,7 +1106,9 @@ export const ComponentsBrowsePage = () => {
 
   const cardFor = (source: ComponentCardSource) => (
     <ComponentCard
-      key={source.key}
+      key={`${source.key}:${source.id}`}
+      device={device}
+      localOnly={!!user?.localOnly}
       loadFamily={loadFamily}
       onReact={handleReact}
       onSave={handleSave}
@@ -1104,8 +1141,13 @@ export const ComponentsBrowsePage = () => {
           </Button>
         </Flex>
 
-        {user?.isAdmin && <CatalogImporter key={user.id} onPublished={() => { familyCacheRef.current.clear(); void runBrowse(); }} />}
+        {accountUser?.isAdmin && <CatalogImporter key={accountUser.id} onPublished={() => { familyCacheRef.current.clear(); void runBrowse(); }} />}
 
+        <Flex gap={2} wrap="wrap">
+          <Button size="sm" aria-pressed={device} onClick={() => navigate('/components?catalog=device')}>This device</Button>
+          <Button size="sm" aria-pressed={!device} onClick={() => navigate('/components?catalog=online')}>Online catalogue</Button>
+        </Flex>
+        {device && <Text fontSize="sm">Bundled components and copies saved in this workspace. Your online account may contain more components.</Text>}
         {/* same rainbow-ringed input as /search and /schemas */}
         <form onSubmit={submit}>
           <Center position="relative" width="100%">
@@ -1175,13 +1217,13 @@ export const ComponentsBrowsePage = () => {
           <Button {...pillProps(sort === 'newest')} onClick={() => setAndRun({ sort: 'newest' })}>
             Newest
           </Button>
-          <Button {...pillProps(sort === 'popular')} onClick={() => setAndRun({ sort: 'popular' })}>
+          {!device && <Button {...pillProps(sort === 'popular')} onClick={() => setAndRun({ sort: 'popular' })}>
             Popular
-          </Button>
+          </Button>}
           <Button {...pillProps(sort === 'oldest')} onClick={() => setAndRun({ sort: 'oldest' })}>
             Oldest
           </Button>
-          {user && (
+          {user && (device || !user.localOnly) && (
             <>
               <Box width={2} />
               <Text {...monoLabel}>show</Text>
@@ -1208,7 +1250,7 @@ export const ComponentsBrowsePage = () => {
 
         {view === 'feed' && <Flex direction="column" gap={3}>{sources.map(cardFor)}</Flex>}
         {view === 'grid' && (
-          <Grid gap={3} templateColumns="repeat(auto-fill, minmax(340px, 1fr))">
+          <Grid gap={3} templateColumns="repeat(auto-fill, minmax(min(100%, 340px), 1fr))">
             {sources.map(cardFor)}
           </Grid>
         )}

@@ -177,7 +177,9 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	const browse = (kind: 'component' | 'schema') => async (args: Record<string, unknown> = {}) => {
 		lease.assertCurrent();
 		if (args.device === true || args.mine || args.library) {
-			const result = await browseLocalDefinitions(await service().snapshot(), kind, args, workspaceScopeKey({ kind: 'anonymous' }), project);
+			const bundled = kind === 'component' ? (await import('../components/ComponentsLibrary/bundledComponentCatalog')).bundledComponentEntries() : [];
+			lease.assertCurrent();
+			const result = await browseLocalDefinitions(await service().snapshot(), kind, args, workspaceScopeKey({ kind: 'anonymous' }), project, bundled);
 			lease.assertCurrent(); return result;
 		}
 		const query = new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
