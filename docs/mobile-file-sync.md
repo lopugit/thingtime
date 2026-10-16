@@ -84,7 +84,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
-| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Core direction/delete policy and iOS/Android folder-access controls; editable sync Things and policy UI pending |
+| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Folder-access controls exist; connection editor, native approval store and worker integration remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; native conflict handling, retention and UI pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
@@ -308,3 +308,44 @@ the running emulator window; no system-picker success is inferred from mocks.
 The optional live picker test is retained for operator-assisted acceptance.
 Native writes, persistent workers, Photos, editable sync policy Things,
 conflict/retention/sharing UI and release remain on the original full goal.
+
+
+## Editable sync configuration — 2026-10-17
+
+`fileSync/configuration.ts` defines an ordinary, independently copyable
+`file-sync` schema. The existing Things API stores one bounded connection per
+Thing, defaults it to private, and keeps its changes in the canonical Timeline.
+The crystal contains a device ID, opaque native root ID, cloud folder ID, name,
+direction, pause, deletion opt-in, Wi-Fi/any-network choice, charging choice and
+up to 100 exact relative exclusion paths (16 KiB total). No OS path, bookmark,
+tree URI, credential or transfer history is stored in this configuration.
+The new configuration factory defaults to paused/two-way/Wi-Fi/no deletions.
+Both API manifests advertise Things 1.35.0; `useApi` negotiates it for new
+configuration writes. Public schema definitions remain independently copyable.
+
+`configuredPlan.ts` reads the real public Thing projection (`author.id`, not
+an invented `ownerId` field), requires a private owned record, and compares its
+canonical configuration and revision with a separately supplied device-local
+approval. Approval scope includes account, origin, data plane, device and the
+configuration Thing ID. Separate configurations therefore have separate sync
+journals even if they select the same native root. These helpers do not create
+or persist native approvals: that remains worker integration work.
+
+Before producing mutations, the configured planner gates paused/offline/unknown
+network and charging state. It validates the full scans, then excludes matching
+paths and descendants equally from both replicas and their common baseline.
+Excluded descendants also prevent ancestor-folder deletion. Runtime adapters
+must still reauthorize both roots, recheck current policy/conditions before new
+effects, reconcile any in-flight receipts, and enforce source/destination CAS.
+An editable Thing alone is never native execution authority.
+
+Verification: eight focused configuration tests plus the existing sync suite;
+public-schema copy/validation, both capability manifests, Things regressions;
+real local API create/list/read/update, anonymous refusal, invalid paths,
+stale-write 409, changed-approval refusal and charging gate. The integration
+script removes its synthetic configuration/folder through the normal API and
+logs out. The File sync reference and all eleven fields render in the local
+browser. This is storage and planning acceptance, not production sync UI or
+native scheduling/transport acceptance. Connection editor, native approval
+persistence, efficient streaming, destination writes, Photos and the remaining
+full-goal acceptance ledger above are still open.

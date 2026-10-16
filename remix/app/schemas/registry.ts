@@ -1,3 +1,4 @@
+import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
 import { DEVICE_PLATFORMS } from '../devices/platform.ts';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
@@ -4519,6 +4520,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   subspaceTombstoneSchema,
   subspaceReportSchema,
   folderSchema,
+  fileSyncSchema,
   appSchema,
   appDataSchema,
   // admin-plane kinds (PROTECTED: written only through admin endpoints)
@@ -6919,6 +6921,11 @@ const crystalSanitizers: Record<
 	attachment: sanitizeAttachmentCrystal,
   post: sanitizePostCrystal,
   folder: sanitizeFolderCrystal,
+  [FILE_SYNC_KIND]: (input, ids) => {
+    if (ids.length !== 1) return fail(400, 'File sync configurations stand alone');
+    try { return { ok: true, crystal: { ...parseFileSyncConfiguration(input) } }; }
+    catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid file sync configuration'); }
+  },
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
   share: () => ({ ok: true, crystal: {} }),

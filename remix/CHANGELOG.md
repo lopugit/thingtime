@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Persist editable file-sync connections through
+  ordinary private-by-default Things, with bounded direction, pause, network,
+  charging and exclusion preferences. Configured planning checks local approval
+  and protects excluded descendants from ancestor deletion. Real API guarded
+  edit/readback acceptance passes; native workers and connection UI remain open.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Android now shares the mobile folder-access
   controls with native read-only tree grants, encrypted scoped references and
   verified provider scans/reads. Native/provider and installed bridge tests pass;

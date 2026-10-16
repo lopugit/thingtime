@@ -1571,8 +1571,8 @@ export const createThing = async (
     acl = [ACL_INHERIT];
   } else if (validated.requiresTarget && !validated.thingtime.includes('post')) {
     acl = [ACL_INHERIT];
-  } else if (validated.thingtime.includes('folder')) {
-    // organization structure is personal — folders default private, unlike
+  } else if (validated.thingtime.includes('folder') || validated.thingtime.includes('file-sync')) {
+    // Organization and device-folder configuration default private, unlike
     // the public default for standalone content things
     acl = inputAcl || [ACL_OWNER];
   } else {

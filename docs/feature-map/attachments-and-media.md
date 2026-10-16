@@ -6,7 +6,12 @@ resolves uncertain receipts, and `journal.client.ts` stores the browser queue.
 The content endpoint also serves exact-version `sha256-parts-v1` fingerprints
 through `getAttachmentFingerprint`; `contentFingerprint.ts` shares part planning
 and bounded local hashing, and `attachmentFingerprint.client.ts` reads the
-authorized receipt. Run `test:file-sync` and `test:attachments`. Native file
+authorized receipt. Run `test:file-sync` and `test:attachments`. The editable `file-sync` schema in `configuration.ts` persists bounded connection
+preferences through ordinary Things (1.35.0, private by default).
+`configuredPlan.ts` checks owned/private projections, separately supplied local
+approval, conditions and symmetric exclusions, including excluded ancestor
+deletion protection. Run `scripts/file-sync-configuration.integration.mts` for
+real API storage/revision checks. Native file
 write adapters, persistent workers and product sync integration are pending;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.

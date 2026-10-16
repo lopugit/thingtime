@@ -4676,3 +4676,23 @@ and both charged versions remain private in Trash. The temporary mode-0600 run
 file is removed after success and retained after failure for inspection/recovery.
 Remove any temporary fixture admin setting and restart afterwards. This does
 not exercise OS background scheduling, native disk writes or production S3.
+
+
+### Verifying editable sync configurations locally
+
+With the same disposable local account fixture (mode 0600) described above:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-configuration.integration.mts /absolute/path/to/private-fixture.json
+```
+
+No upload approval, object-store credentials, extra environment variables or
+indexes are needed for this configuration-only check. It creates a synthetic
+cloud folder and private `file-sync` Thing through the existing Things API,
+verifies guarded editing and runtime policy boundaries, removes only its own
+fixtures through ordinary deletion, and logs out. The public schema is visible
+at `/docs/schemas#schema-file-sync`. Configurations contain opaque references;
+they do not grant OS access or launch transfers. The native connection editor,
+approval persistence and transfer workers remain in the
+[full sync acceptance ledger](docs/mobile-file-sync.md).

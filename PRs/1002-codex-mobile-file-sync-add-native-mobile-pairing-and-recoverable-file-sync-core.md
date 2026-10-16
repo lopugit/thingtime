@@ -287,3 +287,29 @@ acceptance. Keep the full goal active until the evidence table is satisfied.
   and 1280px retain folders after errors with no horizontal overflow. The installed
   foldable screenshot still shows the previously recorded duplicate card painting
   beneath Things filters; broader Things rendering is not claimed fixed here.
+
+
+## Editable sync configuration checkpoint — 2026-10-17
+
+- Added ordinary `file-sync` Things, private by default, through the canonical
+  registry/Things writer. The public schema can be copied independently; no new
+  collection, index, endpoint or secret. Things 1.35.0 appears in both manifests
+  and the shared client negotiates it for configuration writes.
+- Bounded device/root/cloud-folder references and explicit direction, pause,
+  deletion, network, charging and exact-path exclusions. The factory defaults
+  paused, two-way, Wi-Fi and no deletions. No native URI/bookmark/credential data.
+- `configuredPlan.ts` consumes the real `author.id` projection, requires an owned
+  private configuration and a matching separately supplied device-local approval,
+  gates network/power state, and filters both inventories/baseline consistently.
+  Excluded descendants block ancestor deletion. Full scan validation precedes
+  filtering; current root authorization and per-effect rechecks remain mandatory.
+- Focused configuration tests, schema/capability/Things suites and real local
+  API create/list/read/update/invalid-input/private-read/stale-write checks pass.
+  API acceptance caught and corrected an initial owner-projection mismatch.
+  Public File sync reference and all eleven fields render in the local browser.
+  Targeted lint has no errors; raw TypeScript retains the same 91 baseline
+  diagnostics. The complete web build is checked separately before publishing.
+- Scope remains incomplete: native approval persistence, connection editing UI,
+  worker wiring, destination writes, efficient streaming, Photos, retention,
+  peer behavior and physical-device acceptance are still required. The API test
+  uses synthetic opaque IDs and does not exercise native grants or transfers.

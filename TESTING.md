@@ -10053,3 +10053,28 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   localhost account: real multipart interruption/restart, lost accepted commit,
   stable replacement, independent hashes of retained versions and executor Trash.
   Remove temporary test admin access and restart; verify the account is non-admin.
+
+
+## Editable file sync configuration
+
+- [ ] Run `test:file-sync`, `test:schemas`, `test:api-capabilities` and
+  `test:things`. The `file-sync` schema copies without mutating its system
+  definition and accepts only its bounded typed fields; private native paths,
+  URIs and credentials never enter the authored configuration.
+- [ ] Run README's `file-sync-configuration.integration.mts` on a disposable
+  loopback account. Verify private create/list/reload, all policy choices,
+  invalid path refusal, stale-edit 409, normal cleanup and logout. Confirm the
+  runtime reads the actual public `author.id` projection, rejecting other owners
+  and shared audiences. View all eleven fields in `/docs/schemas#schema-file-sync`.
+- [ ] After a saved configuration changes direction, destination, exclusions,
+  revision, owner, origin, data plane or device, old local approval must not
+  authorize a new plan. Paused/offline/unknown-network/unknown-charging conditions
+  must not produce mutations. Stored configuration alone grants no access.
+- [ ] Exclude a child, then delete its parent on the other replica. Keep the
+  excluded child and its ancestor folder; allowed siblings may still sync.
+  Apply exclusions to both inventories and baseline, and reject incomplete,
+  case/Unicode-colliding or missing-ancestor scans before filtering. This
+  regression prevents exclusions from turning protected descendants into
+  apparent empty-folder deletions.
+- [ ] Native approval persistence, connection editor and policy rechecks during
+  actual native transfers remain separate acceptance in `docs/mobile-file-sync.md`.

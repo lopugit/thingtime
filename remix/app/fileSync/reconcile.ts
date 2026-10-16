@@ -21,7 +21,7 @@ export type SyncPolicy = { mode: SyncMode; propagateDeletes: boolean };
 export type SyncDecision =
 	| { kind: 'copy'; path: string; from: SyncSide; source: SyncEntry; expectedTarget: SyncEntry | null }
 	| { kind: 'trash'; path: string; side: SyncSide; expected: SyncEntry }
-	| { kind: 'conflict'; path: string; reason: 'both-changed' | 'type-changed' | 'delete-edit' | 'deletion-disabled' | 'destination-changed'; local: SyncEntry | null; remote: SyncEntry | null }
+	| { kind: 'conflict'; path: string; reason: 'both-changed' | 'type-changed' | 'delete-edit' | 'deletion-disabled' | 'destination-changed' | 'excluded-descendants'; local: SyncEntry | null; remote: SyncEntry | null }
 	| { kind: 'settled'; path: string; local: SyncEntry | null; remote: SyncEntry | null };
 export type SyncPlan = { scope: SyncScope; decisions: SyncDecision[] };
 
