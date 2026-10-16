@@ -311,6 +311,7 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
   return result;
  };
  const local = resolveWorkspacePage(await sync.things.snapshot(), target, scope.ownerId);
+ if (!local.page && target.kind !== 'id' && navigator.onLine === false) return { ok: true, page: null, source: null, components: [], refs: {} };
  if (!local.page) return refresh();
  if (navigator.onLine !== false) void refresh().catch(() => {});
  const dependencies = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ components: any[]; refs: Record<string, string | null> }>('page-components', local.page!.id));

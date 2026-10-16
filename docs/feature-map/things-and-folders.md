@@ -508,3 +508,12 @@ is independent of ancillary draft saves. Run `test:components`, `test:drafts`,
 `test:local-workspace` and the opt-in `components.browser.test.ts` flow described
 in [local workspaces](../local-workspaces.md). Remote account authorization and
 component trust/source confirmation remain separate from local ownership.
+
+
+Global/site page definitions share `app/schemas/sitePages.ts` between the server
+seed and local Builder. They remain canonical webpage Things, privately owned
+in the selected workspace. `local-workspace/runtime.client.ts` broadcasts only
+scope invalidation after writes; recipients ignore other account/origin/data-plane
+scopes. `siteBlocks.browser.test.ts` verifies anonymous offline edits, scoped
+account sync, normal import remapping and native source rendering. See the
+[local workspace checkpoint](../local-workspaces.md#global-and-site-blocks--2026-10-16).

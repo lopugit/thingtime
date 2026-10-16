@@ -7693,11 +7693,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
       see public pages read-only while included controls can run in the
       root-authorized read-only action mode (no saved-data mutations).
-- [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
-      /authorize) enters in-place editing of the current route; the live app
-      screen renders as the locked 🔒 native block; Save my version forks a
-      viewer-owned twin; leaving edit mode shows the personalised blocks in
-      view mode; reset-to-default deletes the fork and restores the seed.
+- [ ] Builder → Customize a site page works anonymously and offline; the native
+      sections render once, and Save my version creates a private workspace
+      copy. Global blocks and route-specific blocks remain isolated by workspace.
+      Unsaved name/text edits recover after reload; Discard retires recovery; reset-to-default removes the
+      version and retires unfinished recovery. Recheck after a second reload.
+- [ ] Global/site blocks: edit in one offline tab and verify another updates;
+      account/origin/data-plane changes cannot retain another workspace's cache.
+      Failed refresh keeps loaded blocks with Retry. Import a component/source
+      bundle through Things and verify native source output after offline reload.
+      Check 1440/390/320px widths with no horizontal overflow. Account page saves
+      and confirmed sync must finish while `/api/v1/drafts` POSTs never settle.
+      `siteBlocks.browser.test.ts` exercises the disposable production client.
 - [ ] Global blocks (webpage-site-global doc) render on every page and do NOT
       refetch or remount on client navigation.
 - [ ] Admin seed POST /api/v1/admin/webpages/seed converges (re-run →

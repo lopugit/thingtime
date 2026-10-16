@@ -9,11 +9,31 @@ let binding: { anonymous: boolean; generation: number; remoteConfirmed: boolean;
 let bindingVersion = 0;
 let database: WorkspaceDatabase | null = null;
 const invalidations = new Set<() => void>();
+let changeChannel: BroadcastChannel | null = null;
+const currentChangeScope = () => {
+ if (!binding || binding.generation !== rootIdentity.read().generation || rootIdentity.read().pending) return null;
+ return binding.anonymous ? workspaceScopeKey({ kind: 'anonymous' }) : binding.account ? workspaceScopeKey(binding.account) : null;
+};
+const dispatchChange = (removedIds?: string[]) => {
+ window.dispatchEvent(Object.assign(new Event(LOCAL_WORKSPACE_CHANGED), { removedIds }));
+ window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
+};
+const ensureChangeChannel = () => {
+ if (changeChannel || typeof window === 'undefined' || typeof window.BroadcastChannel !== 'function') return;
+ try {
+  changeChannel = new window.BroadcastChannel('thingtime:workspace-changes:v1');
+  changeChannel.onmessage = event => {
+   // Invalidation only: no Thing content, credentials or authority crosses tabs.
+   if (event.data?.scope && event.data.scope === currentChangeScope()) dispatchChange();
+  };
+ } catch { /* Local writes remain available where tab messaging is disabled. */ }
+};
 /** Called only after the root loader's current-generation check. A caller's
  * Thing JSON cannot select this identity or open an account partition. */
 export function bindLocalWorkspace(anonymous: boolean, generation: number, account?: Extract<WorkspaceScope, { kind: 'account' }>, remoteConfirmed = true) {
 	const changed = binding?.remoteConfirmed !== remoteConfirmed || binding?.anonymous !== anonymous || binding.generation !== generation || JSON.stringify(binding?.account) !== JSON.stringify(account);
 	binding = { anonymous, generation, remoteConfirmed, ...(!anonymous && account ? { account } : {}) };
+ ensureChangeChannel();
 	if (changed) { bindingVersion++; invalidations.forEach(listener => listener()); }
 }
 export function isAnonymousWorkspace() {
@@ -35,7 +55,11 @@ export function anonymousWorkspaceDatabase() {
 	return database ??= new WorkspaceDatabase(indexedDB);
 }
 export function anonymousThings() { return new LocalThings(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, anonymousWorkspaceLease()); }
-export function announceLocalWorkspaceChange(removedIds?: string[]) { window.dispatchEvent(Object.assign(new Event(LOCAL_WORKSPACE_CHANGED), { removedIds })); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
+export function announceLocalWorkspaceChange(removedIds?: string[]) {
+ dispatchChange(removedIds);
+ const scope = currentChangeScope();
+ try { if (scope) changeChannel?.postMessage({ scope }); } catch { /* Device storage already committed. */ }
+}
 
 export function accountWorkspaceLease(scope: Extract<WorkspaceScope, { kind: 'account' }>): WorkspaceLease {
 	const generation = rootIdentity.read().generation;

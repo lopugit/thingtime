@@ -1427,3 +1427,50 @@ node --import tsx --test app/local-workspace/components.browser.test.ts
 Pending component coverage includes full account discovery caches, cross-tab
 refresh, source-control editing recovery, bundled-only bookmarks and remaining
 Builder global/site block surfaces. The broader merge gates above still apply.
+
+
+## Global and site blocks — 2026-10-16
+
+Builder now offers **Customize a site page** alongside **Global blocks** without
+requiring an account. Both surfaces use the existing webpage Thing schema,
+canonical writer and native section renderer. The server seed and offline editor
+share the same 27 route definitions; saving creates a private workspace version,
+not a replacement system definition. Native sections keep their own permissions.
+
+The editor recovers name, blocks and audience with the shared workspace draft
+session, fenced against a newer saved page. Save and reset do not await account
+draft transport or cleanup. Discard and reset retire unfinished recovery so it cannot
+resurrect after reload. Existing Timeline/history behavior is unchanged.
+
+The site host resolves anonymous and offline account pages through their existing
+local adapters. Its bounded cache belongs to the full workspace identity, keeps
+last loaded blocks after refresh failure, exposes Retry and fences delayed reads.
+Same-origin tabs exchange scope-only invalidations, never content or credentials.
+Global and route-specific sources have separate existing webpage runtimes; source
+execution still uses the normal Action adapters and authorization/trust policies.
+
+Local verification: 156 webpage, 33 draft, 178 workspace and four offline-shell
+tests pass (5 webpage and 18 workspace integration/browser tests opt-in). Three
+clean production-client browser scenarios cover fully offline draft recovery,
+normal save/reset, two-tab updates, native section uniqueness, 1440/390/320px
+layout, account/anonymous isolation, confirmed server sync while account drafts
+stall, and imported source-bound components after offline reload. The actual
+server resolver confirms sync; browser-local reads are not sync evidence.
+The build has 247 verified assets (21,535,609 bytes); raw TypeScript retains the
+same 91 baseline diagnostics. Focused lint has only six existing useWebpage
+warnings. Screenshots and checks: `tmp/local-site-blocks-ui/`.
+
+Run from `remix/` against the isolated production client:
+
+```sh
+TT_LOCAL_SITE_BLOCKS_URL=http://127.0.0.1:22470 \
+TT_LOCAL_SITE_BLOCKS_ARTIFACTS=../tmp/local-site-blocks-ui \
+TT_SHARED_PLAYWRIGHT_PATH=/absolute/path/to/playwright/index.mjs \
+TT_SHARED_CHROME_PATH=/absolute/path/to/chrome \
+node --import tsx --test app/local-workspace/siteBlocks.browser.test.ts
+```
+
+These are local results. CI and deployment have not verified this checkpoint.
+This closes basic global/site composition, draft recovery and source rendering;
+full control-editing recovery, account reset/delete sync, cross-device conflicts,
+and the broader acceptance matrix above remain merge gates.

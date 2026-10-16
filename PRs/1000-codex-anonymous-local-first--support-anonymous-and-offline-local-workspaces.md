@@ -954,3 +954,28 @@ Pending: wider account catalogue caching, cross-tab refresh, source-control
 editor recovery, bundled-only bookmarks, remaining Builder global/site block
 surfaces, and the rest of the local-first acceptance matrix. This checkpoint
 is local verification, not deployed verification or readiness to merge.
+
+
+## 2026-10-16 — Global and site composition checkpoint
+
+Builder exposes canonical site-page editing alongside global blocks for anonymous
+and offline workspaces. Both reuse native sections, the canonical writer and
+shared draft recovery. Global/site caches are bounded and identity-scoped, retain
+paint on failures, and refresh across tabs using scope-only invalidation. Global
+and route compositions use separate existing source runtimes. Save/reset finish
+independently of account draft requests, and discard/reset retire unfinished recovery.
+
+Local verification: 156 webpage, 33 draft, 178 workspace and 4 offline-shell tests
+pass; 5 webpage and 18 workspace tests require explicit integration opt-in.
+Three enabled clean-browser scenarios cover offline edits/recovery/reset, two-tab
+updates, 1440/390/320px native layout, account isolation and direct server readback
+while drafts stall, plus normal-imported source bundles and offline reload.
+Client build: 247 verified assets, 21,535,609 bytes. Raw TypeScript: the same 91
+normalized baseline diagnostics. Focused lint: no errors, six pre-existing
+useWebpage warnings. Evidence: `tmp/local-site-blocks-ui/` and the corresponding
+`tmp/local-site-blocks-*-tests.log` files. Live in-app browser confirms the site
+picker opens the actual native page in Builder with anonymous draft recovery.
+
+This is local validation, not CI/deployed proof. Control-editing recovery,
+account reset/delete sync, cross-device conflicts, and the rest of the acceptance
+matrix remain outstanding. No main merge or manual deployment in this checkpoint.

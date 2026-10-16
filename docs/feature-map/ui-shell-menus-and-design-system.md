@@ -145,3 +145,17 @@ Run `test:local-workspace`; `storage.browser.test.ts` uses `TT_LOCAL_STORAGE_URL
 reload, other-tab writes, ledger failure/recovery, protection outcome and
 1440/390/320px layout. See the device-storage checkpoint in
 [local workspaces](../local-workspaces.md).
+
+
+## Local global/site composition
+
+`BuilderPagesList` links global editing and canonical site routes to `BuilderPage`.
+`schemas/sitePages.ts` supplies the same native-section definitions to offline
+Builder and server seeding. `SiteBlocksHost` resolves the workspace's pages with
+`useWebpage` and a bounded identity-owned `siteBlocksCache`; failed refreshes
+retain paint and offer Retry. Each global/route composition uses the existing
+webpage runtime, with native permission and Action trust checks intact.
+`drafts/sitePageDraft.ts` validates recoverable editor snapshots against the saved
+page revision. Cross-tab refresh is a scope-only local-workspace invalidation.
+Run `test:webpages`, `test:drafts`, `test:local-workspace` and the opt-in
+`local-workspace/siteBlocks.browser.test.ts` described in `docs/local-workspaces.md`.

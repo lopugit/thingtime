@@ -1,3 +1,4 @@
+import { sitePageSeed } from '~/schemas/sitePages';
 import { useWorkspaceUser } from '../../hooks/useWorkspaceUser';
 import { useDataPlane } from '../../hooks/useDataPlane';
 import { rootIdentity } from '../../utils/rootIdentity';
@@ -388,7 +389,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 			// site/global targets must stamp their binding even when no seed doc
 			// existed to inherit it from (fresh deployments before the admin seed)
 			const siteRoute = crystalBase.siteRoute || (target.kind === 'path' ? target.path : undefined);
-			const pageKey = crystalBase.pageKey || (target.kind === 'global' ? 'site-global' : undefined);
+			const pageKey = crystalBase.pageKey || (target.kind === 'global' ? 'site-global' : target.kind === 'path' && sitePageSeed(target.path) ? `route-${sitePageSeed(target.path)!.key}` : undefined);
 			const crystal: WebpageCrystal = {
 				name: options?.name || crystalBase.name || 'Untitled page',
 				...(crystalBase.description ? { description: crystalBase.description } : {}),

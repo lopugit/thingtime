@@ -450,7 +450,7 @@ const BlockInspector = ({
 						</Text>
 					) : (
 						<FieldRow label="Text">
-							<Textarea {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
+							<Textarea aria-label="Block text" {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
 						</FieldRow>
 					)}
 					<RichTextEditorButton block={block} patch={patch} />
@@ -899,7 +899,7 @@ export const BuilderDrawer = (props: {
 						<FieldRow label="Name">
 							<Input
 								{...inputStyles}
-								value={pageName}
+								aria-label="Page name" value={pageName}
 								onChange={(event) => {
 									onPageName(event.target.value);
 									setMetaDirty(true);

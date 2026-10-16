@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bindLocalWorkspace, accountWorkspaceLease, accountRemoteWorkspaceLease, assertAccountSyncAllowed, canSyncAccountWorkspace, isAnonymousWorkspace } from './runtime.client';
+import { bindLocalWorkspace, accountWorkspaceLease, accountRemoteWorkspaceLease, assertAccountSyncAllowed, canSyncAccountWorkspace, isAnonymousWorkspace, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { createRootDataLoader } from '../utils/rootDataLoader';
 import { RootDataUnavailableError } from '../utils/rootDataRecovery';
+import { workspaceScopeKey } from './storage';
 import type { LoaderFunctionArgs } from 'react-router';
 const scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'owner', dataPlane: 'home' } as const;
 test('offline account content remains editable but cannot authorize remote requests', () => {
@@ -38,4 +39,32 @@ test('authoritative root refusal permanently retires local editors and remote op
  accountWorkspaceLease(scope).assertCurrent();
  assert.throws(local.assertCurrent, /workspace changed/i); assert.throws(remote.assertCurrent, /workspace changed/i);
  stop();
+});
+
+
+test('cross-tab changes are scoped invalidations without data or message echoes', () => {
+ const original = Object.getOwnPropertyDescriptor(globalThis, 'window');
+ const received: string[] = [], sent: unknown[] = [];
+ const channels: TestChannel[] = [];
+ class TestChannel {
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  constructor() { channels.push(this); }
+  postMessage(value: unknown) { sent.push(value); }
+ }
+ Object.defineProperty(globalThis, 'window', { configurable: true, value: { BroadcastChannel: TestChannel, dispatchEvent: (event: Event) => { received.push(event.type); } } });
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope, true);
+  const key = workspaceScopeKey(scope);
+  channels[0].onmessage!({ data: { scope: workspaceScopeKey({ ...scope, ownerId: 'different' }) } });
+  channels[0].onmessage!({ data: { scope: workspaceScopeKey({ kind: 'anonymous' }) } });
+  assert.deepEqual(received, []);
+  channels[0].onmessage!({ data: { scope: key } });
+  assert.ok(received.includes(LOCAL_WORKSPACE_CHANGED)); assert.deepEqual(sent, []);
+  announceLocalWorkspaceChange(['test-id']); assert.deepEqual(sent, [{ scope: key }]);
+  const count = received.length; rootIdentity.changed();
+  channels[0].onmessage!({ data: { scope: key } }); assert.equal(received.length, count);
+ } finally {
+  rootIdentity.confirm(rootIdentity.read().generation);
+  if (original) Object.defineProperty(globalThis, 'window', original); else Reflect.deleteProperty(globalThis, 'window');
+ }
 });

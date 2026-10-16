@@ -1,5 +1,6 @@
+import { SITE_PAGE_SEEDS, siteBlocksExcluded } from '~/schemas/sitePages';
 import React from 'react';
-import { Box, Button, Flex, Spinner, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Select, Spinner, Text } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
 import { libraryBuilderHref } from '~/library/builderLinks';
 import { useApi } from '~/hooks/useApi';
@@ -50,6 +51,7 @@ const AccountPagesList = () => {
 	const user = useWorkspaceUser();
 	const navigate = useNavigate();
 	const [creating, setCreating] = React.useState(false);
+ const [sitePath, setSitePath] = React.useState('/');
 	const [revision, refresh] = React.useReducer((value) => value + 1, 0);
 	// Account confirmation changes transport authority without changing the
 	// content owner or remounting this list. Refresh after that transition too.
@@ -126,6 +128,14 @@ const AccountPagesList = () => {
 							Edit
 						</Button>
 					</Flex>
+     <Flex {...CARD_STYLES} padding={4} gap={3} wrap="wrap" align="center">
+      <Text fontWeight={700}>Customize a site page</Text>
+      <Select aria-label="Site page" value={sitePath} onChange={event => setSitePath(event.target.value)} flex="1 1 180px" minWidth={0}>
+       {SITE_PAGE_SEEDS.filter(seed => !siteBlocksExcluded(seed.path)).map(seed => <option key={seed.key} value={seed.path}>{seed.name} · {seed.path}</option>)}
+      </Select>
+      <Button as={Link} size="sm" to={`/builder?site=${encodeURIComponent(sitePath)}`}>Edit site page</Button>
+      <Text width="100%" fontSize="sm">Changes personalize your workspace. Built-in page permissions stay in place.</Text>
+     </Flex>
 					<Text as="h2" fontWeight={700}>
 						Pages
 					</Text>
