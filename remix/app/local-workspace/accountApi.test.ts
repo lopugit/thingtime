@@ -14,7 +14,7 @@ test('account local facade and native page resolution work offline without uploa
  let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; return { ok: true }; };
  try {
   bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
-  const api = accountApi({ actions: { run: remote }, things: { create: remote, update: remote, get: remote, list: remote, search: remote } }, { id: scope.ownerId }, scope.dataPlane);
+  const api = accountApi({ actions: { run: remote }, things: { create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote } }, { id: scope.ownerId }, scope.dataPlane);
   const component: any = await api.things.create({ thingtime: ['component'], crystal: { name: 'Card', componentKey: 'card', version: 1, render: { tag: 'p', children: 'Locally rendered' } } } as any);
   const page: any = await api.things.create({ thingtime: ['webpage'], crystal: { name: 'Offline page', blocks: [{ id: 'card', type: 'component', component: 'card' }] } } as any);
   const resolved = await resolveAccountWebpage(scope, { kind: 'id', id: page.id });
@@ -37,6 +37,20 @@ test('account local facade and native page resolution work offline without uploa
   await assert.rejects(api.things.get({ id: 'not-cached' }), /offline/);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {}, attachmentIds: ['attachment'] }), /offline/);
   await assert.rejects(async () => api.actions.run({}), /offline/);
+  let refusal: Promise<unknown> | undefined;
+  assert.doesNotThrow(() => { refusal = api.actions.run({}); });
+  await assert.rejects(refusal!, /offline/, 'promise-based callers must catch authority refusals without crashing the route');
+  const destination: any = await api.things.create({ thingtime: ['folder'], crystal: { name: 'Offline destination' } });
+  const moved: any = await api.things.bulk({ op: 'move', ids: [page.id, component.id], folderId: destination.id });
+  assert.equal(moved.savedLocally, true); assert.equal(moved.succeeded, 2);
+  assert.equal((await api.things.list({ folder: destination.id }) as any).things.length, 2);
+  assert.equal((await api.things.list({ folder: 'root', thingtime: 'webpage' }) as any).things.length, 0);
+  await assert.rejects(api.things.bulk({ op: 'move', ids: [page.id, page.id], folderId: null }), /distinct Things/);
+  await assert.rejects(api.things.bulk({ op: 'move', ids: [page.id], folderId: 'not-cached' }), /online once/);
+  await assert.rejects(api.things.bulk({ op: 'move', ids: [page.id], folderId: destination.id, acl: ['tt:public'] } as any), /distinct Things/);
+  assert.equal((await api.things.get({ id: page.id }) as any).thing.folderId, destination.id);
+  await api.things.bulk({ op: 'move', ids: [page.id, component.id], folderId: null });
+  assert.equal((await api.things.list({ folder: destination.id }) as any).things.length, 0);
   assert.equal(remoteCalls, 1, 'unconfirmed account cannot fall through to any remote adapter');
   rootIdentity.changed(); bindLocalWorkspace(true, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {} } as any), /workspace changed/i);
@@ -118,5 +132,40 @@ test('account library search paints local content first, refreshes only its owne
   rootIdentity.changed(); await workspaceDatabase().close();
   Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
   if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator); else Reflect.deleteProperty(globalThis, 'navigator');
+ }
+});
+
+test('account folder lists overlay pending placement on fresh and cached pages without remote bulk writes', async () => {
+ const saved = { window: globalThis.window, indexedDB: globalThis.indexedDB, fetch: globalThis.fetch }, oldNav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'move-owner', dataPlane: 'home' } as const;
+ const nav = { onLine: false }, requests: string[] = []; let remoteBulk = 0;
+ const row = (id: string, kind = 'data', folderId: string | null = null) => ({ id, thingtime: [kind], crystal: { name: id }, folderId, createdAt: '2026-10-16T00:00:00.000Z', updatedAt: '2026-10-16T00:00:00.000Z', author: { id: scope.ownerId }, acl: ['tt:user'], visibility: 'private', revision: 1 });
+ const first = row('owned-move-source'), folder = row('owned-move-folder', 'folder'), foreign = { ...row('foreign'), author: { id: 'other-account' } };
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), fetch: async (input: string, init?: RequestInit) => {
+  const url = new URL(input, scope.origin);
+  if (url.pathname.includes('capabilities')) return Response.json({ schemaVersion: 1, origin: scope.origin, features: { 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  requests.push(`${init?.method || 'GET'} ${url.pathname}`); assert.equal(init?.method, 'GET');
+  assert.equal(new Headers(init?.headers).get('X-Thingtime-Expected-Actor'), scope.ownerId);
+  assert.equal(new Headers(init?.headers).get('X-Thingtime-Expected-Data-Plane'), scope.dataPlane);
+  return Response.json(url.searchParams.has('id') ? { ok: true, thing: foreign } : { ok: true, things: url.searchParams.get('folder') === folder.id ? [] : [first, folder], nextCursor: null });
+ } });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: nav });
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const api = accountApi({ things: { bulk: async () => { remoteBulk++; return { ok: true }; } } }, { id: scope.ownerId }, scope.dataPlane) as any;
+  const sync = accountWorkspaceWorker(scope).sync; await sync.remember(first); await sync.remember(folder);
+  await api.things.bulk({ op: 'move', ids: [first.id], folderId: folder.id }); nav.onLine = true;
+  assert.deepEqual((await api.things.list({ folder: 'root' })).things.map((x: any) => x.id), [folder.id]);
+  assert.deepEqual((await api.things.list({ folder: folder.id })).things.map((x: any) => x.id), [first.id]);
+  assert.deepEqual((await api.things.list({ folder: 'root' })).things.map((x: any) => x.id), [folder.id], 'cached page also excludes moved rows');
+  await assert.rejects(api.things.bulk({ op: 'move', ids: [first.id, foreign.id], folderId: null }), /separately/);
+  assert.equal((await sync.view(first.id))!.folderId, folder.id); assert.equal(remoteBulk, 0);
+  nav.onLine = false; await api.things.bulk({ op: 'move', ids: [first.id], folderId: null }); nav.onLine = true;
+  assert.ok((await api.things.list({ folder: 'root' })).things.some((x: any) => x.id === first.id));
+  assert.deepEqual((await api.things.list({ folder: folder.id })).things, []);
+  assert.ok(requests.length > 0); assert.ok(requests.every(request => request.startsWith('GET ')));
+ } finally {
+  rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, saved);
+  if (oldNav) Object.defineProperty(globalThis, 'navigator', oldNav); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });

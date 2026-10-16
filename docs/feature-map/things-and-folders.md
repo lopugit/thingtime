@@ -483,3 +483,17 @@ exact reserved identity locally, including an empty workspace's not-found read.
 Run `test:local-workspace` and `timeline.browser.test.ts` with a production client
 build; it defaults to actual offline emulation and refuses recovered module
 errors. See the managed-folder checkpoint in `docs/local-workspaces.md`.
+
+
+Account bulk moves now enter the existing sync queue through the `LocalThings.move`
+mutation hook, in the same transaction as placement and revision. The account API
+hydrates only missing owned sources/ancestors, guards mixed pending/managed
+batches and overlays local placement on fresh/cached folder listings. Remote
+flush still uses conditional Things PATCH with exact actor/data-plane headers.
+Guarded remote API methods reject promises while unconfirmed; optional archive
+metadata probes can handle that refusal without crashing cold offline folders.
+`accountMove.browser.test.ts` uses `TT_LOCAL_ACCOUNT_MOVE_URL` (disposable local
+server only), `TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH` and
+`TT_LOCAL_ACCOUNT_MOVE_ARTIFACTS`. It creates/cleans its own private fixture and
+checks normal Move UI, cold reload, server-before/after state and responsive
+bounds. See [account move acceptance](../local-workspaces.md#account-folder-moves--2026-10-16).

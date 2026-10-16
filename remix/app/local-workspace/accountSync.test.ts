@@ -142,3 +142,75 @@ test('an orphaned queue entry is quarantined instead of stalling every other pen
  assert.equal((await f.sync.status()).find(entry => entry.id === row.id)!.state, 'synced');
  await f.db.close();
 });
+
+test('account moves commit placement and sync intent atomically, survive reopen and wait for new destinations', async () => {
+ const f = setup();
+ try {
+  const first = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'First' } });
+  const second = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Second' } });
+  await f.sync.sync(f.transport); const before = f.calls.length;
+  const folder = await f.sync.things.create({ thingtime: ['folder'], crystal: { name: 'New offline folder' } });
+  await f.sync.things.move([first.id, second.id], folder.id);
+  assert.equal(f.calls.length, before);
+  assert.equal((await f.sync.things.list({ folder: folder.id })).things.length, 2);
+  assert.ok((await f.sync.status()).every(row => row.state === 'pending'));
+  await f.db.close(); const reopened = new WorkspaceDatabase(f.factory), resumed = new AccountThingSync(reopened, f.scope, f.lease);
+  try {
+   assert.equal((await resumed.things.list({ folder: folder.id })).things.length, 2);
+   await resumed.sync(f.transport);
+   assert.equal(f.calls[before].id, folder.id);
+   for (const id of [first.id, second.id]) { assert.equal(f.remote.get(id)!.folderId, folder.id); assert.deepEqual(f.remote.get(id)!.acl, ['tt:user']); }
+   assert.ok((await resumed.status()).every(row => row.state === 'synced'));
+   await resumed.things.move([first.id, second.id], null); await resumed.sync(f.transport);
+   assert.equal(f.remote.get(first.id)!.folderId, null); assert.equal(f.remote.get(second.id)!.folderId, null);
+  } finally { await reopened.close(); }
+ } finally { await f.db.close(); }
+});
+
+test('account batch move rolls back content and queue together on cycles or missing sync bases', async () => {
+ const f = setup();
+ try {
+  const parent = await f.sync.things.create({ thingtime: ['folder'], crystal: { name: 'Parent' } });
+  const child = await f.sync.things.create({ thingtime: ['folder'], crystal: { name: 'Child' }, folderId: parent.id });
+  const data = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Data' } });
+  await f.sync.sync(f.transport); const before = await f.sync.things.get(data.id), status = await f.sync.status();
+  await assert.rejects(f.sync.things.move([data.id, parent.id], child.id), /contain itself/);
+  assert.deepEqual(await f.sync.things.get(data.id), before); assert.deepEqual(await f.sync.status(), status);
+  const orphan = { ...before, id: 'orphaned-account-cache' };
+  await f.db.transaction(f.scope, 'readwrite', f.lease, tx => tx.put('things', orphan.id, orphan));
+  await assert.rejects(f.sync.things.move([data.id, orphan.id], parent.id), /Load the account Thing/);
+  assert.deepEqual(await f.sync.things.get(data.id), before); assert.deepEqual(await f.sync.status(), status);
+ } finally { await f.db.close(); }
+});
+
+test('a move during an ambiguous write preserves the frozen retry and syncs the later placement afterward', async () => {
+ const f = setup();
+ try {
+  const row = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Moving' } });
+  const folder = await f.sync.things.create({ thingtime: ['folder'], crystal: { name: 'Destination' } });
+  await f.sync.sync(f.transport);
+  await f.sync.things.move([row.id], folder.id);
+  await f.sync.sync({ get: async () => { throw new Error('offline'); }, write: async operation => { await f.transport.write(operation, new AbortController().signal); throw new Error('lost acknowledgement'); } });
+  const frozen = structuredClone(f.calls.at(-1));
+  await f.sync.things.move([row.id], null); await f.sync.retry(row.id); await f.sync.sync(f.transport);
+  assert.deepEqual(f.calls.at(-2), frozen);
+  assert.equal(f.calls.at(-1).body.folderId, null); assert.equal(f.remote.get(row.id)!.folderId, null);
+  assert.equal((await f.sync.status()).find(item => item.id === row.id)!.state, 'synced');
+ } finally { await f.db.close(); }
+});
+
+test('a remote edit conflicts with an offline move and reviewed keep-local preserves both local content and destination', async () => {
+ const f = setup();
+ try {
+  const row = await f.sync.things.create({ thingtime: ['data'], crystal: { name: 'Before' } });
+  const folder = await f.sync.things.create({ thingtime: ['folder'], crystal: { name: 'Destination' } });
+  await f.sync.sync(f.transport); await f.sync.things.move([row.id], folder.id);
+  f.remote.set(row.id, { ...f.remote.get(row.id)!, crystal: { name: 'Other device' }, updatedAt: new Date(Date.now() + 60_000).toISOString() });
+  await f.sync.sync(f.transport);
+  const review = await f.sync.inspectConflict(f.transport, row.id);
+  assert.equal(review.local.folderId, folder.id); assert.equal(review.remote.crystal.name, 'Other device');
+  await f.sync.resolveConflict(f.transport, { id: row.id, keep: 'local', localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt });
+  await f.sync.sync(f.transport);
+  assert.equal(f.remote.get(row.id)!.folderId, folder.id); assert.equal(f.remote.get(row.id)!.crystal.name, 'Before');
+ } finally { await f.db.close(); }
+});

@@ -78,10 +78,10 @@ change this pointer; logout/account changes revoke it.
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
-| Lopu and automation | Local documents, authored definitions and drafts should remain editable. Provider inference, external delivery and hosted scheduled execution still need their real services. |
+| Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu notification history still attempts its remote recording call from an offline authenticated view; it does not block local moves, but needs its own local-first adapter. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
 | Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue update recovery, cross-account coverage and real-device startup verification. Chromium offline-emulation module cancellations remain under investigation; request blocking is no longer accepted without its root-read failure probe; the latest checkpoint defaults to actual offline emulation and retains failures as merge gates. |
-| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Complete deletion/moves/imports, attachments, all dedicated adapters, online cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
+| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Complete deletion/imports, protected-kind moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
 
 ## Development verification
 
@@ -1197,3 +1197,51 @@ merge. Browser storage protection does not repair the known startup issue.
 
 The branch review fix for a damaged Timeline view cache is included. Its library
 regression and the storage timeout boundary pass together (13 targeted checks).
+
+
+## Account folder moves — 2026-10-16
+
+Normal bulk moves for locally supported account Things now use `LocalThings.move`
+and the existing account create/update queue. Placement, revision and queue intent
+commit in one transaction; missing sync bases, cycles and failed writes roll back
+all selected items. The destination and ancestor chain must belong to this exact
+workspace. Previously uncached sources/ancestors may be fetched while confirmed
+online; offline missing content reports a clear error. Mixed batches cannot send
+pending local Things through a dedicated remote adapter. Anonymous moves retain
+their separate local writer and never create account sync entries.
+
+New local destination folders sync before their children. Existing destinations
+use the normal conditional PATCH and expected actor/data-plane headers. Lost
+responses retain the frozen operation; a subsequent move remains pending until
+that exact operation is acknowledged. Concurrent server changes require the
+existing explicit conflict review. Local placement filters apply to both fresh
+and cached account folder pages, so a stale remote listing cannot put a pending
+move back into its previous folder. This does not complete general pagination or
+membership reconciliation.
+
+Cold account folder navigation exposed a separate failure: the optional remote
+attachment-manifest probe expected a promise rejection, while the account guard
+threw synchronously. That escaped the probe's `.catch()` and unmounted the local
+screen into session recovery despite an intact account pointer. Guarded account
+API calls now reject promises with the same authority refusal. They do not gain
+remote permission or send a request while unconfirmed.
+
+Local acceptance: 164 workspace/offline-shell checks pass, with seven opt-in
+browser skips. The enabled clean-browser account-move case passes in 6.2 seconds:
+register a disposable local fixture, create two private Things and a folder,
+move via the normal multi-select dialog offline, cold-navigate/reload the folder,
+verify the server is unchanged, reconnect, and verify two conditional account
+PATCHes. All fixture Things are deleted by the test's own cleanup. No account
+bulk endpoint is called. There are no page/module or caught-router errors in the
+final run; viewport/scroll widths match at 1440/390/320px. Evidence:
+`tmp/local-account-move-ui-final/verification.json` and PNGs.
+
+The existing success-notification helper attempted one remote history request
+while offline; no claim of zero ancillary requests or complete notification
+support is made. Earlier failures in `tmp/local-account-move-ui*` retain the
+folder-probe crash evidence. This fix is distinct from the known intermittent
+entry-module cancellation issue. Build: 245 assets / 21,212,773 bytes. TypeScript
+retains the same 91 baseline diagnostics; targeted lint has zero errors and one
+existing constructor warning. These are local results, not CI/deployed proof.
+Deletion acknowledgements, coordinated dependency imports, protected adapters,
+account Timeline sync and the rest of the matrix still gate merge.

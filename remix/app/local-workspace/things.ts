@@ -347,7 +347,8 @@ export class LocalThings {
 				if (isLocalActivity(previous)) fail('MANAGED_KIND', 'Interactions cannot be filed or moved');
 				const row = { ...previous, revision: previous.revision + 1, updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString() };
 				if (folderId) row.folderId = folderId; else delete row.folderId;
-				await this.placement(tx, row); await tx.put('things', id, row); rows.push(row);
+				await this.placement(tx, row); await tx.put('things', id, row);
+				await this.onWrite?.(tx, row, previous, { folderId }); rows.push(row);
 			}
 			return { ok: true, moved: ids, things: rows };
 		});

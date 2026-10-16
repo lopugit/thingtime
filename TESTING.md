@@ -2,6 +2,17 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] In a disposable local account, move multiple ordinary Things into a folder
+      offline, cold-navigate/reload that folder, then reconnect. The server must
+      remain unchanged until the account is verified; sync must carry actor,
+      data-plane and timestamp preconditions. Check new-folder ordering, move to
+      root, ambiguous retries followed by another move, conflict review, and
+      whole-batch rollback for cycles/missing sync bases. An unavailable remote
+      archive probe must reject a promise and never unmount the local folder.
+      Fresh and cached listings must respect pending local placement. Run
+      `accountSync.test.ts`, `accountApi.test.ts` and opt-in
+      `accountMove.browser.test.ts`; verify 1440/390/320px and fixture cleanup.
+
 - [ ] Settings → Things → Device storage works without login and after a cold
       offline reload. Import a local Thing in another tab and refresh the meter;
       it includes local History/internal records without requesting an account.

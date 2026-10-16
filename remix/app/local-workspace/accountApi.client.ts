@@ -77,7 +77,10 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const facadeLease = accountWorkspaceLease(scope);
 	const worker = () => { facadeLease.assertCurrent(); return accountWorkspaceWorker(scope); };
 	const guard = (value: any): any => {
-		if (typeof value === 'function') return (...args: any[]) => { facadeLease.assertCurrent(); assertAccountSyncAllowed(scope); return value(...args); };
+		// API methods are promise-based. Refusals must reject that promise so an
+		// optional remote probe's .catch() can handle offline/unconfirmed identity
+		// without throwing out of a React effect and unmounting the local screen.
+		if (typeof value === 'function') return async (...args: any[]) => { facadeLease.assertCurrent(); assertAccountSyncAllowed(scope); return value(...args); };
 		if (!value || typeof value !== 'object') return value;
 		const wrapped = new Map<PropertyKey, unknown>();
 		return new Proxy(value, { get(target, key) { if (!wrapped.has(key)) wrapped.set(key, guard(Reflect.get(target, key))); return wrapped.get(key); } });
@@ -101,6 +104,42 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const changed = () => { announceLocalWorkspaceChange(); worker().wake(); };
 	// Explicit login/logout establish or revoke identity; other remote features require confirmation.
 	return { ...online, auth: remote.auth, login: remote.login, things: { ...online.things,
+		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
+			facadeLease.assertCurrent();
+			if (input?.op !== 'move') return online.things.bulk(input);
+			if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) ||
+				!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 ||
+				input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length ||
+				(input.folderId != null && (typeof input.folderId !== 'string' || !input.folderId.trim())))
+				throw new WorkspaceError('INVALID_MOVE', 'Choose between 1 and 200 distinct Things and a destination folder.');
+			const { sync } = worker();
+			const requireLocal = async (id: string) => {
+				let row = await sync.view(id);
+				if (!row) {
+					if (navigator.onLine === false || !canSyncAccountWorkspace(scope))
+						throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open these Things and their destination folder online once before moving them offline.', 409);
+					await refresh({ id }); row = await sync.view(id);
+				}
+				return row;
+			};
+			const rows = [];
+			for (const id of input.ids) rows.push(await requireLocal(id));
+			if (rows.some(row => !row)) {
+				// A mixed batch must never remotely move an unsynced local Thing.
+				if (rows.some(row => row && row.syncState !== 'synced'))
+					throw new WorkspaceError('UNSUPPORTED_LOCAL_MOVE', 'Move saved device Things separately from items that require their dedicated online adapter.', 409);
+				return online.things.bulk(input);
+			}
+			let parent = input.folderId || null; const seen = new Set<string>();
+			while (parent) {
+				if (seen.has(parent) || seen.size >= 200) throw new WorkspaceError('INVALID_FOLDER', 'The destination folder chain is cyclic or too deep.');
+				seen.add(parent); const folder = await requireLocal(parent);
+				if (!folder?.thingtime.includes('folder')) throw new WorkspaceError('INVALID_FOLDER', 'Destination folder is not owned by this workspace.');
+				parent = folder.folderId || null;
+			}
+			await sync.things.move(input.ids, input.folderId || null); changed();
+			return { ok: true, savedLocally: true, succeeded: input.ids.length, failed: 0, results: input.ids.map(id => ({ id, ok: true })) };
+		},
 		search: async (args: Record<string, any> = {}, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
 			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (args.workspace !== true) return online.things.search(args, options);
@@ -196,22 +235,31 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			const query = Object.fromEntries(Object.entries(args).sort(([a], [b]) => a.localeCompare(b)));
 			const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(query)));
 			const key = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+			const kinds = typeof args.thingtime === 'string' ? args.thingtime.split(',') : args.thingtime || [];
+			const matches = (row: any) => row && kinds.every((kind: string) => row.thingtime?.includes(kind)) &&
+				(!args.folder || (args.folder === 'root' ? !row.folderId : row.folderId === args.folder));
+			const overlay = async (rows: any[]) => {
+				const things = rows.filter(matches);
+				if (!args.cursor) {
+					const pending = new Set((await sync.status()).filter(row => row.state !== 'synced').map(row => row.id));
+					for (const row of (await sync.things.list(args)).things) if (pending.has(row.id) && !things.some(thing => thing.id === row.id)) {
+						const current = project(await sync.view(row.id)); if (matches(current)) things.unshift(current);
+					}
+				}
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); return things;
+			};
 			const readPage = async () => {
 				const result = await refresh(args, options?.signal);
 				// Cache only complete pages of the locally supported owned kinds.
 				// Other managed libraries continue using their dedicated adapters.
 				if (result.things?.every((thing: any) => accountThingCanCache(thing) && thing.author?.id === owner.id))
 					await db.transaction(scope, 'readwrite', lease, tx => tx.put('thing-pages', key, { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null }));
-				return result;
+				return { ...result, things: await overlay(result.things || []) };
 			};
 			const page = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ ids: string[]; nextCursor: string | null }>('thing-pages', key));
 			if (!page) return readPage();
 			if (navigator.onLine) void readPage().catch(() => {});
-			const things = (await sync.views(page.ids)).map(project).filter((row: any) => !args.folder || (args.folder === 'root' ? !row.folderId : row.folderId === args.folder));
-			if (!args.cursor) {
-				const pending = new Set((await sync.status()).filter(row => row.state !== 'synced').map(row => row.id));
-				for (const row of (await sync.things.list(args)).things) if (pending.has(row.id) && !things.some((thing: any) => thing.id === row.id)) things.unshift(project(await sync.view(row.id)));
-			}
+			const things = await overlay((await sync.views(page.ids)).map(project));
 			return { ok: true, things, nextCursor: page.nextCursor, localWorkspace: true };
 		}
 	} } as T;

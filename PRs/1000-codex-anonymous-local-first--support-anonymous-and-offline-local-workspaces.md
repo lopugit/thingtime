@@ -810,3 +810,37 @@ merge. No main merge or manual deployment was performed.
 
 The branch review fix for a damaged Timeline view cache is included. Its library
 regression and the storage timeout boundary pass together (13 targeted checks).
+
+
+## 2026-10-16 — account moves and cold folder recovery
+
+Ordinary account bulk moves now use the canonical local placement transaction
+and existing durable account write queue. Placement and intent roll back together;
+new destinations sync first, frozen uncertain requests remain immutable, later
+moves follow acknowledgement, and server conflicts retain explicit review.
+Missing offline content/ancestors fail clearly. Mixed batches cannot remotely
+move pending local content; dedicated managed-kind behavior remains separate.
+Both fresh and cached account folder pages apply pending local placement.
+
+Native acceptance found and fixed a cold folder crash: the optional remote
+attachment-manifest request expected `.catch()`, but the offline guard threw
+synchronously. Account remote guards now reject promises with unchanged
+permission checks. The valid account pointer and local folder remain available.
+Three earlier browser failures retain this evidence; they are not counted as
+passes or as the separate intermittent module-startup defect.
+
+164 workspace/offline-shell checks pass (seven ordinary opt-in browser skips).
+The enabled disposable-account browser case passes in 6.2 seconds through the
+normal multi-select Move dialog, actual offline navigation/reload, server-state
+checks, verified reconnect and two actor/data-plane/timestamp-fenced PATCHes.
+Fixture Things are cleaned up. 1440/390/320px viewport and scroll widths match;
+no page/module/caught-router errors remain in the final run. Evidence:
+`tmp/local-account-move-ui-final/`. One ancillary success-notification history
+request was attempted offline; notification local storage/sync remains open.
+
+Build: 245 verified assets / 21,212,773 bytes. TypeScript retains the same 91
+baseline diagnostics; targeted lint has no errors and one existing constructor
+warning. Local checks are distinct from CI/deployed verification. Account deletes,
+coordinated imports, protected/dedicated adapters, complete list pagination,
+Timeline sync and the full remaining matrix still gate merge. No main merge or
+manual deployment was performed.

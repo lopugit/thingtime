@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Account folder moves now commit locally with sync
+  intent and reconnect through conditional account writes. Pending placement
+  wins over stale folder lists. Promise-based offline refusals also prevent an
+  optional archive probe from crashing cold account folders. Native offline
+  move/reload/reconnect passes locally at desktop/phone widths.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Settings → Things now exposes scoped device
   workspace usage and an explicit browser storage-protection request without
   login. Missing accounting retains last-known values with an error; identity
