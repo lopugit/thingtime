@@ -81,7 +81,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android cloud-download integration, Mac publication, workers and full cross-device transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads and actual Files acceptance verified; Mac publication, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
@@ -883,3 +883,52 @@ and API 26 devices, reboot/power loss, background scheduling, Photos, peer sync,
 Mac receivers and complete convergence/release acceptance remain open. The full
 goal remains active. Fork-safe setup and manual confirmation steps are in both
 READMEs; no new secret, service or broad storage permission is required.
+
+
+### Android foreground offline-root download integration (2026-10-17)
+
+Android publication bridge 1.1.0 now connects the existing configured foreground
+runner to explicitly created offline roots. `ManagedFolderAccess` validates the
+saved grant generation, canonical native root, account/origin ownership and OS
+read permission. Native consent is bound to the saved connection revision/hash
+and device scope, persisted separately from generic-provider OS write approval,
+and checked again before publication. Native catalog scan/read versions and
+receipts share the existing TypeScript contract. Generic SAF folders never gain
+the per-root publication capability. The client negotiates it again before
+approval; legacy iOS publication 1.0 remains compatible.
+
+An installed Android 15 / API 35 run downloaded the real private cloud fixture
+through **Download now**, after cancellation and native reapproval. Independent
+ContentResolver SHA-256 checks matched the 17-byte text and nested 8 MiB + 17-byte
+file. A second transfer completed and passed the byte checks; the initial harness
+then hit an object-only canonical serializer when comparing arrays. The test now
+compares canonical entries individually. The final rerun passed native entry equality, visual Files navigation and
+non-destructive grant removal. The Android suite reported `OK (48 tests)`
+(46 executed, two opt-in process cases skipped); 26 JVM tests, debug build and
+lint also passed. Cloud fixture cleanup retained accounted versions in private
+Trash; the temporary local upload-seeding configuration was restored byte for
+byte before download acceptance. This is emulator evidence, not a throughput
+benchmark or physical-device acceptance.
+
+The first run stopped at the cloud ETag check. Direct same-origin API reads
+returned the expected headers. Version-pinned range, fingerprint and actor-scoped
+requests were eligible for media-worker interception; they now bypass it,
+including no-store requests. The subsequent installed transfer succeeded. The
+regression exercises the real worker's refusal to intercept these requests;
+normal media caching remains covered. HTTP download failures now report their
+status rather than being mislabeled as version changes. No version/byte checks
+were relaxed.
+
+Four new native adapter tests cover scope isolation, approval reload/revision,
+reselection/removal/OS revocation, failed persistence and revocation during copy.
+Shared sync tests pass 93/93; media-cache tests pass 7/7. Targeted ESLint passes
+(the Node media test needs its Node/ES2021 environment); full TypeScript still
+reports 91 diagnostics outside changed files, not a clean project typecheck.
+No new server API, collection, secret or broad storage permission is introduced.
+Connections remain ordinary editable Things and receipts use the shared journal.
+
+This establishes a foreground adapter checkpoint. Real cloud replacement and
+settings reapproval acceptance, generic providers, Mac receivers, background
+workers, Photos, peer sync, deletion/rename convergence, restore/retention UI,
+physical/API 26 devices, reboot/low-storage and release acceptance remain open.
+The full requested goal remains active.

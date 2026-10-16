@@ -739,3 +739,23 @@ and API 26 devices, reboot/power loss, background scheduling, Photos, peer sync,
 Mac receivers and complete convergence/release acceptance remain open. The full
 goal remains active. Fork-safe setup and manual confirmation steps are in both
 READMEs; no new secret, service or broad storage permission is required.
+
+
+## Android foreground offline-root download adapter — 2026-10-17
+
+Download now now negotiates each native folder's publication capability and
+requires exact-connection native approval. Android offline roots use verified
+staging and atomic catalog/receipt publication; generic SAF roots stay read/upload
+sources. Grant generation, account/device/configuration and OS read permission
+are rechecked, including before commit. Android Files receives publication
+notifications. The shared client preserves legacy iOS publication compatibility.
+
+Installed cloud transfer passed independent text/nested 8 MiB byte hashes and
+repeated download. Visual Files navigation and non-destructive grant removal also passed. Final
+Android suite: 46 executed checks, two skipped opt-in process cases (`OK (48
+tests)`), 26 JVM checks, debug build and lint. Full evidence is recorded in the
+[full ledger](../docs/mobile-file-sync.md#android-foreground-offline-root-download-integration-2026-10-17).
+The run exposed a media-worker interception boundary; pinned/actor-scoped reads
+now pass directly to the API. Regression suites pass 93 sync and seven media
+checks, plus four new native authorization adapter cases. Full TypeScript has
+91 unrelated diagnostics. No production release or full-sync completion claim.

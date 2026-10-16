@@ -1,8 +1,9 @@
+import { getNativeBridge } from '../utils/nativeBridge';
 import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { parseFileSyncConfiguration } from './configuration';
 import type { LocalSyncTarget } from './localSyncTarget';
 import { sameSyncScope, validateSyncScope, type SyncScope } from './reconcile';
-import { requestMobileFolders, type MobileWriteApproval } from './mobileFolders.client';
+import { requestMobileFolders, supportsMobileFolderPublication, type MobileWriteApproval } from './mobileFolders.client';
 import { stageMobileCopy } from './mobileStaging.client';
 
 /** Native consent is separate from the editable configuration. Its binding is
@@ -11,12 +12,21 @@ export async function approveMobileSyncTarget(
 	saved: SavedFileSyncConfiguration,
 	scope: SyncScope,
 	signal: AbortSignal,
-	request = requestMobileFolders
+	request = requestMobileFolders,
+	bridge = getNativeBridge()
 ): Promise<LocalSyncTarget> {
 	validateSyncScope(scope);
 	const configuration = parseFileSyncConfiguration(saved.configuration),
 		rootId = configuration.localRootId;
 	if (saved.id !== scope.rootId || configuration.deviceId !== scope.deviceId) throw Error('Sync approval scope changed.');
+	const roots = (await request(scope.ownerId, { action: 'list' }, signal)).roots;
+	if (
+		!supportsMobileFolderPublication(
+			roots.find((root) => root.id === rootId),
+			bridge
+		)
+	)
+		throw Error('Downloads are unavailable for this device folder. On Android, choose a Thingtime offline folder.');
 	const bytes = new TextEncoder().encode(JSON.stringify(configuration));
 	const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (n) => n.toString(16).padStart(2, '0')).join('');
 	const approval: MobileWriteApproval = { scope: { ...scope }, configurationRevision: saved.updatedAt, configurationHash: hash };

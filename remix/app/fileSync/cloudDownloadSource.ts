@@ -79,6 +79,10 @@ export function createCloudDownloadSource(
 					await response.body?.cancel().catch(() => {});
 					throw error;
 				}
+				if (!response.ok) {
+					await response.body?.cancel();
+					throw Error(`Cloud download request failed (${response.status}); retain this run for retry or reconciliation.`);
+				}
 				if (response.headers.get('ETag') !== `"${range.version}"`) {
 					await response.body?.cancel();
 					throw Error('Cloud range version is unavailable or changed.');

@@ -47,6 +47,9 @@ final class FolderStore {
             if(!scope.origin.equals(row.getString("origin")) || row.getString("name").isEmpty() || row.getString("name").length()>1024) throw new Exception("Invalid folder registry");
             tree(row.getString("uri"));
             if(row.has("generation") && !UUID.fromString(row.getString("generation")).toString().equals(row.getString("generation"))) throw new Exception("Invalid folder registry");
+            JSONArray offline=offlineApprovals(row);
+            if(offline.length()>32)throw new Exception("Invalid folder registry");
+            for(int j=0;j<offline.length();j++)new WriteApproval(offline.getJSONObject(j),scope);
             JSONArray approvals=approvals(row);
             if(approvals.length()>32) throw new Exception("Invalid folder registry");
             for(int j=0;j<approvals.length();j++) new WriteApproval(approvals.getJSONObject(j),scope);
@@ -103,6 +106,27 @@ final class FolderStore {
             throw failure;
         }
     } }
+    private static JSONArray offlineApprovals(JSONObject row) throws Exception {return row.has("offlineWriteApprovals")?row.getJSONArray("offlineWriteApprovals"):new JSONArray();}
+    void requireRead(DeviceScope scope,Grant original) throws Exception {synchronized(LOCK) {
+        Grant current=new Grant(find(all(),scope,original.id));
+        if(!current.uri.equals(original.uri) || !current.generation.equals(original.generation) || !permissions.has(current.uri))
+            throw new FolderReader.Failure("Folder access changed. Choose it again.");
+    }}
+    boolean isOfflineWriteApproved(DeviceScope scope,Grant original,WriteApproval approval) throws Exception {synchronized(LOCK) {
+        new WriteApproval(approval.json(),scope);requireRead(scope,original);
+        JSONArray saved=offlineApprovals(find(all(),scope,original.id));
+        for(int i=0;i<saved.length();i++)if(approval.matches(new WriteApproval(saved.getJSONObject(i),scope)))return true;
+        return false;
+    }}
+    /** Only the native offline adapter calls this after root ownership and consent.
+     * OS document handles remain read-only; this authorizes private publication. */
+    void approveOfflineWrite(DeviceScope scope,Grant original,WriteApproval approval) throws Exception {synchronized(LOCK) {
+        new WriteApproval(approval.json(),scope);requireRead(scope,original);
+        JSONArray rows=all();JSONObject row=find(rows,scope,original.id);JSONArray saved=offlineApprovals(row),next=new JSONArray();
+        for(int i=0;i<saved.length();i++)if(!approval.sameScope(new WriteApproval(saved.getJSONObject(i),scope)))next.put(saved.getJSONObject(i));
+        if(next.length()>=32)throw new FolderReader.Failure("Too many folder write approvals. Choose this folder again to clear them.");
+        next.put(approval.json());row.put("offlineWriteApprovals",next);save(rows);
+    }}
     private void releaseUnusedWrite(JSONArray rows,Uri uri) throws Exception {
         for(int i=0;i<rows.length();i++) { JSONObject row=rows.getJSONObject(i);if(uri.toString().equals(row.getString("uri")) && approvals(row).length()>0) return; }
         if(permissions.hasWrite(uri)) try { permissions.releaseWrite(uri); } catch(SecurityException alreadyRevoked) { }

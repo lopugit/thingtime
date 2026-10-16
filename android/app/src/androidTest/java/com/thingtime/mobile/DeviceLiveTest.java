@@ -37,11 +37,14 @@ public class DeviceLiveTest {
     private static void verifyOfflineFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
         File confirmed=new File(context.getFilesDir(),"offline-files-confirmed");Files.deleteIfExists(confirmed.toPath());
         FolderStore grants=new FolderStore(context);assertEquals("Use a disposable account without selected folders",0,grants.list(scope).length());
-        System.out.println("OFFLINE_CREATE_QA_READY: Cancel one creation, then create ThingtimeOfflineQA through Choose folder > New offline folder and select it in Files.");
+        boolean download="true".equals(InstrumentationRegistry.getArguments().getString("offlineDownload"));
+        String expectedName=download?"Thingtime offline":"ThingtimeOfflineQA";
+        System.out.println("OFFLINE_CREATE_QA_NAME: "+expectedName);
+        System.out.println("OFFLINE_CREATE_QA_READY: Cancel one creation, then create "+expectedName+" through Choose folder > New offline folder and select it in Files.");
         long deadline=System.currentTimeMillis()+300000;String grantId=null;
         while(System.currentTimeMillis()<deadline) {
             JSONArray roots=grants.list(scope);
-            for(int i=0;i<roots.length();i++)if(roots.getJSONObject(i).getString("name").equals("ThingtimeOfflineQA"))grantId=roots.getJSONObject(i).getString("id");
+            for(int i=0;i<roots.length();i++)if(roots.getJSONObject(i).getString("name").equals(expectedName))grantId=roots.getJSONObject(i).getString("id");
             if(grantId!=null)break;Thread.sleep(500);
         }
         assertNotNull("Create and select the synthetic offline folder",grantId);
@@ -55,6 +58,8 @@ public class DeviceLiveTest {
         ManagedFileStoreTest fixture=new ManagedFileStoreTest();fixture.before();
         fixture.managed=new File(context.getNoBackupFilesDir(),"ManagedFiles-v1");fixture.root=root;fixture.fixture.owner=scope;fixture.fixture.grant=grantId;
         try {
+            if(download)verifyOfflineDownload(web,context,scope,grantId,root);
+            else {
             fixture.folder("nested");byte[] bytes=new byte[8*1024*1024+17];java.util.Arrays.fill(bytes,(byte)13);
             JSONObject receipt=fixture.publish(fixture.request("nested/original.bin",bytes,true),bytes);String document=root+":"+receipt.getJSONObject("entry").getString("id");
             try(android.os.ParcelFileDescriptor fd=context.getContentResolver().openFileDescriptor(OfflineDocumentsProvider.rootUri(context,document),"r");
@@ -65,15 +70,16 @@ public class DeviceLiveTest {
             assertFalse(scan.toString().contains("content://"));assertFalse(scan.toString().contains("/data/"));
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Check folder')?.click()");
             awaitTrue(web,"document.body.innerText.includes('1 file checked')");
+            }
             android.content.Intent browse=new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,OfflineDocumentsProvider.rootUri(context,root));
             context.startActivity(browse);
-            System.out.println("OFFLINE_FILES_QA_READY: Inspect ThingtimeOfflineQA/nested/original.bin in Android Files, return to Thingtime, then create files/offline-files-confirmed in the debug app.");
+            System.out.println("OFFLINE_FILES_QA_READY: Inspect "+expectedName+"/nested/"+(download?"sample.bin":"original.bin")+" in Android Files, return to Thingtime, then create files/offline-files-confirmed in the debug app.");
             deadline=System.currentTimeMillis()+300000;while(!confirmed.exists() && System.currentTimeMillis()<deadline)Thread.sleep(500);
             assertTrue("Confirm the rendered Files inspection",confirmed.exists());Files.delete(confirmed.toPath());
             folderRequest(web,scope,new JSONObject().put("action","remove").put("rootId",grantId));
             assertEquals(0,grants.list(scope).length());
-            try(ManagedFileStore store=fixture.store()){assertEquals(2,store.scan(scope,root).length());assertEquals(root,store.document(root).id);}
+            try(ManagedFileStore store=fixture.store()){assertEquals(download?3:2,store.scan(scope,root).length());assertEquals(root,store.document(root).id);}
             System.out.println("OFFLINE_FILES_QA_PASS: native creation, actual Files selection, scoped grant, nested provider bytes, bridge scan and non-destructive access removal.");
         } finally {
             grants.remove(scope,grantId);Files.deleteIfExists(confirmed.toPath());
@@ -89,13 +95,59 @@ public class DeviceLiveTest {
             OfflineDocumentsProvider.changed(context);fixture.after();
         }
     }
+    private static void verifyOfflineDownload(android.webkit.WebView web,Context context,DeviceScope scope,String grantId,String root) throws Exception {
+        File source=new File(context.getFilesDir(),"download-test-cloud.json");JSONObject cloud=new JSONObject(new String(Files.readAllBytes(source.toPath()),StandardCharsets.UTF_8));Files.delete(source.toPath());
+        assertEquals(scope.owner,cloud.getString("ownerId"));assertEquals(scope.origin,cloud.getString("origin"));
+        assertFalse(cloud.optBoolean("cleaned"));String connection=null;
+        try {
+            String device=new KeystoreDeviceStore(context).load(scope).getString("deviceId");
+            JSONObject config=new JSONObject().put("configurationVersion",1).put("name","Android cloud download acceptance").put("deviceId",device).put("localRootId",grantId).put("remoteFolderId",cloud.getString("rootId"))
+                .put("mode","download").put("paused",false).put("propagateDeletes",false).put("network","any").put("chargingOnly",false).put("excludedPaths",new JSONArray());
+            connection=webApi(web,"/api/v1/things","POST",new JSONObject().put("thingtime",new JSONArray().put("file-sync")).put("crystal",config)).getJSONObject("thing").getString("id");
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Refresh'&&!b.disabled).click()");
+            awaitTrue(web,"document.body.innerText.includes('Android cloud download acceptance') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Download now'&&!b.disabled)");
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Download now'&&!b.disabled).click()");
+            System.out.println("OFFLINE_DOWNLOAD_CANCEL: Cancel the native Allow downloads dialog.");
+            awaitTrue(web,"document.body.innerText.includes('Download approval cancelled')",300000);
+            try(ManagedFileStore store=new ManagedFileStore(context,()->{})){assertEquals(0,store.scan(scope,root).length());}
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled).click()");
+            System.out.println("OFFLINE_DOWNLOAD_ALLOW: Allow downloads in the native dialog.");
+            awaitDownload(web);
+            JSONArray before=verifyCloudBytes(context,scope,root,cloud.getJSONArray("files"));
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Download now'&&!b.disabled).click()");
+            awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Stop transfer')");
+            awaitDownload(web);
+            JSONArray after=verifyCloudBytes(context,scope,root,cloud.getJSONArray("files"));assertEquals(before.length(),after.length());
+            for(int i=0;i<before.length();i++)assertEquals(SyncStaging.canonical(before.getJSONObject(i)),SyncStaging.canonical(after.getJSONObject(i)));
+            System.out.println("OFFLINE_DOWNLOAD_PASS: actual Download now, native Cancel/Allow, cloud nested bytes, independent hashes and unchanged repeated transfer.");
+        }finally {if(connection!=null)webApi(web,"/api/v1/things?id="+connection,"DELETE",null);}
+    }
+    private static void awaitDownload(android.webkit.WebView web) throws Exception {
+        awaitTrue(web,"document.body.innerText.includes('Last transfer finished.') || Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled)",300000);
+        assertEquals("Cloud download failed: "+evaluate(web,"Array.from(document.querySelectorAll('[role=status]')).map(e=>e.textContent).join(' | ').slice(0,1000)"), "true",evaluate(web,"document.body.innerText.includes('Last transfer finished.')"));
+    }
+    private static JSONArray verifyCloudBytes(Context context,DeviceScope scope,String root,JSONArray expected) throws Exception {
+        try(ManagedFileStore store=new ManagedFileStore(context,()->{})) {
+            JSONArray entries=store.scan(scope,root);assertEquals(expected.length()+1,entries.length());
+            for(int i=0;i<expected.length();i++) {
+                JSONObject file=expected.getJSONObject(i),entry=null;
+                for(int j=0;j<entries.length();j++)if(entries.getJSONObject(j).getString("path").equals(file.getString("path")))entry=entries.getJSONObject(j);
+                assertNotNull(entry);assertEquals(file.getLong("size"),entry.getLong("size"));
+                try(InputStream input=context.getContentResolver().openInputStream(OfflineDocumentsProvider.rootUri(context,root+":"+entry.getString("id")))) {
+                    java.security.MessageDigest hash=java.security.MessageDigest.getInstance("SHA-256");byte[] buffer=new byte[65536];long size=0;int n;
+                    while((n=input.read(buffer))!=-1){hash.update(buffer,0,n);size+=n;}assertEquals(file.getLong("size"),size);assertEquals(file.getString("sha256"),FolderReader.hex(hash.digest()));
+                }
+            }
+            return entries;
+        }
+    }
     private static void verifySelectedFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
-        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.2.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
+        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.3.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
         assertNotNull(folderRequest(web,scope,new JSONObject().put("action","list")).getJSONArray("roots"));
         JSONObject conditions=folderRequest(web,scope,new JSONObject().put("action","conditions")).getJSONObject("conditions");
         assertTrue(java.util.Arrays.asList("wifi","cellular","ethernet","offline","unknown").contains(conditions.getString("network")));
         assertTrue(conditions.isNull("charging") || conditions.get("charging") instanceof Boolean);
-        awaitTrue(web,"window.thingtimeNativeBridge?.fileStagingVersion==='1.0.0' && window.thingtimeNativeBridge.filePublicationVersion===undefined");
+        awaitTrue(web,"window.thingtimeNativeBridge?.fileStagingVersion==='1.0.0' && window.thingtimeNativeBridge.filePublicationVersion==='1.1.0'");
         // A full 64 KiB base64 envelope must reach the real handler, then fail
         // on its missing native grant. This is not successful picker acceptance.
         JSONObject denied=folderReply(web,scope,new JSONObject().put("action","stage-append")
@@ -167,8 +219,8 @@ public class DeviceLiveTest {
         store.add(scope,uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,"ThingtimeSyncQA");
         assertFalse(store.isWriteApproved(scope,id,approval));
         assertFalse(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isWritePermission()));
-        assertEquals("true",evaluate(web,"window.thingtimeNativeBridge.fileStagingVersion==='1.0.0' && window.thingtimeNativeBridge.filePublicationVersion===undefined"));
-        System.out.println("WRITE_APPROVAL_QA_PASS: native cancellation, real OS write grant, encrypted reload, exact retry, configuration change, reselection invalidation; publication remains disabled.");
+        assertEquals("true",evaluate(web,"window.thingtimeNativeBridge.fileStagingVersion==='1.0.0' && window.thingtimeNativeBridge.filePublicationVersion==='1.1.0'"));
+        System.out.println("WRITE_APPROVAL_QA_PASS: native cancellation, real OS write grant, encrypted reload, exact retry, configuration change, reselection invalidation; generic provider publication remains disabled.");
     }
     private static void inspectSelectedDirectoryDescriptor(Context context,android.net.Uri tree) throws Exception {
         JSONObject result=new JSONObject().put("directoryDescriptor",false).put("relativeRead",false);

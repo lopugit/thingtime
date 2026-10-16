@@ -151,7 +151,8 @@ another thread's lock descriptor. Android 8.0 uses second-resolution stamps,
 while all completed stages still require full content verification.
 
 This does not write into the selected folder, request a write grant, or enable
-Download now. Android native consent/publication, retained conflicts, background
+Download now into generic SAF folders. Offline-root downloads are described below;
+retained-conflict controls, background
 transfers and staging retention cleanup remain required work. The receiver uses
 the existing editable connection and transfer shapes; it adds no service or
 secret configuration.
@@ -179,9 +180,10 @@ acceptance. The ordinary suite skips this opt-in process test.
 ## Native write approval acceptance
 
 Initial folder selection still persists only read access. The native
-`write-approve` handler now implements the shared mobile approval contract, but
-`filePublicationVersion` remains absent and the shared Download now control
-remains disabled. Approval does not create, modify or delete provider files.
+`write-approve` handler implements the shared mobile approval contract. Generic
+SAF roots do not advertise per-root publication support, so their Download now
+control remains disabled. Approval alone does not modify provider files.
+Thingtime offline roots use the separate native flow below.
 
 Each approval requires the native **Allow downloads** dialog followed by Android
 Files re-selection of the exact tree with write permission. The bridge verifies
@@ -228,9 +230,8 @@ a supported adapter with explicit destination preconditions and durable recovery
 The app contains `ManagedFileStore`, the native backend for Thingtime-owned
 offline folders under `noBackupFilesDir/ManagedFiles-v1`. Native creation and
 read-only Android Files exposure are described below. Generic selected SAF
-trees are never written by this backend. Per-root publication capability and
-current native write approval still need integration before user-facing
-downloads can run. No broad storage permission is requested.
+trees are never written by this backend. Per-root capability and current native
+approval now gate the foreground download adapter described below. No broad storage permission is requested.
 
 Completed stages are copied through read-only descriptors, independently
 verified and fsynced. Synchronous SQLite transactions commit conditional file
@@ -313,3 +314,59 @@ This is Files access acceptance, not cloud Download now or OS editor support.
 Run the process-recovery script above after catalog changes. Physical devices,
 API 26, reboot/power loss, large files, background execution and writable Files
 operations remain separate acceptance work.
+
+
+## Foreground cloud downloads to offline folders
+
+Builds advertising `filePublicationVersion` 1.1.0 require per-folder
+`publicationVersion` 1.0.0. Only explicitly created Thingtime offline roots
+advertise this capability; generic SAF selections remain read/upload sources.
+Choose an offline root, create an ordinary Download connection with deletion
+propagation off, then use **Download now**. Native **Allow downloads** approval
+is bound to the account, origin, device, selected grant generation and exact
+connection revision/settings. Changing settings or reselecting the root requires
+renewed approval. Removing access stops future writes and keeps downloaded files.
+The approval does not grant writable Files descriptors to other apps.
+
+The adapter rechecks the current persisted OS read grant, root ownership and
+approval before publication, uses the existing private stage and transactional
+catalog, and publishes the shared receipts. Files listings receive a change
+notification after publication. Transfers require the app to stay open; native
+background scheduling, general-provider writes and restore/retention UI remain
+pending. No additional secret, service or broad storage permission is needed.
+
+For installed acceptance, use a disposable loopback account with private-upload
+approval and the existing local attachment storage setup. Keep the account
+fixture and state file outside the repository with mode 0600. From `remix/`:
+
+```sh
+node --import tsx scripts/mobile-sync-installed-fixture.mts /absolute/path/private-fixture.json /absolute/path/download-state.json prepare
+```
+
+From the root, with JDK 17 and Android SDK 35 configured:
+
+```sh
+THINGTIME_OFFLINE_DOWNLOAD_STATE=/absolute/path/download-state.json android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json
+```
+
+Cancel one creation, then create/select the default **Thingtime offline** root.
+Cancel the first native download approval, then allow the retry when prompted.
+The test uses the real connection controls and cloud APIs, checks independent
+SHA-256 hashes of the 17-byte text and nested 8 MiB + 17-byte file, and repeats the
+transfer without changing native entries. At `OFFLINE_FILES_QA_READY`, inspect
+**Thingtime offline/nested/sample.bin** in Files, return to Thingtime, and write
+the confirmation marker using the command above. The test removes its connection,
+grant and synthetic local fixtures. Then from `remix/` clean up its cloud fixtures:
+
+```sh
+node --import tsx scripts/mobile-sync-installed-fixture.mts /absolute/path/private-fixture.json /absolute/path/download-state.json cleanup
+```
+
+Cleanup retains accounted file versions in private Trash. Never use personal
+folders or enable production admin access for this test.
+
+This installed cloud/Files sequence passed on Android 15 / API 35 on 2026-10-17:
+46 executed native checks plus two skipped opt-in process cases (`OK (48 tests)`),
+26 JVM checks, build and lint. Initial and repeated downloads retained matching
+bytes and identical native entries. This does not establish physical/API 26,
+background, reboot, throughput or real cloud replacement acceptance.

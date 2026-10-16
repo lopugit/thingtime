@@ -6,7 +6,7 @@ import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge }
 import { planFileSync, validSyncEntry, type SyncEntry } from './reconcile';
 import type { FingerprintSource } from './contentFingerprint';
 
-export type MobileFolder = { id: string; name: string };
+export type MobileFolder = { id: string; name: string; publicationVersion?: string };
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string };
 export type FolderRequest =
@@ -45,11 +45,24 @@ export function parseMobileFolderResult(
 		payload.roots.length > 32 ||
 		new Set(payload.roots.map((r: any) => r?.id)).size !== payload.roots.length ||
 		payload.roots.some(
-			(r: any) => typeof r?.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(r.id) || typeof r.name !== 'string' || !r.name || r.name.length > 1024
+			(r: any) =>
+				typeof r?.id !== 'string' ||
+				!/^[a-f0-9-]{36}$/i.test(r.id) ||
+				typeof r.name !== 'string' ||
+				!r.name ||
+				r.name.length > 1024 ||
+				(r.publicationVersion !== undefined &&
+					(typeof r.publicationVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(r.publicationVersion) || r.publicationVersion.length > 32))
 		)
 	)
 		throw Error('Invalid native folder response.');
-	const result: FolderResult = { roots: payload.roots.map((r: any) => ({ id: r.id, name: r.name })) };
+	const result: FolderResult = {
+		roots: payload.roots.map((r: any) => ({
+			id: r.id,
+			name: r.name,
+			...(r.publicationVersion !== undefined ? { publicationVersion: r.publicationVersion } : {})
+		}))
+	};
 	if (request.action === 'write-approve') {
 		const approved = payload.writeApproval;
 		if (
@@ -150,6 +163,13 @@ export const supportsMobileStaging = (bridge: ThingtimeNativeBridge | undefined 
 	supportsMobileFolders(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileStagingVersion ?? '');
 export const supportsMobilePublication = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
 	supportsMobileStaging(bridge) && /^1\.\d+\.\d+$/.test(bridge?.filePublicationVersion ?? '');
+/** Publication 1.1 adds explicit per-folder capability. Earlier iOS 1.0
+ * adapters support their selected roots; Android never falls back to that rule. */
+export function supportsMobileFolderPublication(folder: MobileFolder | undefined, bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) {
+	if (!folder || !supportsMobilePublication(bridge)) return false;
+	if (Number(bridge!.filePublicationVersion!.split('.')[1]) >= 1) return /^1\.\d+\.\d+$/.test(folder.publicationVersion ?? '');
+	return bridge!.platform === 'ios';
+}
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));

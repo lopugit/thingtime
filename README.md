@@ -4860,8 +4860,8 @@ device acceptance. See [the full ledger](docs/mobile-file-sync.md).
 Android now exposes the same private `fileStagingVersion` 1.0.0 contract. Native
 chunks and immutable progress records live in app-private no-backup storage;
 completed stages require full content verification. Initial folder grants remain
-read-only. Native write approval is separately tested, but Android does not yet advertise publication or enable downloads
-into selected folders. No new secret, service or environment variable is needed.
+read-only. Publication 1.1 enables downloads only into explicitly created
+Thingtime offline folders after native approval. Generic SAF roots cannot publish. No new secret, service or environment variable is needed.
 
 With JDK 17, Android SDK 35, `adb`, Node and installed `remix` dependencies, run
 `ANDROID_SERIAL=<test-emulator-id> THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-staging-process.sh`
@@ -4887,7 +4887,7 @@ and the private local-account fixture described in the [Android runbook](android
 Run `THINGTIME_FOLDER_APPROVAL_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`.
 Follow the native Cancel / Continue to Files / same-folder Allow / changed-config
 Cancel sequence. No production credentials, broad storage permission or extra
-service is needed. Safe Android publication and background sync remain open.
+service is needed. Generic-provider publication and background sync remain open.
 
 ### Android offline-folder publication backend checks
 
@@ -4895,7 +4895,7 @@ The Android app now includes a transactional backend for Thingtime-owned offline
 folders. It uses verified immutable native blobs plus an atomic entry/receipt
 transaction, and retains displaced versions. Native **Choose folder → New offline
 folder** creates an explicitly consented root in Android Files. Files access is
-read-only; Download now integration remains pending. Existing selected SAF
+read-only; foreground Download now uses scoped native consent. Existing selected SAF
 folders are not converted to another storage model or written by this backend.
 
 On a disposable emulator, run
@@ -4924,3 +4924,21 @@ Follow the [Android Files acceptance steps](android/README.md#offline-folders-in
 including visual inspection before confirming the test. This verifies native
 creation, selection, listing and reads of a synthetic published file; it does
 not establish cloud download, external editing or background synchronization.
+
+
+### Android foreground cloud downloads
+
+Android bridge publication 1.1.0 negotiates download support for each selected
+folder. Explicitly created Thingtime offline folders support **Download now**
+with native consent tied to the current account, device, folder grant and exact
+connection settings. Generic SAF folders remain read/upload sources. Keep the
+app open and deletion propagation off. Downloaded files are readable through
+Android Files; removing Thingtime access preserves them. Background scheduling,
+writable Files editing and restore/retention controls remain pending.
+
+Use the existing local attachment backend and a disposable upload-approved
+account for the [installed download runbook](android/README.md#foreground-cloud-downloads-to-offline-folders).
+No new secret, permission or external dashboard setting is needed. Private test
+credentials/state stay outside Git with mode 0600. The media cache bypasses
+version-pinned, fingerprint and actor-scoped sync requests so their API headers
+and authorization checks reach the transfer runner unchanged.

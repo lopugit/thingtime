@@ -330,3 +330,13 @@ and the opt-in `THINGTIME_OFFLINE_FILES_TEST=1` installed-app flow cover root
 visibility, ancestry, read-only handles, migration and real picker/byte reads.
 See [mobile sync](../mobile-file-sync.md) for pending download integration and
 the broader cross-device requirements.
+
+
+Android `ManagedFolderAccess` connects the shared foreground download target to
+Thingtime offline roots. Publication bridge 1.1 requires each selected root's
+capability, current OS read grant and native approval bound to the exact saved
+connection. Generic SAF roots remain upload/read-only. The native catalog serves
+stable scan/read versions and shared publication receipts; provider notifications
+refresh Android Files. `media-cache-core.mjs` excludes pinned ranges, fingerprint
+JSON and expected-actor/data-plane requests from media interception. See the
+[download acceptance ledger](../mobile-file-sync.md).

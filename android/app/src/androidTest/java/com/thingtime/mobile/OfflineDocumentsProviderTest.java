@@ -29,6 +29,12 @@ public class OfflineDocumentsProviderTest {
             info.readPermission="android.permission.MANAGE_DOCUMENTS";info.writePermission=info.readPermission;
             super.attachInfo(context,info);
         }
+        @Override protected void observe(android.database.MatrixCursor cursor,String root) {
+            // ProviderTestRule has no system notification service; use the real
+            // test-app resolver so registration follows Android's normal path.
+            android.content.Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+            cursor.setNotificationUri(context.getContentResolver(),OfflineDocumentsProvider.rootUri(context,root));
+        }
         @Override protected ManagedFileStore store(PairingEngine.Check check) throws Exception {
             return new ManagedFileStore(fixture.managed,check,()->{},()->{});
         }

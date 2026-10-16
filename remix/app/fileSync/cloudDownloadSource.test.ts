@@ -62,7 +62,7 @@ test('download source reads bounded pinned ranges, verifies content and refuses 
 	await assert.rejects(source.read(0, 1), /incomplete/);
 	short = false;
 	revoked = true;
-	await assert.rejects(source.read(0, 1), /range version/);
+	await assert.rejects(source.read(0, 1), /Cloud download request failed \(404\)/);
 	revoked = false;
 	current = { ...scope, ownerId: 'other' };
 	await assert.rejects(source.read(0, 1), /context changed/);

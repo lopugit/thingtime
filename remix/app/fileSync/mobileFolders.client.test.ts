@@ -5,7 +5,8 @@ import {
 	mobileFolderSource,
 	requestMobileFolders,
 	supportsMobileFolders,
-	supportsMobileSyncConditions
+	supportsMobileSyncConditions,
+	supportsMobileFolderPublication
 } from './mobileFolders.client';
 import { nativeBridgeMessageEvent } from '../utils/nativeBridge';
 const rootId = '00000000-0000-4000-8000-000000000001';
@@ -131,4 +132,22 @@ test('transfer conditions require the new native capability and reject missing o
 			});
 	for (const conditions of [undefined, {}, { network: 'wifi' }, { network: 'wifi', charging: 1 }, { network: 'unmetered', charging: true }])
 		assert.throws(() => parseMobileFolderResult(response({ conditions }), expected, { action: 'conditions' }), /conditions are unavailable/);
+});
+
+test('folder publication is scoped, version negotiated and projected without native paths', () => {
+	const android = {
+		platform: 'android',
+		isNativeWebView: true,
+		fileAccessVersion: '1.3.0',
+		fileStagingVersion: '1.0.0',
+		filePublicationVersion: '1.1.0'
+	} as any;
+	const parse = (extra: object) => parseMobileFolderResult(response({ roots: [{ ...root, ...extra }] }), expected, { action: 'list' })!.roots[0];
+	assert.deepEqual(parse({ publicationVersion: '1.0.0', uri: 'content://private', owner: 'private' }), { ...root, publicationVersion: '1.0.0' });
+	assert.equal(supportsMobileFolderPublication(parse({ publicationVersion: '1.0.0' }), android), true);
+	for (const folder of [undefined, root, { ...root, publicationVersion: '2.0.0' }])
+		assert.equal(supportsMobileFolderPublication(folder, android), false);
+	for (const version of [null, true, '', '1', '1.0.0-private']) assert.throws(() => parse({ publicationVersion: version }));
+	assert.equal(supportsMobileFolderPublication(root, { ...android, platform: 'ios', filePublicationVersion: '1.0.0' }), true);
+	assert.equal(supportsMobileFolderPublication(root, { ...android, filePublicationVersion: '1.0.0' }), false);
 });

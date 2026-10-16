@@ -38,10 +38,10 @@ final class FolderBridge {
     private Request pending; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
     private CancellationSignal cancellation=new CancellationSignal();
     private static final class Request {
-        FolderStore.Grant approvalGrant; WriteApproval approval; boolean chooseExisting; String offlineName;
+        FolderStore.Grant approvalGrant; WriteApproval approval; boolean chooseExisting,offlineConsent; String offlineName;
         final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
-            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("write-approve") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-finish"))?300000:30000);
+            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("write-approve") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-finish") || action.equals("publish") || action.equals("publication-lookup"))?300000:30000);
             base=new JSONObject().put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         }
     }
@@ -72,7 +72,7 @@ final class FolderBridge {
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
         DeviceScope scope=new DeviceScope(payload.getString("ownerId"),origin,BuildConfig.DEBUG);
         if(action.equals("suspend")) { if(pending!=null && pending.id.equals(id)) suspend();return; }
-        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions","stage-begin","stage-append","stage-finish","write-approve").contains(action)) return;
+        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions","stage-begin","stage-append","stage-finish","write-approve","publication-lookup","publish").contains(action)) return;
         if(pending!=null) { reply(new Request(payload,scope,reply,generation.get()),new JSONObject(),"Another folder request is running.");return; }
         Request request=new Request(payload,scope,reply,generation.incrementAndGet());pending=request;execute(request,null,false);
     }
@@ -92,16 +92,16 @@ final class FolderBridge {
         PairingEngine.Check check=()-> { if(generation.get()!=request.generation || !active.get() || android.os.SystemClock.elapsedRealtime()>request.deadline) throw new java.util.concurrent.CancellationException();signal.throwIfCanceled(); };
         worker.execute(()-> {
             try {
-                check.run();FolderStore store=new FolderStore(activity);
+                check.run();FolderStore store=new FolderStore(activity);ManagedFolderAccess offline=new ManagedFolderAccess(activity,store,check);
                 PairingEngine auth=new PairingEngine(new KeystoreDeviceStore(activity),new DeviceHttpTransport(url->CookieManager.getInstance().getCookie(url),check),check);
                 auth.identity(request.scope);check.run();
                 if(request.action.equals("choose") && !pickerFinished) {
                     if(!request.chooseExisting && request.offlineName==null) {choose(request,check);return;}
                     Uri initial=null;
                     if(request.offlineName!=null) {
-                        try(ManagedFileStore offline=new ManagedFileStore(activity,check)) {
-                            String root=offline.createRoot(request.scope,request.offlineName);
-                            offline.exposeInFiles(request.scope,root);initial=OfflineDocumentsProvider.rootUri(activity,root);
+                        try(ManagedFileStore catalog=new ManagedFileStore(activity,check)) {
+                            String root=catalog.createRoot(request.scope,request.offlineName);
+                            catalog.exposeInFiles(request.scope,root);initial=OfflineDocumentsProvider.rootUri(activity,root);
                         }
                         request.offlineName=null;request.chooseExisting=true;OfflineDocumentsProvider.changed(activity);
                     }
@@ -127,8 +127,8 @@ final class FolderBridge {
                     if(selected!=null && selected.getData()!=null) {
                         Uri tree=FolderStore.tree(selected.getData().toString());
                         if(OfflineDocumentsProvider.authority(activity).equals(tree.getAuthority())) {
-                            try(ManagedFileStore offline=new ManagedFileStore(activity,check)) {
-                                offline.requireFilesRoot(request.scope,android.provider.DocumentsContract.getTreeDocumentId(tree));
+                            try(ManagedFileStore catalog=new ManagedFileStore(activity,check)) {
+                                catalog.requireFilesRoot(request.scope,android.provider.DocumentsContract.getTreeDocumentId(tree));
                             }
                         }
                         FolderReader.Doc root=new SafFolderProvider(activity.getContentResolver(),tree,signal).root();
@@ -140,7 +140,15 @@ final class FolderBridge {
                     if(request.action.equals("remove")) { store.remove(request.scope,rootId);proofs.clear(); }
                     else if(request.action.equals("write-approve")) {
                         WriteApproval approval=new WriteApproval(request.payload.getJSONObject("approval"),request.scope);
-                        if(pickerFinished) {
+                        FolderStore.Grant grant=store.snapshot(request.scope,rootId);
+                        if(offline.owns(grant.uri)) {
+                            if(request.offlineConsent) {
+                                if(request.approvalGrant==null || request.approval==null || !request.approval.matches(approval))throw new FolderReader.Failure("Folder write approval changed.");
+                                offline.approve(request.scope,request.approvalGrant,approval);
+                            } else if(!offline.approved(request.scope,grant,approval)) {
+                                request.approvalGrant=grant;request.approval=approval;approveOffline(request,check);return;
+                            }
+                        } else if(pickerFinished) {
                             if(selected==null || selected.getData()==null) throw new FolderReader.Failure("Download approval cancelled. No new folder write permission was granted.");
                             if(request.approvalGrant==null || request.approval==null || !request.approval.matches(approval)) throw new FolderReader.Failure("Folder write approval changed.");
                             Uri tree=FolderStore.tree(selected.getData().toString());
@@ -154,10 +162,19 @@ final class FolderBridge {
                         }
                         result.put("rootId",rootId).put("writeApproval",approval.json());
                     }
+                    else if(request.action.equals("publish") || request.action.equals("publication-lookup")) {
+                        FolderStore.Grant grant=store.snapshot(request.scope,rootId);JSONObject transfer=request.payload.getJSONObject("transfer");
+                        JSONObject publication=request.action.equals("publish")
+                            ?offline.publish(request.scope,grant,transfer,request.payload.getJSONObject("stage"),new WriteApproval(request.payload.getJSONObject("approval"),request.scope),new SyncStaging(activity,check))
+                            :offline.lookup(request.scope,grant,transfer);
+                        result.put("rootId",rootId).put("publication",publication);
+                        if(request.action.equals("publish"))OfflineDocumentsProvider.changed(activity,android.provider.DocumentsContract.getTreeDocumentId(grant.uri));
+                    }
                     else if(request.action.startsWith("stage-")) {
                         // Resolve this account's native grant on every chunk. A
                         // remembered root ID or existing journal is not authority.
-                        FolderReader.Doc root=new SafFolderProvider(activity.getContentResolver(),store.grant(request.scope,rootId),signal).root();
+                        FolderStore.Grant selectedGrant=store.snapshot(request.scope,rootId);store.requireRead(request.scope,selectedGrant);
+                        FolderReader.Doc root=new SafFolderProvider(activity.getContentResolver(),selectedGrant.uri,signal).root();
                         if(!root.directory)throw new FolderReader.Failure("Folder access is unavailable. Choose it again.");
                         SyncStaging staging=new SyncStaging(activity,check);JSONObject transfer=request.payload.getJSONObject("transfer"),progress;
                         if(request.action.equals("stage-begin"))progress=staging.begin(transfer,request.scope,rootId);
@@ -172,17 +189,18 @@ final class FolderBridge {
                         result.put("rootId",rootId).put("staging",progress);
                     }
                     else {
-                        FolderReader reader=new FolderReader(new SafFolderProvider(activity.getContentResolver(),store.grant(request.scope,rootId),signal),check,proofs,request.scope.origin+"\0"+request.scope.owner+"\0"+rootId);
+                        FolderStore.Grant grant=store.snapshot(request.scope,rootId);store.requireRead(request.scope,grant);boolean managed=offline.owns(grant.uri);
+                        FolderReader reader=managed?null:new FolderReader(new SafFolderProvider(activity.getContentResolver(),grant.uri,signal),check,proofs,request.scope.origin+"\0"+request.scope.owner+"\0"+rootId);
                         result.put("rootId",rootId);
-                        if(request.action.equals("scan")) result.put("complete",true).put("entries",reader.scan());
+                        if(request.action.equals("scan")) result.put("complete",true).put("entries",managed?offline.scan(request.scope,grant):reader.scan());
                         else {
                             String path=request.payload.getString("path"),version=request.payload.getString("version");
                             long offset=integer(request.payload,"offset",9007199254740991L),length=integer(request.payload,"length",FolderReader.MAX_READ);
-                            result.put("path",path).put("chunk",reader.read(path,version,offset,(int)length,Boolean.TRUE.equals(request.payload.opt("verifiedChunks"))));
+                            result.put("path",path).put("chunk",managed?offline.read(request.scope,grant,path,version,offset,(int)length):reader.read(path,version,offset,(int)length,Boolean.TRUE.equals(request.payload.opt("verifiedChunks"))));
                         }
                     }
                 }
-                check.run();auth.identity(request.scope);check.run();result.put("roots",store.list(request.scope));finish(request,result,null);
+                check.run();auth.identity(request.scope);check.run();result.put("roots",offline.capabilities(request.scope));finish(request,result,null);
             } catch(java.util.concurrent.CancellationException | android.os.OperationCanceledException cancelled) { finish(request,new JSONObject(),"Folder access paused. Try again when the app is active."); }
             catch(Exception failure) { finish(request,new JSONObject(),failure instanceof FolderReader.Failure || failure instanceof PairingEngine.Failure?failure.getMessage():"Folder access is unavailable. Check Files permissions or choose it again."); }
         });
@@ -218,6 +236,18 @@ final class FolderBridge {
                 }catch(Exception error){name.setError("Enter a folder name without slashes.");}
             });
         }catch(Exception error){finish(request,new JSONObject(),"Folder access paused. Try again when the app is active.");}
+    }
+    private void approveOffline(Request request,PairingEngine.Check check) {
+        activity.runOnUiThread(()-> {
+            try {
+                check.run();android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity)
+                    .setTitle("Allow downloads to " + request.approvalGrant.name + "?")
+                    .setMessage("Approve this sync connection on " + request.scope.origin + " to add and replace files in this offline folder. Replaced versions are retained. Files you select in Android Files remain readable by other apps. Changing sync settings or choosing this folder again requires renewed approval.")
+                    .setNegativeButton("Cancel",(d,w)->finish(request,new JSONObject(),"Download approval cancelled. No new folder write permission was granted."))
+                    .setPositiveButton("Allow downloads",(d,w)->{approvalDialog=null;request.offlineConsent=true;execute(request,null,false);}).create();
+                dialog.setOnCancelListener(d->finish(request,new JSONObject(),"Download approval cancelled. No new folder write permission was granted."));approvalDialog=dialog;dialog.show();
+            }catch(Exception error){finish(request,new JSONObject(),"Folder access paused. Try again when the app is active.");}
+        });
     }
     private void approve(Request request,PairingEngine.Check check) {
         activity.runOnUiThread(()-> {

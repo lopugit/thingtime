@@ -23,6 +23,12 @@ public class OfflineDocumentsProvider extends DocumentsProvider {
     static void changed(android.content.Context context) {
         context.getContentResolver().notifyChange(DocumentsContract.buildRootsUri(authority(context)),null);
     }
+    static void changed(android.content.Context context,String root) {
+        context.getContentResolver().notifyChange(rootUri(context,root),null);
+    }
+    protected void observe(MatrixCursor cursor,String root) {
+        cursor.setNotificationUri(getContext().getContentResolver(),rootUri(getContext(),root));
+    }
     @Override public boolean onCreate() {return true;}
     protected ManagedFileStore store(PairingEngine.Check check) throws Exception {return new ManagedFileStore(getContext(),check);}
     private static FileNotFoundException unavailable() {return new FileNotFoundException("Offline folder is unavailable.");}
@@ -62,12 +68,12 @@ public class OfflineDocumentsProvider extends DocumentsProvider {
     }
     @Override public Cursor queryDocument(String id,String[] projection) throws FileNotFoundException {
         MatrixCursor result=cursor(projection,DOCUMENT_COLUMNS);
-        try(ManagedFileStore store=store(()->{})){document(result,store.document(id));return result;}
+        try(ManagedFileStore store=store(()->{})){ManagedFileStore.Document item=store.document(id);document(result,item);observe(result,item.root);return result;}
         catch(Exception failure){result.close();throw unavailable();}
     }
     @Override public Cursor queryChildDocuments(String parent,String[] projection,String sortOrder) throws FileNotFoundException {
         MatrixCursor result=cursor(projection,DOCUMENT_COLUMNS);
-        try(ManagedFileStore store=store(()->{})){for(ManagedFileStore.Document child:store.children(parent))document(result,child);return result;}
+        try(ManagedFileStore store=store(()->{})){for(ManagedFileStore.Document child:store.children(parent))document(result,child);observe(result,store.document(parent).root);return result;}
         catch(Exception failure){result.close();throw unavailable();}
     }
     @Override public DocumentsContract.Path findDocumentPath(String parent,String child) throws FileNotFoundException {

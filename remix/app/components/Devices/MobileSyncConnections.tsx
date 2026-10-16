@@ -10,7 +10,7 @@ import {
 	requestMobileFolders,
 	mobileFolderSource,
 	supportsMobileSyncConditions,
-	supportsMobilePublication
+	supportsMobileFolderPublication
 } from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
 import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
@@ -394,7 +394,9 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 				const downloading = saved.configuration.mode === 'download';
 				const supported =
 					['upload', 'backup'].includes(saved.configuration.mode) ||
-					(downloading && supportsMobilePublication() && !saved.configuration.propagateDeletes);
+					(downloading &&
+						supportsMobileFolderPublication(roots.find((root) => root.id === saved.configuration.localRootId)) &&
+						!saved.configuration.propagateDeletes);
 				const allowed =
 					supportsMobileSyncConditions() &&
 					scope.dataPlane === 'home' &&
@@ -412,7 +414,7 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 									? 'Paused'
 									: !supported
 									? downloading
-										? 'Downloads need an updated app and deletion propagation off'
+										? 'Downloads need a supported device folder and deletion propagation off'
 										: 'This direction is not available yet'
 									: !supportsMobileSyncConditions()
 									? 'Update the mobile app to transfer files'
