@@ -2965,3 +2965,37 @@ client for cold offline reload; test registration must use a disposable local AP
 Native live account/origin/data-plane transitions, broader legacy rich-draft/media
 reconciliation and the existing full-suite matrix remain open. No merge or manual
 deployment is performed by this checkpoint.
+
+
+## Native cross-tab draft isolation — 2026-10-17
+
+`drafts/workspaceSwitch.browser.test.ts` now exercises the normal account switcher
+in a second tab while native editor-tree and plain-comment recovery are mounted.
+It delays delivery of real IndexedDB results during both review and copy, switches
+to a second disposable account, then releases those results. Neither old modal
+nor recovered content enters the new account. Switching back restores the original
+current edits and leaves both recovery sources available.
+
+The same browser test holds a real successful private-comment response after the
+server has committed it. Local submission completes before that response arrives.
+After a native account switch, the second account cannot read the private parent
+and does not display the comment. Returning to the original account reconciles
+its exact local sync record to `synced` with no pending operation, and a fresh
+server list contains exactly one comment with the original author. Completed text
+does not reappear in the composer. No application identity, authentication or
+permission checks are stubbed; only delivery timing is controlled.
+
+Enable with `TT_LOCAL_DRAFT_SWITCH_URL` pointing to a loopback production-client
+server, `TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH`, and optional
+`TT_LOCAL_DRAFT_SWITCH_ARTIFACTS`. The fixture registers two disposable accounts,
+creates one private parent through the normal API, and cleans up that parent and
+its sessions. Local evidence: `tmp/workspace-switch-native-settled/verification.json`.
+The enabled browser fixture passes; root-data (39) and draft (46) checks pass with
+three default opt-in skips excluded. Focused lint is clean. TypeScript reports
+91 existing diagnostics, none in this test. Application assets are unchanged from
+the preceding validated client build; this checkpoint adds regression coverage.
+
+This proves live cross-tab account switching for these recovery and plain-comment
+paths. Origin/data-plane transitions, rich/media drafts, remote-only legacy
+recovery and the remaining full-suite matrix still require acceptance. CI and
+current-head deployment are not established by this local fixture.

@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Added native cross-tab account-switch regression
+  coverage for delayed draft recovery reads/copies and an uncertain private-comment
+  response, including original-queue acknowledgment and exactly-once server readback.
+  Local acceptance only; broader workspace gates remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Scope plain comment/reply drafts and offer reviewed
   earlier-device recovery without replacing current text or removing the source.
   Compact multiline fields preserve recovered line breaks and IME behavior.

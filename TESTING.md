@@ -11050,3 +11050,22 @@ Run `app/local-workspace/components.browser.test.ts` with
 - [ ] Complete native live account/origin/data-plane changes during comment
   review/submission, remote-only older drafts and rich/media recovery before
   declaring the wider draft acceptance matrix complete.
+
+
+### Cross-tab draft identity races (2026-10-17)
+
+- [ ] With two disposable accounts in one browser, hold a real legacy tree and
+  plain-comment read during review, then during copy. Switch accounts through
+  Settings in another tab, release the reads, and verify old modals/content never
+  enter the new workspace. Return to the original account and verify its current
+  text and original recovery sources remain intact.
+- [ ] Hold a successful private-comment response after the real server commit.
+  Require local completion before release, switch accounts, and verify the new
+  account cannot read the parent or display the comment. Return, wait for the
+  exact original `thing-sync` record to acknowledge with no pending operation,
+  then verify one server comment and an empty composer.
+- [ ] Run the enabled `drafts/workspaceSwitch.browser.test.ts` against a disposable
+  loopback API and production client. Close recovery dialogs before clicking Send
+  so modal focus restoration is not mistaken for submission completion.
+- [ ] Continue the separate origin/data-plane, rich/media and remote-only legacy
+  draft matrix; these cross-tab account checks do not establish those boundaries.

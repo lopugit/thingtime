@@ -103,3 +103,11 @@ only after its latest-request fence; a stale success/failure cannot change a
 newer pointer. `useWorkspaceUser` is content identity only. Legacy anonymous tree
 hydration does not silently claim data for an account. Test `test:root-data`,
 `test:local-workspace` and `test:autosave` for these boundaries.
+
+
+The opt-in `drafts/workspaceSwitch.browser.test.ts` uses the actual account switcher
+and identity BroadcastChannel across three clean browser tabs. Held device reads
+and a delayed successful private-comment response cannot enter the next account;
+the original account retains edits, recovery sources and exactly one acknowledged
+comment. This is local account-switch acceptance, not coverage of every origin,
+data-plane or editor transition. Setup: [local workspaces](../local-workspaces.md#native-cross-tab-draft-isolation--2026-10-17).

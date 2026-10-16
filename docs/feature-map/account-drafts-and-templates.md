@@ -165,3 +165,12 @@ PostCard comment/reply fields share this flow. Earlier keys are retained after
 posting. Rich/media recovery stays in its original editor. Run the plain-comment
 unit/browser fixtures, workspace/draft/feed suites and anonymous discussion
 regression. Setup and remaining gates: [local workspaces](../local-workspaces.md#plain-comment-draft-recovery--2026-10-17).
+
+
+`workspaceSwitch.browser.test.ts` adds native cross-tab account-switch acceptance
+for held legacy tree/plain-comment review and copy reads, plus a real successful
+comment response delivered after the original account retires. The fixture waits
+for the original queue acknowledgment before asserting one server comment.
+Use the loopback-only setup in [local workspaces](../local-workspaces.md#native-cross-tab-draft-isolation--2026-10-17).
+This closes those account-switch cases; origin/data-plane and rich/media cases
+remain open.
