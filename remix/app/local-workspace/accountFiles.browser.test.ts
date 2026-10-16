@@ -257,7 +257,7 @@ test(
 			offline = false; await context.setOffline(false);
 			await page.evaluate(() => window.dispatchEvent(new Event('thingtime:root-data-refresh')));
 			const fileRegion = page.getByRole('region', { name: 'Account file sync', exact: true });
-			await fileRegion.getByRole('status').filter({ hasText: 'File details need comparison.' }).waitFor();
+			await fileRegion.getByRole('status').filter({ hasText: 'File changes need review.' }).waitFor();
 			await fileRegion.getByText('Review file sync', { exact: true }).click();
 			await fileRegion.getByRole('button', { name: 'Compare file details', exact: true }).click();
 			await fileRegion.getByRole('button', { name: 'Keep device file details', exact: true }).waitFor();
@@ -371,18 +371,84 @@ test(
 			assert.equal((await deleteFile(null)).status(), 400);
 			assert.equal((await deleteFile(original.updatedAt)).status(), 409);
 			assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text);
-			const [deleteRace, editRace] = await Promise.all([
-				deleteFile(reconciled.updatedAt),
-				context.request.post(url('/api/v1/attachments/annotate'), { headers, data: { id: remoteId, title: 'Concurrent deletion fixture', expectedUpdatedAt: reconciled.updatedAt } })
-			]);
-			assert.equal([deleteRace, editRace].filter(response => response.status() === 200).length, 1, 'Edit and conditional deletion cannot both win');
-			if (editRace.status() === 200) {
-				assert.equal(deleteRace.status(), 409);
-				assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text);
-				assert.equal((await deleteFile((await readRemote()).updatedAt)).status(), 200);
-			} else assert.ok([404,409].includes(editRace.status()));
+			// Queue deletion offline against an account version edited elsewhere.
+			const changed = await context.request.post(url('/api/v1/attachments/annotate'), { headers, data: { id: remoteId, title: 'Changed before offline deletion', expectedUpdatedAt: (await readRemote()).updatedAt } });
+			assert.equal(changed.status(), 200);
+			const queueDeletion = () => page.evaluate(async id => {
+				const paths = (window as any).__fileFixtureModules as string[], [runtime, api] = await Promise.all(paths.map(path => import(path))), scope = runtime.currentAccountWorkspace();
+				const files = api.accountWorkspaceWorker(scope).files;
+				await files.db.transaction(scope, 'readwrite', files.lease, async (tx: any) => {
+					const remaining = 64 * 1024 * 1024 - (await tx.usage()).bytes;
+					if (remaining) await tx.putBytes('delete-quota-' + crypto.randomUUID(), new Uint8Array(remaining));
+				});
+				const facade = api.accountApi({ things: {}, attachments: {} }, { id: scope.ownerId }, scope.dataPlane);
+				await facade.attachments.deleteLocalFile({ id });
+				try { await files.things.get(id); throw Error('Deleted file remained visible'); } catch (error: any) { if (error.status !== 404) throw error; }
+				await files.db.transaction(scope, 'readonly', files.lease, async (tx: any) => { if (!await tx.getBytes(id)) throw Error('Recovery bytes missing before acknowledgement'); });
+			}, localId);
+			offline = true; await context.setOffline(true); await queueDeletion();
+			assert.deepEqual(writes.filter(row => row.offline && row.method), []);
+			offline = false; await context.setOffline(false);
+			await page.evaluate(() => window.dispatchEvent(new Event('thingtime:root-data-refresh')));
+			await fileRegion.getByText('Review file sync', { exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Review file deletion', exact: true }).click();
+			for (const width of [1440, 390, 320]) {
+				await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+				assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+				if (artifacts) await page.screenshot({ path: resolve(artifacts, `file-deletion-review-${width}.png`), fullPage: true });
+			}
+			const reviewed = await readRemote();
+			assert.equal((await context.request.post(url('/api/v1/attachments/annotate'), { headers, data: { id: remoteId, title: 'Changed after review', expectedUpdatedAt: reviewed.updatedAt } })).status(), 200);
+			await fileRegion.getByRole('button', { name: 'Delete reviewed account file', exact: true }).click();
+			await fileRegion.getByRole('alert').filter({ hasText: 'changed' }).waitFor();
+			assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text);
+			await fileRegion.getByRole('button', { name: 'Close review', exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Review file deletion', exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Keep device file', exact: true }).click();
+			await fileRegion.waitFor({ state: 'hidden' });
+			assert.equal(await page.evaluate(async id => {
+				const paths = (window as any).__fileFixtureModules as string[], [runtime, api] = await Promise.all(paths.map(path => import(path)));
+				return new TextDecoder().decode((await api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).files.things.readFile(id)).bytes);
+			}, localId), text);
+			offline = true; await context.setOffline(true); await queueDeletion();
+			let lostDeletion = 0, deletionRaced = false;
+			let reportDeleteRace!: (status: number) => void;
+			const deleteRaceFinished = new Promise<number>(resolve => { reportDeleteRace = resolve; });
+			const deletionBodies: unknown[] = [];
+			await context.route('**/api/v1/attachments/delete', async (route: any) => {
+				const input = route.request().postDataJSON();
+				if (input?.requestId !== requestId) return route.continue();
+				deletionBodies.push(input);
+				if (!lostDeletion) {
+					let response;
+					if (!deletionRaced) {
+						deletionRaced = true;
+						const [deleting, editing] = await Promise.all([route.fetch(), context.request.post(url('/api/v1/attachments/annotate'), { headers, data: { id: remoteId, title: 'Racing reviewed deletion', expectedUpdatedAt: input.expectedUpdatedAt } })]);
+						assert.equal([deleting, editing].filter(r => r.status() === 200).length, 1, 'Reviewed deletion and concurrent edit must have exactly one winner');
+						if (editing.status() === 200) { assert.equal(deleting.status(), 409); assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text); }
+						else assert.ok([404,409].includes(editing.status()));
+						response = deleting; reportDeleteRace(deleting.status());
+					} else response = await route.fetch();
+					if (response.status() === 200) { assert.equal((await response.json()).deleted, true); lostDeletion++; return route.abort('failed'); }
+					return route.fulfill({ response });
+				}
+				return route.continue();
+			});
+			offline = false; await context.setOffline(false);
+			await page.evaluate(() => window.dispatchEvent(new Event('thingtime:root-data-refresh')));
+			await fileRegion.getByText('Review file sync', { exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Review file deletion', exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Delete reviewed account file', exact: true }).click();
+			if (await deleteRaceFinished === 409) {
+				await fileRegion.getByRole('button', { name: 'Review file deletion', exact: true }).click();
+				await fileRegion.getByRole('button', { name: 'Delete reviewed account file', exact: true }).click();
+			}
+			await fileRegion.waitFor({ state: 'hidden', timeout: 75_000 });
+			assert.equal(deletionRaced, true); assert.equal(lostDeletion, 1); assert.ok(deletionBodies.length >= 2); assert.deepEqual(deletionBodies.at(-1), deletionBodies.at(-2));
 			assert.equal((await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}`))).status(), 404);
-			assert.equal((await deleteFile(reconciled.updatedAt)).status(), 200, 'Lost deletion receipt can be retried');
+			const lateStart = await context.request.post(url('/api/v1/attachments/uploads'), { headers, data: { requestId, filename: 'offline-file.txt', contentType: 'text/plain', sizeBytes: new TextEncoder().encode(text).length, purpose: 'file' } });
+			assert.equal(lateStart.status(), 409); assert.equal((await lateStart.json()).code, 'upload_cancelled');
+			assert.equal((await deleteFile(reconciled.updatedAt)).status(), 200, 'Legacy cleanup cannot remove the fence');
 			offline = true; await context.setOffline(true);
 			await page.evaluate(async () => {
 				const paths = (window as any).__fileFixtureModules as string[], [runtime, api] = await Promise.all(paths.map(path => import(path))), scope = runtime.currentAccountWorkspace();
@@ -416,6 +482,10 @@ test(
 							cancelRequestId,
 							cancelledRemoteId,
 							editDeleteSingleWinner: true,
+							durableOfflineDeletion: true,
+							fullQuotaDeletionAndRestore: true,
+							staleDeletionReviewRefused: true,
+							lostDeletionReceipt: true,
 							concurrentEditSingleWinner: true,
 							conditionalPlacement: true,
 							durableOfflineMetadata: true,

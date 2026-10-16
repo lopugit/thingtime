@@ -2,6 +2,22 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Completed file deletion: delete an uploaded standalone file while offline
+      and at the full 64 MiB device quota. It disappears from Things immediately;
+      recovery bytes remain private until an exact durable acknowledgement.
+      Change account details, reject a stale native review, restore the device
+      file at full quota, and delete it again without losing the worker wake.
+      Race the reviewed deletion with annotation: exactly one succeeds. Drop a
+      successful deletion reply; retries must reuse the frozen version/request,
+      eventually release bytes, and reject a late original upload start. Legacy
+      cleanup must retain the receipt. Test missing-file reads, malformed replies,
+      bound/unfinished refusal, metadata pause, storage reopen and native review
+      at 1440/390/320px. A delayed moderation verdict must not modify deleting or
+      cancelled files. Run workspace, attachment, moderation and capability
+      suites and the enabled file browser fixture. Built delete 1.3.0 must be
+      discoverable; anonymous and Watch request-id mutations remain refused.
+      Ordinary account picker/list/media integration is still outstanding.
+
 - [ ] Durable upload cancellation: cancel a never-started local file offline
       with no remote calls. Lose a real start reply, cancel from the native sync
       panel offline, and verify bytes remain until a durable cancellation reply.
@@ -26,9 +42,9 @@
       the original timestamp, preserving multipart deferral and quota billing.
       A skipped claim with a live row must not return completed success. Run
       attachment/capability suites and the enabled account file browser fixture;
-      verify built manifests and docs advertise delete 1.2.0 and anonymous calls
+      verify built manifests and docs advertise delete 1.3.0 and anonymous calls
       remain 401. Missing rows are not proof of durable upload cancellation;
-      late-start fencing and local deletion queue acceptance remain separate.
+      durable request-id mode below provides that fence.
 
 - [ ] Account file details: save annotations and a folder selection offline,
       reopen storage, reconnect, and wait for the file and folder dependencies.
@@ -40,7 +56,7 @@
       `accountFileMetadata.test.ts` and the real `accountFiles.browser.test.ts`.
       The browser fixture must import the app's exact Vite module URLs after HMR,
       never a second bare-import workspace singleton. Normal account picker,
-      listing/media and completed-file deletion still have separate completion gates.
+      listing/media still have separate completion gates.
 
 - [ ] Conditional file metadata: run attachment, Things, capability and local
       workspace suites, then enable `accountFiles.browser.test.ts`. Concurrent

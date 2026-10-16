@@ -360,3 +360,114 @@ test('full device quota still admits and completes never-started or queued cance
 		} finally { await f.db.close(); }
 	}
 });
+
+async function completedFileFixture() {
+	const f = fixture(), local = await f.service.things.saveFile(f.input);
+	await f.service.sync(f.transport);
+	let version = 1;
+	const remote: any = { id: f.remote.id, author: { id: scope.ownerId }, thingtime: ['attachment'], crystal: { ...local.crystal }, updatedAt: new Date(version).toISOString() };
+	const transport = { ...f.transport, get: async () => structuredClone(remote), annotate: async () => {}, move: async () => {}, remove: async (input: any) => {
+		f.calls.push({ kind: 'delete', value: input }); return { deleted: true as const, deferred: false };
+	} };
+	return { ...f, local, account: remote, deletionTransport: transport, bump: () => { remote.updatedAt = new Date(++version).toISOString(); } };
+}
+test('completed file deletion commits offline, preserves recovery bytes and freezes retries through lost acknowledgement', async () => {
+	const f = await completedFileFixture();
+	try {
+		await f.service.remove(f.local.id);
+		await assert.rejects(f.service.things.get(f.local.id), (error: any) => error.status === 404);
+		assert.equal(await f.service.remoteId(f.local.id), null);
+		assert.equal((await f.service.status())[0].phase, 'delete');
+		assert.equal(f.calls.filter(x => x.kind === 'delete').length, 0);
+		let lost = true;
+		const transport = { ...f.deletionTransport, remove: async (input: any) => { const result = await f.deletionTransport.remove(input); if (lost) { lost = false; throw new WorkspaceError('LOST', 'lost', 503); } return result; } };
+		await f.service.sync(transport);
+		await f.db.transaction(scope, 'readonly', lease, async tx => assert.ok(await tx.getBytes(f.local.id)));
+		const first = f.calls.find(x => x.kind === 'delete')!.value;
+		f.bump(); f.advance();
+		await f.service.sync({ ...transport, get: async () => { throw Error('Must retry the frozen deletion'); } });
+		assert.deepEqual(f.calls.filter(x => x.kind === 'delete').map(x => x.value), [first, first]);
+		assert.equal((await f.service.status()).length, 0);
+		await f.db.transaction(scope, 'readonly', lease, async tx => assert.equal(await tx.getBytes(f.local.id), undefined));
+		await assert.rejects(f.service.things.saveFile(f.input), /cancelled/);
+	} finally { await f.db.close(); }
+});
+
+test('changed account file requires review; stale review cannot delete and keeping restores the device snapshot', async () => {
+	const f = await completedFileFixture();
+	try {
+		await f.service.remove(f.local.id);
+		f.account.crystal.title = 'Other device edit'; f.bump();
+		await f.service.sync(f.deletionTransport);
+		assert.equal((await f.service.status())[0].state, 'conflict');
+		assert.equal(f.calls.filter(x => x.kind === 'delete').length, 0);
+		await assert.rejects(f.service.retry(f.local.id), /Review/);
+		const review = await f.service.inspectDeletion(f.deletionTransport, f.local.id);
+		const choice = { id: review.id, localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt, operationVersion: review.operationVersion, keep: 'delete' as const };
+		f.bump(); await assert.rejects(f.service.resolveDeletion(f.deletionTransport, choice), /changed/);
+		const next = await f.service.inspectDeletion(f.deletionTransport, f.local.id);
+		await f.service.resolveDeletion(f.deletionTransport, { ...choice, remoteUpdatedAt: next.remote.updatedAt, keep: 'file' });
+		assert.deepEqual((await f.service.things.readFile(f.local.id)).bytes, f.bytes);
+		assert.equal((await f.service.status())[0].state, 'synced');
+		await f.service.remove(f.local.id); await f.service.sync(f.deletionTransport);
+		const last = await f.service.inspectDeletion(f.deletionTransport, f.local.id);
+		await f.service.resolveDeletion(f.deletionTransport, { ...choice, remoteUpdatedAt: last.remote.updatedAt });
+		await f.service.sync(f.deletionTransport);
+		assert.equal((await f.service.status()).length, 0);
+		assert.equal(f.calls.filter(x => x.kind === 'delete').length, 1);
+	} finally { await f.db.close(); }
+});
+
+for (const response of [{ deferred: false }, { deleted: true }, null]) test(`file deletion requires a durable receipt: ${JSON.stringify(response)}`, async () => {
+	const f = await completedFileFixture();
+	try {
+		await f.service.remove(f.local.id);
+		await f.service.sync({ ...f.deletionTransport, remove: async () => response as any });
+		assert.equal((await f.service.status())[0].state, 'pending');
+		await f.db.transaction(scope, 'readonly', lease, async tx => assert.ok(await tx.getBytes(f.local.id)));
+	} finally { await f.db.close(); }
+});
+
+test('deletion and reviewed restore work at the exact device quota and survive reopening', async () => {
+	const f = await completedFileFixture();
+	try {
+		await f.db.transaction(scope, 'readwrite', lease, async tx => {
+			let remaining = WORKSPACE_LIMITS.bytes - (await tx.usage()).bytes, part = 0;
+			while (remaining > 0) { const size = Math.min(remaining, WORKSPACE_LIMITS.binaryBytes); await tx.putBytes(`delete-fill-${part++}`, new Uint8Array(size)); remaining -= size; }
+			assert.equal((await tx.usage()).bytes, WORKSPACE_LIMITS.bytes);
+		});
+		await f.service.remove(f.local.id);
+		f.account.crystal.title = 'Concurrent edit'; f.bump();
+		await f.service.sync(f.deletionTransport);
+		await f.db.close();
+		const reopened = new WorkspaceDatabase(f.factory, undefined, undefined, IDBKeyRange), files = new AccountFileSync(reopened, scope, lease);
+		try {
+			assert.equal((await files.status())[0].state, 'conflict');
+			const review = await files.inspectDeletion(f.deletionTransport, f.local.id);
+			await files.resolveDeletion(f.deletionTransport, { id: review.id, localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt, operationVersion: review.operationVersion, keep: 'file' });
+			assert.deepEqual((await files.things.readFile(f.local.id)).bytes, f.bytes);
+			await reopened.transaction(scope, 'readwrite', lease, async tx => {
+				const remaining = WORKSPACE_LIMITS.bytes - (await tx.usage()).bytes;
+				if (remaining) await tx.putBytes('refill-after-restore', new Uint8Array(remaining));
+			});
+			await files.remove(f.local.id); await files.sync(f.deletionTransport);
+			const next = await files.inspectDeletion(f.deletionTransport, f.local.id);
+			await files.resolveDeletion(f.deletionTransport, { id: next.id, localRevision: next.localRevision, remoteUpdatedAt: next.remote.updatedAt, operationVersion: next.operationVersion, keep: 'delete' });
+			await files.sync(f.deletionTransport);
+			assert.deepEqual(await files.status(), []);
+		} finally { await reopened.close(); }
+	} finally { await f.db.close(); }
+});
+
+test('a deletion read 404 still requires a durable account receipt and a racing account change needs review', async () => {
+	const f = await completedFileFixture();
+	try {
+		await f.service.remove(f.local.id);
+		let deletes = 0;
+		await f.service.sync({ ...f.deletionTransport, get: async () => { throw new WorkspaceError('MISSING', 'missing', 404); }, remove: async input => {
+			deletes++; assert.equal(input.expectedUpdatedAt, new Date(0).toISOString()); throw new WorkspaceError('STALE', 'changed', 409);
+		} });
+		assert.equal(deletes, 1); assert.equal((await f.service.status())[0].state, 'conflict');
+		await f.db.transaction(scope, 'readonly', lease, async tx => assert.ok(await tx.getBytes(f.local.id)));
+	} finally { await f.db.close(); }
+});

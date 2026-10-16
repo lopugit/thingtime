@@ -30,9 +30,10 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
 	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease), files = new AccountFileSync(db, scope, lease);
 	const controller = new AbortController();
-	let running = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
+	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
 	const wake = () => {
-		if (stopped || running || navigator.onLine === false || !canSyncAccountWorkspace(scope)) return;
+		if (stopped || navigator.onLine === false || !canSyncAccountWorkspace(scope)) return;
+		if (running) { wakeRequested = true; return; }
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => { timer = null; void drain(); }, 0);
 	};
@@ -64,7 +65,12 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 				timer = setTimeout(wake, Math.max(1000, Math.min(60_000, soonest)));
 			}
 		} catch { /* Identity changes retire this worker; durable writes stay scoped. */ }
-		finally { running = false; }
+		finally {
+			running = false;
+			// A local write or reconnect can arrive after the final status read.
+			// Preserve that wake instead of leaving its new work indefinitely idle.
+			if (wakeRequested) { wakeRequested = false; wake(); }
+		}
 	};
 	const unsubscribe = lease.onInvalidate(() => stop());
 	const unbind = subscribeWorkspaceBinding(wake);
@@ -275,6 +281,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				const row = await worker().files.things.annotateFile(input); changed();
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
 			},
+			deleteLocalFile: async ({ id }: { id: string }) => { await worker().files.remove(id); changed(); return { ok: true, savedLocally: true }; },
 			cancelLocalFileUpload: async ({ id }: { id: string }) => { await worker().files.cancel(id); changed(); return { ok: true, savedLocally: true }; },
 			moveLocalFile: async ({ id, folderId }: { id: string; folderId: string | null }) => {
 				const current = worker();

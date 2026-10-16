@@ -1,11 +1,11 @@
-import { AccountFileMetadata, type FileMetadataTransport } from './accountFileMetadata';
+import { AccountFileMetadata, fileMetadata, type FileMetadataTransport } from './accountFileMetadata';
 import { normalizePublicAttachment, multipartPartRange, attachmentCompleteRetryPhase } from '../components/Attachments/attachmentUiCore';
 import type { PublicAttachment, SignedUploadPart } from '../components/Attachments/attachmentTypes';
 import { transferChecksum } from '../utils/thingTransfer/archive';
 import { LocalThings } from './things';
 import type { LocalAttachment } from './attachments';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
-import type { SyncState } from './accountSync';
+import { accountSyncDeadline, type SyncState } from './accountSync';
 
 const COLLECTION = 'account-files';
 const CLAIM_MS = 60_000;
@@ -25,6 +25,9 @@ type FileRecord = {
 	sha256: string;
 	controlReserve?: string;
 	started?: boolean;
+	deleteRequested?: true;
+	deleteVersion?: string;
+	deletingLocal?: LocalAttachment;
 	cancelRequested?: true;
 	cancelled?: true;
 	state: SyncState;
@@ -38,6 +41,7 @@ type FileRecord = {
 	claim?: { token: string; expiresAt: number };
 };
 export type AccountFileTransport = {
+	remove?(input: { id: string; requestId: string; expectedUpdatedAt: string }, signal: AbortSignal): Promise<{ deleted: true; deferred: boolean; retryAt?: string }>;
 	cancel?(requestId: string, signal: AbortSignal): Promise<{ cancelled: true; deferred: boolean; retryAt?: string }>;
 	start(request: Readonly<AccountFileRequest>, signal: AbortSignal): Promise<AccountFilePlan>;
 	parts(id: string, parts: { partNumber: number; checksumSha256: string }[], signal: AbortSignal): Promise<SignedUploadPart[]>;
@@ -83,14 +87,14 @@ export class AccountFileSync {
 		// Reserve bounded control space at admission, so a full workspace can
 		// still record cancellation, claim it, retry and acknowledge it. Account
 		// response/part data remain separately charged at their actual size.
-		const { state, phase, started, cancelRequested, cancelled, attempts, retryAt, error, claim } = row;
-		const controls = JSON.stringify({ state, phase, started, cancelRequested, cancelled, attempts, retryAt, error, claim });
+		const { state, phase, started, deleteRequested, deleteVersion, cancelRequested, cancelled, attempts, retryAt, error, claim } = row;
+		const controls = JSON.stringify({ state, phase, started, deleteRequested, deleteVersion, cancelRequested, cancelled, attempts, retryAt, error, claim, ...(row.deletingLocal ? { deletingLocal: null } : {}) });
 		const controlReserve = ' '.repeat(Math.max(0, 1024 - new TextEncoder().encode(controls).length));
 		return tx.put(COLLECTION, row.id, { ...row, controlReserve });
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) {
 		const existing = await tx.get<FileRecord>(COLLECTION, row.id);
-		if (existing?.cancelRequested || existing?.cancelled) throw new WorkspaceError('UPLOAD_CANCELLED', 'This upload request was cancelled. Choose the file again with a new request.', 409);
+		if (existing?.deleteRequested || existing?.cancelRequested || existing?.cancelled) throw new WorkspaceError('UPLOAD_CANCELLED', 'This upload request was cancelled. Choose the file again with a new request.', 409);
 		await this.metadata.enqueue(tx, row, previous);
 		if (existing) return;
 		const purpose = row.localAttachment.purpose,
@@ -123,10 +127,10 @@ export class AccountFileSync {
 				id: value.id,
 				name: value.request.filename,
 				state: value.state === 'synced' ? metadata.get(value.id)?.state || value.state : value.state,
-				phase: value.cancelRequested ? 'cancel' as const : value.phase,
+				phase: value.deleteRequested ? 'delete' as const : value.cancelRequested ? 'cancel' as const : value.phase,
 				error: value.state === 'synced' ? metadata.get(value.id)?.error : value.error,
 				retryAt: value.state === 'synced' ? metadata.get(value.id)?.retryAt || 0 : value.retryAt,
-				canCancel: value.request.purpose === 'file' && !value.remote && !value.cancelRequested,
+				canCancel: value.request.purpose === 'file' && !value.remote && !value.cancelRequested && !value.deleteRequested,
 				remoteId: value.remote?.id
 			}))
 		);
@@ -135,7 +139,7 @@ export class AccountFileSync {
 		await tx.deleteBytes(row.id);
 		await tx.delete('things', row.id);
 		await this.metadata.discardUnuploaded(tx, row.id);
-		await this.putRecord(tx, { ...row, cancelled: true, cancelRequested: true, state: 'synced', claim: undefined, error: undefined, retryAt: 0 });
+		await this.putRecord(tx, { ...row, deletingLocal: undefined, deleteVersion: undefined, cancelled: true, cancelRequested: true, state: 'synced', claim: undefined, error: undefined, retryAt: 0 });
 	}
 	/** Records intent offline. Ambiguous uploads keep device bytes until the
 	 * account acknowledges a durable fence; finalized files require review. */
@@ -151,14 +155,58 @@ export class AccountFileSync {
 			await this.putRecord(tx, { ...row, cancelRequested: true, state: 'pending', claim: undefined, error: undefined, retryAt: 0 });
 		});
 	}
+	/** Commit deletion on the device immediately. Bytes and the removed snapshot
+	 * remain private recovery data until the server's replay fence is confirmed. */
+	async remove(id: string) {
+		await this.tx('readwrite', async tx => {
+			const row = await tx.get<FileRecord>(COLLECTION, id);
+			if (!row) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching file.', 404);
+			if (row.cancelled || row.deleteRequested) return;
+			const local = await tx.get<LocalAttachment>('things', id);
+			if (!local || row.request.purpose !== 'file' || local.targetId || local.localAttachment.draftId)
+				throw new WorkspaceError('BOUND_UPLOAD', 'Remove this file through its owning editor.', 409);
+			if (!row.remote) throw new WorkspaceError('UPLOAD_UNFINISHED', 'Cancel the unfinished upload instead.', 409);
+			await tx.delete('things', id);
+			await this.putRecord(tx, { ...row, deleteRequested: true, deletingLocal: local, state: 'pending', claim: undefined, error: undefined, retryAt: 0 });
+		});
+	}
+	async inspectDeletion(transport: FileMetadataTransport, id: string, signal = new AbortController().signal) {
+		const row = await this.tx('readonly', tx => tx.get<FileRecord>(COLLECTION, id));
+		if (!row?.deleteRequested || row.state !== 'conflict' || !row.remote || !row.deletingLocal)
+			throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'Review this deletion again.', 409);
+		const remote = this.metadata.checked(await accountSyncDeadline(child => transport.get(row.remote!.id, child), signal), row.remote.id);
+		this.lease.assertCurrent(); signal.throwIfAborted();
+		return { id, remote, local: fileMetadata(row.deletingLocal), localRevision: row.deletingLocal.revision, operationVersion: row.deleteVersion || null };
+	}
+	async resolveDeletion(transport: FileMetadataTransport, choice: { id: string; remoteUpdatedAt: string; localRevision: number; operationVersion: string | null; keep: 'file' | 'delete' }, signal = new AbortController().signal) {
+		if (!['file', 'delete'].includes(choice.keep)) throw new WorkspaceError('INVALID_CONFLICT_CHOICE', 'Choose whether to keep or delete this file.');
+		const review = await this.inspectDeletion(transport, choice.id, signal);
+		if (review.remote.updatedAt !== choice.remoteUpdatedAt || review.localRevision !== choice.localRevision || review.operationVersion !== choice.operationVersion)
+			throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'The file changed. Review it again.', 409);
+		await this.tx('readwrite', async tx => {
+			signal.throwIfAborted();
+			const row = await tx.get<FileRecord>(COLLECTION, choice.id);
+			if (!row?.deleteRequested || row.state !== 'conflict' || !row.deletingLocal || row.deletingLocal.revision !== choice.localRevision || (row.deleteVersion || null) !== choice.operationVersion)
+				throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'The deletion changed. Review it again.', 409);
+			if (choice.keep === 'delete') {
+				await this.putRecord(tx, { ...row, deleteVersion: choice.remoteUpdatedAt, state: 'pending', claim: undefined, retryAt: 0, error: undefined });
+			} else {
+				const local = row.deletingLocal;
+				await this.putRecord(tx, { ...row, deleteRequested: undefined, deletingLocal: undefined, deleteVersion: undefined, state: 'synced', claim: undefined, retryAt: 0, error: undefined });
+				await tx.put('things', row.id, local);
+			}
+		});
+	}
 	async remoteId(id: string) {
-		return this.tx('readonly', async (tx) => (await tx.get<FileRecord>(COLLECTION, id))?.remote?.id || null);
+		return this.tx('readonly', async (tx) => { const row = await tx.get<FileRecord>(COLLECTION, id); return row && !row.deleteRequested && !row.cancelled ? row.remote?.id || null : null; });
 	}
 	async retry(id: string) {
-		await this.metadata.retry(id);
+		const deleting = await this.tx('readonly', async tx => (await tx.get<FileRecord>(COLLECTION, id))?.deleteRequested);
+		if (!deleting) await this.metadata.retry(id);
 		return this.tx('readwrite', async (tx) => {
 			const row = await tx.get<FileRecord>(COLLECTION, id);
 			if (!row || row.state === 'synced' || (row.claim && row.claim.expiresAt > this.now())) return;
+			if (row.state === 'conflict') throw new WorkspaceError('SYNC_CONFLICT', 'Review this deletion before retrying.', 409);
 			await this.putRecord(tx, { ...row, state: 'pending', retryAt: 0, error: undefined });
 		});
 	}
@@ -223,6 +271,34 @@ export class AccountFileSync {
 			};
 			let phase = claimed.phase;
 			try {
+				if (claimed.deleteRequested) {
+					if (!transport.remove || !transport.get || !claimed.remote || !claimed.deletingLocal)
+						throw new WorkspaceError('DELETION_UNAVAILABLE', 'The account cannot confirm file deletion yet.', 503);
+					let expectedUpdatedAt = claimed.deleteVersion;
+					if (!expectedUpdatedAt) {
+						try {
+							const remote = this.metadata.checked(await run(() => transport.get!(claimed.remote!.id, controller.signal)), claimed.remote.id);
+							const local = fileMetadata(claimed.deletingLocal);
+							if (Object.keys(local).some(key => local[key as keyof typeof local] !== remote.metadata[key as keyof typeof local]))
+								throw new WorkspaceError('FILE_DELETE_CONFLICT', 'File details changed. Review before deleting.', 409);
+							expectedUpdatedAt = remote.updatedAt;
+						} catch (error) {
+							if ((error as any)?.status !== 404) throw error;
+							// Absence is not an acknowledgement. The durable DELETE must
+							// still fence the original request; any live version refuses.
+							expectedUpdatedAt = new Date(0).toISOString();
+						}
+						await this.update(claimed.id, token, row => ({ ...row, deleteVersion: expectedUpdatedAt }));
+					}
+					const result = await run(() => transport.remove!({ id: claimed.remote!.id, requestId: claimed.request.requestId, expectedUpdatedAt: expectedUpdatedAt! }, controller.signal));
+					if (result?.deleted !== true || typeof result.deferred !== 'boolean') throw new WorkspaceError('INVALID_DELETION', 'The account did not confirm durable deletion.', 502);
+					await this.tx('readwrite', async tx => {
+						const row = await tx.get<FileRecord>(COLLECTION, claimed.id);
+						if (!row || row.claim?.token !== token) throw new WorkspaceError('SYNC_CLAIM', 'File synchronization changed.', 409);
+						await this.finishCancellation(tx, row);
+					});
+					completed++; continue;
+				}
 				if (claimed.cancelRequested) {
 					if (!transport.cancel) throw new WorkspaceError('CANCELLATION_UNAVAILABLE', 'The account cannot confirm upload cancellation yet.', 503);
 					const result = await run(() => transport.cancel!(claimed.request.requestId, controller.signal));
@@ -324,12 +400,12 @@ export class AccountFileSync {
 					retryPhase = phase === 'complete' ? attachmentCompleteRetryPhase(error) : null;
 				await this.update(claimed.id, token, (row) => ({
 					...row,
-					state: [400, 401, 403, 404, 410, 413, 422].includes(status) || (status === 409 && (error as any)?.retryable !== true) ? 'error' : 'pending',
+					state: row.deleteRequested && status === 409 ? 'conflict' : [400, 401, 403, 404, 410, 413, 422].includes(status) || (status === 409 && (error as any)?.retryable !== true) ? 'error' : 'pending',
 					claim: undefined,
 					attempts: row.attempts + 1,
 					retryAt: this.now() + Math.max(Math.min(60_000, 1000 * 2 ** Math.min(row.attempts, 6)), Number((error as any)?.retryAfterMs) || 0),
-					error: row.cancelRequested ? 'Cancellation needs attention; device bytes are retained. A completed account file requires reviewed deletion.' : 'File is saved on this device; account upload needs attention.',
-					...(!row.cancelRequested && retryPhase === 'upload' ? { phase: 'upload' as const, uploaded: [] } : {})
+					error: row.deleteRequested ? 'Deletion needs review or retry; recovery bytes remain on this device.' : row.cancelRequested ? 'Cancellation needs attention; device bytes are retained. A completed account file requires reviewed deletion.' : 'File is saved on this device; account upload needs attention.',
+					...(!row.cancelRequested && !row.deleteRequested && retryPhase === 'upload' ? { phase: 'upload' as const, uploaded: [] } : {})
 				})).catch((failure) => {
 					if ((failure as any)?.code !== 'SYNC_CLAIM') throw failure;
 				});

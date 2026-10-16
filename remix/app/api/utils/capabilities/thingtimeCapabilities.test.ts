@@ -460,8 +460,8 @@ test('conditional interaction sync advertises a distinct compatible capability',
 
 
 test('conditional attachment deletion is advertised by both capability manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.attachment-delete'], '1.2.0');
-  assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-delete'].version, '1.2.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.attachment-delete'], '1.3.0');
+  assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-delete'].version, '1.3.0');
   for (const version of ['', '1.0.0', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
 });
 

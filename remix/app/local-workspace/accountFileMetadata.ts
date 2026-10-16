@@ -27,7 +27,7 @@ export type FileMetadataTransport = {
 	): Promise<unknown>;
 	move(id: string, folderId: string | null, expectedUpdatedAt: string, signal?: AbortSignal): Promise<void>;
 };
-const metadata = (row: { crystal: any; folderId?: unknown }): FileMetadata => ({
+export const fileMetadata = (row: { crystal: any; folderId?: unknown }): FileMetadata => ({
 	filenamePreview: row.crystal.filenamePreview ?? null,
 	title: row.crystal.title ?? null,
 	description: row.crystal.description ?? null,
@@ -52,8 +52,8 @@ export class AccountFileMetadata {
 		return this.db.transaction(this.scope, mode, this.lease, work);
 	}
 	async enqueue(tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) {
-		const before = previous ? metadata(previous) : empty,
-			after = metadata(row);
+		const before = previous ? fileMetadata(previous) : empty,
+			after = fileMetadata(row);
 		if (same(before, after)) return;
 		if (row.localAttachment.purpose !== 'file' || row.targetId)
 			throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Bound account media requires its dedicated reconciliation adapter.');
@@ -78,7 +78,7 @@ export class AccountFileMetadata {
 			await tx.put(COLLECTION, id, { ...row, state: 'pending', retryAt: 0, error: undefined });
 		});
 	}
-	private checked(raw: any, id: string): Snapshot {
+	checked(raw: any, id: string): Snapshot {
 		if (
 			!raw ||
 			raw.id !== id ||
@@ -91,10 +91,10 @@ export class AccountFileMetadata {
 			throw new WorkspaceError('FILE_IDENTITY', 'The account file did not match this workspace.', 409);
 		const checked = sanitizeAttachmentPublicMetadata(raw.crystal);
 		if (!checked.ok) throw new WorkspaceError('INVALID_FILE_METADATA', 'The account returned invalid file metadata.', 502);
-		return { id, updatedAt: raw.updatedAt, metadata: metadata({ crystal: checked.crystal, folderId: raw.folderId }) };
+		return { id, updatedAt: raw.updatedAt, metadata: fileMetadata({ crystal: checked.crystal, folderId: raw.folderId }) };
 	}
 	private async writeLocal(tx: WorkspaceTransaction, local: LocalAttachment, next: FileMetadata) {
-		if (same(metadata(local), next)) return;
+		if (same(fileMetadata(local), next)) return;
 		const patch = applyAttachmentAnnotationPatch(local.crystal, next);
 		if (patch.ok === false) throw new WorkspaceError('INVALID_FILE_METADATA', patch.error);
 		await tx.put('things', local.id, {
@@ -109,7 +109,7 @@ export class AccountFileMetadata {
 		return this.tx('readwrite', async (tx) => {
 			const row = await tx.get<MetadataRecord>(COLLECTION, id),
 				local = await tx.get<LocalAttachment>('things', id);
-			if (!row || row.claim?.token !== token) throw new WorkspaceError('SYNC_CLAIM', 'File synchronization changed.', 409);
+			if (!row || row.claim?.token !== token || (await tx.get<any>('account-files', id))?.deleteRequested) throw new WorkspaceError('SYNC_CLAIM', 'File synchronization changed.', 409);
 			if (!local || !isLocalAttachment(local)) throw new WorkspaceError('MISSING_LOCAL_FILE', 'The device file is missing.', 404);
 			let base = row.base;
 			if (row.pending) {
@@ -118,7 +118,7 @@ export class AccountFileMetadata {
 				if (acknowledged) base = row.pending.after;
 				else if (remote.updatedAt === row.pending.expectedUpdatedAt) return row.pending;
 			}
-			const desired = metadata(local),
+			const desired = fileMetadata(local),
 				merged = { ...remote.metadata };
 			for (const key of keys) {
 				if (desired[key] !== base[key] && remote.metadata[key] !== base[key] && desired[key] !== remote.metadata[key])
@@ -153,7 +153,7 @@ export class AccountFileMetadata {
 				local = await tx.get<LocalAttachment>('things', id);
 			if (state?.state !== 'conflict' || state.remoteId !== remoteId || !local)
 				throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'Review this file again.', 409);
-			return { id, remoteId, local: metadata(local), remote, localRevision: local.revision };
+			return { id, remoteId, local: fileMetadata(local), remote, localRevision: local.revision };
 		});
 	}
 	async resolve(
@@ -205,7 +205,7 @@ export class AccountFileMetadata {
 			const token = this.uuid();
 			const claimed = await this.tx('readwrite', async (tx) => {
 				const row = await tx.get<MetadataRecord>(COLLECTION, candidate.id);
-				if (!row || !['pending', 'syncing'].includes(row.state) || row.retryAt > this.now() || (row.claim && row.claim.expiresAt > this.now()))
+				if (!row || (await tx.get<any>('account-files', candidate.id))?.deleteRequested || !['pending', 'syncing'].includes(row.state) || row.retryAt > this.now() || (row.claim && row.claim.expiresAt > this.now()))
 					return false;
 				await tx.put(COLLECTION, row.id, { ...row, remoteId: remote, state: 'syncing', claim: { token, expiresAt: this.now() + 60_000 } });
 				return true;
@@ -257,7 +257,7 @@ export class AccountFileMetadata {
 				this.lease.assertCurrent();
 				await this.tx('readwrite', async (tx) => {
 					const row = await tx.get<MetadataRecord>(COLLECTION, candidate.id);
-					if (row?.claim?.token !== token) return;
+					if (row?.claim?.token !== token || (await tx.get<any>('account-files', candidate.id))?.deleteRequested) return;
 					const conflict = error?.code === 'FILE_METADATA_CONFLICT';
 					const state = conflict
 						? 'conflict'

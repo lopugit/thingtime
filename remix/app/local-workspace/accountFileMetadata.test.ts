@@ -345,3 +345,21 @@ test('keeping reviewed account details updates only metadata and refuses a subst
 		await f.db.close();
 	}
 });
+
+test('deletion pauses metadata even when a prior worker already resolved the remote identity or started its read', async () => {
+	for (const inFlight of [false, true]) {
+		const f = await fixture();
+		try {
+			await f.files.things.annotateFile({ id: f.local.id, title: 'Pending device detail' });
+			let release = () => {}, entered = () => {};
+			const blocked = new Promise<void>(resolve => { release = resolve; }), started = new Promise<void>(resolve => { entered = resolve; });
+			if (!inFlight) await f.files.remove(f.local.id);
+			const syncing = f.files.metadata.sync({ ...f.transport, get: async () => { entered(); await blocked; return f.transport.get(); } }, async () => f.remote.id, async () => true);
+			if (inFlight) { await started; await f.files.remove(f.local.id); }
+			release(); await syncing;
+			assert.deepEqual(f.calls, []);
+			assert.equal((await f.files.status())[0].phase, 'delete');
+			await assert.rejects(f.files.things.readFile(f.local.id), (error: any) => error.status === 404);
+		} finally { await f.db.close(); }
+	}
+});

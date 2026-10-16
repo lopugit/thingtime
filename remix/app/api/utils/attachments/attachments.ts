@@ -1233,11 +1233,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const remove = async (ownerId: string, input: unknown, options?: { pendingOnly: boolean }): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>> => {
+	const remove = async (ownerId: string, input: unknown, options?: { pendingOnly?: boolean; retainCancellation?: true }): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string; deleted?: true }>> => {
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment deletion request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => !['id', 'targetId', 'expectedUpdatedAt'].includes(key))) return fail(400, 'Invalid attachment deletion request');
+			if (Object.keys(raw).some((key) => !['id', 'targetId', 'expectedUpdatedAt', 'requestId'].includes(key))) return fail(400, 'Invalid attachment deletion request');
 			if (raw.expectedUpdatedAt !== undefined && (typeof raw.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(raw.expectedUpdatedAt)))) {
 				return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
 			}
@@ -1246,6 +1246,30 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const targetId = raw.targetId === undefined ? null : normalizeId(raw.targetId);
 			if (!id) return fail(400, 'Invalid attachment id');
 			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
+			if ('requestId' in raw) {
+				const requestId = normalizeId(raw.requestId);
+				if (!requestId || !expectedUpdatedAt || raw.targetId !== undefined || attachmentIdForRequest(ownerId, requestId) !== id)
+					return fail(400, 'Durable file deletion requires the matching upload request id and expectedUpdatedAt, without targetId');
+				if (dependencies.customMongoActive()) return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+				// Reserve absence as well as existing uploads. A missing row alone is
+				// not proof against a delayed replay of the original start request.
+				for (let attempt = 0; attempt < 3; attempt++) {
+					let reserved: AttachmentDoc;
+					try { reserved = await dependencies.store.reserveCancellation(ownerId, id); }
+					catch (error) { if (Number((error as any)?.code) === 11000) continue; throw error; }
+					if (reserved.attachmentState === 'cancelled') return { ok: true, deleted: true, deferred: false };
+					if (reserved.targetId || reserved.attachmentPurpose !== 'file' || !['ready', 'deleting'].includes(reserved.attachmentState))
+						return fail(409, 'This upload must finish or be removed through its owning surface');
+					const result = await remove(ownerId, { id, expectedUpdatedAt: raw.expectedUpdatedAt }, { retainCancellation: true });
+					if (!result.ok) return result;
+					const receipt = await dependencies.store.getById(id);
+					if (receipt?.ownerId === ownerId && receipt.attachmentCancellationRequested && ['cancelled', 'deleting'].includes(receipt.attachmentState))
+						return { ...result, deleted: true };
+					// A concurrent legacy cleanup removed the row: reserve its fence
+					// on the next pass, never acknowledge an unprotected missing row.
+				}
+				return fail(503, 'File deletion is still in progress; retry the same request', { retryable: true });
+			}
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing || existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
 			// Internal copy rollback may only discard unfinished uploads. The
@@ -1268,7 +1292,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(409, 'Attachment changed; refresh before deleting');
 			}
 			const reason: AttachmentDeleteClaimScope = {
-				...(existing.targetId ? { kind: 'target', targetId: existing.targetId } : { kind: 'draft' }),
+				...(existing.targetId ? { kind: 'target', targetId: existing.targetId } : { kind: 'draft', ...(options?.retainCancellation ? { retainCancellation: true as const } : {}) }),
 				...(expectedUpdatedAt ? { expectedUpdatedAt } : {})
 			};
 			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, reason);
@@ -1278,7 +1302,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				if (raced?.attachmentState === 'finalizing') {
 					return fail(409, 'Attachment finalization is in progress — try again');
 				}
-				if (expectedUpdatedAt && raced) {
+				if (expectedUpdatedAt && raced && raced.attachmentState !== 'cancelled') {
 					if (raced.attachmentState !== 'deleting') return fail(409, 'Attachment changed; refresh before deleting');
 					return deferredDeletingResponse(raced) || fail(503, 'Attachment cleanup is still in progress; retry deletion');
 				}

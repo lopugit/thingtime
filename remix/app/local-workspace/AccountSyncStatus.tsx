@@ -1,3 +1,4 @@
+import type { AccountFileSync } from './accountFiles';
 import type { AccountFileMetadata } from './accountFileMetadata';
 import { useOfflineWorkspace } from '../hooks/useWorkspaceUser';
 import React from 'react';
@@ -201,6 +202,7 @@ function InteractionStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: strin
 function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
 	const [rows, setRows] = React.useState<Awaited<ReturnType<ReturnType<typeof accountWorkspaceWorker>['files']['status']>>>([]);
 	const [review, setReview] = React.useState<Awaited<ReturnType<AccountFileMetadata['inspect']>> | null>(null);
+	const [deletionReview, setDeletionReview] = React.useState<Awaited<ReturnType<AccountFileSync['inspectDeletion']>> | null>(null);
 	const [error, setError] = React.useState(''),
 		[busy, setBusy] = React.useState(false),
 		[online, setOnline] = React.useState(navigator.onLine);
@@ -226,7 +228,7 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 			for (const event of [LOCAL_WORKSPACE_CHANGED, 'online', 'offline']) window.removeEventListener(event, update);
 		};
 	}, [ownerId, dataPlane]);
-	if (!rows.length && !error && !review) return null;
+	if (!rows.length && !error && !review && !deletionReview) return null;
 	const act = async (run: (current: ReturnType<typeof accountWorkspaceWorker>) => Promise<unknown>) => {
 		const current = service.current;
 		if (!current) return;
@@ -260,11 +262,11 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 			borderRadius="lg"
 		>
 			<Text role="status">
-				{rows.length} file{rows.length === 1 ? '' : 's'} saved on this device.{' '}
+				{rows.length} file change{rows.length === 1 ? '' : 's'} saved on this device.{' '}
 				{unconfirmed || !online
 					? 'Waiting for verified account sync.'
 					: rows.some((row) => row.state === 'conflict')
-					? 'File details need comparison.'
+					? 'File changes need review.'
 					: rows.some((row) => row.state === 'error')
 					? 'Account upload needs attention.'
 					: 'Syncing files and details to your account.'}
@@ -274,12 +276,13 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 				{rows.slice(0, 20).map((row) => (
 					<Flex key={row.id} gap={3} align="center" flexWrap="wrap" py={2}>
 						<Text fontSize="sm" flex="1" minW={0} overflowWrap="anywhere">
-							{row.name}: {row.error || (row.phase === 'cancel' ? 'Cancellation queued; device bytes are retained until confirmed.' : row.state === 'syncing' ? 'Syncing' : 'Waiting to sync')}
+							{row.name}: {row.error || (row.phase === 'delete' ? 'Deleted on this device; account deletion is queued.' : row.phase === 'cancel' ? 'Cancellation queued; device bytes are retained until confirmed.' : row.state === 'syncing' ? 'Syncing' : 'Waiting to sync')}
 						</Text>
 						{row.state === 'conflict' ? <Button size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async current => {
-							const next = await current.files.metadata.inspect(current.transport.files, row.id); if (mounted.current) setReview(next);
-						})}>Compare file details</Button> : <Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void act(current => current.files.retry(row.id))}>
-							{row.phase === 'cancel' ? 'Retry cancellation' : row.remoteId ? 'Retry file sync' : 'Retry upload'}
+							if (row.phase === 'delete') { const next = await current.files.inspectDeletion(current.transport.files, row.id); if (mounted.current) setDeletionReview(next); }
+							else { const next = await current.files.metadata.inspect(current.transport.files, row.id); if (mounted.current) setReview(next); }
+						})}>{row.phase === 'delete' ? 'Review file deletion' : 'Compare file details'}</Button> : <Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void act(current => current.files.retry(row.id))}>
+							{row.phase === 'delete' ? 'Retry deletion' : row.phase === 'cancel' ? 'Retry cancellation' : row.remoteId ? 'Retry file sync' : 'Retry upload'}
 						</Button>}
 						{row.canCancel && <Box w="100%">
 							<Text fontSize="sm" mb={2}>Cancelling removes this device file once the upload is safely cancelled.</Text>
@@ -301,6 +304,21 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 					if (mounted.current) setReview(null);
 				})}>{keep === 'local' ? 'Keep device file details' : 'Keep account file details'}</Button>)}
 				<Button size="sm" variant="ghost" onClick={() => setReview(null)}>Cancel</Button></Flex>
+			</Box>}
+			{deletionReview && <Box mt={3}>
+				<Text fontWeight="bold">Review file deletion</Text>
+				<Text fontSize="sm">The account file changed. Keep the device file, or delete the account version shown here.</Text>
+				<Flex gap={3} flexWrap="wrap" my={3}>
+					{[{ name: 'Deleted device version', value: deletionReview.local }, { name: 'Current account version', value: deletionReview.remote.metadata }].map(({ name, value }) => <Box key={name} flex="1" minW="min(260px, 100%)" maxW="100%">
+						<Text>{name}</Text><Box as="pre" maxH="240px" overflow="auto" whiteSpace="pre-wrap" overflowWrap="anywhere" fontSize="xs">{JSON.stringify(value, null, 2)}</Box>
+					</Box>)}
+				</Flex>
+				<Flex gap={3} flexWrap="wrap">{(['file', 'delete'] as const).map(keep => <Button key={keep} size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async current => {
+					await current.files.resolveDeletion(current.transport.files, { id: deletionReview.id, localRevision: deletionReview.localRevision, operationVersion: deletionReview.operationVersion, remoteUpdatedAt: deletionReview.remote.updatedAt, keep });
+					if (mounted.current) setDeletionReview(null);
+				})}>{keep === 'file' ? 'Keep device file' : 'Delete reviewed account file'}</Button>)}
+					<Button size="sm" variant="ghost" onClick={() => setDeletionReview(null)}>Close review</Button>
+				</Flex>
 			</Box>}
 			{error && <Text role="alert">{error}</Text>}
 		</Box>

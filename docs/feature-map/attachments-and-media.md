@@ -7,15 +7,15 @@ only for single-item moves and reports stale per-item status 409. Both manifests
 must carry these versions. `accountTransport.client.ts` negotiates them;
 `accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
 and canonical attachment cleanup. Durable metadata reconciliation now lives in `accountFileMetadata.ts`;
-delete reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+completed-file deletion now uses the durable queue described below; ordinary account file UI wiring remains pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
 
 Conditional deletion uses the same cleanup claims: delete 1.2.0 accepts
 `expectedUpdatedAt` and fences both ordinary and objectless initial claims.
 Retries of already-deleting rows retain owner/target/expiry checks but omit the
 pre-claim timestamp. `attachments.test.ts` covers racing/skipped claims and
 multipart deferral; the real account file browser test races annotation/deletion.
-Absence is not a durable late-start cancellation receipt; the local deletion
-queue remains pending.
+Legacy missing-row success is not a durable late-start cancellation receipt;
+the request-id mode in delete 1.3.0 and the local queue below supply that fence.
 
 Durable cancellation now uses abort 1.2.0 `{requestId}` and the existing unique
 attachment identity. `reserveCancellation`, the retained deleting claim and
@@ -24,7 +24,7 @@ cleanup. The closed envelope is validated in `attachmentCore.ts`; never expire o
 purge it through ordinary cleanup. Legacy abort stays separate; full-user auth
 is required for this new mode. `accountFiles.ts` persists start/cancel intent,
 fences tab claims and retains bytes until confirmation. `AccountSyncStatus`
-provides offline Cancel upload; completed-file deletion still needs its adapter.
+provides offline Cancel upload and completed-file deletion review.
 
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).
@@ -194,4 +194,18 @@ state as dependencies. `AccountSyncStatus.tsx` provides comparison and reviewed
 choices. Run `accountFileMetadata.test.ts`, the local workspace suite and the
 file browser fixture. Preserve immutable pending operations on lost replies;
 newer device edits and unrelated account edits must survive reconciliation.
-The ordinary account picker/list/media/delete path is still pending.
+The ordinary account picker/list/media path is still pending.
+
+## Durable completed-file deletion
+
+Delete 1.3.0 accepts a canonical id, its original requestId and expectedUpdatedAt
+for full-user standalone-file deletion. It reuses retained cancellation receipts
+and version-fenced cleanup; legacy deletion behavior remains compatible.
+`AccountFileSync.remove` moves the local snapshot into recovery with queued intent;
+`inspectDeletion`/`resolveDeletion` drive the native review and protect both sides.
+Metadata sync skips deleting files. Only a durable `deleted:true` acknowledgement
+releases bytes. The worker coalesces wake-ups arriving during a drain, and the
+moderation stamper only updates ready files. Run workspace, attachment, capability
+and moderation suites plus the real file browser fixture, including full quota,
+lost replies, stale reviews and the concurrent edit/delete race. Normal account
+file discovery/media wiring remains a separate completion gate.

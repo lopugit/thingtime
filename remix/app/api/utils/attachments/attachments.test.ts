@@ -2578,3 +2578,48 @@ test('request cancellation validates its closed input, bounded retries and custo
 	const custom = createAttachmentService({ customMongoActive: () => true });
 	assert.equal((await custom.cancel('user-1', { requestId: 'x' })).ok, false);
 });
+
+test('durable file deletion retains exact-version cleanup and fences lost replies and delayed starts', async () => {
+	const requestId = 'delete-ready-request', id = attachmentIdForRequest('user-1', requestId);
+	let doc: AttachmentDoc | null = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: 'file', objectVersionId: 'ready-version', uploadId: undefined });
+	const deleted: unknown[] = [];
+	const service = createAttachmentService({ now: () => now, customMongoActive: () => false,
+		store: {
+			reserveCancellation: async () => doc ||= cancelledAttachmentReceipt('user-1', id, now),
+			getById: async () => doc, getOwned: async () => doc, listExpiredOwned: async () => [],
+			claimDeleting: async (_owner: string, _id: string, _states: unknown, scope: any) => {
+				assert.equal(scope.retainCancellation, true); assert.equal(scope.expectedUpdatedAt.toISOString(), now.toISOString());
+				doc = { ...doc!, attachmentState: 'deleting', attachmentCancellationRequested: true }; return doc;
+			},
+			removeDeleting: async () => { doc = cancelledAttachmentReceipt('user-1', id, now); return true; }
+		} as any, getS3: () => noopS3({ deleteObject: async input => { deleted.push(input); } })
+	});
+	const input = { id, requestId, expectedUpdatedAt: now.toISOString() };
+	assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
+	assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
+	assert.equal(deleted.length, 1); assert.equal((deleted[0] as any).versionId, 'ready-version');
+	const replay = await service.start('user-1', { requestId, filename: 'file.txt', sizeBytes: 42, purpose: 'file' });
+	assert.equal(replay.ok, false); if (!replay.ok) assert.equal(replay.code, 'upload_cancelled');
+	doc = null;
+	assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
+	assert.equal(doc!.attachmentState, 'cancelled');
+});
+
+test('durable file deletion refuses mismatched identities, unfinished/bound files and stale versions without cleanup', async () => {
+	const requestId = 'delete-ready-request', id = attachmentIdForRequest('user-1', requestId);
+	let reservations = 0, doc = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: 'file' });
+	const service = createAttachmentService({ customMongoActive: () => false,
+		store: { reserveCancellation: async () => { reservations++; return doc; }, getOwned: async () => doc } as any,
+		getS3: () => { throw Error('Must not touch storage'); }
+	});
+	const input = { id, requestId, expectedUpdatedAt: now.toISOString() };
+	for (const patch of [{ requestId: 'wrong' }, { requestId: null }, { expectedUpdatedAt: undefined }, { targetId: 'post' }, { id: 'wrong' }]) {
+		const result = await service.remove('user-1', { ...input, ...patch }); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
+	}
+	assert.equal(reservations, 0);
+	for (const patch of [{ attachmentState: 'pending' }, { attachmentState: 'finalizing' }, { targetId: 'post' }, { attachmentPurpose: 'recording' }, { updatedAt: new Date(now.getTime() + 1) }]) {
+		doc = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: 'file', ...patch } as any);
+		const result = await service.remove('user-1', input); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 409);
+	}
+	assert.equal((await createAttachmentService({ customMongoActive: () => true }).remove('user-1', input)).ok, false);
+});

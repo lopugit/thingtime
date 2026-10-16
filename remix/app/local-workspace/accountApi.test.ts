@@ -289,3 +289,28 @@ test('online catalogue discovery retains owned definitions for device paging wit
   await assert.rejects(api.components.browse({device:true}),/changed/i);
  } finally { rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis,{window:saved.window,indexedDB:saved.indexedDB}); if(saved.navigator) Object.defineProperty(globalThis,'navigator',saved.navigator); }
 });
+
+test('a wake arriving during a drain is coalesced into a follow-up pass instead of lost', async () => {
+ const saved = { window: globalThis.window, indexedDB: globalThis.indexedDB, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') };
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'wake-owner', dataPlane: 'home' } as const;
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory() });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+ let release = () => {}, entered = () => {}, followed = () => {};
+ const first = new Promise<void>(resolve => { release = resolve; }), started = new Promise<void>(resolve => { entered = resolve; }), again = new Promise<void>(resolve => { followed = resolve; });
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const worker = accountWorkspaceWorker(scope); let drains = 0;
+  worker.sync.status = worker.interactions.status = worker.files.status = async () => [];
+  worker.sync.exportSnapshot = async () => ({ records: [] }) as any;
+  worker.interactions.sync = worker.files.sync = async () => ({ completed: 0 });
+  worker.sync.sync = async () => { if (++drains === 1) { entered(); await first; } else followed(); return { completed: 0 }; };
+  worker.wake(); await started;
+  worker.wake(); worker.wake(); release();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { await Promise.race([again, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Lost sync wake')), 1000); })]); }
+  finally { clearTimeout(timer); }
+  assert.equal(drains, 2); worker.stop();
+ } finally {
+  release(); rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, { window: saved.window, indexedDB: saved.indexedDB }); if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator);
+ }
+});

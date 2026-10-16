@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Queue completed account-file deletion locally,
+  retaining recovery bytes through offline use and lost replies. Add native
+  version review, full-quota restoration, durable delete 1.3.0 replay fences,
+  ready-only moderation stamps and coalesced sync wake-ups. Ordinary account
+  picker/list/media wiring remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#completed-account-file-deletion--2026-10-16).
+
 - 2026-10-16 — **Codex (AI)**: Make queued file cancellation durable across
   offline use, lost responses and delayed upload starts. Reuse private,
   quota-accounted attachment receipts and the existing cleanup lifecycle; add

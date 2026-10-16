@@ -5955,8 +5955,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
@@ -5972,7 +5972,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'POST the canonical attachment id; include the exact targetId when deleting from an existing post or comment.',
 			'Optionally send expectedUpdatedAt from the current Thing read. A stale version returns 409 before claiming deletion, including a concurrent edit between read and claim.',
 			'After deletion is claimed, retrying resumes cleanup even if its lifecycle timestamp advanced. A deferred response includes retryAt; storage remains charged until cleanup is verified. Missing rows are idempotent success, not a durable cancellation fence against a delayed upload start.',
-			'Retry a temporary 503; the source row stays charged until S3 deletion succeeds.'
+			'For a standalone file created by an upload request, include requestId and expectedUpdatedAt with its canonical id, without targetId. This full-user mode returns deleted:true only after retaining a private accounted replay fence, including an already-missing file. Stale live versions still return 409; pending, finalizing and bound files are refused. The receipt never expires; delayed upload starts cannot recreate the deleted file.',
+			'Retry a temporary 503 with the identical request; the source row stays charged until S3 deletion succeeds.'
 		],
 		requestExamples: [
 			{

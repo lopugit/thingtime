@@ -1510,3 +1510,57 @@ Graph verification: the initial semantic refresh completed, but the follow-up
 for the quota correction refused an unverified semantic node shrink. The guard
 was preserved; the final structural refresh retains earlier documentation nodes.
 Latest documentation semantic freshness is therefore unverified.
+
+## Completed account file deletion — 2026-10-16
+
+`accountFiles.ts` now removes an uploaded standalone file from the device Things
+list atomically with durable deletion intent. Its bytes and removed snapshot stay
+in the same private account/origin/data-plane partition for recovery. Metadata
+sync pauses for that file; new writes cannot recreate its original identity.
+Deletion, conflict recording and restoration fit at the full 64 MiB device quota
+using the upload record's reserved control space. Never-started/uncertain uploads
+continue to use cancellation, and bound/editor media retains its owning adapter.
+
+The worker compares current account details with the removed device snapshot and
+freezes the conditional deletion before sending it. Changed account details or a
+racing edit require native review: Keep device file restores the local copy;
+Delete reviewed account file rechecks the account timestamp and local snapshot.
+A lost reply retries the identical request, without reading a missing row as
+success or uploading again. Only a `deleted:true` receipt releases recovery bytes.
+The account worker now coalesces a wake received during a drain; otherwise a
+quick restore/delete or reconnect could leave fresh work idle after the final
+status read. Metadata and other queue operations keep their existing boundaries.
+
+Attachment delete **1.3.0** accepts `{id, requestId, expectedUpdatedAt}` for this
+full-user standalone-file mode. It validates the original upload identity, rejects
+target binding and unfinished files, and uses the existing version-fenced cleanup.
+The same private, quota-accounted cancellation receipt survives exact-version
+object deletion. Missing rows also acquire this replay fence; stale live rows
+still refuse. Original upload-start retries and legacy cleanup cannot resurrect
+or purge it. An asynchronous moderation verdict is now restricted to ready files
+so it cannot stamp a deleting row or its retained receipt. No new collection,
+public content, credential, or permission bypass is introduced.
+
+The normal account picker/list/media and existing-account file cache/alias wiring
+remain unfinished. This checkpoint covers the scoped file adapter, facade
+`attachments.deleteLocalFile({id})`, worker, and native conflict review. It does
+not complete the full local-workspace matrix or authorize a main merge.
+
+Local verification: **728 checks pass** (259 workspace/offline shell, 308
+attachment, 98 capability and 63 moderation); the generic workspace command
+skips 27 opt-in browser fixtures. The separately enabled real browser scenario
+passes offline deletion and restore at full quota, stale native review refusal,
+concurrent annotation/deletion with one winner, lost successful deletion reply,
+identical retries, original upload replay refusal and owner/guest media gates.
+Native review was inspected at 1440/390/320px; the browser reported no page errors.
+The disposable database receipt has 134 accounted JSON bytes, zero object bytes,
+owner-private ACL and no expiry. Evidence: `tmp/account-file-delete-ui/`,
+`tmp/account-file-delete-receipt-check.json` and the `account-file-delete-*` logs.
+
+Client and Node/Nitro builds pass. The client contains 248 verified offline
+assets (21,613,315 bytes); both built manifests advertise delete 1.3.0, both
+attachment delete/abort docs routes serve JSON, and anonymous mutations return
+401. TypeScript retains 91 baseline diagnostics with none in changed paths;
+focused lint has no errors or warnings beyond the tooling deprecation notice.
+These are local results; current-head CI and deployed acceptance remain separate.
+No main merge, manual deployment or existing-account mutation was performed.
