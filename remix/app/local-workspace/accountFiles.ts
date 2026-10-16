@@ -3,7 +3,9 @@ import { AccountFileMetadata, fileMetadata, type FileMetadataTransport } from '.
 import { normalizePublicAttachment, multipartPartRange, attachmentCompleteRetryPhase } from '../components/Attachments/attachmentUiCore';
 import type { PublicAttachment, SignedUploadPart } from '../components/Attachments/attachmentTypes';
 import { transferChecksum } from '../utils/thingTransfer/archive';
-import { LocalThings } from './things';
+import { compositionAttachmentIds } from '../api/utils/actions/compositionMediaCore';
+import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
+import { LocalThings, type LocalThing } from './things';
 import { createLocalAttachment, isLocalAttachment, type LocalAttachment } from './attachments';
 import { WORKSPACE_LIMITS, WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { accountSyncDeadline, type SyncState } from './accountSync';
@@ -107,6 +109,32 @@ export class AccountFileSync {
 		const controlReserve = ' '.repeat(Math.max(0, 1024 - new TextEncoder().encode(controls).length));
 		return tx.put(COLLECTION, row.id, { ...row, controlReserve });
 	}
+	/** Both writers participate in the importer's existing transaction. Only
+	 * confirmed upload receipts can rewrite a device file to an account ID. */
+	readonly contentHooks = {
+		mutate: (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => this.enqueue(tx, row, previous),
+		prepare: async (tx: WorkspaceTransaction, row: LocalThing): Promise<LocalThing | null> => {
+			this.lease.assertCurrent();
+			const records = new Map((await tx.list<FileRecord>(COLLECTION)).map(({ value }) => [value.id, value]));
+			if (!records.size) return row;
+			const used = new Set([...compositionAttachmentIds(row.thingtime, row.crystal)].filter(id => records.has(id)));
+			// Track canonical rewriter lookups in saved args, CSS, authored HTML
+			// and late-bound templates. Only confirmed IDs enter the copy map.
+			class FileReferences extends Map<string, string> {
+				get(id: string) { if (records.has(id)) used.add(id); return super.get(id); }
+				has(id: string) { if (records.has(id)) used.add(id); return super.has(id); }
+			}
+			const copies = new FileReferences([...records.values()].flatMap(file => file.remote ? [[file.id, file.remote.id] as const] : []));
+			const crystal = rewriteTransferMedia([row], copies).get(row.id)!;
+			const targetId = row.targetId ? copies.get(row.targetId) || row.targetId : row.targetId;
+			for (const id of used) {
+				const file = records.get(id)!;
+				if (file.cancelled || file.cancelRequested || file.deleteRequested) throw new WorkspaceError('FILE_REFERENCE_DELETED', 'A referenced device file was removed. Edit this Thing before retrying account sync.', 409);
+				if (!file.remote) return null;
+			}
+			return { ...row, crystal, ...(targetId ? { targetId } : {}) };
+		}
+	};
 	private async enqueue(tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) {
 		const existing = await tx.get<FileRecord>(COLLECTION, row.id);
 		if (existing?.deleteRequested || existing?.cancelRequested || existing?.cancelled) throw new WorkspaceError('UPLOAD_CANCELLED', 'This upload request was cancelled. Choose the file again with a new request.', 409);

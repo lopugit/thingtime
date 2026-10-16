@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Normal account standalone-file ZIP imports now
+  finish on-device with atomic bytes/content/queue intent. Independent changes
+  sync separately; media references wait for real private upload IDs. Preserve
+  canonical re-export byte targets when Components precede standalone files.
+  Production-client offline import/reload/export/reconnect and 1440/390/320px
+  checks pass. Document same-origin local storage for preview testing. Full
+  managed/media acceptance remains open. [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Normal account Download now exports saved file
   bytes and offline annotations as canonical ZIPs without waiting for sync.
   Production-client cold offline Download → anonymous Import → native preview

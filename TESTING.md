@@ -10697,3 +10697,28 @@ Run `app/local-workspace/components.browser.test.ts` with
   with `TT_LOCAL_FILE_RETENTION_COLD=1` and its existing private admin fixture.
 - [ ] Finish account file import and complete remote-folder/managed media
   transfer coverage before claiming the full offline suite or merging.
+
+
+### Offline account file transfer import (2026-10-17)
+
+- [x] Import a canonical folder/Component/page/standalone-file ZIP through the
+  normal account dialog with networking disabled. No Upload step or mutation
+  request; cold reload and decode the native preview. Export again through the
+  normal Download dialog; validate exact bytes and standalone file target IDs.
+- [x] Reconnect with verified identity. Independent content must drain while
+  file-dependent content waits for upload, then use the real private account
+  attachment ID. Verify title/folder metadata, exact downloaded bytes and guest
+  404. Never replace storage policy or approval with a local identity.
+- [x] Cover ambiguous receipt retry plus a newer edit, cancellation dependency
+  errors, missing/invalid bytes, missing destination, abort and actual full-quota
+  atomic rollback. Check split templates, saved/instance arguments, HTML/CSS
+  remapping and repeated independent imports. Ordinary/protected import routing
+  must preserve dedicated behavior until its local adapter is implemented.
+- [x] Inspect native dialog/preview at 1440/390/320px; no overflow or page errors.
+  Enable `TT_LOCAL_FILE_IMPORT_URL`, `TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE`, optional
+  `TT_LOCAL_FILE_IMPORT_ARTIFACTS` and shared Playwright/Chrome paths for
+  `accountFileImport.browser.test.ts`. Use the production client, a disposable
+  loopback stack and root-relative local storage URLs across preview ports.
+  A CSP-blocked upload is a real failure; do not loosen CSP to pass the fixture.
+- [ ] Complete recordings, bound/linked/managed account import and remaining
+  full-suite acceptance before merge. Standalone file coverage is not that gate.

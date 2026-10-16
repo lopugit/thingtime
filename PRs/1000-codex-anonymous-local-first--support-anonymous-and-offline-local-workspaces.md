@@ -1649,3 +1649,24 @@ source errors. Client build and focused lint pass. See the
 [checkpoint, artifacts and remaining scope](../docs/local-workspaces.md#account-file-transfer-exports--2026-10-17).
 Account file import, complete remote-folder file snapshots, bound/managed media
 and the remaining full-suite matrix still block merge. No manual deployment.
+
+
+## Account file ZIP import — 2026-10-17
+
+The normal account dialog now saves supported standalone-file ZIPs locally,
+including bytes and both durable queues in one transaction. Independent Things
+sync without waiting for media; referenced files require a confirmed private
+upload receipt before the canonical rewriter maps IDs. Ambiguous retries stay
+immutable. The shared exporter also fixes byte-target selection when a Component
+is visited before its standalone file. Anonymous content remains device-only.
+
+The enabled production-client browser fixture passes normal offline import,
+cold native preview, canonical re-export/exact bytes, verified private upload,
+real account media IDs, metadata placement and guest refusal. Dialog/preview
+checks cover 1440/390/320px. The original failure was the local store's absolute
+development origin conflicting with preview CSP; root-relative local URLs fix
+that setup without weakening policy. See `tmp/account-file-import-browser/`.
+Seven focused regression cases pass; existing workspace/Things/attachment suites
+pass. Raw typecheck, lint/build evidence and graph status are recorded in the
+checkpoint verification file. Bound/recording/linked/managed imports and the
+broader matrix remain open; no main merge or manual deployment.

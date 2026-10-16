@@ -1,3 +1,4 @@
+import { accountImportSupported } from './accountImport';
 import { AccountFileSync } from './accountFiles';
 import { localThingProjection } from './things';
 import { clearLocalCache } from '../hooks/localCache';
@@ -29,7 +30,8 @@ const workers = new Map<string, ReturnType<typeof createWorker>>();
 const BLOCKED_RETRY_MS = 60_000;
 function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
-	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease), files = new AccountFileSync(db, scope, lease);
+	const files = new AccountFileSync(db, scope, lease);
+	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
 	const controller = new AbortController();
 	const fileRetentionErrors = new Map<string, string>();
 	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
@@ -289,18 +291,19 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (Object.keys(input || {}).some(key => !['manifest', 'folderId', 'files', 'localFiles'].includes(key))) throw new WorkspaceError('INVALID_IMPORT', 'Unsupported import options.');
 			const manifest = parseTransfer(serializeTransfer(validateTransfer(input.manifest))), folderId = input.folderId;
-			if (manifest.files.length || manifest.links?.length || !manifest.things.every(accountThingCanCache)) return online.things.import(input, options);
+			if (input.localFiles !== undefined && input.files !== undefined) throw new WorkspaceError('INVALID_IMPORT', 'Choose device bytes or uploaded files, not both.');
+			if (!accountImportSupported(manifest) || (input.files && Object.keys(input.files).length)) return online.things.import(input, options);
 			if ((input.files !== undefined && (!input.files || typeof input.files !== 'object' || Array.isArray(input.files) || Object.keys(input.files).length)) ||
-				(input.localFiles !== undefined && (!(input.localFiles instanceof Map) || input.localFiles.size))) throw new WorkspaceError('INVALID_IMPORT', 'This transfer contains no files.');
+				(input.localFiles !== undefined && !(input.localFiles instanceof Map))) throw new WorkspaceError('INVALID_IMPORT', 'Provide a valid transfer file map.');
 			if (folderId != null && (typeof folderId !== 'string' || !folderId.trim())) throw new WorkspaceError('INVALID_FOLDER', 'Choose an import destination.');
 			const { sync } = worker();
 			if (folderId && !await sync.view(folderId)) {
 				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open the destination folder online once before importing offline.', 409);
 				await refresh({ id: folderId }, options?.signal);
 			}
-			const result = await sync.things.import(manifest, folderId, undefined, options?.signal);
+			const result = await sync.things.import(manifest, folderId, input.localFiles, options?.signal);
 			changed();
-			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: 0, linksImported: 0, savedLocally: true };
+			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: manifest.files.length, linksImported: 0, savedLocally: true };
 		};
 	return { ...online, auth: remote.auth, login: remote.login,
 		attachments: { ...online.attachments,

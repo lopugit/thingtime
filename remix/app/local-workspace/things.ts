@@ -24,6 +24,7 @@ import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
 import { type WorkspaceDatabase, WorkspaceError, WORKSPACE_LIMITS, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
+export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => Promise<void>;
 export type LocalThingMutation = (tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: ThingWrite) => Promise<void>;
 export type ThingWrite = {
 	id?: string; thingtime?: unknown; crystal?: unknown; extended?: unknown; tags?: unknown;
@@ -64,7 +65,7 @@ const validated = (input: ThingWrite, postAttachments?: { hasAny: boolean; hasVi
 export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
-		private onFileWrite?: (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => Promise<void>) {}
+		private onFileWrite?: LocalFileMutation) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -370,7 +371,7 @@ export class LocalThings {
 		const manifest = parseTransfer(serializeTransfer(validateTransfer(input)));
 		orderTransferImports(manifest);
 		if (manifest.links?.length) fail('ATTACHMENT_IMPORT_REQUIRED', 'Linked galleries require the workspace linked-attachment adapter');
-		if (manifest.files.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+		if (manifest.files.length && this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		// Snapshot caller-owned bytes before asynchronous hashing or persistence.
 		if (!(fileBytes instanceof Map) || fileBytes.size !== manifest.files.length) fail('INVALID_LOCAL_FILE', 'The transfer has missing or unexpected file bytes');
 		if (manifest.files.some(file => file.bytes > WORKSPACE_LIMITS.binaryBytes) || manifest.files.reduce((total, file) => total+file.bytes, 0) > WORKSPACE_LIMITS.bytes) fail('LOCAL_QUOTA', 'Local files exceed the 16 MiB per-file or 64 MiB workspace limit', 413);
@@ -378,9 +379,10 @@ export class LocalThings {
 		await verifyTransferFiles({ manifest, files: bytes }, signal); this.lease.assertCurrent();
 		const recordings = manifest.things.filter(isTransferRecording);
 		for (const row of recordings) recordingTransferFile(row, manifest);
+		if (this.scope.kind === 'account' && (recordings.some(row => row.crystal.filePurpose !== 'file') || manifest.files.some(file => !recordings.some(row => row.id === file.targetId)))) fail('LOCAL_OPERATION_UNAVAILABLE', 'Bound media and recordings require their dedicated account import adapter');
 		const map = new Map(manifest.things.map(row => [row.id, this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()]));
 		const accountSuffix = this.scope.kind === 'account' ? this.uuid().slice(0, 8) : null;
-		const fileMap = new Map(manifest.files.map(file => [file.id, `local-${this.uuid()}`]));
+		const fileMap = new Map(manifest.files.map(file => [file.id, `${this.scope.kind === 'account' ? 'local-file' : 'local'}-${this.uuid()}`]));
 		for (const recording of recordings) { const id = fileMap.get(String(recording.crystal.recordingFileId))!; map.set(recording.id, id); fileMap.set(recording.id, id); }
 		const crystals = rewriteTransferMedia(manifest.things, fileMap);
 		const stamp = this.now();
@@ -430,7 +432,16 @@ export class LocalThings {
 			if (importedThemes.length && importedThemes.length + (await tx.list<LocalThing>('things')).filter(row => isTransferTheme(row.value)).length > MAX_SAVED_THEMES) fail('LOCAL_QUOTA', 'This import exceeds the saved-theme limit', 413);
 			// All IDs exist before relationship checks, including forward refs.
 			for (const row of rows) await tx.put('things', row.id, row);
-			for (const row of rows) { signal?.throwIfAborted(); await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, null, row); }
+			for (const row of rows) {
+				signal?.throwIfAborted(); await this.placement(tx, row);
+				if (isLocalAttachment(row) && this.scope.kind === 'account') {
+					row.localAttachment.requestId = row.id.slice('local-file-'.length);
+					row.localAttachment.initialFolderId = row.folderId || null;
+				}
+				await tx.put('things', row.id, row);
+				if (isLocalAttachment(row)) await this.onFileWrite?.(tx, row);
+				else await this.onWrite?.(tx, row, null, row);
+			}
 			for (const file of manifest.files) { signal?.throwIfAborted(); await tx.putBytes(fileMap.get(file.id)!, bytes.get(file.id)!); }
 		}, undefined, signal);
 		return { ok: true, roots: manifest.roots.map(id => map.get(id)!), idMap: Object.fromEntries(map), things: rows };
@@ -482,6 +493,14 @@ export async function exportLocalThingSnapshot(saved: LocalThing[], builtins: re
 			}
 		}
 	}, options);
+	// Embedded use can be visited before the standalone file itself. When
+	// both are included, the byte entry belongs to that file Thing so its normal
+	// import contract remains valid regardless of folder/UUID traversal order.
+	const included = new Set(bundle.manifest.things.map(row => row.id));
+	for (const row of attachments) if (!row.targetId && included.has(row.id)) {
+		const file = bundle.manifest.files.find(file => file.id === localAttachmentFileId(row.id));
+		if (file) file.targetId = row.id;
+	}
 	const includedCopies = new Map([...mediaCopies].filter(([, fileId]) => bundle.files.has(fileId)));
 	const crystals = rewriteTransferMedia(bundle.manifest.things, includedCopies);
 	for (const row of bundle.manifest.things) row.crystal = crystals.get(row.id)!;

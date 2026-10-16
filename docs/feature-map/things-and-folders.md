@@ -1,5 +1,13 @@
 # Things and folders
 
+Normal account ZIP import uses `local-workspace/accountImport.ts` for shared
+UI/facade routing, and `AccountThingSync` plus `AccountFileSync.contentHooks`
+for atomic local admission and receipt-dependent media remapping. Regressions:
+`accountFileImport.test.ts` and opt-in production-client
+`accountFileImport.browser.test.ts`. Standalone file/ordinary content is covered;
+bound, recording, linked and managed imports remain separate acceptance work.
+See [local workspaces](../local-workspaces.md#account-file-transfer-imports--2026-10-17).
+
 Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
 shared `timeline/actionOutcome.ts`, called from the canonical server executor.
 They retain safe effect receipts in the existing Timeline, never a new history

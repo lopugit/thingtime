@@ -1,4 +1,4 @@
-import { LocalThings, type LocalThing, type ThingWrite } from './things';
+import { LocalThings, type LocalThing, type ThingWrite, type LocalFileMutation } from './things';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { aclFromVisibility, sanitizeAcl, visibilityFromAcl, isProtectedThingtime, validateThingtimeCrystal } from '../schemas/registry';
@@ -62,10 +62,11 @@ export const accountSyncDeadline = async <T>(run: (signal: AbortSignal) => Promi
 export class AccountThingSync {
 	readonly things: LocalThings;
 	constructor(private db: WorkspaceDatabase, readonly scope: AccountScope, private lease: WorkspaceLease,
-		private now = () => Date.now(), private uuid = () => crypto.randomUUID()) {
+		private now = () => Date.now(), private uuid = () => crypto.randomUUID(),
+		private files?: { mutate: LocalFileMutation; prepare: (tx: WorkspaceTransaction, row: LocalThing) => Promise<LocalThing | null> }) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous workspaces never sync', 403);
 		this.things = new LocalThings(db, scope, lease, [], () => new Date(now()).toISOString(), uuid,
-			(tx, row, previous, input) => this.enqueue(tx, row, previous, input as AccountThingWrite));
+			(tx, row, previous, input) => this.enqueue(tx, row, previous, input as AccountThingWrite), files?.mutate);
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) { return this.db.transaction(this.scope, mode, this.lease, run); }
 	private checked(input: AccountThing): AccountThing {
@@ -258,7 +259,18 @@ export class AccountThingSync {
 					if (candidate.deleted && rows.some(other => other.id !== candidate.id && other.state !== 'synced' &&
 						[other.base?.folderId, other.base?.targetId, other.pending?.body.folderId, other.pending?.body.targetId].includes(candidate.id))) continue;
 					if (!candidate.deleted && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
-					record = candidate; row = content; break;
+					let prepared = content;
+					if (!candidate.deleted && !candidate.pending && this.files) {
+						try {
+							const ready = await this.files.prepare(tx, content);
+							if (!ready) continue;
+							prepared = ready;
+						} catch (error) {
+							if (!(error instanceof WorkspaceError)) throw error;
+							await tx.put(COLLECTION, candidate.id, { ...candidate, state: 'error', claim: undefined, error: error.message }); continue;
+						}
+					}
+					record = candidate; row = prepared; break;
 				}
 				if (!record || !row) return null;
 				const pending: FrozenWrite | FrozenDelete = record.pending || (record.deleted && record.base ? {

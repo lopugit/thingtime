@@ -4610,8 +4610,8 @@ administrator through the normal API, add its username to ignored
 in the ignored JSON fixture (restrict it to mode 0600). Enable the existing
 filesystem object-store stand-in with
 `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<ignored-directory>`. If setting
-`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, use the **same Vite origin** the
-browser opens; a different Nitro port is a different origin and is correctly
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, use the **same browser origin** the
+browser opens (including a production-client preview port); a different Nitro port is a different origin and is correctly
 blocked by the normal CSP. The default root-relative signed URLs also work.
 Restart this checkout using `npm run web-pms` after environment changes.
 
@@ -4629,3 +4629,22 @@ app/local-workspace/accountFileUi.browser.test.ts` from `remix/`, with
 and optional `TT_LOCAL_FILE_SYNC_ARTIFACTS` as above. It creates only a disposable
 local account and needs no administrator approval because its saves finish
 offline. The separate lifecycle fixture tests protected upload approval and sync.
+
+
+### Offline account ZIP import regression
+
+`accountFileImport.browser.test.ts` runs the normal Import and Download dialogs,
+native preview and verified private sync against a production client. From
+`remix`, run `node --import tsx --test app/local-workspace/accountFileImport.browser.test.ts`.
+Set `TT_LOCAL_FILE_IMPORT_URL=http://127.0.0.1:<production-preview-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, optional
+`TT_LOCAL_FILE_IMPORT_ARTIFACTS=/path/to/local-evidence`, and the shared
+Playwright/Chrome paths described above. Use the disposable replica/admin setup
+above and normal rate-limited registration. Fixture accounts remain disposable;
+created files/Things and browser contexts are cleaned up.
+
+When the dev and production-client preview use different ports, leave
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN` unset so the stand-in emits
+root-relative signed URLs. An absolute URL for the other port is correctly
+blocked by CSP. Restart only this checkout's managed stack after changing the
+environment. Do not weaken CSP, signing, upload approval or rate limits.

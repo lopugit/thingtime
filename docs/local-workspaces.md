@@ -81,7 +81,7 @@ change this pointer; logout/account changes revoke it.
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
 | Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue update recovery, cross-account coverage and real-device startup verification. Chromium offline-emulation module cancellations remain under investigation; request blocking is no longer accepted without its root-read failure probe; the latest checkpoint defaults to actual offline emulation and retains failures as merge gates. |
-| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Ordinary JSON imports now create private independent local copies with atomic queue intent and verified canonical server round-trip (checkpoint below). Ordinary JSON downloads now use device content and complete scoped export snapshots, with native offline dialog/download/reload and normal-importer round-trip evidence (checkpoint below). Complete file/managed imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
+| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Ordinary JSON imports now create private independent local copies with atomic queue intent and verified canonical server round-trip (checkpoint below). Ordinary JSON downloads now use device content and complete scoped export snapshots, with native offline dialog/download/reload and normal-importer round-trip evidence (checkpoint below). Standalone file ZIP imports/exports now finish locally through the normal dialogs (checkpoints below). Complete bound/recording/linked/managed imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
 
 ## Development verification
 
@@ -2284,8 +2284,53 @@ existing-retention fixtures delete only their newly created server file.
 Client build and focused lint pass. Raw TypeScript remains at 91 baseline errors
 with none in changed sources. CI and deployed acceptance are separate.
 
-Still open: account file imports (the account dialog currently uploads first),
+Superseded for standalone account files by the import checkpoint below. Still open:
 complete export caching of remote folders with files not already represented by
 a complete device closure, linked galleries and managed account transfers,
 bound post/draft media, and the rest of the full-suite matrix. This checkpoint
 is not full offline account transfer acceptance and does not authorize merge.
+
+
+## Account file transfer imports — 2026-10-17
+
+The normal Import dialog now commits supported account ZIPs to the device in
+one transaction: editable ordinary Things, standalone file metadata, validated
+bytes and both durable queue intents. It does not wait for upload or draft saving.
+The UI and facade share `accountImportSupported`; existing staged uploads keep
+their normal remote importer. Anonymous imports remain device-only.
+
+After verified reconnect, unrelated Things drain independently. Only Things
+referencing a queued file wait for its real upload receipt. The shared canonical
+media rewriter handles URLs, authored HTML, CSS, saved/instance arguments and
+split templates without flattening editable content. Uncertain writes retain
+their frozen body; newer edits follow separately. Removed file dependencies
+surface a review error. File annotations and placement use their existing queue.
+All uploads remain private and subject to ordinary approval and server policy.
+
+Re-export now binds a shared byte entry to its included standalone file Thing
+even when the collector visits an embedding Component first. This preserves the
+normal importer contract regardless of generated UUID traversal order.
+
+Local acceptance: the production client imports a folder, Component, page and
+PNG while actually offline, cold reloads its native preview, then downloads and
+validates a canonical ZIP with identical bytes. Reconnect uses the normal private
+upload lifecycle and rewrites the Component to the real account file ID; guest
+reads return 404. No offline mutation or bulk account import request occurs.
+Import dialog/native preview pass 1440×1000, 390×844 and 320×844 layout checks.
+Evidence is `tmp/account-file-import-browser/` and `tmp/account-file-import-*.log`.
+The fixture closes all browser contexts and deletes its new account Things/files.
+Seven focused regressions cover atomic queues, independent progress, immutable
+retries, removal errors, invalid bytes/placement/cancellation/full-quota rollback,
+unsupported dedicated kinds and editable template/media remapping. Existing
+workspace, Things and attachment suites also pass; generic browser skips are
+not browser acceptance. CI and deployed verification are separate.
+
+The first browser run exposed a test origin mismatch: the local store emitted
+absolute development-port URLs into a different production-preview origin. Use
+root-relative stand-in URLs for multiple browser origins; keep normal CSP.
+The rerun passes without changing CSP, upload authorization or rate limits.
+
+Still unfinished: recordings, bound post/draft media, linked galleries and
+managed account imports, complete remote-folder caches, wider media surfaces,
+and the full-suite matrix above. These are acceptance work, not exemptions from
+the requested end state. This checkpoint does not authorize a main merge.
