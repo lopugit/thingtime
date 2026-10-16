@@ -40,8 +40,8 @@ posting prerequisite.
 Account, origin, editor target and old-editor callback guards prevent cross-talk.
 The picker preference controls automatic account resume; device recovery remains
 on. Account changes also scope the local Thing workspace and BroadcastChannel.
-The old device workspace is copied once to the first opening account, retained
-in the old key, and is never uploaded merely by hydration.
+Anonymous and account workspaces remain separate. Signing in never copies or
+uploads anonymous content; moving it requires an explicit portable export/import.
 
 Definition snapshots retain the original `baseUpdatedAt`. Restoring a draft
 against a newer saved definition (or restoring a legacy draft without a known
@@ -79,3 +79,25 @@ has no draft-save prerequisite. `DraftPicker` labels device-only storage explici
 Run `test:local-workspace` alongside the account suites above; the local composer
 manual checklist covers offline edit previews, template independence and reload.
 Account draft permissions and upload admission are unchanged.
+
+
+## Account local queue foundation (not yet wired to editors)
+
+`local-workspace/accountDrafts.ts` wraps the same `LocalDrafts` store with atomic
+queue admission. Editor revisions remain independent from acknowledged server
+revisions. Unsent saves coalesce; uncertain writes retain their immutable body
+and write ID across reloads, newer edits and retirement. Cross-tab claims and
+scope leases fence completion. Conflicts preserve both versions for review.
+
+`AccountFileSync.draftHooks` resolves confirmed upload receipts, checks retained
+access in the copy transaction and registers independent template/copy uploads.
+`retainDraft` uses the existing owned-file descriptor and atomically commits all
+originals with the complete draft snapshot. Draft media stays out of the ordinary
+file library. Canonical read refusals remain effective after local release.
+
+`accountDrafts.test.ts` and `accountDraftFiles.test.ts` cover this service layer.
+**Native account drafts still use the current remote draft client.** Remaining
+work includes verified transport/home-data-plane semantics, server template-save
+negotiation, cached bounded discovery, native client/worker/status wiring, conflict
+and cleanup UI, and real offline/reconnect acceptance. Do not count these unit
+checks as completion of account local-first drafts or change the full merge gate.

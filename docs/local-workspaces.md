@@ -2793,3 +2793,47 @@ The full coverage matrix remains open, including shared/managed/linked transfer,
 parent binding reconciliation, draft and catalogue sync, encrypted local Vault,
 native/integration coverage and broader identity/offline startup recovery. This
 checkpoint is local evidence only and does not make the draft PR ready to merge.
+
+
+## Account local draft queue foundation — 2026-10-17
+
+The shared local draft implementation now offers transactional hooks for account
+queue admission and file copies. The new `AccountDraftSync` service separates
+local editor revisions from canonical server revisions, coalesces unsent saves,
+freezes uncertain writes, respects retry delays, serializes cross-tab claims and
+preserves newer edits while an older save completes. Local retirement does not
+await remote cleanup; an already-started uncertain save is reconciled before its
+delete. Explicit conflict review checks both local and remote revisions.
+
+Account media hooks preserve independent template/working-copy bytes and upload
+identities, wait for confirmed receipts before constructing canonical draft file
+references, and retain existing private originals with their complete draft in
+one transaction. Draft files stay hidden from the ordinary library. A canonical
+read refusal arriving after preparation prevents a new copy; the original parent
+access boundary survives local file release. Recovery bytes remain intact.
+
+This is an **inactive service foundation**, not native account-draft completion:
+`draftClient.ts`, the account worker and draft status UI are not routed through
+it yet. Verified home-draft/data-plane transport, template-save capability,
+bounded discovery/refresh, identity-scoped client callbacks, conflict UI, released
+upload cleanup and submission/draft-media donation races remain required before
+activation. Account posting continues independently of draft saves.
+
+Local service validation: 367 workspace plus 4 offline-shell tests pass (38
+opt-in browser skips excluded), and 33 existing draft tests pass. Focused lint
+has no errors and the existing LocalDrafts constructor warning. Client build
+verifies 247 assets. The new queue/media tests use controlled transports and are
+not evidence of real account API synchronization. CI, preview and full native
+account-draft acceptance remain separate gates; PR #1000 remains draft.
+
+The enabled fresh-device post/comment retention browser regression also passes
+against the rebuilt production client, including offline native export, anonymous
+round-trip import, pending edits/removals, private reconnect and 1440/390/320px
+bounds. Evidence: `tmp/account-draft-bound-browser/`. Raw TypeScript reports 91
+baseline diagnostics, none in the changed files. This regression protects shared
+file behavior; it does not exercise the unwired account draft queue in an editor.
+
+The cold standalone-file browser regression also passes against this build,
+including real canonical deletion/refusal and no output from the subsequent
+offline Download (`tmp/account-draft-file-browser/`). Both enabled browser checks
+use fresh disposable loopback accounts, never existing account data.

@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add the account-local draft queue foundation over
+  existing canonical local drafts, with immutable retries, separate editor/server
+  revisions and atomic private media handling. Fence copying after account read
+  refusals. Native client/worker activation remains pending; no account draft
+  completion or deployment is claimed. [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Retained account files now fence known access
   refusals before fresh offline reads/exports and reject stale reauthorization,
   while preserving device edits. Dedicated/keyed export plans retain identity

@@ -10951,3 +10951,24 @@ Run `app/local-workspace/components.browser.test.ts` with
   reconcile, delete only the disposable server fixture, observe the real 404,
   withdraw its active preview, and refuse a new native offline Download. Check
   1440/390/320px layout, no resulting file, no offline mutation or duplicate upload.
+
+
+### Account local draft queue foundation (activation pending)
+
+- [x] Service tests: local save/list/load work without transport, unsent writes
+  coalesce, and acknowledgements never change the editor's local revision.
+- [x] Simulate a lost save response, reconstruct the service, edit or discard,
+  and replay exactly the old write before newer intent. A deleted local draft
+  cannot reappear. Two workers cannot concurrently claim the same write.
+- [x] Conflicts retain both versions; reviewed replacement checks both revisions.
+  Retired identities, malformed replies and quota failures cannot partly commit.
+  Respect a server Retry-After delay without changing the frozen write.
+- [x] Template and working copies own independent originals/upload identities.
+  Existing private draft retention is atomic and hidden from the ordinary library.
+  Refusal after preparation prevents copying; local release does not erase the
+  original parent refusal boundary. Recovery bytes remain stored.
+- [ ] Activate only after verified account/home-data-plane transport, native
+  client/worker/status integration, bounded cached discovery and template-save
+  capability negotiation. Prove cold offline native editing, independent post
+  completion, reconnect and media donation/removal/cleanup races with disposable
+  accounts. Current queue tests alone do not satisfy this acceptance gate.
