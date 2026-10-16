@@ -9,7 +9,7 @@ export function accountImportSupported(manifest: ThingTransfer): boolean {
  const files = new Set<string>();
  for (const row of manifest.things) {
   if (accountThingCanCache(row)) continue;
-  if (!isTransferRecording(row) || row.crystal.filePurpose !== 'file') return false;
+  if (!isTransferRecording(row)) return false;
   try { files.add(recordingTransferFile(row, manifest).id); } catch { return false; }
  }
  return manifest.files.every(file => files.has(file.id));

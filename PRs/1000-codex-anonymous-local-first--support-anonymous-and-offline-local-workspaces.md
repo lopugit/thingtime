@@ -1670,3 +1670,29 @@ Seven focused regression cases pass; existing workspace/Things/attachment suites
 pass. Raw typecheck, lint/build evidence and graph status are recorded in the
 checkpoint verification file. Bound/recording/linked/managed imports and the
 broader matrix remain open; no main merge or manual deployment.
+
+
+## Standalone recordings and independent deletion — 2026-10-17
+
+Canonical recording ZIPs now use the same atomic device import, byte storage,
+export and private sync path as files. Owned recording retention negotiates
+content 1.14.0 and durable deletion 1.5.0 with exact-purpose fences. Retention now
+preserves canonical annotations instead of using a minimal byte projection.
+Native device audio waits for a usable source and avoids a redundant legacy
+cache copy. Shared/keyed playback cannot borrow that cache.
+
+Real browser checks exposed two deletion dependencies: unsynced local metadata
+was incorrectly treated as a remote conflict, and the native library's bulk
+Delete menu bypassed the file queue. Both are fixed, with complete-snapshot
+comparison, conditional account deletion, durable replay and explicit mixed-batch
+results. Unknown account edits still require review.
+
+The production recording browser scenario passes import/play/edit/export,
+clean-context retention, offline rename/delete, lost-response retry and anonymous
+offline playback/reconnect with zero remote writes. Existing file import and
+retention scenarios also pass. 1,034 unit/offline-shell checks pass; 33 generic
+browser skips are not acceptance evidence. See the [recording checkpoint and
+remaining work](../docs/local-workspaces.md#local-standalone-recordings--2026-10-17).
+No main merge or manual deployment. Full-suite acceptance, microphone capture,
+bound media, secondary offline readers and current-head deployed verification
+remain open.

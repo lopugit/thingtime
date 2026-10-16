@@ -1,4 +1,4 @@
-import { applyAttachmentAnnotationPatch, sanitizeAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
+import { isStandaloneAttachmentPurpose, applyAttachmentAnnotationPatch, sanitizeAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
 import { accountSyncDeadline, type SyncState } from './accountSync';
 import { isLocalAttachment, type LocalAttachment } from './attachments';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
@@ -55,7 +55,7 @@ export class AccountFileMetadata {
 		const before = previous ? fileMetadata(previous) : empty,
 			after = fileMetadata(row);
 		if (same(before, after)) return;
-		if (row.localAttachment.purpose !== 'file' || row.targetId)
+		if (!isStandaloneAttachmentPurpose(row.localAttachment.purpose) || row.targetId)
 			throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Bound account media requires its dedicated reconciliation adapter.');
 		const prior = await tx.get<MetadataRecord>(COLLECTION, row.id);
 		await tx.put(
@@ -73,6 +73,14 @@ export class AccountFileMetadata {
 		if (prior && (prior.state !== 'synced' || prior.pending)) return;
 		await this.writeLocal(tx, local, remote.metadata);
 		await tx.put(COLLECTION, local.id, { id: local.id, remoteId: remote.id, base: remote.metadata, state: 'synced', attempts: 0, retryAt: 0 } satisfies MetadataRecord);
+	}
+	/** Deleting after an offline edit must not depend on that edit syncing first.
+	 * Accept only a complete known snapshot; unrelated account edits still need
+	 * review, and the delete request independently fences the observed version. */
+	async matchesDeletion(tx: WorkspaceTransaction, local: LocalAttachment, remote: Snapshot) {
+		if (same(fileMetadata(local), remote.metadata)) return true;
+		const known = await tx.get<MetadataRecord>(COLLECTION, local.id);
+		return !!known && (!known.remoteId || known.remoteId === remote.id) && same(known.base, remote.metadata);
 	}
 	async discardUnuploaded(tx: WorkspaceTransaction, id: string) { await tx.delete(COLLECTION, id); }
 	async status() {

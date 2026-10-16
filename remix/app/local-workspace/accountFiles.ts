@@ -1,4 +1,4 @@
-import { sanitizeAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
+import { isStandaloneAttachmentPurpose, sanitizeAttachmentPublicMetadata } from '../api/utils/attachments/attachmentCore';
 import { AccountFileMetadata, fileMetadata, type FileMetadataTransport } from './accountFileMetadata';
 import { normalizePublicAttachment, multipartPartRange, attachmentCompleteRetryPhase } from '../components/Attachments/attachmentUiCore';
 import type { PublicAttachment, SignedUploadPart } from '../components/Attachments/attachmentTypes';
@@ -19,7 +19,7 @@ export type AccountFileRequest = {
 	filename: string;
 	contentType: string;
 	sizeBytes: number;
-	purpose: 'file' | 'post' | 'comment';
+	purpose: 'file' | 'recording' | 'post' | 'comment';
 };
 export type AccountFilePlan = { id: string; partSizeBytes: number; partCount: number; state?: 'ready' };
 type FileRecord = {
@@ -47,7 +47,7 @@ type FileRecord = {
 	error?: string;
 	claim?: { token: string; expiresAt: number };
 };
-const libraryFileVisible = (row: LocalAttachment | null, record: FileRecord | undefined | null): row is LocalAttachment => !!row && isLocalAttachment(row) && row.localAttachment.purpose === 'file' && !row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt && !!record && !record.cancelled && !record.cancelRequested && !record.deleteRequested;
+const libraryFileVisible = (row: LocalAttachment | null, record: FileRecord | undefined | null): row is LocalAttachment => !!row && isLocalAttachment(row) && isStandaloneAttachmentPurpose(row.localAttachment.purpose) && !row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt && !!record && !record.cancelled && !record.cancelRequested && !record.deleteRequested;
 export type AccountFileRetentionTransport = {
 	retention(id: string, signal: AbortSignal): Promise<unknown>;
 	bytes(id: string, cacheKey: string, size: number, signal: AbortSignal): Promise<Uint8Array>;
@@ -142,7 +142,7 @@ export class AccountFileSync {
 		if (existing) return;
 		const purpose = row.localAttachment.purpose,
 			requestId = row.localAttachment.requestId;
-		if (!requestId || !['file', 'post', 'comment'].includes(purpose))
+		if (!requestId || !['file', 'recording', 'post', 'comment'].includes(purpose))
 			throw new WorkspaceError('INVALID_UPLOAD', 'Unsupported account file selection');
 		const record: FileRecord = {
 			id: row.id,
@@ -165,14 +165,15 @@ export class AccountFileSync {
 	}
 	private checkedRetention(raw: any, id: string) {
 		const file = raw?.file, attachment = normalizePublicAttachment(file?.attachment);
-		if (!attachment || attachment.id !== id || file?.ownerId !== this.scope.ownerId || 'url' in file.attachment ||
+		const purpose = file?.purpose;
+		if (!isStandaloneAttachmentPurpose(purpose) || !attachment || attachment.id !== id || file?.ownerId !== this.scope.ownerId || 'url' in file.attachment ||
 			!Number.isSafeInteger(raw.size) || raw.size < 1 || raw.size !== attachment.size || raw.size > WORKSPACE_LIMITS.binaryBytes ||
 			!(/^[a-f0-9]{64}:original$/).test(raw.cacheKey || ''))
 			throw new WorkspaceError('INVALID_FILE_RETENTION', 'The account returned an invalid owned file descriptor.', 502);
 		const metadata = this.metadata.checked({ id, author: { id: file.ownerId }, thingtime: ['attachment'], crystal: attachment, updatedAt: file.updatedAt, folderId: file.folderId }, id);
 		const crystal = sanitizeAttachmentPublicMetadata(attachment);
 		if (!crystal.ok) throw new WorkspaceError('INVALID_FILE_RETENTION', 'The account returned invalid file metadata.', 502);
-		return { attachment, crystal: crystal.crystal, metadata, cacheKey: raw.cacheKey as string };
+		return { purpose, attachment, crystal: crystal.crystal, metadata, cacheKey: raw.cacheKey as string };
 	}
 	/** Retain only bytes disclosed by the verified owned-file transport. The
 	 * descriptor is checked again after reading; no upload intent is invented. */
@@ -201,17 +202,17 @@ export class AccountFileSync {
 					const localId = alias?.id || fallbackId;
 					const prior = alias || await tx.get<FileRecord>(COLLECTION, localId), local = await tx.get<LocalAttachment>('things', localId);
 					if (prior?.deleteRequested || prior?.cancelRequested || prior?.cancelled) throw new WorkspaceError('FILE_DELETED', 'This file was deleted in this workspace.', 404);
-					if (prior && (!local || prior.remote?.id !== id || prior.sha256 !== sha256 || (prior.retainedKey && prior.retainedKey !== snapshot.cacheKey)))
+					if (prior && (!local || prior.remote?.id !== id || prior.request.purpose !== snapshot.purpose || local.localAttachment.purpose !== snapshot.purpose || prior.sha256 !== sha256 || (prior.retainedKey && prior.retainedKey !== snapshot.cacheKey)))
 						throw new WorkspaceError('FILE_CHANGED', 'Retained file bytes or identity changed. The device copy has been preserved.', 409);
 					if (prior && local && ((prior.retainedObservedAt ?? -1) >= observedAt || (prior.retainedVersion && Date.parse(prior.retainedVersion) > Date.parse(snapshot.metadata.updatedAt)))) return { row: local, changed: false };
-					let row = local || createLocalAttachment(localId, { id: 'bytes', targetId: localId, path: 'files/000000', name: snapshot.attachment.name, mime: snapshot.attachment.contentType, bytes: copy.length, sha256 }, new Date(this.now()).toISOString(), 'file', 0, snapshot.metadata.metadata.folderId ? { folderId: snapshot.metadata.metadata.folderId } : {});
+					let row = local || createLocalAttachment(localId, { id: 'bytes', targetId: localId, path: 'files/000000', name: snapshot.attachment.name, mime: snapshot.attachment.contentType, bytes: copy.length, sha256 }, new Date(this.now()).toISOString(), snapshot.purpose, 0, snapshot.metadata.metadata.folderId ? { folderId: snapshot.metadata.metadata.folderId } : {});
 					if (!local) row = { ...row, crystal: { ...snapshot.crystal } };
 					const flagsChanged = row.localAttachment.nsfw !== snapshot.attachment.nsfw || row.localAttachment.pending !== snapshot.attachment.pending;
 					row = { ...row, localAttachment: { ...row.localAttachment, accountFileId: id, nsfw: snapshot.attachment.nsfw ? true : undefined, pending: snapshot.attachment.pending }, ...(flagsChanged && local ? { revision: row.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(row.updatedAt) + 1)).toISOString() } : {}) };
 					if (!local || flagsChanged || local.localAttachment.accountFileId !== id) await tx.put('things', row.id, row);
 					if (!local) await tx.putBytes(row.id, copy);
 					await this.metadata.remember(tx, row, snapshot.metadata);
-					await this.putRecord(tx, { ...(prior || { id: row.id, source: 'account' as const, request: { filename: snapshot.attachment.name, contentType: snapshot.attachment.contentType, sizeBytes: copy.length, purpose: 'file' as const }, sha256, state: 'synced' as const, phase: 'complete' as const, uploaded: [], attempts: 0, retryAt: 0 }), remote: snapshot.attachment, retainedKey: snapshot.cacheKey, retainedVersion: snapshot.metadata.updatedAt, retainedObservedAt: observedAt });
+					await this.putRecord(tx, { ...(prior || { id: row.id, source: 'account' as const, request: { filename: snapshot.attachment.name, contentType: snapshot.attachment.contentType, sizeBytes: copy.length, purpose: snapshot.purpose }, sha256, state: 'synced' as const, phase: 'complete' as const, uploaded: [], attempts: 0, retryAt: 0 }), remote: snapshot.attachment, retainedKey: snapshot.cacheKey, retainedVersion: snapshot.metadata.updatedAt, retainedObservedAt: observedAt });
 					const next = (await tx.get<LocalAttachment>('things', row.id))!;
 					return { row: next, changed: !local || next.revision !== local.revision };
 				}, child);
@@ -232,7 +233,7 @@ export class AccountFileSync {
 			});
 			const visible = new Set(things.map(row => row.id));
 			const aliases = new Map<string, string | null>();
-			for (const record of records.values()) if (record.request.purpose === 'file' && record.remote) aliases.set(record.remote.id, visible.has(record.id) ? record.id : null);
+			for (const record of records.values()) if (isStandaloneAttachmentPurpose(record.request.purpose) && record.remote) aliases.set(record.remote.id, visible.has(record.id) ? record.id : null);
 			return { things, aliases };
 		});
 	}
@@ -269,7 +270,7 @@ export class AccountFileSync {
 				phase: value.deleteRequested ? 'delete' as const : value.cancelRequested ? 'cancel' as const : value.phase,
 				error: value.state === 'synced' ? metadata.get(value.id)?.error : value.error,
 				retryAt: value.state === 'synced' ? metadata.get(value.id)?.retryAt || 0 : value.retryAt,
-				canCancel: value.request.purpose === 'file' && !value.remote && !value.cancelRequested && !value.deleteRequested,
+				canCancel: isStandaloneAttachmentPurpose(value.request.purpose) && !value.remote && !value.cancelRequested && !value.deleteRequested,
 				remoteId: value.remote?.id
 			}))
 		);
@@ -288,7 +289,7 @@ export class AccountFileSync {
 			if (!row) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching upload.', 404);
 			if (row.cancelled) return;
 			const local = await tx.get<LocalAttachment>('things', id);
-			if (row.request.purpose !== 'file' || local?.targetId || local?.localAttachment.draftId) throw new WorkspaceError('BOUND_UPLOAD', 'Remove this upload through its owning editor.', 409);
+			if (!isStandaloneAttachmentPurpose(row.request.purpose) || local?.targetId || local?.localAttachment.draftId) throw new WorkspaceError('BOUND_UPLOAD', 'Remove this upload through its owning editor.', 409);
 			if (row.remote) throw new WorkspaceError('UPLOAD_FINALIZED', 'This file finished uploading. Review it before deleting.', 409);
 			if (row.started === false) return this.finishCancellation(tx, row);
 			await this.putRecord(tx, { ...row, cancelRequested: true, state: 'pending', claim: undefined, error: undefined, retryAt: 0 });
@@ -302,7 +303,7 @@ export class AccountFileSync {
 			if (!row) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching file.', 404);
 			if (row.cancelled || row.deleteRequested) return;
 			const local = await tx.get<LocalAttachment>('things', id);
-			if (!local || row.request.purpose !== 'file' || local.targetId || local.localAttachment.draftId)
+			if (!local || !isStandaloneAttachmentPurpose(row.request.purpose) || local.targetId || local.localAttachment.draftId)
 				throw new WorkspaceError('BOUND_UPLOAD', 'Remove this file through its owning editor.', 409);
 			if (!row.remote) throw new WorkspaceError('UPLOAD_UNFINISHED', 'Cancel the unfinished upload instead.', 409);
 			await tx.delete('things', id);
@@ -417,8 +418,8 @@ export class AccountFileSync {
 					if (!expectedUpdatedAt) {
 						try {
 							const remote = this.metadata.checked(await run(() => transport.get!(claimed.remote!.id, controller.signal)), claimed.remote.id);
-							const local = fileMetadata(claimed.deletingLocal);
-							if (Object.keys(local).some(key => local[key as keyof typeof local] !== remote.metadata[key as keyof typeof local]))
+							const known = await this.tx('readonly', tx => this.metadata.matchesDeletion(tx, claimed.deletingLocal!, remote));
+							if (!known)
 								throw new WorkspaceError('FILE_DELETE_CONFLICT', 'File details changed. Review before deleting.', 409);
 							expectedUpdatedAt = remote.updatedAt;
 						} catch (error) {

@@ -4,8 +4,12 @@ Normal account ZIP import uses `local-workspace/accountImport.ts` for shared
 UI/facade routing, and `AccountThingSync` plus `AccountFileSync.contentHooks`
 for atomic local admission and receipt-dependent media remapping. Regressions:
 `accountFileImport.test.ts` and opt-in production-client
-`accountFileImport.browser.test.ts`. Standalone file/ordinary content is covered;
-bound, recording, linked and managed imports remain separate acceptance work.
+`accountFileImport.browser.test.ts`. Standalone files, recordings and ordinary content use this path;
+bound, linked and managed imports remain separate acceptance work. Recording
+regression: `accountRecordingImport.browser.test.ts`; retention negotiates content
+1.14.0 and deletion 1.5.0. Offline rename/delete compares complete known metadata
+snapshots so deletion does not wait for annotation sync; unknown account changes
+still require review. Native device audio skips the legacy audio cache.
 See [local workspaces](../local-workspaces.md#account-file-transfer-imports--2026-10-17).
 
 Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`

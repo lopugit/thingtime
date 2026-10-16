@@ -9,7 +9,7 @@ function fixture() {
  let now = Date.parse('2026-10-17T00:00:00Z'), retired = false;
  const lease = { assertCurrent() { if (retired) throw new Error('Retired'); }, onInvalidate: () => () => {} };
  const files = new AccountFileSync(db, scope, lease, () => now), bytes = new TextEncoder().encode('Previously uploaded file bytes');
- const remote = { ok: true, cacheKey: 'a'.repeat(64) + ':original', size: bytes.length, file: { ownerId: scope.ownerId, updatedAt: new Date(now).toISOString(), folderId: null as string | null,
+ const remote = { ok: true, cacheKey: 'a'.repeat(64) + ':original', size: bytes.length, file: { purpose: 'file' as 'file' | 'recording', ownerId: scope.ownerId, updatedAt: new Date(now).toISOString(), folderId: null as string | null,
   attachment: { id: 'account-file', name: 'existing.txt', size: bytes.length, contentType: 'text/plain', mediaKind: 'file', title: 'Original title' } } };
  const calls: any[] = [];
  const transport = {
@@ -56,7 +56,7 @@ test('retention reconciles clean remote details while preserving offline edits a
  } finally {await f.db.close();}
 });
 test('foreign, linked, oversized or malformed descriptors never persist bytes or create upload intent', async () => {
- for(const mutate of [ (r:any)=>r.file.ownerId='foreign', (r:any)=>r.file.attachment.url='https://foreign.test/file', (r:any)=>r.size++, (r:any)=>r.cacheKey='url-secret', (r:any)=>r.file.updatedAt='bad', (r:any)=>{r.size=r.file.attachment.size=17*1024*1024;} ]) {
+ for(const mutate of [ (r:any)=>delete r.file.purpose, (r:any)=>r.file.purpose='post', (r:any)=>r.file.ownerId='foreign', (r:any)=>r.file.attachment.url='https://foreign.test/file', (r:any)=>r.size++, (r:any)=>r.cacheKey='url-secret', (r:any)=>r.file.updatedAt='bad', (r:any)=>{r.size=r.file.attachment.size=17*1024*1024;} ]) {
   const f=fixture(); try {mutate(f.remote);await assert.rejects(f.files.retain(f.transport,'account-file')); assert.deepEqual(f.calls,[]); assert.deepEqual(await f.files.status(),[]); assert.deepEqual((await f.files.library()).things,[]);} finally {await f.db.close();}
  }
 });
@@ -146,4 +146,43 @@ test('aborting during the final storage transaction rolls back retained bytes, m
   f.db.transaction=original;
   await f.db.transaction(scope,'readonly',f.lease,async tx=>{assert.equal((await tx.usage()).records,0);});
  }finally{await f.db.close();}
+});
+
+
+test('retained recordings keep purpose, edit offline and delete with an existing-ID receipt without uploads',async()=>{
+ const f=fixture();try{
+  f.remote.file.purpose='recording';
+  const {row}=await f.files.retain(f.transport,'account-file');
+  assert.equal(row.localAttachment.purpose,'recording');assert.equal(row.localAttachment.requestId,undefined);
+  assert.deepEqual((await f.files.readFile(row.id)).bytes,f.bytes);
+  await f.files.things.annotateFile({id:row.id,title:'Offline recording'});await f.files.sync(f.transport);
+  assert.equal(f.remote.file.attachment.title,'Offline recording');
+  f.remote.file.purpose='file';f.advance();await assert.rejects(f.files.retain(f.transport,'account-file'),/identity changed/);
+  assert.equal((await f.files.views([row.id]))[0].localAttachment.purpose,'recording');
+  await f.files.remove(row.id);assert.equal((await f.files.library()).things.length,0);await f.files.sync(f.transport);
+  assert.equal(f.calls.at(-1).retainReceipt,true);assert.equal(f.calls.at(-1).requestId,undefined);
+  await assert.rejects(f.files.readFile(row.id));
+ }finally{await f.db.close();}
+});
+
+for (const purpose of ['file', 'recording'] as const) for (const concurrent of [false, true])
+test(`${purpose} deletion after unsynced local edits ${concurrent ? 'reviews unrelated account changes' : 'does not wait for metadata sync'}`, async () => {
+ const f = fixture(); try {
+  f.remote.file.purpose = purpose;
+  const {row} = await f.files.retain(f.transport, 'account-file');
+  await f.files.things.annotateFile({id: row.id, title: 'Unsynced local name'});
+  if (concurrent) { f.remote.file.attachment.title = 'Another device name'; f.remote.file.updatedAt = '2026-10-17T00:00:02.000Z'; }
+  await f.files.remove(row.id);
+  await f.files.sync(f.transport);
+  const writes = f.calls.filter(call => typeof call === 'object');
+  if (concurrent) {
+   assert.equal((await f.files.status())[0].state, 'conflict'); assert.deepEqual(writes, []);
+   const review = await f.files.inspectDeletion(f.transport, row.id);
+   assert.equal(review.local.title, 'Unsynced local name'); assert.equal(review.remote.metadata.title, 'Another device name');
+  } else {
+   assert.deepEqual(await f.files.status(), []); assert.equal(writes.length, 1);
+   assert.equal(writes[0].retainReceipt, true); assert.equal(writes[0].expectedUpdatedAt, f.remote.file.updatedAt);
+   assert.equal(f.remote.file.attachment.title, 'Original title', 'No metadata write is required before deletion');
+  }
+ } finally { await f.db.close(); }
 });

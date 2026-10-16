@@ -761,3 +761,6 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	if (!crystal || crystal.size !== Number(doc.objectSizeBytes)) return null;
 	return Number(doc.objectSizeBytes);
 };
+
+/** Durable owner-private originals; editor-bound upload purposes stay separate. */
+export const isStandaloneAttachmentPurpose = (value: unknown): value is 'file' | 'recording' => value === 'file' || value === 'recording';

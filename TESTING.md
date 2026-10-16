@@ -10722,3 +10722,27 @@ Run `app/local-workspace/components.browser.test.ts` with
   A CSP-blocked upload is a real failure; do not loosen CSP to pass the fixture.
 - [ ] Complete recordings, bound/linked/managed account import and remaining
   full-suite acceptance before merge. Standalone file coverage is not that gate.
+
+
+### Standalone recordings and independent offline deletion (2026-10-17)
+
+- [x] Run the production-client `accountRecordingImport.browser.test.ts` using
+  the README disposable local setup. Import a canonical WAV ZIP offline; native
+  playback must advance after cold reload, without an empty-source codec error
+  or a second legacy-cache download button. Edit, reload and export identical
+  bytes with recording purpose intact at 1440/390/320 CSS pixels.
+- [x] Reconnect with verified identity; upload exactly once with recording
+  purpose. A new clean account browser retains and plays the existing recording
+  offline. Guest and other-account retention reads remain denied.
+- [x] Rename offline and delete immediately without syncing the rename first.
+  Observe local removal, a durable account deletion and identical retry after
+  the first successful response is lost. No re-upload or annotation prerequisite.
+  Unrelated account metadata changes must still require explicit review. Retain
+  already annotated media and verify the descriptor preserves title, description
+  and display filename. The native library bulk menu must use the same queue,
+  including one-item, repeated and mixed file/content selections.
+- [x] Import/play/reload the same recording anonymously while offline, then
+  reconnect: no account creation, upload or other remote mutation.
+- [ ] Finish native microphone capture, audio cache account-switch/revocation
+  coverage, bound/linked/managed media and the full local-first matrix before
+  merge. A generated WAV is playback evidence, not microphone evidence.

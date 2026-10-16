@@ -4648,3 +4648,23 @@ When the dev and production-client preview use different ports, leave
 root-relative signed URLs. An absolute URL for the other port is correctly
 blocked by CSP. Restart only this checkout's managed stack after changing the
 environment. Do not weaken CSP, signing, upload approval or rate limits.
+
+
+### Offline recording import regression
+
+The same local ZIP path accepts standalone recordings (canonical transfer
+`recordingFileId`, with no `filePurpose: "file"`). The recording retains its
+purpose through local storage, export and verified private upload. Original
+account recording retention requires `api.attachment-content` 1.14.0; durable
+deletion requires `api.attachment-delete` 1.5.0. Account approval and all normal
+server authorization remain required for sync; anonymous work never syncs.
+
+Run `node --import tsx --test app/local-workspace/accountRecordingImport.browser.test.ts`
+from `remix` using the disposable local setup above. Set
+`TT_LOCAL_RECORDING_IMPORT_URL=http://127.0.0.1:<production-preview-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, optional
+`TT_LOCAL_RECORDING_IMPORT_ARTIFACTS=/path/to/local-evidence`, and the shared
+Playwright/Chrome paths. It generates a WAV without using a microphone, checks
+native offline playback, exact-byte export, clean-context private retention,
+unsynced edit/delete and lost-response retry, plus anonymous offline playback.
+This fixture does not prove microphone capture or bound post/draft media.

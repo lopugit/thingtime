@@ -109,10 +109,8 @@ test('bad bytes, missing placement, quota refusal and abort roll back content, f
  }
 });
 
-test('recordings, bound media and mixed managed imports keep their dedicated account path', async () => {
+test('bound media and mixed managed imports keep their dedicated account path', async () => {
  const f = await fixture(); try {
-  const recording = structuredClone(f.manifest); delete recording.things.find(row => row.id === 'file')!.crystal.filePurpose;
-  assert.equal(accountImportSupported(recording), false); await assert.rejects(f.sync.things.import(recording, null, new Map([['portable-bytes', f.bytes]])), /dedicated account import/);
   const bound = structuredClone(f.manifest); bound.things = bound.things.filter(row => row.id !== 'file'); bound.files[0].targetId = 'component';
   assert.equal(accountImportSupported(bound), false); await assert.rejects(f.sync.things.import(bound, null, new Map([['portable-bytes', f.bytes]])), /dedicated account import/);
   const missing = structuredClone(f.manifest); missing.files = []; assert.equal(accountImportSupported(missing), false);
@@ -143,4 +141,22 @@ test('split templates, CSS, authored HTML and persisted arguments keep editable 
   const blocks = f.remote.get(imported.idMap.page)!.crystal.blocks as any[];
   assert.match(blocks[0].html, /id=account-imported-file/); assert.equal(blocks[1].args.exact, 'account-imported-file');
  } finally { await f.db.close(); }
+});
+
+
+test('recording imports preserve purpose through local bytes, export and verified upload', async () => {
+ const f=await fixture();try {
+  delete f.manifest.things.find(row=>row.id==='file')!.crystal.filePurpose;
+  assert.equal(accountImportSupported(f.manifest),true);
+  const imported=await f.importing(), id=imported.idMap.file;
+  const local=(await f.files.readFile(id)).row;
+  assert.equal(local.localAttachment.purpose,'recording');assert.equal(local.localAttachment.expiresAt,undefined);
+  const exported=await exportAccountThings({ids:imported.roots},{sync:f.sync,files:f.files,db:f.db,lease:f.lease,canRefresh:()=>false,remote:async()=>{throw Error('No network');}});
+  const row=exported.plan.things.find((row:any)=>row.id===id)!;
+  assert.equal(row.crystal.filePurpose,undefined);
+  recordingTransferFile(row,{format:'thingtime.transfer',version:1,...exported.plan});
+  await f.sync.sync(f.content);await f.files.sync(f.fileTransport);await f.sync.sync(f.content);
+  assert.equal(f.uploads[0].purpose,'recording');assert.equal((await f.files.library()).aliases.get('account-imported-file'),id);
+  assert.deepEqual((await f.files.readFile(id)).bytes,f.bytes);
+ }finally{await f.db.close();}
 });

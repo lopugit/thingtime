@@ -185,6 +185,13 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		return retainPosts(result, startedAt);
 	};
 	const changed = () => { announceLocalWorkspaceChange(); worker().wake(); };
+	const removeFile = async (id: string, localFileId: string | null, expectedUpdatedAt?: string) => {
+		if (expectedUpdatedAt !== undefined) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Review account file deletion through File sync.', 409);
+		const { files } = worker();
+		if (localFileId) { if (await files.remoteId(localFileId)) await files.remove(localFileId); else await files.cancel(localFileId); }
+		announceLocalWorkspaceChange([id]); worker().wake();
+		return { ok: true, savedLocally: true };
+	};
 	const remove = async (ids: string[], expectedUpdatedAt: string | undefined, fallback: () => Promise<any>) => {
 		facadeLease.assertCurrent();
 		if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
@@ -379,13 +386,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		remove: async (input: { id: string; expectedUpdatedAt?: string }) => {
 			if (Object.keys(input || {}).some(key => !['id', 'expectedUpdatedAt'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
 			const localFileId = await fileAlias(input?.id);
-			if (localFileId !== undefined) {
-				if (input.expectedUpdatedAt !== undefined) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Review account file deletion through File sync.', 409);
-				const { files } = worker();
-				if (localFileId) { if (await files.remoteId(localFileId)) await files.remove(localFileId); else await files.cancel(localFileId); }
-				announceLocalWorkspaceChange([input.id]); worker().wake();
-				return { ok: true, savedLocally: true };
-			}
+			if (localFileId !== undefined) return removeFile(input.id, localFileId, input.expectedUpdatedAt);
 			return remove([input?.id], input?.expectedUpdatedAt, () => online.things.remove(input));
 		},
 		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
@@ -405,6 +406,30 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			}
 			if (input?.op === 'delete') {
 				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
+				if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 || input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length)
+					throw new WorkspaceError('INVALID_IDS', 'Choose between 1 and 200 distinct Things.');
+				const ids = [...input.ids], aliases = await Promise.all(ids.map(fileAlias));
+				if (aliases.some(id => id !== undefined)) {
+					// The native library uses bulk deletion even for one file. Route
+					// each file through its byte/receipt queue and report partial batch
+					// failures explicitly, as the ordinary bulk API does.
+					const results = [];
+					for (const [index, id] of ids.entries()) {
+						try {
+							const alias = aliases[index];
+							if (alias !== undefined) { await removeFile(id, alias); results.push({ id, ok: true }); }
+							else {
+								const result = await remove([id], undefined, () => online.things.bulk({ op: 'delete', ids: [id] }));
+								results.push(result.results?.[0] || { id, ok: false, error: 'Deletion was not acknowledged.' });
+							}
+						} catch (error) {
+							facadeLease.assertCurrent();
+							results.push({ id, ok: false, error: error instanceof Error ? error.message : 'Deletion failed.', status: (error as any)?.status || 500 });
+						}
+					}
+					const succeeded = results.filter(result => result.ok).length;
+					return { ok: true, savedLocally: true, succeeded, failed: results.length - succeeded, results };
+				}
 				return remove(input.ids, undefined, () => online.things.bulk(input));
 			}
 			if (input?.op !== 'move') return online.things.bulk(input);

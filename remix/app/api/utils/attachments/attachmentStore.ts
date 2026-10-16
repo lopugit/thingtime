@@ -120,7 +120,7 @@ type LinkedReadyInput = {
 };
 
 export type AttachmentDeleteClaimScope = (
-	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date; retainCancellation?: true; standaloneFile?: true }
+	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date; retainCancellation?: true; standalonePurpose?: 'file' | 'recording' }
 	| { kind: 'target'; targetId: string }
 ) & { expectedUpdatedAt?: Date };
 export type AttachmentDraftDeleteClaimScope = Extract<AttachmentDeleteClaimScope, { kind: 'draft' }>;
@@ -129,8 +129,9 @@ export const attachmentDeleteClaimFence = (scope: AttachmentDeleteClaimScope): R
 	return {
 		...(scope.kind === 'target' ? { targetId: scope.targetId } : {
 			targetId: { $exists: false },
-			...(scope.standaloneFile ? {
-				attachmentPurpose: 'file', attachmentLinked: { $ne: true },
+			...(scope.standalonePurpose ? {
+				attachmentPurpose: scope.standalonePurpose, attachmentLinked: { $ne: true },
+				attachmentImportDraft: { $ne: true }, attachmentProfileSlot: { $exists: false },
 				// Ready import drafts are excluded; already-claimed deletion has
 				// its own cleanup deadline and must remain retryable.
 				$and: [{ $or: [{ attachmentState: 'deleting' }, { attachmentExpiresAt: { $exists: false } }] }]

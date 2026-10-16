@@ -20,7 +20,7 @@ function setup() {
  const bytes = new TextEncoder().encode('An independent offline file.');
  const save = (folderId?: string) => files.things.saveFile({ requestId: randomUUID(), name: 'original.txt', contentType: 'text/plain', bytes, folderId });
  const retain = async () => (await files.retain({ retention: async () => ({ ok: true, cacheKey: 'a'.repeat(64) + ':original', size: bytes.length,
-  file: { ownerId: scope.ownerId, updatedAt: '2026-10-17T00:00:00Z', folderId: null, attachment: { id: 'canonical-file', name: 'existing.txt', size: bytes.length, contentType: 'text/plain', mediaKind: 'file' } } }), bytes: async () => bytes }, 'canonical-file')).row;
+  file: { purpose: 'file', ownerId: scope.ownerId, updatedAt: '2026-10-17T00:00:00Z', folderId: null, attachment: { id: 'canonical-file', name: 'existing.txt', size: bytes.length, contentType: 'text/plain', mediaKind: 'file' } } }), bytes: async () => bytes }, 'canonical-file')).row;
  return { db, scope, lease, sync, files, deps, bytes, save, retain, retire() { active = false; } };
 }
 

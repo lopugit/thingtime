@@ -192,7 +192,7 @@ export class LocalThings {
 			await tx.put('things', id, row); return row;
 		});
 	}
-	async saveFile(input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null; purpose?: 'file' | 'post' | 'comment' }, signal?: AbortSignal) {
+	async saveFile(input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null; purpose?: 'file' | 'recording' | 'post' | 'comment' }, signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 		if (this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		if (!/^[a-zA-Z0-9-]{16,80}$/.test(input.requestId)) fail('INVALID_REQUEST', 'A stable file save request ID is required');
@@ -200,11 +200,11 @@ export class LocalThings {
 		const bytes = Uint8Array.from(input.bytes), sha256 = await transferChecksum(bytes);
 		this.lease.assertCurrent(); signal?.throwIfAborted();
 		const purpose = input.purpose ?? 'file';
-		if (!['file', 'post', 'comment'].includes(purpose) || (purpose !== 'file' && input.folderId)) fail('INVALID_ATTACHMENT', 'Invalid local file purpose or placement');
+		if (!['file', 'recording', 'post', 'comment'].includes(purpose) || (!['file', 'recording'].includes(purpose) && input.folderId)) fail('INVALID_ATTACHMENT', 'Invalid local file purpose or placement');
 		const id = `local-file-${input.requestId}`;
 		const row = createLocalAttachment(id, { id: 'bytes', targetId: id, path: 'files/000000', name: input.name, mime: input.contentType, bytes: bytes.byteLength, sha256 }, this.now(), purpose, 0, input.folderId ? { folderId: input.folderId } : {});
 		row.localAttachment.requestId = input.requestId; row.localAttachment.initialFolderId = input.folderId || null;
-		if (purpose !== 'file') row.localAttachment.expiresAt = new Date(Date.parse(this.now()) + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
+		if (!['file', 'recording'].includes(purpose)) row.localAttachment.expiresAt = new Date(Date.parse(this.now()) + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
 		return this.transaction('readwrite', async tx => {
 			signal?.throwIfAborted();
 			await reapLocalAttachmentDrafts(tx, Date.parse(this.now()));
@@ -379,7 +379,7 @@ export class LocalThings {
 		await verifyTransferFiles({ manifest, files: bytes }, signal); this.lease.assertCurrent();
 		const recordings = manifest.things.filter(isTransferRecording);
 		for (const row of recordings) recordingTransferFile(row, manifest);
-		if (this.scope.kind === 'account' && (recordings.some(row => row.crystal.filePurpose !== 'file') || manifest.files.some(file => !recordings.some(row => row.id === file.targetId)))) fail('LOCAL_OPERATION_UNAVAILABLE', 'Bound media and recordings require their dedicated account import adapter');
+		if (this.scope.kind === 'account' && manifest.files.some(file => !recordings.some(row => row.id === file.targetId))) fail('LOCAL_OPERATION_UNAVAILABLE', 'Bound media requires its dedicated account import adapter');
 		const map = new Map(manifest.things.map(row => [row.id, this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()]));
 		const accountSuffix = this.scope.kind === 'account' ? this.uuid().slice(0, 8) : null;
 		const fileMap = new Map(manifest.files.map(file => [file.id, `${this.scope.kind === 'account' ? 'local-file' : 'local'}-${this.uuid()}`]));

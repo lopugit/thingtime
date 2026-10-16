@@ -314,3 +314,34 @@ test('a wake arriving during a drain is coalesced into a follow-up pass instead 
   release(); rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, { window: saved.window, indexedDB: saved.indexedDB }); if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator);
  }
 });
+
+
+test('native bulk deletion queues retained recordings and cancels device files offline with explicit partial results', async () => {
+ const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+ const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'bulk-files', dataPlane: 'home' } as const;
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), fetch: async () => { throw Error('Unexpected network'); } });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+ let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; throw Error('Unexpected remote delete'); };
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const api = accountApi({ things: { create: remote, get: remote, bulk: remote, remove: remote } }, {id:scope.ownerId}, scope.dataPlane);
+  const worker = accountWorkspaceWorker(scope), bytes = new TextEncoder().encode('offline file bytes');
+  const local = await worker.files.things.saveFile({requestId:crypto.randomUUID(), name:'local.txt', contentType:'text/plain', bytes, purpose:'file'});
+  const recording = await worker.files.things.saveFile({requestId:crypto.randomUUID(), name:'recording.wav', contentType:'audio/wav', bytes, purpose:'recording'});
+  const retained = await worker.files.retain({ retention: async () => ({cacheKey:'a'.repeat(64)+':original',size:bytes.length,file:{purpose:'recording',ownerId:scope.ownerId,updatedAt:'2026-10-17T00:00:00.000Z',folderId:null,attachment:{id:'existing-recording',name:'existing.wav',size:bytes.length,contentType:'audio/wav',mediaKind:'audio'}}}), bytes:async()=>bytes }, 'existing-recording');
+  const content:any = await api.things.create({thingtime:['data'],crystal:{name:'Local note'}});
+  await assert.rejects(api.things.bulk({op:'delete',ids:[local.id,local.id]}), /distinct/);
+  assert.equal((await worker.files.library()).things.length,3);
+  const result:any = await api.things.bulk({op:'delete',ids:['unvisited',local.id,recording.id,'existing-recording',content.id]});
+  assert.equal(result.succeeded,4);assert.equal(result.failed,1);assert.equal(result.results[0].id,'unvisited');assert.equal(result.results[0].status,409);
+  assert.equal((await worker.files.library()).things.length,0);
+  assert.equal((await worker.files.status()).length,1);assert.equal((await worker.files.status())[0].id,retained.row.id);assert.equal((await worker.files.status())[0].phase,'delete');
+  assert.equal(await worker.sync.view(content.id),null);assert.equal(remoteCalls,0);
+  const repeated:any = await api.things.bulk({op:'delete',ids:['existing-recording',local.id,recording.id]});
+  assert.equal(repeated.failed,0);assert.equal(repeated.succeeded,3);assert.equal(remoteCalls,0);
+ } finally {
+  rootIdentity.changed();await workspaceDatabase().close();Object.assign(globalThis,{window:oldWindow,indexedDB:oldFactory,fetch:oldFetch});
+  if(oldNavigator)Object.defineProperty(globalThis,'navigator',oldNavigator);else Reflect.deleteProperty(globalThis,'navigator');
+ }
+});

@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Standalone recording ZIPs now import, play,
+  edit and export locally, then sync privately after verified login. Retention
+  preserves annotations and purpose; native library deletion uses durable file
+  queues without waiting for unsynced metadata. Production-client anonymous and
+  account regressions cover cold offline playback and lost deletion responses.
+  Full-suite acceptance remains open; see the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Normal account standalone-file ZIP imports now
   finish on-device with atomic bytes/content/queue intent. Independent changes
   sync separately; media references wait for real private upload IDs. Preserve

@@ -42,8 +42,8 @@ test('existing account file retention renders and edits offline through the nati
 			const parts = await owner.request.post(url('/api/v1/attachments/uploads/parts'), { headers, data: { uploadId: fileId, parts: [{ partNumber: 1, checksumSha256: createHash('sha256').update(bytes).digest('base64') }] } });
 			assert.equal(parts.status(), 200, await parts.text());
 			const part = (await parts.json()).parts[0];
-			assert.ok(['127.0.0.1', 'localhost'].includes(new URL(part.url).hostname), 'Only disposable loopback object storage');
-			assert.equal((await guest.request.put(part.url, { headers: part.headers, data: bytes })).status(), 200);
+			assert.ok(['127.0.0.1', 'localhost'].includes(new URL(part.url, base).hostname), 'Only disposable loopback object storage');
+			assert.equal((await guest.request.put(new URL(part.url, base).href, { headers: part.headers, data: bytes })).status(), 200);
 			const complete = await owner.request.post(url('/api/v1/attachments/uploads/complete'), { headers, data: { uploadId: fileId } });
 			assert.equal(complete.status(), 200, await complete.text());
 			if (artifacts) await mkdir(resolve(artifacts), { recursive: true });

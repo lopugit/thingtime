@@ -403,3 +403,12 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+
+
+Standalone recording retention extends attachment content to 1.14.0 (the owned
+retention descriptor includes immutable `purpose`). Deletion 1.5.0 extends both
+durable receipt modes to recordings with exact-purpose claim fences. Routes keep
+full-user, same-origin, private/no-store and owner-only restrictions. Both
+manifests derive from `apiDocs.ts`; coverage includes `attachmentsRoutes.test.ts`,
+attachment service tests, both capability suites and the local recording browser
+fixture. No new route or public publishing endpoint is added.

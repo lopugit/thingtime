@@ -2580,15 +2580,16 @@ test('request cancellation validates its closed input, bounded retries and custo
 });
 
 test('durable file deletion retains exact-version cleanup and fences lost replies and delayed starts', async () => {
+ for (const purpose of ['file', 'recording'] as const) {
 	const requestId = 'delete-ready-request', id = attachmentIdForRequest('user-1', requestId);
-	let doc: AttachmentDoc | null = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: 'file', objectVersionId: 'ready-version', uploadId: undefined });
+	let doc: AttachmentDoc | null = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: purpose, attachmentExpiresAt: undefined, objectVersionId: 'ready-version', uploadId: undefined });
 	const deleted: unknown[] = [];
 	const service = createAttachmentService({ now: () => now, customMongoActive: () => false,
 		store: {
 			reserveCancellation: async () => doc ||= cancelledAttachmentReceipt('user-1', id, now),
 			getById: async () => doc, getOwned: async () => doc, listExpiredOwned: async () => [],
 			claimDeleting: async (_owner: string, _id: string, _states: unknown, scope: any) => {
-				assert.equal(scope.retainCancellation, true); assert.equal(scope.expectedUpdatedAt.toISOString(), now.toISOString());
+				assert.equal(scope.standalonePurpose, purpose); assert.equal(scope.retainCancellation, true); assert.equal(scope.expectedUpdatedAt.toISOString(), now.toISOString());
 				doc = { ...doc!, attachmentState: 'deleting', attachmentCancellationRequested: true }; return doc;
 			},
 			removeDeleting: async () => { doc = cancelledAttachmentReceipt('user-1', id, now); return true; }
@@ -2598,11 +2599,12 @@ test('durable file deletion retains exact-version cleanup and fences lost replie
 	assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
 	assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
 	assert.equal(deleted.length, 1); assert.equal((deleted[0] as any).versionId, 'ready-version');
-	const replay = await service.start('user-1', { requestId, filename: 'file.txt', sizeBytes: 42, purpose: 'file' });
+	const replay = await service.start('user-1', { requestId, filename: 'file.txt', sizeBytes: 42, purpose });
 	assert.equal(replay.ok, false); if (!replay.ok) assert.equal(replay.code, 'upload_cancelled');
 	doc = null;
 	assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
 	assert.equal(doc!.attachmentState, 'cancelled');
+ }
 });
 
 test('durable file deletion refuses mismatched identities, unfinished/bound files and stale versions without cleanup', async () => {
@@ -2617,7 +2619,7 @@ test('durable file deletion refuses mismatched identities, unfinished/bound file
 		const result = await service.remove('user-1', { ...input, ...patch }); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
 	}
 	assert.equal(reservations, 0);
-	for (const patch of [{ attachmentState: 'pending' }, { attachmentState: 'finalizing' }, { targetId: 'post' }, { attachmentPurpose: 'recording' }, { updatedAt: new Date(now.getTime() + 1) }]) {
+	for (const patch of [{ attachmentState: 'pending' }, { attachmentState: 'finalizing' }, { targetId: 'post' }, { attachmentPurpose: 'message' }, { updatedAt: new Date(now.getTime() + 1) }]) {
 		doc = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: 'file', ...patch } as any);
 		const result = await service.remove('user-1', input); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 409);
 	}
@@ -2625,8 +2627,8 @@ test('durable file deletion refuses mismatched identities, unfinished/bound file
 });
 
 test('existing owned file deletion retains its canonical identity without the original request ID', async () => {
-	for (const id of [attachmentIdForRequest('user-1', 'older-upload'), 'legacy-file-uuid']) {
-		let doc: AttachmentDoc | null = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: 'file', objectVersionId: 'immutable-version', uploadId: undefined, attachmentExpiresAt: undefined });
+	for (const purpose of ['file', 'recording'] as const) for (const id of [attachmentIdForRequest('user-1', 'older-upload'), 'legacy-file-uuid']) {
+		let doc: AttachmentDoc | null = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: purpose, objectVersionId: 'immutable-version', uploadId: undefined, attachmentExpiresAt: undefined });
 		const deletes: unknown[] = [];
 		const service = createAttachmentService({ customMongoActive: () => false, now: () => now,
 			store: {
@@ -2634,7 +2636,7 @@ test('existing owned file deletion retains its canonical identity without the or
 				getById: async () => doc, listExpiredOwned: async () => [],
 				reserveCancellation: async () => { throw Error('Existing-ID mode cannot reserve caller-chosen IDs'); },
 				claimDeleting: async (_owner: string, _id: string, _states: unknown, scope: any) => {
-					assert.equal(scope.standaloneFile, true); assert.equal(scope.retainCancellation, true);
+					assert.equal(scope.standalonePurpose, purpose); assert.equal(scope.retainCancellation, true);
 					doc = { ...doc!, attachmentState: 'deleting', attachmentCancellationRequested: true }; return doc;
 				},
 				removeDeleting: async () => { doc = cancelledAttachmentReceipt('user-1', id, now); return true; }
@@ -2645,7 +2647,7 @@ test('existing owned file deletion retains its canonical identity without the or
 		assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
 		assert.equal(deletes.length, 1); assert.equal((deletes[0] as any).versionId, 'immutable-version');
 		if (id.startsWith('att_')) {
-			const replay = await service.start('user-1', { requestId: 'older-upload', filename: 'old.txt', sizeBytes: 42, purpose: 'file' });
+			const replay = await service.start('user-1', { requestId: 'older-upload', filename: 'old.txt', sizeBytes: 42, purpose });
 			assert.equal(replay.ok, false); if (!replay.ok) assert.equal(replay.code, 'upload_cancelled');
 		}
 		const foreign = await service.remove('user-2', input); assert.equal(foreign.ok, false); if (!foreign.ok) assert.equal(foreign.status, 404);
@@ -2665,7 +2667,7 @@ test('existing file receipts reject malformed, non-library and stale deletion at
 		const result = await service.remove('user-1', { ...input, ...patch }); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
 	}
 	assert.equal(reads, 0);
-	for (const patch of [{ attachmentState: 'pending' }, { attachmentState: 'finalizing' }, { targetId: 'post' }, { attachmentPurpose: 'recording' }, { attachmentExpiresAt: now }, { attachmentLinked: true }, { updatedAt: new Date(now.getTime() + 1) }]) {
+	for (const patch of [{ attachmentState: 'pending' }, { attachmentState: 'finalizing' }, { targetId: 'post' }, { attachmentPurpose: 'message' }, { attachmentImportDraft: true }, { attachmentProfileSlot: 'avatar' }, { attachmentExpiresAt: now }, { attachmentLinked: true }, { updatedAt: new Date(now.getTime() + 1) }]) {
 		doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined, ...patch } as any);
 		const result = await service.remove('user-1', input); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 409);
 	}
@@ -2692,24 +2694,31 @@ test('an existing file cleanup race never acknowledges an absent or unfenced row
 });
 
 test('existing file delete claims retain standalone eligibility through concurrent changes and cleanup retries', () => {
-	const fence = attachmentDeleteClaimFence({ kind: 'draft', standaloneFile: true, retainCancellation: true, expectedUpdatedAt: now });
-	assert.equal(fence.attachmentPurpose, 'file');
+ for (const purpose of ['file', 'recording'] as const) {
+	const fence = attachmentDeleteClaimFence({ kind: 'draft', standalonePurpose: purpose, retainCancellation: true, expectedUpdatedAt: now });
+	assert.equal(fence.attachmentPurpose, purpose);
 	assert.deepEqual(fence.targetId, { $exists: false });
 	assert.deepEqual(fence.attachmentLinked, { $ne: true });
 	assert.deepEqual(fence.$and, [{ $or: [{ attachmentState: 'deleting' }, { attachmentExpiresAt: { $exists: false } }] }]);
 	assert.equal(fence.updatedAt, now);
+ assert.deepEqual(fence.attachmentImportDraft, { $ne: true });
+ assert.deepEqual(fence.attachmentProfileSlot, { $exists: false });
+ }
 });
 
 test('owned file retention descriptors reuse content gates and disclose no storage credentials', async () => {
  let doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined, uploadId: undefined, objectVersionId: 'version', folderId: 'folder', moderation: { status: 'nsfw' } });
+ doc.crystal = { ...doc.crystal, title: 'Saved title', description: 'Saved description', filenamePreview: 'Display filename' };
  const service = createAttachmentService({ customMongoActive: () => false, store: { getById: async () => doc } as any, getS3: () => noopS3() });
  const result = await service.download({ id: 'user-1' }, doc.shareId, true, true);
  assert.equal(result.ok, true);
  if (result.ok) {
-  assert.deepEqual(result.retention, { ownerId: 'user-1', updatedAt: now.toISOString(), folderId: 'folder', attachment: { id: doc.shareId, ...doc.crystal, nsfw: true } });
+  assert.deepEqual(result.retention, { purpose: 'file', ownerId: 'user-1', updatedAt: now.toISOString(), folderId: 'folder', attachment: { id: doc.shareId, ...doc.crystal, nsfw: true } });
   assert.ok(!JSON.stringify(result.retention).includes('objects/'));
  }
- for (const patch of [{ attachmentPurpose: 'post', attachmentExpiresAt: new Date(Date.now()+60000) }, { attachmentPurpose: 'recording' }, { targetId: 'post' }, { attachmentImportDraft: true }, { attachmentLinked: true }, { moderation: { status: 'blocked' } }]) {
+ doc.attachmentPurpose='recording';
+ const recording=await service.download({id:'user-1'},doc.shareId,true,true);assert.equal(recording.ok,true);if(recording.ok){assert.equal(recording.retention?.purpose,'recording');assert.equal(recording.retention?.attachment.title,'Saved title');assert.equal(recording.retention?.attachment.description,'Saved description');assert.equal(recording.retention?.attachment.filenamePreview,'Display filename');}
+ for (const patch of [{ attachmentPurpose: 'post', attachmentExpiresAt: new Date(Date.now()+60000) }, { attachmentPurpose: 'message' }, { targetId: 'post' }, { attachmentImportDraft: true }, { attachmentLinked: true }, { moderation: { status: 'blocked' } }]) {
   doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined, objectVersionId: 'version', ...patch } as any);
   assert.equal((await service.download({ id: 'user-1', isAdmin: true }, doc.shareId, true, true)).ok, false);
  }

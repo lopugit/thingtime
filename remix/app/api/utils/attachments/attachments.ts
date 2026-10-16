@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { StorageMutationError } from '../storage/storageCore';
 import {
+	isStandaloneAttachmentPurpose,
 	attachmentMediaKindForContentType,
 	canonicalLinkedAttachmentUrl,
 	isAttachmentObjectVersionId,
@@ -1257,13 +1258,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				if (!existing || existing.shareId !== id || existing.ownerId !== ownerId) return fail(404, 'Attachment not found');
 				if (existing.attachmentState === 'cancelled' && existing.attachmentCancellationRequested)
 					return { ok: true, deleted: true, deferred: false };
-				if (existing.targetId || existing.attachmentPurpose !== 'file' || existing.attachmentLinked ||
+				if (existing.targetId || !isStandaloneAttachmentPurpose(existing.attachmentPurpose) || existing.attachmentLinked || existing.attachmentImportDraft || existing.attachmentProfileSlot ||
 					!['ready', 'deleting'].includes(existing.attachmentState) || (existing.attachmentState === 'ready' && existing.attachmentExpiresAt))
 					return fail(409, 'Only a saved standalone file can be deleted with an existing-file receipt');
 				if (existing.attachmentState !== 'deleting' && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime())
 					return fail(409, 'Attachment changed; refresh before deleting');
 				const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, {
-					kind: 'draft', standaloneFile: true, retainCancellation: true, expectedUpdatedAt
+					kind: 'draft', standalonePurpose: existing.attachmentPurpose, retainCancellation: true, expectedUpdatedAt
 				});
 				const receipt = await dependencies.store.getOwned(ownerId, id);
 				if (receipt?.shareId === id && receipt.ownerId === ownerId && receipt.attachmentCancellationRequested &&
@@ -1286,7 +1287,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					try { reserved = await dependencies.store.reserveCancellation(ownerId, id); }
 					catch (error) { if (Number((error as any)?.code) === 11000) continue; throw error; }
 					if (reserved.attachmentState === 'cancelled') return { ok: true, deleted: true, deferred: false };
-					if (reserved.targetId || reserved.attachmentPurpose !== 'file' || !['ready', 'deleting'].includes(reserved.attachmentState))
+					if (reserved.targetId || !isStandaloneAttachmentPurpose(reserved.attachmentPurpose) || reserved.attachmentLinked || reserved.attachmentImportDraft || reserved.attachmentProfileSlot || (reserved.attachmentState === 'ready' && reserved.attachmentExpiresAt) || !['ready', 'deleting'].includes(reserved.attachmentState))
 						return fail(409, 'This upload must finish or be removed through its owning surface');
 					const result = await remove(ownerId, { id, expectedUpdatedAt: raw.expectedUpdatedAt }, { retainCancellation: true });
 					if (!result.ok) return result;
@@ -1320,7 +1321,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				return fail(409, 'Attachment changed; refresh before deleting');
 			}
 			const reason: AttachmentDeleteClaimScope = {
-				...(existing.targetId ? { kind: 'target', targetId: existing.targetId } : { kind: 'draft', ...(options?.retainCancellation ? { retainCancellation: true as const } : {}) }),
+				...(existing.targetId ? { kind: 'target', targetId: existing.targetId } : { kind: 'draft', ...(options?.retainCancellation ? { retainCancellation: true as const, ...(isStandaloneAttachmentPurpose(existing.attachmentPurpose) ? { standalonePurpose: existing.attachmentPurpose } : {}) } : {}) }),
 				...(expectedUpdatedAt ? { expectedUpdatedAt } : {})
 			};
 			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, reason);
@@ -1428,15 +1429,17 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const download = async (
 		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainOwnedFile = false
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean; retention?: { ownerId: string; updatedAt: string; folderId: string | null; attachment: AttachmentPublicMetadata & { nsfw?: true; pending?: true } } }>> => {
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean; retention?: { purpose: 'file' | 'recording'; ownerId: string; updatedAt: string; folderId: string | null; attachment: AttachmentPublicMetadata } }>> => {
 		try {
 			const readable = await readableStoredAttachment(viewer, idInput);
 			if (readable.ok === false) return readable;
 			const { doc } = readable;
-			if (retainOwnedFile && (viewer?.id !== doc.ownerId || viewer.sharedRoot || doc.targetId || doc.attachmentPurpose !== 'file' ||
+			if (retainOwnedFile && (viewer?.id !== doc.ownerId || viewer.sharedRoot || doc.targetId || !isStandaloneAttachmentPurpose(doc.attachmentPurpose) ||
 				doc.attachmentExpiresAt || doc.attachmentImportDraft || doc.attachmentProfileSlot || doc.attachmentLinked || doc.moderation?.status === 'blocked'))
 				return fail(404, 'Saved owned file not found');
 			if (retainOwnedFile && doc.objectSizeBytes > 16 * 1024 * 1024) return fail(413, 'This file exceeds the device retention limit');
+			const retainedMetadata = retainOwnedFile ? toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, { ownerView: true }) : null;
+			if (retainOwnedFile && !retainedMetadata) return fail(404, 'Saved owned file metadata is unavailable');
 			const s3 = dependencies.getS3();
 			const inline = !forceDownload && attachmentMayRenderInline(doc.crystal);
 			const signed = await s3.signDownload({
@@ -1457,10 +1460,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				disposition: attachmentContentDisposition(doc.crystal.name, inline),
 				image: inline && doc.crystal.mediaKind === 'image',
 				...(retainOwnedFile ? { retention: {
-					ownerId: doc.ownerId, updatedAt: doc.updatedAt.toISOString(), folderId: doc.folderId || null,
-					attachment: { ...attachmentPublicProjection(doc.shareId, doc.crystal),
-						...(doc.moderation?.status === 'nsfw' ? { nsfw: true as const } : {}),
-						...(doc.moderation?.status === 'pending' ? { pending: true as const } : {}) }
+					purpose: doc.attachmentPurpose as 'file' | 'recording', ownerId: doc.ownerId, updatedAt: doc.updatedAt.toISOString(), folderId: doc.folderId || null,
+					attachment: retainedMetadata!
 				} } : {})
 			};
 		} catch (error) {
