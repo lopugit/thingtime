@@ -81,21 +81,30 @@ export async function pruneOfflineShells() {
 	completed.sort((a, b) => b.time - a.time);
 	for (const previous of completed.slice(1)) await caches.delete(previous.name);
 }
-export async function handleOfflineShell(request) {
+export async function handleOfflineShell(request, manifest = offlineShellManifest, cacheStorage = caches, fetcher = fetch) {
 	const url = new URL(request.url);
+	const current = cacheName(manifest);
 	if (request.mode === 'navigate') {
-		try { return await fetch(request); }
+		try { return await fetcher(request); }
 		catch (error) {
-			const cache = await caches.open(cacheName());
-			if (await cache.match(COMPLETE)) { const shell = await cache.match('/offline-shell.html'); if (shell) return shell; }
+			// Unreachable storage says nothing about the navigation. Report the
+			// original network failure rather than masking it with a cache error.
+			try {
+				const cache = await cacheStorage.open(current);
+				if (await cache.match(COMPLETE)) { const shell = await cache.match('/offline-shell.html'); if (shell) return shell; }
+			} catch {}
 			throw error;
 		}
 	}
 	// Immutable URLs can be served from either the active build or the previous
 	// complete build while an already-open editor finishes its work.
-	for (const name of [cacheName(), ...(await caches.keys()).filter(name => name.startsWith(PREFIX) && name !== cacheName())]) {
-		const cache = await caches.open(name);
-		if (await cache.match(COMPLETE)) { const cached = await cache.match(url.pathname); if (cached) return cached; }
-	}
-	return fetch(request);
+	// This worker intercepts every build asset, so unreachable or damaged
+	// CacheStorage must degrade to the network instead of failing the request.
+	try {
+		for (const name of [current, ...(await cacheStorage.keys()).filter(name => name.startsWith(PREFIX) && name !== current)]) {
+			const cache = await cacheStorage.open(name);
+			if (await cache.match(COMPLETE)) { const cached = await cache.match(url.pathname); if (cached) return cached; }
+		}
+	} catch {}
+	return fetcher(request);
 }
