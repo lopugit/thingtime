@@ -625,3 +625,31 @@ acceptance, native write consent, safe provider publication and retained conflic
 remain open. Android Download now stays disabled. No new secret, collection or
 parallel history/settings format was introduced. Reproducible commands and
 cleanup are in the Android and root READMEs. The full goal remains in progress.
+
+### Android native write approval and actual picker acceptance (2026-10-17)
+
+Android now implements the shared `write-approve` contract with a native dialog,
+exact-tree OS write selection and fresh account verification. Keystore-encrypted
+approvals bind account/origin, remote root/device, configuration revision/hash
+and the native selection generation. Choosing the same URI again invalidates
+old consent; another account's references remain intact. Failed saves cannot
+leave a new persisted write grant or revoke an existing shared grant. Reacquiring revoked OS write access clears every older approval for that tree,
+including other accounts and connections. Native checks reject malformed fields and unavailable/revoked OS access.
+
+The installed Android 15 / API 35 app passed actual picker selection, native
+Cancel, same-folder write Allow, encrypted reload, identical approval retry,
+changed-configuration Cancel and native re-selection invalidation. The test
+removed all its folder references and verified OS read/write grant release.
+The suite reports `OK (28 tests)` with one opt-in process scenario skipped:
+27 tests executed, including the live account/bridge test, seven registry tests,
+three Keystore tests, three provider tests and thirteen staging tests. All 26
+JVM tests, debug build and Android lint passed.
+
+A separate read-only local-provider descriptor probe opened the directory but
+relative child access returned `EACCES`. Generic SAF does not promise exclusive
+atomic rename or conditional replacement, so Android still advertises private
+staging only; Download now remains disabled. This checkpoint is consent, not
+publication acceptance. Android/Mac receivers, retained conflict recovery,
+background scheduling, Photos, peer sync, rename/delete convergence, scalable
+roots, physical/reboot acceptance and release delivery remain open. The full
+goal remains active. Fork-safe commands are in the Android and root READMEs.

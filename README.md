@@ -4598,7 +4598,7 @@ and install the resulting debug APK. A fork can select its HTTPS server with
 loopback HTTP plus `adb reverse`. The opt-in Android test script also requires
 `userId` in the private fixture. See [Android build and acceptance](android/README.md)
 for exact commands, emulator tests and security boundaries. Android folder
-access uses scoped read-only Storage Access Framework grants and encrypted
+access starts with scoped read-only Storage Access Framework grants and encrypted
 native references without broad storage permissions or additional secrets;
 see [selected-folder setup and limits](android/README.md#selected-folders).
 Release signing
@@ -4859,8 +4859,8 @@ device acceptance. See [the full ledger](docs/mobile-file-sync.md).
 
 Android now exposes the same private `fileStagingVersion` 1.0.0 contract. Native
 chunks and immutable progress records live in app-private no-backup storage;
-completed stages require full content verification. Folder grants remain
-read-only and Android does not yet advertise publication or enable downloads
+completed stages require full content verification. Initial folder grants remain
+read-only. Native write approval is separately tested, but Android does not yet advertise publication or enable downloads
 into selected folders. No new secret, service or environment variable is needed.
 
 With JDK 17, Android SDK 35, `adb`, Node and installed `remix` dependencies, run
@@ -4871,3 +4871,20 @@ debug APKs, deliberately kills the test process after byte flush and after stage
 completion, verifies both recoveries in fresh processes and checks native wire
 responses with the shared TypeScript codec. See the [Android staging runbook](android/README.md#private-download-staging-and-process-recovery)
 for evidence, cleanup and remaining boundaries.
+
+### Android native folder write approval checks
+
+The Android adapter now implements the shared `write-approve` contract behind
+its still-disabled publication capability. It requires a native consent dialog,
+re-selection of the exact folder in Android Files with write access, and fresh
+account verification. The encrypted approval binds the account, site, remote
+root, device and configuration revision/hash to this native selection. Selecting
+the folder again invalidates that binding, including when its URI is unchanged.
+No provider file is written by approval or private staging.
+
+On a disposable emulator, create only the synthetic `ThingtimeSyncQA` fixture
+and the private local-account fixture described in the [Android runbook](android/README.md#native-write-approval-acceptance).
+Run `THINGTIME_FOLDER_APPROVAL_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`.
+Follow the native Cancel / Continue to Files / same-folder Allow / changed-config
+Cancel sequence. No production credentials, broad storage permission or extra
+service is needed. Safe Android publication and background sync remain open.

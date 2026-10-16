@@ -175,3 +175,50 @@ the failed operation. Logs and non-secret wire evidence are in
 `android/build/staging-process/` (ignored). This is Android 15 / API 35 emulator
 process-exit evidence, not reboot, low-disk, physical-device or provider-write
 acceptance. The ordinary suite skips this opt-in process test.
+
+## Native write approval acceptance
+
+Initial folder selection still persists only read access. The native
+`write-approve` handler now implements the shared mobile approval contract, but
+`filePublicationVersion` remains absent and the shared Download now control
+remains disabled. Approval does not create, modify or delete provider files.
+
+Each approval requires the native **Allow downloads** dialog followed by Android
+Files re-selection of the exact tree with write permission. The bridge verifies
+the account before consent and again after the picker returns. The encrypted
+registry binds approval to account/origin, remote root, device, configuration
+revision/hash and a native selection generation. Re-selection clears approvals
+and changes that generation even for the same URI. Changed configuration needs
+new approval; identical approved requests can retry without another prompt.
+Backgrounding/navigation cancels consent. Removing/re-selecting the last approved
+reference releases write permission while preserving another account's read or
+write references. Reacquiring revoked OS write access clears older approvals
+for that tree across accounts/connections. Failed persistence releases only
+newly acquired write access.
+
+With the disposable local account and synthetic `Documents/ThingtimeSyncQA`
+fixture from the picker section above, run:
+
+```sh
+THINGTIME_FOLDER_APPROVAL_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json
+```
+
+Select the fixture through **Choose folder**. Cancel the first native approval.
+On the next dialog, choose **Continue to Files**, select the same test folder,
+and accept Android's access prompt. Cancel the next native dialog, which tests
+a changed configuration revision. The test verifies encrypted reload, exact
+retry, actual persisted OS permissions, and re-selection invalidation, then
+removes its grant references. Never select personal folders for this acceptance.
+This sequence passed on Android 15 / API 35 on 2026-10-17; it does not establish
+Android 8.0, physical-device, background or provider publication acceptance.
+
+`THINGTIME_FOLDER_DESCRIPTOR_TEST=1` optionally probes a selected directory's
+read-only descriptor. On the tested Android 15 external-storage provider,
+opening the directory succeeded but opening `original.bin` relative to that
+descriptor failed with `EACCES`. A descriptor does not bypass scoped storage.
+The probe prints only booleans and error class/errno to Android's `System.out`
+log. It performs no provider writes. Generic SAF rename is not an atomic
+compare-and-swap contract: [DocumentsContract](https://developer.android.com/reference/android/provider/DocumentsContract)
+allows changed document IDs, and the [AOSP filesystem provider](https://android.googlesource.com/platform/frameworks/base.git/+/master/core/java/com/android/internal/content/FileSystemProvider.java)
+chooses an available destination name before rename. Publication still requires
+a supported adapter with explicit destination preconditions and durable recovery.

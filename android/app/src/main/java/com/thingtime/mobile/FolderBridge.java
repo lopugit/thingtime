@@ -34,12 +34,14 @@ final class FolderBridge {
         }
         @Override public synchronized void onLost(android.net.Network network) { if(network.equals(observedNetwork)){observedNetwork=null;networkKind="offline";} }
     };
+    private android.app.AlertDialog approvalDialog;
     private Request pending; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
     private CancellationSignal cancellation=new CancellationSignal();
     private static final class Request {
+        FolderStore.Grant approvalGrant; WriteApproval approval;
         final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
-            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-finish"))?300000:30000);
+            this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("write-approve") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-finish"))?300000:30000);
             base=new JSONObject().put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         }
     }
@@ -51,6 +53,7 @@ final class FolderBridge {
     void close() { suspend();try { if(connectivity!=null)connectivity.unregisterNetworkCallback(networkCallback); }catch(Exception ignored){} }
     void suspend() {
         proofs.clear();
+        if(approvalDialog!=null) { approvalDialog.dismiss();approvalDialog=null; }
         Request old=pending;pending=null;selecting=false;selectedResult=null;resultArrived=false;generation.incrementAndGet();cancellation.cancel();cancellation=new CancellationSignal();
         if(old!=null) reply(old,new JSONObject(),"Folder access paused. Try again when the app is active.");
     }
@@ -69,7 +72,7 @@ final class FolderBridge {
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
         DeviceScope scope=new DeviceScope(payload.getString("ownerId"),origin,BuildConfig.DEBUG);
         if(action.equals("suspend")) { if(pending!=null && pending.id.equals(id)) suspend();return; }
-        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions","stage-begin","stage-append","stage-finish").contains(action)) return;
+        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions","stage-begin","stage-append","stage-finish","write-approve").contains(action)) return;
         if(pending!=null) { reply(new Request(payload,scope,reply,generation.get()),new JSONObject(),"Another folder request is running.");return; }
         Request request=new Request(payload,scope,reply,generation.incrementAndGet());pending=request;execute(request,null,false);
     }
@@ -119,6 +122,22 @@ final class FolderBridge {
                 } else if(!request.action.equals("list")) {
                     String rootId=request.payload.getString("rootId");if(!UUID.fromString(rootId).toString().equalsIgnoreCase(rootId)) throw new FolderReader.Failure("Invalid folder selection.");
                     if(request.action.equals("remove")) { store.remove(request.scope,rootId);proofs.clear(); }
+                    else if(request.action.equals("write-approve")) {
+                        WriteApproval approval=new WriteApproval(request.payload.getJSONObject("approval"),request.scope);
+                        if(pickerFinished) {
+                            if(selected==null || selected.getData()==null) throw new FolderReader.Failure("Download approval cancelled. No new folder write permission was granted.");
+                            if(request.approvalGrant==null || request.approval==null || !request.approval.matches(approval)) throw new FolderReader.Failure("Folder write approval changed.");
+                            Uri tree=FolderStore.tree(selected.getData().toString());
+                            if(!tree.equals(request.approvalGrant.uri)) throw new FolderReader.Failure("Choose the same folder to approve downloads.");
+                            if(!new SafFolderProvider(activity.getContentResolver(),tree,signal).root().directory) throw new FolderReader.Failure("Choose a folder.");
+                            check.run();auth.identity(request.scope);check.run();
+                            store.approveWrite(request.scope,request.approvalGrant,approval,tree,selected.getFlags());
+                        } else if(!store.isWriteApproved(request.scope,rootId,approval)) {
+                            request.approvalGrant=store.snapshot(request.scope,rootId);request.approval=approval;
+                            approve(request,check);return;
+                        }
+                        result.put("rootId",rootId).put("writeApproval",approval.json());
+                    }
                     else if(request.action.startsWith("stage-")) {
                         // Resolve this account's native grant on every chunk. A
                         // remembered root ID or existing journal is not authority.
@@ -152,9 +171,33 @@ final class FolderBridge {
             catch(Exception failure) { finish(request,new JSONObject(),failure instanceof FolderReader.Failure || failure instanceof PairingEngine.Failure?failure.getMessage():"Folder access is unavailable. Check Files permissions or choose it again."); }
         });
     }
+    private void approve(Request request,PairingEngine.Check check) {
+        activity.runOnUiThread(()-> {
+            try {
+                check.run();
+                android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity)
+                    .setTitle("Allow downloads to " + request.approvalGrant.name + "?")
+                    .setMessage("Approve this sync connection on " + request.scope.origin + " to add and replace files in this folder. Next, select the same folder in Files to grant Android write access. Choosing or removing this folder clears this connection's approval.")
+                    .setNegativeButton("Cancel",(d,w)->finish(request,new JSONObject(),"Download approval cancelled. No new folder write permission was granted."))
+                    .setPositiveButton("Continue to Files",(d,w)-> {
+                        approvalDialog=null;
+                        try {
+                            check.run();selecting=true;
+                            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+                                .putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,request.approvalGrant.uri);
+                            activity.startActivityForResult(intent,PICK_FOLDER);
+                        } catch(Exception error) { finish(request,new JSONObject(),"The system folder picker is unavailable."); }
+                    }).create();
+                dialog.setOnCancelListener(d->finish(request,new JSONObject(),"Download approval cancelled. No new folder write permission was granted."));
+                approvalDialog=dialog;dialog.show();
+            } catch(Exception error) { finish(request,new JSONObject(),"Folder access paused. Try again when the app is active."); }
+        });
+    }
     private void finish(Request request,JSONObject result,String error) {
         activity.runOnUiThread(()-> {
             if(generation.get()!=request.generation || pending!=request || !active.get()) return;
+            if(approvalDialog!=null) { approvalDialog.dismiss();approvalDialog=null; }
             pending=null;selecting=false;reply(request,result,error);
         });
     }

@@ -5,6 +5,12 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="${1:-}"
 picker_test="${THINGTIME_FOLDER_PICKER_TEST:-0}"
 upload_test="${THINGTIME_FOLDER_UPLOAD_TEST:-0}"
+descriptor_test="${THINGTIME_FOLDER_DESCRIPTOR_TEST:-0}"
+approval_test="${THINGTIME_FOLDER_APPROVAL_TEST:-0}"
+[[ "$approval_test" == 0 || "$approval_test" == 1 ]] || { echo 'THINGTIME_FOLDER_APPROVAL_TEST must be 0 or 1.' >&2; exit 1; }
+if [[ "$approval_test" == 1 ]]; then picker_test=1; fi
+[[ "$descriptor_test" == 0 || "$descriptor_test" == 1 ]] || { echo 'THINGTIME_FOLDER_DESCRIPTOR_TEST must be 0 or 1.' >&2; exit 1; }
+if [[ "$descriptor_test" == 1 ]]; then picker_test=1; fi
 [[ "$upload_test" == 0 || "$upload_test" == 1 ]] || { echo 'THINGTIME_FOLDER_UPLOAD_TEST must be 0 or 1.' >&2; exit 1; }
 if [[ "$upload_test" == 1 ]]; then picker_test=1; fi
 [[ "$picker_test" == 0 || "$picker_test" == 1 ]] || { echo 'THINGTIME_FOLDER_PICKER_TEST must be 0 or 1.' >&2; exit 1; }
@@ -42,6 +48,8 @@ result="$(mktemp)"
 test_args=()
 if [[ "$picker_test" == 1 ]]; then
   test_args=(-e folderSelection true)
+  if [[ "$descriptor_test" == 1 ]]; then test_args+=(-e folderDescriptor true); fi
+  if [[ "$approval_test" == 1 ]]; then test_args+=(-e folderApproval true); fi
   if [[ "$upload_test" == 1 ]]; then test_args+=(-e folderUpload true); fi
   echo 'When the installed app is ready, choose Documents/ThingtimeSyncQA through its Folder access control.'
 fi

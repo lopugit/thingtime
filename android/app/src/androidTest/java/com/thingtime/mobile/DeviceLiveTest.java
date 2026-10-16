@@ -31,7 +31,7 @@ public class DeviceLiveTest {
     private static JSONObject folderReply(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
         String id=java.util.UUID.randomUUID().toString();request.put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         evaluate(web,"window.__folderTestReply=null;window.__folderTestListener=e=>{if(e.detail?.type==='mobile-files-result'&&e.detail?.payload?.requestId==="+JSONObject.quote(id)+"){window.__folderTestReply=e.detail.payload;window.removeEventListener('thingtime:native-message',window.__folderTestListener)}};window.addEventListener('thingtime:native-message',window.__folderTestListener);window.thingtimeNativeBridge.postMessage("+new JSONObject().put("type","mobile-files").put("payload",request)+");");
-        awaitTrue(web,"window.__folderTestReply !== null");
+        awaitTrue(web,"window.__folderTestReply !== null",request.optString("action").equals("write-approve")?300000:60000);
         return new JSONObject(new JSONTokener(evaluate(web,"JSON.stringify(window.__folderTestReply)")).nextValue().toString());
     }
     private static void verifySelectedFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
@@ -70,6 +70,8 @@ public class DeviceLiveTest {
             assertEquals(FolderReader.hex(composite.digest()),file.getJSONObject("fingerprint").getString("sha256"));
             JSONObject read=folderRequest(web,scope,new JSONObject().put("action","read").put("rootId",id).put("path","original.bin").put("version",file.getString("version")).put("offset",8*1024*1024).put("length",65536).put("verifiedChunks",true));
             assertArrayEquals(tail,java.util.Base64.getDecoder().decode(read.getJSONObject("chunk").getString("data")));
+            if("true".equals(InstrumentationRegistry.getArguments().getString("folderApproval"))) verifyWriteApproval(web,context,scope,id,uri);
+            if("true".equals(InstrumentationRegistry.getArguments().getString("folderDescriptor"))) inspectSelectedDirectoryDescriptor(context,uri);
             if("true".equals(InstrumentationRegistry.getArguments().getString("folderUpload"))) verifySelectedUpload(web,context,scope,id);
             store.add(other,uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,"ThingtimeSyncQA");
             folderRequest(web,scope,new JSONObject().put("action","remove").put("rootId",id));
@@ -81,6 +83,54 @@ public class DeviceLiveTest {
         } finally {
             store.remove(scope,rootId);JSONArray otherRoots=store.list(other);for(int i=0;i<otherRoots.length();i++) store.remove(other,otherRoots.getJSONObject(i).getString("id"));
         }
+    }
+    private static void verifyWriteApproval(android.webkit.WebView web,Context context,DeviceScope scope,String id,android.net.Uri uri) throws Exception {
+        FolderStore store=new FolderStore(context);
+        WriteApproval approval=new WriteApproval(new JSONObject().put("scope",new JSONObject().put("ownerId",scope.owner).put("origin",scope.origin).put("dataPlane","home")
+            .put("rootId","native-approval-qa").put("deviceId",new KeystoreDeviceStore(context).load(scope).getString("deviceId")))
+            .put("configurationRevision","1").put("configurationHash","a".repeat(64)),scope);
+        JSONObject request=new JSONObject().put("action","write-approve").put("rootId",id).put("approval",approval.json());
+        assertFalse(store.isWriteApproved(scope,id,approval));
+        System.out.println("WRITE_APPROVAL_QA_CANCEL: Cancel the native download approval dialog.");
+        JSONObject cancelled=folderReply(web,scope,new JSONObject(request.toString()));
+        assertEquals("Download approval cancelled. No new folder write permission was granted.",cancelled.getString("error"));
+        assertFalse(store.isWriteApproved(scope,id,approval));
+        assertFalse(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isWritePermission()));
+        System.out.println("WRITE_APPROVAL_QA_ALLOW: Continue to Files, select the same ThingtimeSyncQA folder, then allow its access.");
+        JSONObject accepted=folderRequest(web,scope,new JSONObject(request.toString()));
+        assertTrue(approval.matches(new WriteApproval(accepted.getJSONObject("writeApproval"),scope)));
+        assertFalse(accepted.toString().contains("content://"));assertTrue(new FolderStore(context).isWriteApproved(scope,id,approval));
+        // Identical retry must return without a second dialog.
+        folderRequest(web,scope,new JSONObject(request.toString()));
+        WriteApproval revised=new WriteApproval(approval.json().put("configurationRevision","2"),scope);
+        assertFalse(store.isWriteApproved(scope,id,revised));
+        System.out.println("WRITE_APPROVAL_QA_REVISION: Cancel the new approval dialog for changed configuration.");
+        JSONObject denied=folderReply(web,scope,new JSONObject(request.toString()).put("approval",revised.json()));
+        assertTrue(denied.has("error"));assertFalse(store.isWriteApproved(scope,id,revised));assertTrue(store.isWriteApproved(scope,id,approval));
+        // A real native re-selection invalidates the old configuration binding.
+        store.add(scope,uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,"ThingtimeSyncQA");
+        assertFalse(store.isWriteApproved(scope,id,approval));
+        assertFalse(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isWritePermission()));
+        assertEquals("true",evaluate(web,"window.thingtimeNativeBridge.fileStagingVersion==='1.0.0' && window.thingtimeNativeBridge.filePublicationVersion===undefined"));
+        System.out.println("WRITE_APPROVAL_QA_PASS: native cancellation, real OS write grant, encrypted reload, exact retry, configuration change, reselection invalidation; publication remains disabled.");
+    }
+    private static void inspectSelectedDirectoryDescriptor(Context context,android.net.Uri tree) throws Exception {
+        JSONObject result=new JSONObject().put("directoryDescriptor",false).put("relativeRead",false);
+        android.net.Uri root=android.provider.DocumentsContract.buildDocumentUriUsingTree(tree,android.provider.DocumentsContract.getTreeDocumentId(tree));
+        try(android.os.ParcelFileDescriptor descriptor=context.getContentResolver().openFileDescriptor(root,"r")) {
+            assertNotNull(descriptor);
+            boolean directory=android.system.OsConstants.S_ISDIR(android.system.Os.fstat(descriptor.getFileDescriptor()).st_mode);
+            result.put("directoryDescriptor",directory);
+            if(directory) {
+                java.io.FileDescriptor file=android.system.Os.open("/proc/self/fd/"+descriptor.getFd()+"/original.bin",android.system.OsConstants.O_RDONLY|android.system.OsConstants.O_NOFOLLOW,0);
+                try { byte[] bytes=new byte[32];assertEquals(32,android.system.Os.pread(file,bytes,0,32,0));for(byte value:bytes)assertEquals(13,value);result.put("relativeRead",true); }
+                finally { android.system.Os.close(file); }
+            }
+        } catch(java.io.FileNotFoundException | android.system.ErrnoException unsupported) {
+            result.put("failureType",unsupported.getClass().getSimpleName());
+            if(unsupported instanceof android.system.ErrnoException)result.put("errno",((android.system.ErrnoException)unsupported).errno);
+        }
+        System.out.println("DIRECTORY_DESCRIPTOR_RESULT: "+result);
     }
     private static JSONObject webApi(android.webkit.WebView web,String path,String method,JSONObject body) throws Exception {
         evaluate(web,"window.__syncQA=null;(async()=>{try{const r=await fetch("+JSONObject.quote(path)+",{method:"+JSONObject.quote(method)+",headers:{'Content-Type':'application/json'},"+(body==null?"":"body:"+JSONObject.quote(body.toString())+",")+"redirect:'error'});const value=await r.json();window.__syncQA=r.ok?{ok:true,value}:{ok:false,status:r.status};}catch(e){window.__syncQA={ok:false,error:String(e)}}})()");

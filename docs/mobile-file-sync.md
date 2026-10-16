@@ -81,11 +81,11 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging and real process-exit recovery verified; Android/Mac writes, workers and full cross-device transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval and real process-exit recovery verified; Android/Mac publication, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
-| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain write approvals implemented; Android/Mac approvals, retention/selective settings and background workers remain pending |
+| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac approvals, retention/selective settings and background workers remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; restore/conflict UI and retention policy remain pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
@@ -769,3 +769,31 @@ acceptance, native write consent, safe provider publication and retained conflic
 remain open. Android Download now stays disabled. No new secret, collection or
 parallel history/settings format was introduced. Reproducible commands and
 cleanup are in the Android and root READMEs. The full goal remains in progress.
+
+### Android native write approval and actual picker acceptance (2026-10-17)
+
+Android now implements the shared `write-approve` contract with a native dialog,
+exact-tree OS write selection and fresh account verification. Keystore-encrypted
+approvals bind account/origin, remote root/device, configuration revision/hash
+and the native selection generation. Choosing the same URI again invalidates
+old consent; another account's references remain intact. Failed saves cannot
+leave a new persisted write grant or revoke an existing shared grant. Reacquiring revoked OS write access clears every older approval for that tree,
+including other accounts and connections. Native checks reject malformed fields and unavailable/revoked OS access.
+
+The installed Android 15 / API 35 app passed actual picker selection, native
+Cancel, same-folder write Allow, encrypted reload, identical approval retry,
+changed-configuration Cancel and native re-selection invalidation. The test
+removed all its folder references and verified OS read/write grant release.
+The suite reports `OK (28 tests)` with one opt-in process scenario skipped:
+27 tests executed, including the live account/bridge test, seven registry tests,
+three Keystore tests, three provider tests and thirteen staging tests. All 26
+JVM tests, debug build and Android lint passed.
+
+A separate read-only local-provider descriptor probe opened the directory but
+relative child access returned `EACCES`. Generic SAF does not promise exclusive
+atomic rename or conditional replacement, so Android still advertises private
+staging only; Download now remains disabled. This checkpoint is consent, not
+publication acceptance. Android/Mac receivers, retained conflict recovery,
+background scheduling, Photos, peer sync, rename/delete convergence, scalable
+roots, physical/reboot acceptance and release delivery remain open. The full
+goal remains active. Fork-safe commands are in the Android and root READMEs.
