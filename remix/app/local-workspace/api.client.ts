@@ -146,6 +146,11 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		remove: async ({ id }: { id: string }) => { const result = await service().remove([id]); announceLocalWorkspaceChange(result.deleted); return changed(result); },
 		create: (input: ThingWrite) => write(input), update: (input: ThingWrite) => write(input, true),
 		renameLibrary: ({ id, displayTitle, expectedUpdatedAt }: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => write({ id, crystal: { title: displayTitle }, expectedUpdatedAt }, true),
+		fork: async ({ id }: { id: string; key?: string }) => {
+			const things = service(), bundle = await things.export([id]);
+			const result = await things.import(bundle.manifest, null, bundle.files);
+			return changed({ ...result, id: result.idMap[id] });
+		},
 		export: async ({ ids, ...options }: { ids: string[] }, request?: { signal?: AbortSignal }) => {
 			const { manifest, files } = await service().export(ids, { ...options, signal: request?.signal });
 			return { ok: true, plan: { roots: manifest.roots, things: manifest.things, files: manifest.files,

@@ -155,9 +155,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		result[key] = entries.filter(row => views.has(row.id) || bundledIds.has(row.id)).map(row => views.has(row.id) ? { ...row, ...views.get(row.id) } : row);
 		facadeLease.assertCurrent(); return { ...result, incomplete: true };
 	};
-	return { ...online, auth: remote.auth, login: remote.login,
-		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
-		export: async (input: Parameters<typeof exportAccountThings>[0], options?: { signal?: AbortSignal }) => {
+	const exportThings = async (input: Parameters<typeof exportAccountThings>[0], options?: { signal?: AbortSignal }) => {
 			input = snapshotAccountExportInput(input);
 			return withExportDeadline(async signal => {
 				options = { ...options, signal };
@@ -175,8 +173,8 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				}
 				return exportAccountThings(input, { ...current, canRefresh, remote: (args, request) => current.transport.export(args, request?.signal) }, options?.signal);
 			}, options?.signal);
-		},
-		import: async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array> }, options?: { signal?: AbortSignal }) => {
+		};
+	const importThings = async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array> }, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (Object.keys(input || {}).some(key => !['manifest', 'folderId', 'files', 'localFiles'].includes(key))) throw new WorkspaceError('INVALID_IMPORT', 'Unsupported import options.');
 			const manifest = parseTransfer(serializeTransfer(validateTransfer(input.manifest))), folderId = input.folderId;
@@ -192,13 +190,40 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			const result = await sync.things.import(manifest, folderId, undefined, options?.signal);
 			changed();
 			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: 0, linksImported: 0, savedLocally: true };
+		};
+	return { ...online, auth: remote.auth, login: remote.login,
+		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
+		fork: async (input: { id: string; key?: string }) => {
+			facadeLease.assertCurrent();
+			if (!input || Object.keys(input).some(key => !['id', 'key'].includes(key))) throw new WorkspaceError('INVALID_COPY', 'Unsupported copy options.');
+			const request = { id: input.id, key: input.key }, { plan } = await exportThings({ ids: [request.id], key: request.key });
+			if (plan.files?.length || plan.links?.length || !plan.things.every(accountThingCanCache)) {
+				if ((await worker().sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_COPY_REQUIRED', 'Copy device edits separately from items requiring their dedicated online adapter.', 409);
+				return worker().transport.fork(request);
+			}
+			const result = await importThings({ manifest: { format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: [] } });
+			return { ...result, id: result.ids[request.id] };
 		},
+		export: exportThings, import: importThings,
 		remove: async (input: { id: string; expectedUpdatedAt?: string }) => {
 			if (Object.keys(input || {}).some(key => !['id', 'expectedUpdatedAt'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
 			return remove([input?.id], input?.expectedUpdatedAt, () => online.things.remove(input));
 		},
 		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
 			facadeLease.assertCurrent();
+			if (input?.op === 'copy') {
+				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) || !Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 ||
+					input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length ||
+					(input.folderId != null && (typeof input.folderId !== 'string' || !input.folderId.trim()))) throw new WorkspaceError('INVALID_COPY', 'Choose between 1 and 200 distinct Things and a copy destination.');
+				const request = { ids: [...input.ids], folderId: input.folderId };
+				const { plan } = await exportThings({ ids: request.ids });
+				if (plan.files?.length || plan.links?.length || !plan.things.every(accountThingCanCache)) {
+					if ((await worker().sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_COPY_REQUIRED', 'Copy device edits separately from items requiring their dedicated online adapter.', 409);
+					return online.things.bulk({ op: 'copy', ...request });
+				}
+				const result = await importThings({ manifest: { format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: [] }, folderId: request.folderId });
+				return { ...result, succeeded: request.ids.length, failed: 0, results: request.ids.map(id => ({ id, ok: true, newId: result.ids[id] })) };
+			}
 			if (input?.op === 'delete') {
 				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
 				return remove(input.ids, undefined, () => online.things.bulk(input));
@@ -315,12 +340,12 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		get: async (args: any, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
-			if (Object.keys(args || {}).some(key => key !== 'id')) return online.things.get(args, options);
+			if (Object.entries(args || {}).some(([key, value]) => value !== undefined && key !== 'id')) return online.things.get(args, options);
 			const { sync } = worker();
 			if (await sync.isDeleted(args.id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
 			const cached = await sync.view(args.id);
 			if (cached) {
-				if (navigator.onLine !== false) void refresh(args, options?.signal).then(() => {}).catch(() => {});
+				if (navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(() => {}).catch(() => {});
 				return { ok: true, thing: project(cached), savedLocally: cached.syncState !== 'synced' };
 			}
 			return refresh(args, options?.signal);

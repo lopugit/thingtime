@@ -106,8 +106,16 @@ test('account component versions complete and sync while draft writes never fini
   const id = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!); ids.push(id);
   await page.getByRole('button', { name: 'Independent content completion', exact: true }).first().waitFor();
   assert.ok(stalled > 0);
-  await page.waitForFunction(async id => { const response = await fetch(`/api/v1/things?id=${encodeURIComponent(id)}`); const value = await response.json(); return response.ok && value.ok && !!value.thing; }, id);
-  const response = await context.request.get(new URL(`/api/v1/things?id=${encodeURIComponent(id)}`, base).href); const content = (await response.json()).thing;
+  // Browser fetch is intentionally local-first. Inspect the actual server through
+  // the fixture request context so a local response cannot masquerade as sync.
+  let content: any;
+  for (let attempt = 0; attempt < 100; attempt++) {
+   const response = await context.request.get(new URL(`/api/v1/things?id=${encodeURIComponent(id)}`, base).href);
+   if (response.ok()) content = (await response.json()).thing;
+   if (content?.crystal.savedArgs?.label === 'Independent content completion') break;
+   await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(content, 'the real server receives the locally completed component');
   assert.equal(content.author.username, username); assert.equal(content.crystal.savedArgs.label, 'Independent content completion'); assert.equal(content.crystal.forkOf, 'component-demo-guestbook-reader');
   const localUrl = page.url();
   await page.goto(new URL(`/components/demo-guestbook-reader?catalog=online&design=${id}`, base).href);

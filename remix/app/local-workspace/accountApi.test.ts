@@ -14,12 +14,13 @@ test('account local facade and native page resolution work offline without uploa
  let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; return { ok: true }; };
  try {
   bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
-  const api = accountApi({ actions: { run: remote }, things: { create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote } }, { id: scope.ownerId }, scope.dataPlane);
+  const api = accountApi({ actions: { run: remote }, things: { create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
   const component: any = await api.things.create({ thingtime: ['component'], crystal: { name: 'Card', componentKey: 'card', version: 1, render: { tag: 'p', children: 'Locally rendered' } } } as any);
   const page: any = await api.things.create({ thingtime: ['webpage'], crystal: { name: 'Offline page', blocks: [{ id: 'card', type: 'component', component: 'card' }] } } as any);
   const resolved = await resolveAccountWebpage(scope, { kind: 'id', id: page.id });
   assert.equal(resolved.page.id, page.id); assert.equal(resolved.refs.card, component.id); assert.equal(resolved.components[0].crystal.render.children, 'Locally rendered');
   assert.equal((await api.things.get({ id: page.id } as any) as any).thing.crystal.name, 'Offline page');
+  assert.equal((await api.things.get({ id: page.id, key: undefined } as any) as any).thing.id, page.id);
   assert.equal(remoteCalls, 0);
   await assert.rejects(api.things.update({ id: page.id, attachmentIds: ['attachment'], crystal: {} } as any), /online adapter/);
   await api.things.create({ thingtime: ['data'], crystal: {}, attachmentIds: ['attachment'] } as any); assert.equal(remoteCalls, 1, 'unsupported creates retain the complete existing remote adapter');
@@ -71,6 +72,13 @@ test('account local facade and native page resolution work offline without uploa
   const downloaded: any = await api.things.export({ ids: imported.roots });
   assert.equal(downloaded.localWorkspace, true); assert.equal(downloaded.plan.things[0].crystal.name, 'Offline imported copy');
   assert.equal(remoteCalls, 1, 'ordinary account download requires no remote endpoint, sync or draft write');
+  const copied: any = await api.things.bulk({ op: 'copy', ids: imported.roots });
+  assert.equal(copied.savedLocally, true); assert.notEqual(copied.results[0].newId, imported.roots[0]);
+  const forked: any = await api.things.fork({ id: imported.roots[0] });
+  assert.equal(forked.savedLocally, true); assert.notEqual(forked.id, imported.roots[0]);
+  assert.equal((await api.things.get({ id: forked.id }) as any).thing.crystal.name, 'Offline imported copy');
+  assert.equal(remoteCalls, 1, 'duplicate controls cannot invoke an account request while unconfirmed');
+
 
   await assert.rejects(api.things.import({ manifest: { format: 'thingtime.transfer', version: 1, roots: ['post'], things: [{ id: 'post', thingtime: ['post'], crystal: { type: 'text', text: 'Dedicated adapter' } }], files: [] } }), /offline/);
   rootIdentity.changed(); bindLocalWorkspace(true, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);

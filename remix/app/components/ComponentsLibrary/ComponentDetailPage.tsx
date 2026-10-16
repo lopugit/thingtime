@@ -1,3 +1,5 @@
+import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { restoreComponentSourceDraft } from '~/drafts/componentSourceDraft';
 import { useComponentVersionDraft } from '~/drafts/useComponentVersionDraft';
 import { createWithDraft } from '~/drafts/createWithDraft';
 import { DraftSaveStatus } from '~/drafts/DraftPicker';
@@ -265,28 +267,47 @@ const draftFrom = (binding: ThingSourceBinding | null): SourceDraft => ({
 });
 
 const SourceControl = ({
+  componentId,
   binding,
   suggestions,
   onBind
 }: {
+  componentId: string;
   binding: ThingSourceBinding | null;
   suggestions: ThingSourceBinding[];
   onBind: (binding: ThingSourceBinding | null) => void;
 }) => {
   const bindingKey = JSON.stringify(binding);
-  const [draft, setDraft] = React.useState<SourceDraft>(() => draftFrom(binding));
+  const seenBinding = React.useRef(bindingKey);
+  const [draft, setDraftState] = React.useState<SourceDraft>(() => draftFrom(binding));
+  const [draftBinding, setDraftBinding] = React.useState(bindingKey);
+  const [dirty, setDirty] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const recovery = useWorkspaceDraft({ context: `component-source:${componentId}`, surface: 'definition',
+    validateSnapshot: restoreComponentSourceDraft,
+    onRestore: saved => { const value = restoreComponentSourceDraft(saved.snapshot); setDraftState(value.draft); setDraftBinding(value.binding); setDirty(true); }
+  });
+  const setDraft: typeof setDraftState = next => { setDirty(true); setDraftState(next); };
   React.useEffect(() => {
-    setDraft(draftFrom(binding));
-    setError(null);
+    if (seenBinding.current === bindingKey) return;
+    seenBinding.current = bindingKey;
+    setDraftState(draftFrom(binding)); setDraftBinding(bindingKey); setDirty(false); setError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bindingKey is the serialised binding
   }, [bindingKey]);
+  const snapshot = JSON.stringify({ draft, binding: draftBinding }), capture = recovery.capture;
+  React.useEffect(() => {
+    if (dirty) capture({ name: 'Component source controls', surface: 'definition', context: recovery.context, snapshot, attachmentIds: [] }, true, true);
+  }, [dirty, snapshot, capture, recovery.context]);
+  const bind = (next: ThingSourceBinding | null) => {
+    onBind(next); setDirty(false); setDraftBinding(JSON.stringify(next)); setDraftState(draftFrom(next));
+    void recovery.retire().catch(() => {});
+  };
 
   const apply = () => {
     const action = draft.action.trim();
     if (!action) {
       setError(null);
-      onBind(null);
+      bind(null);
       return;
     }
     if (!isSourceActionKey(action)) {
@@ -301,7 +322,7 @@ const SourceControl = ({
       return;
     }
     setError(null);
-    onBind({
+    bind({
       action,
       refresh: draft.refresh,
       ...(draft.refresh === 'interval' ? { intervalMs: clampSourceInterval(draft.intervalMs) } : {}),
@@ -312,6 +333,8 @@ const SourceControl = ({
   return (
     <Flex direction="column" gap={2} data-testid="component-source-control">
       <Text {...monoLabel}>data source</Text>
+      <DraftSaveStatus paused={!!recovery.recoveryError} status={recovery.status} error={recovery.error} retry={recovery.retry} />
+      {dirty && draftBinding !== bindingKey ? <Text role="alert" fontSize="sm">The URL binding changed since this draft. Review these controls before binding them. Recovery does not run the Action.</Text> : null}
       <Flex align="center" gap={2} wrap="wrap">
         <Input
           {...fieldProps}
@@ -359,7 +382,7 @@ const SourceControl = ({
           {binding ? 'Rebind' : 'Bind'}
         </Button>
         {binding && (
-          <Button color="var(--tt-muted, #9a9aa6)" onClick={() => onBind(null)} size="sm" variant="ghost" data-testid="component-source-clear">
+          <Button color="var(--tt-muted, #9a9aa6)" onClick={() => bind(null)} size="sm" variant="ghost" data-testid="component-source-clear">
             Clear
           </Button>
         )}
@@ -394,7 +417,7 @@ const SourceControl = ({
               height="24px"
               isDisabled={binding?.action === suggestion.action}
               key={suggestion.action}
-              onClick={() => onBind(suggestion)}
+              onClick={() => bind(suggestion)}
               paddingX={2}
               size="xs"
               variant="unstyled"
@@ -993,7 +1016,7 @@ const ComponentDetailWorkspace = ({ docsFocus }: { docsFocus: boolean }) => {
                 </Flex>
               )}
               <DraftSaveStatus paused={!!versionDraft.recoveryError} status={versionDraft.status} error={versionDraft.error} retry={versionDraft.retry} />
-              <SourceControl binding={binding} onBind={bindSource} suggestions={suggestions} />
+              <SourceControl key={`${cacheScope}:${active?.id || key}`} componentId={active?.id || key} binding={binding} onBind={bindSource} suggestions={suggestions} />
               <Flex align="center" gap={2} wrap="wrap">
                 {trust === 'stranger' && (
                   <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" data-testid="component-stranger-hint">

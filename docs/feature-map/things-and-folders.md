@@ -146,7 +146,16 @@ no-follow operations. The manual checklist is “Remote brightness and files”.
 and source editing through the canonical Things update path. Component/page
 menus and the Action inspector reuse it. It preserves Thing identity and ACLs,
 replaces the validated crystal, and refuses stale `expectedUpdatedAt` writes.
-See [browser Actions and editor checks](../builder-browser-actions.md).
+Workspace ownership enables this editor and Builder duplication offline for
+anonymous and remembered account workspaces; sharing still requires login.
+`definitionDraft.ts` validates recovery envelopes separately from unfinished
+JSON and preserves raw numbers, field expansion and editor mode. Content writes
+use `createWithDraft` and never await recovery/Timeline queues. Component source
+controls use `componentSourceDraft.ts`; recovery does not bind or execute Actions.
+`accountApi.client.ts` and `api.client.ts` route ordinary private forks/copies
+through canonical local export/import; dedicated media/managed paths remain guarded.
+See [browser Actions and editor checks](../builder-browser-actions.md) and the
+[local recovery checkpoint](../local-workspaces.md#builder-definition-and-source-control-recovery-checkpoint--2026-10-16).
 
 
 ## Web standards app

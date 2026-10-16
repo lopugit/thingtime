@@ -1036,6 +1036,10 @@ export function useApi() {
       )
     },
     things: {
+      fork: useCallback(async (args: { id: string; key?: string }) => {
+        await requireThingtimeCapability('api.things-fork', '1.6.0');
+        return asyncFetcher.submit({ id: args.id, key: args.key }, { action: '/api/v1/things/fork' });
+      }, [asyncFetcher]),
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
           await requireThingtimeCapability('api.things-export', '1.15.0');

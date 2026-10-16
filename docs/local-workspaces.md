@@ -69,7 +69,7 @@ change this pointer; logout/account changes revoke it.
 | Local storage and account boundaries | Unit-tested persistence, atomic rollback, concurrent edits, scope isolation and identity invalidation. Settings now shows scoped device usage and offers browser eviction protection without login, with offline reload, other-tab writes and failed-accounting browser checks. Finish broader multi-tab and account-switch regressions. |
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
 | Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Library text search now works across folders offline, with bounded cursor pages and visible error/retry states. Clean-browser acceptance covers 61 matches, kind filters, rename/reload and grid/list mouse selection at 1440/390/320px. The earlier checkbox report came from targeting its hidden input; clicking the visible label works, and descriptive labels/regressions now cover it. The native Search page now has a separate structured device view, with canonical field operators and credential-free anonymous online search (checkpoint below). Advanced shortcut filters/ranking, wider account discovery caching and remaining normal UI flows still require completion. |
-| Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Schema builder/form recovery now passes offline reload and malformed-copy preservation checks (checkpoint below). Finish other definition recovery, media kinds and account draft sync. |
+| Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Schema builder/form recovery now passes offline reload and malformed-copy preservation checks (checkpoint below). Shared Builder definition and Component source-control recovery now pass anonymous/account offline browser checks (checkpoint below). Finish other editor consumers, media kinds, cross-device conflicts and account draft sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. The schema catalogue, schema authoring, copies and data forms now pass offline browser checks (checkpoint below). Component catalogue/detail and argument/version recovery now pass local offline browser checks (checkpoint below). Finish remaining Builder surfaces, account discovery caching and cross-tab UI refresh. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Scoped device usage and browser protection controls are available in Settings. Protected-kind adapters and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
@@ -1635,3 +1635,44 @@ accepted. The earlier semantic extraction is retained and the final source uses
 the repository-permitted structural refresh. Final documentation semantic
 freshness is unverified; source fingerprint and graph/manifest coverage are
 checked separately.
+
+## Builder definition and source-control recovery checkpoint — 2026-10-16
+
+Builder menus now use workspace ownership for editing and private duplication;
+account authentication still gates sharing. Definition recovery uses the existing
+workspace-scoped draft session, retaining raw JSON, Fields/Source mode, expanded
+fields, unfinished property names and raw numeric input such as `1e-`. Invalid
+numbers cannot silently become a different saved number. Array moves/removals
+keep unfinished input with the right row. The original saved-version fence is
+retained; stale recovery requires an explicit discard before using newer content.
+Malformed recovery is kept verbatim with autosave paused. Canonical content
+updates, draft saves, Timeline recovery and cleanup complete independently.
+
+Component source controls retain unfinished Action keys, interval and input JSON
+in the same isolated workspace recovery. Restoring them never binds or executes
+an Action; explicit binding and existing confirmation still apply. Ordinary
+file-free Builder forks and Things copies use canonical export/import locally,
+including offline account copies. Dedicated media/managed copies retain their
+existing remote path and refuse to replace pending local edits. Account reads
+with an absent optional bearer key stay local; an actual key retains its guarded
+remote path.
+
+Local verification: 206 workspace, four offline-shell, 33 draft, 52 component and
+315 Things tests pass. The general workspace suite skips 22 opt-in scenarios;
+the two definition scenarios were separately enabled and passed. Clean anonymous
+and disposable account browsers prove numeric/raw-source recovery, native save,
+source-control recovery without execution, independent duplication, stale-version
+refusal, explicit discard and malformed recovery preservation. Account content
+sync completes while draft POSTs are held indefinitely. Offline mutation requests
+and browser errors are zero. Dialog bounds and PNGs cover 1440/390/320px in
+`tmp/local-definition-ui/`; the production client has 247 verified assets /
+21,555,433 bytes. Targeted lint has no warnings/errors; TypeScript retains the
+91 baseline diagnostics. Existing anonymous/account Component browser regressions
+also pass; the sync assertion now polls the real server through the fixture
+request context instead of browser fetch, which intentionally returns local
+content first. This is local evidence, separate from CI/deployment.
+
+These checks cover the shared ThingDefinitionEditor and Component source controls.
+They do not claim raw-number recovery in other DefinitionValueEditor consumers,
+cross-device draft conflict UI, account file/managed copies or the remaining
+full-suite acceptance matrix. No main merge or manual deployment.

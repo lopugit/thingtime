@@ -1072,3 +1072,44 @@ accepted. The earlier semantic extraction is retained and the final source uses
 the repository-permitted structural refresh. Final documentation semantic
 freshness is unverified; source fingerprint and graph/manifest coverage are
 checked separately.
+
+## Builder definition and source-control recovery checkpoint — 2026-10-16
+
+Builder menus now use workspace ownership for editing and private duplication;
+account authentication still gates sharing. Definition recovery uses the existing
+workspace-scoped draft session, retaining raw JSON, Fields/Source mode, expanded
+fields, unfinished property names and raw numeric input such as `1e-`. Invalid
+numbers cannot silently become a different saved number. Array moves/removals
+keep unfinished input with the right row. The original saved-version fence is
+retained; stale recovery requires an explicit discard before using newer content.
+Malformed recovery is kept verbatim with autosave paused. Canonical content
+updates, draft saves, Timeline recovery and cleanup complete independently.
+
+Component source controls retain unfinished Action keys, interval and input JSON
+in the same isolated workspace recovery. Restoring them never binds or executes
+an Action; explicit binding and existing confirmation still apply. Ordinary
+file-free Builder forks and Things copies use canonical export/import locally,
+including offline account copies. Dedicated media/managed copies retain their
+existing remote path and refuse to replace pending local edits. Account reads
+with an absent optional bearer key stay local; an actual key retains its guarded
+remote path.
+
+Local verification: 206 workspace, four offline-shell, 33 draft, 52 component and
+315 Things tests pass. The general workspace suite skips 22 opt-in scenarios;
+the two definition scenarios were separately enabled and passed. Clean anonymous
+and disposable account browsers prove numeric/raw-source recovery, native save,
+source-control recovery without execution, independent duplication, stale-version
+refusal, explicit discard and malformed recovery preservation. Account content
+sync completes while draft POSTs are held indefinitely. Offline mutation requests
+and browser errors are zero. Dialog bounds and PNGs cover 1440/390/320px in
+`tmp/local-definition-ui/`; the production client has 247 verified assets /
+21,555,433 bytes. Targeted lint has no warnings/errors; TypeScript retains the
+91 baseline diagnostics. Existing anonymous/account Component browser regressions
+also pass; the sync assertion now polls the real server through the fixture
+request context instead of browser fetch, which intentionally returns local
+content first. This is local evidence, separate from CI/deployment.
+
+These checks cover the shared ThingDefinitionEditor and Component source controls.
+They do not claim raw-number recovery in other DefinitionValueEditor consumers,
+cross-device draft conflict UI, account file/managed copies or the remaining
+full-suite acceptance matrix. No main merge or manual deployment.

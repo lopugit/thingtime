@@ -10413,3 +10413,30 @@ Run `app/local-workspace/components.browser.test.ts` with
 `TT_LOCAL_COMPONENTS_URL` pointing to the isolated production-client origin,
 `TT_SHARED_PLAYWRIGHT_PATH`, `TT_SHARED_CHROME_PATH`, and optionally
 `TT_LOCAL_COMPONENTS_ARTIFACTS`. See the local workspace runbook.
+
+
+### Builder definition/source-control recovery (2026-10-16)
+
+- In a clean anonymous workspace and a disposable signed-in workspace, prepare
+  the production offline shell, disable networking and import a native Component.
+  Its Builder menu must allow editing and private duplication. An omitted optional
+  bearer key must not force account reads onto the network; real bearer keys must
+  keep their existing guarded remote path.
+- Type an unfinished numeric field (`1e-`) and new property name; reload/reopen
+  and verify exact recovery with Save disabled. Move/remove array rows and verify
+  raw numeric drafts follow the correct row. Switch to Source, leave invalid JSON,
+  reload and recover exact text/mode; correct it and save immediately.
+- Hold draft POSTs indefinitely. Definition saving must finish, update native
+  rendering, and sync account content without waiting for draft or Timeline queues.
+  Reload after completion: the finished draft must not reappear.
+- Retain an older device draft after a newer saved definition. Save must refuse
+  the stale version; explicitly discard recovery and confirm the newer content.
+  Corrupt the recovery envelope: show a paused recovery error, preserve its bytes,
+  and still allow a normal validated definition save.
+- Leave unfinished Component source Action/interval/input fields and reload.
+  Recover exact input without binding, adding a source URL or executing an Action.
+  A private duplicate must not inherit the original component's control draft.
+- Inspect 1440/390/320px dialog bounds and screenshots; no horizontal overflow.
+  Verify zero offline mutation requests and no browser errors. Regression command:
+  enable `TT_LOCAL_DEFINITION_URL`, `TT_LOCAL_DEFINITION_ARTIFACTS` and shared
+  Playwright/Chrome paths for `app/local-workspace/definition.browser.test.ts`.

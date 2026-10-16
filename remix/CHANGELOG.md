@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Builder definition and Component source controls
+  recover unfinished fields offline in isolated anonymous/account workspaces.
+  Content saves no longer await draft/Timeline queues; private ordinary copies
+  reuse canonical local transfer. Verified stale/malformed recovery, stalled
+  drafts, native saves and 1440/390/320px layouts. Full matrix remains open;
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-16 — **Codex (AI)**: Normal account Downloads now export saved device
   edits offline through the canonical transfer pipeline, with complete scoped
   export snapshots, dependency/alias guards and explicit missing-content errors.
