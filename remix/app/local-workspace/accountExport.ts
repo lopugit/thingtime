@@ -33,13 +33,11 @@ export async function exportAccountThings(input: Input, deps: {
 }, signal?: AbortSignal) {
  const args = snapshotAccountExportInput(input), { sync, db, lease } = deps;
  const check = () => { lease.assertCurrent(); signal?.throwIfAborted(); }; check();
- // Bearer-link exports keep their existing authorized path and are never cached.
- if (args.key) return deps.remote(args, { signal });
  const key = await transferChecksum(new TextEncoder().encode(JSON.stringify({ ...args, ids: [...args.ids].sort() })));
  check();
  const tx = <T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) =>
   db.transaction(sync.scope, mode, { assertCurrent: check, onInvalidate: lease.onInvalidate }, run);
- const initial = await tx('readonly', async tx => ({snapshot:await tx.get<Snapshot>(STORE,key),refusals:await accountReadRefusals(tx)}));
+ const initial = await tx('readonly', async tx => ({snapshot:args.key ? null : await tx.get<Snapshot>(STORE,key),refusals:await accountReadRefusals(tx)}));
  let baseline = initial.snapshot;
  const watched = new Set(args.ids);
  let selected = new Set<string>();
@@ -52,6 +50,31 @@ export async function exportAccountThings(input: Input, deps: {
    if(current.get(id)?.at !== initial.refusals.get(id)?.at || (selected.has(id) && deleted.has(id))) throw unavailable();
   }
  };
+ // Dedicated and bearer-link plans are never retained as editable content,
+ // but still belong to this in-process identity and observed access boundary.
+ const remotePlan = async () => {
+  const result = await deps.remote(args, { signal }); check();
+  if (!result?.ok || !result.plan) throw new WorkspaceError('EXPORT_FAILED', result?.error || 'Could not prepare complete export content.', result?.status || 503);
+  const plan = result.plan;
+  if (!Array.isArray(plan.things) || !Array.isArray(plan.files) || !Array.isArray(plan.roots)) throw new WorkspaceError('INVALID_EXPORT', 'The account returned an invalid export plan.', 502);
+  watch(plan); selected = new Set([...plan.roots, ...plan.things.map((row: any) => row.id)]);
+  for (const row of [...plan.files, ...(plan.links || [])]) for (const id of [row.id, row.sourceId, row.targetId, row.sharedRoot]) if (typeof id === 'string') watched.add(id);
+  const assertCurrent = async (requestSignal?: AbortSignal) => {
+   check(); requestSignal?.throwIfAborted();
+   await plan.assertCurrent?.(requestSignal);
+   await tx('readonly', assertReadable);
+   const library = await deps.files?.library(true);
+   for (const id of watched) if (library?.aliases.has(id)) {
+    const local = library.aliases.get(id);
+    if (!local) throw unavailable();
+    await deps.files!.assertFileReadable(local, requestSignal);
+   }
+   check(); requestSignal?.throwIfAborted();
+  };
+  await assertCurrent();
+  return { ...result, plan: { ...plan, assertCurrent } };
+ };
+ if (args.key) return remotePlan();
  if(baseline) {
   const baselineIds = [...new Set([...args.ids,...baseline.references || [],...baseline.manifest.things.flatMap(row=>[row.id,...(row.targetId?[row.targetId]:[])])])];
   // Old snapshots predate refusal fencing. Require a new authorized export
@@ -148,7 +171,7 @@ export async function exportAccountThings(input: Input, deps: {
     for (const [remote, local] of library?.aliases || []) if (local && selected.has(remote)) selected.add(local);
     const affectedFiles = library?.things.some(row => pendingFiles.has(row.id) && (selected.has(row.id) || (args.includeChildren && row.folderId && selected.has(row.folderId))));
     if (state.records.some(row => row.state !== 'synced') || affectedFiles) throw new WorkspaceError('DEDICATED_EXPORT_REQUIRED', 'This download needs its file or managed-content adapter. Sync your device edits before downloading it online.', 409);
-    return deps.remote(args, { signal });
+    return remotePlan();
    }
    const manifest = parseTransfer(serializeTransfer({ format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: [] }));
    watch(manifest);await tx('readonly',assertReadable);

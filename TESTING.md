@@ -10934,3 +10934,20 @@ Run `app/local-workspace/components.browser.test.ts` with
   menu hit targets and export dialog bounds at 1440/390/320px.
 - [ ] Repeat shared-link and cross-account changes during an in-flight export;
   verify dialog cancellation and that no prior account/key survives the switch.
+
+
+### Retained file access lifetimes
+
+- [x] Refuse a canonical retained file before its first export. Both canonical
+  and local aliases reject fresh exports and media reads; unsynced metadata and
+  recovery bytes remain stored. A stale descriptor cannot undo the refusal.
+- [x] Canonical descriptor 403/404/410 fences retained bytes; 401, network and byte
+  failures preserve normal offline use. Fresh validated descriptors reauthorize
+  identical bytes without uploads and preserve pending edits.
+- [x] Dedicated and keyed export plans reject a refusal arriving during/after
+  preparation, scope retirement and cancellation. Do not persist keyed plans or
+  serialize their in-process checks.
+- [x] Cold production-client fixture: edit/export an existing file offline,
+  reconcile, delete only the disposable server fixture, observe the real 404,
+  withdraw its active preview, and refuse a new native offline Download. Check
+  1440/390/320px layout, no resulting file, no offline mutation or duplicate upload.

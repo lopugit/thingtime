@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Retained account files now fence known access
+  refusals before fresh offline reads/exports and reject stale reauthorization,
+  while preserving device edits. Dedicated/keyed export plans retain identity
+  and refusal checks through final encoding. Cold native acceptance covers a
+  real fixture 404, withdrawn preview and failed offline Download. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Complete retained account post/reply bindings now
   export offline through native Download menus, including pending text edits and
   deliberate file removals. Reuse the shared portable dialog across persisted

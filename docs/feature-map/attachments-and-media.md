@@ -350,3 +350,15 @@ prior online export. Missing file records still fail; intentional device removal
 and pending edits are included. The proof is internal and never portable.
 `accountBoundRetention.test.ts` and its opt-in browser fixture cover exact-byte
 round trips, retained order, conflict recovery and fresh anonymous import.
+
+
+`AccountFileSync` checks canonical read-refusal watermarks before exposing retained
+account bytes. Only definitive owned-descriptor refusals write those watermarks;
+transient failures keep offline access. Reauthorization rechecks descriptors and
+atomically fences older responses. `accountApi.client.ts` announces affected
+local aliases so active blob previews recheck access; unsynced metadata/recovery
+bytes remain in their original scope. `accountExport.ts` also fences dedicated
+and keyed remote plans through the existing in-process `assertCurrent` hook.
+Run file-retention/export, account read-refusal and workspace suites, plus
+`accountFileRetention.browser.test.ts` with the existing cold production-client
+fixture. See the [lifetime checkpoint](../local-workspaces.md#retained-file-access-and-remote-export-lifetimes--2026-10-17).

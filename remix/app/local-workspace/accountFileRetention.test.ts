@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import { AccountDiscussionCache } from './accountDiscussions';
 import { AccountFileSync, type AccountFileRetentionTransport } from './accountFiles';
 import { WorkspaceDatabase, WORKSPACE_LIMITS, type WorkspaceTransaction } from './storage';
 const scope = { kind: 'account' as const, ownerId: 'owner', origin: 'https://files.test', dataPlane: 'home' };
@@ -184,5 +185,47 @@ test(`${purpose} deletion after unsynced local edits ${concurrent ? 'reviews unr
    assert.equal(writes[0].retainReceipt, true); assert.equal(writes[0].expectedUpdatedAt, f.remote.file.updatedAt);
    assert.equal(f.remote.file.attachment.title, 'Original title', 'No metadata write is required before deletion');
   }
+ } finally { await f.db.close(); }
+});
+
+
+for (const status of [401, 403, 404, 410, 503]) test(`file retention ${status} preserves edits and only definitive descriptor refusals fence bytes`, async () => {
+ const f = fixture(); try {
+  const {row} = await f.files.retain(f.transport, 'account-file');
+  await f.files.things.annotateFile({ id: row.id, title: 'Unsynced title' }); f.advance();
+  await assert.rejects(f.files.retain({ ...f.transport, retention: async () => { throw { status }; } }, 'account-file'));
+  if ([403,404,410].includes(status)) await assert.rejects(f.files.readFile(row.id), /no longer available/);
+  else assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes);
+  assert.equal((await f.files.things.readFile(row.id)).row.crystal.title, 'Unsynced title');
+  f.advance(); await f.files.retain(f.transport, 'account-file');
+  assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes);
+  assert.equal((await f.files.views([row.id]))[0].crystal.title, 'Unsynced title');
+  assert.deepEqual(f.calls, ['read'], 'Fresh authorized descriptors may reuse identical scoped bytes without uploading');
+ } finally { await f.db.close(); }
+});
+
+test('a late retained-file response cannot undo a newer canonical refusal', async () => {
+ const f = fixture(); try {
+  const {row} = await f.files.retain(f.transport, 'account-file'); f.advance();
+  let calls = 0;
+  await assert.rejects(f.files.retain({ ...f.transport, retention: async () => {
+   if (++calls === 2) await new AccountDiscussionCache(f.db, scope, f.lease).forget('account-file', Date.parse('2026-10-17T00:00:01Z'));
+   return structuredClone(f.remote);
+  } }, 'account-file'), /no longer available/);
+  await assert.rejects(f.files.readFile(row.id), /no longer available/);
+  f.advance(); await f.files.retain(f.transport, 'account-file');
+  assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes);
+ } finally { await f.db.close(); }
+});
+
+
+test('a failed original-byte response is not a canonical descriptor refusal', async () => {
+ const f = fixture(); try {
+  const {row} = await f.files.retain(f.transport, 'account-file'); f.advance();
+  await f.db.transaction(scope, 'readwrite', f.lease, async tx => {
+   const record = await tx.get<any>('account-files', row.id); delete record.retainedKey; await tx.put('account-files', row.id, record);
+  });
+  await assert.rejects(f.files.retain({ ...f.transport, bytes: async () => { throw { status: 403 }; } }, 'account-file'));
+  assert.deepEqual((await f.files.readFile(row.id)).bytes, f.bytes);
  } finally { await f.db.close(); }
 });

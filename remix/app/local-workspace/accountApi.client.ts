@@ -128,10 +128,14 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			return result.row;
 		} catch (error) {
 			facadeLease.assertCurrent(); signal?.throwIfAborted();
-			const message = 'This account file could not be refreshed on this device. Any existing device copy is preserved. Retry online before relying on the latest version offline.';
+			const refused = error instanceof WorkspaceError && error.code === 'FILE_ACCESS_REFUSED';
+			const message = refused ? error.message : 'This account file could not be refreshed on this device. Any existing device copy is preserved. Retry online before relying on the latest version offline.';
 			if (service.fileRetentionErrors.size >= 200 && !service.fileRetentionErrors.has(id)) service.fileRetentionErrors.delete(service.fileRetentionErrors.keys().next().value!);
 			service.fileRetentionErrors.set(id, message);
-			if (beforeError !== message) announceLocalWorkspaceChange([id]);
+			if (beforeError !== message) {
+				const alias = (await service.files.library(true)).aliases.get(id);
+				announceLocalWorkspaceChange([id, ...(alias ? [alias] : [])]);
+			}
 			throw error;
 		}
 	};

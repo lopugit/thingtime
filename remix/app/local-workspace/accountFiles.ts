@@ -8,6 +8,7 @@ import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { LocalThings, type LocalThing } from './things';
 import { createLocalAttachment, isLocalAttachment, type LocalAttachment } from './attachments';
 import { WORKSPACE_LIMITS, WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { accountReadRefusals, forgetAccountConversation } from './accountReadRevocation';
 import { accountSyncDeadline, type SyncState } from './accountSync';
 
 const COLLECTION = 'account-files';
@@ -183,16 +184,33 @@ export class AccountFileSync {
 		if (!crystal.ok) throw new WorkspaceError('INVALID_FILE_RETENTION', 'The account returned invalid file metadata.', 502);
 		return { purpose: purpose as LocalAttachment['localAttachment']['purpose'], attachment, crystal: crystal.crystal, metadata, cacheKey: raw.cacheKey as string };
 	}
+	private accessRefused() { return new WorkspaceError('FILE_ACCESS_REFUSED', 'Account access to this retained file is no longer available. Reopen it online before using its saved bytes. Device edits are preserved.', 409); }
 	private async loadRetention(transport: AccountFileRetentionTransport, id: string, signal: AbortSignal, binding?: RetainedBinding) {
 		this.lease.assertCurrent(); signal.throwIfAborted();
 		if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(id) || id.startsWith('local-file-')) throw new WorkspaceError('INVALID_FILE_ID', 'A canonical account file ID is required.');
-		const observedAt = this.now(), snapshot = this.checkedRetention(await transport.retention(id, signal, !!binding), id, binding);
+		const observedAt = this.now();
+		const descriptor = async () => {
+			try { return await transport.retention(id, signal, !!binding); }
+			catch (error) {
+				this.lease.assertCurrent(); signal.throwIfAborted();
+				// Only the canonical owned descriptor is an access decision. A
+				// failed byte fetch or expired session does not revoke device work.
+				if ([403,404,410].includes(Number((error as any)?.status))) {
+					await this.tx('readwrite', tx => forgetAccountConversation(tx, id, this.now()), signal);
+					throw this.accessRefused();
+				}
+				throw error;
+			}
+		};
+		const snapshot = this.checkedRetention(await descriptor(), id, binding);
 		const known = await this.tx('readonly', async tx => (await tx.list<FileRecord>(COLLECTION)).find(row => row.value.remote?.id === id)?.value);
 		if (known?.deleteRequested || known?.cancelled || known?.cancelRequested) throw new WorkspaceError('FILE_DELETED', 'This file was deleted in this workspace.', 404);
-		const bytes = known?.retainedKey === snapshot.cacheKey ? (await this.readFile(known.id, signal)).bytes : await transport.bytes(id, snapshot.cacheKey, snapshot.attachment.size, signal);
+		// Fresh descriptors reauthorize reuse of immutable stored bytes. The final
+		// transaction rejects newer refusals before these bytes become readable.
+		const bytes = known?.retainedKey === snapshot.cacheKey ? (await this.things.readFile(known.id, signal)).bytes : await transport.bytes(id, snapshot.cacheKey, snapshot.attachment.size, signal);
 		if (!(bytes instanceof Uint8Array) || bytes.length !== snapshot.attachment.size) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes were incomplete. Retry while online.', 502);
 		const copy = Uint8Array.from(bytes), sha256 = await transferChecksum(copy);
-		const final = this.checkedRetention(await transport.retention(id, signal, !!binding), id, binding);
+		const final = this.checkedRetention(await descriptor(), id, binding);
 		if (JSON.stringify(final) !== JSON.stringify(snapshot)) throw new WorkspaceError('FILE_CHANGED', 'The account file changed while being retained. Retry while online.', 409);
 		this.lease.assertCurrent(); signal.throwIfAborted();
 		const fallbackId = `local-file-account-${await transferChecksum(new TextEncoder().encode(id))}`;
@@ -201,6 +219,8 @@ export class AccountFileSync {
 	private async commitRetention(tx: WorkspaceTransaction, prepared: Awaited<ReturnType<AccountFileSync['loadRetention']>>, signal: AbortSignal) {
 		const { id, snapshot, copy, sha256, observedAt, fallbackId, binding } = prepared;
 		signal.throwIfAborted();
+		const refusals = await accountReadRefusals(tx);
+		if ([id, binding?.targetId].some(target => target && (refusals.get(target)?.at ?? -1) >= observedAt)) throw this.accessRefused();
 		// Upload completion or another tab can establish an alias while bytes are in flight.
 		const alias = (await tx.list<FileRecord>(COLLECTION)).find(record => record.value.remote?.id === id)?.value;
 		const localId = alias?.id || fallbackId;
@@ -218,7 +238,7 @@ export class AccountFileSync {
 		await this.metadata.remember(tx, row, snapshot.metadata);
 		await this.putRecord(tx, { ...(prior || { id: row.id, source: 'account' as const, request: { filename: snapshot.attachment.name, contentType: snapshot.attachment.contentType, sizeBytes: copy.length, purpose: snapshot.purpose }, sha256, state: 'synced' as const, phase: 'complete' as const, uploaded: [], attempts: 0, retryAt: 0 }), remote: snapshot.attachment, retainedKey: snapshot.cacheKey, retainedVersion: snapshot.metadata.updatedAt, retainedObservedAt: observedAt });
 		const next = (await tx.get<LocalAttachment>('things', row.id))!;
-		return { row: next, changed: !local || next.revision !== local.revision };
+		return { row: next, changed: !local || next.revision !== local.revision || [id, binding?.targetId].some(target => !!target && (refusals.get(target)?.at ?? -1) >= (prior?.retainedObservedAt ?? 0)) };
 	}
 	/** Retain only bytes disclosed by the verified owned-file transport. The
 	 * descriptor is checked again after reading; no upload intent is invented. */
@@ -304,6 +324,10 @@ export class AccountFileSync {
 		const readable = await this.tx('readonly', async tx => {
 			const row = await tx.get<LocalAttachment>('things', id), record = await tx.get<FileRecord>(COLLECTION, id);
 			if (!row || !isLocalAttachment(row) || !record || record.cancelled || record.cancelRequested || record.deleteRequested) return false;
+			if (record.source === 'account') {
+				const refusals = await accountReadRefusals(tx);
+				if ([record.remote?.id, row.targetId].some(target => target && (refusals.get(target)?.at ?? -1) >= (record.retainedObservedAt ?? 0))) throw this.accessRefused();
+			}
 			if (libraryFileVisible(row, record)) return true;
 			// Editor drafts and bound post files use the same scoped bytes. A
 			// refused/deleted parent must not leave its files readable through a URL.

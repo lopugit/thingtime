@@ -25,7 +25,10 @@ export async function forgetAccountConversation(tx: WorkspaceTransaction, id: st
  }
  const denied = new Set([id]), pending = [id];
  while (pending.length) for (const child of children.get(pending.pop()!) || []) if (!denied.has(child)) { denied.add(child); pending.push(child); }
- let changed = false;
+ // Retained bytes stay recoverable, but media views must recheck their access
+ // watermark even when this refusal has no ordinary Thing projection.
+ const files = await tx.list<{source?:string;remote?:{id:string}}>('account-files');
+ let changed = files.some(row => row.value.source === 'account' && denied.has(row.value.remote?.id || ''));
  // Export-only dependencies are read caches too, never an enduring grant.
  // Remove the whole closure; pruning a fragment would advertise a partial ZIP.
  for (const row of exports) if (row.value.manifest.things.some(thing => denied.has(thing.id)) || row.value.references?.some(id=>denied.has(id))) { await tx.delete(ACCOUNT_EXPORT_SNAPSHOTS,row.id);changed=true; }

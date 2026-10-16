@@ -109,8 +109,31 @@ test('existing account file retention renders and edits offline through the nati
 			for (let i = 0; i < 100; i++) { const response = await owner.request.get(url('/api/v1/things?id=' + fileId)); const row = (await response.json()).thing; if (row?.crystal?.title === 'Offline retained title') { reconciled = true; break; } await new Promise(resolve => setTimeout(resolve, 200)); }
 			assert.ok(reconciled, 'Offline details reconcile to the original account file');
 			if (cold) {
+				// Delete only this fixture's server file, then let the ordinary
+				// owned-descriptor refresh observe its real 404. A cached preview
+				// and a new offline Download must both stop exposing those bytes.
+				await navigate('/media/' + fileId); await image.waitFor();
+				const removed = await owner.request.post(url('/api/v1/attachments/delete'), { headers, data: { id: fileId } });
+				assert.equal(removed.status(), 200, await removed.text());
+				await page.reload();
+				await page.getByText(/Account access to this retained file is no longer available/).first().waitFor();
+				await image.waitFor({ state: 'hidden' });
+				offline = true; await owner.setOffline(true);
+				await navigate('/things');
+				await page.getByRole('link', { name: 'Offline retained title', exact: true }).click({ button: 'right' });
+				await page.getByRole('menuitem', { name: '📥 Download…', exact: true }).click();
+				let unexpectedDownloads = 0; page.on('download', () => unexpectedDownloads++);
+				await page.getByRole('button', { name: 'Download', exact: true }).click();
+				await page.getByRole('alert').filter({ hasText: 'no longer available' }).waitFor();
+				for (const width of [1440,390,320]) {
+					await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+					assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+					if (artifacts) await page.screenshot({ path: resolve(artifacts, `refused-retained-download-${width}.png`) });
+				}
+				assert.equal(unexpectedDownloads, 0);
+				assert.deepEqual(writes.filter(write => write.offline), []);
 				assert.deepEqual(writes.filter(write => write.path.includes('/attachments/uploads')), []); assert.deepEqual(errors, []);
-				if (artifacts) await writeFile(resolve(artifacts, 'cold-retention-verification.json'), JSON.stringify({ localId, fileId, coldOfflineReload: true, offlineDetailsSurviveReload: true, exactOfflineDownload: true, canonicalOfflineZip: true, jsonFileExclusionRefused: true, reconciled, duplicateUploads: 0, viewports: [1440,390,320], writes, errors }, null, 2));
+				if (artifacts) await writeFile(resolve(artifacts, 'cold-retention-verification.json'), JSON.stringify({ localId, fileId, coldOfflineReload: true, offlineDetailsSurviveReload: true, exactOfflineDownload: true, canonicalOfflineZip: true, canonicalRefusalStopsPreviewAndExport: true, jsonFileExclusionRefused: true, reconciled, duplicateUploads: 0, viewports: [1440,390,320], writes, errors }, null, 2));
 				return;
 			}
 			let lost = 0; const deletions: any[] = [];

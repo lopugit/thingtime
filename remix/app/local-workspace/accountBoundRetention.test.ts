@@ -92,7 +92,7 @@ test('a retained reply with an uncached parent keeps the complete authorized rem
   const response={ok:true,plan:{roots:['post'],things,files:f.attachments.map(file=>({id:file.id,targetId:'post',name:file.name,mime:file.contentType,bytes:file.size}))}};
   const deps={...f,canRefresh:()=>false,remote:async()=>response};
   await assert.rejects(exportAccountThings({ids:['post']},deps),/Complete export content/);
-  deps.canRefresh=()=>true;assert.equal(await exportAccountThings({ids:['post']},deps),response);
+  deps.canRefresh=()=>true;assert.deepEqual((await exportAccountThings({ids:['post']},deps)).plan.things,response.plan.things);
   assert.equal(await f.sync.view('root'),null,'an export-only parent must not become an owned editable Thing');
  }finally{await f.db.close();}
 });

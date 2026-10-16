@@ -89,7 +89,7 @@ test('dedicated online exports remain available but cannot erase pending device 
   const item = row('note', 'data', { name: 'Media owner' }); await f.sync.remember(item); f.enable();
   const remotePlan = { ok: true, plan: { roots: [item.id], things: [portable(item)], files: [{ id: 'file' }] } };
   f.deps.remote = async () => remotePlan;
-  assert.equal(await exportAccountThings({ ids: [item.id] }, f.deps), remotePlan);
+  assert.deepEqual((await exportAccountThings({ ids: [item.id] }, f.deps)).plan.things, remotePlan.plan.things);
   await f.sync.things.update({ id: item.id, crystal: { name: 'Pending edit' } });
   await assert.rejects(exportAccountThings({ ids: [item.id] }, f.deps), /Sync your device edits/);
   assert.equal((await f.sync.view(item.id))!.crystal.name, 'Pending edit');
@@ -191,4 +191,29 @@ test('legacy export snapshots cannot bypass a refusal retained before this clien
   await f.db.transaction(f.sync.scope,'readwrite',f.lease,async tx=>{const {refusals,...legacy}=saved[0].value;await tx.put('thing-export-snapshots',saved[0].id,legacy);});
   f.deps.canRefresh=()=>false;await assert.rejects(exportAccountThings({ids:[post.id]},f.deps),/no longer available/);
  }finally{await f.db.close();}
+});
+
+
+for (const keyed of [false, true]) test(`${keyed ? 'keyed' : 'dedicated'} remote plans are fenced during and after their authorized read`, async () => {
+ for (const when of ['during', 'after', 'retired', 'aborted']) {
+  const f = setup(); try {
+   const item = row('remote-root', 'data', { name: 'Remote content' }); await f.sync.remember(item); f.enable();
+   const response = { ok: true, plan: { roots: [item.id], things: [portable(item)], files: [], attachmentOrder: ['linked-file'], links: [{ id: 'linked-file', targetId: item.id, url: 'https://example.com/image.png', mediaKind: 'image' }] } };
+   let calls = 0;
+   f.deps.remote = async () => {
+    if (when === 'during' && ++calls === (keyed ? 1 : 2)) await new AccountDiscussionCache(f.db, f.sync.scope, f.lease).forget('linked-file');
+    return response;
+   };
+   const input = { ids: [item.id], ...(keyed ? { key: 'fixture-only-link' } : {}) };
+   if (when === 'during') { await assert.rejects(exportAccountThings(input, f.deps), /no longer available/); continue; }
+   const result = await exportAccountThings(input, f.deps);
+   const prepared = await bundleFromPlan(result.plan);
+   if (when === 'after') await new AccountDiscussionCache(f.db, f.sync.scope, f.lease).forget('linked-file');
+   if (when === 'retired') f.retire();
+   const controller = new AbortController(); if (when === 'aborted') controller.abort();
+   await assert.rejects(bundleFromPlan(result.plan, { signal: controller.signal }));
+   await assert.rejects(prepared.assertCurrent!(controller.signal));
+   assert.deepEqual(await f.db.transaction(f.sync.scope, 'readonly', { assertCurrent() {}, onInvalidate: () => () => {} }, tx => tx.list('thing-export-snapshots')), []);
+  } finally { await f.db.close(); }
+ }
 });

@@ -156,3 +156,31 @@ test('prepared byte readers cannot outlive deletion or a canonical account-file 
   }finally{await f.db.close();}
  }
 });
+
+
+test('a fresh export cannot reuse retained bytes after an already-known canonical refusal', async () => {
+ const f = setup(); try {
+  const file = await f.retain();
+  await f.files.things.annotateFile({ id: file.id, title: 'Recoverable device edit' });
+  await new AccountDiscussionCache(f.db, f.scope, f.lease).forget('canonical-file');
+  for (const id of ['canonical-file', file.id]) await assert.rejects(exportAccountThings({ ids: [id] }, f.deps), /no longer available/);
+  await assert.rejects(f.files.readFile(file.id), /no longer available/);
+  assert.equal((await f.files.things.readFile(file.id)).row.crystal.title, 'Recoverable device edit');
+  assert.deepEqual(await f.db.transaction(f.scope, 'readonly', f.lease, tx => tx.list('thing-export-snapshots')), []);
+ } finally { await f.db.close(); }
+});
+
+
+test('canonical account refusal does not remove independent device-authored original ownership', async () => {
+ const f = setup(); try {
+  const file = await f.save();
+  await f.files.sync({ start: async () => ({ id: 'canonical-file', partSizeBytes: f.bytes.length, partCount: 1 }),
+   parts: async (_id, parts) => parts.map(part => ({ ...part, url: 'https://storage.test/part', headers: {}, expiresAt: '2026-10-18' })), put: async () => {},
+   complete: async () => ({ id: 'canonical-file', name: 'original.txt', size: f.bytes.length, contentType: 'text/plain', mediaKind: 'file' }) });
+  assert.equal(await f.files.remoteId(file.id), 'canonical-file');
+  await new AccountDiscussionCache(f.db, f.scope, f.lease).forget('canonical-file');
+  assert.deepEqual((await f.files.readFile(file.id)).bytes, f.bytes);
+  const bundle = await bundleFromPlan((await exportAccountThings({ ids: [file.id] }, f.deps)).plan);
+  assert.deepEqual(bundle.files.get(bundle.manifest.files[0].id), f.bytes);
+ } finally { await f.db.close(); }
+});

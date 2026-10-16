@@ -1990,3 +1990,37 @@ This closes native offline export for completely retained owned post/comment
 bindings. Fresh-file refusal lifecycles, shared/managed/linked transfer cases,
 parent binding reconciliation and the broader acceptance matrix remain open.
 The PR stays draft; this checkpoint does not authorize merging or deployment.
+
+
+## Retained file access and remote export lifetimes — 2026-10-17
+
+Fresh Downloads of retained account originals now consult the same scoped
+refusal watermarks as ordinary account content, even without an earlier export
+snapshot. Canonical owned-file descriptor 403/404/410 responses invalidate access;
+401, network failures and failed byte transfers do not. Unsynced metadata and
+recovery bytes stay stored, while normal reads, media previews and exports refuse
+unavailable retained content. Device-authored originals retain their independent
+local ownership. Fresh validated descriptors can reauthorize unchanged scoped
+bytes; the final transaction rejects a response started before a newer refusal.
+
+Dedicated and bearer-link remote export plans now carry the existing in-process
+identity, abort, deletion and read-refusal checks through bundle preparation and
+final encoding. The bearer context remains uncached, and ordinary account edits
+cannot silently be replaced by a dedicated remote plan. No credentials, callback
+or authorization metadata enter portable JSON.
+
+Local validation: 352 workspace tests plus 4 offline-shell tests pass (38 default
+browser skips excluded). The enabled production-client file-retention fixture
+passes cold offline edits, exact-byte Download/ZIP, conditional reconciliation,
+and a real server deletion/404 followed by preview withdrawal and a visible
+failed offline Download with no second file. It checks 1440/390/320px rendering,
+zero offline mutations and zero replacement uploads. Evidence is in
+`tmp/file-refusal-browser/` and `tmp/file-refusal-*.log`. Build verifies 247 offline
+assets; focused lint is clean. TypeScript still reports 91 baseline diagnostics,
+none in changed files. Remote plan lifetime races are service-tested; native
+in-flight shared-key/account switching remains a separate acceptance gate.
+
+The full coverage matrix remains open, including shared/managed/linked transfer,
+parent binding reconciliation, draft and catalogue sync, encrypted local Vault,
+native/integration coverage and broader identity/offline startup recovery. This
+checkpoint is local evidence only and does not make the draft PR ready to merge.
