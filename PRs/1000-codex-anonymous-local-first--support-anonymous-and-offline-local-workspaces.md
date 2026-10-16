@@ -1235,3 +1235,57 @@ CI and deployed verification must be read separately for the pushed revision.
 Remaining work includes noncached account social/catalogue membership, complete
 account post/file/draft and other dedicated adapters, cross-device recovery and
 the rest of the acceptance matrix. Main remains unmerged.
+
+## Account post snapshots, Saved and offline membership — 2026-10-16
+
+Normal authorized feed, trending, Saved and permalink reads now retain bounded
+read-only post snapshots in the existing account/origin/data-plane workspace.
+They never become owned Things or queued content writes. A whitelist strips
+server-only envelopes and hidden-link bearer fields, preserves original authors
+and editable display content, and keeps attachment bytes behind the existing
+authenticated resolver. Explicit shared-key reads retain their online path.
+
+Save/react now records desired membership locally for account targets even when
+the target is not an owned cached definition. Native post and comment reaction
+controls use offline workspace identity only for these local intents. Other
+account actions still require their actual authority. Conditional independent
+sync performs fresh permission checks; anonymous workspaces cannot replay the
+queue. Batched interaction retention uses request-start watermarks so delayed
+reads cannot roll back newer membership or completed commands. Saved reads also
+retain canonical bookmark timestamps instead of reordering by post creation.
+
+The native Saved library supports scoped device pagination, offline reload and
+cross-tab changes. Permalinks recover retained posts offline and refresh cached
+ordinary posts optimistically online. Offline coverage is explicitly partial:
+unvisited posts, uncached conversation context, cloud attachment bytes and full
+feed pagination are not fabricated. A known 403/404/410 removes the snapshot,
+prunes nested comment/share/linked copies, clears this scope's Saved first-paint
+cache, and fences delayed reads from resurrecting the refused content. A fresh
+authorized read may retain it again. Scope-keyed post views reset on logout or
+account changes; previous snapshots grant no read/write permission.
+
+Local checks: 224 workspace + four offline-shell + 78 feed tests pass (306),
+with 26 opt-in browser/integration scenarios skipped by the general workspace
+command. The new post browser scenario is separately enabled and passes against
+the disposable local replica stack: a post privately shared between two test
+accounts survives cold offline permalink/Saved reload, local Save/react and
+cross-tab changes; reconnect applies both choices; logout prevents anonymous
+offline recovery; revocation prevents later offline resurrection. It records
+zero offline mutations/page errors and no horizontal overflow at 1440/390/320px.
+Evidence: `tmp/local-social-ui/verification.json` and `account-saved-*.png`.
+TypeScript retains the same 91 baseline diagnostics. This is local acceptance,
+not deployed verification or completion of the full matrix.
+
+Run from `remix` with shared Playwright/Chrome paths configured:
+
+```sh
+TT_LOCAL_ACCOUNT_POSTS_URL=http://127.0.0.1:22470 \
+TT_LOCAL_ACCOUNT_POSTS_ARTIFACTS=../tmp/local-social-ui \
+node --import tsx --test app/local-workspace/accountPosts.browser.test.ts
+```
+
+The target must be the disposable local replica stack. The test uses the normal
+API to create/register its fixtures and never weakens registration rate limits.
+Broader feed/discovery cache membership, account post/comment writes, private
+media recovery, dedicated adapters, cross-device coverage and the remaining
+matrix still gate main. Posting and draft completion remain independent.

@@ -19,6 +19,7 @@ relational children aggregated on read (`FUNDAMENTALS.md` §3).
 | Post ⋯ menu (privacy submenu, moderation, flair, Files section) | `app/components/Feed/PostThingMenu.tsx` |
 | Composer (Editor.js rich text, attachments, tags, audience) | `app/components/Feed/PostComposer.tsx`, `app/components/Editor/*` |
 | Lists and pages | `app/components/Feed/PostList.tsx`, `Feed.tsx`, `app/routes/feed.tsx`, `post.tsx`, `media.tsx`, `explore.tsx` |
+| Account offline read snapshots and conditional bookmarks/reactions | `app/local-workspace/accountPosts.ts`, `accountInteractions.ts`, `accountApi.client.ts`; native Saved and post permalink consumers |
 | Reaction overlays and thread cache (optimistic rendering) | `app/components/Feed/reactionOverlay.ts`, `threadCache.ts`, `useFeedEngagement.ts` |
 | Subspaces (communities) moderation on posts | `app/api/utils/subspaces/*`, `app/components/Subspaces/*` |
 
@@ -108,3 +109,19 @@ discussions. `PersistedThingMenu` uses workspace content identity and separately
 checks the resolved author for Rename. `restoredRouting.test.ts` plus the clean
 offline History/detail browser regressions cover this path; public discussions
 and remote recipient operations keep their account requirements.
+
+Account post snapshots are read-only, scoped by account/origin/data plane and
+bounded by the existing workspace quota. They never enter owned Things or
+content sync. Retain only normal authorized projections, strip bearer-link and
+server-only envelopes, and keep attachment bytes behind their existing resolver.
+A known 403/404/410 removes the snapshot and nested retained references; refusal
+watermarks fence older in-flight reads. The Saved page's first-paint cache is
+cleared only for the affected scope. Anonymous workspaces never adopt these
+snapshots or account interaction intents.
+
+`accountPosts.browser.test.ts` uses `TT_LOCAL_ACCOUNT_POSTS_URL` and optional
+`TT_LOCAL_ACCOUNT_POSTS_ARTIFACTS` with the shared Playwright/Chrome paths. It
+creates two disposable local accounts and a username-granted private post,
+then exercises offline Save/react, Saved/permalink reload, two tabs, reconnect,
+logout isolation and permission revocation. `test:local-workspace` includes its
+unit tests; enable the browser test separately against the disposable stack.

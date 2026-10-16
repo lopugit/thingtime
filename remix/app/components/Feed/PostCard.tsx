@@ -856,6 +856,7 @@ const CommentRow = (props: {
   const sharedAccess = useSharedAccess();
   const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
   const user = workspace?.localOnly === true && comment.author?.localOnly === true && comment.author.id === workspace.id ? workspace : accountUser;
+  const interactionUser = user || (workspace?.offline ? workspace : null);
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
@@ -939,7 +940,7 @@ const CommentRow = (props: {
   // optimistic: repaint immediately, reconcile with the server's counts,
   // revert on failure — same principle as post reactions
   const handleReact = async (rawToken: string) => {
-    if (!user) {
+    if (!interactionUser) {
       lopu({ title: 'Log in to react 🗝️', status: 'info', duration: 6000 });
       return;
     }
@@ -1246,7 +1247,7 @@ const CommentRow = (props: {
   const reactControl = (
     <Box ref={reactAnchorRef} position="relative" display="flex" flexShrink={0}>
       <ReactionControl
-        enabled={!!user && !pending}
+        enabled={!!interactionUser && !pending}
         onQuickTap={() => handleReact('❤️')}
         content={(close) => (
           <QuickReactionRow
@@ -1495,6 +1496,7 @@ function PostCardImpl(props: PostCardProps) {
   const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
   const localOnly = workspace?.localOnly === true && post.author?.localOnly === true && post.author.id === workspace.id;
   const user = localOnly ? workspace : accountUser;
+  const interactionUser = user || (workspace?.offline ? workspace : null);
   const lopu = useLopu();
 
   const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
@@ -1833,7 +1835,7 @@ function PostCardImpl(props: PostCardProps) {
   // we repaint the card immediately, then reconcile with the server's counts
   // and revert on failure — no spinner, no wait (optimistic-rendering rule).
   const handleReact = async (rawToken: string) => {
-    if (!user) {
+    if (!interactionUser) {
       lopu({ title: 'Log in to react 🗝️', status: 'info', duration: 6000 });
       return;
     }
@@ -2160,7 +2162,7 @@ function PostCardImpl(props: PostCardProps) {
   // toggles rather than setting, so response order could invert the state).
   const inFlightSaveRef = React.useRef(false);
   const handleToggleSave = async () => {
-    if (!user) return; // the button is hidden logged-out; belt-and-braces
+    if (!interactionUser) return; // the button is hidden logged-out; belt-and-braces
     if (inFlightSaveRef.current) return;
     inFlightSaveRef.current = true;
 
@@ -2503,7 +2505,7 @@ function PostCardImpl(props: PostCardProps) {
           />
           {showVotes && <UpdownControl votes={post.votes} hideUnknownScore={!!commentCollection} onVote={handleUpdown} enabled={!!user} accent={post.subspace?.accent} />}
 
-          {user ? (
+          {interactionUser ? (
             <Box ref={reactAnchorRef} position="relative" display="flex">
               {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
               opens the full picker */}
@@ -2626,7 +2628,7 @@ function PostCardImpl(props: PostCardProps) {
 
           {/* bookmark: save to the viewer's private library (/saved) —
           filled/accent when saved, hidden logged-out (nothing to save into) */}
-          {user && (
+          {interactionUser && (
             <ActionIcon
               icon={<Bookmark size={18} strokeWidth={2.2} fill={post.viewerSaved ? 'currentColor' : 'none'} />}
               label={post.viewerSaved ? 'Remove from Saved' : 'Save to library'}

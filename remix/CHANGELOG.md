@@ -68,6 +68,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Account post bookmarks/reactions now complete
+  locally for read-only retained posts; native Saved/permalink recovery works
+  offline and across tabs, with conditional independent sync, scope isolation,
+  known-refusal eviction and stale-read fencing. Local clean-browser checks
+  cover private sharing, logout, revocation and 1440/390/320px layouts. Full
+  local-first acceptance remains open; see the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-16 — **Codex (AI)**: Cached account bookmarks and reactions complete
   locally and synchronize independently using conditional membership writes,
   immutable retries and native conflict review. Generic and legacy interaction

@@ -280,3 +280,24 @@ test('an unversioned visible projection seeds the local toggle without inventing
 		await h.db.close();
 	}
 });
+
+test('older read projections cannot roll back newer reads or completed local commands', async () => {
+	const h = fixture();
+	try {
+		await h.service.remember([initial()], true, 10);
+		await h.service.remember([initial()], true, 30);
+		await h.service.remember([{ ...initial(), saved: true }], false, 20);
+		assert.equal((await h.service.states())[0].saved, false);
+		await h.service.toggle('save', 'target');
+		await h.service.sync(h.transport);
+		await h.service.remember([initial()], false, 40);
+		await h.service.remember([initial()], false, 1000);
+		assert.equal((await h.service.states())[0].saved, true);
+		const savedAt = '2026-10-16T00:00:00Z';
+		await h.service.remember([{ ...initial(), saved: true, savedAt }], true, 2000);
+		await h.service.remember([{ ...initial(), saved: true }], false, 3000);
+		assert.equal((await h.service.states())[0].savedAt, savedAt, 'post projections retain known bookmark order');
+	} finally {
+		await h.db.close();
+	}
+});

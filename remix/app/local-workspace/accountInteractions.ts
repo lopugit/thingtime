@@ -10,6 +10,8 @@ type RecordState = {
 	id: string;
 	base: InteractionState | null;
 	observed?: InteractionState;
+	readAt?: number;
+	mutationAt?: number;
 	changes: Changes;
 	version: number;
 	state: SyncState;
@@ -79,18 +81,24 @@ export class AccountInteractionSync {
 			retryAt: 0
 		};
 	}
-	async remember(states: InteractionState[], revisionKnown = true) {
-		if (!Array.isArray(states) || states.length > 50) throw new WorkspaceError('INVALID_INTERACTIONS', 'Invalid interaction page');
+	async remember(states: InteractionState[], revisionKnown = true, startedAt = this.now()) {
+		if (!Array.isArray(states) || states.length > 50 || !Number.isFinite(startedAt))
+			throw new WorkspaceError('INVALID_INTERACTIONS', 'Invalid interaction page');
 		const checked = states.map(interactionState);
 		return this.tx('readwrite', async (tx) => {
 			let changed = false;
 			for (const state of checked) {
 				const old = await tx.get<RecordState>(COLLECTION, state.id);
-				if (old && old.state !== 'synced') continue;
-				if (old && JSON.stringify(revisionKnown ? old.base : old.observed) === JSON.stringify(state)) continue;
+				if (old && (old.state !== 'synced' || (old.readAt ?? -Infinity) > startedAt || (old.mutationAt ?? -Infinity) >= startedAt)) continue;
+				if (!revisionKnown && state.saved && state.savedAt === undefined) state.savedAt = (old?.base || old?.observed)?.savedAt;
+				if (old && JSON.stringify(revisionKnown ? old.base : old.observed) === JSON.stringify(state)) {
+					if (startedAt > (old.readAt ?? -Infinity)) await tx.put(COLLECTION, state.id, { ...old, readAt: startedAt });
+					continue;
+				}
 				await tx.put(COLLECTION, state.id, {
 					...this.fresh(state.id),
 					base: revisionKnown ? state : null,
+					readAt: startedAt,
 					observed: revisionKnown ? undefined : state,
 					version: (old?.version || 0) + 1
 				});
@@ -182,6 +190,8 @@ export class AccountInteractionSync {
 			await tx.put(COLLECTION, row.id, {
 				...row,
 				base: remote,
+				readAt: this.now(),
+				mutationAt: this.now(),
 				changes: keep === 'local' ? row.changes : { reactions: {} },
 				pending: undefined,
 				pendingVersion: undefined,
@@ -257,6 +267,8 @@ export class AccountInteractionSync {
 					await tx.put(COLLECTION, row.id, {
 						...row,
 						base: remote,
+						readAt: this.now(),
+						mutationAt: this.now(),
 						pending: undefined,
 						pendingVersion: undefined,
 						claim: undefined,

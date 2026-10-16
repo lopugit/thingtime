@@ -74,7 +74,7 @@ change this pointer; logout/account changes revoke it.
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Scoped device usage and browser protection controls are available in Settings. Protected-kind adapters and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
-| Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
+| Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Retained account posts now support offline bookmarks/reactions, Saved/permalink reload and cross-tab membership, with independent conditional sync and known-refusal eviction (checkpoint below). Linked Things, complete account post writes and broader cross-account/device acceptance remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
@@ -1755,8 +1755,9 @@ bookmark/reaction changes in the scoped account workspace before attempting
 remote sync. Device Library membership, counts and cross-tab updates use those
 retained choices. A missing server-side bundled target remains local with a
 visible synchronization error; it never creates or publishes the target.
-Uncached/foreign account targets still use the existing guarded online adapter,
-so this is partial account coverage, not completion of the full matrix.
+This checkpoint initially left uncached/foreign targets on the guarded online
+adapter; the following post-snapshot checkpoint extends that coverage. Neither
+checkpoint completes the full matrix.
 
 `AccountInteractionSync` stores bounded desired membership independently from
 ordinary Thing content and draft queues. The worker drains content and
@@ -1798,3 +1799,57 @@ CI and deployed verification must be read separately for the pushed revision.
 Remaining work includes noncached account social/catalogue membership, complete
 account post/file/draft and other dedicated adapters, cross-device recovery and
 the rest of the acceptance matrix. Main remains unmerged.
+
+## Account post snapshots, Saved and offline membership — 2026-10-16
+
+Normal authorized feed, trending, Saved and permalink reads now retain bounded
+read-only post snapshots in the existing account/origin/data-plane workspace.
+They never become owned Things or queued content writes. A whitelist strips
+server-only envelopes and hidden-link bearer fields, preserves original authors
+and editable display content, and keeps attachment bytes behind the existing
+authenticated resolver. Explicit shared-key reads retain their online path.
+
+Save/react now records desired membership locally for account targets even when
+the target is not an owned cached definition. Native post and comment reaction
+controls use offline workspace identity only for these local intents. Other
+account actions still require their actual authority. Conditional independent
+sync performs fresh permission checks; anonymous workspaces cannot replay the
+queue. Batched interaction retention uses request-start watermarks so delayed
+reads cannot roll back newer membership or completed commands. Saved reads also
+retain canonical bookmark timestamps instead of reordering by post creation.
+
+The native Saved library supports scoped device pagination, offline reload and
+cross-tab changes. Permalinks recover retained posts offline and refresh cached
+ordinary posts optimistically online. Offline coverage is explicitly partial:
+unvisited posts, uncached conversation context, cloud attachment bytes and full
+feed pagination are not fabricated. A known 403/404/410 removes the snapshot,
+prunes nested comment/share/linked copies, clears this scope's Saved first-paint
+cache, and fences delayed reads from resurrecting the refused content. A fresh
+authorized read may retain it again. Scope-keyed post views reset on logout or
+account changes; previous snapshots grant no read/write permission.
+
+Local checks: 224 workspace + four offline-shell + 78 feed tests pass (306),
+with 26 opt-in browser/integration scenarios skipped by the general workspace
+command. The new post browser scenario is separately enabled and passes against
+the disposable local replica stack: a post privately shared between two test
+accounts survives cold offline permalink/Saved reload, local Save/react and
+cross-tab changes; reconnect applies both choices; logout prevents anonymous
+offline recovery; revocation prevents later offline resurrection. It records
+zero offline mutations/page errors and no horizontal overflow at 1440/390/320px.
+Evidence: `tmp/local-social-ui/verification.json` and `account-saved-*.png`.
+TypeScript retains the same 91 baseline diagnostics. This is local acceptance,
+not deployed verification or completion of the full matrix.
+
+Run from `remix` with shared Playwright/Chrome paths configured:
+
+```sh
+TT_LOCAL_ACCOUNT_POSTS_URL=http://127.0.0.1:22470 \
+TT_LOCAL_ACCOUNT_POSTS_ARTIFACTS=../tmp/local-social-ui \
+node --import tsx --test app/local-workspace/accountPosts.browser.test.ts
+```
+
+The target must be the disposable local replica stack. The test uses the normal
+API to create/register its fixtures and never weakens registration rate limits.
+Broader feed/discovery cache membership, account post/comment writes, private
+media recovery, dedicated adapters, cross-device coverage and the remaining
+matrix still gate main. Posting and draft completion remain independent.

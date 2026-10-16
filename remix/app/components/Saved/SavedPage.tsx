@@ -3,7 +3,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
-import { currentAccountWorkspace, isAnonymousWorkspace, subscribeWorkspaceBinding } from '~/local-workspace/runtime.client';
+import { currentAccountWorkspace, isAnonymousWorkspace, subscribeWorkspaceBinding, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { workspaceScopeKey } from '~/local-workspace/storage';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
@@ -63,6 +63,7 @@ const WorkspaceSavedPage = ({ cacheKey, ready }: { cacheKey: string; ready: bool
   const [loading, setLoading] = React.useState(!!user && posts.length === 0);
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [loadingMore, setLoadingMore] = React.useState(false);
+  const [incomplete, setIncomplete] = React.useState(false), [cacheError, setCacheError] = React.useState('');
 
   // a sequence guard drops stale responses when the viewer changes mid-flight
   const requestSeqRef = React.useRef(0);
@@ -100,6 +101,7 @@ const WorkspaceSavedPage = ({ cacheKey, ready }: { cacheKey: string; ready: bool
     try {
       const resp = await apiRef.current.v1.things.saved();
       if (seq !== requestSeqRef.current) return;
+      setIncomplete(resp.incomplete === true); setCacheError(resp.localCacheError || '');
       const fresh = mergeReactionOverlays<PublicPost>(startedAt, resp.posts || []);
       removedRef.current.clear();
       setPosts(fresh);
@@ -126,6 +128,7 @@ const WorkspaceSavedPage = ({ cacheKey, ready }: { cacheKey: string; ready: bool
     try {
       const resp = await apiRef.current.v1.things.saved({ cursor });
       if (seq !== requestSeqRef.current) return;
+      setIncomplete(resp.incomplete === true); setCacheError(resp.localCacheError || '');
       const fresh = mergeReactionOverlays<PublicPost>(startedAt, resp.posts || []);
       setPosts((prev) => {
         const known = new Set(prev.map((post) => post.id));
@@ -155,8 +158,9 @@ const WorkspaceSavedPage = ({ cacheKey, ready }: { cacheKey: string; ready: bool
       setLoading(!!viewerIdRef.current && seeded.length === 0);
     }
     load();
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, load);
     const requests = requestSeqRef;
-    return () => { requests.current++; };
+    return () => { requests.current++; window.removeEventListener(LOCAL_WORKSPACE_CHANGED, load); };
   }, [load, cacheKey]);
 
   const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
@@ -249,6 +253,8 @@ const WorkspaceSavedPage = ({ cacheKey, ready }: { cacheKey: string; ready: bool
         {user?.localOnly && <Text fontSize="sm">Saved on this device only. Nothing is synced to an account.</Text>}
         {user ? (
           <>
+            {incomplete && <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">Saved on this device. Your online account may contain more saved posts.</Text>}
+            {cacheError && <Text role="alert" fontSize="sm">{cacheError}</Text>}
             <FeedShortcutsContext.Provider value={shortcuts.registry}>
               <PostList
                 posts={posts}

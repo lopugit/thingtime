@@ -10512,6 +10512,33 @@ Run `app/local-workspace/components.browser.test.ts` with
 - [x] Unit checks cover account isolation, unknown baseline reconciliation,
   cross-tab claims, immutable retries, newer intent, permanent refusal, identity
   retirement and discard fencing. Keep ordinary content and draft sync separate.
-- [ ] Complete noncached/foreign target offline membership and the broader
-  account social-cache acceptance matrix. Do not treat this checkpoint as full
-  account interaction coverage or a production verification.
+- [x] Extend noncached/foreign target membership through the read-only post
+  snapshot checkpoint below.
+- [ ] Complete the broader account social-cache matrix; these local checkpoints
+  are not full account interaction coverage or production verification.
+
+
+### Read-only account post recovery and local membership (2026-10-16)
+
+- [x] Share a private post between two disposable local accounts through a
+  username grant. Retain it through the normal native permalink, disable all
+  networking, cold reload, and Save/react without sending a mutation request.
+- [x] Open and reload Saved offline; remove/re-add the bookmark in another tab.
+  Both tabs retain original authors, counts and current device membership.
+  Device cursors are workspace-bound and must not masquerade as server cursors.
+- [x] Reconnect through verified account identity and confirm both desired
+  membership changes through the normal interaction API. Logout, cold reload
+  anonymously offline and verify the private post is absent; log in normally.
+- [x] Revoke the original read grant and perform a normal read. Refused content
+  must disappear from permalink/Saved recovery and remain absent after offline
+  reload. Unit tests also fence delayed reads and prune nested share/comment/
+  linked references while permitting a later genuinely authorized read.
+- [x] Keep credentials/server envelope fields out of retained projections;
+  never create owned Things or content sync records from another author's post.
+  Account, origin and data-plane scope and existing quota remain enforced.
+- [x] Check Saved at 1440/390/320px with no horizontal overflow or page errors.
+  Run `app/local-workspace/accountPosts.browser.test.ts` with
+  `TT_LOCAL_ACCOUNT_POSTS_URL`, `TT_LOCAL_ACCOUNT_POSTS_ARTIFACTS` and shared
+  Playwright/Chrome paths. Use normal rate-limited fixture registration.
+- [ ] Finish full feed paging, unvisited/context/media cache recovery, account
+  post/comment writes and wider cross-device social acceptance before merge.

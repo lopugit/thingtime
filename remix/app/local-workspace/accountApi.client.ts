@@ -1,3 +1,5 @@
+import { clearLocalCache } from '../hooks/localCache';
+import { AccountPostCache, overlayAccountPost } from './accountPosts';
 import { AccountInteractionSync } from './accountInteractions';
 import { withExportDeadline } from '../utils/thingTransfer/exportDeadline';
 import { exportAccountThings, snapshotAccountExportInput } from './accountExport';
@@ -25,7 +27,7 @@ const workers = new Map<string, ReturnType<typeof createWorker>>();
 const BLOCKED_RETRY_MS = 60_000;
 function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
-	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease);
+	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
 	const controller = new AbortController();
 	let running = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
 	const wake = () => {
@@ -71,7 +73,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
-	return { sync, interactions, transport, db, lease, wake, stop };
+	return { sync, interactions, posts, transport, db, lease, wake, stop };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
@@ -100,16 +102,34 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const online = guard(remote) as T;
 
 	const project = (thing: any) => thing ? { ...thing, author: owner } : thing;
-	const retainInteractionProjection = async (row: any) => {
+	const retainInteractionProjection = async (row: any, startedAt: number) => {
 		if (!row || typeof row.id !== 'string' || !Array.isArray(row.viewerReactions) || !row.reactionCounts) return;
 		const service = worker();
-		if (!await service.sync.view(row.id)) return;
-		await service.interactions.remember([{ id: row.id, revision: null, saved: !!(row.saved ?? row.viewerSaved), reactions: row.viewerReactions, reactionCounts: row.reactionCounts }], false);
+		await service.interactions.remember([{ id: row.id, revision: null, saved: !!(row.saved ?? row.viewerSaved), reactions: row.viewerReactions, reactionCounts: row.reactionCounts }], false, startedAt);
 		const state = (await service.interactions.states()).find(state => state.id === row.id);
 		if (state) Object.assign(row, { saved: state.saved, viewerSaved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {} });
 	};
+	const retainPosts = async (result: any, startedAt: number) => {
+		const rows = [result.post, result.parent, result.root, ...(Array.isArray(result.posts) ? result.posts : [])].filter(Boolean);
+		if (!rows.length) return result;
+		try { await worker().posts.remember(rows, startedAt); }
+		catch (error) { facadeLease.assertCurrent(); result.localCacheError = 'These posts could not be retained on this device. Retry online before going offline.'; }
+		const pending = [...rows], seen = new Set<string>(), observed = [];
+		while (pending.length && seen.size < 250) {
+			const row = pending.shift(); if (!row || seen.has(row.id)) continue; seen.add(row.id);
+			if (typeof row.id === 'string' && Array.isArray(row.viewerReactions) && row.reactionCounts) observed.push({id:row.id,revision:null,saved:!!row.viewerSaved,reactions:row.viewerReactions,reactionCounts:row.reactionCounts});
+			pending.push(...(Array.isArray(row.comments) ? row.comments : []), ...(row.shareOf ? [row.shareOf] : []));
+		}
+		try { for (let offset=0;offset<observed.length;offset+=50) await worker().interactions.remember(observed.slice(offset,offset+50),false,startedAt); }
+		catch { facadeLease.assertCurrent(); result.localCacheError = 'Post interactions could not be retained on this device. Retry online before going offline.'; }
+		const states = new Map((await worker().interactions.states()).map(state => [state.id, state]));
+		for (const key of ['post', 'parent', 'root']) if (result[key]) result[key] = overlayAccountPost(result[key], states);
+		if (Array.isArray(result.posts)) result.posts = result.posts.map((post: any) => overlayAccountPost(post, states));
+		return result;
+	};
 	const refresh = async (args: Record<string, unknown>, signal?: AbortSignal, retainPage?: (page: { ids: string[]; nextCursor: string | null }) => Promise<void>) => {
 		const { sync, transport, lease } = worker();
+		const startedAt = Date.now();
 		const result = await transport.read(args, signal);
 		lease.assertCurrent();
 		// Page membership belongs to the authorized server snapshot. Keep deleted
@@ -124,9 +144,9 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		};
 		if (result.thing) result.thing = await retain(result.thing);
 		if (result.things) result.things = (await Promise.all(result.things.map(retain))).filter(Boolean);
-		await retainInteractionProjection(result.discussion || result.post);
+		await retainInteractionProjection(result.discussion, startedAt);
 		if (membership && retainPage) await retainPage(membership);
-		return result;
+		return retainPosts(result, startedAt);
 	};
 	const changed = () => { announceLocalWorkspaceChange(); worker().wake(); };
 	const remove = async (ids: string[], expectedUpdatedAt: string | undefined, fallback: () => Promise<any>) => {
@@ -208,10 +228,6 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const interact = async (kind: 'save' | 'reaction', args: { id: string; emoji?: unknown }) => {
 		facadeLease.assertCurrent();
 		const service = worker();
-		let known = !!await service.sync.view(args.id);
-		if (!known && typeof args.id === 'string' && args.id.startsWith('component-')) known = (await import('../components/ComponentsLibrary/bundledComponentCatalog')).bundledComponentEntries().some(row => row.id === args.id);
-		facadeLease.assertCurrent();
-		if (!known) return kind === 'save' ? online.things.save(args) : online.things.react(args);
 		const state = await service.interactions.toggle(kind, args.id, args.emoji); changed();
 		return { ok: true, saved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {}, savedLocally: true };
 	};
@@ -254,6 +270,31 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	return { ...online, auth: remote.auth, login: remote.login,
 		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
 		save: (args: any) => interact('save', args), react: (args: any) => interact('reaction', args),
+		feed: async (...args: any[]) => { const startedAt = Date.now(); return retainPosts(await online.things.feed(...args), startedAt); },
+		trending: async (...args: any[]) => { const startedAt = Date.now(); return retainPosts(await online.things.trending(...args), startedAt); },
+		saved: async (args: {cursor?:string;limit?:number} = {}) => {
+			const service = worker();
+			if (navigator.onLine === false || !canSyncAccountWorkspace(scope) || args.cursor?.startsWith('device:')) {
+				if (args.cursor && !args.cursor.startsWith('device:')) throw new WorkspaceError('LOCAL_CURSOR_REQUIRED','Reload Saved to browse device snapshots offline.');
+				const result = await service.posts.saved(await service.interactions.states(), {...args,cursor:args.cursor?.slice(7)});
+				return {...result,nextCursor:result.nextCursor?`device:${result.nextCursor}`:null};
+			}
+			const startedAt = Date.now(), result = await retainPosts(await online.things.saved(args), startedAt);
+			const ids = [...new Set<string>((result.posts || []).map((post: any) => post.id))].slice(0,50);
+			if (ids.length) {
+				const readAt = Date.now();
+				try { await service.interactions.remember(await service.transport.interactions.read(ids), true, readAt); }
+				catch { facadeLease.assertCurrent(); result.localCacheError = 'Saved post details could not be refreshed. Your device choices are preserved.'; }
+			}
+			const states = new Map((await service.interactions.states()).map(state => [state.id,state]));
+			result.posts = (result.posts||[]).filter((post:any)=>states.get(post.id)?.saved!==false).map((post:any)=>overlayAccountPost(post,states));
+			if (!args.cursor) {
+				const local = await service.posts.saved([...states.values()],{limit:50});
+				const pending = new Set((await service.interactions.status()).filter(row=>row.state!=='synced').map(row=>row.id));
+				result.posts = [...local.posts.filter(post=>pending.has(post.id)&&!result.posts.some((row:any)=>row.id===post.id)),...result.posts];
+			}
+			return result;
+		},
 		fork: async (input: { id: string; key?: string }) => {
 			facadeLease.assertCurrent();
 			if (!input || Object.keys(input).some(key => !['id', 'key'].includes(key))) throw new WorkspaceError('INVALID_COPY', 'Unsupported copy options.');
@@ -402,16 +443,31 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		get: async (args: any, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
 			if (Object.entries(args || {}).some(([key, value]) => value !== undefined && key !== 'id')) {
-				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post); return result;
+				const startedAt = Date.now();
+				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post, startedAt); return result;
 			}
-			const { sync } = worker();
+			const service = worker(), { sync } = service;
+			const evictRefusedPost = async (error: unknown) => {
+				if ([403,404,410].includes(Number((error as any)?.status)) && await service.posts.forget(args.id)) {
+					clearLocalCache(`tt-saved-${workspaceScopeKey(scope)}`); announceLocalWorkspaceChange([args.id]);
+				}
+			};
+			const cachedPost = await service.posts.get(args.id);
+			const offline = navigator.onLine === false || !canSyncAccountWorkspace(scope);
+			if (cachedPost && (offline || !cachedPost.thingtime.includes('comment'))) {
+				if (!offline) void refresh(args, options?.signal).then(async () => {
+					if (JSON.stringify(await service.posts.get(args.id)) !== JSON.stringify(cachedPost)) announceLocalWorkspaceChange([args.id]);
+				}).catch(async error => { await evictRefusedPost(error); }).catch(() => {});
+				return {ok:true,thing:null,post:overlayAccountPost(cachedPost,new Map((await service.interactions.states()).map(state=>[state.id,state]))),parent:null,root:null,localWorkspace:true,incomplete:offline};
+			}
 			if (await sync.isDeleted(args.id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
 			const cached = await sync.view(args.id);
 			if (cached) {
 				if (navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(() => {}).catch(() => {});
 				return { ok: true, thing: project(cached), savedLocally: cached.syncState !== 'synced' };
 			}
-			return refresh(args, options?.signal);
+			try { return await refresh(args, options?.signal); }
+			catch (error) { await evictRefusedPost(error); throw error; }
 		},
 		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
