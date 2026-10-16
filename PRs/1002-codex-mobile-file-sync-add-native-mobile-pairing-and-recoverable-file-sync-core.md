@@ -313,3 +313,37 @@ acceptance. Keep the full goal active until the evidence table is satisfied.
   worker wiring, destination writes, efficient streaming, Photos, retention,
   peer behavior and physical-device acceptance are still required. The API test
   uses synthetic opaque IDs and does not exercise native grants or transfers.
+
+
+## Mobile connection editor checkpoint — 2026-10-17
+
+Paired mobile device cards now create/edit ordinary private `file-sync` Things.
+The shared form exposes native/cloud folder selection and policy settings;
+backup keeps deletion propagation off, and missing grants preserve saved data.
+Complete local drafts are scoped by origin/account/data plane/device and read
+before first paint. Verified persistence precedes dispatch. Fixed IDs, immutable
+pending payloads and expected revisions recover accepted response loss without
+creating duplicates; stale versions preserve the draft for explicit comparison
+and replacement. Expected actor/plane headers pin requests across capability
+awaits, and cancellation fences retired views and StrictMode remounts.
+
+Validation: 66 sync + 20 request/payload/error + 88 device tests pass. Real
+loopback API create/edit accepted-reply-loss cases each write exactly once and
+survive draft serialization; stale edits and cleanup/logout pass. The production
+editor with synthetic API/native responses passes draft reload, uncertain retry,
+stale comparison/replacement and missing-grant checks at desktop 1280px and
+mobile 390px/320px without horizontal overflow. Native app picker acceptance,
+streaming writes/workers, Photos, peer behavior and retention remain open in the
+full delivery ledger. Readback confirms current settings, not a permanent
+operation receipt; an unresolved pending save is deliberately retained.
+
+The prior-head CodeQL check flagged a test-only `startsWith` URL guard in
+`cloudTransport.test.ts`. It now compares the parsed exact origin; no alert was
+dismissed. Fresh remote scan completion remains required before calling CI clean.
+
+Full web build and Vercel output validation pass. Targeted source/fixture lint
+passes; the `.mts` acceptance script is executed and typechecked separately
+because this repository's ESLint parser does not cover that extension. Raw
+TypeScript remains at the same 91 pre-existing diagnostics, with none added or
+removed. Structural Graphify refresh accompanies the checkpoint; semantic
+freshness is not claimed after the earlier extraction shrink-guard failure.

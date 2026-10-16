@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { requestMobileFolders, supportsMobileFolders, type FolderRequest, type MobileFolder } from '~/fileSync/mobileFolders.client';
+import { MobileSyncConnections } from './MobileSyncConnections';
 const cached = new Map<string, MobileFolder[]>();
-export function MobileFolderAccess({ ownerId }: { ownerId: string }) {
+export function MobileFolderAccess({ ownerId, deviceId }: { ownerId: string; deviceId: string }) {
 	if (!supportsMobileFolders()) return null;
-	return <FolderAccess key={`${window.location.origin}:${ownerId}`} ownerId={ownerId} />;
+	return <FolderAccess key={`${window.location.origin}:${ownerId}`} ownerId={ownerId} deviceId={deviceId} />;
 }
-function FolderAccess({ ownerId }: { ownerId: string }) {
+function FolderAccess({ ownerId, deviceId }: { ownerId: string; deviceId: string }) {
 	const key = `${window.location.origin}:${ownerId}`;
 	const [roots, setRoots] = useState<MobileFolder[]>(() => cached.get(key) ?? []),
 		[busy, setBusy] = useState(false),
@@ -100,6 +101,7 @@ function FolderAccess({ ownerId }: { ownerId: string }) {
 					{error}
 				</Text>
 			) : null}
+			<MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={roots} />
 		</Box>
 	);
 }

@@ -11,8 +11,12 @@ preferences through ordinary Things (1.35.0, private by default).
 `configuredPlan.ts` checks owned/private projections, separately supplied local
 approval, conditions and symmetric exclusions, including excluded ancestor
 deletion protection. Run `scripts/file-sync-configuration.integration.mts` for
-real API storage/revision checks. Native file
-write adapters, persistent workers and product sync integration are pending;
+real API storage/revision and editor lost-response recovery checks.
+`components/Devices/MobileSyncConnections.tsx` connects selected roots to those
+Things through shared `configurationEditor.ts` save/recovery logic. Drafts are
+local, scoped and verified before writes; fixed IDs and revision guards survive
+reloads. A saved connection is not native execution approval. Native file
+write adapters, persistent workers and transfer-status integration are pending;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.
 

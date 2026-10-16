@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { saveConfigurationDraft, ConfigurationConflict, type ConfigurationEditorTransport } from '../app/fileSync/configurationEditor';
 import { newFileSyncConfiguration } from '../app/fileSync/configuration';
 import { readOwnedFileSyncConfiguration, planConfiguredFileSync } from '../app/fileSync/configuredPlan';
 const path = process.argv[2];
@@ -11,7 +12,7 @@ if (base.protocol !== 'http:' || !['localhost', '127.0.0.1'].includes(base.hostn
 const cookies = new Map<string, string>();
 async function call(route: string, body?: unknown, method = body === undefined ? 'GET' : 'POST', auth = true) {
  const response = await fetch(base.origin + route, { method, redirect: 'error', signal: AbortSignal.timeout(30_000), headers: {
-  Accept: 'application/json', Origin: base.origin, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+  Accept: 'application/json', Origin: base.origin, ...(auth && signedIn ? { 'X-Thingtime-Expected-Actor': fixture.userId, 'X-Thingtime-Expected-Data-Plane': 'home' } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
   ...(auth ? { Cookie: [...cookies].map(([k,v]) => `${k}=${v}`).join('; ') } : {})
  }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
  if (auth) for (const header of response.headers.getSetCookie()) { const pair = header.split(';')[0], i = pair.indexOf('='); cookies.set(pair.slice(0,i), pair.slice(i+1)); }
@@ -28,6 +29,23 @@ try {
  assert.equal((await ok('/api/v1/auth/me')).user.id, fixture.userId);
  const cloud = (await ok('/api/v1/things', { thingtime: ['folder'], crystal: { name: 'Sync configuration acceptance' } })).thing; created.push(cloud.id);
  const config = newFileSyncConfiguration({ name: 'Selected device documents', deviceId: 'fixture-device', localRootId: randomUUID(), remoteFolderId: cloud.id });
+ const pendingId = randomUUID(); let creates = 0, updates = 0;
+ const transport: ConfigurationEditorTransport = {
+  assertCurrent() {}, async verifyDeviceRoot(device, root) { assert.equal(device, config.deviceId); assert.equal(root, config.localRootId); },
+  async get(id) { const response = await call(`/api/v1/things?id=${id}`); if (response.status !== 200) throw Object.assign(Error(response.data.error), { status: response.status }); return response.data.thing; },
+  async create(id, crystal) { creates++; await ok('/api/v1/things', { shareId: id, thingtime: ['file-sync'], acl: ['tt:user'], crystal }); throw Error('Simulated accepted reply loss'); },
+  async update(id, crystal, expectedUpdatedAt) { updates++; await ok('/api/v1/things', { id, crystal, expectedUpdatedAt, replaceCrystal: true }, 'PATCH'); throw Error('Simulated accepted edit reply loss'); }
+ };
+ const pending = { version: 1 as const, id: pendingId, baseUpdatedAt: null, configuration: config, exclusions: '', pending: true };
+ created.push(pendingId);
+ const editorScope = { origin: base.origin, ownerId: fixture.userId, dataPlane: 'home', deviceId: config.deviceId };
+ const accepted = await saveConfigurationDraft(pending, editorScope, transport);
+ await saveConfigurationDraft(JSON.parse(JSON.stringify(pending)), editorScope, transport); assert.equal(creates, 1);
+ const editedPending = { ...pending, baseUpdatedAt: accepted.updatedAt, configuration: { ...config, name: 'Editor recovered update' } };
+ await saveConfigurationDraft(editedPending, editorScope, transport);
+ await saveConfigurationDraft(JSON.parse(JSON.stringify(editedPending)), editorScope, transport); assert.equal(updates, 1);
+ await assert.rejects(saveConfigurationDraft({ ...editedPending, configuration: { ...config, name: 'Stale editor draft' } }, editorScope, transport), ConfigurationConflict);
+ console.log('PASS: editor fixed-ID create and CAS update recover accepted response loss after draft serialization, each with exactly one write; stale editor draft rejected. Native grant adapter is synthetic.');
  const first = (await ok('/api/v1/things', { thingtime: ['file-sync'], crystal: config })).thing; created.push(first.id);
  assert.deepEqual(first.acl, ['tt:user']);
  const fresh = (await ok(`/api/v1/things?id=${first.id}`)).thing;

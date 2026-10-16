@@ -10076,5 +10076,39 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   case/Unicode-colliding or missing-ancestor scans before filtering. This
   regression prevents exclusions from turning protected descendants into
   apparent empty-folder deletions.
-- [ ] Native approval persistence, connection editor and policy rechecks during
+- [ ] Native approval persistence and policy rechecks during
   actual native transfers remain separate acceptance in `docs/mobile-file-sync.md`.
+
+
+## Mobile sync connection editor
+
+- [ ] Open `scripts/mobile-sync-editor.browser.html` in the local dev browser.
+  Exercise the real editor/useApi with synthetic native and Things responses.
+  Save all settings, reload before saving, and verify complete draft restoration,
+  including whitespace-only names and unfinished invalid exclusion text.
+  Backup disables deletion propagation; empty/invalid destinations/exclusions
+  cannot dispatch. Repeat at desktop 1280px and mobile 390px/320px, including
+  long folder names, checkbox wrapping and lower save/error controls.
+- [ ] Lose the next accepted create/edit reply; readback confirms the same
+  connection without a duplicate write. Go offline before saving, reload, and
+  retry the fixed pending ID/payload. Retry never silently edits an uncertain
+  payload. The real-API configuration integration covers both accepted reply
+  losses through the same save helper, exact write counts and stale edits.
+- [ ] Change the saved version elsewhere before saving. Preserve the full local
+  draft, inspect saved settings without discarding it, then explicitly replace
+  the draft with a freshly read saved version. Do not silently overwrite.
+- [ ] Remove native access during editing: keep the saved connection and mark
+  missing access. If no mutation was dispatched on the first attempt, the draft
+  stays editable. Do not unlock a previously uncertain write on a failed grant
+  check. A confirmed existing save can be read back without restoring the grant.
+- [ ] Quota/disabled draft storage blocks HTTP dispatch. Another tab replacing
+  the draft disables further edits until reload. Account/origin/device/data-plane
+  changes cannot retarget a save; requests carry both guards and stale async
+  completions are fenced, including React StrictMode remounts.
+- [ ] Check paginated private cloud folders/connections, excluded invalid/shared
+  connections, cached first paint and missing-grant labels in signed-in native
+  apps. The synthetic fixture is not proof of real picker/background transfers.
+
+- [ ] In transport fixtures, classify storage requests by parsed exact origin,
+  never a URL prefix that would accept a lookalike host. CodeQL flagged the old
+  test-only prefix check; production transport authorization is separate.

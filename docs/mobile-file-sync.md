@@ -80,11 +80,11 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter verified; iOS and Android folder grants/scans/reads implemented; native writes/workers and production sync UI pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter verified; iOS and Android folder grants/scans/reads implemented; native writes/workers and transfer-status UI pending; mobile connection editor implemented |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
-| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Folder-access controls exist; connection editor, native approval store and worker integration remain pending |
+| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; native approval store, retention/selective settings and worker integration remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; native conflict handling, retention and UI pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
@@ -346,6 +346,39 @@ stale-write 409, changed-approval refusal and charging gate. The integration
 script removes its synthetic configuration/folder through the normal API and
 logs out. The File sync reference and all eleven fields render in the local
 browser. This is storage and planning acceptance, not production sync UI or
-native scheduling/transport acceptance. Connection editor, native approval
+native scheduling/transport acceptance. The connection editor is covered below; native approval
 persistence, efficient streaming, destination writes, Photos and the remaining
 full-goal acceptance ledger above are still open.
+
+
+## Mobile connection editor — 2026-10-17
+
+`MobileSyncConnections.tsx` attaches to the actual paired device identity in
+Things/Settings. It lists owned private connections with pagination, offers
+private cloud folders, and edits name, native root, destination, direction,
+pause, network, charging, deletion and exact-path exclusions. Defaults remain
+paused. Removing a native grant preserves the connection and displays missing
+access. Backup disables deletion propagation. No transfer-running state is
+claimed: native workers are not connected yet.
+
+`configurationEditor.ts` shares the save/recovery contract. Complete local
+drafts are isolated by origin/account/data plane/device and restored before
+first paint. Storage writes are checked before HTTP dispatch. A pending write
+keeps its ID/payload and expected revision across reloads. Retrying reads that
+ID first; exact current configuration confirms success without another write.
+This is current-state confirmation, not an immutable operation receipt.
+Divergent revisions preserve the draft and offer saved-settings review before
+explicit replacement. Missing grants before the first mutation leave the draft
+editable; a previously uncertain save remains fixed until confirmed or found
+in conflict. Requests carry expected actor/data-plane headers and abort on
+identity retirement; old StrictMode requests cannot update a new mount.
+
+Verification: 66 sync tests, 20 request/payload/error tests and 88 device tests
+pass. The disposable loopback integration verifies fixed-ID create and CAS edit
+with simulated accepted-reply loss, serialization/reload and exactly one write,
+then stale-edit rejection and normal API cleanup/logout. The browser fixture
+uses the production component/useApi with synthetic Things/native responses:
+complete draft reload, lost-response readback, offline retry after reload,
+stale draft review/replacement and removed-grant recovery passed. Desktop
+1280px and mobile 390px/320px show no horizontal overflow or out-of-bounds
+controls. Actual signed-in native picker/worker acceptance remains open.

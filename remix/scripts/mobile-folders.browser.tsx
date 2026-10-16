@@ -1,5 +1,6 @@
 // Real folder controls in StrictMode; only the native picker/reader is synthetic.
 import React, { StrictMode, useState } from 'react';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { createRoot } from 'react-dom/client';
 import { Box, Button, ChakraProvider, Text } from '@chakra-ui/react';
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
@@ -51,7 +52,7 @@ function Fixture() {
 				<Text fontSize="12px">Synthetic native responses. No files are accessed or uploaded.</Text>
 				<Box marginTop={4} padding={4} border="1px solid #ddd" borderRadius="12px">
 					<Text fontWeight="bold">This device is added</Text>
-					<MobileFolderAccess ownerId="folder-ui-fixture" />
+					<MobileFolderAccess ownerId="folder-ui-fixture" deviceId="folder-ui-device" />
 				</Box>
 				<Button
 					marginTop={4}
@@ -69,6 +70,6 @@ function Fixture() {
 }
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
-		<Fixture />
+		<RouterProvider router={createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ user: null, dataPlane: 'home' }), element: <Fixture /> }])} />
 	</StrictMode>
 );

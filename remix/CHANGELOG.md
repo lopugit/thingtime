@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Mobile device cards now create/edit private sync
+  connections with complete local drafts, fixed-ID lost-response recovery,
+  stale-edit comparison and fresh folder checks. Desktop/mobile browser and
+  real API recovery checks pass; native transfer workers remain pending.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Persist editable file-sync connections through
   ordinary private-by-default Things, with bounded direction, pause, network,
   charging and exclusion preferences. Configured planning checks local approval

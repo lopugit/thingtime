@@ -4690,9 +4690,13 @@ node --import tsx scripts/file-sync-configuration.integration.mts /absolute/path
 No upload approval, object-store credentials, extra environment variables or
 indexes are needed for this configuration-only check. It creates a synthetic
 cloud folder and private `file-sync` Thing through the existing Things API,
-verifies guarded editing and runtime policy boundaries, removes only its own
+verifies guarded editing, fixed-ID create/edit recovery after accepted response
+loss and runtime policy boundaries, removes only its own
 fixtures through ordinary deletion, and logs out. The public schema is visible
 at `/docs/schemas#schema-file-sync`. Configurations contain opaque references;
-they do not grant OS access or launch transfers. The native connection editor,
-approval persistence and transfer workers remain in the
+they do not grant OS access or launch transfers. The paired mobile device card
+now edits connections through this API. For a browser-only regression, open
+`/scripts/mobile-sync-editor.browser.html` on the local dev server; it uses the
+production editor with synthetic API/native responses and never accesses files.
+Native approval persistence and transfer workers remain in the
 [full sync acceptance ledger](docs/mobile-file-sync.md).

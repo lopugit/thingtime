@@ -78,7 +78,7 @@ test('stale destination, foreign receipt, wrong source bytes and context changes
  f.context(scope); f.hook(undefined);
  const wrong = { ...source(), read: async () => new Uint8Array([4, 3, 2, 1]) };
  // Use a byte-agnostic PUT mock while retaining all API behavior.
- const original = f.runtime.fetch; f.runtime.fetch = async (url: any, init: any) => String(url).startsWith('https://storage.test') ? new Response(null) : original(url, init);
+ const original = f.runtime.fetch; f.runtime.fetch = async (url: any, init: any) => new URL(String(url)).origin === 'https://storage.test' ? new Response(null) : original(url, init);
  await assert.rejects(createCloudFileTransport(f.runtime, write).apply(wrong), /planned fingerprint/); assert.equal(f.counts().commits, 0);
  f.hook((path, body) => path === '/api/v1/files' && body ? Response.json({ ok: false }, { status: 409 }) : null);
  await assert.rejects(createCloudFileTransport(f.runtime, write).apply(source()), /409/); assert.equal(f.counts().commits, 0);

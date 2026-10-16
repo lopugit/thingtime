@@ -71,7 +71,7 @@ function MobileDeviceConnection({ ownerId, onPaired }: { ownerId: string; onPair
 				</Flex>
 			</Flex>
 			{error ? <Text role="alert" color="orange.600" fontSize="12px" marginTop={2}>{error}</Text> : null}
-            {isPaired ? <MobileFolderAccess ownerId={ownerId} /> : null}
+            {isPaired ? <MobileFolderAccess ownerId={ownerId} deviceId={status!.deviceId!} /> : null}
 		</Box>
 	);
 }
