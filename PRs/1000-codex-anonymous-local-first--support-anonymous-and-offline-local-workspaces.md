@@ -2110,3 +2110,26 @@ originals become ready. The native draft test holds the draft POST unresolved
 and requires the private post to reach the real account within eight seconds,
 before releasing that draft request. This tests normal completion independently
 of the draft transport timeout, in addition to rejection/retirement handling.
+
+
+## 2026-10-17: generic editor draft scope and cold recovery
+
+The generic Thing adapter now uses captured workspace leases, shared scoped
+recovery keys and validated canonical snapshots. Closing the same workspace can
+finish its last local save; changing identity prevents late completion from
+writing recovery, restoring a value or changing the next editor's UI.
+
+A real anonymous/offline browser check exposed a second issue: the generic draft
+could finish saving before the whole-tree debounce, so an immediate reload showed
+older text. Native route views and non-embedded editor windows now resume their
+current scoped recovery once after hydration. This does not adopt legacy keys,
+replay authored edits, or restore into embedded foreign previews. Invalid recovery
+is retained with an explicit paused-saving error instead of becoming blank data.
+
+Local verification: `tmp/thing-draft-workspace-browser-verified/` holds the native
+1440/390/320px screenshots, cold offline create/edit/picker/reload evidence and
+corrupt-copy preservation check. The held-draft private-post regression passed
+again (`tmp/thing-draft-workspace-account-regression/`). The client build passes;
+raw TypeScript still reports the 91 baseline diagnostics, with none in changed
+files. Scope services and codec tests pass; current-head CI/deployment remain
+separate. All previously listed full-suite and legacy-recovery gates stay open.

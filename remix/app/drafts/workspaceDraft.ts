@@ -10,3 +10,9 @@ export async function workspaceDraftContext(scope: WorkspaceScope, context: stri
 export function workspaceDraftRequest(lease: WorkspaceLease, request = draftRequest): typeof draftRequest {
  return async (...args) => { lease.assertCurrent(); const result = await request(...args); lease.assertCurrent(); return result as any; };
 }
+
+/** Recovery identities survive reloads, but never cross owners or data planes.
+ * Generation belongs to the lease, not the durable key. */
+export function workspaceDraftRecoveryKey(origin: string, actor: string, context: string, scope: WorkspaceScope) {
+ return `tt-account-draft:${origin}:${actor}:${context}:workspace-store:${workspaceScopeKey(scope)}`;
+}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useThingDraftRecovery } from '~/drafts/ThingDrafts';
 import { Flex } from '@chakra-ui/react';
 import { useLocation, useMatches } from 'react-router';
 
@@ -34,6 +35,8 @@ export const ThingtimeURL = (props) => {
   const mode = React.useMemo(() => {
     return parseThingMode(pathname);
   }, [pathname]);
+
+  useThingDraftRecovery(path, mode !== 'editor');
 
   const inEditorMode = mode === 'editor';
 

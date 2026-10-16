@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Generic Thing drafts now retain their captured
+  workspace identity and recover the latest scoped device copy after a cold
+  offline reload. Corrupt recovery stays intact with a visible error. Native
+  anonymous editing/picker checks cover desktop and narrow phones; the held-draft
+  posting regression still passes. Full-suite acceptance remains open. Details:
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Wire native account drafts to scoped local storage
   and independent private sync, bounded summary discovery and reviewed conflicts.
   Real local browser checks cover offline recovery, responsive picker, posting

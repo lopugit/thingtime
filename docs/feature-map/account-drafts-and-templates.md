@@ -126,3 +126,30 @@ originals become ready. The native draft test holds the draft POST unresolved
 and requires the private post to reach the real account within eight seconds,
 before releasing that draft request. This tests normal completion independently
 of the draft transport timeout, in addition to rejection/retirement handling.
+
+
+## Generic Thing editor recovery
+
+`thingDraftWorkspace.ts` connects the native Thing event adapter to the existing
+local draft protocol with a captured workspace lease. It shares the recovery-key
+helper with `useAccountDraft`; late saves, loads and callbacks cannot adopt a new
+account, origin, data plane or generation. Normal same-workspace navigation still
+drains the final edit and acknowledges its original recovery key.
+
+Generic route views and non-embedded editor windows resume their validated scoped
+recovery copy once after the tree hydrates. This closes the gap where a draft was
+saved but the separately debounced whole-tree snapshot reopened older text.
+Recovery uses the canonical Thingtime codec, retains cycles and Dates, and does
+not emit another authored edit or broadcast. Corrupt recovery remains untouched
+with a visible paused-saving error. Embedded/foreign previews do not resume into
+the user tree. Earlier unscoped recovery keys are deliberately not auto-assigned;
+the explicit legacy recovery work remains open.
+
+Run `thingDraftWorkspace.test.ts` and the opt-in
+`thingDraftWorkspace.browser.test.ts` (`TT_LOCAL_THING_DRAFTS_URL` must be a
+loopback production-client server, with the shared Playwright/Chrome paths).
+The native browser fixture creates a text Thing through its normal type menu,
+saves/loads through the picker, reloads offline after a later edit, checks the
+picker at 1440/390/320px, and verifies corrupt recovery is retained. Native
+account/origin/data-plane switches across every editor remain a wider acceptance
+gate; a service-level retired-lease test does not establish that entire matrix.

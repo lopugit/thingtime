@@ -10984,3 +10984,24 @@ Run `app/local-workspace/components.browser.test.ts` with
   capability negotiation. Prove cold offline native editing, independent post
   completion, reconnect and media donation/removal/cleanup races with disposable
   accounts. Current queue tests alone do not satisfy this acceptance gate.
+
+
+### Generic Thing drafts and cold editor recovery (2026-10-17)
+
+- [x] In a clean anonymous browser, go offline after installing the application
+  shell. In `/editor/Notes`, use the native type menu to create a string and edit
+  it. Load its device draft, reload, edit again and reload immediately after the
+  new draft save completes. The latest text must appear without another picker
+  selection; the older whole-tree snapshot must not replace it.
+- [x] Open the generic draft picker at 1440x1000, 390x844 and 320x844. Its controls
+  remain within the viewport. Record actual screenshots and zero remote writes.
+- [x] In that disposable context only, corrupt the scoped recovery serialization.
+  Reload and verify a visible paused-saving error, unchanged recovery bytes and
+  a still-editable Thing. Never substitute blank data for a decoding failure.
+- [x] Service regression: retire a captured lease during a pending save/load.
+  No old completion may persist, restore or retry into the next workspace.
+  Same-workspace closure drains the final edit and updates only its original key.
+- [x] Regression: a native private post reaches the real disposable account while
+  draft POST remains held; releasing the failure later allows cleanup to converge.
+- [ ] Complete native account/origin/data-plane transitions, explicit legacy-key
+  recovery and the broader draft/media/conflict matrix before merging PR #1000.

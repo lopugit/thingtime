@@ -1,5 +1,5 @@
 import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '../local-workspace/storageStatus.client';
-import { workspaceScopeKey } from '../local-workspace/storage';
+import { workspaceDraftRecoveryKey } from './workspaceDraft';
 import { LOCAL_WORKSPACE_CHANGED } from '../local-workspace/runtime.client';
 import React from 'react';
 import { clearLocalCache, readLocalCache } from '~/hooks/localCache';
@@ -33,7 +33,8 @@ export function useAccountDraft({
 		if (!binding) throw new Error('Draft workspace is not ready. Reopen this editor.');
 		binding.lease.assertCurrent(); const result = await requestInput(...args); binding.lease.assertCurrent(); return result as any;
 	}, [binding, requestInput]);
-	const key = `tt-account-draft:${typeof location === 'undefined' ? '' : location.origin}:${actor || 'guest'}:${context}:workspace-store:${binding ? workspaceScopeKey(binding.scope) : 'unconfirmed'}`;
+	const origin = typeof location === 'undefined' ? '' : location.origin;
+	const key = binding ? workspaceDraftRecoveryKey(origin, actor || 'guest', context, binding.scope) : `tt-account-draft:${origin}:${actor || 'guest'}:${context}:workspace-store:unconfirmed`;
 	const [status, setStatus] = React.useState<DraftSaveState>('idle');
 	const [error, setError] = React.useState('');
 	const [deviceError, setDeviceError] = React.useState('');
