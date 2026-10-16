@@ -8,7 +8,8 @@ export async function publicWorkspaceRead(path: string, feature: string, version
 	const lease = anonymousWorkspaceLease(); lease.assertCurrent(); signal?.throwIfAborted();
 	const url = new URL(path, window.location.origin);
 	if (url.origin !== window.location.origin || !['/api/v1/things', '/api/v1/things/search', '/api/v1/things/feed', '/api/v1/things/trending', '/api/v1/components/browse', '/api/v1/schemas/browse', '/api/v1/webpages/resolve', '/api/v1/themes/shared', '/api/v1/algorithms/search', '/api/v1/algorithms/shared', '/api/v1/users/profile', '/api/v1/users/activity', '/api/v1/users/search'].includes(url.pathname)) throw new WorkspaceError('INVALID_PUBLIC_READ', 'Unsupported public catalog read');
-	if (searchBody !== undefined && (url.pathname !== '/api/v1/things/search' || new TextEncoder().encode(searchBody).byteLength > 32 * 1024)) throw new WorkspaceError('INVALID_PUBLIC_READ', 'Search must be at most 32 KiB.');
+	if (searchBody !== undefined && url.pathname !== '/api/v1/things/search') throw new WorkspaceError('INVALID_PUBLIC_READ', 'Search must use the public search read.');
+	if (searchBody !== undefined && new TextEncoder().encode(searchBody).byteLength > 32 * 1024) throw new WorkspaceError('INVALID_PUBLIC_READ', 'Search must be at most 32 KiB.');
 	const key = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(searchBody === undefined ? url.pathname + url.search : JSON.stringify([url.pathname, url.search, searchBody]))).then(bytes => [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join(''));
 	const cacheable = !url.searchParams.has('key') && !url.searchParams.has('sharedRoot');
 	const db = anonymousWorkspaceDatabase();

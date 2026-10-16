@@ -1,4 +1,4 @@
-import { buildGroup, GENERIC_SEARCH_EXCLUDED_THINGTIME } from '../api/utils/things/searchGrammar';
+import { buildGroup, GENERIC_SEARCH_EXCLUDED_THINGTIME, DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, MAX_TEXT_QUERY_CHARS } from '../api/utils/things/searchGrammar';
 import { localSearchText } from './librarySearch';
 import { isLocalAttachment } from './attachments';
 import type { LocalThing } from './things';
@@ -73,7 +73,7 @@ export async function searchLocalThings(rows: LocalThing[], query: Record<string
  for (const [key, value] of Object.entries(query)) if (value !== undefined && !ALLOWED.has(key)) invalid(`Device search does not support the ${key} filter.`);
  if (query.q !== undefined && typeof query.q !== 'string') invalid('Search text must be a string.');
  const q = String(query.q || '').trim().normalize('NFKC').toLowerCase();
- if (q.length > 200) invalid('Search text must be at most 200 characters.');
+ if (q.length > MAX_TEXT_QUERY_CHARS) invalid(`Search text must be at most ${MAX_TEXT_QUERY_CHARS} characters.`);
  if (query.thingtime !== undefined && typeof query.thingtime !== 'string') invalid('Search kinds must be a comma-separated string.');
  const kinds = [...new Set(String(query.thingtime || '').split(',').map(kind => kind.trim()).filter(Boolean))].sort();
  if (kinds.length > 20 || kinds.some(kind => kind.length > 64)) invalid('Too many or invalid search kinds.');
@@ -84,8 +84,8 @@ export async function searchLocalThings(rows: LocalThing[], query: Record<string
  const conditions = (query.conditions || []) as unknown[];
  const filter = conditions.length ? buildGroup({ conditions, mode: query.mode }, 1, { total: 0 }) : {};
  if (filter.ok === false) invalid(filter.error);
- const rawLimit = query.limit ?? 20;
- if (typeof rawLimit !== 'number' || !Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 50) invalid('Search limit must be an integer from 1 to 50.');
+ const rawLimit = query.limit ?? DEFAULT_SEARCH_LIMIT;
+ if (typeof rawLimit !== 'number' || !Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > MAX_SEARCH_LIMIT) invalid(`Search limit must be an integer from 1 to ${MAX_SEARCH_LIMIT}.`);
  const limit = rawLimit as number;
  const serialized = new TextEncoder().encode(JSON.stringify([scopeKey, q, kinds, sort, filter]));
  if (serialized.byteLength > 32 * 1024) invalid('Device search filters must be at most 32 KiB.');
