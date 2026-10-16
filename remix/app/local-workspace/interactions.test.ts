@@ -27,7 +27,7 @@ test('local reactions are independent relational slots, bounded, and excluded fr
   assert.equal((await interactions.toggle('reaction', post.id, '👍')).reactionCounts['👍'], undefined);
   assert.equal((await interactions.toggle('reaction', post.id, '🦁')).reactionCounts['🦁'], 1);
   assert.equal((await things.get(post.id)).revision, post.revision);
-  assert.equal((await things.list()).things.length, 1);
+  assert.deepEqual((await things.list()).things.map(row => row.id).sort(), [post.id, 'timeline-folder-local-workspace'].sort());
   assert.deepEqual((await things.export([post.id])).manifest, before.manifest);
   const reaction = (await things.snapshot()).find(row => row.thingtime.includes('reaction'))!;
   assert.equal(reaction.targetId, post.id); assert.equal('ownerId' in reaction, false); assert.equal('acl' in reaction, false);

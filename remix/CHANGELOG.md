@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous Timeline is discoverable through the
+  normal Things library and search, using a protected read projection over
+  canonical local history. Cold offline rename no longer requests a server
+  capability manifest. Native offline navigation/reload is verified at
+  1440/390/320px; intermittent startup failures remain a merge gate.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Page + related History resolves anonymous local
   composition offline through canonical references, bounded membership and the
   shared cursor contract. Includes race/scope regression coverage, native

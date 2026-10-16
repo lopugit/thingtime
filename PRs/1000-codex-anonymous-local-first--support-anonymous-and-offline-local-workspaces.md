@@ -738,3 +738,39 @@ damaged CacheStorage falls back to the real network for build assets; a failed
 navigation retains its original network error. Its four offline-shell tests and
 the rebuilt native History regression pass. This cache-error fallback does not
 establish a fix for the separately observed module cancellations.
+
+
+## 2026-10-16 — managed anonymous Timeline folder and cold offline rename
+
+The ordinary library and literal search now expose a managed Timeline folder,
+computed from saved local history. Stable first-receipt metadata preserves list
+paging. The existing folder route renders native History; current-content
+snapshots, account scopes and portable export never receive this container.
+Ordinary update/move/delete/export, placement and import into it fail without
+partial writes. Exact reserved-identity reads remain local even before history
+exists. Unit regressions cover pagination, search, reopen, deletion retention,
+account isolation and adapter routing without network access.
+
+The new cold-navigation regression caught library rename's unconditional remote
+capability check. Anonymous rename now uses the existing local validation and
+workspace lease; account negotiation stays intact. The full History browser
+flow passes with actual offline emulation, including folder/rename cold reload
+and all previous notes/names/branches/merge/export/restore/related checks. Zero
+account Timeline calls, HTTP mutations, restored-ID public reads, page errors or
+recovered module errors in the final run; viewport/scroll widths match at
+1440/390/320. Manual IAB folder navigation also passes at desktop/390, with task
+tab cleanup. Evidence is in `tmp/local-timeline-folder-ui-checkpoint/` and the
+manual folder screenshots in `tmp/local-timeline-folder-ui/`.
+
+149 workspace + 4 offline-shell + 238 Timeline tests pass (five ordinary opt-in
+browser skips). Explicit native browser case passes in 35.5 seconds. Build:
+245 assets / 21,205,081 bytes. TypeScript: unchanged 91 baseline diagnostics.
+Targeted lint: zero errors, six existing warnings.
+
+Network diagnostics remain explicit: request-blocking failed its root-read
+failure assertion, so `offline-emulation` is now the default. Both modes keep
+that assertion; module errors remain fatal. Two earlier emulated runs completed
+functional work but failed on recovered entry-module errors. A later clean pass
+does not establish reliable startup. Storage controls, protected History,
+account sync and the full remaining matrix are still merge gates. No main merge
+or manual deployment was performed. CI and preview state are reported separately.

@@ -35,7 +35,7 @@ test('folder relationships stay local, reject cycles, and delete children only e
 	await assert.rejects(things.create({ crystal: {}, folderId: 'private-account-folder' }), /not in this workspace/);
 	await assert.rejects(things.remove([folder.id]), /has children/);
 	assert.equal((await things.remove([folder.id], true)).deleted.length, 2);
-	assert.equal((await things.list()).things.length, 0); await db.close();
+	assert.deepEqual((await things.list()).things.map(row => row.crystal.name), ['Timeline']); await db.close();
 });
 test('portable round trip remaps folder and component dependencies and strips local metadata', async () => {
 	const { db, things } = fixture();

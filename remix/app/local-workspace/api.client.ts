@@ -1,5 +1,5 @@
 import { LocalTimelineVersions } from './timelineVersions';
-import { LocalTimeline } from './timeline';
+import { LOCAL_TIMELINE_FOLDER, LocalTimeline } from './timeline';
 import { searchLocalLibrary } from './librarySearch';
 import { LocalInteractions, localSavedPage } from './interactions';
 import { localPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
@@ -80,7 +80,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (args.workspace !== true) return unavailable();
 			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
-			const page = searchLocalLibrary(await service().snapshot(), args);
+			const page = searchLocalLibrary(await service().librarySnapshot(), args);
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
 			return { ...page, things: page.things.map(project) };
 		},
@@ -103,7 +103,7 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		trending: async () => { lease.assertCurrent(); return publicWorkspaceRead('/api/v1/things/trending?anon=1', 'api.things-trending', '1.0.0'); },
 		get: async ({ id, key, sharedRoot, commentProjection }: { id: string; key?: string; sharedRoot?: string; commentProjection?: boolean }, options?: { signal?: AbortSignal }) => {
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
-			const storedHere = id.startsWith('local-') || await service().hasReference(id);
+			const storedHere = id === LOCAL_TIMELINE_FOLDER || id.startsWith('local-') || await service().hasReference(id);
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (storedHere) {
 				const things = service(), row = await things.get(id), all = await things.snapshot();

@@ -59,6 +59,19 @@ export async function localTimelineEntry(tx: WorkspaceTransaction, id: string): 
  return entry;
 }
 
+/** A managed library projection over canonical local History, never an authored
+ * Thing. Keeping it outside `things` prevents generic copy/import/export, Actions
+ * and deletion from treating the Timeline container as editable content. */
+export async function localTimelineFolder(tx: WorkspaceTransaction): Promise<LocalThing | null> {
+ const headers = await tx.list<Header>(INDEX);
+ if (!headers.length) return null;
+ const first = headers.reduce((a, b) => parseHeader(a.value, a.id).position < parseHeader(b.value, b.id).position ? a : b);
+ const entry = await localTimelineEntry(tx, first.id);
+ if (!entry) return fail('The local Timeline folder is unavailable.');
+ const stamp = entry.receipt.acceptedAt;
+ return { id: LOCAL_TIMELINE_FOLDER, thingtime: ['folder'], crystal: { name: 'Timeline', icon: '🕰️' }, createdAt: stamp, updatedAt: stamp, revision: 1 };
+}
+
 export async function localTimelineHead(tx: WorkspaceTransaction, thingId: string) {
  const id = await tx.get<string>(META, `head:${thingId}`);
  if (!id) return null;

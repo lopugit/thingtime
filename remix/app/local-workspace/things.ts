@@ -1,4 +1,4 @@
-import { recordLocalThingChanges, type LocalMutationCapture } from './timeline';
+import { LOCAL_TIMELINE_FOLDER, localTimelineFolder, recordLocalThingChanges, type LocalMutationCapture } from './timeline';
 import { isLocalInteraction } from './interactions';
 import { attachmentCountLimit } from '../schemas/attachmentLimits';
 import type { StoredDraft } from './drafts';
@@ -81,6 +81,7 @@ export class LocalThings {
 		});
 	}
 	private async placement(tx: WorkspaceTransaction, row: TransferThing) {
+		if (row.folderId === LOCAL_TIMELINE_FOLDER || row.targetId === LOCAL_TIMELINE_FOLDER) fail('MANAGED_KIND', 'Timeline is managed by History. Choose an ordinary folder or Thing.');
 		const seen = new Set([row.id]); let parent = row.folderId;
 		while (parent) {
 			if (seen.has(parent)) fail('FOLDER_CYCLE', 'A folder cannot contain itself');
@@ -257,11 +258,11 @@ export class LocalThings {
 	 * history also keeps deleted local identities from falling through to public
 	 * reads. The actual operation still resolves/validates the scoped Thing. */
 	async hasReference(id: string): Promise<boolean> {
-		return this.transaction('readonly', async tx => !!(await tx.get('things', id)) || !!(await tx.get('timeline-meta', `head:${id}`)));
+		return this.transaction('readonly', async tx => (this.scope.kind === 'anonymous' && id === LOCAL_TIMELINE_FOLDER && !!await localTimelineFolder(tx)) || !!(await tx.get('things', id)) || !!(await tx.get('timeline-meta', `head:${id}`)));
 	}
 	async get(id: string): Promise<LocalThing> {
 		return this.transaction('readonly', async tx => {
-			const found = await tx.get<LocalThing>('things', id);
+			const found = this.scope.kind === 'anonymous' && id === LOCAL_TIMELINE_FOLDER ? await localTimelineFolder(tx) : await tx.get<LocalThing>('things', id);
 			if (!found || found.thingtime.includes('action-run')) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
 			return found;
 		});
@@ -269,11 +270,21 @@ export class LocalThings {
 	async snapshot(): Promise<LocalThing[]> {
 		return this.transaction('readonly', async tx => (await tx.list<LocalThing>('things')).map(row => row.value));
 	}
+	/** User-facing library only; content snapshots and portable exports exclude
+	 * managed containers. Account partitions never receive anonymous History. */
+	private async librarySnapshotIn(tx: WorkspaceTransaction, includeTimeline = true): Promise<LocalThing[]> {
+		const rows = (await tx.list<LocalThing>('things')).map(row => row.value);
+		const folder = includeTimeline && this.scope.kind === 'anonymous' ? await localTimelineFolder(tx) : null;
+		return folder ? [...rows, folder] : rows;
+	}
+	async librarySnapshot(): Promise<LocalThing[]> {
+		return this.transaction('readonly', tx => this.librarySnapshotIn(tx));
+	}
 	async list(query: { thingtime?: string | string[]; folder?: string; target?: string; cursor?: string; limit?: number } = {}) {
 		const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
 		const kinds = typeof query.thingtime === 'string' ? query.thingtime.split(',') : query.thingtime || [];
 		return this.transaction('readonly', async tx => {
-			let rows = (await tx.list<LocalThing>('things')).map(({ value }) => value)
+			let rows = (await this.librarySnapshotIn(tx, !query.target && (!query.folder || query.folder === 'root') && kinds.every(kind => kind === 'folder')))
 				.filter(row => isLocalLibraryThing(row, query.target) && kinds.every(kind => row.thingtime.includes(kind)) &&
 					(!query.folder || (query.folder === 'root' ? !row.folderId : row.folderId === query.folder)) &&
 					(!query.target || row.targetId === query.target))
@@ -290,6 +301,7 @@ export class LocalThings {
 		return this.transaction('readwrite', tx => this.updateIn(tx, input));
 	}
 	private async updateIn(tx: WorkspaceTransaction, input: ThingWrite & { id: string }) {
+			if (input.id === LOCAL_TIMELINE_FOLDER) fail('MANAGED_KIND', 'Timeline is managed by History.');
 			const previous = await tx.get<LocalThing>('things', input.id);
 			if (!previous) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
 			if (input.expectedUpdatedAt !== undefined && input.expectedUpdatedAt !== previous.updatedAt) fail('WRITE_CONFLICT', 'This Thing changed in another editor. Reload before saving.', 409);
@@ -303,6 +315,7 @@ export class LocalThings {
 			await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, previous, input); return row;
 	}
 	async remove(ids: string[], recursive = false) {
+		if (Array.isArray(ids) && ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Timeline is managed by History.');
 		if (!Array.isArray(ids) || !ids.length || ids.length > 200) fail('INVALID_IDS', 'Choose between 1 and 200 Things');
 		return this.transaction('readwrite', async tx => {
 			const all = await tx.list<LocalThing>('things'); const selected = new Set(ids);
@@ -324,6 +337,7 @@ export class LocalThings {
 		});
 	}
 	async move(ids: string[], folderId: string | null) {
+		if (Array.isArray(ids) && ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Timeline is managed by History.');
 		if (!Array.isArray(ids) || !ids.length || ids.length > 200 || new Set(ids).size !== ids.length) fail('INVALID_IDS', 'Choose between 1 and 200 distinct Things');
 		return this.transaction('readwrite', async tx => {
 			const rows: LocalThing[] = [];
@@ -339,6 +353,7 @@ export class LocalThings {
 		});
 	}
 	async export(ids: string[], options: CollectTransferOptions = {}) {
+		if (ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Open History to export a saved version.');
 		// Take one consistent snapshot, then collect outside the IDB transaction.
 		const saved = await this.snapshot();
 		if (saved.some(row => ids.includes(row.id) && isLocalActivity(row))) fail('MANAGED_KIND', 'Export the content Thing; local interaction and run state is not portable account authority');

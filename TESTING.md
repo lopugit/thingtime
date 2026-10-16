@@ -2,6 +2,15 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] After saving local content, find Timeline in Things and library search,
+      open it, cold-reload offline, return to Things and rename a local item.
+      Reload again and verify the name without a capability-manifest request.
+      Check 1440/390/320px, managed folder menu restrictions, paged membership,
+      retained history after current-content deletion and no account partition
+      leakage. Ordinary rename/move/delete/export, target/folder placement and
+      import into Timeline must fail without changing content. Run the local
+      Timeline unit and native browser regressions.
+
 - [ ] Restore a page with recorded components offline, open its `restored-` copy
       from Things, verify the native preview, add a comment/nested reply, rename,
       and cold-reload at desktop/390/320px. No account Timeline/mutation HTTP or
@@ -10235,11 +10244,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   `timeline-related.integration.mts` with fixture cleanup.
 
 - [ ] Run the History regression with both network modes when investigating
-  startup: default `TT_LOCAL_TIMELINE_NETWORK_MODE=blocked-requests` rejects
-  network reads while preserving cached service-worker responses;
-  `offline-emulation` uses Chromium's offline flag. Record module-load failures
-  separately and do not count automatic retries as uninterrupted startup. The
-  default asserts the root API is unreachable but leaves `navigator.onLine`
+  startup: default `TT_LOCAL_TIMELINE_NETWORK_MODE=offline-emulation` uses
+  Chromium's offline flag. Optional `blocked-requests` may miss controlled
+  requests, so both modes must explicitly prove the root API is unreachable.
+  Record module-load failures separately and do not count automatic retries as
+  uninterrupted startup. The request-blocking mode leaves `navigator.onLine`
   true. Real-device offline startup remains a separate acceptance check.
 
 - [ ] Make CacheStorage enumeration/open/match fail in the offline-shell reader.

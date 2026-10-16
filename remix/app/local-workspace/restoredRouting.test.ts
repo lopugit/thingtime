@@ -38,7 +38,7 @@ async function fixture() {
 	};
 	const createApi = () =>
 		anonymousApi({
-			things: { create: remote, get: remote, list: remote, update: remote, remove: remote, react: remote, save: remote },
+			things: { create: remote, get: remote, list: remote, search: remote, update: remote, remove: remote, react: remote, save: remote },
 			timeline: { page: remote, version: remote }
 		});
 	const api = createApi();
@@ -86,6 +86,10 @@ async function fixture() {
 test('restored component reads, comments, reactions and rename stay in local authority, including deleted reads', async () => {
 	const h = await fixture();
 	try {
+		const folderId = 'timeline-folder-local-workspace';
+		assert.equal((await h.api.things.get({ id: folderId })).thing.crystal.name, 'Timeline');
+		assert.deepEqual((await h.api.things.search({ workspace: true, q: 'Timeline' })).things.map((row: any) => row.id), [folderId]);
+		assert.equal((await h.api.things.list({ folder: 'root', thingtime: 'folder' })).things.some((row: any) => row.id === folderId), true);
 		const read = await h.api.things.get({ id: h.restored });
 		assert.equal(read.thing.crystal.render.children, 'Old recorded content');
 		assert.equal(read.thing.localOnly, true);

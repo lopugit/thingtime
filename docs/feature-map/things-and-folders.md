@@ -472,3 +472,14 @@ covers args, aliases, caps, cycles, scope isolation and transaction races; the
 guarded `timeline-related.integration.mts` verifies the real account API and
 cleans up its own fixture Things. Protected histories and account sync remain
 pending.
+
+
+Anonymous Timeline library discovery uses `localTimelineFolder` in
+`local-workspace/timeline.ts` and `LocalThings.librarySnapshot` for managed
+read projections. `snapshot` stays authored-content-only; normal mutations and
+transfers cannot alter/copy the History container. `api.client.ts` routes its
+exact reserved identity locally, including an empty workspace's not-found read.
+`ThingsPage` only negotiates remote rename capabilities for account operations.
+Run `test:local-workspace` and `timeline.browser.test.ts` with a production client
+build; it defaults to actual offline emulation and refuses recovered module
+errors. See the managed-folder checkpoint in `docs/local-workspaces.md`.

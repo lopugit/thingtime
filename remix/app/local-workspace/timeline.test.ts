@@ -3,9 +3,10 @@ import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { WorkspaceDatabase } from './storage';
 import { LocalThings } from './things';
-import { LocalTimeline, localTimelineScope, LOCAL_TIMELINE_OWNER } from './timeline';
+import { LocalTimeline, localTimelineScope, LOCAL_TIMELINE_FOLDER, LOCAL_TIMELINE_OWNER } from './timeline';
 import { parseTimelineEntry, parseTimelineEvent } from '../timeline/contract';
 import { capturedComponentBindings } from '../timeline/componentBindings';
+import { searchLocalLibrary } from './librarySearch';
 import { splitTimelineEvent } from '../timeline/records';
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} }, scope = { kind: 'anonymous' } as const;
 const page = (thingId: string | null = null, extra = {}) => ({ thingId, before: null, after: null, limit: 40, ...extra });
@@ -139,4 +140,47 @@ test('two database connections serialize history ordering and retired leases can
   await assert.rejects(history.page(page()), /Workspace changed/);
   assert.equal((await new LocalTimeline(second, lease, 'https://thingtime.example').page(page())).entries.length, 8);
  } finally { await first.close(); await second.close(); }
+});
+
+
+test('Timeline is discoverable in the local library but never becomes editable or portable content', async () => {
+ const factory = new IDBFactory(), db = new WorkspaceDatabase(factory), things = new LocalThings(db, scope, lease);
+ try {
+  assert.equal((await things.list()).things.length, 0);
+  assert.equal(await things.hasReference(LOCAL_TIMELINE_FOLDER), false);
+  const row = await things.create({ thingtime: ['data'], crystal: { name: 'Local history source' } });
+  const folder = (await things.list({ folder: 'root', thingtime: 'folder' })).things[0];
+  assert.equal(folder.id, LOCAL_TIMELINE_FOLDER);
+  assert.equal(folder.crystal.name, 'Timeline');
+  assert.equal(await things.hasReference(folder.id), true);
+  assert.deepEqual(await things.get(folder.id), folder);
+  const first = await things.list({ limit: 1 }), second = await things.list({ limit: 1, cursor: first.nextCursor! });
+  assert.equal(new Set([...first.things, ...second.things].map(item => item.id)).size, 2);
+  assert.equal(second.nextCursor, null);
+  assert.deepEqual(searchLocalLibrary(await things.librarySnapshot(), { q: 'Timeline' }).things.map(item => item.id), [folder.id]);
+  assert.deepEqual((await things.snapshot()).map(item => item.id), [row.id]);
+  const { manifest } = await things.export([row.id]);
+  assert.deepEqual(manifest.things.map(item => item.id), [row.id]);
+  for (const attempt of [
+   () => things.update({ id: folder.id, crystal: { name: 'Renamed' } }),
+   () => things.move([folder.id], null), () => things.remove([folder.id], true),
+   () => things.remove([row.id, folder.id], true), () => things.export([folder.id]),
+   () => things.move([row.id], folder.id),
+   () => things.create({ thingtime: ['data'], crystal: {}, folderId: folder.id }),
+   () => things.create({ thingtime: ['data'], crystal: {}, targetId: folder.id }),
+   () => things.import(manifest, folder.id)
+  ]) await assert.rejects(attempt(), (error: any) => error.code === 'MANAGED_KIND');
+  assert.equal((await things.snapshot()).length, 1, 'failed mixed operations are atomic');
+  assert.deepEqual(await things.get(folder.id), folder);
+  const account = new LocalThings(db, { kind: 'account', origin: 'https://thingtime.example', ownerId: 'account', dataPlane: 'home' }, lease);
+  assert.equal((await account.librarySnapshot()).length, 0);
+  assert.equal(await account.hasReference(folder.id), false);
+  await assert.rejects(account.get(folder.id), /not in this workspace/);
+  await things.remove([row.id]);
+  assert.deepEqual(await things.get(folder.id), folder, 'folder stays after deleting current content');
+  await db.close();
+  const reopened = new WorkspaceDatabase(factory);
+  try { assert.deepEqual(await new LocalThings(reopened, scope, lease).get(folder.id), folder); }
+  finally { await reopened.close(); }
+ } finally { await db.close(); }
 });
