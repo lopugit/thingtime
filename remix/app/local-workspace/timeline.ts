@@ -61,14 +61,23 @@ export async function localTimelineEntry(tx: WorkspaceTransaction, id: string): 
 
 /** A managed library projection over canonical local History, never an authored
  * Thing. Keeping it outside `things` prevents generic copy/import/export, Actions
- * and deletion from treating the Timeline container as editable content. */
+ * and deletion from treating the Timeline container as editable content.
+ *
+ * This runs on the ordinary library list and library search, so it reads only the
+ * label stamp instead of materializing and validating a whole entry: the hot read
+ * path must not pay for every link record, and damage to this evictable view cache
+ * must not make the rest of the workspace unreadable. An unusable index projects no
+ * folder; History's own strict readers still report the damage when it is opened. */
 export async function localTimelineFolder(tx: WorkspaceTransaction): Promise<LocalThing | null> {
- const headers = await tx.list<Header>(INDEX);
- if (!headers.length) return null;
- const first = headers.reduce((a, b) => parseHeader(a.value, a.id).position < parseHeader(b.value, b.id).position ? a : b);
- const entry = await localTimelineEntry(tx, first.id);
- if (!entry) return fail('The local Timeline folder is unavailable.');
- const stamp = entry.receipt.acceptedAt;
+ let first: { id: string; position: number } | null = null;
+ for (const header of await tx.list<Header>(INDEX)) {
+  const position = header.value?.id === header.id ? header.value.position : undefined;
+  if (!Number.isSafeInteger(position) || position! < 1) continue;
+  if (!first || position! < first.position) first = { id: header.id, position: position! };
+ }
+ if (!first) return null;
+ const stamp = (await tx.get<Stored>(EVENTS, first.id))?.receipt?.acceptedAt;
+ if (typeof stamp !== 'string' || Number.isNaN(Date.parse(stamp))) return null;
  return { id: LOCAL_TIMELINE_FOLDER, thingtime: ['folder'], crystal: { name: 'Timeline', icon: '🕰️' }, createdAt: stamp, updatedAt: stamp, revision: 1 };
 }
 

@@ -184,3 +184,28 @@ test('Timeline is discoverable in the local library but never becomes editable o
   finally { await reopened.close(); }
  } finally { await db.close(); }
 });
+
+test('a damaged evictable Timeline view cache never breaks the ordinary library', async () => {
+ const db = new WorkspaceDatabase(new IDBFactory()), things = new LocalThings(db, scope, lease);
+ const ids = async () => (await things.list()).things.map(item => item.id).sort();
+ const drop = (collection: string, pick: (rows: { id: string }[]) => string) =>
+  db.transaction(scope, 'readwrite', lease, async tx => tx.delete(collection, pick(await tx.list<unknown>(collection))));
+ try {
+  const row = await things.create({ thingtime: ['data'], crystal: { name: 'Ordinary content' } });
+  assert.deepEqual(await ids(), [LOCAL_TIMELINE_FOLDER, row.id].sort());
+  // These stores are an evictable view/queue cache, so partial loss is an expected
+  // state. The library list and search must stay readable through all of it, and
+  // the folder must keep pointing at real History for as long as it is locatable.
+  await drop('timeline-links', rows => rows[0].id);
+  assert.deepEqual(await ids(), [LOCAL_TIMELINE_FOLDER, row.id].sort());
+  assert.deepEqual(searchLocalLibrary(await things.librarySnapshot(), { q: 'Ordinary' }).things.map(item => item.id), [row.id]);
+  // History's own strict reader still refuses a damaged entry rather than hiding it.
+  await assert.rejects(new LocalTimeline(db, lease, 'https://thingtime.example').page(page()), /Local Timeline links are incomplete/);
+  // With no projectable stamp left, the folder disappears and the library remains.
+  await drop('timeline-events', rows => rows[0].id);
+  assert.deepEqual(await ids(), [row.id]);
+  assert.deepEqual(searchLocalLibrary(await things.librarySnapshot(), { q: 'Ordinary' }).things.map(item => item.id), [row.id]);
+  assert.equal(await things.hasReference(LOCAL_TIMELINE_FOLDER), false);
+  await assert.rejects(things.get(LOCAL_TIMELINE_FOLDER), (error: any) => error.status === 404);
+ } finally { await db.close(); }
+});
