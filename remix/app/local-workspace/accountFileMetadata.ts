@@ -66,6 +66,14 @@ export class AccountFileMetadata {
 				: ({ id: row.id, base: before, state: 'pending', attempts: 0, retryAt: 0 } satisfies MetadataRecord)
 		);
 	}
+	/** An authorized observation may refresh clean details, never replace local
+	 * edits or an immutable operation whose account receipt is still unknown. */
+	async remember(tx: WorkspaceTransaction, local: LocalAttachment, remote: Snapshot) {
+		const prior = await tx.get<MetadataRecord>(COLLECTION, local.id);
+		if (prior && (prior.state !== 'synced' || prior.pending)) return;
+		await this.writeLocal(tx, local, remote.metadata);
+		await tx.put(COLLECTION, local.id, { id: local.id, remoteId: remote.id, base: remote.metadata, state: 'synced', attempts: 0, retryAt: 0 } satisfies MetadataRecord);
+	}
 	async discardUnuploaded(tx: WorkspaceTransaction, id: string) { await tx.delete(COLLECTION, id); }
 	async status() {
 		return this.tx('readonly', async (tx) => (await tx.list<MetadataRecord>(COLLECTION)).map((row) => row.value));

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Retain opened owned standalone files with bounded,
+  version-checked bytes and native offline metadata editing/download. Reuse
+  conditional sync and durable deletion receipts without duplicate uploads.
+  Production-build cold reload and 1440/390/320px checks pass locally; the full
+  local-first rollout remains incomplete. Details in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Add durable deletion receipts for existing owned
   standalone files without their original upload request ID, retaining version,
   scope and authentication fences. Local storage/browser and capability checks

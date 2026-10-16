@@ -1427,12 +1427,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const download = async (
-		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainOwnedFile = false
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean; retention?: { ownerId: string; updatedAt: string; folderId: string | null; attachment: AttachmentPublicMetadata & { nsfw?: true; pending?: true } } }>> => {
 		try {
 			const readable = await readableStoredAttachment(viewer, idInput);
 			if (readable.ok === false) return readable;
 			const { doc } = readable;
+			if (retainOwnedFile && (viewer?.id !== doc.ownerId || viewer.sharedRoot || doc.targetId || doc.attachmentPurpose !== 'file' ||
+				doc.attachmentExpiresAt || doc.attachmentImportDraft || doc.attachmentProfileSlot || doc.attachmentLinked || doc.moderation?.status === 'blocked'))
+				return fail(404, 'Saved owned file not found');
+			if (retainOwnedFile && doc.objectSizeBytes > 16 * 1024 * 1024) return fail(413, 'This file exceeds the device retention limit');
 			const s3 = dependencies.getS3();
 			const inline = !forceDownload && attachmentMayRenderInline(doc.crystal);
 			const signed = await s3.signDownload({
@@ -1451,7 +1455,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				size: doc.objectSizeBytes,
 				contentType: inline ? doc.crystal.contentType : 'application/octet-stream',
 				disposition: attachmentContentDisposition(doc.crystal.name, inline),
-				image: inline && doc.crystal.mediaKind === 'image'
+				image: inline && doc.crystal.mediaKind === 'image',
+				...(retainOwnedFile ? { retention: {
+					ownerId: doc.ownerId, updatedAt: doc.updatedAt.toISOString(), folderId: doc.folderId || null,
+					attachment: { ...attachmentPublicProjection(doc.shareId, doc.crystal),
+						...(doc.moderation?.status === 'nsfw' ? { nsfw: true as const } : {}),
+						...(doc.moderation?.status === 'pending' ? { pending: true as const } : {}) }
+				} } : {})
 			};
 		} catch (error) {
 			return knownFailure(error) || unavailable('download', error);

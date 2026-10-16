@@ -1,4 +1,4 @@
-import type { AccountFileTransport } from './accountFiles';
+import type { AccountFileRetentionTransport, AccountFileTransport } from './accountFiles';
 import type { PublicAttachment } from '../components/Attachments/attachmentTypes';
 import { interactionState, type InteractionWrite } from '../utils/interactionState';
 import type { InteractionTransport } from './accountInteractions';
@@ -10,6 +10,18 @@ import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { WorkspaceError, type WorkspaceLease, type WorkspaceScope } from './storage';
 import type { AccountSyncTransport, AccountThing } from './accountSync';
 
+export const readBoundedBytes = async (response: Response, expectedSize: number) => {
+	if (!Number.isSafeInteger(expectedSize) || expectedSize < 1 || expectedSize > 16 * 1024 * 1024) throw new WorkspaceError('INVALID_FILE_BYTES', 'Invalid file size.', 502);
+	const reader = response.body?.getReader();
+	if (!reader) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes are missing.', 502);
+	const chunks: Uint8Array[] = []; let size = 0;
+	try {
+		for (;;) { const part = await reader.read(); if (part.done) break; size += part.value.length; if (size > expectedSize) throw new WorkspaceError('INVALID_FILE_BYTES', 'File exceeds its verified size.', 502); chunks.push(part.value); }
+		if (size !== expectedSize) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes are incomplete.', 502);
+		const bytes = new Uint8Array(size); let offset = 0;
+		for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; } return bytes;
+	} finally { await reader.cancel().catch(() => {}); }
+};
 export const readBoundedJson = async (response: Response) => {
 	const reader = response.body?.getReader();
 	if (!reader) throw new WorkspaceError('SYNC_RESPONSE', 'Missing account response', 503);
@@ -28,7 +40,7 @@ export const readBoundedJson = async (response: Response) => {
 };
 export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountSyncTransport & {
 	interactions: InteractionTransport;
-	files: AccountFileTransport & {
+	files: AccountFileTransport & AccountFileRetentionTransport & {
 		get(id: string, signal: AbortSignal): Promise<unknown>;
 		annotate(input: { id: string; expectedUpdatedAt: string; filenamePreview?: string | null; title?: string | null; description?: string | null }, signal?: AbortSignal): Promise<{ attachment: PublicAttachment; updatedAt: string }>;
 		move(id: string, folderId: string | null, expectedUpdatedAt: string, signal?: AbortSignal): Promise<void>;
@@ -39,14 +51,14 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	fork(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/uploads/abort' | 'attachments/delete' | 'things/bulk' = 'things') => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/uploads/abort' | 'attachments/delete' | 'attachments/content' | 'things/bulk' = 'things', binary?: { cacheKey: string; size: number }) => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		const endpointCapability = ({ 'attachments/delete': ['api.attachment-delete', '1.3.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
+		const endpointCapability = ({ 'attachments/content': ['api.attachment-content', '1.13.0'], 'attachments/delete': ['api.attachment-delete', args.retainReceipt === true ? '1.4.0' : '1.3.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
 		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
@@ -63,7 +75,13 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		// a status-less failure as retryable, so a refused or conflicting write
 		// would retry forever instead of surfacing as error/conflict for review.
 		let result: any = null;
-		try { result = await readBoundedJson(response); } catch (error) { if (response.ok) throw error; }
+		try {
+			if (response.ok && binary) {
+				if (response.headers.get('ETag') !== `"${binary.cacheKey}:v1"` || Number(response.headers.get('Content-Length')) !== binary.size)
+					throw new WorkspaceError('FILE_CHANGED', 'The file version changed before its bytes arrived.', 409);
+				result = { ok: true, bytes: await readBoundedBytes(response, binary.size) };
+			} else result = await readBoundedJson(response);
+		} catch (error) { if (response.ok) { await response.body?.cancel().catch(() => {}); throw error; } }
 		lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted();
 		if (response.status === 401 || (response.status === 409 && (['ACTOR_CHANGED', 'DATA_PLANE_CHANGED'].includes(result?.code) || result?.error === 'The active account changed. Run the action again.'))) {
 			rootIdentity.changed();
@@ -80,6 +98,11 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	};
 	return {
 		files: {
+			retention: (id, signal) => request('GET', { id, cache: 'retain', download: 1 }, signal, 'attachments/content'),
+			bytes: async (id, cacheKey, size, signal) => {
+				if (!/^[a-f0-9]{64}:original$/.test(cacheKey) || !Number.isSafeInteger(size) || size < 1 || size > 16 * 1024 * 1024) throw new WorkspaceError('INVALID_FILE_BYTES', 'Invalid file descriptor.', 502);
+				return (await request('GET', { id, cache: 'bytes', download: 1 }, signal, 'attachments/content', { cacheKey, size })).bytes;
+			},
 			remove: (input, signal) => request('POST', input, signal, 'attachments/delete'),
 			cancel: (requestId, signal) => request('POST', { requestId }, signal, 'attachments/uploads/abort'),
 			get: async (id, signal) => (await request('GET', { id }, signal)).thing,

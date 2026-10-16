@@ -31,6 +31,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
 	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease), files = new AccountFileSync(db, scope, lease);
 	const controller = new AbortController();
+	const fileRetentionErrors = new Map<string, string>();
 	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
 	const wake = () => {
 		if (stopped || navigator.onLine === false || !canSyncAccountWorkspace(scope)) return;
@@ -81,7 +82,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
-	return { sync, interactions, posts, files, transport, db, lease, wake, stop };
+	return { sync, interactions, posts, files, fileRetentionErrors, transport, db, lease, wake, stop };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
@@ -110,7 +111,25 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const online = guard(remote) as T;
 
 	const project = (thing: any) => thing ? { ...thing, author: owner } : thing;
-	const projectFile = (thing: any) => project(localThingProjection(thing, owner.id));
+	const projectFile = (thing: any) => project({ ...localThingProjection(thing, owner.id), ...(thing.localAttachment?.accountFileId ? { accountFileId: thing.localAttachment.accountFileId } : {}), crystal: { ...thing.crystal,
+		...(thing.localAttachment?.nsfw ? { nsfw: true } : {}), ...(thing.localAttachment?.pending ? { pending: true } : {}) } });
+	const retainFile = async (id: string, signal?: AbortSignal) => {
+		const service = worker(), beforeError = service.fileRetentionErrors.get(id);
+		try {
+			const result = await service.files.retain(service.transport.files, id, signal);
+			facadeLease.assertCurrent(); service.fileRetentionErrors.delete(id);
+			if (result.changed || beforeError) announceLocalWorkspaceChange([id, result.row.id]);
+			return result.row;
+		} catch (error) {
+			facadeLease.assertCurrent(); signal?.throwIfAborted();
+			const message = 'This account file could not be refreshed on this device. Any existing device copy is preserved. Retry online before relying on the latest version offline.';
+			if (service.fileRetentionErrors.size >= 200 && !service.fileRetentionErrors.has(id)) service.fileRetentionErrors.delete(service.fileRetentionErrors.keys().next().value!);
+			service.fileRetentionErrors.set(id, message);
+			if (beforeError !== message) announceLocalWorkspaceChange([id]);
+			throw error;
+		}
+	};
+	const fileAlias = async (id: string): Promise<string | null | undefined> => typeof id === 'string' && id.startsWith('local-file-') ? id : (await worker().files.library()).aliases.get(id);
 	const localViews = async (ids: string[]) => {
 		const { sync, files } = worker();
 		const library = new Map((await files.views(ids)).map(row => [row.id, row]));
@@ -285,9 +304,18 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	return { ...online, auth: remote.auth, login: remote.login,
 		attachments: { ...online.attachments,
 			annotate: async (input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) => {
-				if (!input.id?.startsWith('local-file-')) return online.attachments.annotate(input);
-				const row = await worker().files.things.annotateFile(input); changed();
+				const id = await fileAlias(input.id);
+				if (id === undefined) return online.attachments.annotate(input);
+				if (!id) throw new WorkspaceError('NOT_FOUND', 'File was deleted in this workspace.', 404);
+				const row = await worker().files.things.annotateFile({ ...input, id }); changed();
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
+			},
+			delete: async (input: { id: string; targetId?: string }) => {
+				const id = await fileAlias(input.id);
+				if (id === undefined) return online.attachments.delete(input);
+				if (Object.keys(input).some(key => key !== 'id')) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Remove bound media through its owning editor.');
+				if (id) { if (await worker().files.remoteId(id)) await worker().files.remove(id); else await worker().files.cancel(id); changed(); }
+				return { ok: true, savedLocally: true };
 			},
 			deleteLocalFile: async ({ id }: { id: string }) => { await worker().files.remove(id); changed(); return { ok: true, savedLocally: true }; },
 			cancelLocalFileUpload: async ({ id }: { id: string }) => { await worker().files.cancel(id); changed(); return { ok: true, savedLocally: true }; },
@@ -346,10 +374,11 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		export: exportThings, import: importThings,
 		remove: async (input: { id: string; expectedUpdatedAt?: string }) => {
 			if (Object.keys(input || {}).some(key => !['id', 'expectedUpdatedAt'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
-			if (input?.id?.startsWith('local-file-')) {
+			const localFileId = await fileAlias(input?.id);
+			if (localFileId !== undefined) {
 				if (input.expectedUpdatedAt !== undefined) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Review account file deletion through File sync.', 409);
 				const { files } = worker();
-				if (await files.remoteId(input.id)) await files.remove(input.id); else await files.cancel(input.id);
+				if (localFileId) { if (await files.remoteId(localFileId)) await files.remove(localFileId); else await files.cancel(localFileId); }
 				announceLocalWorkspaceChange([input.id]); worker().wake();
 				return { ok: true, savedLocally: true };
 			}
@@ -491,11 +520,15 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post, startedAt); return result;
 			}
 			const service = worker(), { sync } = service;
-			if (typeof args?.id === 'string' && args.id.startsWith('local-file-')) {
-				const [row] = await service.files.views([args.id]);
+			const localFile = typeof args?.id === 'string' && args.id.startsWith('local-file-');
+			const alias = localFile ? args.id : (await service.files.library()).aliases.get(args?.id);
+			if (localFile || alias !== undefined) {
+				const [row] = alias ? await service.files.views([alias]) : [];
 				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 				if (!row) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
-				return { ok: true, thing: projectFile(row), savedLocally: true };
+				const remoteId = await service.files.remoteId(row.id);
+				if (remoteId && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void retainFile(remoteId, options?.signal).catch(() => {});
+				return { ok: true, thing: { ...projectFile(row), ...(remoteId && service.fileRetentionErrors.has(remoteId) ? { localRetentionError: service.fileRetentionErrors.get(remoteId) } : {}) }, savedLocally: true };
 			}
 			const evictRefusedPost = async (error: unknown) => {
 				if ([403,404,410].includes(Number((error as any)?.status)) && await service.posts.forget(args.id)) {
@@ -516,7 +549,14 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				if (navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(() => {}).catch(() => {});
 				return { ok: true, thing: project(cached), savedLocally: cached.syncState !== 'synced' };
 			}
-			try { return await refresh(args, options?.signal); }
+			try {
+				const result = await refresh(args, options?.signal);
+				if (result.thing?.author?.id === owner.id && result.thing.thingtime?.length === 1 && result.thing.thingtime[0] === 'attachment' && !result.thing.targetId) {
+					try { result.thing = projectFile(await retainFile(args.id, options?.signal)); result.savedLocally = true; }
+					catch { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); result.thing.localRetentionError = service.fileRetentionErrors.get(args.id); }
+				}
+				return result;
+			}
 			catch (error) { await evictRefusedPost(error); throw error; }
 		},
 		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {

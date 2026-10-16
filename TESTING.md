@@ -2,6 +2,21 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [x] Existing account-file retention: open an owned standalone original through
+      the normal media route. Inject truncated bytes: show a retention warning
+      and preserve the valid online view. Retry; edit details offline and download
+      identical bytes. Production build: cold reload before and after editing,
+      reconnect and verify the original account file, with zero upload requests.
+      Check native rendering at 1440/390/320px and one Files-list alias. Drop a
+      successful deletion reply and verify identical durable receipt retry.
+      `accountFileRetention.browser.test.ts` uses explicit loopback/admin
+      fixtures; `TT_LOCAL_FILE_RETENTION_COLD=1` selects production-shell mode.
+      Unit coverage must refuse foreign/shared/linked/bound/blocked content,
+      changed descriptors, quota overflow, expired leases and late transactions;
+      retain conflicting edits and keep the original alias on upload completion.
+      Full-quota deletion and three-file concurrency admission must pass.
+      Unvisited files, parent-folder discovery and managed/bound media remain open.
+
 - [x] Existing saved-file deletion receipts: in a disposable account, upload a
       standalone file through the real storage lifecycle, then delete it with
       `retainReceipt:true`, canonical `id` and a freshly read `expectedUpdatedAt`,
@@ -15,7 +30,8 @@
       capability suites, `accountExistingFile.browser.test.ts` and the existing
       `accountFiles.browser.test.ts` with their explicit loopback/admin fixtures.
       Verify built attachment-delete 1.4.0 in both discovery manifests and docs.
-      Existing-account byte retention is still a separate outstanding gate.
+      Opened standalone originals are covered by the retention check above;
+      wider media retention remains outstanding.
 
 - [ ] Normal account files: use the Files picker offline, create a folder, move
       the file with Cut/Paste, download identical bytes and open its native media

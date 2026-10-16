@@ -1608,3 +1608,28 @@ none in changed sources. Evidence: `tmp/owned-file-deletion-*.log`,
 Existing-account byte retention remains unfinished; this server prerequisite
 must not be described as end-to-end offline retention. No main merge or manual
 deployment was performed; CI/deployed verification remain separate.
+
+
+## Retained account files — 2026-10-17
+
+Existing owned standalone files can now retain bounded, version-checked original
+bytes through content 1.13.0 and render/edit/download through the native media
+page offline. Metadata sync and receipt-based deletion reuse existing workers;
+retained originals never upload again. Atomic storage, scope retirement, dirty
+edits, conflicting updates, exact quota and in-flight upload completion are
+covered. Failed retention reports a warning while preserving the online view.
+
+Local evidence: 1,011 unit/offline-shell checks and two enabled browser modes
+pass, including production-build cold offline reload, edit/reload/download,
+verified reconnect, no duplicate uploads and lost deletion acknowledgement.
+Screenshots cover 1440/390/320 CSS pixels. See the detailed
+[checkpoint and remaining boundaries](../docs/local-workspaces.md#retained-account-files--2026-10-17).
+The full-suite matrix still blocks merge; current-head CI and deployed acceptance
+are separate from these local results.
+
+Client and Node/Nitro builds pass; the offline manifest verifies 247 assets /
+21,628,804 bytes. Both built capability manifests advertise content 1.13.0
+and deletion 1.4.0, and anonymous retention/deletion remains refused. Focused
+lint is clean aside from the existing tooling deprecation. Raw TypeScript has
+91 baseline diagnostics and no changed-source errors. The existing native
+Files-picker and private upload/deletion browser scenarios also pass.

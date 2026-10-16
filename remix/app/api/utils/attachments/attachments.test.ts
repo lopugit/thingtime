@@ -2699,3 +2699,25 @@ test('existing file delete claims retain standalone eligibility through concurre
 	assert.deepEqual(fence.$and, [{ $or: [{ attachmentState: 'deleting' }, { attachmentExpiresAt: { $exists: false } }] }]);
 	assert.equal(fence.updatedAt, now);
 });
+
+test('owned file retention descriptors reuse content gates and disclose no storage credentials', async () => {
+ let doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined, uploadId: undefined, objectVersionId: 'version', folderId: 'folder', moderation: { status: 'nsfw' } });
+ const service = createAttachmentService({ customMongoActive: () => false, store: { getById: async () => doc } as any, getS3: () => noopS3() });
+ const result = await service.download({ id: 'user-1' }, doc.shareId, true, true);
+ assert.equal(result.ok, true);
+ if (result.ok) {
+  assert.deepEqual(result.retention, { ownerId: 'user-1', updatedAt: now.toISOString(), folderId: 'folder', attachment: { id: doc.shareId, ...doc.crystal, nsfw: true } });
+  assert.ok(!JSON.stringify(result.retention).includes('objects/'));
+ }
+ for (const patch of [{ attachmentPurpose: 'post', attachmentExpiresAt: new Date(Date.now()+60000) }, { attachmentPurpose: 'recording' }, { targetId: 'post' }, { attachmentImportDraft: true }, { attachmentLinked: true }, { moderation: { status: 'blocked' } }]) {
+  doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined, objectVersionId: 'version', ...patch } as any);
+  assert.equal((await service.download({ id: 'user-1', isAdmin: true }, doc.shareId, true, true)).ok, false);
+ }
+ doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined, objectVersionId: 'version' });
+ assert.equal((await service.download({ id: 'other', isAdmin: true },doc.shareId,true,true)).ok,false);
+ assert.equal((await service.download(null,doc.shareId,true,true)).ok,false);
+ const custom = createAttachmentService({ customMongoActive: () => true, store: {getById:async()=>doc} as any });
+ assert.equal((await custom.download({id:'user-1'},doc.shareId,true,true)).ok,false);
+ doc.objectSizeBytes=17*1024*1024;
+ const large=await service.download({id:'user-1'},doc.shareId,true,true);assert.equal(large.ok,false);if(!large.ok)assert.equal(large.status,413);
+});

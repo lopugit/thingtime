@@ -56,6 +56,7 @@ export type AttachmentDoc = {
 	ownerId: string;
 	acl: string[];
 	targetId?: string;
+	folderId?: string;
 	tags: [];
 	storageClass: 'content';
 	storageAccountingVersion: number;

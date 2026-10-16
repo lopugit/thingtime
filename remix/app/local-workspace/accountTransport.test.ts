@@ -1,7 +1,7 @@
 import { bindLocalWorkspace } from './runtime.client';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { accountThingTransport, readBoundedJson } from './accountTransport.client';
+import { accountThingTransport, readBoundedBytes, readBoundedJson } from './accountTransport.client';
 import { accountWriteSupported } from './accountSync';
 import { rootIdentity } from '../utils/rootIdentity';
 
@@ -116,4 +116,37 @@ test('file transport negotiates uploads, preserves retry codes, and sends signed
   await assert.rejects(transport.put(part, bytes, signal), /workspace changed/);
   assert.equal(calls.length, count);
  } finally { Object.assign(globalThis, saved); }
+});
+
+
+test('owned file transport binds metadata and exact bytes to one account, plane and immutable version', async () => {
+ const saved={window:globalThis.window,fetch:globalThis.fetch};
+ const origin='https://retention.test',scope={kind:'account' as const,origin,ownerId:'owner',dataPlane:'home'};
+ const calls:any[]=[],bytes=new Uint8Array([1,2,3]),key='a'.repeat(64)+':original';
+ let etag='"'+key+':v1"', body=bytes;
+ Object.assign(globalThis,{window:{location:{origin},dispatchEvent(){}},fetch:async(url:string,init:RequestInit)=>{
+  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.attachment-content':{version:'1.13.0'},'api.attachment-delete':{version:'1.4.0'},'api.mongodb-endpoint':{version:'1.1.0'}}});
+  calls.push({url,init});
+  return url.includes('cache=bytes')?new Response(body,{headers:{ETag:etag,'Content-Length':'3'}}):Response.json({ok:true});
+ }});
+ try{
+  rootIdentity.confirm(rootIdentity.read().generation);bindLocalWorkspace(false,rootIdentity.read().generation,scope);
+  const transport=accountThingTransport(scope,{assertCurrent(){},onInvalidate:()=>()=>{}}).files,signal=new AbortController().signal;
+  await assert.rejects(transport.retention('file',signal),/incompatible/); // Prior test's other-origin manifest must be rejected and evicted.
+  await transport.retention('file',signal);assert.equal(calls.at(-1).url,'/api/v1/attachments/content?id=file&cache=retain&download=1');
+  assert.deepEqual(await transport.bytes('file',key,3,signal),bytes);
+  for(const {init} of calls){assert.equal(init.credentials,'same-origin');assert.equal(init.redirect,'error');assert.equal(init.headers['X-Thingtime-Expected-Actor'],'owner');assert.equal(init.headers['X-Thingtime-Expected-Data-Plane'],'home');}
+  etag='"another-version"';await assert.rejects(transport.bytes('file',key,3,signal),/version changed/);
+  etag='"'+key+':v1"';body=bytes.slice(1);await assert.rejects(transport.bytes('file',key,3,signal),/incomplete/);
+  body=new Uint8Array([1,2,3,4]);await assert.rejects(transport.bytes('file',key,3,signal),/exceeds/);
+  await transport.remove!({id:'file',expectedUpdatedAt:'2026-10-17T00:00:00.000Z',retainReceipt:true},signal);
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body),{id:'file',expectedUpdatedAt:'2026-10-17T00:00:00.000Z',retainReceipt:true});
+ }finally{Object.assign(globalThis,saved);}
+});
+
+test('bounded file reader refuses missing, oversized and truncated bodies',async()=>{
+ await assert.rejects(readBoundedBytes(new Response(null),3),/missing/);
+ await assert.rejects(readBoundedBytes(new Response(new Uint8Array(2)),3),/incomplete/);
+ await assert.rejects(readBoundedBytes(new Response(new Uint8Array(4)),3),/exceeds/);
+ await assert.rejects(readBoundedBytes(new Response(new Uint8Array(3)),17*1024*1024),/Invalid file size/);
 });

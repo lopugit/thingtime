@@ -235,3 +235,23 @@ Run the attachment/capability suites and `accountExistingFile.browser.test.ts`
 with the same disposable loopback/admin setup as `accountFiles.browser.test.ts`.
 Existing-account byte retention remains unfinished; see the
 [local workspace checkpoint](../local-workspaces.md#existing-saved-file-deletion-receipts--2026-10-16).
+
+
+## Retaining existing owned originals
+
+Content 1.13.0 adds `cache=retain&download=1`: the same-origin full-user route
+returns an opaque version key and canonical owned-file metadata without storage
+URLs. `attachments.download(..., true)` additionally restricts retention to
+standalone, non-expiring, unblocked originals owned by the caller.
+`AccountFileSync.retain` double-checks the descriptor and atomically stores
+versioned bytes, metadata and a device alias; no upload request ID is invented.
+The normal Thing/media page reads the alias, edits through `AccountFileMetadata`
+and deletes through receipt mode 1.4.0. Retention failure preserves the online
+view with a warning. Keyed/shared media stays on the existing authorization path.
+
+Run `accountFileRetention.test.ts`, attachment/capability/workspace/Things suites
+and `accountFileRetention.browser.test.ts` with explicit local fixture settings.
+Set `TT_LOCAL_FILE_RETENTION_COLD=1` against a production client build to prove
+true offline reload, edit/download and reconnect. See the
+[dated scope and evidence](../local-workspaces.md#retained-account-files--2026-10-17);
+parent-folder discovery, managed transfers and bound media are still open.

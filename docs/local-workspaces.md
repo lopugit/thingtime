@@ -2200,3 +2200,52 @@ Raw TypeScript retains 91 baseline diagnostics and none in changed source.
 This is a server prerequisite for existing-file retention, not completed offline
 retention or synchronization coverage. That adapter, managed transfers and the
 remaining account/media acceptance matrix are still open.
+
+
+## Retained account files — 2026-10-17
+
+Opening an owned standalone stored file now retains its verified original bytes
+and canonical display metadata in the active account/origin/data-plane workspace.
+Attachment content 1.13.0 adds the same-origin, full-user `cache=retain&download=1`
+descriptor. It refuses foreign/shared, linked, bound, expiring/import, unfinished
+and blocked files; no signed URL, storage key or credentials enter device storage.
+The existing content route still authorizes each online byte read.
+
+The adapter checks the descriptor again after exact-length, version-bound bytes
+arrive, then atomically commits bytes, metadata and the owned alias. It coalesces
+repeated reads, permits at most three simultaneous retentions, uses the existing
+20-second deadline, 16 MiB file and 64 MiB workspace limits, and rolls back on
+quota, retirement or cancellation. An uploaded file that completes during the
+read keeps its existing local identity. No original upload request ID is invented
+for an existing account file, and retained files never enter the upload path.
+
+The native Thing/media page can edit display filename, title and description
+offline and download identical bytes. Clean remote details refresh; dirty local
+edits remain pending and conflicting fields require the existing review.
+Deletion uses the existing 1.4.0 receipt mode, including lost-response retries.
+Failed retention leaves the online view usable with an explicit warning.
+Shared/keyed contexts cannot use this path.
+
+Local verification: **1,011 unit/offline-shell checks pass** (279 workspace,
+314 attachment, 319 Things, 99 capability); the generic command skips 30 opt-in
+browser scenarios. The enabled retention browser scenario passes both against
+Vite and against the production client build. The latter disables networking,
+cold reloads, edits, reloads again, downloads identical bytes and reconnects to
+the original file without upload calls. Desktop 1440×1000 and phone 390×844 /
+320×844 screenshots have no horizontal overflow. The development scenario also
+discards a successful deletion reply and proves identical receipt retry.
+Evidence: `tmp/retained-files-browser/`, `tmp/retained-files-cold-browser/` and
+`tmp/retained-files-*.log`. Browser contexts and newly created files are cleaned up.
+
+This covers explicitly opened standalone originals, not an offline copy of the
+entire account. Parent-folder discovery, unvisited files, files above the local
+limit, managed imports/exports, bound post/draft media, galleries, audio/video
+and the remaining matrix still require acceptance. No main merge or manual
+deployment was performed. CI and deployed verification remain separate.
+
+Client and Node/Nitro builds pass; the offline manifest verifies 247 assets /
+21,628,804 bytes. Both built capability manifests advertise content 1.13.0
+and deletion 1.4.0, and anonymous retention/deletion remains refused. Focused
+lint is clean aside from the existing tooling deprecation. Raw TypeScript has
+91 baseline diagnostics and no changed-source errors. The existing native
+Files-picker and private upload/deletion browser scenarios also pass.

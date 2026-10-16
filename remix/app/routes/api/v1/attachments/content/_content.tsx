@@ -3,7 +3,7 @@ import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachment
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { getAttachmentDownload } from '~/api/utils/attachments/attachments';
-import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
+import { isSameOriginAttachmentRequest, withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
@@ -35,6 +35,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			// Service credentials are not first-party attachment principals. Treat
 			// them exactly like an anonymous caller for public-post authorization.
 			const user = resolvedUser?.accountKind === 'user' ? resolvedUser : null;
+			const retainOwnedFile = url.searchParams.get('cache') === 'retain';
+			if (retainOwnedFile && (!user || !isSameOriginAttachmentRequest(request))) return json({ ok: false, error: 'A same-origin full user session is required' }, { status: user ? 403 : 401 });
+			if (retainOwnedFile && (sharedRoot || url.searchParams.has('key') || url.searchParams.has('width') || url.searchParams.get('download') !== '1'))
+				return json({ ok: false, error: 'File retention requires an unscoped original download' }, { status: 400 });
 			const limit = await dependencies.enforceLimit(request, 'attachments.read', user ? `user:${user.id}` : null, {
 				failClosed: true
 			});
@@ -51,9 +55,14 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				// evidence for moderation review; everyone else 404s on blocked docs.
 				audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
 				url.searchParams.get('id'),
-				url.searchParams.get('download') === '1'
+				url.searchParams.get('download') === '1',
+				retainOwnedFile
 			);
 			if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
+			if (retainOwnedFile) {
+				if (!result.retention || result.retention.ownerId !== user!.id) return json({ ok: false, error: 'Saved owned file not found' }, { status: 404 });
+				return json({ ok: true, cacheKey: `${result.cacheKey}:original`, size: result.size, file: result.retention });
+			}
 			if (width && (!result.image || result.size > 20 * 1024 * 1024)) {
 				return json({ ok: false, error: 'Image preview unavailable; use the original' }, { status: 415 });
 			}

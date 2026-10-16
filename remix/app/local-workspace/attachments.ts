@@ -5,7 +5,7 @@ import { WorkspaceError, type WorkspaceTransaction } from './storage';
 
 /** Device bookkeeping is separate from the canonical public attachment crystal.
  * It never represents a server object, upload approval or moderation verdict. */
-export type LocalAttachment = LocalThing & { localAttachment: { purpose: 'file' | 'recording' | 'post' | 'comment'; sha256: string; order: number; requestId?: string; initialFolderId?: string | null; draftId?: string; expiresAt?: string } };
+export type LocalAttachment = LocalThing & { localAttachment: { purpose: 'file' | 'recording' | 'post' | 'comment'; sha256: string; order: number; accountFileId?: string; nsfw?: true; pending?: true; requestId?: string; initialFolderId?: string | null; draftId?: string; expiresAt?: string } };
 export const isLocalAttachment = (row: LocalThing): row is LocalAttachment => row.thingtime.length === 1 && row.thingtime[0] === 'attachment' && !!(row as LocalAttachment).localAttachment;
 export const localAttachmentFileId = (id: string) => `${id}:bytes`;
 export const createLocalAttachment = (id: string, file: TransferFile, stamp: string, purpose: LocalAttachment['localAttachment']['purpose'], order: number, placement: { folderId?: string; targetId?: string } = {}): LocalAttachment => {
