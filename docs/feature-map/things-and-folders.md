@@ -44,6 +44,24 @@ account authentication for History and recording handoff. The API adapter owns
 capability negotiation; local rename makes no remote manifest request. See
 [the local workspace matrix](../local-workspaces.md) for remaining coverage.
 
+## Conditional account interaction sync
+
+`local-workspace/accountInteractions.ts` retains account-only desired save/reaction
+membership; `accountApi.client.ts` overlays cached owned and bundled catalogue
+entries and drains this queue independently of content/drafts after verified
+binding. `AccountSyncStatus.tsx` exposes retries and reviewed device/account
+choices. Uncached targets retain the existing online adapter.
+
+`routes/api/v1/things/interactions/_interactions.tsx` exposes first-party
+`api.things-interactions` 1.0.0. `readInteractionStates`/`writeInteractionState`
+in canonical Things utilities use current visibility and bounded conditional
+writes. Canonical create/update/shared deletion accounting atomically invalidate
+interaction revisions, including the old toggles. Internal revision metadata
+never enters portable exports. No new physical collection or index is needed.
+Run `test:local-workspace`, `test:things`, `test:api-capabilities` and the opt-in
+`local-workspace/accountInteractions.browser.test.ts`; see the local workspace
+matrix and TESTING checklist for exact coverage and remaining work.
+
 ## Authorization helper
 
 - Reads: `findViewableThing` / `canViewInherited` (see

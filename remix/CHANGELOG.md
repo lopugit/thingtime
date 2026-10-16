@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Cached account bookmarks and reactions complete
+  locally and synchronize independently using conditional membership writes,
+  immutable retries and native conflict review. Generic and legacy interaction
+  mutations invalidate revisions atomically. Local replica/browser checks cover
+  offline reload, cross-tab changes, lost responses and 320px review layout;
+  full local-first acceptance remains open. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-bookmark-and-reaction-synchronization--2026-10-16).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous Component Library now retains bookmarks
   and reactions to bundled definitions offline without creating owned copies.
   Verified reload, cross-tab changes, save ordering and 1440/390/320px layouts.

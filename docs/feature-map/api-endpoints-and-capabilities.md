@@ -1,5 +1,13 @@
 # API endpoints and capabilities
 
+`api.things-interactions` 1.0.0 adds the first-party private GET/POST
+`/api/v1/things/interactions` capability: bounded membership snapshots and
+conditional desired-state writes for independent account interaction sync.
+The canonical Things helpers own revision invalidation and authorization;
+`local-workspace/accountTransport.client.ts` negotiates this capability and the
+existing data-plane fence. Route file, import map and docs registry are updated
+together. See [Things and folders](things-and-folders.md) for tests and limits.
+
 Timeline 1.18.0 adds named versions, undo and version export on the existing
 route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
 shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),

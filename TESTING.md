@@ -10480,6 +10480,38 @@ Run `app/local-workspace/components.browser.test.ts` with
   and zero browser errors. Enable `TT_LOCAL_COMPONENTS_URL`,
   `TT_LOCAL_COMPONENTS_ARTIFACTS` and shared Playwright/Chrome paths for
   `app/local-workspace/components.browser.test.ts`; all three scenarios pass.
-- [ ] Complete account interaction synchronization with safe retry semantics;
+- [x] Add conditional account synchronization for cached owned targets (see below);
   never replay the current remote toggle after a lost response as though it were
   an idempotent desired-state command.
+
+
+### Conditional account bookmarks and reactions (2026-10-16)
+
+- [x] In a disposable replica-backed account, retain an owned Component through
+  Online catalogue / Mine. Disable networking, save/react from This device,
+  cold reload Library, and remove/re-add its bookmark from another tab. Local
+  completion must emit no remote mutations, and reactions must survive reload.
+- [x] Reconnect and drop the response after the server commits a conditional
+  write. Reconcile membership without toggling twice; a frozen retry carries
+  the same expected revision and cannot overwrite a competing account edit.
+- [x] Race two commands against one revision: one succeeds and one returns 409.
+  Legacy toggle, generic create, generic reaction edit and generic deletion
+  invalidate older commands atomically. Ordinary exports omit internal revisions.
+- [x] Change the account while an offline device unsaves. Open native conflict
+  review, compare device/account choices, keep the device choice, and preserve
+  the other account reaction. Review must reject later local/remote changes.
+- [x] Refuse anonymous/foreign-account private reads, cross-origin writes and
+  wrong actor/data-plane writes. Malformed/duplicate/oversized input fails
+  clearly (400/413); no stale membership or unauthorized write succeeds.
+- [x] Check offline and review layouts at 1440/390/320px, zero overflow, navigation
+  clearance, wrapped controls and zero page errors. Run
+  `app/local-workspace/accountInteractions.browser.test.ts` with
+  `TT_LOCAL_INTERACTIONS_URL`, `TT_LOCAL_INTERACTIONS_ARTIFACTS` and shared
+  Playwright/Chrome paths against the disposable local stack. The test allows
+  the 60-second claim expiry after a reload interrupts a queued request.
+- [x] Unit checks cover account isolation, unknown baseline reconciliation,
+  cross-tab claims, immutable retries, newer intent, permanent refusal, identity
+  retirement and discard fencing. Keep ordinary content and draft sync separate.
+- [ ] Complete noncached/foreign target offline membership and the broader
+  account social-cache acceptance matrix. Do not treat this checkpoint as full
+  account interaction coverage or a production verification.

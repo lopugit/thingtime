@@ -70,7 +70,7 @@ change this pointer; logout/account changes revoke it.
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
 | Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Library text search now works across folders offline, with bounded cursor pages and visible error/retry states. Clean-browser acceptance covers 61 matches, kind filters, rename/reload and grid/list mouse selection at 1440/390/320px. The earlier checkbox report came from targeting its hidden input; clicking the visible label works, and descriptive labels/regressions now cover it. The native Search page now has a separate structured device view, with canonical field operators and credential-free anonymous online search (checkpoint below). Advanced shortcut filters/ranking, wider account discovery caching and remaining normal UI flows still require completion. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Schema builder/form recovery now passes offline reload and malformed-copy preservation checks (checkpoint below). Shared Builder definition and Component source-control recovery now pass anonymous/account offline browser checks (checkpoint below). Finish other editor consumers, media kinds, cross-device conflicts and account draft sync. |
-| Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. The schema catalogue, schema authoring, copies and data forms now pass offline browser checks (checkpoint below). Component catalogue/detail and argument/version recovery now pass local offline browser checks (checkpoint below). Visited online account catalogue pages now retain owned definitions for device browsing; Component/Schema catalogue and Component detail cross-tab refresh pass local browser checks (checkpoint below). Anonymous bundled bookmarks/reactions now survive offline reload and cross-tab changes without becoming owned Things (checkpoint below). Finish remaining Builder surfaces, unvisited account discovery and broader cache membership. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
+| Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. The schema catalogue, schema authoring, copies and data forms now pass offline browser checks (checkpoint below). Component catalogue/detail and argument/version recovery now pass local offline browser checks (checkpoint below). Visited online account catalogue pages now retain owned definitions for device browsing; Component/Schema catalogue and Component detail cross-tab refresh pass local browser checks (checkpoint below). Anonymous bundled bookmarks/reactions now survive offline reload and cross-tab changes without becoming owned Things (checkpoint below). Cached owned account bookmarks/reactions now complete locally and use conditional independent sync, with offline, lost-response and conflict-review browser evidence (checkpoint below). Finish remaining Builder surfaces, unvisited account discovery and broader cache membership. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Scoped device usage and browser protection controls are available in Settings. Protected-kind adapters and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
@@ -1746,3 +1746,55 @@ Account bookmarks/reactions still need a dedicated synchronization adapter: the
 existing remote toggle cannot safely be replayed after an uncertain response.
 Account guards remain enforced. The full acceptance matrix remains open; no main
 merge or manual deployment.
+
+
+## Account bookmark and reaction synchronization — 2026-10-16
+
+Cached owned Things and trusted bundled Component references now complete
+bookmark/reaction changes in the scoped account workspace before attempting
+remote sync. Device Library membership, counts and cross-tab updates use those
+retained choices. A missing server-side bundled target remains local with a
+visible synchronization error; it never creates or publishes the target.
+Uncached/foreign account targets still use the existing guarded online adapter,
+so this is partial account coverage, not completion of the full matrix.
+
+`AccountInteractionSync` stores bounded desired membership independently from
+ordinary Thing content and draft queues. The worker drains content and
+interactions concurrently after verified account/origin/data-plane binding.
+Anonymous namespaces cannot instantiate this synchronizer and never upload.
+Frozen retries, transactional tab claims and response identity checks preserve
+newer local edits. A reload after claiming a request can wait up to the existing
+60-second claim window before another worker retries it.
+
+The first-party `api.things-interactions` 1.0.0 capability provides bounded
+private state reads and conditional desired-state writes at
+`/api/v1/things/interactions`. It reuses canonical visibility, engagement,
+transaction, quota, history and rate-limit helpers. Every canonical save/reaction
+create, edit and delete changes the target's internal interaction revision in
+the same transaction, including legacy toggles and generic CRUD. A stale command
+returns 409; a lost response is reconciled against current membership rather
+than replaying a toggle. The review panel shows device/account choices and
+rebases only the reviewed local fields, retaining unrelated remote reactions.
+Internal revision metadata is absent from normal portable content exports.
+Legacy embedded/interim reaction residue is refused for synchronization until
+canonical reconciliation; it is never treated as an empty membership baseline.
+
+Local verification: 218 workspace plus four offline-shell tests, 315 Things
+tests and 95 capability tests pass (632 total; 25 opt-in workspace cases skip in
+the general command). All three existing Component browser scenarios and the
+new account-interaction browser scenario were separately enabled and passed.
+The latter exercises a disposable replica-backed account, full offline network
+failure, cold reload, two-tab bookmarks, a genuinely dropped successful server
+response, stale-write races, generic/legacy revision invalidation, permission
+and identity refusals, input limits, native conflict review and canonical export.
+The browser records zero offline mutation requests or page errors, and PNGs at
+1440/390/320px have no horizontal overflow. The 320px review panel clears fixed
+navigation and wraps its controls. Evidence: `tmp/local-interaction-ui/` and
+`tmp/local-interaction-component-ui/`. The client build verifies 248 offline
+assets. Targeted lint has zero errors and three existing Things warnings;
+TypeScript has the same 91 baseline diagnostics. These are local results;
+CI and deployed verification must be read separately for the pushed revision.
+
+Remaining work includes noncached account social/catalogue membership, complete
+account post/file/draft and other dedicated adapters, cross-device recovery and
+the rest of the acceptance matrix. Main remains unmerged.

@@ -1,3 +1,4 @@
+import { AccountInteractionSync } from './accountInteractions';
 import { withExportDeadline } from '../utils/thingTransfer/exportDeadline';
 import { exportAccountThings, snapshotAccountExportInput } from './accountExport';
 import { browseLocalDefinitions } from './definitionCatalog';
@@ -24,7 +25,7 @@ const workers = new Map<string, ReturnType<typeof createWorker>>();
 const BLOCKED_RETRY_MS = 60_000;
 function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
-	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease);
+	const sync = new AccountThingSync(db, scope, lease), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease);
 	const controller = new AbortController();
 	let running = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
 	const wake = () => {
@@ -37,10 +38,16 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		running = true;
 		try {
 			lease.assertCurrent();
-			const before = JSON.stringify(await sync.status());
-			const { completed } = await sync.sync(transport, controller.signal);
-			const status = await sync.status();
-			if (JSON.stringify(status) !== before) announceLocalWorkspaceChange();
+			const before = JSON.stringify([await sync.status(), await interactions.status()]);
+			const targets = new Map((await sync.exportSnapshot()).records.map(row => [row.id, row]));
+			const outcomes = await Promise.all([sync.sync(transport, controller.signal), interactions.sync(transport.interactions, controller.signal, async id => {
+				const record = targets.get(id);
+				if (record?.deleted) { await interactions.discard([id]); return false; }
+				return !record || record.remote;
+			})]);
+			const completed = outcomes.reduce((sum, result) => sum + result.completed, 0);
+			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), status = [...contentStatus, ...interactionStatus];
+			if (JSON.stringify([contentStatus, interactionStatus]) !== before) announceLocalWorkspaceChange();
 			const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
 			if (pending.length && !stopped) {
 				// A row whose retryAt has already passed is not schedulable work: the
@@ -64,7 +71,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
-	return { sync, transport, db, lease, wake, stop };
+	return { sync, interactions, transport, db, lease, wake, stop };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
@@ -93,6 +100,14 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const online = guard(remote) as T;
 
 	const project = (thing: any) => thing ? { ...thing, author: owner } : thing;
+	const retainInteractionProjection = async (row: any) => {
+		if (!row || typeof row.id !== 'string' || !Array.isArray(row.viewerReactions) || !row.reactionCounts) return;
+		const service = worker();
+		if (!await service.sync.view(row.id)) return;
+		await service.interactions.remember([{ id: row.id, revision: null, saved: !!(row.saved ?? row.viewerSaved), reactions: row.viewerReactions, reactionCounts: row.reactionCounts }], false);
+		const state = (await service.interactions.states()).find(state => state.id === row.id);
+		if (state) Object.assign(row, { saved: state.saved, viewerSaved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {} });
+	};
 	const refresh = async (args: Record<string, unknown>, signal?: AbortSignal, retainPage?: (page: { ids: string[]; nextCursor: string | null }) => Promise<void>) => {
 		const { sync, transport, lease } = worker();
 		const result = await transport.read(args, signal);
@@ -109,6 +124,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		};
 		if (result.thing) result.thing = await retain(result.thing);
 		if (result.things) result.things = (await Promise.all(result.things.map(retain))).filter(Boolean);
+		await retainInteractionProjection(result.discussion || result.post);
 		if (membership && retainPage) await retainPage(membership);
 		return result;
 	};
@@ -138,6 +154,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		const remaining = [];
 		for (const id of ids) if (!await sync.isDeleted(id)) remaining.push(id);
 		const removed = remaining.length ? (await sync.remove(remaining, expectedUpdatedAt)).deleted : ids;
+		await worker().interactions.discard(removed);
 		announceLocalWorkspaceChange(removed); worker().wake();
 		return { ok: true, savedLocally: true, succeeded: ids.length, failed: 0, results: ids.map(id => ({ id, ok: true })) };
 	};
@@ -162,20 +179,41 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				facadeLease.assertCurrent();
 				result.localCacheError = `These account definitions could not be saved on this device: ${error instanceof Error ? error.message : 'Device storage failed'}. Retry the catalogue before going offline.`;
 			}
+			if (owned.length) {
+				try { const retained = await worker().interactions.remember(await transport.interactions.read(owned.map((row: any) => row.id))); changed ||= retained; }
+				catch {
+					result.localCacheError = result.localCacheError || 'Account bookmarks and reactions could not be refreshed. Device choices are preserved; retry online to reconcile.';
+					await worker().interactions.remember(owned.map((row: any) => ({ id: row.id, revision: null, saved: !!row.saved, reactions: row.viewerReactions || [], reactionCounts: row.reactionCounts || {} })), false).catch(() => {});
+				}
+			}
 			const snapshot = await sync.viewSnapshot(owned.map((row: any) => row.id));
 			const views = new Map(snapshot.rows.map(row => [row.id, project(row)])), deleted = snapshot.deleted;
 			result[key] = result[key].filter((row: any) => !deleted.has(row.id)).map((row: any) => views.has(row.id) ? { ...row, ...views.get(row.id) } : row);
+			const membership = new Map((await worker().interactions.states()).map(row => [row.id, row]));
+			result[key] = result[key].map((row: any) => { const state = membership.get(row.id); return state ? { ...row, saved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {} } : row; });
 			facadeLease.assertCurrent(); if (changed) announceLocalWorkspaceChange();
 			return result;
 		}
 		const bundled = kind === 'component' ? (await import('../components/ComponentsLibrary/bundledComponentCatalog')).bundledComponentEntries() : [];
 		facadeLease.assertCurrent();
-		const result = await browseLocalDefinitions(await sync.things.snapshot(), kind, args, workspaceScopeKey(scope), row => ({ id: row.id }), bundled);
+		const result = await browseLocalDefinitions([...await sync.things.snapshot(), ...await worker().interactions.rows()], kind, args, workspaceScopeKey(scope), row => ({ id: row.id }), bundled);
 		const key = kind === 'schema' ? 'schemas' : 'components', entries = result[key];
 		const views = new Map((await sync.views(entries.map(row => row.id))).map(row => [row.id, project(row)]));
 		const bundledIds = new Set(bundled.map(row => row.id));
 		result[key] = entries.filter(row => views.has(row.id) || bundledIds.has(row.id)).map(row => views.has(row.id) ? { ...row, ...views.get(row.id) } : row);
+		const membership = new Map((await worker().interactions.states()).map(row => [row.id, row]));
+		result[key] = result[key].map((row: any) => { const state = membership.get(row.id); return state ? { ...row, saved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {} } : row; });
 		facadeLease.assertCurrent(); return { ...result, incomplete: true };
+	};
+	const interact = async (kind: 'save' | 'reaction', args: { id: string; emoji?: unknown }) => {
+		facadeLease.assertCurrent();
+		const service = worker();
+		let known = !!await service.sync.view(args.id);
+		if (!known && typeof args.id === 'string' && args.id.startsWith('component-')) known = (await import('../components/ComponentsLibrary/bundledComponentCatalog')).bundledComponentEntries().some(row => row.id === args.id);
+		facadeLease.assertCurrent();
+		if (!known) return kind === 'save' ? online.things.save(args) : online.things.react(args);
+		const state = await service.interactions.toggle(kind, args.id, args.emoji); changed();
+		return { ok: true, saved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {}, savedLocally: true };
 	};
 	const exportThings = async (input: Parameters<typeof exportAccountThings>[0], options?: { signal?: AbortSignal }) => {
 			input = snapshotAccountExportInput(input);
@@ -215,6 +253,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		};
 	return { ...online, auth: remote.auth, login: remote.login,
 		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
+		save: (args: any) => interact('save', args), react: (args: any) => interact('reaction', args),
 		fork: async (input: { id: string; key?: string }) => {
 			facadeLease.assertCurrent();
 			if (!input || Object.keys(input).some(key => !['id', 'key'].includes(key))) throw new WorkspaceError('INVALID_COPY', 'Unsupported copy options.');
@@ -362,7 +401,9 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		get: async (args: any, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
-			if (Object.entries(args || {}).some(([key, value]) => value !== undefined && key !== 'id')) return online.things.get(args, options);
+			if (Object.entries(args || {}).some(([key, value]) => value !== undefined && key !== 'id')) {
+				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post); return result;
+			}
 			const { sync } = worker();
 			if (await sync.isDeleted(args.id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
 			const cached = await sync.view(args.id);

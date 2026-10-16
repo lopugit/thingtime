@@ -1183,3 +1183,55 @@ Account bookmarks/reactions still need a dedicated synchronization adapter: the
 existing remote toggle cannot safely be replayed after an uncertain response.
 Account guards remain enforced. The full acceptance matrix remains open; no main
 merge or manual deployment.
+
+
+## Account bookmark and reaction synchronization — 2026-10-16
+
+Cached owned Things and trusted bundled Component references now complete
+bookmark/reaction changes in the scoped account workspace before attempting
+remote sync. Device Library membership, counts and cross-tab updates use those
+retained choices. A missing server-side bundled target remains local with a
+visible synchronization error; it never creates or publishes the target.
+Uncached/foreign account targets still use the existing guarded online adapter,
+so this is partial account coverage, not completion of the full matrix.
+
+`AccountInteractionSync` stores bounded desired membership independently from
+ordinary Thing content and draft queues. The worker drains content and
+interactions concurrently after verified account/origin/data-plane binding.
+Anonymous namespaces cannot instantiate this synchronizer and never upload.
+Frozen retries, transactional tab claims and response identity checks preserve
+newer local edits. A reload after claiming a request can wait up to the existing
+60-second claim window before another worker retries it.
+
+The first-party `api.things-interactions` 1.0.0 capability provides bounded
+private state reads and conditional desired-state writes at
+`/api/v1/things/interactions`. It reuses canonical visibility, engagement,
+transaction, quota, history and rate-limit helpers. Every canonical save/reaction
+create, edit and delete changes the target's internal interaction revision in
+the same transaction, including legacy toggles and generic CRUD. A stale command
+returns 409; a lost response is reconciled against current membership rather
+than replaying a toggle. The review panel shows device/account choices and
+rebases only the reviewed local fields, retaining unrelated remote reactions.
+Internal revision metadata is absent from normal portable content exports.
+Legacy embedded/interim reaction residue is refused for synchronization until
+canonical reconciliation; it is never treated as an empty membership baseline.
+
+Local verification: 218 workspace plus four offline-shell tests, 315 Things
+tests and 95 capability tests pass (632 total; 25 opt-in workspace cases skip in
+the general command). All three existing Component browser scenarios and the
+new account-interaction browser scenario were separately enabled and passed.
+The latter exercises a disposable replica-backed account, full offline network
+failure, cold reload, two-tab bookmarks, a genuinely dropped successful server
+response, stale-write races, generic/legacy revision invalidation, permission
+and identity refusals, input limits, native conflict review and canonical export.
+The browser records zero offline mutation requests or page errors, and PNGs at
+1440/390/320px have no horizontal overflow. The 320px review panel clears fixed
+navigation and wraps its controls. Evidence: `tmp/local-interaction-ui/` and
+`tmp/local-interaction-component-ui/`. The client build verifies 248 offline
+assets. Targeted lint has zero errors and three existing Things warnings;
+TypeScript has the same 91 baseline diagnostics. These are local results;
+CI and deployed verification must be read separately for the pushed revision.
+
+Remaining work includes noncached account social/catalogue membership, complete
+account post/file/draft and other dedicated adapters, cross-device recovery and
+the rest of the acceptance matrix. Main remains unmerged.

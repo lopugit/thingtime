@@ -40,7 +40,7 @@ const stable = (input: unknown): string => JSON.stringify(input, function (_key,
 const sameContent = (remote: AccountThing, operation: FrozenWrite) =>
 	Object.entries(operation.body).filter(([key]) => !['shareId', 'id', 'expectedUpdatedAt', 'replaceCrystal'].includes(key))
 		.every(([key, value]) => stable((remote as any)[key] ?? (value === null ? null : undefined)) === stable(value));
-const deadline = async <T>(run: (signal: AbortSignal) => Promise<T>, parent: AbortSignal): Promise<T> => {
+export const accountSyncDeadline = async <T>(run: (signal: AbortSignal) => Promise<T>, parent: AbortSignal): Promise<T> => {
 	const controller = new AbortController();
 	const abort = () => controller.abort(parent.reason);
 	parent.addEventListener('abort', abort, { once: true });
@@ -197,7 +197,7 @@ export class AccountThingSync {
 		});
 	}
 	async inspectConflict(transport: AccountSyncTransport, id: string, signal = new AbortController().signal) {
-		const remote = this.checked(await deadline(child => transport.get(id, child), signal));
+		const remote = this.checked(await accountSyncDeadline(child => transport.get(id, child), signal));
 		if (remote.id !== id) throw new WorkspaceError('SYNC_IDENTITY', 'Server returned a different Thing', 409);
 		return this.tx('readonly', async tx => {
 			const state = await tx.get<SyncRecord>(COLLECTION, id), local = await tx.get<LocalThing>(state?.deleted ? DELETED_CONTENT : 'things', id);
@@ -209,7 +209,7 @@ export class AccountThingSync {
 	 * sides so typing, another tab or another device invalidates an old review. */
 	async resolveConflict(transport: AccountSyncTransport, choice: { id: string; keep: 'local' | 'remote'; localRevision: number; remoteUpdatedAt: string }, signal = new AbortController().signal) {
 		if (!['local', 'remote'].includes(choice.keep)) throw new WorkspaceError('INVALID_CONFLICT_CHOICE', 'Choose which version to keep');
-		const remote = this.checked(await deadline(child => transport.get(choice.id, child), signal));
+		const remote = this.checked(await accountSyncDeadline(child => transport.get(choice.id, child), signal));
 		if (remote.id !== choice.id || remote.updatedAt !== choice.remoteUpdatedAt) throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'The account version changed. Review it again.', 409);
 		return this.tx('readwrite', async tx => {
 			const state = await tx.get<SyncRecord>(COLLECTION, choice.id), local = await tx.get<LocalThing>(state?.deleted ? DELETED_CONTENT : 'things', choice.id);
@@ -278,13 +278,13 @@ export class AccountThingSync {
 			try {
 				if (pending.method === 'delete') {
 					if (!transport.remove) throw new WorkspaceError('DELETE_UNAVAILABLE', 'This account adapter cannot synchronize deletion yet.', 422);
-					try { await deadline(child => transport.remove!(pending, child), controller.signal); }
+					try { await accountSyncDeadline(child => transport.remove!(pending, child), controller.signal); }
 					catch (failure) {
 						this.lease.assertCurrent();
 						const status = Number((failure as any)?.status);
 						if (status !== 404 && status !== 409 && status > 0 && status < 500 && status !== 408 && status !== 429) throw failure;
 						let absent = false;
-						try { await deadline(child => transport.get(pending.id, child), controller.signal); }
+						try { await accountSyncDeadline(child => transport.get(pending.id, child), controller.signal); }
 						catch (error) { absent = Number((error as any)?.status) === 404; }
 						if (!absent) throw failure;
 					}
@@ -298,7 +298,7 @@ export class AccountThingSync {
 					completed++; continue;
 				}
 				let remote: AccountThing;
-				try { remote = this.checked(await deadline(child => transport.write(pending, child), controller.signal)); }
+				try { remote = this.checked(await accountSyncDeadline(child => transport.write(pending, child), controller.signal)); }
 				catch (failure) {
 					this.lease.assertCurrent();
 					// A create may have committed before its response was lost; a
@@ -306,7 +306,7 @@ export class AccountThingSync {
 					const status = Number((failure as any)?.status);
 					if (status !== 409 && status > 0 && status < 500 && status !== 408 && status !== 429) throw failure;
 					try {
-						const found = this.checked(await deadline(child => transport.get(pending.id, child), controller.signal));
+						const found = this.checked(await accountSyncDeadline(child => transport.get(pending.id, child), controller.signal));
 						if (found.id !== pending.id || !sameContent(found, pending)) throw failure;
 						remote = found;
 					} catch { throw failure; }

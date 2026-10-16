@@ -1,3 +1,5 @@
+import { interactionState, type InteractionWrite } from '../utils/interactionState';
+import type { InteractionTransport } from './accountInteractions';
 import { accountRemoteWorkspaceLease } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
@@ -23,20 +25,21 @@ export const readBoundedJson = async (response: Response) => {
 	} finally { await reader.cancel().catch(() => {}); }
 };
 export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountSyncTransport & {
+	interactions: InteractionTransport;
 	browse(kind: 'schema' | 'component', args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	read(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	resolve(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	fork(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' = 'things') => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' = 'things') => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		const capability = endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0'];
+		const capability = endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0'];
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
 		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', '1.10.0');
@@ -64,6 +67,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		} finally { unsubscribe(); }
 	};
 	return {
+		interactions: { read: async (ids, signal) => { const result = await request('GET', { id: ids }, signal, 'things/interactions'); if (!Array.isArray(result.states) || result.states.length !== ids.length || new Set(result.states.map((s: any) => s.id)).size !== ids.length || result.states.some((s: any) => !ids.includes(s.id))) throw new WorkspaceError('INVALID_INTERACTIONS', 'Invalid account interaction response', 502); return result.states.map(interactionState); }, write: async (command: InteractionWrite, signal) => interactionState((await request('POST', command, signal, 'things/interactions')).state) },
 		browse: (kind, args, signal) => request('GET', args, signal, kind === 'component' ? 'components/browse' : 'schemas/browse'),
 		read: (args, signal) => request('GET', args, signal),
 		resolve: (args, signal) => request('GET', args, signal, 'webpages/resolve'),

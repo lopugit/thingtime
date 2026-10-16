@@ -10151,6 +10151,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-interactions', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'things',
+    title: 'Conditional account interactions', endpoint: '/api/v1/things/interactions',
+    summary: 'Read private bookmark/reaction membership and conditionally set it for durable account synchronization.',
+    detail: 'GET id (comma-separated, at most 50 distinct IDs) returns states { id, revision, saved, reactions }. POST { id, expectedRevision, kind: save|reaction, active, emoji? } sets one membership atomically through normal permission, quota and history writers. The opaque revision is concurrency metadata, never ownership. A stale command returns 409 and does not change content. After a lost response read state and reconcile; never replay a toggle or silently replace a newer revision. Generic creates/deletes and legacy toggles also invalidate revisions. Responses are private, no-store. Legacy embedded reactions require reconciliation before this sync path. First-party account sessions only; PAT/app tokens retain their existing routes and scopes. Same-origin mutation requests are required.',
+    auth: { mode: 'session-or-bearer', description: 'First-party account session; no PAT or app credentials.' }, methods: ['GET','POST'],
+    steps: ['Read current states for visible targets.', 'Set one membership using its observed revision.', 'On 409 preserve local intent and review current state.'],
+    requestExamples: [{ name:'Read states', description:'Read two targets.', method:'GET', query:{id:'thing_one,thing_two'} },{ name:'Save', description:'Save against the observed initial revision.', method:'POST',body:{id:'thing_one',expectedRevision:null,kind:'save',active:true}}],
+    responseExamples:[{status:200,description:'Private membership snapshot.',body:{ok:true,states:[{id:'thing_one',revision:null,saved:false,reactions:[]}]}},{status:409,description:'Newer interaction state exists.',body:{ok:false,error:'Interactions changed. Review your local choice before syncing.'}}]
+  }),
+  endpoint({
     id: 'things-react',
     featureVersion: '1.2.0',
     contractVersion: '1.2.0',

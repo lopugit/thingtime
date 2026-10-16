@@ -447,3 +447,13 @@ test('server Action outcomes are discoverable in both capability manifests', () 
     assert.equal(capabilitySatisfies('1.17.0', '1.18.0'), false);
   }
 });
+
+
+test('conditional interaction sync advertises a distinct compatible capability', () => {
+ for (const features of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://interactions.test').features).map(([id, feature]) => [id, feature.version]))]) {
+  assert.equal(features['api.things-interactions'], '1.0.0');
+  assert.equal(capabilitySatisfies(features['api.things-interactions'], '1.0.0'), true);
+ }
+ for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+ assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
+});

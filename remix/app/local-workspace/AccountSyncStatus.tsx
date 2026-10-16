@@ -6,6 +6,7 @@ import { useDataPlane } from '../hooks/useDataPlane';
 import { accountWorkspaceWorker } from './accountApi.client';
 import { LOCAL_WORKSPACE_CHANGED, announceLocalWorkspaceChange } from './runtime.client';
 import type { AccountThingSync } from './accountSync';
+import type { AccountInteractionSync } from './accountInteractions';
 
 type Review = Awaited<ReturnType<AccountThingSync['inspectConflict']>>;
 type Status = Awaited<ReturnType<AccountThingSync['status']>>;
@@ -13,7 +14,7 @@ export function AccountSyncStatus() {
  const user = useCurrentUser(), dataPlane = useDataPlane(), offline = useOfflineWorkspace();
  const ownerId = offline?.ownerId || (user && !user.temporary ? user.id : null);
  if (!ownerId || !dataPlane) return null;
- return <WorkspaceStatus key={JSON.stringify([ownerId, dataPlane])} ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} />;
+ return <React.Fragment key={JSON.stringify([ownerId, dataPlane])}><WorkspaceStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><InteractionStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /></React.Fragment>;
 }
 function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
  const [rows, setRows] = React.useState<Status>([]), [error, setError] = React.useState('');
@@ -64,4 +65,133 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string;
   </Box> : null}
   {error ? <Text role="alert" mt={2}>{error}</Text> : null}
  </Box>;
+}
+
+
+function InteractionStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
+	const [rows, setRows] = React.useState<Awaited<ReturnType<AccountInteractionSync['status']>>>([]),
+		[review, setReview] = React.useState<Awaited<ReturnType<AccountInteractionSync['inspect']>> | null>(null),
+		[error, setError] = React.useState(''),
+		[busy, setBusy] = React.useState(false),
+		[online, setOnline] = React.useState(navigator.onLine);
+	const service = React.useRef<ReturnType<typeof accountWorkspaceWorker> | null>(null),
+		mounted = React.useRef(true);
+	React.useEffect(() => {
+		mounted.current = true;
+		const current = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, origin: window.location.origin });
+		service.current = current;
+		const update = () => {
+			setOnline(navigator.onLine);
+			void current.interactions
+				.status()
+				.then((value) => {
+					if (mounted.current) setRows(value.filter((row) => row.state !== 'synced'));
+				})
+				.catch(() => {});
+		};
+		update();
+		for (const event of [LOCAL_WORKSPACE_CHANGED, 'online', 'offline']) window.addEventListener(event, update);
+		return () => {
+			mounted.current = false;
+			for (const event of [LOCAL_WORKSPACE_CHANGED, 'online', 'offline']) window.removeEventListener(event, update);
+		};
+	}, [ownerId, dataPlane]);
+	const act = async (run: (value: NonNullable<typeof service.current>) => Promise<unknown>) => {
+		if (!service.current) return;
+		setBusy(true);
+		setError('');
+		try {
+			await run(service.current);
+			if (mounted.current) {
+				announceLocalWorkspaceChange();
+				service.current.wake();
+			}
+		} catch (failure) {
+			if (mounted.current) setError(failure instanceof Error ? failure.message : 'Could not sync interactions.');
+		} finally {
+			if (mounted.current) setBusy(false);
+		}
+	};
+	if (!rows.length && !error) return null;
+	const disabled = busy || !online || unconfirmed;
+	const describe = (state: { saved: boolean; reactions: string[] }) =>
+		`${state.saved ? 'In Library' : 'Not in Library'} · Reactions: ${state.reactions.join(' ') || 'none'}`;
+	return (
+		<Box
+			as="section"
+			aria-label="Account interaction sync"
+			maxW="900px"
+			w="calc(100% - 32px)"
+			mx="auto"
+			mt="var(--tt-nav-clearance, 72px)"
+			mb={4}
+			sx={{ '[data-testid="account-sync-status"] + &': { marginTop: '16px' } }}
+			p={4}
+			borderWidth="1px"
+			borderRadius="lg"
+		>
+			<Text role="status">
+				{rows.length} bookmark or reaction change{rows.length === 1 ? '' : 's'} saved on this device.{' '}
+				{rows.some((row) => ['error', 'conflict'].includes(row.state)) ? 'Account sync needs attention.' : 'Waiting for verified account sync.'}
+			</Text>
+			<details>
+				<summary>Review interaction sync</summary>
+				{rows.slice(0, 20).map((row) => (
+					<Flex key={row.id} gap={3} py={2} align="center" flexWrap="wrap">
+						<Text flex="1" flexBasis={{ base: '100%', md: 'auto' }} minW={0} overflowWrap="anywhere" fontSize="sm">
+							{row.id}: {row.error || row.state}
+						</Text>
+						<Button
+							size="sm"
+							isDisabled={disabled || row.state === 'syncing'}
+							onClick={() =>
+								void act(async (current) => {
+									const next = await current.interactions.inspect(current.transport.interactions, row.id);
+									if (mounted.current) setReview(next);
+								})
+							}
+						>
+							Review account choice
+						</Button>
+						{row.state !== 'conflict' ? (
+							<Button
+								size="sm"
+								isDisabled={disabled || row.state === 'syncing'}
+								onClick={() => void act((current) => current.interactions.retry(row.id))}
+							>
+								Retry interaction sync
+							</Button>
+						) : null}
+					</Flex>
+				))}
+			</details>
+			{review ? (
+				<Box mt={3}>
+					<Text>This device: {describe(review.local)}</Text>
+					<Text>Account: {describe(review.remote)}</Text>
+					<Flex gap={3} mt={3} flexWrap="wrap">
+						{(['local', 'remote'] as const).map((keep) => (
+							<Button
+								key={keep}
+								size="sm"
+								isDisabled={disabled}
+								onClick={() =>
+									void act(async (current) => {
+										await current.interactions.resolve(current.transport.interactions, review, keep);
+										if (mounted.current) setReview(null);
+									})
+								}
+							>
+								{keep === 'local' ? 'Keep device interaction choices' : 'Keep account interaction choices'}
+							</Button>
+						))}
+						<Button size="sm" variant="ghost" onClick={() => setReview(null)}>
+							Cancel
+						</Button>
+					</Flex>
+				</Box>
+			) : null}
+			{error ? <Text role="alert">{error}</Text> : null}
+		</Box>
+	);
 }
