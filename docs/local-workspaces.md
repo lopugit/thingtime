@@ -7,10 +7,12 @@ rollout is **not ready to merge** until the outstanding rows below are verified.
 
 ## Audit of existing support
 
-- `ThingtimeProvider` already persists the legacy editable tree with localforage,
-  serialized autosave and cross-tab updates. Account keys remain isolated. The automatic legacy anonymous workspace
-  claim is removed; existing account keys are preserved and anonymous data stays
-  in its original namespace until an explicit transfer.
+- `ThingtimeProvider` has serialized autosave and cross-tab updates. Its native
+  tree now uses the shared workspace transaction adapter, scoped by account,
+  origin and data plane. Earlier localforage keys are preserved: anonymous data
+  migrates only to the anonymous partition, while owner-only account trees need
+  an explicit reviewed copy because their database provenance is unknown.
+  Anonymous content is never automatically claimed by an account.
 - Timeline already has canonical event/link records, IndexedDB recovery, branch
   and note queues. Account history discovers an authenticated remote scope; the anonymous
   adapter now has a separate browser-local authority (checkpoint below).
@@ -2879,3 +2881,42 @@ originals become ready. The native draft test holds the draft POST unresolved
 and requires the private post to reach the real account within eight seconds,
 before releasing that draft request. This tests normal completion independently
 of the draft transport timeout, in addition to rejection/retirement handling.
+
+
+## Legacy native editor tree isolation — 2026-10-17
+
+`WorkspaceThingtimeProvider` binds the native tree and its tab channel to the
+captured account, API origin, data plane and identity generation. `LocalEditorTree`
+uses the existing workspace database: its canonical storage bytes and integrity
+metadata commit atomically, count toward device quota, and abort on identity
+retirement. The tree has a 16 MiB limit within the existing 64 MiB workspace quota.
+Invalid or damaged storage stays intact with a visible error; it never hydrates
+as a successful empty tree. This is internal editor storage, not transfer JSON.
+
+The earlier anonymous device key migrates only into the anonymous partition,
+without deleting the original. Account keys lacking data-plane provenance never
+hydrate automatically. The generic editor offers a read-only review followed by
+an explicit copy under a new name. It rejects changed previews and existing names,
+keeps current settings/content and the original bytes, and completes its device
+write independently of draft limits or network saving. It does not add an account
+Thing endpoint or enable anonymous remote sync.
+
+Local evidence: `editorTree.test.ts` covers scope separation, canonical Dates and
+cycles, migration races, corruption, quota rollback/retry and mid-transaction
+identity invalidation. `editorTree.browser.test.ts` uses clean browser contexts
+and real disposable loopback registration, with offline native editing/recovery,
+source preservation, changed-review/name-conflict rejection and a 600 KiB copy
+that exceeds the separate draft snapshot limit. Desktop/390/320px checks include
+screenshots and copy-button hit testing. Run with `TT_LOCAL_EDITOR_TREE_URL`,
+`TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH` and
+`TT_LOCAL_EDITOR_TREE_ARTIFACTS`; use a production client for cold offline reload.
+Existing generic draft recovery and held-draft independent posting regressions
+also pass. Evidence is local, not current-head CI or deployed acceptance.
+
+Still required: native account/origin/data-plane transitions during tree reads,
+copies and tab broadcasts; earlier comment/draft-key recovery; whole-tree remote
+sync semantics; and the previously listed full-suite acceptance matrix. The
+native tree rebuilds its root wrapper during hydration: arbitrary self-references
+to that old root are not aliases of the newly constructed wrapper. Nested cyclic
+values are preserved; broader root-reference semantics remain an explicit audit
+item. No merge or manual deployment is performed by this checkpoint.

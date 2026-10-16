@@ -11005,3 +11005,25 @@ Run `app/local-workspace/components.browser.test.ts` with
   draft POST remains held; releasing the failure later allows cleanup to converge.
 - [ ] Complete native account/origin/data-plane transitions, explicit legacy-key
   recovery and the broader draft/media/conflict matrix before merging PR #1000.
+
+
+### Legacy native editor device storage (2026-10-17)
+
+- [x] Scope tree snapshots by account, origin and selected database. Invalidate
+  a lease between byte and metadata writes: both roll back. At full quota, a
+  refused replacement keeps the earlier snapshot and usage; retry after freeing
+  fixture bytes succeeds. Malformed/damaged snapshots remain recoverable.
+- [x] In a clean anonymous context, seed only the earlier device tree, then edit
+  through the native editor and cold reload offline. Preserve tagged Dates,
+  nested cycles and original legacy bytes, with zero remote writes.
+- [x] In a disposable account context, old owner-only data must not auto-load.
+  Review it, change the original during review, and reject copying until it is
+  reviewed again. Reject an existing destination name. Copy under a fresh name
+  offline; current content/settings and source bytes remain intact after reload.
+  A 600 KiB source must finish even though ancillary drafts have a smaller cap.
+- [x] Recovery controls fit 1440/390/320px viewports and pass hit testing across
+  the copy button. Leave clearance for the floating assistant on narrow phones;
+  a bounding box alone does not establish a reachable control.
+- [ ] Complete native account/origin/data-plane transitions during tree reads,
+  recovery and broadcasts, whole-tree account sync, and root-reference semantics.
+  These service/native recovery checks do not close the broader acceptance matrix.

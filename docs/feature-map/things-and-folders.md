@@ -624,3 +624,13 @@ Account ordinary exports now include new or retained standalone device files via
 scoped readers. `accountFileExport.test.ts` covers repeat export, aliases, bytes,
 deletions and scope; its production-client browser fixture covers normal Download
 and anonymous round-trip Import. See [remaining file-transfer work](../local-workspaces.md#account-file-transfer-exports--2026-10-17).
+
+
+The legacy generic editor tree now uses `local-workspace/editorTree.ts` and
+`WorkspaceThingtimeProvider.tsx` for the shared scoped transaction/quota boundary.
+Native `ThingtimeProvider` accepts this storage adapter; explicit flush lets
+reviewed legacy copies finish independently of ancillary draft saves. Recovery
+appears only on generic editor/view routes, not embedded foreign previews.
+Run `editorTree.test.ts`, opt-in `editorTree.browser.test.ts`, generic draft
+browser recovery and account draft/post independence regressions. Setup and
+remaining gates are in [local workspaces](../local-workspaces.md#legacy-native-editor-tree-isolation--2026-10-17).

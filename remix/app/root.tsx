@@ -16,7 +16,7 @@ import { Main } from './components/Layout/Main';
 import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
-import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+import { WorkspaceThingtimeProvider } from './local-workspace/WorkspaceThingtimeProvider';
 import { TimelineHost } from './components/Timeline/TimelineHost';
 import { TimelineProvider } from './timeline/TimelineProvider';
 import { DevKit } from './components/DevKit/DevKit';
@@ -136,7 +136,7 @@ export default function App() {
         html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
         html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
       `}</style>
-      <ThingtimeProvider key={contentOwnerId || 'guest'} accountId={contentOwnerId} storageKey={contentOwnerId ? `thingtime:account:${contentOwnerId}` : 'thingtime'}>
+      <WorkspaceThingtimeProvider>
         <ThingDraftsProvider>
          <TimelineProvider>
          {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
@@ -184,7 +184,7 @@ export default function App() {
         {mounted && !isStandalonePage ? <EasterEggs /> : null}
          </TimelineProvider>
         </ThingDraftsProvider>
-      </ThingtimeProvider>
+      </WorkspaceThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}
     </ChakraWrapper>

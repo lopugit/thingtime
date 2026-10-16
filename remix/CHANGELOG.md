@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Scope the legacy native editor tree through the
+  shared workspace storage boundary, retain old device bytes and offer reviewed
+  account recovery into an independent item. Offline browser checks cover native
+  recovery, draft-independent persistence and reachable narrow-phone controls.
+  Full-suite and identity-transition gates remain open. Details:
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Generic Thing drafts now retain their captured
   workspace identity and recover the latest scoped device copy after a cold
   offline reload. Corrupt recovery stays intact with a visible error. Native

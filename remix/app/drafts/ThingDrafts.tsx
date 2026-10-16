@@ -1,4 +1,5 @@
 import React from 'react';
+import { LegacyEditorTreeRecovery } from '../local-workspace/WorkspaceThingtimeProvider';
 import { smarts } from '../smarts';
 import { Flex } from '@chakra-ui/react';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
@@ -104,6 +105,7 @@ export function ThingDraftPicker() {
 	return user && drafts ? (
 		<Flex px={3} py={2} gap={3} justify="flex-end" flexWrap="wrap">
 			<DraftSaveStatus status={drafts.status} error={drafts.error} paused={drafts.paused} retry={drafts.retry} />
+			<LegacyEditorTreeRecovery />
 			<DraftPicker actor={user.id} surface="thing" onLoad={drafts.load} beforeOpen={drafts.flush} onDeleted={drafts.forget} />
 		</Flex>
 	) : null;
