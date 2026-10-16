@@ -805,11 +805,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				expiresAt: doc.attachmentExpiresAt?.toISOString() ?? null
 			});
 			const sameRequest = (doc: AttachmentDoc) =>
-				doc.ownerId === ownerId &&
+				doc.ownerId === ownerId && (doc.attachmentState === 'cancelled' || (
 				doc.attachmentRequestFingerprint === requestFingerprint &&
 				(intent.purpose === 'post'
 					? (doc.attachmentPurpose === undefined || doc.attachmentPurpose === 'post') && doc.attachmentProfileSlot === undefined
-					: doc.attachmentPurpose === intent.purpose && doc.attachmentProfileSlot === intent.profileSlot);
+					: doc.attachmentPurpose === intent.purpose && doc.attachmentProfileSlot === intent.profileSlot)));
 
 			let ownsInitialization = false;
 			let reserved = requestedId ? await dependencies.store.getById(id) : null;
@@ -841,6 +841,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					reserved = raced;
 				}
 			}
+			if (reserved.attachmentState === 'cancelled') return fail(409, 'This upload request was cancelled', { code: 'upload_cancelled', retryable: false });
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
 			if (['recording', 'file'].includes(intent.purpose) && reserved.attachmentState === 'ready') {
@@ -917,7 +918,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					}
 					reserved = persisted;
 				} else {
-					if (!persisted) await s3.abortMultipartUpload({ objectKey, uploadId }).catch(() => {});
+					if (!persisted || persisted.attachmentState === 'cancelled') await s3.abortMultipartUpload({ objectKey, uploadId }).catch(() => {});
 					throw error;
 				}
 			}
@@ -1179,15 +1180,40 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			? { ok: true, deferred: true, retryAt: doc.attachmentExpiresAt.toISOString() }
 			: null;
 
-	const cancel = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>> => {
+	const cancelRequest = async (ownerId: string, requestId: string): Promise<AttachmentResult<{ cancelled: true; deferred: boolean; retryAt?: string }>> => {
+		if (dependencies.customMongoActive()) return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+		const id = attachmentIdForRequest(ownerId, requestId);
+		// A competing start/cleanup may win the unique-row race. Re-read through
+		// the same reservation operation; never acknowledge an absent row as fenced.
+		for (let attempt = 0; attempt < 3; attempt++) {
+			let existing: AttachmentDoc;
+			try { existing = await dependencies.store.reserveCancellation(ownerId, id); }
+			catch (error) { if (Number((error as any)?.code) === 11000) continue; throw error; }
+			if (existing.attachmentState === 'cancelled') return { ok: true, cancelled: true, deferred: false };
+			if (existing.targetId || !['pending', 'deleting'].includes(existing.attachmentState)) {
+				return fail(409, 'Upload already finalized or attached; refresh before deleting', { code: 'upload_already_finalized', retryable: false });
+			}
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft', retainCancellation: true });
+			if (outcome.status !== 'skipped') return { ...cleanupResponse(outcome), cancelled: true };
+		}
+		return fail(503, 'Upload cancellation is still in progress; retry the same request id', { retryable: true });
+	};
+
+	const cancel = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string; cancelled?: true }>> => {
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid cancellation request');
 			const raw = input as Record<string, unknown>;
+			if ('requestId' in raw) {
+				if (Object.keys(raw).some(key => key !== 'requestId')) return fail(400, 'Invalid cancellation request');
+				const requestId = normalizeId(raw.requestId);
+				if (!requestId) return fail(400, 'Invalid attachment request id');
+				return await cancelRequest(ownerId, requestId);
+			}
 			if (Object.keys(raw).some((key) => key !== 'uploadId')) return fail(400, 'Invalid cancellation request');
 			const id = normalizeId(raw.uploadId);
 			if (!id) return fail(400, 'Invalid attachment upload id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
-			if (!existing) return { ok: true, deferred: false };
+			if (!existing || existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
 			if (existing.targetId) return fail(409, 'Attached files must be removed from their post');
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
@@ -1221,7 +1247,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!id) return fail(400, 'Invalid attachment id');
 			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
-			if (!existing) return { ok: true, deferred: false };
+			if (!existing || existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
 			// Internal copy rollback may only discard unfinished uploads. The
 			// cleanup claim below CAS-fences the observed state, so a concurrent
 			// finalization cannot turn this retry into deletion of a durable file.

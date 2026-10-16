@@ -464,3 +464,10 @@ test('conditional attachment deletion is advertised by both capability manifests
   assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-delete'].version, '1.2.0');
   for (const version of ['', '1.0.0', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
 });
+
+
+test('durable upload cancellation requires the additive 1.2.0 contract on both manifests', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.attachment-upload-abort'], '1.2.0');
+  assert.equal(thingtimeCapabilityManifest('https://files.test').features['api.attachment-upload-abort'].version, '1.2.0');
+  for (const version of ['', '1.0.0', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
+});

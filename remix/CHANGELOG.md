@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Make queued file cancellation durable across
+  offline use, lost responses and delayed upload starts. Reuse private,
+  quota-accounted attachment receipts and the existing cleanup lifecycle; add
+  native Cancel upload with retained bytes until confirmation. Real local
+  browser/database and built API checks pass; completed-file deletion and normal
+  account file UI integration remain pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-upload-cancellation--2026-10-16).
+
 - 2026-10-16 — **Codex (AI)**: Add conditional attachment deletion to the existing
   cleanup lifecycle. Stale/racing edits are protected, deferred cleanup remains
   retryable and billed, and built API discovery advertises delete 1.2.0. Real

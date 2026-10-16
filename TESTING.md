@@ -2,6 +2,23 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Durable upload cancellation: cancel a never-started local file offline
+      with no remote calls. Lose a real start reply, cancel from the native sync
+      panel offline, and verify bytes remain until a durable cancellation reply.
+      Lose that reply too; reconnect/retry must remove device bytes without
+      re-uploading. Replaying the original request, including after legacy
+      abort/delete, must fail. Cancel-before-start and concurrent start/cancel
+      must leave one private quota-accounted zero-object receipt with no expiry.
+      Finalized, finalizing and bound uploads require reviewed deletion; legacy
+      or malformed acknowledgements must retain bytes. Check competing tabs,
+      owner/origin/plane isolation, original save replay refusal, cancellation at the
+      full 64 MiB device quota (both never-started and attempted uploads), and
+      multipart settlement. Verify native controls at 1440/390/320px, abort 1.2.0
+      in both built manifests, anonymous 401 and Watch refusal for the new mode.
+      Run workspace, attachment, storage, schema, Things and capability suites,
+      plus the enabled account file browser fixture. This is cancellation of
+      queued files, not acceptance of the unfinished ordinary account file UI.
+
 - [ ] Conditional file deletion: malformed versions fail 400, stale versions
       fail 409 without touching bytes, and a real annotation/delete race using
       one timestamp has exactly one winner. Repeat deletion after a lost reply;
@@ -23,7 +40,7 @@
       `accountFileMetadata.test.ts` and the real `accountFiles.browser.test.ts`.
       The browser fixture must import the app's exact Vite module URLs after HMR,
       never a second bare-import workspace singleton. Normal account picker,
-      listing/media and deletion/cancellation still have separate completion gates.
+      listing/media and completed-file deletion still have separate completion gates.
 
 - [ ] Conditional file metadata: run attachment, Things, capability and local
       workspace suites, then enable `accountFiles.browser.test.ts`. Concurrent

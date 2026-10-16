@@ -285,6 +285,85 @@ test(
 				assert.equal(row.actor, owner.id);
 				assert.ok(row.plane);
 			}
+			// A finished file cannot be erased by a request-level cancellation.
+			assert.equal((await context.request.post(url('/api/v1/attachments/uploads/abort'), { headers, data: { requestId } })).status(), 409);
+			const cancelRequestId = randomUUID(), cancelText = 'Cancel this private device upload';
+			let cancelledRemoteId = '', startedCancellation!: () => void;
+			const cancellationStarted = new Promise<void>(resolve => { startedCancellation = resolve; });
+			await context.route('**/api/v1/attachments/uploads', async (route: any) => {
+				if (route.request().postDataJSON()?.requestId !== cancelRequestId) return route.continue();
+				const response = await route.fetch();
+				assert.equal(response.status(), 200);
+				cancelledRemoteId = (await response.json()).upload.id;
+				offline = true; await context.setOffline(true);
+				await route.abort('failed'); startedCancellation();
+			});
+			const cancelLocalId = await page.evaluate(async ({ requestId, text }) => {
+				const paths = (window as any).__fileFixtureModules as string[], [runtime, api] = await Promise.all(paths.map(path => import(path))), scope = runtime.currentAccountWorkspace();
+				const facade = api.accountApi({ things: {}, attachments: {} }, { id: scope.ownerId }, scope.dataPlane);
+				return (await facade.attachments.saveLocalFile({ requestId, name: 'cancel-offline.txt', contentType: 'text/plain', bytes: new TextEncoder().encode(text), purpose: 'file' })).attachment.id;
+			}, { requestId: cancelRequestId, text: cancelText });
+			await cancellationStarted;
+			// This disposable account fills the real browser workspace to its exact
+			// 64 MiB cap. Only fixture-owned filler bytes are written here.
+			await page.evaluate(async () => {
+				const paths = (window as any).__fileFixtureModules as string[], [runtime, api] = await Promise.all(paths.map(path => import(path))), scope = runtime.currentAccountWorkspace();
+				const files = api.accountWorkspaceWorker(scope).files;
+				await files.db.transaction(scope, 'readwrite', files.lease, async (tx: any) => {
+					let remaining = 64 * 1024 * 1024 - (await tx.usage()).bytes, index = 0;
+					while (remaining > 0) { const size = Math.min(16 * 1024 * 1024, remaining); await tx.putBytes('cancel-quota-fixture-' + index++, new Uint8Array(size)); remaining -= size; }
+					if ((await tx.usage()).bytes !== 64 * 1024 * 1024) throw Error('Quota fixture did not fill exactly');
+				});
+			});
+			await fileRegion.waitFor();
+			await fileRegion.getByText('Review file sync', { exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Cancel upload', exact: true }).click();
+			await fileRegion.getByText(/Cancellation queued; device bytes are retained/).waitFor();
+			assert.equal(await page.evaluate(async id => {
+				const paths = (window as any).__fileFixtureModules as string[], [runtime, api] = await Promise.all(paths.map(path => import(path)));
+				return new TextDecoder().decode((await api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).files.things.readFile(id)).bytes);
+			}, cancelLocalId), cancelText);
+			for (const width of [1440,390,320]) {
+				await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+				assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+				if (artifacts) await page.screenshot({ path: resolve(artifacts, `file-cancellation-${width}.png`) });
+			}
+			assert.deepEqual(writes.filter(row => row.offline && row.method), []);
+			let lostCancellation = 0;
+			await context.route('**/api/v1/attachments/uploads/abort', async (route: any) => {
+				if (!lostCancellation && route.request().postDataJSON()?.requestId === cancelRequestId) {
+					const response = await route.fetch();
+					if (response.status() === 200) { lostCancellation++; return route.abort('failed'); }
+					return route.fulfill({ response });
+				}
+				return route.continue();
+			});
+			offline = false; await context.setOffline(false);
+			await page.evaluate(() => window.dispatchEvent(new Event('thingtime:root-data-refresh')));
+			await fileRegion.waitFor({ state: 'hidden', timeout: 75_000 });
+			assert.equal(await page.evaluate(async id => {
+				const paths = (window as any).__fileFixtureModules as string[], [runtime, api] = await Promise.all(paths.map(path => import(path)));
+				try { await api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).files.things.readFile(id); return false; }
+				catch (error: any) { return error.status === 404; }
+			}, cancelLocalId), true);
+			const replayCancelled = (id: string) => context.request.post(url('/api/v1/attachments/uploads'), { headers,
+				data: { requestId: id, filename: 'cancel-offline.txt', contentType: 'text/plain', sizeBytes: new TextEncoder().encode(cancelText).length, purpose: 'file' } });
+			assert.equal(lostCancellation, 1);
+			const replay = await replayCancelled(cancelRequestId);
+			assert.equal(replay.status(), 409); assert.equal((await replay.json()).code, 'upload_cancelled');
+			assert.equal((await context.request.post(url('/api/v1/attachments/delete'), { headers, data: { id: cancelledRemoteId } })).status(), 200);
+			assert.equal((await replayCancelled(cancelRequestId)).status(), 409, 'Legacy cleanup must retain the durable receipt');
+			for (const client of [context, guest]) assert.equal((await client.request.get(url(`/api/v1/attachments/content?id=${cancelledRemoteId}`))).status(), 404);
+			const beforeStart = randomUUID();
+			const cancelledFirst = await context.request.post(url('/api/v1/attachments/uploads/abort'), { headers, data: { requestId: beforeStart } });
+			assert.equal(cancelledFirst.status(), 200); assert.equal((await cancelledFirst.json()).cancelled, true);
+			assert.equal((await replayCancelled(beforeStart)).status(), 409);
+			const competing = randomUUID();
+			const [raceStart, raceCancel] = await Promise.all([
+				replayCancelled(competing), context.request.post(url('/api/v1/attachments/uploads/abort'), { headers, data: { requestId: competing } })
+			]);
+			assert.ok([200,409].includes(raceStart.status())); assert.equal(raceCancel.status(), 200);
+			assert.equal((await replayCancelled(competing)).status(), 409);
 			// Exercise conditional deletion on the real database and storage lifecycle.
 			const deleteFile = (expectedUpdatedAt: unknown) => context.request.post(url('/api/v1/attachments/delete'), {
 				headers, data: { id: remoteId, expectedUpdatedAt }
@@ -304,6 +383,23 @@ test(
 			} else assert.ok([404,409].includes(editRace.status()));
 			assert.equal((await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}`))).status(), 404);
 			assert.equal((await deleteFile(reconciled.updatedAt)).status(), 200, 'Lost deletion receipt can be retried');
+			offline = true; await context.setOffline(true);
+			await page.evaluate(async () => {
+				const paths = (window as any).__fileFixtureModules as string[], [runtime, api] = await Promise.all(paths.map(path => import(path))), scope = runtime.currentAccountWorkspace();
+				const files = api.accountWorkspaceWorker(scope).files;
+				await files.db.transaction(scope, 'readwrite', files.lease, (tx: any) => tx.deleteBytes('cancel-quota-fixture-0'));
+				const facade = api.accountApi({ things: {}, attachments: {} }, { id: scope.ownerId }, scope.dataPlane);
+				await facade.attachments.saveLocalFile({ requestId: crypto.randomUUID(), name: 'never-started.txt', contentType: 'text/plain', bytes: new TextEncoder().encode('Never send'), purpose: 'file' });
+				await files.db.transaction(scope, 'readwrite', files.lease, async (tx: any) => {
+					let remaining = 64 * 1024 * 1024 - (await tx.usage()).bytes, index = 0;
+					while (remaining > 0) { const size = Math.min(16 * 1024 * 1024, remaining); await tx.putBytes('cancel-never-started-fill-' + index++, new Uint8Array(size)); remaining -= size; }
+				});
+			});
+			await fileRegion.waitFor();
+			await fileRegion.getByText('Review file sync', { exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Cancel upload', exact: true }).click();
+			await fileRegion.waitFor({ state: 'hidden' });
+			assert.deepEqual(writes.filter(row => row.offline && row.method), []);
 			assert.deepEqual(errors, []);
 			if (artifacts)
 				await writeFile(
@@ -313,6 +409,12 @@ test(
 							adapterOnly: true,
 							conditionalAnnotation: true,
 							conditionalDeletion: true,
+							durableCancellation: true,
+							lostCancellationReceipt: true,
+							fullQuotaCancellation: true,
+							preStartAndConcurrentCancellation: true,
+							cancelRequestId,
+							cancelledRemoteId,
 							editDeleteSingleWinner: true,
 							concurrentEditSingleWinner: true,
 							conditionalPlacement: true,

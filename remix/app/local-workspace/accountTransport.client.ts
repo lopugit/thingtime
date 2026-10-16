@@ -39,14 +39,14 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	fork(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'things/bulk' = 'things') => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/uploads/abort' | 'things/bulk' = 'things') => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		const endpointCapability = ({ 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
+		const endpointCapability = ({ 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
 		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
@@ -80,6 +80,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	};
 	return {
 		files: {
+			cancel: (requestId, signal) => request('POST', { requestId }, signal, 'attachments/uploads/abort'),
 			get: async (id, signal) => (await request('GET', { id }, signal)).thing,
 			annotate: (input, signal) => request('POST', input, signal, 'attachments/annotate'),
 			move: async (id, folderId, expectedUpdatedAt, signal) => {

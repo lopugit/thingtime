@@ -73,7 +73,7 @@ const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', '
 const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner', 'recording', 'recording-import', 'file', 'file-import']);
 
 export const createAttachmentMutationAction = (
-	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },
+	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean; requestIdRequiresFullUser?: boolean },
 	overrides: Partial<AttachmentMutationDependencies> = {}
 ) => {
 	const dependencies = { ...defaultDependencies, ...overrides };
@@ -103,6 +103,9 @@ export const createAttachmentMutationAction = (
 			}
 
 			const body = await dependencies.readBody(request, ATTACHMENT_JSON_BODY_BYTES);
+			if (options.requestIdRequiresFullUser && usesDeviceCredential(request) && body && typeof body === 'object' && 'requestId' in body) {
+				return json({ ok: false, error: 'Durable upload cancellation requires a full user session' }, { status: 403 });
+			}
 			// File/media uploads are withheld per SCOPE from new accounts until an
 			// admin grants them (auth/users.ts userPublicUploadsEnabled /
 			// userPrivateUploadsEnabled): the requested purpose decides which flag

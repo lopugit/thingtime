@@ -251,7 +251,7 @@ export type ThingDoc = {
 	// Protected private-S3 attachment envelope. Dedicated attachment utilities
 	// are the only writers; generic Thing CRUD rejects the attachment kind.
 	attachmentEnvelopeVersion?: number;
-	attachmentState?: 'pending' | 'finalizing' | 'ready' | 'deleting';
+	attachmentState?: 'pending' | 'finalizing' | 'ready' | 'deleting' | 'cancelled';
 	objectSizeBytes?: number;
 	objectKey?: string;
 	objectVersionId?: string;

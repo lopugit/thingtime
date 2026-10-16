@@ -17,6 +17,15 @@ multipart deferral; the real account file browser test races annotation/deletion
 Absence is not a durable late-start cancellation receipt; the local deletion
 queue remains pending.
 
+Durable cancellation now uses abort 1.2.0 `{requestId}` and the existing unique
+attachment identity. `reserveCancellation`, the retained deleting claim and
+`cancelledAttachmentReceipt` keep a private accounted zero-object tombstone after
+cleanup. The closed envelope is validated in `attachmentCore.ts`; never expire or
+purge it through ordinary cleanup. Legacy abort stays separate; full-user auth
+is required for this new mode. `accountFiles.ts` persists start/cancel intent,
+fences tab claims and retains bytes until confirmation. `AccountSyncStatus`
+provides offline Cancel upload; completed-file deletion still needs its adapter.
+
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).
 Every attachment is bound to exactly one target (post, comment, page, message,

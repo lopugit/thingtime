@@ -1451,3 +1451,62 @@ and anonymous deletion returns 401. TypeScript reports the same 91 baseline
 diagnostics with none in changed paths; focused lint has no errors or warnings.
 CI and deployed feature acceptance remain separate. No main merge, manual deploy,
 public publishing or existing-account mutation is included in these checks.
+
+
+## Durable upload cancellation — 2026-10-16
+
+`POST /api/v1/attachments/uploads/abort {requestId}` now reserves the original
+owner-scoped upload identity with a private cancellation receipt, including when
+the upload start has not arrived. Abort capability/contract 1.2.0 distinguishes
+this mode from legacy `{uploadId}` cleanup. `cancelled:true` confirms a durable
+fence; `deferred`/`retryAt` still describe outstanding storage cleanup. Completed,
+finalizing or bound uploads return 409 for fresh reviewed deletion. The new mode
+requires full user authentication; paired Watch credentials retain legacy cleanup.
+Same-origin checks, rate limits, home-plane isolation and upload approval remain.
+
+Pending uploads atomically enter the existing deleting lifecycle with a protected
+`attachmentCancellationRequested` marker. Its cleanup transaction replaces the
+row with a closed `cancelled` attachment envelope only after byte cleanup passes.
+Receipts have zero object bytes, no target/upload/expiry, and a small accounted JSON
+payload (134 bytes in the real fixture). They never expire: deletion or expiry
+would reopen the original identity to arbitrarily delayed starts. Existing normal
+abort/delete cannot remove these receipts. No new collection or uncharged side
+store is introduced; generic reads, media and publication cannot expose them.
+
+The account file queue records whether a start was attempted before sending it.
+Never-started cancellation completes wholly locally. Ambiguous starts retain bytes
+and queue the original request ID offline; the worker negotiates the fenced API
+after verified account/data-plane binding. A confirmed receipt atomically removes
+device bytes, the local file and its unused metadata intent, retaining a local
+replay tombstone. Missing/legacy responses and finalized-file conflicts retain
+bytes. Cancelling invalidates competing tab claims, and each next network step
+rechecks its claim. The native file sync panel offers Cancel upload offline and
+shows pending cancellation separately from upload retry. Editor-bound post/comment
+uploads stay with their owning editor; finished account files require the pending
+dedicated deletion/review integration.
+
+Local checks: 1,255 pass (250 workspace/offline shell, 306 attachment, 17 storage,
+265 schema, 319 Things and 98 capability); 27 opt-in workspace browser tests are
+skipped by the generic command. The separately enabled real Vite/replica browser
+scenario passes cancellation before start, concurrent start/cancel, a lost start
+reply followed by native offline cancellation, a lost cancellation reply, replay
+refusal, legacy-cleanup receipt retention, finalized-file refusal, owner/guest
+media 404 and canonical cleanup. Native controls fit 1440/390/320px. Evidence:
+`tmp/account-file-cancel-ui/`; a read of only that fixture's database receipt also
+confirms private zero-object accounting and no expiry. Client and Node/Nitro builds
+pass; built discovery/docs/auth checks confirm abort 1.2.0 and anonymous 401.
+TypeScript retains 91 baseline diagnostics, none in changed paths; focused lint
+has zero errors and five pre-existing warnings. These are local results, not
+current-head CI or deployed acceptance. Normal account picker/list/media, completed
+file deletion/conflict review and the rest of the full coverage matrix remain
+unfinished. No main merge, manual deploy or existing-account mutation is claimed.
+
+Cancellation control fields reserve 1 KiB at file admission; final cancellation
+releases bytes before updating its retained receipt in the same transaction. A
+real IndexedDB quota test fills all 64 MiB and proves both never-started and
+previously attempted cancellation can still complete.
+
+Graph verification: the initial semantic refresh completed, but the follow-up
+for the quota correction refused an unverified semantic node shrink. The guard
+was preserved; the final structural refresh retains earlier documentation nodes.
+Latest documentation semantic freshness is therefore unverified.

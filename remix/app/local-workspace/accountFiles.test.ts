@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { AccountFileSync, type AccountFileTransport } from './accountFiles';
-import { WorkspaceDatabase, WorkspaceError } from './storage';
+import { WorkspaceDatabase, WorkspaceError, WORKSPACE_LIMITS } from './storage';
 import { LocalThings } from './things';
 const scope = { kind: 'account' as const, origin: 'https://example.test', ownerId: 'owner', dataPlane: 'home' };
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} };
 function fixture() {
 	const factory = new IDBFactory(),
-		db = new WorkspaceDatabase(factory);
+		db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
 	let now = 1000;
 	const service = new AccountFileSync(db, scope, lease, () => now),
 		bytes = new TextEncoder().encode('A complete editable file'),
@@ -259,5 +259,104 @@ test('invalid upload plans fail before PUT and server retry timing is retained',
 		assert.equal((await f.service.status())[0].retryAt, 93000);
 	} finally {
 		await f.db.close();
+	}
+});
+
+
+test('never-started cancellation is local, durable, scoped and prevents the original save replay', async () => {
+	const f = fixture();
+	try {
+		const row = await f.service.things.saveFile(f.input);
+		await f.service.cancel(row.id); await f.service.cancel(row.id);
+		assert.deepEqual(await f.service.status(), []);
+		await assert.rejects(f.service.things.readFile(row.id), /not stored/);
+		await assert.rejects(f.service.things.saveFile(f.input), /cancelled/);
+		await f.service.sync(f.transport); assert.deepEqual(f.calls, []);
+		const other = new AccountFileSync(f.db, { ...scope, ownerId: 'other' }, lease);
+		assert.ok(await other.things.saveFile(f.input));
+	} finally { await f.db.close(); }
+});
+
+test('ambiguous starts cancel by original request after reopening; only a durable receipt releases bytes', async () => {
+	const f = fixture();
+	try {
+		const row = await f.service.things.saveFile(f.input);
+		await f.service.sync({ ...f.transport, start: async () => { throw Error('Lost start response'); } });
+		await f.service.cancel(row.id);
+		assert.equal((await f.service.status())[0].phase, 'cancel');
+		assert.deepEqual((await f.service.things.readFile(row.id)).bytes, f.bytes);
+		await f.db.close();
+		const db = new WorkspaceDatabase(f.factory), service = new AccountFileSync(db, scope, lease, () => 1000);
+		try {
+			await service.sync({ ...f.transport, cancel: async (requestId) => {
+				assert.equal(requestId, f.input.requestId); return { cancelled: true, deferred: true, retryAt: '2026-10-24T00:00:00.000Z' };
+			} });
+			assert.deepEqual(await service.status(), []);
+			await assert.rejects(service.things.readFile(row.id), /not stored/);
+			await assert.rejects(service.things.saveFile(f.input), /cancelled/);
+			assert.deepEqual(f.calls, []);
+		} finally { await db.close(); }
+	} finally { await f.db.close(); }
+});
+
+test('cancellation supersedes an in-flight tab claim; its late start response cannot upload bytes', async () => {
+	const f = fixture();
+	try {
+		const row = await f.service.things.saveFile(f.input);
+		let release!: () => void, started!: () => void;
+		const entering = new Promise<void>(r => { started = r; }), wait = new Promise<void>(r => { release = r; });
+		const run = f.service.sync({ ...f.transport, start: async () => { started(); await wait; return { id: 'remote-file', partSizeBytes: 8, partCount: Math.ceil(f.bytes.length / 8) }; } });
+		await entering;
+		const otherTab = new AccountFileSync(f.db, scope, lease, () => 1000);
+		await otherTab.cancel(row.id);
+		await otherTab.sync({ ...f.transport, cancel: async () => ({ cancelled: true, deferred: false }) });
+		release(); await run;
+		assert.deepEqual(f.calls, []); assert.deepEqual(await f.service.status(), []);
+		await assert.rejects(f.service.things.readFile(row.id), /not stored/);
+	} finally { await f.db.close(); }
+});
+
+test('refused or legacy cancellation keeps bytes; finalized and editor-bound files cannot be cancelled', async () => {
+	const f = fixture();
+	try {
+		const row = await f.service.things.saveFile(f.input);
+		await f.service.sync({ ...f.transport, start: async () => { throw Error('Lost start'); } });
+		await f.service.cancel(row.id);
+		await f.service.sync({ ...f.transport, cancel: async () => ({ deferred: false } as any) });
+		assert.deepEqual((await f.service.things.readFile(row.id)).bytes, f.bytes);
+		f.advance();
+		await f.service.sync({ ...f.transport, cancel: async () => { throw new WorkspaceError('upload_already_finalized', 'Already ready', 409); } });
+		assert.equal((await f.service.status())[0].state, 'error');
+		assert.deepEqual((await f.service.things.readFile(row.id)).bytes, f.bytes);
+		const ready = await f.service.things.saveFile({ ...f.input, requestId: randomUUID() });
+		await f.service.sync(f.transport); await assert.rejects(f.service.cancel(ready.id), /finished uploading/);
+		const post = await f.service.things.saveFile({ ...f.input, requestId: randomUUID(), purpose: 'post' });
+		await assert.rejects(f.service.cancel(post.id), /owning editor/);
+	} finally { await f.db.close(); }
+});
+
+
+test('full device quota still admits and completes never-started or queued cancellation', async () => {
+	for (const started of [false, true]) {
+		const f = fixture();
+		try {
+			const row = await f.service.things.saveFile(f.input);
+			if (started) {
+				await f.service.sync({ ...f.transport, start: async () => { throw Error('Lost start response'); } });
+				await f.service.retry(row.id);
+			}
+			await f.db.transaction(scope, 'readwrite', lease, async tx => {
+				let remaining = WORKSPACE_LIMITS.bytes - (await tx.usage()).bytes, part = 0;
+				while (remaining > 0) {
+					const size = Math.min(remaining, WORKSPACE_LIMITS.binaryBytes);
+					await tx.putBytes(`quota-fill-${part++}`, new Uint8Array(size)); remaining -= size;
+				}
+				assert.equal((await tx.usage()).bytes, WORKSPACE_LIMITS.bytes);
+			});
+			await f.service.cancel(row.id);
+			if (started) await f.service.sync({ ...f.transport, cancel: async () => ({ cancelled: true, deferred: false }) });
+			assert.deepEqual(await f.service.status(), []);
+			await assert.rejects(f.service.things.readFile(row.id), /not stored/);
+		} finally { await f.db.close(); }
 	}
 });

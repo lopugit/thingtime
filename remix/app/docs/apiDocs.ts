@@ -5808,8 +5808,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-abort',
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'attachments',
 		title: 'Cancel attachment upload',
 		endpoint: '/api/v1/attachments/uploads/abort',
@@ -5822,7 +5822,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['POST'],
 		steps: [
-			'POST either the returned upload id or the original requestId when the user removes a draft file or abandons composition; lookup remains owner-scoped.',
+			'POST {requestId} with a full user session to durably cancel the original upload request, including before its start arrives. The private quota-accounted receipt never expires. cancelled:true proves the request identity is fenced; deferred still reports outstanding byte cleanup. Already-ready/finalizing/bound uploads return 409 and require a fresh reviewed deletion.',
+			'Legacy {uploadId} cleanup still accepts the returned attachment id or original request id, but missing-row success does not fence a delayed start. Watch credentials retain only this legacy mode.',
 			'Treat ok:true as idempotent.',
 			'When deferred is true, quota remains reserved until the cleanup job passes retryAt and completes its separated verification.'
 		],

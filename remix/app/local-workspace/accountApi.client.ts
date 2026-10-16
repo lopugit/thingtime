@@ -275,6 +275,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				const row = await worker().files.things.annotateFile(input); changed();
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
 			},
+			cancelLocalFileUpload: async ({ id }: { id: string }) => { await worker().files.cancel(id); changed(); return { ok: true, savedLocally: true }; },
 			moveLocalFile: async ({ id, folderId }: { id: string; folderId: string | null }) => {
 				const current = worker();
 				if (!await current.files.remoteId(id) && !(await current.files.status()).some(row => row.id === id)) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);

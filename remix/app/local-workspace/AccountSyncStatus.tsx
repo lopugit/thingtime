@@ -274,13 +274,17 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 				{rows.slice(0, 20).map((row) => (
 					<Flex key={row.id} gap={3} align="center" flexWrap="wrap" py={2}>
 						<Text fontSize="sm" flex="1" minW={0} overflowWrap="anywhere">
-							{row.name}: {row.error || (row.state === 'syncing' ? 'Syncing' : 'Waiting to sync')}
+							{row.name}: {row.error || (row.phase === 'cancel' ? 'Cancellation queued; device bytes are retained until confirmed.' : row.state === 'syncing' ? 'Syncing' : 'Waiting to sync')}
 						</Text>
 						{row.state === 'conflict' ? <Button size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async current => {
 							const next = await current.files.metadata.inspect(current.transport.files, row.id); if (mounted.current) setReview(next);
 						})}>Compare file details</Button> : <Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void act(current => current.files.retry(row.id))}>
-							{row.remoteId ? 'Retry file sync' : 'Retry upload'}
+							{row.phase === 'cancel' ? 'Retry cancellation' : row.remoteId ? 'Retry file sync' : 'Retry upload'}
 						</Button>}
+						{row.canCancel && <Box w="100%">
+							<Text fontSize="sm" mb={2}>Cancelling removes this device file once the upload is safely cancelled.</Text>
+							<Button size="sm" isDisabled={busy} onClick={() => void act(current => current.files.cancel(row.id))}>Cancel upload</Button>
+						</Box>}
 					</Flex>
 				))}
 			</details>

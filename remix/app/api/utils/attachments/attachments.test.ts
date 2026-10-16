@@ -12,6 +12,7 @@ import {
 } from './attachments';
 import {
 	assertUnboundPostAnnotation,
+	cancelledAttachmentReceipt,
 	attachmentDeleteClaimFence,
 	attachmentDeletingRetryAt,
 	attachmentDeletingRetryUpdate,
@@ -2505,4 +2506,75 @@ test('only an authorized working draft can donate a bound file to a post', async
   const rejected = await service.inspectForPost('user-1', ['attachment-1']);
   assert.equal(rejected.ok, false);
   if (rejected.ok === false) assert.equal(rejected.status, 409);
+});
+
+
+test('request cancellation reserves an owner-scoped receipt before a delayed start', async () => {
+	const docs = new Map<string, AttachmentDoc>(); let starts = 0;
+	const service = createAttachmentService({ now: () => now, customMongoActive: () => false,
+		store: {
+			reserveCancellation: async (owner: string, id: string) => {
+				const doc = docs.get(id) || cancelledAttachmentReceipt(owner, id, now); docs.set(id, doc); return doc;
+			},
+			getById: async (id: string) => docs.get(id) || null,
+			getOwned: async (owner: string, id: string) => docs.get(id)?.ownerId === owner ? docs.get(id) : null,
+			listExpiredOwned: async () => []
+		} as any,
+		getS3: () => noopS3({ createMultipartUpload: async () => { starts++; throw Error('Must not create an upload'); } })
+	});
+	const requestId = 'original-request';
+	assert.deepEqual(await service.cancel('user-1', { requestId }), { ok: true, cancelled: true, deferred: false });
+	assert.deepEqual(await service.cancel('user-1', { requestId }), { ok: true, cancelled: true, deferred: false });
+	assert.deepEqual(await service.start('user-1', { filename: 'file.txt', sizeBytes: 42, contentType: 'text/plain', purpose: 'file', requestId }), {
+		ok: false, status: 409, error: 'This upload request was cancelled', code: 'upload_cancelled', retryable: false
+	});
+	assert.deepEqual(await service.remove('user-1', { id: attachmentIdForRequest('user-1', requestId) }), { ok: true, deferred: false });
+	assert.equal(starts, 0); assert.equal(docs.size, 1);
+	await service.cancel('user-2', { requestId }); assert.equal(docs.size, 2);
+	assert.equal((await service.download({ id: 'user-1' }, attachmentIdForRequest('user-1', requestId), false)).ok, false);
+});
+
+test('cancellation winning the reserve race fences a start that already observed absence', async () => {
+	let receipt: AttachmentDoc | null = null;
+	const service = createAttachmentService({ now: () => now, customMongoActive: () => false,
+		store: { listExpiredOwned: async () => [], getById: async () => receipt,
+			reservePending: async (input: any) => { receipt = cancelledAttachmentReceipt(input.ownerId, input.id, now); throw Object.assign(Error('Duplicate'), { code: 11000 }); }
+		} as any, getS3: () => noopS3({ createMultipartUpload: async () => { throw Error('Must not initialize cancelled upload'); } })
+	});
+	const result = await service.start('user-1', { filename: 'file.txt', sizeBytes: 42, requestId: 'race', purpose: 'file' });
+	assert.equal(result.ok, false); if (!result.ok) assert.equal(result.code, 'upload_cancelled');
+});
+
+test('request cancellation retains the fence during deferred cleanup and refuses finalization or binding', async () => {
+	let doc = attachmentDoc({ attachmentPartsIssuedAt: now }), removed = 0;
+	const service = createAttachmentService({ now: () => now, customMongoActive: () => false,
+		store: { reserveCancellation: async () => doc,
+			claimDeleting: async (_owner: string, _id: string, _states: unknown, scope: any) => {
+				assert.equal(scope.retainCancellation, true);
+				doc = { ...doc, attachmentState: 'deleting', attachmentCancellationRequested: true }; return doc;
+			}, removeDeleting: async () => { removed++; return true; }
+		} as any, getS3: () => noopS3()
+	});
+	assert.deepEqual(await service.cancel('user-1', { requestId: 'pending' }), { ok: true, cancelled: true, deferred: true, retryAt: doc.attachmentExpiresAt!.toISOString() });
+	assert.equal(removed, 0); assert.equal(doc.attachmentCancellationRequested, true);
+	for (const patch of [{ attachmentState: 'ready' }, { attachmentState: 'finalizing' }, { targetId: 'post' }]) {
+		doc = attachmentDoc(patch as any);
+		const result = await service.cancel('user-1', { requestId: 'pending' });
+		assert.equal(result.ok, false); if (!result.ok) assert.equal(result.code, 'upload_already_finalized');
+	}
+});
+
+test('request cancellation validates its closed input, bounded retries and custom-plane refusal', async () => {
+	let attempts = 0;
+	const service = createAttachmentService({ customMongoActive: () => false,
+		store: { reserveCancellation: async () => { attempts++; throw Object.assign(Error('Concurrent start'), { code: 11000 }); } } as any
+	});
+	for (const input of [{ requestId: '' }, { requestId: null }, { requestId: 'x', uploadId: 'x' }, { requestId: 'x', ownerId: 'other' }]) {
+		const result = await service.cancel('user-1', input); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
+	}
+	assert.equal(attempts, 0);
+	const result = await service.cancel('user-1', { requestId: 'x' });
+	assert.equal(attempts, 3); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 503);
+	const custom = createAttachmentService({ customMongoActive: () => true });
+	assert.equal((await custom.cancel('user-1', { requestId: 'x' })).ok, false);
 });

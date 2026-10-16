@@ -23,6 +23,10 @@ type FileRecord = {
 	id: string;
 	request: AccountFileRequest;
 	sha256: string;
+	controlReserve?: string;
+	started?: boolean;
+	cancelRequested?: true;
+	cancelled?: true;
 	state: SyncState;
 	phase: 'start' | 'upload' | 'complete';
 	plan?: AccountFilePlan;
@@ -34,6 +38,7 @@ type FileRecord = {
 	claim?: { token: string; expiresAt: number };
 };
 export type AccountFileTransport = {
+	cancel?(requestId: string, signal: AbortSignal): Promise<{ cancelled: true; deferred: boolean; retryAt?: string }>;
 	start(request: Readonly<AccountFileRequest>, signal: AbortSignal): Promise<AccountFilePlan>;
 	parts(id: string, parts: { partNumber: number; checksumSha256: string }[], signal: AbortSignal): Promise<SignedUploadPart[]>;
 	put(part: SignedUploadPart, bytes: Uint8Array, signal: AbortSignal): Promise<void>;
@@ -74,9 +79,20 @@ export class AccountFileSync {
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) {
 		return this.db.transaction(this.scope, mode, this.lease, run);
 	}
+	private putRecord(tx: WorkspaceTransaction, row: FileRecord) {
+		// Reserve bounded control space at admission, so a full workspace can
+		// still record cancellation, claim it, retry and acknowledge it. Account
+		// response/part data remain separately charged at their actual size.
+		const { state, phase, started, cancelRequested, cancelled, attempts, retryAt, error, claim } = row;
+		const controls = JSON.stringify({ state, phase, started, cancelRequested, cancelled, attempts, retryAt, error, claim });
+		const controlReserve = ' '.repeat(Math.max(0, 1024 - new TextEncoder().encode(controls).length));
+		return tx.put(COLLECTION, row.id, { ...row, controlReserve });
+	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) {
+		const existing = await tx.get<FileRecord>(COLLECTION, row.id);
+		if (existing?.cancelRequested || existing?.cancelled) throw new WorkspaceError('UPLOAD_CANCELLED', 'This upload request was cancelled. Choose the file again with a new request.', 409);
 		await this.metadata.enqueue(tx, row, previous);
-		if (await tx.get<FileRecord>(COLLECTION, row.id)) return;
+		if (existing) return;
 		const purpose = row.localAttachment.purpose,
 			requestId = row.localAttachment.requestId;
 		if (!requestId || !['file', 'post', 'comment'].includes(purpose))
@@ -91,27 +107,49 @@ export class AccountFileSync {
 				purpose: purpose as AccountFileRequest['purpose']
 			},
 			sha256: row.localAttachment.sha256,
+			started: false,
 			state: 'pending',
 			phase: 'start',
 			uploaded: [],
 			attempts: 0,
 			retryAt: 0
 		};
-		await tx.put(COLLECTION, row.id, record);
+		await this.putRecord(tx, record);
 	}
 	async status() {
 		const metadata = new Map((await this.metadata.status()).map(row => [row.id, row]));
 		return this.tx('readonly', async (tx) =>
-			(await tx.list<FileRecord>(COLLECTION)).map(({ value }) => ({
+			(await tx.list<FileRecord>(COLLECTION)).filter(({ value }) => !value.cancelled).map(({ value }) => ({
 				id: value.id,
 				name: value.request.filename,
 				state: value.state === 'synced' ? metadata.get(value.id)?.state || value.state : value.state,
-				phase: value.phase,
+				phase: value.cancelRequested ? 'cancel' as const : value.phase,
 				error: value.state === 'synced' ? metadata.get(value.id)?.error : value.error,
 				retryAt: value.state === 'synced' ? metadata.get(value.id)?.retryAt || 0 : value.retryAt,
+				canCancel: value.request.purpose === 'file' && !value.remote && !value.cancelRequested,
 				remoteId: value.remote?.id
 			}))
 		);
+	}
+	private async finishCancellation(tx: WorkspaceTransaction, row: FileRecord) {
+		await tx.deleteBytes(row.id);
+		await tx.delete('things', row.id);
+		await this.metadata.discardUnuploaded(tx, row.id);
+		await this.putRecord(tx, { ...row, cancelled: true, cancelRequested: true, state: 'synced', claim: undefined, error: undefined, retryAt: 0 });
+	}
+	/** Records intent offline. Ambiguous uploads keep device bytes until the
+	 * account acknowledges a durable fence; finalized files require review. */
+	async cancel(id: string) {
+		return this.tx('readwrite', async tx => {
+			const row = await tx.get<FileRecord>(COLLECTION, id);
+			if (!row) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching upload.', 404);
+			if (row.cancelled) return;
+			const local = await tx.get<LocalAttachment>('things', id);
+			if (row.request.purpose !== 'file' || local?.targetId || local?.localAttachment.draftId) throw new WorkspaceError('BOUND_UPLOAD', 'Remove this upload through its owning editor.', 409);
+			if (row.remote) throw new WorkspaceError('UPLOAD_FINALIZED', 'This file finished uploading. Review it before deleting.', 409);
+			if (row.started === false) return this.finishCancellation(tx, row);
+			await this.putRecord(tx, { ...row, cancelRequested: true, state: 'pending', claim: undefined, error: undefined, retryAt: 0 });
+		});
 	}
 	async remoteId(id: string) {
 		return this.tx('readonly', async (tx) => (await tx.get<FileRecord>(COLLECTION, id))?.remote?.id || null);
@@ -121,7 +159,7 @@ export class AccountFileSync {
 		return this.tx('readwrite', async (tx) => {
 			const row = await tx.get<FileRecord>(COLLECTION, id);
 			if (!row || row.state === 'synced' || (row.claim && row.claim.expiresAt > this.now())) return;
-			await tx.put(COLLECTION, id, { ...row, state: 'pending', retryAt: 0, error: undefined });
+			await this.putRecord(tx, { ...row, state: 'pending', retryAt: 0, error: undefined });
 		});
 	}
 	private async update(id: string, token: string, change: (row: FileRecord) => FileRecord) {
@@ -130,7 +168,7 @@ export class AccountFileSync {
 			if (!row || row.claim?.token !== token)
 				throw new WorkspaceError('SYNC_CLAIM', 'File synchronization changed; the device file is preserved.', 409);
 			const next = change(row);
-			await tx.put(COLLECTION, id, next);
+			await this.putRecord(tx, next);
 			return next;
 		});
 	}
@@ -147,7 +185,7 @@ export class AccountFileSync {
 					);
 				if (!row) return null;
 				const next = { ...row, state: 'syncing' as const, claim: { token: this.uuid(), expiresAt: this.now() + CLAIM_MS } };
-				await tx.put(COLLECTION, row.id, next);
+				await this.putRecord(tx, next);
 				return next;
 			});
 			if (!claimed) break;
@@ -169,7 +207,13 @@ export class AccountFileSync {
 					controller.signal.addEventListener('abort', stop, { once: true });
 				});
 				try {
-					const result = await Promise.race([Promise.resolve().then(task), cancelled]);
+					const result = await Promise.race([Promise.resolve().then(async () => {
+						await this.tx('readonly', async tx => {
+							if ((await tx.get<FileRecord>(COLLECTION, claimed.id))?.claim?.token !== token) throw new WorkspaceError('SYNC_CLAIM', 'File synchronization changed.', 409);
+						});
+						controller.signal.throwIfAborted(); this.lease.assertCurrent();
+						return task();
+					}), cancelled]);
 					controller.signal.throwIfAborted();
 					this.lease.assertCurrent();
 					return result;
@@ -179,6 +223,17 @@ export class AccountFileSync {
 			};
 			let phase = claimed.phase;
 			try {
+				if (claimed.cancelRequested) {
+					if (!transport.cancel) throw new WorkspaceError('CANCELLATION_UNAVAILABLE', 'The account cannot confirm upload cancellation yet.', 503);
+					const result = await run(() => transport.cancel!(claimed.request.requestId, controller.signal));
+					if (result?.cancelled !== true || typeof result.deferred !== 'boolean') throw new WorkspaceError('INVALID_CANCELLATION', 'The account did not confirm durable cancellation.', 502);
+					await this.tx('readwrite', async tx => {
+						const row = await tx.get<FileRecord>(COLLECTION, claimed.id);
+						if (!row || row.claim?.token !== token) throw new WorkspaceError('SYNC_CLAIM', 'File synchronization changed.', 409);
+						await this.finishCancellation(tx, row);
+					});
+					completed++; continue;
+				}
 				const { row, bytes } = await this.things.readFile(claimed.id, controller.signal);
 				if (
 					row.localAttachment.sha256 !== claimed.sha256 ||
@@ -188,6 +243,7 @@ export class AccountFileSync {
 					throw new WorkspaceError('FILE_CHANGED', 'Device file bytes changed. Choose the file again.', 409);
 				let current: FileRecord = claimed;
 				if (phase === 'start') {
+					current = await this.update(current.id, token, row => ({ ...row, started: true }));
 					const plan = await run(() => transport.start({ ...current.request }, controller.signal));
 					if (
 						!plan ||
@@ -272,8 +328,8 @@ export class AccountFileSync {
 					claim: undefined,
 					attempts: row.attempts + 1,
 					retryAt: this.now() + Math.max(Math.min(60_000, 1000 * 2 ** Math.min(row.attempts, 6)), Number((error as any)?.retryAfterMs) || 0),
-					error: 'File is saved on this device; account upload needs attention.',
-					...(retryPhase === 'upload' ? { phase: 'upload' as const, uploaded: [] } : {})
+					error: row.cancelRequested ? 'Cancellation needs attention; device bytes are retained. A completed account file requires reviewed deletion.' : 'File is saved on this device; account upload needs attention.',
+					...(!row.cancelRequested && retryPhase === 'upload' ? { phase: 'upload' as const, uploaded: [] } : {})
 				})).catch((failure) => {
 					if ((failure as any)?.code !== 'SYNC_CLAIM') throw failure;
 				});

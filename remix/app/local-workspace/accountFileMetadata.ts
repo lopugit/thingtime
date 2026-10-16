@@ -66,6 +66,7 @@ export class AccountFileMetadata {
 				: ({ id: row.id, base: before, state: 'pending', attempts: 0, retryAt: 0 } satisfies MetadataRecord)
 		);
 	}
+	async discardUnuploaded(tx: WorkspaceTransaction, id: string) { await tx.delete(COLLECTION, id); }
 	async status() {
 		return this.tx('readonly', async (tx) => (await tx.list<MetadataRecord>(COLLECTION)).map((row) => row.value));
 	}
