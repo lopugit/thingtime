@@ -49,7 +49,7 @@ Full sync UI/worker acceptance remains incomplete.
 
 ## Next work
 
-Complete installed-app iOS click-through and Android native pairing. Then add editable sync roots and
+Complete installed-app iOS click-through, then add editable sync roots and
 canonical guarded file-version/transfer APIs, native file/Photos workers,
 background scheduling, progress/conflict/settings surfaces and real cross-device
 acceptance. Keep the full goal active until the evidence table is satisfied.
@@ -124,3 +124,39 @@ acceptance. Keep the full goal active until the evidence table is satisfied.
   ID and out-of-scope extraction warnings remain; earlier checkpoint guard
   failures above are historical. Final source/manifest consistency is checked
   after the PR-note rename and activity-recreation serialization change.
+
+
+## Content integrity checkpoint — 2026-10-17
+
+- Attachment-content 1.13.0 returns an authorized, exact-version composite
+  fingerprint without storage identifiers or signed URLs. Object identity,
+  size, version, checksum format and post-HEAD lifecycle checks must all pass.
+  The same canonical part plan drives attachment uploads and bounded local
+  hashing. Sync entries now support that format without confusing it with
+  whole-file SHA-256. Existing attachment lifecycle/accounting remain canonical.
+- The live local HTTP test uploaded two real parts (8 MiB + 17 bytes), replayed
+  start and completion, matched local/cloud fingerprints, independently hashed
+  the downloaded bytes, denied anonymous reads and removed its synthetic file.
+  Local MongoDB and the documented local storage stand-in were used; production
+  S3 and native file transfer acceptance remain outstanding.
+- Focused sync, attachment and capability suites cover malformed/missing
+  checksums, exact-version mismatch, deletion during HEAD, ACL refusal,
+  capability negotiation, scope changes during streaming and response bounds.
+  This is the content-comparison foundation, not a completed sync worker.
+- Empty files, native incremental hashing above the browser's 32 MiB part cap,
+  stable logical file IDs and conditional replacement/Timeline history remain
+  tracked under the full goal in `docs/mobile-file-sync.md`.
+
+- Verification: 36 file-sync tests, 288 attachment tests and 95 capability
+  tests pass (419 total). Targeted lint passes (the existing `.mts` files need
+  the TypeScript parser/ES2021 flags). Full web/Vercel build and both compiled
+  capability handlers pass at 1.13.0. Raw TypeScript retains the same 91
+  pre-existing diagnostics with no additions. No native source changed in this
+  checkpoint; the earlier native acceptance is not a new full-sync claim.
+
+- The content-checkpoint semantic refresh refused a shrinking extraction of the
+  PR note/README and preserved the complete prior semantics. No force/partial
+  override was used. A final structural refresh supplies current source/manifest
+  consistency; it does not establish current semantic coverage for these docs.
+  The browser scope test also rejects mutation of the caller's original scope
+  object during a request, not only replacement with a different scope object.

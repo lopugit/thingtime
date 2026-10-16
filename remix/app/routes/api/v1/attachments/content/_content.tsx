@@ -2,7 +2,7 @@ import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { getAttachmentDownload } from '~/api/utils/attachments/attachments';
+import { getAttachmentDownload, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
 import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -12,6 +12,7 @@ type ContentDependencies = {
 	getUser: typeof getCurrentUser;
 	enforceLimit: typeof enforceRateLimit;
 	download: typeof getAttachmentDownload;
+	fingerprint: typeof getAttachmentFingerprint;
 	enrichViewer: typeof withFriendIds;
 };
 
@@ -19,6 +20,7 @@ const defaultDependencies: ContentDependencies = {
 	getUser: getCurrentUser,
 	enforceLimit: enforceRateLimit,
 	download: getAttachmentDownload,
+	fingerprint: getAttachmentFingerprint,
 	enrichViewer: withFriendIds
 };
 
@@ -46,6 +48,15 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			}
 
 			const audience = await dependencies.enrichViewer(withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || '']));
+			if (url.searchParams.get('fingerprint') === '1') {
+				if (width || url.searchParams.has('cache')) return json({ ok: false, error: 'Fingerprint requests cannot select image or byte-cache variants' }, { status: 400 });
+				const result = await dependencies.fingerprint(
+					audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
+					url.searchParams.get('id')
+				);
+				if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
+				return json(result);
+			}
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.

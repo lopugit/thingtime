@@ -1,3 +1,4 @@
+import { equalContentFingerprints, validContentFingerprint, type ContentFingerprint } from './contentFingerprint';
 /** Transport-independent reconciliation for the native and cloud file adapters.
  * Observations are not authority: executors must condition writes on the exact
  * source and destination stamps and use canonical upload/ACL/quota writers.
@@ -12,6 +13,7 @@ export type SyncEntry = {
 	kind: 'file' | 'folder';
 	size: number;
 	sha256: string | null;
+	fingerprint?: ContentFingerprint;
 };
 export type SyncScan = { scope: SyncScope; complete: boolean; entries: readonly SyncEntry[] };
 export type SyncBaseline = { scope: SyncScope; entries: readonly { path: string; local: SyncEntry; remote: SyncEntry }[] };
@@ -41,7 +43,9 @@ export const sameSyncScope = (a: SyncScope, b: SyncScope): boolean =>
 
 /** A digest is byte equality, never a substitute for an exact mutation guard. */
 export const sameSyncContent = (a: SyncEntry | null, b: SyncEntry | null): boolean =>
-	a === null || b === null ? a === b : a.kind === b.kind && (a.kind === 'folder' || (a.size === b.size && a.sha256 === b.sha256));
+	a === null || b === null ? a === b : a.kind === b.kind && (a.kind === 'folder' || (a.size === b.size && (
+		a.fingerprint && b.fingerprint ? equalContentFingerprints(a.fingerprint, b.fingerprint) :
+		!a.fingerprint && !b.fingerprint && typeof a.sha256 === 'string' && a.sha256 === b.sha256)));
 
 export const sameSyncStamp = (a: SyncEntry | null, b: SyncEntry | null): boolean =>
 	a === null || b === null ? a === b : a.path === b.path && a.id === b.id && a.version === b.version && sameSyncContent(a, b);
@@ -50,7 +54,9 @@ export const validSyncEntry = (entry: SyncEntry): boolean => Boolean(entry) && v
 	typeof entry.id === 'string' && entry.id.length > 0 && entry.id.length <= 512 &&
 	typeof entry.version === 'string' && entry.version.length > 0 && entry.version.length <= 512 &&
 	Number.isSafeInteger(entry.size) && entry.size >= 0 &&
-	(entry.kind === 'folder' ? entry.sha256 === null && entry.size === 0 : entry.kind === 'file' && typeof entry.sha256 === 'string' && digestPattern.test(entry.sha256));
+	(entry.kind === 'folder' ? entry.sha256 === null && entry.size === 0 && entry.fingerprint === undefined : entry.kind === 'file' && (
+		entry.fingerprint === undefined ? typeof entry.sha256 === 'string' && digestPattern.test(entry.sha256) :
+		entry.sha256 === null && validContentFingerprint(entry.fingerprint, entry.size)));
 
 const entryMap = (entries: readonly SyncEntry[]): Map<string, SyncEntry> => {
 	if (entries.length > MAX_SYNC_SCAN_ENTRIES) throw new Error('Sync scan exceeds its bounded partition.');

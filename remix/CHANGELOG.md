@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Mobile sync content integrity: expose authorized,
+  exact-version multipart fingerprints through attachment-content 1.13.0 and
+  compare them with bounded local hashing. Real local multipart upload/download,
+  replay and deletion checks pass. Native sync workers and conditional file
+  replacement remain in progress. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Added the Android native shell and device pairing
   through the shared Things controls, with Keystore-encrypted recovery and
   origin/account fencing. Debug build, lint, protocol and real API/emulator

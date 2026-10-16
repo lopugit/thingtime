@@ -4583,3 +4583,32 @@ loopback HTTP plus `adb reverse`. The opt-in Android test script also requires
 `userId` in the private fixture. See [Android build and acceptance](android/README.md)
 for exact commands, emulator tests and security boundaries. Release signing
 and store distribution remain separate setup; never commit signing keys.
+
+### Verifying file-sync content fingerprints locally
+
+The existing content endpoint advertises `api.attachment-content` 1.13.0 and
+accepts `GET /api/v1/attachments/content?id=<attachment-id>&fingerprint=1`.
+Clients must negotiate that feature first. The fingerprint is a canonical
+multipart composite, not a whole-file SHA-256; see the [sync contract and
+remaining acceptance](docs/mobile-file-sync.md). Missing checksum evidence is
+an error and must never become a deletion decision.
+
+For the opt-in byte acceptance test, use a disposable account on a local MongoDB
+and loopback dev server. Enable private uploads through the normal admin API,
+or register the fixture first, then set `ADMIN_USERNAMES=<fixture-username>` in
+the ignored worktree `remix/.env`. Configure the local attachment storage stand-in
+above, including `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN` with this checkout's
+origin, then restart with `npm run web-pms`. Keep a mode-0600 JSON fixture outside
+the web root containing `base`, `username`, `password` and `userId` (from
+`/api/v1/auth/me`). Never commit credentials or grant a real account test access.
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-fingerprint.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This creates one 8 MiB + 17 byte file, checks replay identity, compares local and
+cloud fingerprints, independently hashes the downloaded bytes, checks anonymous
+denial, then deletes its file and signs out its test session. Remove temporary
+`ADMIN_USERNAMES` entries and restart after acceptance. It does not exercise
+production S3, native background scheduling or complete cross-device sync.

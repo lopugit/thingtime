@@ -657,3 +657,18 @@ test('the local object-storage route is inert unless the stand-in directory is c
 		if (previous !== undefined) process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR = previous;
 	}
 });
+
+test('fingerprint requests retain the content audience, no-store headers and fail-closed rate limit', async () => {
+	let observed: any; let called = 0; let limited = false;
+	const payload = { ok: true as const, id: 'fixture', version: 'a'.repeat(64), size: 1, fingerprint: { algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } };
+	const loader = createAttachmentContentLoader({ getUser: async () => user, enrichViewer: async viewer => ({ ...viewer!, groupIds: new Set(['group']) }),
+		enforceLimit: (async () => limited ? { allowed: false, unavailable: true } : allowed()) as any,
+		download: async () => { throw Error('must not issue a download URL'); },
+		fingerprint: async (viewer, id) => { called++; observed = viewer; assert.equal(id, 'fixture'); return payload; } });
+	const request = new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&fingerprint=1&key=link&sharedRoot=page');
+	const result = await loader({ request }); assert.deepEqual(await result.json(), payload);
+	assert.equal(observed.id, user.id); assert.equal(observed.sharedRoot, 'page'); assert.deepEqual([...observed.linkKeys], ['link']); assert.deepEqual([...observed.groupIds], ['group']);
+	assert.match(result.headers.get('Cache-Control')!, /private.*no-store/);
+	for (const variant of ['&width=64', '&cache=bytes']) assert.equal((await loader({ request: new Request(request.url + variant) })).status, 400);
+	assert.equal(called, 1); limited = true; assert.equal((await loader({ request })).status, 503); assert.equal(called, 1);
+});

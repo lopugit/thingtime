@@ -9965,3 +9965,22 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Revoke then explicitly reconnect; confirm a full account and selected
   server are required. Pairing alone must not request storage/Photos permission
   or advertise background sync/continuous presence.
+
+
+### File-sync verified content (2026-10-17)
+
+- [ ] Run `test:file-sync`, `test:attachments` and `test:api-capabilities`.
+  Composite multipart checksums must never compare equal to whole-file hashes;
+  reject wrong part boundaries, noncanonical digests, changed object versions,
+  source changes during hashing and account/root changes while reading.
+- [ ] Run the README's opt-in `file-sync-fingerprint.integration.mts` against
+  a disposable local upload-approved account. Check two real parts, identical
+  start/complete retries, matching cloud/local fingerprints, an independent
+  whole-file download hash, anonymous 404, deleted-file 404 and fixture cleanup.
+- [ ] Fingerprint requests obey the existing content ACL/moderation/expiry and
+  rate limits, remain private/no-store, reject image/cache variants and never
+  expose storage URLs/keys/versions. Missing checksums, 404, 409, offline and
+  oversized responses must preserve the current sync state, not imply deletion.
+- [ ] Both compiled manifests advertise `api.attachment-content` 1.13.0.
+  Full native transfers, zero-byte files, large-part streaming and production
+  object-storage acceptance remain separate items in `docs/mobile-file-sync.md`.

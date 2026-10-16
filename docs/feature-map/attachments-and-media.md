@@ -3,7 +3,11 @@
 Persistent file sync work lives in `app/fileSync/`: `reconcile.ts` plans bounded
 three-way inventory reconciliation, `execute.ts` persists stable operations and
 resolves uncertain receipts, and `journal.client.ts` stores the browser queue.
-Run `test:file-sync`. Native/cloud adapters and product integration are pending;
+The content endpoint also serves exact-version `sha256-parts-v1` fingerprints
+through `getAttachmentFingerprint`; `contentFingerprint.ts` shares part planning
+and bounded local hashing, and `attachmentFingerprint.client.ts` reads the
+authorized receipt. Run `test:file-sync` and `test:attachments`. Native file
+adapters, conditional cloud replacement and product integration are pending;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.
 

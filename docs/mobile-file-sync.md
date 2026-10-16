@@ -17,7 +17,7 @@ contract and engine work below does **not** establish end-to-end delivery.
 - Version history belongs in the existing Timeline. A sync journal contains
   pending transfer identities and acknowledgements, not an alternate history.
 - Mac currently provides bounded manual transfers (32 MiB per file), not a
-  persistent sync daemon. The iOS shell has recordings, Watch attachment upload paths and native mobile pairing. There is no Android native application in this tree.
+  persistent sync daemon. The iOS shell has recordings, Watch attachment upload paths and native mobile pairing. The Android shell now pairs through the same protocol.
 
 ## Implemented contracts
 
@@ -78,9 +78,9 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor foundation only |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor and verified content fingerprints; stable file replacement and native adapters pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal tests only; native schedulers and transfer adapters pending |
-| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Existing multipart attachments available; sync transport pending |
+| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real two-part attachment upload/download verified; resumable native sync transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Core direction/delete policy only; saved Things and settings UI pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | Core refuses destructive conflicts; storage/UI pending |
@@ -150,3 +150,32 @@ remain pending. See [Android setup and acceptance](../android/README.md).
   and phone widths. Screenshots show duplicated device-card painting beneath
   the existing Things filters; the new connection card and native insets are
   verified, but broader Things rendering remains an open acceptance item.
+
+## Verified content checkpoint — 2026-10-17
+
+The existing attachment content endpoint now supports `fingerprint=1` under
+`api.attachment-content` 1.13.0. It reuses content authorization, verifies the
+exact stored object version, size and attachment ID, then rechecks attachment
+access/lifecycle. The private, uncached response contains an opaque version and
+`sha256-parts-v1`: SHA-256 of concatenated part SHA-256 digests, with the canonical
+part size and count. It is not a whole-file SHA-256. See [S3 composite checksum
+semantics](https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity-upload.html).
+No bucket, object key, internal VersionId or signed download URL is exposed.
+Missing/noncanonical checksums return 409; they never mean an absent file.
+
+`contentFingerprint.ts` shares attachment part planning with bounded local
+hashing. `attachmentFingerprint.client.ts` negotiates the feature and refuses
+scope changes, failed reads and oversized responses. Reconciliation and durable
+operations accept compatible composite fingerprints as well as existing whole
+file hashes; the two formats never compare equal accidentally. The current
+browser implementation caps each part at 32 MiB. Larger parts need a native
+streaming adapter. Empty files remain unsupported by attachment upload and are
+an explicit remaining full-sync requirement.
+
+The real HTTP acceptance script uploaded 8 MiB + 17 bytes in two parts through
+the local storage implementation, replayed start and completion, matched the
+local/cloud fingerprints, independently verified the downloaded whole-file
+SHA-256, denied anonymous reads, and deleted the fixture. This verifies the
+canonical API/local storage integration; it is not a production S3 acceptance
+run or a native background sync run. Stable logical file identity, conditional
+version replacement, Timeline versions/trash and native workers are next.
