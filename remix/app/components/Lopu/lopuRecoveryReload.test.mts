@@ -2,16 +2,17 @@ import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
 let task: any;
 let replies: any[] = [];
+let stops: string[] = [];
 let replayEvents: any[] | null = null;
 const ndjson = (events: any[]) => events.map(event => JSON.stringify(event)).join('\n') + '\n';
 mock.module('./aiTasks.client', { namedExports: {
- bindAiTaskOwner: () => {}, getAiTasks: () => [task], refreshAiTasks: async () => {}, stopAiTaskRequest: async () => {},
+ bindAiTaskOwner: () => {}, getAiTasks: () => [task], refreshAiTasks: async () => {}, stopAiTaskRequest: async (id: string) => { stops.push(id); },
  readAiTaskOutput: async () => ({task, output:ndjson(replayEvents ?? [
   {type:'meta',chatId:'chat',requestId:task.requestId,userMessageId:'user'},
   {type:'done',assistantMessageId:'saved',stopReason:'error',continuationSafe:true,recoveryFailures:task.failures}
  ])})
 }});
-const {getLopuStoreSnapshot, bindLopuApi, hydrateLopuStore, loadLopuChats, recoverLopuBackgroundTasks, resetLopuStoreForTests, resumeLopuChat} = await import('./lopuChatStore');
+const {getLopuStoreSnapshot, bindLopuApi, hydrateLopuStore, loadLopuChats, recoverLopuBackgroundTasks, resetLopuStoreForTests, resumeLopuChat, sendLopuMessage, selectLopuChat, abortLopuTurn} = await import('./lopuChatStore');
 const load = async (owner = 'owner') => {
  hydrateLopuStore(owner);
  bindLopuApi({
@@ -27,7 +28,7 @@ const load = async (owner = 'owner') => {
 };
 const flush = () => new Promise(resolve => setImmediate(resolve));
 beforeEach(() => {
- resetLopuStoreForTests(); replies = []; replayEvents = null;
+ resetLopuStoreForTests(); replies = []; stops = []; replayEvents = null;
  task = {id:'task',requestId:'previous',chatId:'chat',path:'/api/v1/lopu/chats/reply',management:'client',status:'needs-attention',contentType:'application/x-ndjson',updatedAt:'1',failures:5};
 });
 test('saved retry limit survives independent polls, reload and account switches; manual Continue intentionally retries', async () => {
@@ -98,4 +99,29 @@ for (const management of ['client', 'server']) {
    }
   });
  }
+}
+
+for (const path of ['/api/v1/lopu/musing', '/api/v1/ai/complete', '/api/v1/lopu/chats/reply']) {
+ test(`a task without a chat ID (${path}) cannot block a fresh chat's first message`, async () => {
+  await load(); selectLopuChat(null);
+  task = { ...task, chatId: null, path, status: 'running' };
+  assert.equal((await sendLopuMessage('Hello from a new chat')).ok, true);
+  assert.equal(replies.length, 1, 'the first message reaches the reply client');
+ });
+ test(`Stop in a fresh chat does not cancel a task without a chat ID (${path})`, async () => {
+  await load(); selectLopuChat(null);
+  task = { ...task, chatId: null, path, status: 'running' };
+  abortLopuTurn(); await flush();
+  assert.deepEqual(stops, [], 'Stop in a fresh chat must not stop unrelated work');
+ });
+}
+for (const state of [{status: 'running'}, {status: 'completed', workflowStatus: 'running'}]) {
+ test(`a real chat task still prevents duplicate sends (${JSON.stringify(state)})`, async () => {
+  await load(); selectLopuChat('chat');
+  task = { ...task, ...state };
+  assert.equal((await sendLopuMessage('Do not duplicate')).ok, false);
+  assert.equal(replies.length, 0);
+  abortLopuTurn(); await flush();
+  assert.deepEqual(stops, [task.requestId]);
+ });
 }
