@@ -539,3 +539,15 @@ JSON imports into that queue, with managed/file imports retaining their dedicate
 adapters. `accountImport.test.ts` covers rollback, frozen retries and references;
 `accountImport.browser.test.ts` covers the normal dialog offline and a real server
 export/import round-trip. Offline account export completeness remains a separate gate.
+
+
+Account Download uses `local-workspace/accountExport.ts` and the shared
+`exportLocalThingSnapshot` collector. `AccountThingSync.exportSnapshot` captures
+content and queue/tombstones together. Complete canonical online plans supply
+scoped export-only dependency snapshots; partial library pages never establish
+completeness. The existing account transport now also serves export preparation
+with actor/data-plane headers and capability negotiation. `accountExport.test.ts`
+covers missing coverage, stale copies, pending edits, alias ownership, quota,
+cancellation and identity fencing. `accountImport.browser.test.ts` exercises
+real offline normal-dialog downloads and round-trips the downloaded file.
+File/linked-gallery and managed-account offline export remain separate work.

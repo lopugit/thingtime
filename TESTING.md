@@ -7705,6 +7705,20 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Check 1440/390/320px widths with no horizontal overflow. Account page saves
       and confirmed sync must finish while `/api/v1/drafts` POSTs never settle.
       `siteBlocks.browser.test.ts` exercises the disposable production client.
+- [ ] Account offline export: download a newly imported ordinary bundle through
+  the normal Download dialog while fully offline, before sync; verify canonical
+  content and all dependencies, then import the downloaded file through the normal
+  importer with fresh IDs. Repeat download after sync and cold offline reload.
+  Check the 320px dialog and zero offline mutation requests.
+- [ ] A first-page account folder cache must fail offline download until the
+  canonical exporter has supplied complete coverage. Preserve pending edits,
+  moves and deletes in the cached export; refuse missing dependencies. A shared
+  export-only component with a higher version and the same key must not replace
+  an owned component alias. Two authorized roots with conflicting saved dependency
+  contexts must fail instead of silently rewriting one another. Identity
+  changes/cancellation must not retain partial
+  snapshots. A full device must still permit downloading its local content even
+  when export-cache retention exceeds quota. Keep media/managed exports explicit.
 - [ ] Account offline import: use the normal Things dialog to import a folder,
       page/component and schema/data bundle with no networking. Native preview,
       edit and cold reload work locally; no mutation is sent. Reconnect only

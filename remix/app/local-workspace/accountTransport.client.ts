@@ -25,15 +25,18 @@ export const readBoundedJson = async (response: Response) => {
 export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountSyncTransport & {
 	read(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	resolve(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
+	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' = 'things') => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' = 'things') => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		await requireThingtimeCapability(endpoint === 'things' ? 'api.things' : 'api.webpages-resolve', endpoint === 'things' ? '1.33.0' : '1.3.0');
+		const capability = endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0'];
+		await requireThingtimeCapability(capability[0], capability[1]);
+		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
 		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', '1.10.0');
 		await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 		lease.assertCurrent(); remoteLease.assertCurrent(); retired.signal.throwIfAborted(); signal?.throwIfAborted();
@@ -61,6 +64,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	return {
 		read: (args, signal) => request('GET', args, signal),
 		resolve: (args, signal) => request('GET', args, signal, 'webpages/resolve'),
+		export: (args, signal) => request('POST', args, signal, 'things/export'),
 		get: async (id, signal) => (await request('GET', { id }, signal)).thing as AccountThing,
 		remove: async (operation, signal) => { await request('DELETE', operation.body, signal); },
 		write: async (operation, signal) => (await request(operation.method === 'create' ? 'POST' : 'PATCH', operation.body, signal)).thing as AccountThing

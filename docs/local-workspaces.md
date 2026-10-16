@@ -81,7 +81,7 @@ change this pointer; logout/account changes revoke it.
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
 | Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue update recovery, cross-account coverage and real-device startup verification. Chromium offline-emulation module cancellations remain under investigation; request blocking is no longer accepted without its root-read failure probe; the latest checkpoint defaults to actual offline emulation and retains failures as merge gates. |
-| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Ordinary JSON imports now create private independent local copies with atomic queue intent and verified canonical server round-trip (checkpoint below). Complete file/managed imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
+| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Ordinary JSON imports now create private independent local copies with atomic queue intent and verified canonical server round-trip (checkpoint below). Ordinary JSON downloads now use device content and complete scoped export snapshots, with native offline dialog/download/reload and normal-importer round-trip evidence (checkpoint below). Complete file/managed imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
 
 ## Development verification
 
@@ -1577,3 +1577,61 @@ TT_SHARED_PLAYWRIGHT_PATH=/absolute/path/to/playwright/index.mjs \
 TT_SHARED_CHROME_PATH=/absolute/path/to/chrome \
 node --import tsx --test app/local-workspace/accountImport.browser.test.ts
 ```
+
+
+## Account export checkpoint — 2026-10-16
+
+The normal Things Download dialog now exports ordinary account content locally.
+`accountExport.ts` reuses `exportLocalThingSnapshot`, the existing collector,
+composition rewriter, canonical validator and serializer. New unsynced content
+requires no draft save, sync or network request. Pending edits, moves and
+local deletions overlay the last complete device export snapshot. The UI calls
+this a device snapshot; it cannot promise changes made elsewhere while offline.
+
+A cached library page is not proof that all folder children, dependencies or
+media were read. For existing server content, the adapter prepares missing
+coverage through the canonical server exporter while online and verified, then
+retains validated content-only snapshots in the account/origin/data-plane scope.
+Missing coverage or required dependencies refuse the download while offline;
+no partial success is returned. Existing shared-link requests remain uncached.
+Export-only dependency copies are not editable owned Things, sync entries or
+alias candidates for account-owned definitions. Exact dependency IDs retain
+meaning; shared keys cannot capture a local component alias.
+
+Snapshots are keyed by selected IDs and every include option, limited to 16
+entries and the existing 1 MiB record / 64 MiB workspace quotas. Cache retention
+is optional: an over-quota snapshot does not prevent downloading the only local
+copy (`retainedOnDevice: false`). Local collection uses one content/sync snapshot;
+identity, cancellation and the canonical 30-second preparation deadline fence
+completion. Remote preparation uses bounded responses and the existing actor/
+data-plane transport, capability negotiation and 20-second request timeout.
+
+This checkpoint covers ordinary no-file/no-link transfers. Media and managed
+content retain their dedicated online export path; pending local edits cannot
+silently be replaced with older server content. Offline file/linked-gallery and
+managed-account exports remain acceptance work, as do broader catalogue/cache
+membership and cross-device refresh. Account imports with files remain gated.
+
+Local verification: 206 workspace tests and four offline-shell tests pass;
+20 opt-in workspace/browser cases are skipped in the general suite. All 315
+Things tests pass. The enabled disposable-account browser scenario now downloads
+actual JSON from the normal dialog while fully offline, preserves all five
+Things and the pending page edit, round-trips that exact file through the normal
+server importer, and downloads the same device snapshot after sync and cold
+reload. It verifies zero offline mutations, no browser errors, native preview
+bounds at 1440/390/320px, and a usable 320px Download dialog. Artifacts live in
+`tmp/local-account-export-ui/`, including `offline-exported.thingtime.json` and
+`export-dialog-320.png`. Run the existing `accountImport.browser.test.ts` with
+its documented environment and this artifact directory to repeat it.
+
+Client build: 247 verified offline assets / 21,549,320 bytes. Focused lint has
+zero errors and the existing LocalThings constructor warning. Raw TypeScript
+retains the same 91 normalized baseline diagnostics. These results are local;
+CI and deployed behavior remain separate, and the full matrix is not complete.
+
+Final graph verification: the semantic refresh hit Graphify's shrink guard for
+the PR note (two semantic nodes became one), so no partial semantic graph was
+accepted. The earlier semantic extraction is retained and the final source uses
+the repository-permitted structural refresh. Final documentation semantic
+freshness is unverified; source fingerprint and graph/manifest coverage are
+checked separately.

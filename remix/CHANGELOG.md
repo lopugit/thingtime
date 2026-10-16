@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Normal account Downloads now export saved device
+  edits offline through the canonical transfer pipeline, with complete scoped
+  export snapshots, dependency/alias guards and explicit missing-content errors.
+  Verified normal-dialog download, importer round-trip and cold offline reload;
+  [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Ordinary account imports now create editable local
   private copies and queue sync atomically, reusing canonical copy preparation
   and stable retry identities. Verified native offline import/edit/reload and

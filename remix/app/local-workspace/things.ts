@@ -355,55 +355,8 @@ export class LocalThings {
 		});
 	}
 	async export(ids: string[], options: CollectTransferOptions = {}) {
-		if (ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Open History to export a saved version.');
-		// Take one consistent snapshot, then collect outside the IDB transaction.
-		const saved = await this.snapshot();
-		if (saved.some(row => ids.includes(row.id) && isLocalActivity(row))) fail('MANAGED_KIND', 'Export the content Thing; local interaction and run state is not portable account authority');
-		const attachments = saved.filter(isLocalAttachment);
-		const mediaCopies = new Map(attachments.map(row => [row.id, localAttachmentFileId(row.id)]));
-		const readBytes = (id: string) => this.transaction('readonly', tx => tx.getBytes(id));
-		const lease = this.lease;
-		const docs = new Map([...this.builtins.map(doc => [doc.id, content(doc)] as const), ...saved.filter(row => !isLocalActivity(row)).map(value => [value.id, content(value)] as const)]);
-		const timestamps = new Map(saved.map(row => [row.id, row.updatedAt]));
-		const builtinIds = new Set(this.builtins.map(row => row.id));
-		const componentCandidates = [...docs.values()].filter(row => row.thingtime.includes('component'))
-			.sort((a, b) => (timestamps.get(b.id) || '').localeCompare(timestamps.get(a.id) || '') || a.id.localeCompare(b.id))
-			.map(row => ({ row, shareId: row.id, ownerId: builtinIds.has(row.id) ? 'system' : 'workspace', crystal: row.crystal }));
-		const resolve = (kind: string, ref: string) => {
-			const exact = docs.get(ref); if (exact?.thingtime.includes(kind)) return exact;
-			if (kind === 'component') return selectComponent(ref, componentCandidates, 'workspace')?.row;
-			return [...docs.values()].find(row => row.thingtime.includes(kind) && (row.crystal.actionKey === ref || row.crystal.name === ref));
-		};
-		// Canonicalize aliases using the existing composition rewriter; portable
-		// dependencies may not depend on a database's seeded key resolution.
-		for (const doc of docs.values()) doc.crystal = rewriteComposition(doc.thingtime, doc.crystal, (kind, ref) => resolve(kind, ref)?.id || ref);
-		const bundle = await collectTransfer(ids, {
-			read: async id => { this.lease.assertCurrent(); const file = attachments.find(row => row.id === id); if (file && (file.targetId || options.includeFiles === false)) fail('FILE_EXPORT_REQUIRED', 'Export the containing Thing, or include file bytes in a ZIP for a standalone file'); return docs.get(id) || fail('MISSING_DEPENDENCY', `Missing Thing: ${id}`, 404); },
-			children: async id => ({ ids: [...docs.values()].filter(doc => doc.folderId === id && !doc.targetId).map(doc => doc.id) }),
-			dependencies: async doc => compositionReferences(doc.thingtime, doc.crystal).flatMap(ref => {
-				const found = resolve(ref.kind, ref.ref);
-				if (!found && !ref.optional) fail('MISSING_DEPENDENCY', `Missing ${ref.kind}: ${ref.ref}`, 404);
-				return found ? [found.id] : [];
-			}),
-			files: async function* (doc) {
-				const ids = new Set(attachments.filter(row => row.targetId === doc.id || row.id === doc.id).sort((a,b) => a.localAttachment.order-b.localAttachment.order || a.id.localeCompare(b.id)).map(row => row.id));
-				for (const id of compositionAttachmentIds(doc.thingtime, doc.crystal, { component: ref => resolve('component', ref)?.crystal })) ids.add(id);
-				for (const id of ids) {
-					lease.assertCurrent(); options.signal?.throwIfAborted();
-					const row = attachments.find(row => row.id === id);
-					if (!row) fail('MISSING_LOCAL_FILE', `File ${id} is not stored in this workspace`, 404);
-					const data = await readBytes(id);
-					if (!data || data.byteLength !== row!.crystal.size || await transferChecksum(data) !== row!.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed; no partial export was created');
-					lease.assertCurrent();
-					yield { id: localAttachmentFileId(id), name: String(row!.crystal.name), mime: String(row!.crystal.contentType), data: data!, ...transferAnnotations(row!.crystal as any) };
-				}
-			}
-		}, options);
-		const includedCopies = new Map([...mediaCopies].filter(([, fileId]) => bundle.files.has(fileId)));
-		const crystals = rewriteTransferMedia(bundle.manifest.things, includedCopies);
-		for (const row of bundle.manifest.things) row.crystal = crystals.get(row.id)!;
-		serializeTransfer(bundle.manifest);
-		this.lease.assertCurrent(); return bundle;
+		return exportLocalThingSnapshot(await this.snapshot(), this.builtins, ids, this.lease,
+			id => this.transaction('readonly', tx => tx.getBytes(id)), options);
 	}
 	async import(input: unknown, folderId?: string | null, fileBytes = new Map<string, Uint8Array>(), signal?: AbortSignal) {
 		this.lease.assertCurrent(); signal?.throwIfAborted();
@@ -475,4 +428,56 @@ export class LocalThings {
 		}, undefined, signal);
 		return { ok: true, roots: manifest.roots.map(id => map.get(id)!), idMap: Object.fromEntries(map), things: rows };
 	}
+}
+
+/** Collect one immutable device snapshot through the canonical transfer pipeline.
+ * Account adapters must prove cache completeness before each selected read. */
+export async function exportLocalThingSnapshot(saved: LocalThing[], builtins: readonly TransferThing[], ids: string[],
+ lease: WorkspaceLease, readBytes: (id: string) => Promise<Uint8Array | undefined>, options: CollectTransferOptions = {},
+ assertAvailable?: (thing: TransferThing) => void, aliasIds?: ReadonlySet<string>) {
+	if (ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Open History to export a saved version.');
+	if (saved.some(row => ids.includes(row.id) && isLocalActivity(row))) fail('MANAGED_KIND', 'Export the content Thing; local interaction and run state is not portable account authority');
+	const attachments = saved.filter(isLocalAttachment);
+	const mediaCopies = new Map(attachments.map(row => [row.id, localAttachmentFileId(row.id)]));
+	const docs = new Map([...builtins.map(doc => [doc.id, content(doc)] as const), ...saved.filter(row => !isLocalActivity(row)).map(value => [value.id, content(value)] as const)]);
+	const timestamps = new Map(saved.map(row => [row.id, row.updatedAt]));
+	const builtinIds = new Set(builtins.map(row => row.id));
+	const componentCandidates = [...docs.values()].filter(row => row.thingtime.includes('component') && (!aliasIds || aliasIds.has(row.id)))
+		.sort((a, b) => (timestamps.get(b.id) || '').localeCompare(timestamps.get(a.id) || '') || a.id.localeCompare(b.id))
+		.map(row => ({ row, shareId: row.id, ownerId: builtinIds.has(row.id) ? 'system' : 'workspace', crystal: row.crystal }));
+	const resolve = (kind: string, ref: string) => {
+		const exact = docs.get(ref); if (exact?.thingtime.includes(kind)) return exact;
+		if (kind === 'component') return selectComponent(ref, componentCandidates, 'workspace')?.row;
+		return [...docs.values()].find(row => (!aliasIds || aliasIds.has(row.id)) && row.thingtime.includes(kind) && (row.crystal.actionKey === ref || row.crystal.name === ref));
+	};
+	// Canonicalize aliases using the existing composition rewriter; portable
+	// dependencies may not depend on a database's seeded key resolution.
+	for (const doc of docs.values()) doc.crystal = rewriteComposition(doc.thingtime, doc.crystal, (kind, ref) => resolve(kind, ref)?.id || ref);
+	const bundle = await collectTransfer(ids, {
+		read: async id => { lease.assertCurrent(); const found = docs.get(id); if (found) assertAvailable?.(found); const file = attachments.find(row => row.id === id); if (file && (file.targetId || options.includeFiles === false)) fail('FILE_EXPORT_REQUIRED', 'Export the containing Thing, or include file bytes in a ZIP for a standalone file'); return docs.get(id) || fail('MISSING_DEPENDENCY', `Missing Thing: ${id}`, 404); },
+		children: async id => ({ ids: [...docs.values()].filter(doc => doc.folderId === id && !doc.targetId).map(doc => doc.id) }),
+		dependencies: async doc => compositionReferences(doc.thingtime, doc.crystal).flatMap(ref => {
+			const found = resolve(ref.kind, ref.ref);
+			if (!found && !ref.optional) fail('MISSING_DEPENDENCY', `Missing ${ref.kind}: ${ref.ref}`, 404);
+			return found ? [found.id] : [];
+		}),
+		files: async function* (doc) {
+			const ids = new Set(attachments.filter(row => row.targetId === doc.id || row.id === doc.id).sort((a,b) => a.localAttachment.order-b.localAttachment.order || a.id.localeCompare(b.id)).map(row => row.id));
+			for (const id of compositionAttachmentIds(doc.thingtime, doc.crystal, { component: ref => resolve('component', ref)?.crystal })) ids.add(id);
+			for (const id of ids) {
+				lease.assertCurrent(); options.signal?.throwIfAborted();
+				const row = attachments.find(row => row.id === id);
+				if (!row) fail('MISSING_LOCAL_FILE', `File ${id} is not stored in this workspace`, 404);
+				const data = await readBytes(id);
+				if (!data || data.byteLength !== row!.crystal.size || await transferChecksum(data) !== row!.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed; no partial export was created');
+				lease.assertCurrent();
+				yield { id: localAttachmentFileId(id), name: String(row!.crystal.name), mime: String(row!.crystal.contentType), data: data!, ...transferAnnotations(row!.crystal as any) };
+			}
+		}
+	}, options);
+	const includedCopies = new Map([...mediaCopies].filter(([, fileId]) => bundle.files.has(fileId)));
+	const crystals = rewriteTransferMedia(bundle.manifest.things, includedCopies);
+	for (const row of bundle.manifest.things) row.crystal = crystals.get(row.id)!;
+	serializeTransfer(bundle.manifest);
+	lease.assertCurrent(); return bundle;
 }

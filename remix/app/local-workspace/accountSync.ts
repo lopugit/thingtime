@@ -112,6 +112,13 @@ export class AccountThingSync {
 			state: existing?.state === 'conflict' || existing?.state === 'error' ? existing.state : 'pending',
 			attempts: existing?.attempts || 0, retryAt: existing?.retryAt || 0 } satisfies SyncRecord);
 	}
+	/** Content, tombstones and sync bases must describe the same device revision. */
+	async exportSnapshot() {
+		return this.tx('readonly', async tx => ({
+			things: (await tx.list<LocalThing>('things')).map(row => row.value),
+			records: (await tx.list<SyncRecord>(COLLECTION)).map(({ value: row }) => ({ id: row.id, state: row.state, remote: !!row.base, deleted: !!row.deleted }))
+		}));
+	}
 	async isDeleted(id: string) { return this.tx('readonly', async tx => !!(await tx.get<SyncRecord>(COLLECTION, id))?.deleted); }
 	/** Match canonical deletion: drain folder children to their surviving parent;
 	 * cascade target-linked content. Content removal and intent commit together. */

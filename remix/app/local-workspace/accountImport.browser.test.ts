@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import test from 'node:test';
-import { serializeTransfer, validateTransfer } from '../utils/thingTransfer/format';
+import { parseTransfer, serializeTransfer, validateTransfer } from '../utils/thingTransfer/format';
 const base = process.env.TT_LOCAL_ACCOUNT_IMPORT_URL, artifacts = process.env.TT_LOCAL_ACCOUNT_IMPORT_ARTIFACTS, playwrightPath = process.env.TT_SHARED_PLAYWRIGHT_PATH;
 test('normal account import creates editable native content offline and syncs remapped private copies after reconnect', { skip: !base || !playwrightPath, timeout: 150_000 }, async () => {
  assert.ok(['localhost', '127.0.0.1'].includes(new URL(base!).hostname), 'Disposable local account fixture only');
@@ -47,6 +47,26 @@ test('normal account import creates editable native content offline and syncs re
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.goto(new URL(`/p/${pageId}`, base).href); await page.getByText('Native account import', { exact: true }).waitFor();
   for (const width of [1440, 390, 320]) { await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 }); const size = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth })); assert.equal(size.width, size.scrollWidth); bounds.push(size); if (artifacts) await page.screenshot({ path: resolve(artifacts, `import-preview-${width}.png`), fullPage: false }); }
+  await page.goto(new URL('/things', base).href);
+  const downloadFolder = async () => {
+   await page.getByRole('link', { name: 'Offline imported bundle', exact: true }).click({ button: 'right' });
+   await page.getByRole('menuitem', { name: '📥 Download…', exact: true }).click();
+   await page.getByRole('combobox', { name: 'Download format' }).selectOption('json');
+   await page.evaluate(() => document.fonts.ready);
+   const dialogBounds = await page.getByRole('dialog').evaluate((node: HTMLElement) => ({ width: node.getBoundingClientRect().width, scroll: node.scrollWidth, client: node.clientWidth }));
+   assert.ok(dialogBounds.width <= 320); assert.equal(dialogBounds.scroll, dialogBounds.client);
+   if (artifacts) await page.screenshot({ path: resolve(artifacts, 'export-dialog-320.png') });
+   const ready = page.waitForEvent('download');
+   await page.getByRole('button', { name: 'Download', exact: true }).click();
+   const downloaded = await ready, path = await downloaded.path(); assert.ok(path);
+   const exported = parseTransfer(await readFile(path!, 'utf8'));
+   assert.equal(exported.things.length, 5);
+   assert.equal(exported.things.find(row => row.id === pageId)!.crystal.name, 'Edited imported page before sync');
+   assert.doesNotMatch(serializeTransfer(exported), /"author"|"visibility"|"revision"|"updatedAt"/);
+   return exported;
+  };
+  const offlinePortable = await downloadFolder();
+  if (artifacts) await writeFile(resolve(artifacts, 'offline-exported.thingtime.json'), serializeTransfer(offlinePortable));
   assert.deepEqual(mutations.slice(before), []); assert.equal(await read(pageId), null);
   await context.setOffline(false); await page.goto(new URL('/things', base).href);
   let remotePage: any;
@@ -63,14 +83,19 @@ test('normal account import creates editable native content offline and syncs re
   const plan = (await exported.json()).plan;
   const portable = validateTransfer({ format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: plan.files });
   const json = serializeTransfer(portable); assert.equal(portable.things.length, 5); assert.doesNotMatch(json, /"author"|"visibility"|"revision"|"updatedAt"/);
-  const copied = await context.request.post(new URL('/api/v1/things/import', base).href, { headers, data: { manifest: portable, files: {} } }); assert.equal(copied.status(), 200);
+  const copied = await context.request.post(new URL('/api/v1/things/import', base).href, { headers, data: { manifest: offlinePortable, files: {} } }); assert.equal(copied.status(), 200);
   const imported = await copied.json(); assert.equal(imported.imported, 5);
   for (const id of Object.values(imported.ids) as string[]) ids.add(id);
   const copiedPage = await read(imported.ids[pageId]), copiedSchema = await read(imported.ids[schema.id]), copiedData = await read(imported.ids[data.id]);
   assert.notEqual(copiedPage.id, pageId); assert.equal(copiedPage.crystal.blocks[0].component, imported.ids[card.id]);
   assert.equal(copiedData.crystal.schemaId, copiedSchema.id); assert.equal(copiedData.crystal.schema, copiedSchema.crystal.name);
+  await context.setOffline(true); await page.goto(new URL('/things', base).href); await page.reload();
+  const beforeSecondDownload = mutations.length;
+  assert.equal(serializeTransfer(await downloadFolder()), serializeTransfer(offlinePortable));
+  assert.deepEqual(mutations.slice(beforeSecondDownload), []);
+  await context.setOffline(false);
   assert.deepEqual(errors, []);
-  if (artifacts) { await writeFile(resolve(artifacts, 'exported.thingtime.json'), json); await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ offlineImport: true, nativePreview: true, offlineEdit: true, coldReload: true, zeroOfflineMutations: true, privateServerSync: true, remappedDependencies: true, noSitePlacement: true, canonicalExport: true, normalServerImportRoundTrip: true, bounds, errors }, null, 2)); }
+  if (artifacts) { await writeFile(resolve(artifacts, 'exported.thingtime.json'), json); await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ offlineImport: true, nativePreview: true, offlineEdit: true, coldReload: true, zeroOfflineMutations: true, privateServerSync: true, remappedDependencies: true, noSitePlacement: true, canonicalExport: true, normalServerImportRoundTrip: true, offlineDownloadThroughNormalDialog: true, offlineDownloadAfterSyncAndReload: true, bounds, errors }, null, 2)); }
  } catch (error) { if (artifacts) { await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.json'), JSON.stringify({ body: await page.locator('body').innerText(), errors, mutations }, null, 2)); } throw error;
  } finally {
   await context.setOffline(false);

@@ -1035,3 +1035,40 @@ Artifacts: `tmp/local-account-import-ui/`; logs: `tmp/local-account-import-*.log
 Account file/managed imports, account export UI/cache completeness and the wider
 acceptance matrix remain open. Anonymous site/suite import semantics are unchanged;
 complete local/remote import parity is not claimed. No main merge or manual deployment.
+
+
+## 2026-10-16 — Ordinary account export checkpoint
+
+Normal Download now uses device content before network or sync, including
+pending edits and complete dependency closure. `accountExport.ts` keeps scoped,
+option-bound content-only snapshots prepared by the canonical server exporter;
+a partial library page never qualifies as a complete folder export. Missing
+coverage refuses offline; canonical collection/serialization and exact dependency
+remapping remain shared. Shared/export-only definitions cannot capture owned
+component aliases or become owned editable/syncable Things. Snapshots are bounded
+to 16 entries and normal device quota; cache-retention failure does not block the
+download. Preparation retains the existing deadline, cancellation, expected-actor,
+data-plane, identity and capability boundaries.
+
+Verification: 206 workspace + four offline-shell + 315 Things tests pass, with
+20 general-suite opt-in skips. The enabled account import browser scenario now
+also downloads real canonical JSON offline through the normal dialog, imports
+that exact file through the normal server importer, then repeats the offline
+download after sync/cold reload. All five Things, pending text, references and
+private copy remapping survive. Native preview fits 1440/390/320px; the 320px
+Download dialog has no horizontal overflow. Offline mutations and browser errors
+are zero. Evidence: `tmp/local-account-export-ui/`. Build: 247 verified assets /
+21,549,320 bytes. Lint: zero errors, one existing constructor warning. TypeScript:
+the unchanged 91 normalized baseline diagnostics.
+
+Ordinary no-file/no-link exports are covered. Dedicated media/managed exports
+with unsynced edits, broader account cache membership and cross-device refresh
+remain open; the full [matrix](../docs/local-workspaces.md) still gates merging.
+Local evidence is separate from CI and deployment.
+
+Final graph verification: the semantic refresh hit Graphify's shrink guard for
+the PR note (two semantic nodes became one), so no partial semantic graph was
+accepted. The earlier semantic extraction is retained and the final source uses
+the repository-permitted structural refresh. Final documentation semantic
+freshness is unverified; source fingerprint and graph/manifest coverage are
+checked separately.

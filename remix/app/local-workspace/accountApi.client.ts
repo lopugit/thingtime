@@ -1,3 +1,5 @@
+import { withExportDeadline } from '../utils/thingTransfer/exportDeadline';
+import { exportAccountThings, snapshotAccountExportInput } from './accountExport';
 import { browseLocalDefinitions } from './definitionCatalog';
 import { searchLocalThings } from './structuredSearch';
 import { readWorkspaceSearchCursor, workspaceSearchCursor } from './searchCursor';
@@ -155,6 +157,25 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	};
 	return { ...online, auth: remote.auth, login: remote.login,
 		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
+		export: async (input: Parameters<typeof exportAccountThings>[0], options?: { signal?: AbortSignal }) => {
+			input = snapshotAccountExportInput(input);
+			return withExportDeadline(async signal => {
+				options = { ...options, signal };
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				const current = worker(), canRefresh = () => navigator.onLine !== false && canSyncAccountWorkspace(scope);
+				if (!input.key) {
+					for (const id of input.ids) if (!await current.sync.view(id) && !await current.sync.isDeleted(id)) {
+						if (!canRefresh()) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'This Thing is not saved on this device. Open it online before downloading offline.', 409);
+						await refresh({ id }, options?.signal);
+						if (!await current.sync.view(id)) {
+							if ((await current.sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_EXPORT_REQUIRED', 'Download device edits separately from content requiring its dedicated online adapter.', 409);
+							return current.transport.export(input, options?.signal);
+						}
+					}
+				}
+				return exportAccountThings(input, { ...current, canRefresh, remote: (args, request) => current.transport.export(args, request?.signal) }, options?.signal);
+			}, options?.signal);
+		},
 		import: async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array> }, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 			if (Object.keys(input || {}).some(key => !['manifest', 'folderId', 'files', 'localFiles'].includes(key))) throw new WorkspaceError('INVALID_IMPORT', 'Unsupported import options.');
