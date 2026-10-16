@@ -577,7 +577,7 @@ with actor/data-plane headers and capability negotiation. `accountExport.test.ts
 covers missing coverage, stale copies, pending edits, alias ownership, quota,
 cancellation and identity fencing. `accountImport.browser.test.ts` exercises
 real offline normal-dialog downloads and round-trips the downloaded file.
-File/linked-gallery and managed-account offline export remain separate work.
+Saved standalone account files now participate in this collector (see the file-transfer checkpoint below); linked-gallery and managed-account offline export remain separate work.
 
 
 Account catalogue discovery uses `accountThingTransport.browse` and bounded
@@ -595,3 +595,10 @@ are stored; bundled targets remain read-only and outside Mine/ordinary export.
 save time without changing projected definition timestamps. Existing scoped
 refresh handles changes from other tabs. Account interaction sync remains a
 separate gate; see the [bundled Library checkpoint](../local-workspaces.md#anonymous-bundled-bookmarks-and-reactions--2026-10-16).
+
+
+Account ordinary exports now include new or retained standalone device files via
+`AccountFileSync.library/readFile`, with canonical media rewriting and immutable
+scoped readers. `accountFileExport.test.ts` covers repeat export, aliases, bytes,
+deletions and scope; its production-client browser fixture covers normal Download
+and anonymous round-trip Import. See [remaining file-transfer work](../local-workspaces.md#account-file-transfer-exports--2026-10-17).

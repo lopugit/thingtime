@@ -1633,3 +1633,19 @@ and deletion 1.4.0, and anonymous retention/deletion remains refused. Focused
 lint is clean aside from the existing tooling deprecation. Raw TypeScript has
 91 baseline diagnostics and no changed-source errors. The existing native
 Files-picker and private upload/deletion browser scenarios also pass.
+
+
+## Account file ZIP export — 2026-10-17
+
+The normal Download dialog now exports new or retained account file bytes and
+local annotations through the canonical collector, including local folder and
+ordinary component/page media closure. It does not wait for upload or metadata
+sync. Deleted/cancelled files cannot return from old snapshots; repeated exports,
+original references when excluding bytes, and scope/byte failures are covered.
+920 unit/offline-shell checks and two production-client browser flows pass,
+including actual ZIP import in a clean anonymous workspace and cold offline
+native preview/download. Raw TypeScript has 91 baseline errors and no changed
+source errors. Client build and focused lint pass. See the
+[checkpoint, artifacts and remaining scope](../docs/local-workspaces.md#account-file-transfer-exports--2026-10-17).
+Account file import, complete remote-folder file snapshots, bound/managed media
+and the remaining full-suite matrix still block merge. No manual deployment.

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Normal account Download now exports saved file
+  bytes and offline annotations as canonical ZIPs without waiting for sync.
+  Production-client cold offline Download → anonymous Import → native preview
+  and retained-file exports pass. Full account imports/media coverage remains
+  open. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Retain opened owned standalone files with bounded,
   version-checked bytes and native offline metadata editing/download. Reuse
   conditional sync and durable deletion receipts without duplicate uploads.

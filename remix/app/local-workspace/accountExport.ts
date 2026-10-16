@@ -1,3 +1,6 @@
+import { localAttachmentFileId } from './attachments';
+import type { AccountFileSync } from './accountFiles';
+import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { type AccountThingSync, accountThingCanCache } from './accountSync';
 import { exportLocalThingSnapshot, type LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceTransaction } from './storage';
@@ -23,7 +26,7 @@ export const snapshotAccountExportInput = (input: Input) => {
 /** Scoped, bounded content snapshots are export data, never owned editable Things
  * or an authorization grant. A partial library page cannot prove completeness. */
 export async function exportAccountThings(input: Input, deps: {
- sync: AccountThingSync; db: WorkspaceDatabase; lease: WorkspaceLease;
+ sync: AccountThingSync; files?: AccountFileSync; db: WorkspaceDatabase; lease: WorkspaceLease;
  canRefresh: () => boolean;
  remote: (input: Input, options?: { signal?: AbortSignal }) => Promise<any>;
 }, signal?: AbortSignal) {
@@ -38,9 +41,16 @@ export async function exportAccountThings(input: Input, deps: {
  let baseline = await tx<Snapshot | undefined>('readonly', tx => tx.get<Snapshot>(STORE, key));
  const attempted = new Set<string>();
  const collect = async (state: State) => {
+  const fileLibrary = await deps.files?.library(); check();
+  const files = new Map(fileLibrary?.things.map(row => [row.id, row]) || []);
+  const aliases = new Map([...fileLibrary?.aliases || []].filter((entry): entry is [string, string] => entry[1] !== null));
+  const ids = args.ids.map(id => {
+   if (fileLibrary?.aliases.get(id) === null) throw new WorkspaceError('NOT_FOUND', 'File was deleted in this workspace.', 404);
+   return aliases.get(id) || id;
+  });
   const records = new Map(state.records.map(row => [row.id, row]));
   const captured = new Map(baseline?.manifest.things.map(row => [row.id, row]) || []);
-  const docs = new Map<string, LocalThing>([...captured].map(([id, row]) => [id, { ...row, createdAt: baseline!.savedAt, updatedAt: baseline!.savedAt, revision: 1 }]));
+  const docs = new Map<string, LocalThing>([...captured].filter(([, row]) => accountThingCanCache(row)).map(([id, row]) => [id, { ...row, createdAt: baseline!.savedAt, updatedAt: baseline!.savedAt, revision: 1 }]));
   for (const row of state.things) {
    const record = records.get(row.id);
    if (!record || record.deleted || !accountThingCanCache(row)) continue;
@@ -49,8 +59,17 @@ export async function exportAccountThings(input: Input, deps: {
    if (!docs.has(row.id) || record.state !== 'synced' || baseline?.revisions[row.id] !== row.revision) docs.set(row.id, row);
   }
   for (const row of state.records) if (row.deleted) docs.delete(row.id);
-  const bundle = await exportLocalThingSnapshot([...docs.values()], [], args.ids, lease,
-   async () => undefined, { ...args, signal }, row => {
+  // Only live dedicated file records grant access to device bytes. Portable
+  // attachment rows retained in an older export never resurrect a deletion.
+  for (const row of files.values()) docs.set(row.id, row);
+  // A saved export uses portable byte IDs; restore those bindings to the
+  // live device records before collecting the next immutable bundle.
+  const mediaAliases = new Map(args.includeFiles ? [...aliases, ...[...files.keys()].map(id => [localAttachmentFileId(id), id] as const)] : []);
+  const crystals = rewriteTransferMedia([...docs.values()], mediaAliases);
+  for (const row of docs.values()) row.crystal = crystals.get(row.id)!;
+  const bundle = await exportLocalThingSnapshot([...docs.values()], [], ids, lease,
+   async id => (await deps.files!.readFile(id, signal)).bytes, { ...args, signal }, row => {
+    if (files.has(row.id)) return;
     const record = records.get(row.id);
     if (record && !record.remote && !record.deleted) return;
     if (!captured.has(row.id)) throw new MissingExportSnapshot(row.id);
@@ -66,7 +85,14 @@ export async function exportAccountThings(input: Input, deps: {
    baseline = { manifest: bundle.manifest, revisions: Object.fromEntries(state.things.map(row => [row.id, row.revision])), savedAt: new Date().toISOString() };
    const retainedOnDevice = await retain(baseline); check();
    return { ok: true, localWorkspace: true, snapshotAt: baseline.savedAt, retainedOnDevice,
-    plan: { roots: bundle.manifest.roots, things: bundle.manifest.things, files: [] } };
+    plan: { roots: bundle.manifest.roots, things: bundle.manifest.things, files: bundle.manifest.files,
+     ...(bundle.manifest.attachmentOrder ? { attachmentOrder: bundle.manifest.attachmentOrder } : {}),
+     ...(bundle.files.size ? { readLocalFile: async (id: string, requestSignal?: AbortSignal) => {
+      lease.assertCurrent(); requestSignal?.throwIfAborted();
+      const bytes = bundle.files.get(id);
+      if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not in this export.', 404);
+      return Uint8Array.from(bytes);
+     } } : {}) } };
   } catch (error) {
    check();
    if (!(error instanceof MissingExportSnapshot) || !deps.canRefresh() || attempted.has(error.id)) throw error;
@@ -78,7 +104,11 @@ export async function exportAccountThings(input: Input, deps: {
    if (plan.files?.length || plan.links?.length || !plan.things?.every(accountThingCanCache)) {
     // Keep dedicated online exports working, but never replace pending local
     // content with an older server version just because it includes media.
-    if (state.records.some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_EXPORT_REQUIRED', 'This download needs its file or managed-content adapter. Sync your device edits before downloading it online.', 409);
+    const library = await deps.files?.library(), pendingFiles = new Set((await deps.files?.status())?.filter(row => row.state !== 'synced').map(row => row.id));
+    const selected = new Set([...args.ids, ...plan.things.map((row: any) => row.id), ...(plan.files || []).map((row: any) => row.sourceId || row.id)]);
+    for (const [remote, local] of library?.aliases || []) if (local && selected.has(remote)) selected.add(local);
+    const affectedFiles = library?.things.some(row => pendingFiles.has(row.id) && (selected.has(row.id) || (args.includeChildren && row.folderId && selected.has(row.folderId))));
+    if (state.records.some(row => row.state !== 'synced') || affectedFiles) throw new WorkspaceError('DEDICATED_EXPORT_REQUIRED', 'This download needs its file or managed-content adapter. Sync your device edits before downloading it online.', 409);
     return deps.remote(args, { signal });
    }
    const manifest = parseTransfer(serializeTransfer({ format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: [] }));

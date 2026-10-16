@@ -3,6 +3,8 @@ import test from 'node:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { decodeTransferArchive } from '../utils/thingTransfer/archive';
+import { serializeTransfer } from '../utils/thingTransfer/format';
 
 const base = process.env.TT_LOCAL_FILE_SYNC_URL,
 	adminFile = process.env.TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE,
@@ -83,6 +85,20 @@ test('existing account file retention renders and edits offline through the nati
 			if (cold) { await page.reload(); await page.getByRole('heading', { name: 'Offline retained title', exact: true, level: 1 }).waitFor(); await image.waitFor(); }
 			const downloadWait = page.waitForEvent('download'); await page.getByRole('link', { name: 'Download', exact: true }).click();
 			const download = await downloadWait; assert.deepEqual(await readFile((await download.path())!), bytes);
+			await navigate('/things');
+			await page.getByRole('link', { name: 'Offline retained title', exact: true }).click({ button: 'right' });
+			await page.getByRole('menuitem', { name: '📥 Download…', exact: true }).click();
+			await page.getByRole('combobox', { name: 'Download format' }).selectOption('json');
+			await page.getByRole('button', { name: 'Download', exact: true }).click();
+			await page.getByRole('alert').filter({ hasText: 'include file bytes' }).waitFor();
+			await page.getByRole('combobox', { name: 'Download format' }).selectOption('zip');
+			const archiveWait = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download', exact: true }).click();
+			const archive = await readFile((await (await archiveWait).path())!), exported = await decodeTransferArchive(archive);
+			assert.equal(exported.manifest.files.length, 1); assert.equal(exported.manifest.files[0].title, 'Offline retained title');
+			assert.deepEqual(Buffer.from(exported.files.get(exported.manifest.files[0].id)!), bytes);
+			if (artifacts) { await writeFile(resolve(artifacts, 'retained-export.thingtime.zip'), archive); await writeFile(resolve(artifacts, 'retained-export.thingtime.json'), serializeTransfer(exported.manifest)); }
+			await navigate('/media/' + fileId); await image.waitFor();
+
 			for (const width of [1440, 390, 320]) { await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 }); await image.scrollIntoViewIfNeeded(); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width); if (artifacts) await page.screenshot({ path: resolve(artifacts, `retained-native-${width}.png`) }); }
 			await navigate('/things?files=thingtime');
 			const library = page.getByTestId('filesystem-browser'); await library.getByText('Offline retained title', { exact: true }).first().waitFor();
@@ -94,7 +110,7 @@ test('existing account file retention renders and edits offline through the nati
 			assert.ok(reconciled, 'Offline details reconcile to the original account file');
 			if (cold) {
 				assert.deepEqual(writes.filter(write => write.path.includes('/attachments/uploads')), []); assert.deepEqual(errors, []);
-				if (artifacts) await writeFile(resolve(artifacts, 'cold-retention-verification.json'), JSON.stringify({ localId, fileId, coldOfflineReload: true, offlineDetailsSurviveReload: true, exactOfflineDownload: true, reconciled, duplicateUploads: 0, viewports: [1440,390,320], writes, errors }, null, 2));
+				if (artifacts) await writeFile(resolve(artifacts, 'cold-retention-verification.json'), JSON.stringify({ localId, fileId, coldOfflineReload: true, offlineDetailsSurviveReload: true, exactOfflineDownload: true, canonicalOfflineZip: true, jsonFileExclusionRefused: true, reconciled, duplicateUploads: 0, viewports: [1440,390,320], writes, errors }, null, 2));
 				return;
 			}
 			let lost = 0; const deletions: any[] = [];

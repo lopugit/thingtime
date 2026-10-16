@@ -2249,3 +2249,43 @@ and deletion 1.4.0, and anonymous retention/deletion remains refused. Focused
 lint is clean aside from the existing tooling deprecation. Raw TypeScript has
 91 baseline diagnostics and no changed-source errors. The existing native
 Files-picker and private upload/deletion browser scenarios also pass.
+
+
+## Account file transfer exports — 2026-10-17
+
+Normal Download now collects new device files and retained owned account files
+through the existing canonical transfer collector. It includes current local
+annotations and exact validated bytes, resolves canonical account file aliases,
+and rewrites media references to portable file IDs. Complete local folders and
+cached ordinary definitions can include these files without waiting for upload
+or metadata sync. Repeated exports after ordinary sync restore portable byte
+bindings before recollecting; JSON that excludes bytes preserves original
+account references. Standalone file downloads require ZIP with bytes.
+
+Only live dedicated file records supply bytes. Old export snapshots cannot
+resurrect cancelled/deleted files, damaged bytes fail without a partial plan,
+and the in-process byte reader checks account retirement and cancellation.
+An online fallback cannot silently omit affected pending file edits; unrelated
+file uploads do not block that fallback. Existing folder-completeness checks,
+scoped quotas, authentication and remote authorization remain in force.
+
+Local evidence: 920 unit/offline-shell checks pass (287 workspace, 319 Things,
+314 attachments). The generic workspace command skips 31 opt-in browser tests.
+Two enabled production-client scenarios pass: (1) create an account folder/file
+offline, cold reload, Download ZIP, import that actual ZIP through the normal
+anonymous dialog, cold reload the imported native preview and download identical
+bytes; (2) retain an existing owned file, edit/reload offline, reject standalone
+JSON without bytes, export the edited ZIP, reconnect and sync metadata without
+re-uploading. Download dialogs and native previews were checked at 1440/390/320
+CSS pixels with no overflow or page errors. Offline mutations were zero.
+Evidence: `tmp/account-file-export-browser/`, `tmp/account-retained-export-browser/`
+and `tmp/account-file-export-*.log`. All test browser contexts close afterward;
+existing-retention fixtures delete only their newly created server file.
+Client build and focused lint pass. Raw TypeScript remains at 91 baseline errors
+with none in changed sources. CI and deployed acceptance are separate.
+
+Still open: account file imports (the account dialog currently uploads first),
+complete export caching of remote folders with files not already represented by
+a complete device closure, linked galleries and managed account transfers,
+bound post/draft media, and the rest of the full-suite matrix. This checkpoint
+is not full offline account transfer acceptance and does not authorize merge.

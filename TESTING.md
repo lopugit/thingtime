@@ -10670,3 +10670,30 @@ Run `app/local-workspace/components.browser.test.ts` with
   Playwright/Chrome paths. Use normal rate-limited fixture registration.
 - [ ] Finish full feed paging, unvisited/context/media cache recovery, account
   post/comment writes and wider cross-device social acceptance before merge.
+
+
+### Offline account file transfer export (2026-10-17)
+
+- [x] Create an account folder and PNG with the normal Files UI while offline;
+  cold reload, then use normal Things Download ZIP. Decode with the canonical
+  archive reader and compare exact original bytes and portable metadata.
+- [x] Import that actual ZIP through the normal anonymous dialog in a separate
+  clean browser context. Verify fresh IDs, folder placement, cold offline native
+  preview and identical original-byte download, with zero remote mutations.
+- [x] Export an existing retained account file after offline metadata edits and
+  reload. JSON excluding required bytes must fail clearly; ZIP retains edits.
+  Reconnect through verified identity without creating a duplicate upload.
+- [x] Re-export component media after ordinary sync acknowledgement; portable
+  byte references must resolve again. Excluding bytes preserves original account
+  references. Deleted/cancelled files never return from old export snapshots.
+- [x] Refuse corrupt/missing bytes, other workspace scope, retired identity and
+  cancelled reads without returning partial content. Unrelated uploads must not
+  block a valid online fallback; affected pending files must not be omitted.
+- [x] Check Download dialog and imported native preview at 1440/390/320 pixels,
+  wrapping controls, no horizontal overflow and no browser errors. Enable
+  `TT_LOCAL_FILE_EXPORT_URL` (production client on a disposable local stack),
+  `TT_LOCAL_FILE_EXPORT_ARTIFACTS` and shared Playwright/Chrome paths for
+  `accountFileExport.browser.test.ts`. Also run the retention browser fixture
+  with `TT_LOCAL_FILE_RETENTION_COLD=1` and its existing private admin fixture.
+- [ ] Finish account file import and complete remote-folder/managed media
+  transfer coverage before claiming the full offline suite or merging.

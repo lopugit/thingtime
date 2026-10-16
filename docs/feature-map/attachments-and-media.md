@@ -7,7 +7,7 @@ only for single-item moves and reports stale per-item status 409. Both manifests
 must carry these versions. `accountTransport.client.ts` negotiates them;
 `accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
 and canonical attachment cleanup. Durable metadata reconciliation now lives in `accountFileMetadata.ts`;
-completed-file deletion now uses the durable queue described below; ordinary standalone file UI now uses the adapter below; existing remote byte retention remains pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+completed-file deletion now uses the durable queue described below; ordinary standalone file UI now uses the adapter below; existing owned-file byte retention now uses the checkpoint below; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
 
 Conditional deletion uses the same cleanup claims: delete 1.2.0 accepts
 `expectedUpdatedAt` and fences both ordinary and objectless initial claims.
@@ -206,7 +206,7 @@ Metadata sync skips deleting files. Only a durable `deleted:true` acknowledgemen
 releases bytes. The worker coalesces wake-ups arriving during a drain, and the
 moderation stamper only updates ready files. Run workspace, attachment, capability
 and moderation suites plus the real file browser fixture, including full quota,
-lost replies, stale reviews and the concurrent edit/delete race. Existing remote file retention remains a separate completion gate.
+lost replies, stale reviews and the concurrent edit/delete race. Existing owned-file retention is implemented in the checkpoint below.
 
 
 ## Normal account file browser and scoped media
@@ -220,7 +220,7 @@ with authorized account discovery without blocking local completion.
 `media.client.tsx` scopes URL registries to `workspaceIdentityKey`; shared media
 contexts remain on their server authorization path. Tests: workspace, Things,
 attachments, `accountFileUi.browser.test.ts` and `accountFiles.browser.test.ts`.
-Existing remote byte retention and managed imports/exports remain completion gates.
+Existing owned-file retention is implemented below; managed imports/exports remain completion gates.
 
 
 ## Existing account file deletion receipts
@@ -233,7 +233,7 @@ request-ID mode, missing IDs return 404 and are never reserved. Full-user and
 same-origin gates remain; uncertain legacy cleanup never acknowledges a fence.
 Run the attachment/capability suites and `accountExistingFile.browser.test.ts`
 with the same disposable loopback/admin setup as `accountFiles.browser.test.ts`.
-Existing-account byte retention remains unfinished; see the
+Existing-account byte retention is now covered by the later retention checkpoint; see the
 [local workspace checkpoint](../local-workspaces.md#existing-saved-file-deletion-receipts--2026-10-16).
 
 
@@ -255,3 +255,13 @@ Set `TT_LOCAL_FILE_RETENTION_COLD=1` against a production client build to prove
 true offline reload, edit/download and reconnect. See the
 [dated scope and evidence](../local-workspaces.md#retained-account-files--2026-10-17);
 parent-folder discovery, managed transfers and bound media are still open.
+
+
+`local-workspace/accountExport.ts` now feeds live standalone account file records
+into the shared `exportLocalThingSnapshot` collector and supplies a scoped
+in-process byte reader to the normal Download dialog. Canonical account aliases
+and retained portable byte bindings are rewritten with `rewriteTransferMedia`;
+old snapshots do not grant file access. Run `accountFileExport.test.ts`, the
+opt-in `accountFileExport.browser.test.ts` and the extended cold-retention browser
+fixture. Account file import and complete remote-folder/managed transfer coverage
+remain pending; see [the transfer checkpoint](../local-workspaces.md#account-file-transfer-exports--2026-10-17).
