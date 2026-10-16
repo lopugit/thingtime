@@ -2471,6 +2471,14 @@ email whose link points at the attacker.
 
 ## Account drafts and reusable post templates
 
+- [ ] Block, reject and stall only `/api/v1/drafts`, leaving the post API online.
+      Submit a post, edit, rich comment, plain comment and nested reply: each
+      completes independently of draft saving/cleanup. Reload to confirm the
+      successful post; uncertain retries retain the exact frozen shareId/payload.
+      Start another post while old draft cleanup is pending: late save responses
+      cannot restore the completed draft or overwrite the new editor. Keep
+      attachment ownership/binding and concurrent-device revision checks intact.
+
 - [ ] Signed in, type rich text, partial marketplace values, tags, an audience,
       empty poll options and a nested Thing. Wait for “Saved to your drafts”,
       close/reopen and reload: all values recover. No post is published by typing.
@@ -9860,3 +9868,62 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   canonical public projection, a cold local branch cache, queued push retention,
   delayed-reply revision protection and cancellation after an identity change.
   No visual Builder behavior is introduced by this increment.
+
+## No-login draft preview and agent export
+
+- In a clean browser, open Builder's no-login draft link; paste the affirmation
+  transfer, render, edit the argument, render again, download JSON and reload.
+  Confirm no login/temporary-user/API traffic, no persistence on reload, opaque
+  origin storage denial, and exact text/line breaks through the real renderer.
+- Call `thingtime_render_and_export` through the stdio SDK client. Save the
+  inline JSON/PNG resources; validate the JSON and dependency closure. Capture
+  1440×1000, 390×844, 320×844 and the first viewport's card-only crop. Check
+  400×560 desktop card bounds, 24px phone margins, no overflow and stable hash.
+- Reject malformed/oversized input, duplicate/ambiguous/missing references,
+  unknown schema, remote CSS/assets, Actions in inactive branches, unsafe props,
+  expansion exhaustion, invisible/overflowing content (including zero font size
+  and transparent CSS Color 4 colors), invalid crop/viewport,
+  render exceptions and overlapping requests. Failed exports return no images.
+  A failed editor render retains the last good preview without allowing export.
+- Run the opt-in browser tests, not only their default skip. Round-trip the
+  actual exported JSON through the normal importer on the dedicated disposable
+  `draftPreview` replica; allow fresh IDs, verify dependency remapping/private
+  ACLs/anonymous 404, normal reexport and cleanup. Never use existing accounts.
+- Keep local protocol/browser/import acceptance distinct from CI and deployed
+  verification. Setup and commands: [draft workflow](docs/no-login-draft-preview.md).
+
+
+## Password manager and native AutoFill
+
+- [ ] On desktop and 390px, add two entries for one website, edit/reorder custom
+  fields, mask/reveal, close/reopen and delete one without changing the other.
+  The heading clears the fixed navigation and device safe area.
+  Labels and controls wrap without overflow. Tab switching or a capture picker
+  must mask secrets without discarding an unfinished entry.
+- [ ] Upload a synthetic TOTP QR; compare rotating codes to RFC 6238 vectors.
+  Screen scan uses the selected screen/tab and stops all tracks afterwards.
+  Invalid images, oversized images, HOTP and FIDO handoff codes fail clearly.
+- [ ] Preview/import 1Password 1PUX/CSV, Chrome CSV and Apple CSV; test quoted,
+  multiline and whitespace-sensitive passwords, Unicode, custom fields, TOTP,
+  cancellation, malformed ZIP and bounded expansion. Export acknowledgement
+  is required; 1PUX re-import preserves complete ordered Thingtime entries.
+  More than 2,000 accounts export as numbered parts that all import successfully.
+- [ ] Use the HTTP fixture with two owners: session unlock, other-owner denial,
+  account-switch fence, same-origin proxy handling, no-store, exact retry,
+  stale revision, delete tombstones, password recovery and immediate revocation.
+  Generic Thing reads/search/export and Timeline must not expose credentials.
+- [ ] Native catalog contains no passwords, TOTP secrets or private keys. Reject
+  scoped/temporary/service identities, unavailable vault configuration, wrong
+  origin, bad body, stale session and revoked access before decrypted responses.
+- [ ] Check a configured desktop endpoint against a signed native app. Ordinary
+  unconfigured web servers must not forward passwords to production; desktop
+  forwarding is restricted to its loopback UI and selected HTTPS endpoint.
+- [ ] Managed worktrees sharing a repository basename must have distinct PM2
+  names/ports; starting this checkout must not remove another checkout's stack.
+
+- Vercel functions retain image binaries for their target CPU/OS and stay below
+  the function size limit even when local dependencies include other platforms.
+
+- Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
+
+- Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.

@@ -153,3 +153,7 @@ export const platformRuntimeCsp = serialize({
  'media-src': ['data:', 'blob:'], 'font-src': ['data:'],
  'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts', 'allow-forms']
 });
+
+// Drafts have an opaque origin: even an already signed-in browser cannot read
+// account cookies/storage. Only the shipped classic script loads; no data egress.
+export const draftPreviewCsp = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads";

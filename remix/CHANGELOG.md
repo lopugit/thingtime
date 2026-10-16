@@ -68,8 +68,28 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
+- 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
 
+- 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain
+  comments/replies no longer await account draft sync or cleanup. Completed
+  drafts retire locally immediately; late saves cannot overwrite the next
+  composer, and uncertain post retries keep their frozen identity. Verified
+  private post/reload and mobile comment/reply against a disposable local API
+  account with draft requests blocked; no production account data changed.
+  Details: [PR #999](../PRs/999-codex-independent-post-draft-saving--fix-posting-blocked-by-draft-saving-failures.md).
+
+- 2026-10-15 — **Codex (AI)**: Add isolated no-login native draft previews and the stdio MCP `thingtime_render_and_export` tool, reusing canonical transfers, schema validation and native renderers. Return bounded JSON/PNG artifacts with diagnostics, rejecting transparent CSS Color 4 text and zero-size fonts; keep Actions, account data, assets and publishing unavailable. Local clean-browser and disposable importer verification: [PR #998 evidence](../PRs/998-codex-anonymous-render-export--no-login-native-draft-rendering.md).
+
+
+- 2026-10-15 — **Codex (AI)**: Add a private password library using reusable
+  Thing field mods, account/session encryption and server-assisted recovery,
+  TOTP QR imports and capture cleanup, and 1Password/Chrome/Apple import/export.
+  Reject internal Action principals at the vault boundary even when they carry
+  an Authorization header.
+  Keep native providers in a separate release so Apple provisioning does not
+  block the web vault or existing native packaging. Correct managed worktree
+  port identity and prune non-target image binaries from Vercel functions.
+  [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
 
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new

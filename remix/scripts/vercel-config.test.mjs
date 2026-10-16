@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { prodCsp, devCsp } from './csp.mjs';
-import { platformRuntimeCsp } from './csp.mjs';
+import { draftPreviewCsp, platformRuntimeCsp } from './csp.mjs';
 import { execFileSync } from 'node:child_process';
 import { claudeRuntimeFunctions, packageClaudeOAuthArtifacts, verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
@@ -34,6 +34,14 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
 	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
 	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	const draft = routes.find(route => route.src === '^/draft-preview(?:/.*)?$');
+	assert.equal(draft.headers['Content-Security-Policy'], draftPreviewCsp);
+	assert.equal(draft.headers['Cache-Control'], 'no-store');
+	assert.ok(routes.indexOf(draft) < routes.findIndex(route => route.handle === 'filesystem'));
+	assert.match(draftPreviewCsp, /sandbox allow-scripts allow-downloads/);
+	assert.ok(!draftPreviewCsp.includes('allow-same-origin'));
+	assert.match(draftPreviewCsp, /connect-src 'none'/);
+
 	for (const extension of ['html', 'js']) {
 		const matches = routes.filter(route => route.src === `^/platform/runtime\\.${extension}$`);
 		assert.equal(matches.length, 1);

@@ -666,3 +666,12 @@ test('range programs require the additive owned-boundary contract', () => {
  for (const version of ['1.31.0', '1.31.1', '1.32.0']) assert.equal(capabilitySatisfies(version, '1.31.0'), true);
  for (const version of [undefined, '1.30.0', '1.30.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.31.0'), false);
 });
+
+ test('password manager registers its live route and version on both discovery manifests', () => {
+  const doc = apiEndpointDocs.find(doc => doc.id === 'passwords');
+  assert.equal(doc?.featureVersion, '1.0.0');
+  assert.deepEqual(doc?.methods, ['GET', 'POST']);
+  assert.equal(createApiCapabilitiesManifest().features['api.passwords'], '1.0.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.0.0');
+  assert.equal(typeof routeModules['v1/passwords'], 'function');
+ });

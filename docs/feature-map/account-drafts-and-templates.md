@@ -27,8 +27,16 @@ so delayed writes cannot resurrect it. Device retirement records retry cleanup.
 
 Snapshots preserve raw editing values (512 KiB, bounded JSON depth and file IDs).
 Capture writes a synchronous local recovery copy, then syncs after 250ms idle or
-at most one second of continuous edits. Flush before publishing/navigation.
-Transient failures retry with backoff. Publish identities are saved before submission so reloads retain the same retry identity.
+at most one second of continuous edits. Post/comment submission captures the live
+editor and immutable submission identity locally, then starts remote draft sync
+without awaiting it. Draft save failures never prevent posting. After confirmed
+posting, retirement detaches the old draft immediately; cleanup waits only in the
+background for an already-started save. Old completions cannot restore the posted
+draft or overwrite the next composer. Revision conflicts preserve newer remote
+work. Other editors retain their existing flush-before-navigation contracts.
+Transient failures retry with backoff. Device recovery retains the same post
+retry identity when storage is available; remote draft availability is not a
+posting prerequisite.
 Account, origin, editor target and old-editor callback guards prevent cross-talk.
 The picker preference controls automatic account resume; device recovery remains
 on. Account changes also scope the local Thing workspace and BroadcastChannel.

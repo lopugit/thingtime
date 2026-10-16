@@ -2,6 +2,26 @@
 
 https://thingtime.com
 
+### Password manager setup
+
+The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
+Use a Mongo replica set for canonical storage transactions and configure the
+usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes
+encoded as base64url>` in ignored local env files and your deployment secret
+manager. The existing `THINGTIME_ADMIN_VAULT_KEY` is a compatibility fallback;
+reuse the already configured vault key when upgrading. Back up the vault key
+securely with your database. Replacing or losing it makes existing recovery
+wrappers unreadable; do not generate a new key on each deploy. The server-assisted
+recovery model is documented above. No provider developer accounts are required
+for storing passwords or importing TOTP setup codes.
+
+Native system AutoFill and passkey creation are being delivered separately in
+[PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
+credential-provider bundles, provisioning and device verification. This web
+release does not change the existing desktop/iOS packaging or claim OS AutoFill
+availability. TOTP QR imports, generated codes and password transfers work here
+without native installation.
+
 ### Unified Timeline (implementation in progress)
 
 History is available at `/history` and from a Thing's History menu. List, Cards,
@@ -4514,3 +4534,12 @@ apply. For an isolated verification without model billing:
 
 This checks runtime and storage behavior, not live provider reasoning or
 production gear migration. See [Lopu Action access](docs/lopu-action-access.md).
+
+### No-login native draft preview and export
+
+Use **Builder → No-login draft preview** (`/draft-preview/index.html`) for
+in-memory editable JSON previews and canonical downloads. The local stdio MCP
+server exposes `thingtime_render_and_export`, returning desktop/mobile/card
+PNGs and JSON as inline resources without an account or HTTP access from the
+agent host. No private environment variables are needed. See the
+[fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
