@@ -81,7 +81,7 @@ manual checklist covers offline edit previews, template independence and reload.
 Account draft permissions and upload admission are unchanged.
 
 
-## Account local queue foundation (not yet wired to editors)
+## Account local queue and native editor adapter
 
 `local-workspace/accountDrafts.ts` wraps the same `LocalDrafts` store with atomic
 queue admission. Editor revisions remain independent from acknowledged server
@@ -95,9 +95,34 @@ access in the copy transaction and registers independent template/copy uploads.
 originals with the complete draft snapshot. Draft media stays out of the ordinary
 file library. Canonical read refusals remain effective after local release.
 
-`accountDrafts.test.ts` and `accountDraftFiles.test.ts` cover this service layer.
-**Native account drafts still use the current remote draft client.** Remaining
-work includes verified transport/home-data-plane semantics, server template-save
-negotiation, cached bounded discovery, native client/worker/status wiring, conflict
-and cleanup UI, and real offline/reconnect acceptance. Do not count these unit
-checks as completion of account local-first drafts or change the full merge gate.
+`accountDraftClient.client.ts` now routes native account draft requests through
+that scoped store. `accountDraftCatalog.ts` retains bounded summary pages without
+fetching draft bodies or files; exact reads retain complete snapshots and originals.
+The worker drains drafts independently of content, files and interactions. The
+shared picker and recovery hook capture the current account/origin/data-plane
+lease; the sync panel exposes retries and reviewed conflict choices.
+
+`accountThingTransport.drafts` negotiates `api.drafts` 1.1.0 and sends expected
+account/data-plane preconditions. Draft storage remains home-pinned. New templates
+can be created explicitly; existing templates accept exact retries but cannot be
+edited in place. Account-only/shared post copying retains the canonical server
+copy path; locally complete posts use independent local copies.
+
+Service checks include `accountDraftClient.test.ts`, `accountDraftCatalog.test.ts`,
+`accountDrafts.test.ts` and `accountDraftFiles.test.ts`. Opt-in
+`accountDraftSync.browser.test.ts` proves cold offline text recovery, bounded
+1440/390/320px picker layout, private reconnect, posting despite draft-endpoint
+503s and subsequent cleanup. `accountBoundMedia.browser.test.ts` verifies native
+post/reply byte persistence, private reconnect and deletion replay.
+
+Integration remains in progress: earlier device recovery keys need explicit safe
+migration/recovery; released-upload cleanup, template/media donation races and
+native conflict review need complete acceptance. The full local-first merge gate
+in `docs/local-workspaces.md` remains open.
+
+The draft queue has its own `syncPump` scheduler. A held draft request cannot
+hold the content worker's next pass; upload completion wakes drafts when their
+originals become ready. The native draft test holds the draft POST unresolved
+and requires the private post to reach the real account within eight seconds,
+before releasing that draft request. This tests normal completion independently
+of the draft transport timeout, in addition to rejection/retirement handling.

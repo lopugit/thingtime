@@ -684,3 +684,9 @@ test('conditional file metadata contracts appear on both capability manifests', 
     assert.equal(routed.features[feature].version, version);
   }
 });
+
+
+test('both manifests advertise conditional independent draft and template synchronization', () => {
+ assert.equal(createApiCapabilitiesManifest().features['api.drafts'], '1.1.0');
+ assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.drafts'].version, '1.1.0');
+});

@@ -2837,3 +2837,45 @@ The cold standalone-file browser regression also passes against this build,
 including real canonical deletion/refusal and no output from the subsequent
 offline Download (`tmp/account-draft-file-browser/`). Both enabled browser checks
 use fresh disposable loopback accounts, never existing account data.
+
+## Native account draft integration checkpoint — 2026-10-17
+
+The account draft client, verified transport, independent worker pass, bounded
+summary catalogue, picker and sync review panel now use the scoped local store.
+This supersedes the earlier inactive-foundation description. The real loopback
+API accepts template creation under `api.drafts` 1.1.0, preserves exact retries
+and rejects replacing an existing template. Home-pinned private storage and
+expected account/data-plane preconditions remain unchanged.
+
+Enabled clean-browser evidence on the production client: native text drafts
+survive cold offline reload; private sync resumes; posting completes with the
+draft endpoint returning 503; cleanup later removes the completed draft and
+preserves the template. Picker screenshots cover 1440x1000, 390x844 and 320x844.
+`tmp/account-draft-native-browser/` contains the evidence. Native post/reply media
+also retain exact bytes across offline reload, reconnect with private bindings,
+and pass removal/lost-receipt replay (`tmp/account-draft-native-media-final/`).
+The media harness now waits for composer closure after commit; its old button-label
+check could reload during submission and mistake editor text for a posted reply.
+
+A stale-summary deletion race is fenced against the revision of the body actually
+retained. Reviewed account replacement checks both revisions and increments the
+local revision so an older editor cannot overwrite it. Account-only/shared post
+copies retain the canonical authorized template copy operation; complete local
+posts and cached templates can be copied without network access.
+
+Still open before this integration is complete: explicit recovery of earlier
+unscoped/scoped device keys, released upload intent cleanup, concurrent
+submission/draft-media binding, full native conflict/template/media acceptance,
+and account/origin/plane changes during each native operation. Older recovery
+keys are retained, but that alone does not prove a working recovery UI. The wider
+matrix (including shared/managed/linked transfers, protected Timeline/Actions,
+Vault, themes/algorithms, integrations/recording, notifications and startup/update)
+is unchanged. These are local checks; current-head CI and deployed acceptance
+remain separate. No merge or manual deployment is authorized before the full gate.
+
+The draft queue has its own `syncPump` scheduler. A held draft request cannot
+hold the content worker's next pass; upload completion wakes drafts when their
+originals become ready. The native draft test holds the draft POST unresolved
+and requires the private post to reach the real account within eight seconds,
+before releasing that draft request. This tests normal completion independently
+of the draft transport timeout, in addition to rejection/retirement handling.

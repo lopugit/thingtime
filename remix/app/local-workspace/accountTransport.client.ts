@@ -1,3 +1,5 @@
+import type { AccountDraftTransport } from './accountDrafts';
+import type { DraftSummary } from '../drafts/draftCore';
 import type { AccountFileRetentionTransport, AccountFileTransport } from './accountFiles';
 import type { PublicAttachment } from '../components/Attachments/attachmentTypes';
 import { interactionState, type InteractionWrite } from '../utils/interactionState';
@@ -45,6 +47,7 @@ const withPostAttachments = (result: any) => result?.thing && result.post?.id ==
 
 export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountSyncTransport & {
 	interactions: InteractionTransport;
+	drafts: AccountDraftTransport & { list(query: Record<string, string>, signal?: AbortSignal): Promise<{ drafts: DraftSummary[]; nextCursor: string | null }>; fromPost(input: Record<string, unknown>): Promise<unknown> };
 	files: AccountFileTransport & AccountFileRetentionTransport & {
 		get(id: string, signal: AbortSignal): Promise<unknown>;
 		annotate(input: { id: string; expectedUpdatedAt: string; filenamePreview?: string | null; title?: string | null; description?: string | null }, signal?: AbortSignal): Promise<{ attachment: PublicAttachment; updatedAt: string }>;
@@ -56,14 +59,14 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	fork(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'things/comment' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/uploads/abort' | 'attachments/delete' | 'attachments/content' | 'things/bulk' = 'things', binary?: { cacheKey: string; size: number }) => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'drafts' | 'things' | 'things/comment' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/uploads/abort' | 'attachments/delete' | 'attachments/content' | 'things/bulk' = 'things', binary?: { cacheKey: string; size: number }) => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		const endpointCapability = ({ 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.14.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
+		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.14.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
 		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'attachments/delete' && args.targetId !== undefined) await requireThingtimeCapability('api.attachment-delete', args.retainReceipt === true ? '1.7.0' : '1.6.0');
@@ -103,6 +106,12 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		} finally { unsubscribe(); }
 	};
 	return {
+		drafts: {
+			fromPost: input => request('POST', { ...input, operation: 'from-post', expectedActor: scope.ownerId }, undefined, 'drafts'),
+			read: async (id, signal) => (await request('GET', { id }, signal, 'drafts')).draft,
+			list: (query, signal) => request('GET', query, signal, 'drafts'),
+			write: (command, signal) => request('POST', { ...command, expectedActor: scope.ownerId }, signal, 'drafts')
+		},
 		files: {
 			retention: async (id, signal, bound) => { if (bound) await requireThingtimeCapability('api.attachment-content', '1.15.0'); return request('GET', { id, cache: 'retain', download: 1 }, signal, 'attachments/content'); },
 			bytes: async (id, cacheKey, size, signal) => {

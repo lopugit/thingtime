@@ -40,7 +40,9 @@ test('native account media saves offline and binds exact private bytes after ver
   await page.locator('input[type=file]').first().setInputFiles({name:'reply-portrait.png',mimeType:'image/png',buffer:png});
   await page.getByText('reply-portrait.png',{exact:true}).first().waitFor();
   await page.getByRole('button',{name:'Comment 💬',exact:true}).click();
-  await page.getByRole('button',{name:'Comment 💬',exact:true}).waitFor({state:'detached'});
+  // The button changes its label while submitting; wait for the actual
+  // composer to close after the local transaction commits before reloading.
+  await page.locator('.ce-paragraph[contenteditable="true"]').waitFor({state:'detached'});
   await page.getByText(commentText,{exact:true}).waitFor();
   await page.reload();await page.getByText(commentText,{exact:true}).waitFor();
   const replyImage=page.getByRole('button',{name:'View reply-portrait.png',exact:true}).locator('img');

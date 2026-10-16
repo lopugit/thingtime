@@ -37,7 +37,7 @@ export class LocalDrafts {
   await this.hooks.assertFileReadable?.(tx, id);
   return { row, bytes };
  }
- private async release(tx: WorkspaceTransaction, draftId: string, kept: string[]) {
+ async releaseFiles(tx: WorkspaceTransaction, draftId: string, kept: string[]) {
   for (const { value: row } of await tx.list<LocalThing>('things')) if (isLocalAttachment(row) && row.localAttachment.draftId === draftId && !kept.includes(row.id)) {
    const next = { ...row, localAttachment: { ...row.localAttachment } };
    delete next.localAttachment.draftId;
@@ -74,7 +74,7 @@ export class LocalDrafts {
    delete next.localAttachment.expiresAt;
    await tx.put('things', id, next);
   }
-  await this.release(tx, input.id, content.attachmentIds);
+  await this.releaseFiles(tx, input.id, content.attachmentIds);
   const stamp = new Date().toISOString();
   const draft: AccountDraft = { ...content, id: input.id, mode, revision: (previous?.draft.revision || 0) + 1, createdAt: previous?.draft.createdAt || stamp, updatedAt: stamp };
   const stored: StoredDraft = { draft, deleted: false, writeId: input.writeId, ...(source ? { source } : {}) };
@@ -140,7 +140,7 @@ export class LocalDrafts {
     if (!previous) return fail(404, 'Draft not found');
     if (previous.deleted) return { ok: true };
     if (previous.draft.revision !== input!.revision) return fail(409, 'Draft changed elsewhere; refresh before discarding');
-    await this.release(tx, input!.id, []);
+    await this.releaseFiles(tx, input!.id, []);
     const stored: StoredDraft = { ...previous, deleted: true, draft: { ...previous.draft, revision: previous.draft.revision + 1, snapshot: '{}', attachmentIds: [] } };
     await tx.put('drafts', input!.id, stored);
     await this.hooks.changed?.(tx, stored, previous);
@@ -156,6 +156,7 @@ export class LocalDrafts {
      return { ok: true, draft: existing.draft };
     }
     const source = await tx.get<StoredDraft>('drafts', input!.sourceId);
+    if (input!.sourceRevision !== undefined && source?.draft.revision !== input!.sourceRevision) return fail(409, 'The source draft changed. Review it again.');
     if (!source || (kind === 'template' && (source.deleted || source.draft.mode !== 'template'))) return fail(404, 'Draft source not found');
     if (kind === 'template' && JSON.stringify(content) !== JSON.stringify(source.draft)) return fail(409, 'Template changed. Retry with its current contents.');
     const copied = await this.copy(tx, content!, prepared);

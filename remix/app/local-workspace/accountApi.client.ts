@@ -1,3 +1,7 @@
+import { AccountDraftSync } from './accountDrafts';
+import { AccountDraftCatalog } from './accountDraftCatalog';
+import { AccountDraftClient } from './accountDraftClient.client';
+import { createSyncPump } from './syncPump';
 import { isLocalAttachment } from './attachments';
 import { AccountDiscussionCache } from './accountDiscussions';
 import { accountPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
@@ -35,12 +39,23 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
 	const files = new AccountFileSync(db, scope, lease);
 	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
+	const drafts = new AccountDraftSync(db, scope, lease, files.draftHooks), catalog = new AccountDraftCatalog(db, scope, lease);
 	const discussions = new AccountDiscussionCache(db, scope, lease);
 	const controller = new AbortController();
 	const fileRetentionErrors = new Map<string, string>();
 	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
+	const draftPump = createSyncPump(() => !stopped && navigator.onLine !== false && canSyncAccountWorkspace(scope), async () => {
+		lease.assertCurrent(); const before = JSON.stringify(await drafts.status());
+		const result = await drafts.sync(transport.drafts, controller.signal), status = await drafts.status();
+		if (JSON.stringify(status) !== before) announceLocalWorkspaceChange();
+		const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
+		if (!pending.length) return null;
+		const waits = pending.map(row => row.retryAt - Date.now()).filter(wait => wait > 0);
+		return result.completed ? 0 : waits.length ? Math.min(...waits) : BLOCKED_RETRY_MS;
+	});
 	const wake = () => {
 		if (stopped || navigator.onLine === false || !canSyncAccountWorkspace(scope)) return;
+		draftPump.wake();
 		if (running) { wakeRequested = true; return; }
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => { timer = null; void drain(); }, 0);
@@ -60,6 +75,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 			const completed = outcomes.reduce((sum, result) => sum + result.completed, 0);
 			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), fileStatus = await files.status(), status = [...contentStatus, ...interactionStatus, ...fileStatus];
 			if (JSON.stringify([contentStatus, interactionStatus, fileStatus]) !== before) announceLocalWorkspaceChange();
+			if (completed) draftPump.wake(); // Newly uploaded originals can unblock a draft.
 			const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
 			if (pending.length && !stopped) {
 				// A row whose retryAt has already passed is not schedulable work: the
@@ -84,11 +100,12 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const unbind = subscribeWorkspaceBinding(wake);
 	const stop = () => {
 		if (stopped) return;
-		stopped = true; controller.abort(); if (timer) clearTimeout(timer);
+		stopped = true; controller.abort(); draftPump.stop(); if (timer) clearTimeout(timer);
 		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
-	return { sync, interactions, posts, discussions, files, fileRetentionErrors, transport, db, lease, wake, stop };
+	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
+	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, fileRetentionErrors, transport, db, lease, wake, stop };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;

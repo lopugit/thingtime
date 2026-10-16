@@ -1,3 +1,4 @@
+import type { AccountDraftSync } from './accountDrafts';
 import type { AccountFileSync } from './accountFiles';
 import type { AccountFileMetadata } from './accountFileMetadata';
 import { useOfflineWorkspace } from '../hooks/useWorkspaceUser';
@@ -16,7 +17,7 @@ export function AccountSyncStatus() {
  const user = useCurrentUser(), dataPlane = useDataPlane(), offline = useOfflineWorkspace();
  const ownerId = offline?.ownerId || (user && !user.temporary ? user.id : null);
  if (!ownerId || !dataPlane) return null;
- return <React.Fragment key={JSON.stringify([ownerId, dataPlane])}><WorkspaceStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><InteractionStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><FileSyncStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /></React.Fragment>;
+ return <React.Fragment key={JSON.stringify([ownerId, dataPlane])}><WorkspaceStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><InteractionStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><FileSyncStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /><DraftSyncStatus ownerId={ownerId} dataPlane={dataPlane} unconfirmed={!!offline} /></React.Fragment>;
 }
 function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
  const [rows, setRows] = React.useState<Status>([]), [error, setError] = React.useState('');
@@ -323,4 +324,33 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 			{error && <Text role="alert">{error}</Text>}
 		</Box>
 	);
+}
+
+
+function DraftSyncStatus({ownerId,dataPlane,unconfirmed}:{ownerId:string;dataPlane:string;unconfirmed:boolean}) {
+ const [rows,setRows]=React.useState<Awaited<ReturnType<AccountDraftSync['status']>>>([]),[review,setReview]=React.useState<Awaited<ReturnType<AccountDraftSync['inspect']>>|null>(null),[error,setError]=React.useState(''),[busy,setBusy]=React.useState(false),[online,setOnline]=React.useState(navigator.onLine);
+ const service=React.useRef<ReturnType<typeof accountWorkspaceWorker>|null>(null),mounted=React.useRef(true);
+ React.useEffect(()=>{
+  mounted.current=true;const current=accountWorkspaceWorker({kind:'account',ownerId,dataPlane,origin:location.origin});service.current=current;
+  const update=()=>{setOnline(navigator.onLine);void current.drafts.status().then(value=>{current.lease.assertCurrent();if(mounted.current)setRows(value.filter(row=>row.state!=='synced'));}).catch(()=>{});};update();
+  for(const event of [LOCAL_WORKSPACE_CHANGED,'online','offline'])window.addEventListener(event,update);
+  return ()=>{mounted.current=false;for(const event of [LOCAL_WORKSPACE_CHANGED,'online','offline'])window.removeEventListener(event,update);};
+ },[ownerId,dataPlane]);
+ const act=async(run:(current:NonNullable<typeof service.current>)=>Promise<unknown>)=>{const current=service.current;if(!current)return;setBusy(true);setError('');try{await run(current);current.lease.assertCurrent();if(mounted.current){announceLocalWorkspaceChange();current.wake();}}catch(failure){if(mounted.current)setError(failure instanceof Error?failure.message:'Draft sync needs attention.');}finally{if(mounted.current)setBusy(false);}};
+ if(!rows.length&&!error)return null;
+ const disabled=busy||!online||unconfirmed;
+ return <Box as="section" aria-label="Account draft sync" maxW="900px" w="calc(100% - 32px)" mx="auto" my={4} p={4} borderWidth="1px" borderRadius="lg">
+  <Text role="status">{rows.length} draft change{rows.length===1?'':'s'} saved on this device. {unconfirmed||!online?'Waiting for verified account sync.':rows.some(row=>row.error||['conflict','error'].includes(row.state))?'Private account sync needs attention.':'Syncing drafts to your private account.'} Posting is independent.</Text>
+  <details><summary>Review draft sync</summary>{rows.slice(0,20).map(row=><Flex key={row.id} gap={3} py={2} align="center" flexWrap="wrap"><Text flex="1" minW={0} overflowWrap="anywhere" fontSize="sm">{row.name}: {row.error||row.state}</Text>
+   {row.state==='conflict'?<Button size="sm" isDisabled={disabled} onClick={()=>void act(async current=>{const value=await current.drafts.inspect(current.transport.drafts,row.id);if(mounted.current)setReview(value);})}>Compare draft versions</Button>:<Button size="sm" isDisabled={disabled||row.state==='syncing'} onClick={()=>void act(current=>current.drafts.retry(row.id))}>Retry draft sync</Button>}
+  </Flex>)}</details>
+  {review?<Box mt={3}><Text fontWeight="bold">Review draft versions</Text><Flex gap={3} flexWrap="wrap">{[{name:'This device',value:review.local},{name:'Account',value:review.remote}].map(({name,value})=><Box key={name} flex="1" minW="min(240px, 100%)" maxW="100%"><Text>{name}</Text><Box as="pre" fontSize="xs" whiteSpace="pre-wrap" overflowWrap="anywhere" maxH="200px" overflow="auto">{value?.snapshot||'No account draft exists.'}</Box></Box>)}</Flex>
+   <Flex gap={2} flexWrap="wrap" mt={3}>
+    <Button size="sm" isDisabled={disabled||!review.remote||(review.local.mode==='template'&&!review.deleted)} onClick={()=>void act(async current=>{await current.drafts.keepLocal(current.transport.drafts,{id:review.id,localRevision:review.localRevision,remoteRevision:review.remote!.revision});if(mounted.current)setReview(null);})}>{review.deleted?'Discard reviewed account draft':'Keep device draft'}</Button>
+    <Button size="sm" isDisabled={disabled||!review.remote} onClick={()=>void act(async current=>{await current.draftClient.keepAccount(review);if(mounted.current)setReview(null);})}>Keep account draft</Button>
+    {!review.deleted?<Button size="sm" isDisabled={busy} onClick={()=>void act(async current=>{await current.draftClient.request({operation:'recover',sourceId:review.id,sourceRevision:review.localRevision,id:crypto.randomUUID(),content:review.local});if(mounted.current)setReview(null);})}>Save independent device copy</Button>:null}
+    <Button size="sm" variant="ghost" onClick={()=>setReview(null)}>Cancel</Button>
+   </Flex></Box>:null}
+  {error?<Text role="alert">{error}</Text>:null}
+ </Box>;
 }

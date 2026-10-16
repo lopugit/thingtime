@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Wire native account drafts to scoped local storage
+  and independent private sync, bounded summary discovery and reviewed conflicts.
+  Real local browser checks cover offline recovery, responsive picker, posting
+  through draft 503s, private media reconnect and retirement. Legacy recovery and
+  remaining full-suite gates stay open. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Add the account-local draft queue foundation over
   existing canonical local drafts, with immutable retries, separate editor/server
   revisions and atomic private media handling. Fence copying after account read

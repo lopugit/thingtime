@@ -651,9 +651,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Private metadata.', body: { ok: true, entries: [], nextCursor: null, configured: true } }]
   }),
   endpoint({
-    id: 'drafts', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Private drafts and templates', endpoint: '/api/v1/drafts',
+    id: 'drafts', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'things', title: 'Private drafts and templates', endpoint: '/api/v1/drafts',
     summary: 'Autosave unfinished Things and posts to the current account; reuse post templates.',
-    detail: 'Owner-only, quota-accounted snapshots. Writes use an expected actor, revision and stable write id. Files stay private and durable until the draft is discarded or published. Templates are copied into fresh working drafts and never consumed. Generic Thing CRUD cannot access this protected kind.',
+    detail: 'Owner-only, quota-accounted snapshots. Writes use an expected actor, revision and stable write id. Files stay private and durable until the draft is discarded or published. Templates are copied into fresh working drafts and never consumed. Generic Thing CRUD cannot access this protected kind. Save accepts mode=draft (default) or mode=template for an independent caller-authored template. Existing templates accept exact retries only; create a new copy to change one. Storage remains home-pinned; expected data plane is an identity precondition, not routing.',
     auth: { mode: 'session-or-bearer', description: 'Full account session; app tokens and personal access tokens are refused.' },
     methods: ['GET', 'POST'], steps: ['GET to page through your drafts or read an exact id.', 'POST save, delete, from-post, instantiate or recover with expectedActor.'],
     requestExamples: [{ name: 'Drafts', description: 'List private post drafts and templates.', method: 'GET', query: { surface: 'post' } }],

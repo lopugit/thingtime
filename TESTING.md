@@ -2864,6 +2864,18 @@ email whose link points at the attacker.
 
 ## Account drafts and reusable post templates
 
+- [ ] Save and reopen native account drafts after a cold offline reload. Inspect
+      the picker at 1440, 390 and 320px. Reconnect with only the draft endpoint
+      failing or held unresolved: posting must commit locally and sync privately
+      before that draft request finishes or times out; later draft retry
+      must retire the completed draft while preserving templates. For rich replies,
+      wait for the composer to close after commit, not merely for the submit
+      button's label to disappear while its spinner is showing.
+- [ ] Discard a remote-only summary after another device changes its revision:
+      retain the actual loaded body and refuse deletion against the stale summary.
+      Conflict choices must recheck both device and account revisions; typing
+      during review must never be overwritten by an old review action.
+
 - [ ] Block, reject and stall only `/api/v1/drafts`, leaving the post API online.
       Submit a post, edit, rich comment, plain comment and nested reply: each
       completes independently of draft saving/cleanup. Reload to confirm the

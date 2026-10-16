@@ -25,7 +25,7 @@ test('transport pins account and database on reads and writes and retires mismat
  const lease = { assertCurrent() { if (rootIdentity.read().generation !== generation) throw new Error('Retired workspace'); }, onInvalidate: () => () => {} };
  let result = Response.json({ ok: true, thing: { id: 'thing' } });
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent(event: Event) { events.push(event.type); } }, fetch: async (url: string, init: RequestInit) => {
-  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.15.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.15.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url, init }); return result.clone();
  } });
  try {
@@ -67,6 +67,13 @@ test('transport pins account and database on reads and writes and retires mismat
   assert.equal(calls.at(-1).url, '/api/v1/components/browse?mine=1&cursor=next');
   await transport.browse('schema', { mine: 1 });
   assert.equal(calls.at(-1).url, '/api/v1/schemas/browse?mine=1');
+  const draftCommand = { operation: 'save' as const, id: 'draft', writeId: 'write', revision: 0, mode: 'template' as const, content: { name: 'Saved locally', surface: 'post' as const, context: 'post:new:', snapshot: '{}', attachmentIds: [] } };
+  await transport.drafts.write(draftCommand, new AbortController().signal);
+  assert.equal(calls.at(-1).url, '/api/v1/drafts');
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body), { ...draftCommand, expectedActor: scope.ownerId });
+  await transport.drafts.list({ surface: 'post', cursor: 'next' });
+  assert.equal(calls.at(-1).url, '/api/v1/drafts?surface=post&cursor=next');
+  await transport.drafts.read('draft'); assert.equal(calls.at(-1).url, '/api/v1/drafts?id=draft');
   for (const { init } of calls) { assert.equal(init.headers['X-Thingtime-Expected-Actor'], 'owner'); assert.equal(init.headers['X-Thingtime-Expected-Data-Plane'], 'home'); assert.equal(init.credentials, 'same-origin'); assert.equal(init.redirect, 'error'); }
   // An HTML refusal from an edge/WAF must keep its HTTP status so the sync
   // queue can classify it, instead of degrading to a status-less retry.

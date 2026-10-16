@@ -184,3 +184,22 @@ test('conflict reads are cancelled and refused before transport after scope reti
   assert.equal(calls, 1);
  } finally { await f.db.close(); }
 });
+
+test('keeping the reviewed account version fences both revisions and creates a fresh local revision',async()=>{
+ const f=fixture();try{
+  await f.save('initial');await f.service.sync(f.transport);
+  const other=f.remote.get('draft')!;other.draft={...other.draft,...content('account edit'),revision:2};other.writeId='other';
+  await f.save('device edit',1);await f.service.sync(f.transport);
+  const review=await f.service.inspect(f.transport,'draft');
+  await assert.rejects(f.service.acceptReviewed({...review.remote!,revision:3},review.localRevision,2,Date.now()+1000),/account draft changed/);
+  await f.save('typing during review',2);
+  await assert.rejects(f.service.acceptReviewed(review.remote!,review.localRevision,2,Date.now()+1000),/device draft changed/);
+  const accepted=await f.service.acceptReviewed(review.remote!,3,2,Date.now()+1000);
+  assert.equal(accepted.revision,4);assert.equal(accepted.snapshot,content('account edit').snapshot);
+  assert.equal((await f.service.status())[0].state,'synced');
+  await assert.rejects(f.save('stale editor',3),/changed/i);
+  await f.save('next edit',4);await f.service.sync(f.transport);
+  assert.equal(f.remote.get('draft')!.draft.revision,3);
+  assert.equal(f.remote.get('draft')!.draft.snapshot,content('next edit').snapshot);
+ }finally{await f.db.close();}
+});

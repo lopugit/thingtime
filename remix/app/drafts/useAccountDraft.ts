@@ -1,3 +1,6 @@
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '../local-workspace/storageStatus.client';
+import { workspaceScopeKey } from '../local-workspace/storage';
+import { LOCAL_WORKSPACE_CHANGED } from '../local-workspace/runtime.client';
 import React from 'react';
 import { clearLocalCache, readLocalCache } from '~/hooks/localCache';
 import { inspectDraftRecovery } from './draftRecovery';
@@ -11,7 +14,7 @@ export function useAccountDraft({
 	surface,
 	onRestore,
 	resumeRemote = true,
-	request = draftRequest,
+	request: requestInput = draftRequest,
 	validateSnapshot
 }: {
 	actor?: string | null;
@@ -22,14 +25,22 @@ export function useAccountDraft({
 	request?: typeof draftRequest;
 	validateSnapshot?: (snapshot: string) => unknown;
 }) {
-	const key = `tt-account-draft:${typeof location === 'undefined' ? '' : location.origin}:${actor || 'guest'}:${context}`;
+	const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+	// Capture this generation even when actor and editor context stay the same.
+	// eslint-disable-next-line react-hooks/exhaustive-deps
+	const binding = React.useMemo(() => workspaceStorageBinding(), [identity]);
+	const request = React.useMemo<typeof draftRequest>(() => async (...args) => {
+		if (!binding) throw new Error('Draft workspace is not ready. Reopen this editor.');
+		binding.lease.assertCurrent(); const result = await requestInput(...args); binding.lease.assertCurrent(); return result as any;
+	}, [binding, requestInput]);
+	const key = `tt-account-draft:${typeof location === 'undefined' ? '' : location.origin}:${actor || 'guest'}:${context}:workspace-store:${binding ? workspaceScopeKey(binding.scope) : 'unconfirmed'}`;
 	const [status, setStatus] = React.useState<DraftSaveState>('idle');
 	const [error, setError] = React.useState('');
 	const [deviceError, setDeviceError] = React.useState('');
 	const validate = React.useRef(validateSnapshot);
 	validate.current = validateSnapshot;
 	const recovery = React.useMemo(() => inspectDraftRecovery(actor ? readLocalCache<LocalDraft>(key) : null, validate.current), [actor, key]);
-	const scope = React.useMemo(() => ({ key, active: true, touched: false, restoring: false, baseline: null as string | null }), [key]);
+	const scope = React.useMemo(() => ({ key, active: true, current: () => { try { binding?.lease.assertCurrent(); return !!binding; } catch { return false; } }, touched: false, restoring: false, baseline: null as string | null }), [key, binding]);
 	const restore = React.useRef(onRestore);
 	restore.current = onRestore;
 	const session = React.useMemo(
@@ -40,30 +51,30 @@ export function useAccountDraft({
 				save: async (input) => (await request(actor!, { operation: 'save', ...input })).draft,
 				copy: async (input) => (await request(actor!, { operation: 'recover', ...input })).draft,
 				recovered: (value) => {
-					if (scope.active) {
+					if (scope.active && scope.current()) {
 						scope.baseline = value.content.snapshot;
 						restore.current({ ...value.content, id: value.id, revision: value.revision, mode: 'draft', createdAt: '', updatedAt: '' });
 					}
 				},
 				persist: (value) => {
-					if (!actor || recovery.error) return;
+					if (!actor || recovery.error || !scope.current()) return;
 					if (!value) {
 						clearLocalCache(key);
 						// Retirement/clear leaves no draft to recover, so a stale device
 						// warning would only offer a retry that can never do anything.
 						// A still-failing retirement re-reports once its cleanup settles.
-						if (scope.active) setDeviceError('');
+						if (scope.active && scope.current()) setDeviceError('');
 						return;
 					}
 					try {
 						window.localStorage.setItem(key, JSON.stringify(value));
-						if (scope.active) setDeviceError('');
+						if (scope.active && scope.current()) setDeviceError('');
 					} catch {
-						if (scope.active) setDeviceError('Device recovery storage is unavailable; keep this page open until posting or account saving finishes.');
+						if (scope.active && scope.current()) setDeviceError('Device recovery storage is unavailable; keep this page open until posting or account saving finishes.');
 					}
 				},
 				changed: (next, message) => {
-					if (scope.active) {
+					if (scope.active && scope.current()) {
 						setStatus(next);
 						setError(message || '');
 					}
@@ -75,7 +86,7 @@ export function useAccountDraft({
 		async (draft: AccountDraft) => {
 			validate.current?.(draft.snapshot);
 			await session.load(draft);
-			if (!scope.active) return;
+			if (!scope.active || !scope.current()) return;
 			const saved = session.current();
 			const selected = saved ? { ...draft, ...saved.content, id: saved.id, revision: saved.revision } : draft;
 			scope.baseline = selected.snapshot;
@@ -116,6 +127,19 @@ export function useAccountDraft({
 			}
 		};
 		void retryRetired();
+		const resume = () => {
+			if (cancelled || !scope.current() || scope.touched || session.current() || recovery.error || !actor || !resumeRemote || localStorage.getItem(`tt-draft-resume:${location.origin}:${actor}`) === 'false') return;
+			void request<{ drafts: DraftSummary[] }>(actor, undefined, { context, surface })
+				.then(async (result) => {
+					const found = result.drafts.find((entry) => entry.mode === 'draft' && !localStorage.getItem(`${key}:retired:${entry.id}`));
+					if (!found || cancelled || scope.touched) return;
+					const response = await request(actor, undefined, { id: found.id });
+					if (!cancelled && !scope.touched) await accept(response.draft);
+				})
+				.catch((failure) => {
+					if (!cancelled) setError(failure.message || 'Could not check account drafts');
+				});
+		};
 		const local = session.current();
 		if (local) {
 			scope.restoring = true;
@@ -127,18 +151,7 @@ export function useAccountDraft({
 			restore.current({ ...local.content, id: local.id, revision: local.revision, mode: 'draft', createdAt: '', updatedAt: '' });
 			if (local.dirty !== false || local.pending || local.pendingCopy) void session.retry().catch(() => {});
 			else setStatus('saved');
-		} else if (!recovery.error && actor && resumeRemote && localStorage.getItem(`tt-draft-resume:${location.origin}:${actor}`) !== 'false') {
-			void request<{ drafts: DraftSummary[] }>(actor, undefined, { context, surface })
-				.then(async (result) => {
-					const found = result.drafts.find((entry) => entry.mode === 'draft' && !localStorage.getItem(`${key}:retired:${entry.id}`));
-					if (!found || cancelled || scope.touched) return;
-					const response = await request(actor, undefined, { id: found.id });
-					if (!cancelled && !scope.touched) await accept(response.draft);
-				})
-				.catch((failure) => {
-					if (!cancelled) setError(failure.message || 'Could not check account drafts');
-				});
-		}
+		} else resume();
 		const flush = () => {
 			void session.flush().catch(() => {});
 		};
@@ -146,12 +159,14 @@ export function useAccountDraft({
 			void retryRetired();
 			void session.retry().catch(() => {});
 		};
+		window.addEventListener(LOCAL_WORKSPACE_CHANGED, resume);
 		window.addEventListener('pagehide', flush);
 		window.addEventListener('online', retry);
 		document.addEventListener('visibilitychange', flush);
 		return () => {
 			cancelled = true;
 			scope.active = false;
+			window.removeEventListener(LOCAL_WORKSPACE_CHANGED, resume);
 			window.removeEventListener('pagehide', flush);
 			window.removeEventListener('online', retry);
 			document.removeEventListener('visibilitychange', flush);
@@ -163,7 +178,7 @@ export function useAccountDraft({
 	}, [actor, context, key, surface, session, accept, scope, resumeRemote, request, recovery]);
 	const capture = React.useCallback(
 		(content: DraftContent, hasContent = true, force = false) => {
-			if (!actor || scope.restoring || recovery.error) return;
+			if (!actor || !scope.current() || scope.restoring || recovery.error) return;
 			if (scope.baseline === null && !force) {
 				scope.baseline = content.snapshot;
 				return;
@@ -204,7 +219,7 @@ export function useAccountDraft({
 			try {
 				localStorage.setItem(`${key}:retired:${draft.id}`, JSON.stringify({ id: draft.id, revision: draft.revision, completed: true }));
 			} catch {
-				if (scope.active) setDeviceError('Posted successfully, but device storage could not record draft cleanup.');
+				if (scope.active && scope.current()) setDeviceError('Posted successfully, but device storage could not record draft cleanup.');
 			}
 		});
 	}, [actor, key, session, scope, request]);

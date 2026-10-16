@@ -1,3 +1,4 @@
+import { accountReadRefusals } from './accountReadRevocation';
 import { validateDraftContent, validDraftId, type AccountDraft, type DraftContent } from '../drafts/draftCore';
 import { LocalDrafts, type LocalDraftHooks, type StoredDraft } from './drafts';
 import { accountSyncDeadline, type SyncState } from './accountSync';
@@ -57,6 +58,8 @@ export class AccountDraftSync {
    const state = await tx.get<State>(COLLECTION, draft.id), prior = await tx.get<StoredDraft>('drafts', draft.id);
    if (prior?.deleted || (state && (state.state !== 'synced' || (state.observedAt ?? -1) > startedAt || (state.mutationAt ?? -1) >= startedAt || (state.baseRevision ?? 0) > draft.revision))) return false;
    if (content.attachmentIds.length && !admit) throw new WorkspaceError('DRAFT_FILES_INCOMPLETE', 'Save all draft files on this device before opening offline.', 409);
+   if (((await accountReadRefusals(tx)).get(draft.id)?.at ?? -1) >= startedAt) throw new WorkspaceError('DRAFT_ACCESS_REFUSED', 'Draft access changed while loading. Reopen it online.', 409);
+   await this.drafts.releaseFiles(tx, draft.id, content.attachmentIds);
    await admit?.(tx);
    const same = prior && JSON.stringify(validateDraftContent(prior.draft)) === JSON.stringify(content) && prior.draft.mode === draft.mode;
    const local = { ...draft, ...content, revision: same ? prior.draft.revision : (prior?.draft.revision || 0) + 1 };
@@ -108,6 +111,22 @@ export class AccountDraftSync {
     throw new WorkspaceError('DRAFT_REVIEW_STALE', 'The device draft changed. Review it again.', 409);
    if (remote.mode === 'template' && !local.deleted) throw new WorkspaceError('DRAFT_TEMPLATE', 'Templates stay reusable. Create an independent copy.', 409);
    await tx.put(COLLECTION, state.id, { ...state, baseRevision: remote.revision, state: 'pending', pending: undefined, claim: undefined, error: undefined, attempts: 0, retryAt: 0 });
+  });
+ }
+ async acceptReviewed(remote: AccountDraft, localRevision:number, remoteRevision:number, startedAt:number,
+  localContent:DraftContent=remote, admit?:(tx:WorkspaceTransaction)=>Promise<void>) {
+  const draft=checked(remote),content=validateDraftContent(localContent);
+  if(draft.revision!==remoteRevision||content.context!==draft.context||content.surface!==draft.surface||!Number.isFinite(startedAt))throw new WorkspaceError('DRAFT_REVIEW_STALE','The account draft changed. Review it again.',409);
+  return this.tx('readwrite',async tx=>{
+   const state=await tx.get<State>(COLLECTION,draft.id),local=await tx.get<StoredDraft>('drafts',draft.id);
+   if(!state||state.state!=='conflict'||!local||local.draft.revision!==localRevision)throw new WorkspaceError('DRAFT_REVIEW_STALE','The device draft changed. Review it again.',409);
+   if(((await accountReadRefusals(tx)).get(draft.id)?.at??-1)>=startedAt)throw new WorkspaceError('DRAFT_ACCESS_REFUSED','Draft access changed. Reopen it online.',409);
+   if(content.attachmentIds.length&&!admit)throw new WorkspaceError('DRAFT_FILES_INCOMPLETE','Save all draft originals before replacing this device version.',409);
+   await this.drafts.releaseFiles(tx,draft.id,content.attachmentIds);await admit?.(tx);
+   const replacement={...draft,...content,revision:local.draft.revision+1};
+   await tx.put('drafts',draft.id,{draft:replacement,writeId:this.uuid(),deleted:false} satisfies StoredDraft);
+   await tx.put(COLLECTION,draft.id,{id:draft.id,baseRevision:draft.revision,version:replacement.revision,state:'synced',observedAt:startedAt,attempts:0,retryAt:0} satisfies State);
+   return replacement;
   });
  }
  async sync(transport: AccountDraftTransport, signal = new AbortController().signal, max = 10) {
