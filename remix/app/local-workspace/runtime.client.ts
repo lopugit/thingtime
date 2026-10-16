@@ -101,3 +101,13 @@ export function accountRemoteWorkspaceLease(scope: Extract<WorkspaceScope, { kin
   return () => { invalidations.delete(changed); unsubscribe(); };
  } };
 }
+
+/** Ephemeral UI identity; confirmation changes alone keep local state usable. */
+export const workspaceIdentityKey = () => {
+ const scope = currentChangeScope();
+ return scope ? `${rootIdentity.read().generation}:${scope}` : '';
+};
+export const subscribeWorkspaceIdentity = (listener: () => void) => {
+ const unbind = subscribeWorkspaceBinding(listener), unroot = rootIdentity.subscribe(listener);
+ return () => { unbind(); unroot(); };
+};

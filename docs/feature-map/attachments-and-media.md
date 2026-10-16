@@ -7,7 +7,7 @@ only for single-item moves and reports stale per-item status 409. Both manifests
 must carry these versions. `accountTransport.client.ts` negotiates them;
 `accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
 and canonical attachment cleanup. Durable metadata reconciliation now lives in `accountFileMetadata.ts`;
-completed-file deletion now uses the durable queue described below; ordinary account file UI wiring remains pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+completed-file deletion now uses the durable queue described below; ordinary standalone file UI now uses the adapter below; existing remote byte retention remains pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
 
 Conditional deletion uses the same cleanup claims: delete 1.2.0 accepts
 `expectedUpdatedAt` and fences both ordinary and objectless initial claims.
@@ -121,7 +121,7 @@ until an admin enables them (`POST /api/v1/admin/users/public-uploads`).
 Purpose `file` uses the existing private upload, quota, moderation and exact-owner
 content gates. Completion makes it durable in the owner library; `file-import`
 remains an expiring draft until the protected transfer writer commits it.
-`useAttachmentUploads` supplies the filesystem browser's upload path, preserving
+`AccountFileSync` now supplies the filesystem browser's local save and upload queue, preserving
 original bytes; portable exports/imports retain the immutable file purpose.
 `test:attachments` covers file lifecycle and access alongside recordings.
 The minimum origin contracts are listed in [remote-files.md](../remote-files.md).
@@ -161,7 +161,7 @@ saves, downloads, folders and copy/move. `LocalThings.saveFile/readFile` atomica
 store canonical metadata with bytes and validate checksums. `media.ts` owns bounded,
 reference-counted object URLs; `media.client.tsx` connects them to `SharedMedia` and
 root diagnostics. Local media routes reuse `ThingPage` and its native attachment
-renderer. Pending src/href values are omitted. Account media access is unchanged.
+renderer. Pending src/href values are omitted. Server media access is unchanged; account device previews use the scoped adapter below.
 `apiIdentity.ts` keeps workspace API callbacks stable without retargeting retired
 account closures. Run `test:local-workspace`, `test:attachments`, `test:things` and
 `test:webpages`; see the local-workspace manual checklist for offline browser and
@@ -178,8 +178,7 @@ acceptance and account byte synchronization still need their adapters/checks.
 admission and durable multipart recovery. `accountTransport.client.ts` negotiates
 the existing upload capabilities and fences account/data-plane requests and
 credentialless signed PUTs. `accountApi.client.ts` drains it alongside content and
-interaction queues; `AccountSyncStatus.tsx` renders its retry panel. This is not
-yet the ordinary account picker/list/media adapter. Run `test:local-workspace`
+interaction queues; `AccountSyncStatus.tsx` renders its retry panel. The ordinary standalone account picker/list/media now uses this adapter; see the checkpoint below. Run `test:local-workspace`
 and the opt-in `accountFiles.browser.test.ts` (README local workspace setup),
 plus the attachment suite. Preserve start identity and completion phase on lost
 responses; never restart uncertain completion as a fresh upload.
@@ -194,7 +193,7 @@ state as dependencies. `AccountSyncStatus.tsx` provides comparison and reviewed
 choices. Run `accountFileMetadata.test.ts`, the local workspace suite and the
 file browser fixture. Preserve immutable pending operations on lost replies;
 newer device edits and unrelated account edits must survive reconciliation.
-The ordinary account picker/list/media path is still pending.
+The ordinary standalone account picker/list/media path now uses this queue (checkpoint below).
 
 ## Durable completed-file deletion
 
@@ -207,5 +206,18 @@ Metadata sync skips deleting files. Only a durable `deleted:true` acknowledgemen
 releases bytes. The worker coalesces wake-ups arriving during a drain, and the
 moderation stamper only updates ready files. Run workspace, attachment, capability
 and moderation suites plus the real file browser fixture, including full quota,
-lost replies, stale reviews and the concurrent edit/delete race. Normal account
-file discovery/media wiring remains a separate completion gate.
+lost replies, stale reviews and the concurrent edit/delete race. Existing remote file retention remains a separate completion gate.
+
+
+## Normal account file browser and scoped media
+
+`FilesystemThingsBrowser` now uses `saveLocalFile`, local folder writers and the
+file metadata move adapter for account files. `AccountFileSync.library/views`
+project standalone device files and their owned server aliases; `readFile`
+excludes cancellation/deletion recovery data. `accountApi.client.ts` exposes them
+through normal get/list, and the Files browser combines bounded device pages
+with authorized account discovery without blocking local completion.
+`media.client.tsx` scopes URL registries to `workspaceIdentityKey`; shared media
+contexts remain on their server authorization path. Tests: workspace, Things,
+attachments, `accountFileUi.browser.test.ts` and `accountFiles.browser.test.ts`.
+Existing remote byte retention and managed imports/exports remain completion gates.

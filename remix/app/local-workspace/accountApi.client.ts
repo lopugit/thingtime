@@ -1,4 +1,5 @@
 import { AccountFileSync } from './accountFiles';
+import { localThingProjection } from './things';
 import { clearLocalCache } from '../hooks/localCache';
 import { AccountPostCache, overlayAccountPost } from './accountPosts';
 import { AccountInteractionSync } from './accountInteractions';
@@ -109,6 +110,13 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const online = guard(remote) as T;
 
 	const project = (thing: any) => thing ? { ...thing, author: owner } : thing;
+	const projectFile = (thing: any) => project(localThingProjection(thing, owner.id));
+	const localViews = async (ids: string[]) => {
+		const { sync, files } = worker();
+		const library = new Map((await files.views(ids)).map(row => [row.id, row]));
+		const content = new Map((await sync.views(ids)).map(row => [row.id, row]));
+		return ids.flatMap(id => library.has(id) ? [projectFile(library.get(id))] : content.has(id) ? [project(content.get(id))] : []);
+	};
 	const retainInteractionProjection = async (row: any, startedAt: number) => {
 		if (!row || typeof row.id !== 'string' || !Array.isArray(row.viewerReactions) || !row.reactionCounts) return;
 		const service = worker();
@@ -293,7 +301,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
 			},
 			readLocalFile: async ({ id }: { id: string }, options?: { signal?: AbortSignal }) => {
-				const { row, bytes } = await worker().files.things.readFile(id, options?.signal);
+				const { row, bytes } = await worker().files.readFile(id, options?.signal);
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, bytes };
 			}
 		},
@@ -338,6 +346,13 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		export: exportThings, import: importThings,
 		remove: async (input: { id: string; expectedUpdatedAt?: string }) => {
 			if (Object.keys(input || {}).some(key => !['id', 'expectedUpdatedAt'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
+			if (input?.id?.startsWith('local-file-')) {
+				if (input.expectedUpdatedAt !== undefined) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Review account file deletion through File sync.', 409);
+				const { files } = worker();
+				if (await files.remoteId(input.id)) await files.remove(input.id); else await files.cancel(input.id);
+				announceLocalWorkspaceChange([input.id]); worker().wake();
+				return { ok: true, savedLocally: true };
+			}
 			return remove([input?.id], input?.expectedUpdatedAt, () => online.things.remove(input));
 		},
 		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
@@ -476,6 +491,12 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post, startedAt); return result;
 			}
 			const service = worker(), { sync } = service;
+			if (typeof args?.id === 'string' && args.id.startsWith('local-file-')) {
+				const [row] = await service.files.views([args.id]);
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				if (!row) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+				return { ok: true, thing: projectFile(row), savedLocally: true };
+			}
 			const evictRefusedPost = async (error: unknown) => {
 				if ([403,404,410].includes(Number((error as any)?.status)) && await service.posts.forget(args.id)) {
 					clearLocalCache(`tt-saved-${workspaceScopeKey(scope)}`); announceLocalWorkspaceChange([args.id]);
@@ -500,16 +521,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
-			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit'].includes(key))) return online.things.list(args, options);
+			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device'].includes(key))) return online.things.list(args, options);
 			const { db, lease, sync } = worker();
 			// A cold offline route may never have fetched this exact server page.
 			// List the known local library with its own cursor and explicit partial
 			// coverage instead of making cached content inaccessible.
 			const localCursor = typeof args.cursor === 'string' && args.cursor.startsWith('device:');
-			if (navigator.onLine === false || !canSyncAccountWorkspace(scope) || localCursor) {
+			if (args.device === true || navigator.onLine === false || !canSyncAccountWorkspace(scope) || localCursor) {
 				if (args.cursor && !localCursor) throw new WorkspaceError('LOCAL_CURSOR_REQUIRED', 'Reload this list to browse saved device content while offline.');
 				const page = await sync.things.list({ ...args, cursor: localCursor ? args.cursor.slice(7) : undefined });
-				return { ok: true, things: await sync.views(page.things.map(row => row.id)), nextCursor: page.nextCursor ? `device:${page.nextCursor}` : null, localWorkspace: true, incomplete: true };
+				return { ok: true, things: await localViews(page.things.map(row => row.id)), nextCursor: page.nextCursor ? `device:${page.nextCursor}` : null, localWorkspace: true, incomplete: true };
 			}
 			const query = Object.fromEntries(Object.entries(args).sort(([a], [b]) => a.localeCompare(b)));
 			const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(query)));
@@ -518,11 +539,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			const matches = (row: any) => row && kinds.every((kind: string) => row.thingtime?.includes(kind)) &&
 				(!args.folder || (args.folder === 'root' ? !row.folderId : row.folderId === args.folder));
 			const overlay = async (rows: any[]) => {
-				const things = rows.filter(matches);
+				const library = await worker().files.library(), localFiles = new Map(library.things.map(row => [row.id, row]));
+				const things = rows.flatMap(row => {
+					if (row.author?.id !== owner.id || !library.aliases.has(row.id)) return [row];
+					const id = library.aliases.get(row.id), local = id && localFiles.get(id);
+					return local ? [projectFile(local)] : [];
+				}).filter(matches);
 				if (!args.cursor) {
-					const pending = new Set((await sync.status()).filter(row => row.state !== 'synced').map(row => row.id));
+					const pending = new Set([...(await sync.status()).filter(row => row.state !== 'synced').map(row => row.id), ...localFiles.keys()]);
 					for (const row of (await sync.things.list(args)).things) if (pending.has(row.id) && !things.some(thing => thing.id === row.id)) {
-						const current = project(await sync.view(row.id)); if (matches(current)) things.unshift(current);
+						const current = localFiles.has(row.id) ? projectFile(localFiles.get(row.id)) : project(await sync.view(row.id)); if (matches(current)) things.unshift(current);
 					}
 				}
 				facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); return things;

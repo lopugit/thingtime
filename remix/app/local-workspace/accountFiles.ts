@@ -3,7 +3,7 @@ import { normalizePublicAttachment, multipartPartRange, attachmentCompleteRetryP
 import type { PublicAttachment, SignedUploadPart } from '../components/Attachments/attachmentTypes';
 import { transferChecksum } from '../utils/thingTransfer/archive';
 import { LocalThings } from './things';
-import type { LocalAttachment } from './attachments';
+import { isLocalAttachment, type LocalAttachment } from './attachments';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { accountSyncDeadline, type SyncState } from './accountSync';
 
@@ -40,6 +40,7 @@ type FileRecord = {
 	error?: string;
 	claim?: { token: string; expiresAt: number };
 };
+const libraryFileVisible = (row: LocalAttachment | null, record: FileRecord | undefined | null): row is LocalAttachment => !!row && isLocalAttachment(row) && row.localAttachment.purpose === 'file' && !row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt && !!record && !record.cancelled && !record.cancelRequested && !record.deleteRequested;
 export type AccountFileTransport = {
 	remove?(input: { id: string; requestId: string; expectedUpdatedAt: string }, signal: AbortSignal): Promise<{ deleted: true; deferred: boolean; retryAt?: string }>;
 	cancel?(requestId: string, signal: AbortSignal): Promise<{ cancelled: true; deferred: boolean; retryAt?: string }>;
@@ -120,6 +121,44 @@ export class AccountFileSync {
 		};
 		await this.putRecord(tx, record);
 	}
+	/** Device library and upload aliases come from one scoped snapshot. Closed
+	 * receipts suppress their remote alias without revealing recovery bytes. */
+	async library() {
+		return this.tx('readonly', async tx => {
+			const records = new Map((await tx.list<FileRecord>(COLLECTION)).map(({value}) => [value.id, value]));
+			const things = (await tx.list<LocalAttachment>('things')).map(({value}) => value).filter(row => {
+				const record = records.get(row.id);
+				return libraryFileVisible(row, record);
+			});
+			const visible = new Set(things.map(row => row.id));
+			const aliases = new Map<string, string | null>();
+			for (const record of records.values()) if (record.request.purpose === 'file' && record.remote) aliases.set(record.remote.id, visible.has(record.id) ? record.id : null);
+			return { things, aliases };
+		});
+	}
+
+	async views(ids: string[]) {
+		if (ids.length > 200) throw new WorkspaceError('INVALID_IDS', 'Choose up to 200 files.');
+		return this.tx('readonly', async tx => {
+			const result: LocalAttachment[] = [];
+			for (const id of ids) {
+				if (!id.startsWith('local-file-')) continue;
+				const row = await tx.get<LocalAttachment>('things', id), record = await tx.get<FileRecord>(COLLECTION, id);
+				if (libraryFileVisible(row, record)) result.push(row);
+			}
+			return result;
+		});
+	}
+
+	async readFile(id: string, signal?: AbortSignal) {
+		if (!(await this.views([id])).length) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+		const result = await this.things.readFile(id, signal);
+		// Cancellation keeps recovery bytes until the account acknowledges it,
+		// but those bytes must no longer be available to ordinary media sinks.
+		if (!(await this.views([id])).length) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+		this.lease.assertCurrent(); signal?.throwIfAborted(); return result;
+	}
+
 	async status() {
 		const metadata = new Map((await this.metadata.status()).map(row => [row.id, row]));
 		return this.tx('readonly', async (tx) =>

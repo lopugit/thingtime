@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Account Files picker, local folder moves,
+  discovery and native previews now use scoped device persistence independently
+  of upload. Preserve stable local IDs after sync, revoke retired media URLs and
+  refuse shared-context/recovery-byte access. See the ongoing
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Queue completed account-file deletion locally,
   retaining recovery bytes through offline use and lost replies. Add native
   version review, full-quota restoration, durable delete 1.3.0 replay fences,

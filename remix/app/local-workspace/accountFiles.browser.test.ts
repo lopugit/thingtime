@@ -192,6 +192,18 @@ test(
 				return api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).files.remoteId(localId);
 			}, localId);
 			assert.ok(typeof remoteId === 'string' && remoteId.length > 0, 'completion supplies a canonical account file ID');
+			const discovery = await page.evaluate(async ({ localId, remoteId }) => {
+				const [runtime, api] = await Promise.all(((window as any).__fileFixtureModules as string[]).map(path => import(path))), scope = runtime.currentAccountWorkspace();
+				const facade = api.accountApi({things:{},attachments:{}},{id:scope.ownerId},scope.dataPlane);
+				const device = await facade.things.list({device:true,folder:'root',limit:100});
+				const online = await facade.things.list({folder:'root',limit:100});
+				const native = await facade.things.get({id:localId});
+				return {deviceIds:device.things.map((row:any)=>row.id),onlineIds:online.things.map((row:any)=>row.id),nativeId:native.thing.id,localOnly:native.thing.localOnly,remoteId};
+			},{localId,remoteId});
+			assert.equal(discovery.deviceIds.filter((id:string)=>id===localId).length,1);
+			assert.equal(discovery.onlineIds.filter((id:string)=>id===localId).length,1);
+			assert.ok(!discovery.onlineIds.includes(remoteId)); assert.equal(discovery.nativeId,localId); assert.equal(discovery.localOnly,true);
+
 			const content = await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`));
 			assert.equal(content.status(), 200, await content.text());
 			assert.equal(await content.text(), text);

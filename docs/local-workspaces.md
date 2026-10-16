@@ -2128,3 +2128,46 @@ attachment delete/abort docs routes serve JSON, and anonymous mutations return
 focused lint has no errors or warnings beyond the tooling deprecation notice.
 These are local results; current-head CI and deployed acceptance remain separate.
 No main merge, manual deployment or existing-account mutation was performed.
+
+
+## Normal account file UI and scoped previews — 2026-10-16
+
+The ordinary Files picker now commits standalone bytes and upload intent through
+`saveLocalFile` for account workspaces as well as anonymous workspaces. Folder
+creation and local file moves use the existing facade. Local saves and list
+refresh complete before account discovery or upload; account failures remain
+visible and do not undo device content. The 16 MiB per-file device limit applies;
+paired-device transfers keep their existing 32 MiB limit and approval gates.
+
+Device file pages retain stable local IDs. Account lists replace owned uploaded
+aliases with those IDs and suppress aliases of closed records. Explicit device
+pagination includes standalone files; the file browser reads all bounded device
+pages alongside authorized account discovery. Existing remote files remain
+online reads until a dedicated retention adapter is implemented. This is not a
+claim that the general cached-list membership/pagination work is complete.
+
+Object URLs are scoped to account, origin, data plane and root generation;
+unconfirmed offline accounts can still read their own bytes. Identity retirement
+revokes URLs, and scope-only tab notifications recheck retained bytes with bounded,
+coalesced reads. Shared-link/root contexts and URLs with authorization/scope
+parameters never enter this reader. Cancellation retains private recovery bytes
+while ordinary reads refuse them. MIME allowlists, checksums, quota and upload
+permission checks are unchanged.
+
+Local acceptance includes the real account picker, folder creation, Cut/Paste,
+exact-byte download, native media at 1440/390/320px, shared-context refusal and
+immediate deletion revocation. The real upload/deletion fixture also verifies
+server-alias deduplication. Evidence is in `tmp/account-file-ui-browser/`,
+`tmp/account-file-ui-lifecycle/` and `tmp/account-file-ui-*.log`.
+Existing-account byte retention, managed file transfers and the wider account
+post/editor/gallery/audio/video adapters remain unfinished. No main merge or
+manual deployment is authorized by this checkpoint.
+
+
+Verification for this checkpoint: **893 checks pass** (266 workspace/offline
+shell, 319 Things, 308 attachment), plus the two enabled browser scenarios.
+The generic workspace command skips 28 opt-in browser fixtures. Client and
+Node/Nitro builds pass; the offline manifest verifies 248 assets / 21,617,351
+bytes. Focused lint has no errors or warnings beyond the tooling deprecation.
+Raw TypeScript retains 91 baseline diagnostics, with no changed-source errors.
+These are local results; CI and deployed acceptance are separate.

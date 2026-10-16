@@ -4620,3 +4620,12 @@ uses the disposable admin's normal API to approve only that new account. It
 cleans up its completed file and sessions; fixture accounts remain only in the
 disposable database. Never substitute an existing account or production database,
 weaken CSP, alter rate limits, or commit credentials/evidence storage.
+
+
+The ordinary account Files picker/native-preview acceptance uses the same
+loopback setup: run `node --import tsx --test
+app/local-workspace/accountFileUi.browser.test.ts` from `remix/`, with
+`TT_LOCAL_FILE_SYNC_URL`, `TT_SHARED_PLAYWRIGHT_PATH`, `TT_SHARED_CHROME_PATH`
+and optional `TT_LOCAL_FILE_SYNC_ARTIFACTS` as above. It creates only a disposable
+local account and needs no administrator approval because its saves finish
+offline. The separate lifecycle fixture tests protected upload approval and sync.

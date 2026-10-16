@@ -2,6 +2,19 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Normal account files: use the Files picker offline, create a folder, move
+      the file with Cut/Paste, download identical bytes and open its native media
+      route at 1440/390/320px. Local completion must not await account listing or
+      upload. Reconnect through the normal approval/upload lifecycle; own server
+      aliases must appear once under their stable local ID. Shared media contexts
+      and keyed URLs must never resolve viewer device bytes. Cancellation may
+      retain recovery bytes, but ordinary reads and previews must refuse them.
+      Check scope retirement, scope-only tab invalidation, late reads, deletion
+      and restoration. Run `accountFileUi.browser.test.ts`,
+      `accountFiles.browser.test.ts`, workspace, Things and attachment suites.
+      Existing account files not retained on this device, managed imports and
+      broader list membership remain separate acceptance gates.
+
 - [ ] Completed file deletion: delete an uploaded standalone file while offline
       and at the full 64 MiB device quota. It disappears from Things immediately;
       recovery bytes remain private until an exact durable acknowledgement.
@@ -16,7 +29,7 @@
       cancelled files. Run workspace, attachment, moderation and capability
       suites and the enabled file browser fixture. Built delete 1.3.0 must be
       discoverable; anonymous and Watch request-id mutations remain refused.
-      Ordinary account picker/list/media integration is still outstanding.
+      Existing remote file retention and broader media integration are still outstanding.
 
 - [ ] Durable upload cancellation: cancel a never-started local file offline
       with no remote calls. Lose a real start reply, cancel from the native sync

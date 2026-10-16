@@ -471,3 +471,42 @@ test('a deletion read 404 still requires a durable account receipt and a racing 
 		await f.db.transaction(scope, 'readonly', lease, async tx => assert.ok(await tx.getBytes(f.local.id)));
 	} finally { await f.db.close(); }
 });
+
+test('account file library keeps stable local identities and suppresses closed server aliases', async () => {
+ const f = fixture();
+ try {
+  const row = await f.service.things.saveFile(f.input);
+  let library = await f.service.library();
+  assert.deepEqual(library.things.map(item=>item.id),[row.id]); assert.equal(library.aliases.size,0);
+  await f.service.sync(f.transport);
+  library = await f.service.library(); assert.equal(library.aliases.get(f.remote.id),row.id);
+  await f.service.remove(row.id);
+  library = await f.service.library(); assert.deepEqual(library.things,[]); assert.equal(library.aliases.get(f.remote.id),null);
+  const other = new AccountFileSync(f.db,{...scope,ownerId:'other'},lease);
+  assert.deepEqual((await other.library()).things,[]); assert.equal((await other.library()).aliases.size,0);
+ } finally { f.db.close(); }
+});
+test('account file library excludes editor-owned media and cancelled uploads', async () => {
+ const f = fixture();
+ try {
+  const post = await f.service.things.saveFile({...f.input,purpose:'post'});
+  assert.ok(post.id); assert.deepEqual((await f.service.library()).things,[]);
+  const standalone = await f.service.things.saveFile({...f.input,requestId:randomUUID()});
+  assert.equal((await f.service.library()).things.length,1);
+  await f.service.cancel(standalone.id); assert.deepEqual((await f.service.library()).things,[]);
+ } finally { f.db.close(); }
+});
+
+
+test('cancelled in-flight uploads retain recovery bytes but cannot enter normal media reads', async () => {
+ const f = fixture();
+ try {
+  const row = await f.service.things.saveFile(f.input);
+  await f.service.sync({...f.transport, complete:async()=>{throw Error('lost completion');}});
+  assert.deepEqual((await f.service.readFile(row.id)).bytes,f.bytes);
+  await f.service.cancel(row.id);
+  assert.deepEqual((await f.service.things.readFile(row.id)).bytes,f.bytes,'Recovery remains available to the lifecycle adapter');
+  await assert.rejects(f.service.readFile(row.id),/not in this workspace/);
+  assert.deepEqual(await f.service.views([row.id]),[]);
+ } finally {f.db.close();}
+});

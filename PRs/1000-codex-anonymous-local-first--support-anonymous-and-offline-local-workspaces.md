@@ -1564,3 +1564,25 @@ attachment delete/abort docs routes serve JSON, and anonymous mutations return
 focused lint has no errors or warnings beyond the tooling deprecation notice.
 These are local results; current-head CI and deployed acceptance remain separate.
 No main merge, manual deployment or existing-account mutation was performed.
+
+
+## Account file UI checkpoint — 2026-10-16
+
+The normal Files picker now finishes on device persistence, independently of
+account discovery/upload. Offline folder creation, local file Cut/Paste, exact
+byte download and native image rendering pass in the real browser at desktop,
+390px and 320px. The lifecycle fixture verifies stable local IDs and owned server
+alias deduplication. Scoped preview registries revoke retired/deleted content,
+coalesce cross-tab refreshes, refuse cancelled recovery bytes and keep shared
+contexts on the normal authorization path. No authentication or upload permission
+check was removed. See the dated [workspace checkpoint](../docs/local-workspaces.md#normal-account-file-ui-and-scoped-previews--2026-10-16).
+
+Existing-account byte retention, managed transfers, wider account media/editors
+and the remaining full-suite matrix still block merge. Local verification and
+current-head CI/deployed verification must continue to be reported separately.
+
+
+Local checks: 893 unit/offline-shell checks plus both real browser scenarios;
+client and Node/Nitro builds pass (248 offline assets / 21,617,351 bytes).
+Focused lint is clean; TypeScript has 91 baseline diagnostics and none in changed
+source paths. Browser evidence and the full boundaries are in the linked checkpoint.
