@@ -89,10 +89,30 @@ test('recordings import, play, export, retain and delete offline through native 
   await anonymous.getByRole('button',{name:'Import private copies',exact:true}).click();
   await anonymous.getByRole('link',{name:'Offline recordings',exact:true}).click();await anonymous.getByRole('link',{name:'Imported recording',exact:true}).click();
   await anonymous.reload();await playable(anonymous);assert.equal(await anonymous.getByRole('button',{name:'Save full file offline',exact:true}).count(),0);
-  if(artifacts)await anonymous.screenshot({animations:'disabled',path:resolve(artifacts,'anonymous-recording.png')});
+  await anonymous.getByRole('button',{name:'Edit file details',exact:true}).click();
+  await anonymous.getByLabel('Title',{exact:true}).fill('Anonymous recording title');
+  await anonymous.getByLabel('Display filename',{exact:true}).fill('my-recording.wav');
+  await anonymous.getByLabel('Description',{exact:true}).fill('Edited on this device while offline.');
+  await anonymous.getByRole('button',{name:'Save file details',exact:true}).click();
+  await anonymous.getByRole('heading',{name:'Anonymous recording title',exact:true}).first().waitFor();
+  await anonymous.reload();await playable(anonymous);
+  await anonymous.getByRole('heading',{name:'Anonymous recording title',exact:true}).first().waitFor();
+  await anonymous.getByText('Edited on this device while offline.',{exact:true}).waitFor();
+  for(const width of [1440,390,320]){await anonymous.setViewportSize({width,height:width===1440?1000:844});await anonymous.getByRole('button',{name:'Edit file details',exact:true}).scrollIntoViewIfNeeded();assert.equal(await anonymous.evaluate(()=>document.documentElement.scrollWidth),width);if(artifacts)await anonymous.screenshot({animations:'disabled',path:resolve(artifacts,`anonymous-recording-${width}.png`)});}
+  const anonymousUrl=anonymous.url();
+  await anonymous.goto(url('/things'));await anonymous.getByRole('link',{name:'Offline recordings',exact:true}).click({button:'right'});await anonymous.getByRole('menuitem',{name:'📥 Download…',exact:true}).click();
+  const anonymousDownload=anonymous.waitForEvent('download');await anonymous.getByRole('button',{name:'Download',exact:true}).click();
+  const anonymousZip=await readFile((await(await anonymousDownload).path())!),anonymousExport=await decodeTransferArchive(anonymousZip);
+  assert.equal(anonymousExport.manifest.files[0].title,'Anonymous recording title');
+  assert.equal(anonymousExport.manifest.files[0].description,'Edited on this device while offline.');
+  assert.equal(anonymousExport.manifest.files[0].filenamePreview,'my-recording.wav');
+  assert.deepEqual(Buffer.from(anonymousExport.files.get(anonymousExport.manifest.files[0].id)!),bytes);
+  assert.ok(!serializeTransfer(anonymousExport.manifest).includes('canEditLocalFileDetails'));
+  if(artifacts){await writeFile(resolve(artifacts,'anonymous-recording.thingtime.zip'),anonymousZip);await writeFile(resolve(artifacts,'anonymous-recording.thingtime.json'),serializeTransfer(anonymousExport.manifest));}
+  await anonymous.goto(anonymousUrl);
   await guest.setOffline(false);await anonymous.reload();await playable(anonymous);await anonymous.waitForLoadState('networkidle');
   assert.deepEqual(anonymousWrites,[]);assert.deepEqual(errors,[]);
-  if(artifacts){await writeFile(resolve(artifacts,'recording.thingtime.zip'),exportedZip);await writeFile(resolve(artifacts,'recording.thingtime.json'),serializeTransfer(exported.manifest));await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({anonymousOfflinePlayback:true,anonymousRemoteWrites:anonymousWrites,offlineImport:true,coldNativePlayback:true,offlineMetadata:true,canonicalRecordingExport:true,exactBytes:true,purposePreserved:true,retainedInCleanContext:true,offlineNativeDelete:true,lostDeletionReceipt:true,noReupload:true,viewports:[1440,390,320],writes,retainedWrites,errors},null,2));}
+  if(artifacts){await writeFile(resolve(artifacts,'recording.thingtime.zip'),exportedZip);await writeFile(resolve(artifacts,'recording.thingtime.json'),serializeTransfer(exported.manifest));await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({anonymousOfflinePlayback:true,anonymousOfflineMetadata:true,anonymousMetadataExport:true,anonymousRemoteWrites:anonymousWrites,offlineImport:true,coldNativePlayback:true,offlineMetadata:true,canonicalRecordingExport:true,exactBytes:true,purposePreserved:true,retainedInCleanContext:true,offlineNativeDelete:true,lostDeletionReceipt:true,noReupload:true,viewports:[1440,390,320],writes,retainedWrites,errors},null,2));}
  }catch(error){if(artifacts){const active=activePage;await active.screenshot({animations:'disabled',path:resolve(artifacts,'failure.png')}).catch(()=>{});await writeFile(resolve(artifacts,'failure.json'),JSON.stringify({body:await active.locator('body').innerText().catch(()=>''),writes,retainedWrites,deletions,lost,observations,errors},null,2));}throw error;}finally{
   await retainedContext?.setOffline(false);await context.setOffline(false).catch(()=>{});
   const request=retainedContext?.request||context.request;

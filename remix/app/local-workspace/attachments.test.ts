@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { WorkspaceDatabase, WORKSPACE_LIMITS } from './storage';
-import { LocalThings } from './things';
+import { LocalThings, localThingProjection } from './things';
+import { AccountFileSync } from './accountFiles';
 import { transferChecksum, encodeTransferArchive, decodeTransferArchive } from '../utils/thingTransfer/archive';
 import { validateTransfer, type ThingTransfer } from '../utils/thingTransfer/format';
 import { recordingTransferFile } from '../utils/thingTransfer/recording';
@@ -135,4 +136,27 @@ test('normal file saves are atomic, scoped, idempotent and preserve empty files'
   const controller=new AbortController();controller.abort();await assert.rejects(things.saveFile(input,controller.signal),/abort/i);
   await db.transaction(scope,'readwrite',lease,tx=>tx.deleteBytes(first.id));await assert.rejects(things.saveFile(input),/missing or changed/);
  } finally {await db.close();}
+});
+
+test('imported standalone files derive edit capability from scoped records', async () => {
+ const { db, things } = fixture();
+ try {
+  for (const purpose of ['file', 'recording'] as const) {
+   const source = await bundle();
+   if (purpose === 'recording') delete source.manifest.things[0].crystal.filePurpose;
+   const imported = await things.import(source.manifest, undefined, source.files);
+   const row = (await things.snapshot()).find(row => row.id === imported.roots[0])!;
+   assert.ok(!row.id.startsWith('local-file-'));
+   assert.equal(localThingProjection(row, 'local').canEditLocalFileDetails, true);
+   await things.annotateFile({ id: row.id, title: 'Edited imported file', description: 'Device description', filenamePreview: 'renamed.txt' });
+   const saved = (await things.snapshot()).find(saved => saved.id === row.id)!;
+   assert.equal(saved.crystal.title, 'Edited imported file');
+   assert.equal((saved as any).canEditLocalFileDetails, undefined);
+   for (const patch of [{ targetId: 'post' }, { localAttachment: { ...(row as any).localAttachment, draftId: 'draft' } }, { localAttachment: { ...(row as any).localAttachment, expiresAt: '2099-01-01T00:00:00Z' } }, { localAttachment: { ...(row as any).localAttachment, purpose: 'post' } }, { localAttachment: undefined }]) {
+    assert.equal(localThingProjection({ ...row, ...patch } as any, 'local').canEditLocalFileDetails, false);
+   }
+   const other = new AccountFileSync(db, { kind: 'account', origin: 'https://example.com', ownerId: 'other', dataPlane: 'home' }, lease).things;
+   await assert.rejects(other.annotateFile({ id: row.id, title: 'Forbidden' }), /not stored in this workspace/);
+  }
+ } finally { await db.close(); }
 });

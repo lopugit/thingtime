@@ -1696,3 +1696,21 @@ remaining work](../docs/local-workspaces.md#local-standalone-recordings--2026-10
 No main merge or manual deployment. Full-suite acceptance, microphone capture,
 bound media, secondary offline readers and current-head deployed verification
 remain open.
+
+
+## Anonymous imported file metadata — 2026-10-17
+
+Imported local recordings exposed a native editor gate that depended on the
+upload-only ID prefix. The shared projection now derives standalone annotation
+eligibility from the stored workspace record. The UI retains current ownership,
+link and binding checks, and writes still recheck the scoped record. Canonical
+exports contain no capability fields.
+
+622 unit/offline-shell checks and the enabled production-client recording browser
+scenario pass. That browser now edits all three anonymous metadata fields offline,
+reloads, exports exact bytes/annotations, checks 1440/390/320px bounds and reconnects
+with zero remote writes. Account recording lifecycle checks remain passing in the
+same run. Client build and lint pass (one existing warning); raw TypeScript has
+91 baseline diagnostics, none in changed files. Evidence and the account
+remote-only discussion-read gap are recorded in the [checkpoint](../docs/local-workspaces.md#anonymous-imported-file-metadata--2026-10-17).
+The complete local-first acceptance matrix remains open. No merge or manual deploy.

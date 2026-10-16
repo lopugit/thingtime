@@ -2,6 +2,17 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [x] Anonymous imported file metadata: in a clean no-account browser, import a
+      standalone recording ZIP offline through Things. Open its native detail,
+      edit title, description and display filename, and cold reload. Download
+      the folder through the normal export dialog; canonical annotations and
+      exact original bytes must survive with no UI capability field in the JSON.
+      Reconnect and verify zero remote writes. Check 1440/390/320px and retain
+      account upload/retention/deletion coverage in
+      `accountRecordingImport.browser.test.ts`. Imported `local-` IDs and upload
+      `local-file-` IDs must both work; ID prefixes alone must never grant edits.
+      Foreign workspace, shared-link and bound/draft UI eligibility stay refused.
+
 - [x] Existing account-file retention: open an owned standalone original through
       the normal media route. Inject truncated bytes: show a retention warning
       and preserve the valid online view. Retry; edit details offline and download

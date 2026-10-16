@@ -46,7 +46,7 @@ import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail
 import { ThingComments } from '~/components/Things/ThingComments';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
 import { ScheduledTaskPanel } from '~/components/Lopu/ScheduledTaskPanel';
-import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
+import { attachmentFromThing, canEditLocalFileDetails, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
 import { canKeepThingAfterReadFailure, thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
 
 const DIAGNOSTIC_ID_PATTERN = /^migration-diagnostic-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -990,7 +990,7 @@ function GenericThingPage() {
 						) : null}
 
 						{attachment && (thing as any)?.localRetentionError ? <Text role="status" color="orange.700" fontSize="sm">{(thing as any).localRetentionError}</Text> : null}
-						{sections.preview && attachment ? <ThingAttachmentDetail key={requestKey} attachment={attachment} references={references} onSaveDetails={!linkKey && thing?.author?.id === currentUser?.id && !thing?.targetId && attachment.id.startsWith('local-file-') ? async details => { await api.v1.attachments.annotate({ id: attachment.id, ...details }); refreshThing(); } : undefined} /> : null}
+						{sections.preview && attachment ? <ThingAttachmentDetail key={requestKey} attachment={attachment} references={references} onSaveDetails={canEditLocalFileDetails(thing, currentUser?.id, linkKey) ? async details => { await api.v1.attachments.annotate({ id: attachment.id, ...details }); refreshThing(); } : undefined} /> : null}
 
 						{sections.preview && post ? (
 							<Stack spacing={3} minW={0}>

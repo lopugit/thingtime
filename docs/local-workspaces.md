@@ -2393,3 +2393,37 @@ current-head CI and deployed acceptance remain separate. The full
 matrix remains open, including microphone capture, bound/linked/managed imports,
 complete remote-folder discovery, protected-kind/account sync and real-device
 checks. No main merge or manual deployment is authorized by this checkpoint.
+
+
+## Anonymous imported file metadata — 2026-10-17
+
+The native file detail editor now uses an explicit capability derived from the
+active workspace's standalone attachment record. It no longer assumes that an
+editable file has a `local-file-` ID: normal anonymous imports use `local-` IDs.
+The derived flag is a read projection, absent from stored metadata and canonical
+transfers. Current ownership, shared-link and bound/draft restrictions remain;
+annotation still checks the current scoped record and lease at write time.
+
+Local validation: 622 unit/offline-shell checks pass (298 workspace, 4 shell,
+302 Things and 18 comment projection checks). The generic suite's 33 optional
+browser skips are not acceptance evidence. The enabled production-client
+`accountRecordingImport.browser.test.ts` passes: anonymous offline import,
+native playback, editing all three annotation fields, cold reload, canonical
+ZIP download with exact original bytes, and reconnect with zero remote writes.
+It also reruns account import, upload, retention, offline annotation/deletion
+and lost-deletion-response retry. Native screens were inspected at 1440×1000
+and 320×844; measured overflow checks also cover 390×844. Artifacts are in
+`tmp/anonymous-file-editor-browser/`, including the actual anonymous ZIP/JSON
+exports and three screenshots. Client build passes; lint has zero errors and
+one existing constructor warning. Raw TypeScript reports 91 existing diagnostics,
+none in changed files. This is local evidence, not current-head CI or deployed
+acceptance.
+
+The account offline secondary-read warning remains open: `ThingComments` calls
+Things GET/list with `commentProjection`/`target` options, which currently fall
+through the account facade's remote guard. `AccountPostCache` currently accepts
+post-shaped projections and has no complete discussion-page membership contract.
+Implement and verify scoped offline discussion reads and writers together with
+explicit partial coverage; hiding the warning or inventing an empty complete
+conversation would not satisfy the local-first goal. The full acceptance matrix
+above remains the merge gate.

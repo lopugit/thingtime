@@ -1,5 +1,11 @@
 # Attachments and media
 
+`localThingProjection` derives standalone file edit eligibility from scoped
+storage; `thingAttachmentDetailCore.canEditLocalFileDetails` applies current
+viewer/link checks. Never infer edit rights from an ID prefix. The normal
+anonymous import/edit/export browser regression lives in
+`accountRecordingImport.browser.test.ts`; see the [metadata checkpoint](../local-workspaces.md#anonymous-imported-file-metadata--2026-10-17).
+
 Normal account ZIP import uses `local-workspace/accountImport.ts` for shared
 UI/facade routing, and `AccountThingSync` plus `AccountFileSync.contentHooks`
 for atomic local admission and receipt-dependent media remapping. Regressions:

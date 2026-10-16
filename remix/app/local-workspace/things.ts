@@ -7,7 +7,7 @@ import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { verifyTransferFiles, transferChecksum } from '../utils/thingTransfer/archive';
 import { isTransferRecording, recordingTransferFile } from '../utils/thingTransfer/recording';
 import { createLocalAttachment, isLocalAttachment, localAttachmentFileId, localAttachmentExpired, reapLocalAttachmentDrafts, LOCAL_ATTACHMENT_DRAFT_MS, type LocalAttachment } from './attachments';
-import { applyAttachmentAnnotationPatch, type AttachmentAnnotationPatch } from '../api/utils/attachments/attachmentCore';
+import { applyAttachmentAnnotationPatch, isStandaloneAttachmentPurpose, type AttachmentAnnotationPatch } from '../api/utils/attachments/attachmentCore';
 import { sanitizeTags } from '../schemas/thingTags';
 import { selectComponent } from '../api/utils/webpages/componentResolutionCore';
 import { isProtectedThingtime, sanitizeExtended, validateThingtimeCrystal } from '../schemas/registry';
@@ -33,7 +33,10 @@ export type ThingWrite = {
 export const localThingProjection = (thing: LocalThing, ownerId: string) => ({
 	...thing, author: { id: ownerId, username: 'local', displayName: 'Local workspace', avatarUrl: null, localOnly: true as const },
 	acl: ['tt:user'], visibility: 'private' as const, folderId: thing.folderId || null, targetId: thing.targetId || null,
-	tags: thing.tags || [], extended: thing.extended ?? null, localOnly: true
+	tags: thing.tags || [], extended: thing.extended ?? null, localOnly: true,
+	// Derived from a scoped stored row, never an ID convention or import field.
+	canEditLocalFileDetails: isLocalAttachment(thing) && isStandaloneAttachmentPurpose(thing.localAttachment.purpose) &&
+		!thing.targetId && !thing.localAttachment.draftId && !thing.localAttachment.expiresAt
 });
 const isLocalActivity = (row: Pick<LocalThing, 'thingtime'>) => isLocalInteraction(row) || row.thingtime.includes('action-run');
 export const isLocalLibraryThing = (row: LocalThing, target?: string) => !isLocalActivity(row) && (!isLocalAttachment(row) || ((!row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt) || (!!target && row.targetId === target)));

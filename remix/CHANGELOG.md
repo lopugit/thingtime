@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Native imported-file metadata editing now uses
+  scoped local record eligibility rather than upload ID syntax. Anonymous offline
+  edit/reload/export and zero remote writes verified in the production-client
+  browser fixture; see [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#anonymous-imported-file-metadata--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Standalone recording ZIPs now import, play,
   edit and export locally, then sync privately after verified login. Retention
   preserves annotations and purpose; native library deletion uses durable file
