@@ -10,8 +10,8 @@ Normal account ZIP import uses `local-workspace/accountImport.ts` for shared
 UI/facade routing, and `AccountThingSync` plus `AccountFileSync.contentHooks`
 for atomic local admission and receipt-dependent media remapping. Regressions:
 `accountFileImport.test.ts` and opt-in production-client
-`accountFileImport.browser.test.ts`. Standalone files, recordings and ordinary content use this path;
-bound, linked and managed imports remain separate acceptance work. Recording
+`accountFileImport.browser.test.ts`. Standalone files, recordings, post/comment files and ordinary content use this path;
+linked and managed imports remain separate acceptance work. Recording
 regression: `accountRecordingImport.browser.test.ts`; retention negotiates content
 1.14.0 and deletion 1.5.0. Offline rename/delete compares complete known metadata
 snapshots so deletion does not wait for annotation sync; unknown account changes
@@ -341,3 +341,12 @@ for uploads. Regressions: `accountBoundImport.test.ts` and the expanded
 `accountFileImport.browser.test.ts` using README's existing loopback fixture.
 Complete exports of previously remote bound content still require the separate
 complete-snapshot acceptance work; partial read caches never prove completeness.
+
+
+Complete owned post/comment retention now records the original account file IDs
+inside the existing `thing-sync` record, atomically with content and bytes.
+`accountExport.ts` recognizes this proof for native offline Downloads without a
+prior online export. Missing file records still fail; intentional device removals
+and pending edits are included. The proof is internal and never portable.
+`accountBoundRetention.test.ts` and its opt-in browser fixture cover exact-byte
+round trips, retained order, conflict recovery and fresh anonymous import.

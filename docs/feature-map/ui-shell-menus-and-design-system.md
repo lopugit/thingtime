@@ -10,8 +10,8 @@ components; reuse them instead of adding parallel versions.
 | --- | --- |
 | Thing context menu model (sections, actions, submenus, drill paths) | `app/components/Thingtime/ContextMenu/contextMenuModel.ts` |
 | Menu renderer, trigger, hover/right-click/pinned behaviour | `app/components/Thingtime/ContextMenu/ThingContextMenu.tsx`, `ThingContextMenuTrigger.tsx`, `useThingContextMenu.tsx` |
-| Base verbs every persisted Thing inherits (`open`, `inspect`, `copy-link`, `edit`, `share`, `delete`, `send-to-lopu`) | `app/schemas/thingActions.ts` (`THING_ACTIONS`), `ContextMenu/thingEntityMenu.ts` (`buildThingEntityMenu(capabilities, extensions)`) |
-| Persisted-Thing menu button used by cards and pages | `ContextMenu/PersistedThingMenu.tsx` (fetches the Thing on open, handles copy-link/open/inspect/send-to-lopu; adapters pass `extensions` + `capabilities` + `onAction`) |
+| Base verbs every persisted Thing inherits (`open`, `inspect`, `copy-link`, `download`, `edit`, `share`, `delete`, `send-to-lopu`) | `app/schemas/thingActions.ts` (`THING_ACTIONS`), `ContextMenu/thingEntityMenu.ts` (`buildThingEntityMenu(capabilities, extensions)`) |
+| Persisted-Thing menu button used by cards and pages | `ContextMenu/PersistedThingMenu.tsx` (fetches the Thing on open, handles copy-link/open/inspect/download/send-to-lopu; adapters pass `extensions` + `capabilities` + `onAction`) |
 | Canonical link copying | `ContextMenu/thingEntityLink.ts` |
 | Icons: emoji ↔ lucide registry (`LUCIDE_ICONS`, `LUCIDE_FOR_EMOJI`) | `app/theme/icons.tsx`; renderer `app/components/Icon/Icon.tsx` |
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |
@@ -159,3 +159,12 @@ webpage runtime, with native permission and Action trust checks intact.
 page revision. Cross-tab refresh is a scope-only local-workspace invalidation.
 Run `test:webpages`, `test:drafts`, `test:local-workspace` and the opt-in
 `local-workspace/siteBlocks.browser.test.ts` described in `docs/local-workspaces.md`.
+
+
+Persisted Thing menus share `ThingExportDialog` with the Things library. The
+`download` verb preserves the shared-link context and closes/cancels across
+workspace/Thing identity changes. Account and anonymous posts/replies use the
+same portable JSON/ZIP flow; file-only archive actions remain distinct. The
+opt-in `accountBoundRetention.browser.test.ts` exercises keyboard menu opening,
+touch selection, responsive dialogs and real offline export/import. Managed
+Timeline folders continue to use their dedicated History workflow.

@@ -10916,3 +10916,21 @@ Run `app/local-workspace/components.browser.test.ts` with
   another tab observes the dependency's real 404, and the reopened offline
   Download dialog produces a visible error and no second file. Verify
   1440/390/320px bounds and zero offline mutations in a disposable local account.
+
+
+### Native offline export of retained account posts
+
+- [x] A fresh device opens an existing private post/reply with originals, then
+  disconnects. Download through the post menu without an earlier remote export;
+  validate ordered canonical bytes and complete reply/parent content.
+- [x] Normal anonymous Import creates independent editable IDs; cold native
+  rendering and a second Download preserve every original byte without account
+  requests. Pending account text edits and intentional file removals are exported
+  before synchronization; private reconnect creates no replacement uploads.
+- [x] Incomplete legacy caches, missing file records and unknown parents do not
+  become successful partial offline exports. Keep-device conflict review preserves
+  the known local binding, independent of a different remote attachment list.
+- [x] Open the shared post menu with Enter, select Download by touch, and check
+  menu hit targets and export dialog bounds at 1440/390/320px.
+- [ ] Repeat shared-link and cross-account changes during an in-flight export;
+  verify dialog cancellation and that no prior account/key survives the switch.

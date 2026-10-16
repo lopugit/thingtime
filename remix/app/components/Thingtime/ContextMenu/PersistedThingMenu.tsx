@@ -1,4 +1,5 @@
 import { RenameDialog } from '~/components/Things/ThingsDialogs';
+import { ThingExportDialog } from '~/components/Things/ThingExportDialog';
 import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { thingRenameCrystal, isManagedLibraryThing, type ThingsThing } from '~/components/Things/thingsCore';
 import { useSharedAccess, useSharedThingPath } from '~/components/Sharing/SharedMedia';
@@ -48,8 +49,9 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const [resolved, setResolved] = React.useState<{ identity: string; thing: MenuThing } | null>(null);
   const busy = React.useRef(false);
   const [renameOpen, setRenameOpen] = React.useState(false);
+  const [downloadContext, setDownloadContext] = React.useState<{ identity: string; linkKey?: string } | null>(null);
   const [sending, setSending] = React.useState(false);
-  React.useEffect(() => setRenameOpen(false), [identity]);
+  React.useEffect(() => { setRenameOpen(false); setDownloadContext(null); }, [identity, sharedAccess.key]);
   const fetched = resolved?.identity === identity ? resolved.thing : undefined;
   // Live card projections win over an earlier menu read (e.g. privacy changed).
   const thing = initialThing ? { ...fetched, ...initialThing } : fetched;
@@ -79,7 +81,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
       if (currentIdentity.current === identity) lopu({ title: 'Could not send to Lopu', description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error' });
     } finally { busy.current = false; setSending(false); }
   };
-  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!accountUser?.id && thing?.author?.id === accountUser.id, rename: !!user?.id && !!thing && thing.author?.id === user.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, ...capabilities,
+  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!accountUser?.id && thing?.author?.id === accountUser.id, rename: !!user?.id && !!thing && thing.author?.id === user.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, download: true, ...capabilities,
     'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, accountUser?.id) ? { disabled: sending || handoffDisabled } : false
   }, extensions);
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
@@ -88,6 +90,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
         case 'open': navigate(href); break;
         case 'inspect': navigate(inspectHref); break;
         case 'history': openThingHistory(id, thing?.thingtime); break;
+        case 'download': setDownloadContext({ identity, linkKey: sharedAccess.key }); break;
         case 'copy-link': {
           const url = thingEntityLink(href, window.location.origin, thing, user?.id, sharedAccess.key);
           void navigator.clipboard.writeText(url.href).then(() => lopu({ title: 'Link copied',
@@ -100,6 +103,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
         default: onAction?.(event);
       }
     }} />
+    {downloadContext?.identity === identity && downloadContext.linkKey === sharedAccess.key && <ThingExportDialog key={identity} ids={[id]} linkKey={downloadContext.linkKey} onClose={() => setDownloadContext(null)} />}
     <RenameDialog thing={renameOpen && thing ? thing as ThingsThing : null} onClose={() => setRenameOpen(false)} onRename={async (target, title) => {
       try {
         // The selected adapter owns capability negotiation. Local writes must

@@ -54,6 +54,8 @@ test('post and reply ZIP import commits ordered exact bytes and independent queu
   assert.deepEqual((post as any).attachments.map((row:any)=>row.name),['second.png','first.png']);
   assert.deepEqual((reply as any).attachments.map((row:any)=>row.name),['reply-image.png']);
   assert.ok((await f.sync.status()).every(row=>row.state==='synced'));
+  const exported=await exportAccountThings({ids:imported.roots},{...f,canRefresh:()=>false,remote:async()=>{throw Error('Unexpected remote export');}});
+  assert.equal((await bundleFromPlan(exported.plan)).files.size,3,'verified binding receipts preserve offline export without a prior export snapshot');
  }finally{await f.db.close();}
 });
 

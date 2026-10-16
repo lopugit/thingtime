@@ -93,6 +93,15 @@ export async function exportAccountThings(input: Input, deps: {
     if (files.has(row.id)) return;
     const record = records.get(row.id);
     if (record && !record.remote && !record.deleted) return;
+    if (record?.postAttachmentIds && row.thingtime.every(kind => ['post','comment'].includes(kind)) && (!row.targetId || docs.has(row.targetId))) {
+     // Full owned post retention already admitted the complete body and binding
+     // atomically. Intentional local deletions have null aliases; absent records
+     // are incomplete caches and must never silently drop original media.
+     if (args.includeFiles && record.postAttachmentIds.some(id => !fileLibrary?.aliases.has(id) ||
+      (aliases.has(id) && files.get(aliases.get(id)!)?.targetId !== row.id)))
+      throw new WorkspaceError('EXPORT_FILES_INCOMPLETE', 'Complete post files are not saved on this device. Open the post online before downloading it.', 409);
+     return;
+    }
     if (!captured.has(row.id)) throw new MissingExportSnapshot(row.id);
    }, new Set(state.records.filter(row => !row.deleted).map(row => row.id)));
   for(const [remote,local] of aliases) if(bundle.files.has(localAttachmentFileId(local))) watched.add(remote);

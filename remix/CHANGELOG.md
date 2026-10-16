@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Complete retained account post/reply bindings now
+  export offline through native Download menus, including pending text edits and
+  deliberate file removals. Reuse the shared portable dialog across persisted
+  Thing menus; verify fresh anonymous import, exact originals and responsive
+  keyboard/touch controls. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Invalidate retained account export closures and
   prepared downloads after known read refusals or file cancellation. Cached
   Components now share the definitive-refusal cleanup used by posts; session and

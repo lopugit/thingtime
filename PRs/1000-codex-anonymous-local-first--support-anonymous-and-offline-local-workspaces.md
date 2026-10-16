@@ -1957,3 +1957,36 @@ export. Fresh exports of retained standalone originals, dedicated remote export
 plans and the remaining local-first acceptance matrix still need their broader
 lifecycle checks. No merge, production deployment or public fixture is authorized
 by this checkpoint; the PR remains draft.
+
+
+## Retained post/reply portable Downloads — 2026-10-17
+
+Reproduced normal offline export rejecting a fully retained account post even
+though direct internal export worked. The existing sync record now records the
+original file IDs when atomic full retention or a verified local binding write
+completes, including a changed binding with an unchanged parent body version. The normal exporter recognizes this evidence without accepting partial
+folder/library caches. Pending edits, explicit removals and keep-device conflict
+choices remain exportable; missing file records fail, and an unknown parent keeps
+the complete authorized remote path. Internal proofs never enter portable JSON.
+
+The browser check also found post menus only exposed file archives. The canonical
+Download verb now opens the existing `ThingExportDialog` in persisted Thing menus,
+with shared-link context and identity cancellation. No second exporter was added.
+
+Local verification: 341 workspace tests plus 4 offline-shell tests, 322 Things
+and 79 feed tests pass; 38 opt-in browser skips are excluded. Eight retained-binding tests
+cover complete/incomplete caches, edits/removals, independent anonymous/account
+round trips, keep-device conflict review and unknown-parent fallback. The enabled
+production-client fixture exports three originals from a fresh account context,
+imports normally into an offline anonymous context with new IDs, then re-exports
+identical bytes. A later account export contains current edited text and only the
+one remaining file before sync. Private reconnect and anonymous refusal remain
+verified. Keyboard/touch and 1440/390/320px menu/dialog checks are included.
+Evidence: `tmp/retained-export-browser-final/`, `tmp/retained-export-*.log`.
+Client build verifies 247 offline assets; focused lint is clean; raw TypeScript
+retains 91 baseline diagnostics and none in changed files.
+
+This closes native offline export for completely retained owned post/comment
+bindings. Fresh-file refusal lifecycles, shared/managed/linked transfer cases,
+parent binding reconciliation and the broader acceptance matrix remain open.
+The PR stays draft; this checkpoint does not authorize merging or deployment.

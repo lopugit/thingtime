@@ -2732,3 +2732,30 @@ Client build verifies 247 offline assets. Targeted lint has no errors and one
 existing constructor warning; raw TypeScript has 91 baseline diagnostics and none
 in changed files. Evidence is in `tmp/bound-import-*`, with the successful browser
 run in `tmp/bound-import-browser-complete/`. CI and deployed acceptance are separate.
+
+
+## Retained post export and shared Download menus — 2026-10-17
+
+Opening an owned post/comment online already retains its complete file binding
+and parent body atomically. The existing sync record now carries that completeness
+proof, allowing normal offline Download without first calling the remote exporter.
+Confirmed device-authored binding writes also establish the proof. It survives
+pending local edits and reviewed keep-device conflict choices; keeping a different
+account version requires its own complete retention. Incomplete legacy caches and
+folder listings do not acquire this proof automatically.
+
+The canonical collector includes retained originals in order, current device text,
+and intentional file removals. Missing file records fail explicitly; unknown
+parents retain the existing complete authorized remote path. No foreign parent
+becomes an owned editable Thing. JSON/ZIP output excludes the internal proof,
+account IDs used as authority, and all ownership/permission envelopes.
+
+`PersistedThingMenu` now exposes the canonical Download action through the same
+`ThingExportDialog` used by the library. Shared-link context and workspace/Thing
+identity fences remain intact. The enabled `accountBoundRetention.browser.test.ts`
+checks fresh-device retention, offline export, normal anonymous import with fresh
+IDs, exact-byte re-export, pending edits/removals and private reconnect. It also
+checks keyboard opening, touch selection and desktop/390/320px menu/dialog bounds.
+Artifacts are under `tmp/retained-export-browser-final/` in the local task checkout.
+This is local verification; broader managed/linked transfer, file-revocation and
+local-first matrix requirements remain open.

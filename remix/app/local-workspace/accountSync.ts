@@ -23,6 +23,8 @@ type FrozenWrite = { id: string; operationId: string; version: number; method: '
 type FrozenDelete = Omit<FrozenWrite, 'method'> & { method: 'delete' };
 type SyncRecord = {
 	id: string; state: SyncState; base: AccountThing | null; audience: { acl: string[]; visibility: string };
+	/** Set only by atomic full-file retention or a confirmed local binding write. */
+	postAttachmentIds?: string[];
 	pending?: FrozenWrite | FrozenDelete; deleted?: Pick<LocalThing, 'id' | 'revision' | 'updatedAt'>; claim?: { token: string; expiresAt: number }; attempts: number; retryAt: number; error?: string;
 };
 export type AccountSyncTransport = {
@@ -119,13 +121,16 @@ export class AccountThingSync {
 		if (admitFiles) await admitFiles(tx);
 		if (previous && sync?.base && Date.parse(sync.base.updatedAt) === Date.parse(remote.updatedAt)) {
 			const restored = this.files?.restore ? await this.files.restore(tx, previous) : previous;
-			if (stable(restored) === stable(previous)) return previous;
+			if (stable(restored) === stable(previous)) {
+				if (admitFiles && stable(sync.postAttachmentIds) !== stable(remote.accountAttachmentIds || [])) await tx.put(COLLECTION, remote.id, { ...sync, postAttachmentIds: remote.accountAttachmentIds || [] });
+				return previous;
+			}
 		}
 		const cached = previous ? { ...remote, revision: previous.revision + 1,
 			updatedAt: new Date(Math.max(Date.parse(previous.updatedAt) + 1, Date.parse(remote.updatedAt))).toISOString() } : remote;
 		const device = this.files?.restore ? await this.files.restore(tx, cached) : cached;
 		await tx.put('things', remote.id, device);
-		await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
+		await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, ...(admitFiles ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}), audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
 		return device;
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: AccountThingWrite) {
@@ -146,7 +151,8 @@ export class AccountThingSync {
 	async exportSnapshot() {
 		return this.tx('readonly', async tx => ({
 			things: (await tx.list<LocalThing>('things')).map(row => row.value),
-			records: (await tx.list<SyncRecord>(COLLECTION)).map(({ value: row }) => ({ id: row.id, state: row.state, remote: !!row.base, deleted: !!row.deleted }))
+			records: (await tx.list<SyncRecord>(COLLECTION)).map(({ value: row }) => ({ id: row.id, state: row.state, remote: !!row.base, deleted: !!row.deleted,
+				...(row.postAttachmentIds ? { postAttachmentIds: row.postAttachmentIds } : {}) }))
 		}));
 	}
 	async isDeleted(id: string) { return this.tx('readonly', async tx => !!(await tx.get<SyncRecord>(COLLECTION, id))?.deleted); }
@@ -246,6 +252,7 @@ export class AccountThingSync {
 			}
 			await tx.put(COLLECTION, choice.id, { id: choice.id, state: choice.keep === 'local' ? 'pending' : 'synced', base: remote,
 				...(choice.keep === 'local' && state.deleted ? { deleted: state.deleted } : {}),
+				...(choice.keep === 'local' && state.postAttachmentIds ? { postAttachmentIds: state.postAttachmentIds } : {}),
 				audience: choice.keep === 'local' ? state.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
 		});
 	}
@@ -357,6 +364,7 @@ export class AccountThingSync {
 					const device = this.files?.restore ? await this.files.restore(tx, remote) : remote;
 					if (!newer) await tx.put('things', pending.id, { ...device, ...(row?.localSubmission ? { localSubmission: row.localSubmission } : {}), revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
 					await tx.put(COLLECTION, pending.id, { id: pending.id, state: newer ? 'pending' : 'synced', base: remote,
+						...(this.files && Array.isArray(pending.body.attachmentIds) ? { postAttachmentIds: remote.accountAttachmentIds || [] } : {}),
 						...(latest.deleted ? { deleted: latest.deleted } : {}),
 						audience: newer ? latest.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
 				});

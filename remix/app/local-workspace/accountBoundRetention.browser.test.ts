@@ -3,11 +3,13 @@ import test from 'node:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { decodeTransferArchive } from '../utils/thingTransfer/archive';
+import { serializeTransfer } from '../utils/thingTransfer/format';
 const base=process.env.TT_LOCAL_BOUND_MEDIA_URL,adminFile=process.env.TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE,playwrightPath=process.env.TT_SHARED_PLAYWRIGHT_PATH,artifacts=process.env.TT_LOCAL_BOUND_MEDIA_ARTIFACTS;
 test('a fresh device retains existing private post/comment originals and edits/removes them offline', {skip:!base||!adminFile||!playwrightPath,timeout:180000},async()=>{
  assert.ok(['localhost','127.0.0.1'].includes(new URL(base!).hostname));
  const {chromium}=await import(playwrightPath!),browser=await chromium.launch({executablePath:process.env.TT_SHARED_CHROME_PATH,headless:true,chromiumSandbox:true});
- const seed=await browser.newContext(),admin=await browser.newContext(),guest=await browser.newContext(),device=await browser.newContext({viewport:{width:1440,height:1000}}),page=await device.newPage();
+ const seed=await browser.newContext(),admin=await browser.newContext(),guest=await browser.newContext({hasTouch:true}),device=await browser.newContext({viewport:{width:1440,height:1000},hasTouch:true}),page=await device.newPage();
  const url=(path:string)=>new URL(path,base).href,headers={Origin:new URL(base!).origin},errors:string[]=[],writes:string[]=[],uploadRequests:string[]=[],deletions:any[]=[],responses:any[]=[],readbacks:any[]=[],uploaded:string[]=[];
  let root='',offline=false;page.setDefaultTimeout(20000);
  page.on('pageerror',(error:Error)=>errors.push(error.message));page.on('request',(r:any)=>{const path=new URL(r.url()).pathname;if(offline&&!['GET','HEAD','OPTIONS'].includes(r.method()))writes.push(path);if(path==='/api/v1/attachments/uploads'&&r.method()==='POST')uploadRequests.push(path);if(path==='/api/v1/attachments/delete'&&r.method()==='POST')deletions.push(r.postDataJSON());});
@@ -37,6 +39,43 @@ test('a fresh device retains existing private post/comment originals and edits/r
   }
   await page.waitForFunction(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)return false;for(const key of await caches.keys())if(key.startsWith('thingtime:offline-shell:')&&await(await caches.open(key)).match('/__thingtime_offline_shell_complete__'))return true;return false;});
   offline=true;await device.setOffline(true);
+  let downloadNumber=0;
+  const download=async(tab:any)=>{
+   const current=++downloadNumber;
+   const trigger=tab.getByRole('button',{name:'Post options',exact:true}).first();await trigger.focus();await trigger.press('Enter');
+   const action=tab.getByRole('menuitem',{name:'📥 Download…',exact:true});await action.waitFor();
+   for(const width of [1440,390,320]){
+    await tab.setViewportSize({width,height:width===1440?1000:844});await action.scrollIntoViewIfNeeded();
+    const bounds=await action.evaluate((node:HTMLElement)=>{const b=node.getBoundingClientRect();const top=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return {left:b.left,right:b.right,clickable:!!top&&node.contains(top)};});
+    assert.ok(bounds.left>=0&&bounds.right<=width&&bounds.clickable);if(artifacts)await tab.screenshot({animations:'disabled',path:resolve(artifacts,`download-${current}-menu-${width}.png`)});
+   }
+   await action.tap();
+   for(const width of [1440,390,320]){
+    await tab.setViewportSize({width,height:width===1440?1000:844});const box=await tab.getByRole('dialog').evaluate((node:HTMLElement)=>({width:node.getBoundingClientRect().width,client:node.clientWidth,scroll:node.scrollWidth}));assert.ok(box.width<=width);assert.equal(box.client,box.scroll);
+    if(artifacts)await tab.screenshot({animations:'disabled',path:resolve(artifacts,`download-${current}-dialog-${width}.png`)});
+   }
+   const pending=tab.waitForEvent('download');await tab.getByRole('button',{name:'Download',exact:true}).click();
+   const zip=await readFile((await(await pending).path())!);await tab.getByRole('dialog').waitFor({state:'detached'});return {zip,bundle:await decodeTransferArchive(zip)};
+  };
+  const original=await download(page);assert.equal(original.bundle.manifest.things.length,2);assert.equal(original.bundle.files.size,3);
+  assert.deepEqual(original.bundle.manifest.files.filter(row=>row.targetId===root).map(row=>row.name),['retained-post.png','retained-second.png']);
+  for(const bytes of original.bundle.files.values())assert.deepEqual(Buffer.from(bytes),png);
+  assert.doesNotMatch(serializeTransfer(original.bundle.manifest),/"postAttachmentIds"|"accountAttachmentIds"|"author"|"acl"|"localAttachment"/);
+  const anonymous=await guest.newPage(),anonymousWrites:string[]=[];anonymous.setDefaultTimeout(20000);
+  anonymous.on('request',(r:any)=>{if(!['GET','HEAD','OPTIONS'].includes(r.method()))anonymousWrites.push(new URL(r.url()).pathname);});
+  anonymous.on('pageerror',(error:Error)=>errors.push(error.message));
+  await anonymous.goto(url('/things'));await anonymous.getByRole('button',{name:'Import…',exact:true}).waitFor();
+  await anonymous.waitForFunction(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)return false;for(const key of await caches.keys())if(key.startsWith('thingtime:offline-shell:')&&await(await caches.open(key)).match('/__thingtime_offline_shell_complete__'))return true;return false;});
+  await guest.setOffline(true);await anonymous.getByRole('button',{name:'Import…',exact:true}).click();
+  await anonymous.getByLabel('Thingtime transfer files',{exact:true}).setInputFiles({name:'retained.thingtime.zip',mimeType:'application/zip',buffer:original.zip});
+  await anonymous.getByRole('button',{name:'Import private copies',exact:true}).click();
+  await anonymous.getByRole('link',{name:'Existing private reply.',exact:true}).click();await anonymous.reload();await anonymous.getByText('Existing private reply.',{exact:true}).waitFor();
+  await anonymous.getByRole('button',{name:'View retained-reply.png',exact:true}).locator('img').evaluate((img:HTMLImageElement)=>img.decode());
+  const copied=await download(anonymous);assert.equal(copied.bundle.manifest.things.length,2);assert.equal(copied.bundle.files.size,3);
+  assert.ok(copied.bundle.manifest.things.every(row=>![root,replyId].includes(row.id)));for(const bytes of copied.bundle.files.values())assert.deepEqual(Buffer.from(bytes),png);
+  assert.deepEqual(anonymousWrites,[]);await anonymous.close();await guest.setOffline(false);
+  if(artifacts){await writeFile(resolve(artifacts,'retained.thingtime.zip'),original.zip);await writeFile(resolve(artifacts,'retained.thingtime.json'),serializeTransfer(original.bundle.manifest));}
+
   for(const [id,text,name] of [[root,'Existing private post.','retained-second.png'],[replyId,'Existing private reply.','retained-reply.png']]){
    await page.goto(url('/post/'+id));await page.reload();await page.getByText(text,{exact:true}).waitFor();
    if(id===replyId){const conversation=page.getByRole('link',{name:'View full conversation 🧵',exact:true});await conversation.waitFor();assert.equal(await conversation.getAttribute('href'),'/post/'+root);await conversation.click();await page.getByText('Existing private post. Edited offline.',{exact:true}).waitFor();await page.goto(url('/post/'+id));await page.getByText(text,{exact:true}).waitFor();}
@@ -47,6 +86,10 @@ test('a fresh device retains existing private post/comment originals and edits/r
    await page.reload();await page.getByText(edited,{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'View '+name,exact:true}).count(),0);
    for(const width of [1440,390,320]){await page.setViewportSize({width,height:width===1440?1000:844});await page.getByText(edited,{exact:true}).scrollIntoViewIfNeeded();await page.evaluate(()=>document.fonts.ready);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);if(artifacts)await page.screenshot({animations:'disabled',path:resolve(artifacts,`${id===root?'post':'reply'}-${width}.png`)});}
   }
+  const editedExport=await download(page);assert.equal(editedExport.bundle.files.size,1);
+  assert.ok(editedExport.bundle.manifest.things.every(row=>String(row.crystal.text).endsWith('Edited offline.')));
+  for(const bytes of editedExport.bundle.files.values())assert.deepEqual(Buffer.from(bytes),png);
+  if(artifacts){await writeFile(resolve(artifacts,'edited.thingtime.zip'),editedExport.zip);await writeFile(resolve(artifacts,'edited.thingtime.json'),serializeTransfer(editedExport.bundle.manifest));}
   assert.deepEqual(writes,[]);assert.deepEqual(uploadRequests,[]);
   offline=false;await device.setOffline(false);await page.reload();
   let settled=false;
@@ -58,7 +101,7 @@ test('a fresh device retains existing private post/comment originals and edits/r
   assert.equal(settled,true);assert.ok(deletions.length>=2);assert.ok(deletions.every(input=>input.retainReceipt===true&&!('requestId'in input)&&[root,replyId].includes(input.targetId)));assert.deepEqual(uploadRequests,[]);
   for(const id of [second,replyFile])assert.equal((await seed.request.get(url('/api/v1/attachments/content?id='+id))).status(),404);
   assert.deepEqual(await(await seed.request.get(url('/api/v1/attachments/content?id='+first+'&download=1'))).body(),png);assert.equal((await guest.request.get(url('/api/v1/things?id='+root))).status(),404);assert.deepEqual(errors,[]);
-  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({freshDevice:true,existingPrivatePostAndComment:true,offlineParentNavigation:true,exactRetainedBytes:true,offlineEditAndRemoval:true,existingIdDeletionReceipts:true,noUploads:true,privateReadDenied:true,viewports:[1440,390,320],writes,errors},null,2));
+  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({freshDevice:true,normalOfflineExport:true,keyboardMenuOpen:true,touchDownload:true,anonymousNormalImportRoundTrip:true,editedOfflineExport:true,existingPrivatePostAndComment:true,offlineParentNavigation:true,exactRetainedBytes:true,offlineEditAndRemoval:true,existingIdDeletionReceipts:true,noUploads:true,privateReadDenied:true,viewports:[1440,390,320],writes,errors},null,2));
  }catch(error){await page.getByText('Review sync',{exact:true}).click({timeout:2000}).catch(()=>{});if(artifacts){await page.screenshot({path:resolve(artifacts,'failure.png')}).catch(()=>{});await writeFile(resolve(artifacts,'failure.json'),JSON.stringify({body:await page.locator('body').innerText().catch(()=>''),errors,writes,uploadRequests,deletions,responses,readbacks},null,2));}throw error;}
  finally{await device.setOffline(false).catch(()=>{});if(root)await seed.request.delete(url('/api/v1/things'),{headers,data:{id:root}}).catch(()=>{});for(const id of uploaded)await seed.request.post(url('/api/v1/attachments/delete'),{headers,data:{id}}).catch(()=>{});await browser.close();}
 });
