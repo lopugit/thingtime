@@ -10405,7 +10405,7 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   the previously rendered preview, show Retry and recover when the endpoint
   returns. A failed request must not become a not-found screen.
 - [ ] Finish account catalogue discovery, cross-tab refresh, source-control
-  editor recovery and bundled-only library bookmarks before the full rollout
+  editor recovery and bundled-only library bookmarks (covered by later checkpoints) before the full rollout
   merges. Bundled previews remain unowned; the UI requires saving a version
   before local reactions/library membership.
 
@@ -10461,3 +10461,25 @@ Run `app/local-workspace/components.browser.test.ts` with
   mutation requests and browser errors. Enable `TT_LOCAL_CATALOG_URL`,
   `TT_LOCAL_CATALOG_ARTIFACTS` and the shared Playwright/Chrome paths to run
   `app/local-workspace/catalog.browser.test.ts` against a disposable local stack.
+
+
+### Anonymous bundled Component Library (2026-10-16)
+
+- [x] In a clean logged-out browser, prepare the production offline shell and
+  disable networking. Bookmark a bundled Component and add a reaction; Library
+  must retain both after cold reload, while Mine excludes the bundled definition.
+- [x] Remove and re-add the bookmark from another tab. An open Library must update
+  without reload; removing and reloading must not resurrect the bookmark.
+- [x] Preserve original Thingtime attribution and definition timestamps. Library
+  sorts and paginates by save time, including owned and bundled definitions.
+- [x] Reject unknown bundled targets, wrong resolver IDs/kinds, votes on bundled
+  definitions and account-scope writes. The stored rows are only relational
+  save/reaction children: generic Things reads/exports gain no owned target.
+  Concurrent toggles serialize and persisted reactions survive reopening storage.
+- [x] Verify 1440/390/320px PNGs and no horizontal overflow, zero remote mutations
+  and zero browser errors. Enable `TT_LOCAL_COMPONENTS_URL`,
+  `TT_LOCAL_COMPONENTS_ARTIFACTS` and shared Playwright/Chrome paths for
+  `app/local-workspace/components.browser.test.ts`; all three scenarios pass.
+- [ ] Complete account interaction synchronization with safe retry semantics;
+  never replay the current remote toggle after a lost response as though it were
+  an idempotent desired-state command.

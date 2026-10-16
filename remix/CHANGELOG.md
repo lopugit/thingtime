@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Anonymous Component Library now retains bookmarks
+  and reactions to bundled definitions offline without creating owned copies.
+  Verified reload, cross-tab changes, save ordering and 1440/390/320px layouts.
+  Account interaction sync remains outstanding;
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Visited account Component/Schema catalogues now
   retain owned definitions atomically for offline editing; scoped tab changes
   refresh device catalogues and native Component previews. Verified multi-page

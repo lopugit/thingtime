@@ -125,3 +125,32 @@ test('failed replacement rolls back the prior interaction atomically', async () 
   assert.deepEqual(localInteractionState(post, rows).votes, { up: 1, down: 0, score: 1, viewerVote: 'up' });
  } finally { await db.close(); }
 });
+
+
+test('bundled definition bookmarks and reactions reference trusted content without creating owned targets', async () => {
+ const { db,factory,things }=fixture(); let clock=0;
+ const bundle={id:'component-bundled',thingtime:['component'],crystal:{name:'Bundled card',render:{tag:'p',children:'Unchanged'}}};
+ const original=JSON.stringify(bundle), make=(store:WorkspaceDatabase)=>new LocalInteractions(store,scope,lease,()=>crypto.randomUUID(),()=>new Date(++clock*1000).toISOString(),id=>id===bundle.id?bundle:undefined);
+ const interactions=make(db);
+ try {
+  assert.equal((await interactions.toggle('save',bundle.id)).saved,true);
+  assert.equal((await interactions.toggle('reaction',bundle.id,'❤️')).reactionCounts['❤️'],1);
+  const rows=await things.snapshot(); assert.deepEqual(rows.map(row=>row.thingtime[0]).sort(),['reaction','save']);
+  assert.ok(rows.every(row=>row.targetId===bundle.id)); assert.equal(JSON.stringify(bundle),original);
+  await assert.rejects(new LocalInteractions(db,account,lease,undefined,undefined,()=>bundle).toggle('save',bundle.id),/dedicated sync adapter/);
+  assert.equal((await things.list()).things.some(row=>row.id===bundle.id),false);
+  await assert.rejects(things.get(bundle.id),/not found|unavailable|not in this workspace/i);
+  await assert.rejects(things.export([bundle.id]),/not found|missing|not in this workspace/i);
+  await assert.rejects(interactions.toggle('save','component-not-in-bundle'),/not available/);
+  await assert.rejects(new LocalInteractions(db,scope,lease,undefined,undefined,()=>bundle).toggle('save','wrong-bundled-id'),/not available/);
+  await assert.rejects(new LocalInteractions(db,scope,lease,undefined,undefined,()=>({...bundle,thingtime:['post']})).toggle('save',bundle.id),/not available/);
+  await assert.rejects(interactions.toggle('vote',bundle.id,0),/not available/);
+  await assert.rejects(interactions.toggle('updown',bundle.id,'up'),/not available/);
+  const other=new WorkspaceDatabase(factory);
+  await Promise.all([make(other).toggle('save',bundle.id),interactions.toggle('save',bundle.id)]);
+  assert.equal((await interactions.toggle('reaction',bundle.id,null)).saved,true,'two toggles serialize without duplicate markers');
+  await db.close(); const reopened=new WorkspaceDatabase(factory); assert.equal((await make(reopened).toggle('reaction',bundle.id,null)).saved,true);
+  assert.equal((await make(reopened).toggle('save',bundle.id)).saved,false); await make(reopened).toggle('reaction',bundle.id,'❤️');
+  assert.deepEqual(await new LocalThings(reopened,scope,lease).snapshot(),[]); await reopened.close(); await other.close();
+ } finally { await db.close(); }
+});

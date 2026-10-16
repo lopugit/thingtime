@@ -137,3 +137,37 @@ test('account component versions complete and sync while draft writes never fini
   await context.request.post(new URL('/api/v1/auth/logout', base).href, { headers }); await browser.close();
  }
 });
+
+
+test('anonymous bundled Component bookmarks and reactions survive offline reload without ownership or remote writes', {skip:!enabled,timeout:120_000},async()=>{
+ const browser=await launch(),context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(); page.setDefaultTimeout(15_000);
+ const writes:string[]=[],errors:string[]=[],bounds:any[]=[];
+ context.on('request',(r:any)=>{if(!['GET','HEAD','OPTIONS'].includes(r.method())) writes.push(new URL(r.url()).pathname);});
+ context.on('page',p=>p.on('pageerror',(e:Error)=>errors.push(e.message))); page.on('pageerror',(e:Error)=>errors.push(e.message));
+ const name='Guestbook reader · Guestbook demo',card=(p:any)=>p.getByRole('article',{name,exact:true});
+ try {
+  if(artifacts) await mkdir(resolve(artifacts),{recursive:true});
+  const root=page.waitForResponse((r:any)=>new URL(r.url()).pathname==='/api/root-data'); await page.goto(new URL('/components',base).href); assert.equal((await(await root).json()).user,null); await ready(page);
+  await context.setOffline(true); assert.equal(await page.evaluate(async()=>{try{await fetch('/api/root-data?bundled-offline-probe',{cache:'no-store'});return false;}catch{return true;}}),true);
+  await card(page).getByRole('button',{name:'Add to library',exact:true}).click(); await card(page).getByRole('button',{name:'In my library',exact:true}).waitFor();
+  await card(page).getByRole('button',{name:'react',exact:true}).click(); await page.getByPlaceholder('🔍 Search, or type / paste emoji…').fill('❤️'); await page.getByTitle('Add ❤️ as one reaction',{exact:true}).click();
+  await page.getByRole('button',{name:'Library',exact:true}).click(); await card(page).getByRole('button',{name:'❤️ 1',exact:true}).waitFor();
+  await page.reload(); await card(page).getByRole('button',{name:'In my library',exact:true}).waitFor(); await card(page).getByRole('button',{name:'❤️ 1',exact:true}).waitFor();
+  const second=await context.newPage(); await second.goto(new URL('/components',base).href); await card(second).getByRole('button',{name:'In my library',exact:true}).click();
+  await card(page).waitFor({state:'hidden'});
+  await second.getByRole('button',{name:'All',exact:true}).last().click(); await card(second).getByRole('button',{name:'Add to library',exact:true}).click(); await card(page).waitFor();
+  await page.getByRole('button',{name:'Mine',exact:true}).click(); await card(page).waitFor({state:'hidden'});
+  await page.getByRole('button',{name:'Library',exact:true}).click(); await card(page).getByRole('button',{name:'In my library',exact:true}).waitFor();
+  assert.ok((await card(page).innerText()).includes('Thingtime'));
+  for(const width of [1440,390,320]) {
+   await page.setViewportSize({width,height:width===1440?1000:844}); await card(page).scrollIntoViewIfNeeded();
+   const measured=await card(page).evaluate((node:HTMLElement)=>({width:innerWidth,scroll:document.documentElement.scrollWidth,card:node.getBoundingClientRect().width})); assert.equal(measured.width,measured.scroll); assert.ok(measured.card<=width); bounds.push(measured);
+   if(artifacts) await page.screenshot({path:resolve(artifacts,`bundled-library-${width}.png`)});
+  }
+  await card(page).getByRole('button',{name:'In my library',exact:true}).click(); await card(page).waitFor({state:'hidden'});
+  await page.reload(); assert.equal(await card(page).count(),0);
+  assert.deepEqual(writes,[]); assert.deepEqual(errors,[]);
+  if(artifacts) await writeFile(resolve(artifacts,'bundled-library-verification.json'),JSON.stringify({anonymous:true,offline:true,bookmarkRecovery:true,reactionRecovery:true,crossTabSaveAndRemoval:true,notOwned:true,bounds,writes,errors},null,2));
+ } catch(error){if(artifacts){await page.screenshot({path:resolve(artifacts,'bundled-failure.png'),fullPage:true});await writeFile(resolve(artifacts,'bundled-failure.json'),JSON.stringify({body:await page.locator('body').innerText(),writes,errors},null,2));}throw error;}
+ finally {await browser.close();}
+});

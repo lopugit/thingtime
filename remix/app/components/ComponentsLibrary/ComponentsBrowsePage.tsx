@@ -317,7 +317,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
   }, []);
 
   const systemFields = React.useMemo(systemThingFields, []);
-  const canInteract = !!entry && !(device && !entry.author);
+  const canInteract = !!entry && !(device && !entry.author && !localOnly);
   const reactionEntries = Object.entries(entry?.reactionCounts || {}).filter(([, count]) => count > 0);
   const libraryLabel = COMPONENT_LIBRARY_LABELS[source.library] || source.library;
 
@@ -352,6 +352,8 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
 
   return (
     <Flex
+      as="article"
+      aria-label={source.name}
       background="var(--tt-card, #ffffff)"
       border="1px solid var(--tt-border, #ececef)"
       borderRadius="var(--tt-radius-lg, 16px)"
@@ -763,7 +765,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
         </Button>
       </Flex>
 
-      {device && !entry.author && <Text fontSize="12px" color="var(--tt-muted, #9a9aa6)">Save your own version to add it to your library or react.</Text>}
+      {device && !entry.author && !localOnly && <Text fontSize="12px" color="var(--tt-muted, #9a9aa6)">Save your own version to add it to your library or react.</Text>}
       {(argsOpen || versionOpen) && <DraftSaveStatus paused={!!versionDraft.recoveryError} status={versionDraft.status} error={versionDraft.error} retry={versionDraft.retry} />}
       {versionOpen && (
         <Flex

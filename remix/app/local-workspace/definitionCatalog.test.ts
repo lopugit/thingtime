@@ -38,3 +38,18 @@ test('component family expansion and filters precede paging, preserve provenance
  assert.equal(result.components!.find(row => row.id === 'component-bundled').author, null);
  assert.equal((await browseLocalDefinitions(components, 'component', { mine: true }, 'scope', project, bundled)).components!.some(row => row.id === 'component-bundled'), false);
 });
+
+
+test('Library includes bookmarked bundled designs in save order while Mine and content timestamps stay unchanged', async () => {
+ const bundled:any[]=[{...row('component-first','component',{name:'Gold bundled',componentKey:'first',library:'thingtime'}),author:null},{...row('component-second','component',{name:'Peach bundled',componentKey:'second',library:'thingtime'}),author:null}];
+ const owned=row('owned','component',{name:'Owned copy',componentKey:'owned',library:'custom'});
+ const saves=[{...row('save-first','save',{},'component-first'),createdAt:'2026-10-16T02:00:00Z'},{...row('save-second','save',{},'component-second'),createdAt:'2026-10-16T03:00:00Z'},{...row('save-owned','save',{},'owned'),createdAt:'2026-10-16T01:00:00Z'}];
+ const all=[owned,...saves,row('react','reaction',{emoji:'❤️'},'component-first')], project=(r:LocalThing)=>({...r,author:{id:'local-workspace'}});
+ const run=(args={})=>browseLocalDefinitions(all,'component',args,'anonymous',project,bundled);
+ const first=await run({library:true,limit:1}); assert.equal(first.components![0].id,'component-second'); assert.equal(first.components![0].author,null); assert.equal(first.components![0].saved,true); assert.equal(first.components![0].createdAt,bundled[1].createdAt);
+ const second=await run({library:true,limit:1,cursor:first.nextCursor}); assert.equal(second.components![0].id,'component-first'); assert.deepEqual(second.components![0].viewerReactions,['❤️']);
+ const third=await run({library:true,limit:1,cursor:second.nextCursor}); assert.equal(third.components![0].id,'owned'); assert.equal(third.components![0].createdAt,owned.createdAt); assert.equal(third.nextCursor,null);
+ assert.deepEqual((await run({mine:true})).components!.map(row=>row.id),['owned']);
+ assert.deepEqual((await run({library:true,q:'gold'})).components!.map(row=>row.id),['component-first']);
+ assert.equal((await browseLocalDefinitions([owned],'component',{library:true},'anonymous',project,bundled)).components!.length,0);
+});

@@ -11,8 +11,10 @@ import type { LocalThing } from './things';
  * read-only projections; they never become owned records by being displayed. */
 export async function browseLocalDefinitions(rows: LocalThing[], kind: 'schema' | 'component', args: Record<string, unknown>, scope: string, project: (row: LocalThing) => any, bundled: BrowseComponentEntry[] = []) {
  const index = localTargetIndex(rows), library = !!args.library;
- const saved = new Set(rows.filter(row => row.thingtime.includes('save')).map(row => row.targetId));
- const platform = new Map((args.mine || library ? [] : bundled).map(row => [row.id, row]));
+ const bookmarks = new Map<string, string>();
+ for (const row of rows) if (row.thingtime.includes('save') && row.targetId && (!bookmarks.has(row.targetId) || row.createdAt > bookmarks.get(row.targetId)!)) bookmarks.set(row.targetId, row.createdAt);
+ const saved = new Set(bookmarks.keys());
+ const platform = new Map((args.mine ? [] : bundled).map(row => [row.id, row]));
  const localIds = new Set(rows.map(row => row.id));
  const all = [...rows, ...[...platform.values()].filter(row => !localIds.has(row.id)).map(row => ({ ...row, revision: 0 }))];
  let candidates = library ? all.filter(row => saved.has(row.id)) : all;
@@ -46,13 +48,18 @@ export async function browseLocalDefinitions(rows: LocalThing[], kind: 'schema' 
   }
   catalogScope = JSON.stringify([args.family, args.lib, args.category, args.group, !!args.mine]);
  }
+ const originals = new Map(candidates.map(row => [row.id, row]));
+ // Library ordering follows bookmark recency, without changing the definition's
+ // own timestamps or the canonical projected content.
+ if (library) candidates = candidates.map(row => ({ ...row, createdAt: bookmarks.get(row.id)! }));
  const page = await searchLocalThings(candidates, { q: args.q, sort: args.sort, cursor: args.cursor, limit: args.limit, thingtime: kind }, `${scope}:catalog:${kind}:${library}:${catalogScope}`);
  const usage = new Map<string, number>();
  for (const row of rows) {
   const key = kind === 'schema' && row.thingtime.includes('data') ? row.crystal.schemaId : kind === 'component' && row.thingtime.includes('component') ? row.crystal.componentKey : null;
   if (typeof key === 'string') usage.set(key, (usage.get(key) || 0) + 1);
  }
- const entries = page.things.map(row => {
+ const entries = page.things.map(found => {
+  const row = originals.get(found.id)!;
   const state = localInteractionState(row, index.get(row.id) || []);
   return { ...(platform.get(row.id) || project(row)), reactionCounts: state.reactionCounts, viewerReactions: state.viewerReactions, saved: state.viewerSaved,
    usageCount: kind === 'schema' ? usage.get(row.id) || 0 : Math.max(0, (usage.get(String(row.crystal.componentKey)) || 0) - Number(localIds.has(row.id))),

@@ -1149,3 +1149,37 @@ This covers visited catalogue pages, not automatic download of an account's
 entire library or complete discovery of unvisited pages. Wider cached Things
 membership/pagination, account bookmark/social adapters and cross-account/device
 acceptance remain on the full matrix. No main merge or manual deployment.
+
+
+## Anonymous bundled bookmarks and reactions — 2026-10-16
+
+The device Component catalogue now lets anonymous users bookmark and react to
+code-shipped definitions directly. The dedicated local interaction writer accepts
+only exact trusted bundled references for these operations. It stores scoped
+relational save/reaction records; it never inserts the bundled target into owned
+Things, changes its provenance, executes an Action or sends an account mutation.
+Unknown IDs, mismatched resolver IDs/kinds and account scopes fail closed. Existing
+transactional toggles, quota accounting and reaction limits remain in force.
+
+Library includes saved bundled definitions and orders entries by bookmark time,
+while preserving the definitions' original timestamps and keeping Mine limited to
+owned copies. Reactions, bookmarks and removals survive offline reload and refresh
+other tabs through existing scoped invalidations. Ordinary post interactions do
+not load the bundled Component catalogue.
+
+Local verification: 210 workspace, four offline-shell, 52 Component and 265 Schema
+tests pass. The general workspace suite skips 24 opt-in scenarios; all three
+Component browser scenarios were separately enabled and passed. A clean anonymous
+context verifies real offline bookmark/reaction recovery, two-tab save/removal,
+unchanged attribution and exclusion from Mine, with zero remote mutation requests
+or browser errors. Desktop/390px/320px PNGs and measured bounds are retained in
+`tmp/local-bundled-ui/`; all three widths have no horizontal overflow. Existing
+anonymous editor and account content-save-with-stalled-drafts regressions pass.
+The client build verifies 248 offline assets / 21,558,539 bytes. Targeted lint has
+zero errors and one constructor warning; TypeScript retains the same 91 baseline
+diagnostics. This is local evidence, separate from CI and deployed verification.
+
+Account bookmarks/reactions still need a dedicated synchronization adapter: the
+existing remote toggle cannot safely be replayed after an uncertain response.
+Account guards remain enforced. The full acceptance matrix remains open; no main
+merge or manual deployment.

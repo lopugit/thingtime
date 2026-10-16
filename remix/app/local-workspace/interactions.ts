@@ -11,7 +11,7 @@ const fail = (message: string, status = 400): never => { throw new WorkspaceErro
 
 /** Every row comes from one isolated workspace. Projection identity is a label,
  * never a remote account grant. Reuse the normal poll and up/down tally rules. */
-export function localInteractionState(target: LocalThing, children: LocalThing[], viewer = 'workspace') {
+export function localInteractionState(target: Pick<LocalThing, 'crystal'>, children: LocalThing[], viewer = 'workspace') {
  const reactions = children.filter(row => row.thingtime.includes('reaction')).map(row => sanitizeReactionToken(row.crystal.emoji)).filter((token): token is string => token !== null);
  const viewerReactions = [...new Set(reactions)];
  const poll = pollShapeOfCrystal(target.crystal);
@@ -37,7 +37,7 @@ export function localSavedPage(all: LocalThing[], cursor?: string, limit = 30) {
 /** Dedicated local writer for relational interactions. Generic CRUD/import
  * cannot mint these slots. The scoped transaction serializes toggles and quota. */
 export class LocalInteractions {
- constructor(private db: WorkspaceDatabase, private scope: WorkspaceScope, private lease: WorkspaceLease, private uuid = () => crypto.randomUUID(), private now = () => new Date().toISOString()) {}
+ constructor(private db: WorkspaceDatabase, private scope: WorkspaceScope, private lease: WorkspaceLease, private uuid = () => crypto.randomUUID(), private now = () => new Date().toISOString(), private bundledTarget: (id: string) => Pick<LocalThing, 'id' | 'thingtime' | 'crystal'> | undefined = () => undefined) {}
  async toggle(kind: typeof LOCAL_INTERACTION_KINDS[number], id: unknown, value?: unknown) {
   this.lease.assertCurrent();
   if (this.scope.kind !== 'anonymous') return fail('Account interactions require their dedicated sync adapter', 403);
@@ -47,7 +47,11 @@ export class LocalInteractions {
   const direction = kind === 'updown' ? parseUpdownDirection(value) : null;
   if (direction?.ok === false) return fail(direction.error);
   return this.db.transaction(this.scope, 'readwrite', this.lease, async tx => {
-   const target = await tx.get<LocalThing>('things', id);
+   const stored = await tx.get<LocalThing>('things', id);
+   // This resolver is wired only to code-shipped definitions by the local API,
+   // never to caller JSON or a network lookup. References do not grant ownership.
+   const bundled = !stored && (kind === 'save' || kind === 'reaction') ? this.bundledTarget(id) : undefined;
+   const target = stored || (bundled?.id === id && bundled.thingtime.length === 1 && ['component','schema'].includes(bundled.thingtime[0]) ? bundled : undefined);
    if (!target || isLocalInteraction(target) || (isProtectedThingtime(target.thingtime) && !target.thingtime.includes('attachment'))) return fail('Thing is not available for local interactions', 404);
    const children = (await tx.list<LocalThing>('things')).map(row => row.value).filter(row => row.targetId === id && isLocalInteraction(row));
    const existing = children.filter(row => row.thingtime.includes(kind) && (kind !== 'reaction' || row.crystal.emoji === token));

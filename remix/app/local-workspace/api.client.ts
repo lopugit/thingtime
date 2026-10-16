@@ -1,3 +1,4 @@
+import { RESERVED_COMPONENT_ID_PREFIX } from '../components/ComponentsLibrary/componentBrowseTypes';
 import { browseLocalDefinitions } from './definitionCatalog';
 import { searchLocalThings } from './structuredSearch';
 import { workspaceScopeKey } from './storage';
@@ -53,7 +54,13 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		entry: (scope: any, id: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.entry(id, options?.signal); },
 		componentBindings: (scope: any, id: string, options?: { signal?: AbortSignal }) => { history.assertScope(scope); return history.componentBindings(id, options?.signal); }
 	};
-	const interact = (kind: Parameters<LocalInteractions['toggle']>[0], id: unknown, value?: unknown) => new LocalInteractions(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, lease).toggle(kind, id, value).then(changed);
+	const interact = async (kind: Parameters<LocalInteractions['toggle']>[0], id: unknown, value?: unknown) => {
+		lease.assertCurrent();
+		const bundled = (kind === 'save' || kind === 'reaction') && typeof id === 'string' && id.startsWith(RESERVED_COMPONENT_ID_PREFIX) ? (await import('../components/ComponentsLibrary/bundledComponentCatalog')).bundledComponentEntries() : [];
+		lease.assertCurrent();
+		return new LocalInteractions(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, lease, undefined, undefined,
+			id => bundled.find(row => row.id === id)).toggle(kind, id, value).then(changed);
+	};
 	const algorithms = () => { lease.assertCurrent(); return new LocalAlgorithms(anonymousWorkspaceDatabase(), lease); };
 	// Public discovery and explicit authentication remain available online.
 	local.auth = remote.auth;

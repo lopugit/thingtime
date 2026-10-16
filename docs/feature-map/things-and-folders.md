@@ -568,3 +568,12 @@ Online projections retain shared entries without giving them local ownership.
 `useWorkspaceRefresh` coalesces scope-only invalidations for device catalogues
 and Component detail; family rosters clear before re-reading. See the
 [account catalogue checkpoint](../local-workspaces.md#account-catalogue-discovery-and-cross-tab-refresh--2026-10-16).
+
+
+Anonymous bundled Component bookmarks/reactions use `LocalInteractions` with an
+exact code-shipped resolver supplied by `anonymousApi`. Only relational children
+are stored; bundled targets remain read-only and outside Mine/ordinary export.
+`browseLocalDefinitions` includes bookmarked bundled entries and sorts Library by
+save time without changing projected definition timestamps. Existing scoped
+refresh handles changes from other tabs. Account interaction sync remains a
+separate gate; see the [bundled Library checkpoint](../local-workspaces.md#anonymous-bundled-bookmarks-and-reactions--2026-10-16).
