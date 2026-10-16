@@ -1,3 +1,4 @@
+import { startNotificationHistorySync } from '../local-workspace/notifications.client';
 import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
 import { useOfflineWorkspace } from './useWorkspaceUser';
 import { accountApi, startAccountWorkspaceSync } from '../local-workspace/accountApi.client';
@@ -1610,7 +1611,10 @@ export function useApi() {
   };
 
   useEffect(() => {
-    if (actionUser?.id && !actionUser.temporary && dataPlane) startAccountWorkspaceSync({ kind: 'account', origin: window.location.origin, ownerId: actionUser.id, dataPlane });
+    if (actionUser?.id && !actionUser.temporary && dataPlane) {
+      const scope = { kind: 'account' as const, origin: window.location.origin, ownerId: actionUser.id, dataPlane };
+      startAccountWorkspaceSync(scope); startNotificationHistorySync(scope);
+    }
   }, [actionUser?.id, actionUser?.temporary, dataPlane]);
   const workspaceApi = useRef(new WorkspaceApiIdentity<typeof v1>());
   const identity = rootIdentity.read();

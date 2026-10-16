@@ -6336,11 +6336,28 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
 
-- [ ] `/notifications` (auth) lists every notification the viewer has received
-      newest first (no automatic count-based deletion), with the
-      unfiltered first page painting instantly from `tt-notif-history-<id>`
-      and reconciling in the background; a cold start shows one spinner only.
-      Signed out, the page renders the quiet "Log in" state and never 401s.
+- [ ] `/notifications` keeps authenticated account history as its default;
+      "On this device" (`?source=device`) lists locally saved Lopu messages.
+      Anonymous/offline workspaces default to device history and the nav bell
+      opens it without login. Cached first pages are keyed by workspace and
+      source, repaint instantly, and never cross identity changes.
+- [ ] In a clean anonymous browser, import a Thing offline, open the nav's
+      notification-history link and cold reload: the import message remains
+      searchable at 1440/390/320px, without any mutation request. Login must
+      never upload or adopt that anonymous message.
+- [ ] In a disposable account, trigger a local move offline. Its notification
+      commits locally without a recording POST, survives reload, then syncs
+      exactly once after verified reconnect. Device and account history both
+      expose it. Lost acknowledgements reuse the same event UUID; concurrent
+      tabs cannot own the same live claim. Refused/exhausted sync stays visible
+      as a local message with a failed count, without blocking the action.
+- [ ] Local notification input uses the canonical validator/redactor before
+      persistence; foreign recipients, forged audit fields, changed event bodies,
+      unsafe URLs and oversized UTF-8 bodies fail without partial records.
+      Redaction-expanded text is bounded again before queuing and still passes
+      the canonical server validator on retry.
+      Storage failure emits a nonrecursive failure event; a retired workspace
+      cannot commit or accept a remote acknowledgement.
 - [ ] Category chips All / Social 🤝 / Engagement 💬 / Feed 📰 / System ⚙️, the
       Type dropdown (grouped by category), "Unread only", the search box
       (debounced ~300ms, literal match over preview / actor name / username /

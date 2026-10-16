@@ -78,7 +78,7 @@ change this pointer; logout/account changes revoke it.
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
-| Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu notification history still attempts its remote recording call from an offline authenticated view; it does not block local moves, but needs its own local-first adapter. Provider inference, external delivery and hosted scheduled execution still need their real services. |
+| Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
 | Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue update recovery, cross-account coverage and real-device startup verification. Chromium offline-emulation module cancellations remain under investigation; request blocking is no longer accepted without its root-read failure probe; the latest checkpoint defaults to actual offline emulation and retains failures as merge gates. |
 | Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Complete deletion/imports, protected-kind moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
@@ -1245,3 +1245,44 @@ retains the same 91 baseline diagnostics; targeted lint has zero errors and one
 existing constructor warning. These are local results, not CI/deployed proof.
 Deletion acknowledgements, coordinated dependency imports, protected adapters,
 account Timeline sync and the rest of the matrix still gate merge.
+
+
+## Device notification history checkpoint — 2026-10-16
+
+`useLopu` and completed streams now commit validated, credential-redacted
+messages to the current browser workspace before waking background account sync.
+Toast/action completion remains independent. The same message contract and safe
+internal-link parser serve the existing authenticated recorder; the shared
+redactor uses standard cryptographic UUIDs in both Node and browsers. No new
+endpoint, private read permission or remote delivery behavior is introduced.
+
+Open `/notifications?source=device` for this workspace's local Lopu messages.
+Anonymous/offline workspaces use that view by default, accessible through the
+normal nav bell. Verified accounts retain the existing account-history default
+and can switch to device history. Both reuse existing rows, URL filters and
+pagination controls. Device rows are already-read, history-only messages; they
+do not create a second push/email or an unread badge. Account/social history is
+not silently represented as a complete offline cache.
+
+History and queue state share one bounded IndexedDB record. The workspace quota
+applies; no count-based deletion occurs. Account origin, owner and selected data
+plane partition local copies, even though server notification history remains
+home-pinned. Anonymous records never enter a sync state. Account changes retire
+transactions and requests. The transport rechecks verified identity, uses the
+existing body-recipient check, rejects redirects, caps responses and times out
+at 20 seconds. A pass sends at most 20 records, claims expire after 30 seconds,
+and transient failures stop after five attempts with a visible failed count.
+A lost response reuses the same event UUID and canonical server ID. Permanent
+or exhausted failures retain the message; a manual retry UI is still pending.
+
+Local verification: canonical/redaction/notification tests, workspace suite and
+client build; clean anonymous actual-offline import → history → cold reload →
+search → reconnect with zero mutation requests and no page/module errors.
+Measured 1440, 390 and 320px pages have no horizontal overflow. The disposable
+account move fixture also verifies offline message persistence and one server
+row per event after verified reconnect, through both history views. Evidence:
+`tmp/local-notifications-ui-final/verification.json` and
+`tmp/local-notifications-account-ui/verification.json`. These are local checks;
+CI/preview status is reported separately. General offline-entry reliability,
+other notification kinds, cross-tab live refresh and the wider matrix remain
+open. The earlier account-move checkpoint's ancillary request is fixed here.

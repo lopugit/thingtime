@@ -52,7 +52,7 @@ test('isolated account bulk moves persist offline and sync conditionally after v
   await page.getByRole('link', { name: 'Move first fixture', exact: true }).waitFor();
   await page.getByRole('link', { name: 'Move second fixture', exact: true }).waitFor();
   await page.reload(); await page.getByRole('link', { name: 'Move first fixture', exact: true }).waitFor();
-  assert.equal(writes.slice(before).filter(item => item.path.startsWith('/api/v1/things')).length, 0, 'offline moves never send Thing mutations');
+  assert.equal(writes.slice(before).filter(item => item.path.startsWith('/api/v1/things') || item.path === '/api/v1/notifications/record').length, 0, 'offline moves and their messages never send mutations');
   for (const id of created.slice(1)) assert.equal((await read(id)).folderId, null, 'API request context proves the server has not moved yet');
   const bounds = [];
   for (const width of [1440,390,320]) {
@@ -60,6 +60,12 @@ test('isolated account bulk moves persist offline and sync conditionally after v
    const value = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth })); assert.equal(value.width, value.scrollWidth); bounds.push(value);
    if (artifacts) await page.screenshot({ path: resolve(artifacts, `account-move-${width}.png`), fullPage: true });
   }
+  const deviceMessageIds = await page.evaluate(async () => {
+   const db = await new Promise<IDBDatabase>((resolve, reject) => { const req = indexedDB.open('thingtime.local-workspaces.v1'); req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
+   try { return await new Promise<string[]>((resolve, reject) => { const tx = db.transaction('records', 'readonly'), req = tx.objectStore('records').getAll(); req.onsuccess = () => resolve(req.result.filter(row => row.collection === 'notification-messages').map(row => row.id)); req.onerror = () => reject(req.error); }); }
+   finally { db.close(); }
+  });
+  assert.ok(deviceMessageIds.length > 0);
   await context.setOffline(false);
   const reconnect = page.getByRole('button', { name: 'Reconnect', exact: true }); if (await reconnect.isVisible()) await reconnect.click();
   let synced = false;
@@ -74,8 +80,21 @@ test('isolated account bulk moves persist offline and sync conditionally after v
   assert.equal(writes.some(item => item.path.endsWith('/things/bulk')), false);
   for (const id of created.slice(1)) { const row = await read(id); assert.equal(row.author.id, fixtureOwner); assert.equal(row.visibility, 'private'); }
   assert.deepEqual(errors, []); assert.equal(consoleErrors.some(error => /React Router caught|WorkspaceError:/.test(error)), false);
+  let notifications: any[] = [];
+  for (let attempt = 0; attempt < 100; attempt++) {
+   const response = await context.request.get(new URL('/api/v1/notifications?history=1&types=system-message', base).href);
+   assert.equal(response.status(), 200); const received = (await response.json()).notifications as any[]; notifications = received;
+   if (deviceMessageIds.every((id: string) => received.some(row => row.id === id))) break;
+   await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  for (const id of deviceMessageIds) assert.equal(notifications.filter(row => row.id === id).length, 1, 'Each offline message syncs once after verified reconnect');
+  await page.goto(new URL('/notifications?source=device', base).href);
+  await page.getByText(new RegExp(`${deviceMessageIds.length} notifications? · 0 unread`)).waitFor();
+  await page.getByRole('button', { name: 'Account history', exact: true }).click();
+  await page.getByText(notifications[0].title, { exact: true }).first().waitFor();
+  assert.deepEqual(errors, []);
   const ancillaryWriteAttempts = writes.filter(item => item.path !== '/api/v1/things').map(item => ({ path: item.path, method: item.method }));
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ isolatedAccount: true, coldOfflineReload: true, offlineServerUnchanged: true, conditionalReconnect: true, patchCount: patches.length, ancillaryWriteAttempts, bounds, errors }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ isolatedAccount: true, coldOfflineReload: true, offlineServerUnchanged: true, conditionalReconnect: true, patchCount: patches.length, offlineMessageSyncedExactlyOnce: true, ancillaryWriteAttempts, bounds, errors }, null, 2));
  } catch (error) {
   if (artifacts) { await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.json'), JSON.stringify({ body: await page.locator('body').innerText(), errors, writes, pointers, consoleErrors, lastPointer: await page.evaluate(() => localStorage.getItem('thingtime:local-workspace-root:v1')) }, null, 2)); }
   throw error;

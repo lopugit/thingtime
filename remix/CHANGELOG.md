@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Lopu messages now save to scoped device history
+  without login or network. Account messages queue the existing idempotent
+  recorder after verified reconnect; failures retain local text. The normal nav
+  and notifications page expose searchable offline history. Clean anonymous
+  offline reload and disposable account reconnect checks pass locally.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Account folder moves now commit locally with sync
   intent and reconnect through conditional account writes. Pending placement
   wins over stale folder lists. Promise-based offline refusals also prevent an

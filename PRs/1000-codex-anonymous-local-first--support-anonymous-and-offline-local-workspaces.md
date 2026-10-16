@@ -844,3 +844,29 @@ warning. Local checks are distinct from CI/deployed verification. Account delete
 coordinated imports, protected/dedicated adapters, complete list pagination,
 Timeline sync and the full remaining matrix still gate merge. No main merge or
 manual deployment was performed.
+
+
+## Device notification history — 2026-10-16
+
+Lopu messages no longer depend on an authenticated recording request to be
+retained. The normal toast/stream helper saves a redacted local record and queue
+atomically. Anonymous messages stay in their own namespace; account messages
+retry the existing idempotent home-pinned endpoint only after verified login.
+The normal notifications page exposes an On this device view with the same
+rows, search, filters and pagination, including no-login nav discovery. Existing
+account history remains its authenticated default. Failed sync keeps local text
+and reports a failed count; no action or toast waits for history completion.
+
+Local proof covers anonymous actual-offline import/history/cold reload/search
+with zero mutations; desktop/390/320px no-overflow screenshots; and disposable
+account offline moves whose messages appear once after reconnect in both device
+and server history. Canonical redaction, byte bounds, immutable event IDs,
+concurrent claims, refusal/retry exhaustion and identity retirement have focused
+tests. Redaction-expanded text is bounded after sanitizing so the queued body
+still passes the server contract. Shared redaction tests still pass. Raw TypeScript diagnostics remain at
+the existing 91, with no new normalized diagnostics.
+
+Artifacts/logs: `tmp/local-notifications-*`. Initial browser testing caught and
+fixed the parent nav login gate. This checkpoint does not complete remote social
+notification caching, manual retry controls, cross-tab live refresh or the full
+local-first matrix. No main merge or manual deployment was performed.
