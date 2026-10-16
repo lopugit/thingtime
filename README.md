@@ -4710,3 +4710,32 @@ now edits connections through this API. For a browser-only regression, open
 production editor with synthetic API/native responses and never accesses files.
 Native approval persistence and transfer workers remain in the
 [full sync acceptance ledger](docs/mobile-file-sync.md).
+
+
+### Running a foreground mobile folder upload
+
+Use an iOS/Android build advertising `fileAccessVersion` 1.1.0, pair it in Things,
+choose a folder and save a private connection to an owned cloud folder. Select
+Upload or Backup, unpause it, then choose **Upload now**. Keep the app visible;
+**Stop upload** and **Retry upload** preserve the saved run. Wi-Fi/charging policy
+is checked between requests, not continuously enforced on an in-flight part.
+Two-way/download/background operation is not yet available. No new secrets,
+collections or environment variables are needed beyond existing pairing,
+Mongo transactions, upload approval and attachment storage setup.
+
+With the disposable localhost account, mode-0600 fixture and normal upload
+approval described above, run:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-foreground.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This runs the real configured executor/cloud API with synthetic native source
+and policy adapters. It checks lost commit response recovery without reupload,
+failed checkpoint storage followed by a local edit, stable replacement and
+independent downloaded-byte hashes. It removes its configuration/root through
+normal Things APIs and retains its tiny accounted versions in private Trash.
+Remove any temporary fixture admin setting and restart with `npm run web-pms`
+after testing. Native end-to-end upload, production S3 and OS background behavior
+require separate acceptance; see [the sync ledger](docs/mobile-file-sync.md).

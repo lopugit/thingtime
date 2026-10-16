@@ -10156,3 +10156,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   remains unsupported by this adapter and must not become a blind recursive
   delete. Remove acceptance folders only through normal APIs and retain accounted
   file versions in private Trash.
+
+
+### Foreground mobile upload recovery (2026-10-17)
+
+- [ ] In the synthetic mobile editor, choose an unpaused Backup connection.
+  Use cellular under Wi-Fi-only policy: Upload refuses before mutation. Restore
+  Wi-Fi, lose the next upload reply, reload and retry; the original folder is
+  recovered once. Hold the next scan, start, Stop, reload and Retry; progress
+  survives and the run completes. Verify controls at 1280, 390 and 320px.
+- [ ] Run `test:file-sync`: missing/malformed native policy signals and old
+  bridge versions cannot authorize transfers; v1 IDB upgrades preserve pending
+  work, stale/incomplete runs cannot complete a checkpoint, and changed reviewed
+  configuration stops effects. Interrupted scans must never become empty trees.
+- [ ] With the disposable local account/upload setup, run
+  `scripts/file-sync-foreground.integration.mts`. Lose an accepted file commit,
+  reopen the journal and recover without byte reupload. Fail the completion
+  checkpoint, edit local bytes, then recover the original common baseline from
+  immutable receipts and replace the same file without a false cloud conflict.
+  Independently hash the downloaded bytes; repeat without changes makes no PUT.
+  Restore temporary env settings/restart and retain accounted Trash versions.
+- [ ] Native acceptance remains separate: on iOS and Android verify paired
+  conditions, real selected-file upload, revoked grant, account switch,
+  background/foreground and device revocation. Do not infer native background or
+  continuous network enforcement from foreground/mock acceptance.

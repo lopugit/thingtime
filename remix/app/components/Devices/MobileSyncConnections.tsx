@@ -5,7 +5,11 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { readStampedCache, writeStampedCache, pruneCacheNamespace } from '~/hooks/localCache';
 import { rootIdentity } from '~/utils/rootIdentity';
-import { type MobileFolder, requestMobileFolders } from '~/fileSync/mobileFolders.client';
+import { type MobileFolder, requestMobileFolders, mobileFolderSource, supportsMobileSyncConditions } from '~/fileSync/mobileFolders.client';
+import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
+import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
+import { runForegroundCloudSync, type ForegroundSyncProgress } from '~/fileSync/foregroundSync';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { requestMobileDevice } from './mobileDeviceBridge';
 import { newFileSyncConfiguration, type FileSyncConfiguration } from '~/fileSync/configuration';
 import { readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration } from '~/fileSync/configuredPlan';
@@ -73,6 +77,8 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 			}
 		});
 	});
+	const [transfers, setTransfers] = useState<Record<string, ForegroundSyncProgress & { message?: string }>>({});
+	const [activeTransfer, setActiveTransfer] = useState<string | null>(null);
 	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null),
 		[folderCursor, setFolderCursor] = useState<string | null>(null);
@@ -163,12 +169,19 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 				setStorageError('This draft changed in another tab. Reload to recover it before continuing.');
 			}
 		};
+		const hidden = () => {
+			if (document.visibilityState !== 'visible') controller.current?.abort();
+		};
+		window.addEventListener('pagehide', hidden);
+		document.addEventListener('visibilitychange', hidden);
 		window.addEventListener('storage', changed);
 		return () => {
 			mounted.current = false;
 			controller.current?.abort();
 			controller.current = null;
 			window.removeEventListener('storage', changed);
+			window.removeEventListener('pagehide', hidden);
+			document.removeEventListener('visibilitychange', hidden);
 		};
 		// This component is keyed by the full account/storage/device identity.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,6 +196,82 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 			setStorageError(cause instanceof Error ? cause.message : 'Draft could not be saved on this device.');
 		}
 	};
+	const progressKey = (id: string) => 'tt:sync-progress:' + syncScopeKey({ ...scope, rootId: id });
+	const upload = (saved: SavedFileSyncConfiguration) =>
+		void run(async (assertActive) => {
+			const active = controller.current!,
+				syncScope = { ...scope, rootId: saved.id };
+			const publish = (value: ForegroundSyncProgress & { message?: string }) => {
+				assertActive();
+				setTransfers((previous) => ({ ...previous, [saved.id]: value }));
+				writeStampedCache(progressKey(saved.id), value);
+				pruneCacheNamespace('tt:sync-progress:', progressKey(saved.id), 32);
+			};
+			setActiveTransfer(saved.id);
+			const currentScope = () => {
+				assertActive();
+				return syncScope;
+			};
+			let journal: Awaited<ReturnType<typeof openSyncJournal>> | undefined;
+			try {
+				journal = await openSyncJournal();
+				assertActive();
+				await withSyncRootLock(
+					syncScope,
+					async () => {
+						assertActive();
+						await runForegroundCloudSync(
+							saved,
+							syncScope,
+							{
+								currentScope,
+								readConfiguration: async () => {
+									const value = await apiRef.current.v1.things.get({ id: saved.id }, options());
+									assertActive();
+									return value.thing;
+								},
+								authorizeDevice: async () => {
+									const status = await requestMobileDevice(scope.ownerId, 'status', active.signal);
+									assertActive();
+									if (status.state !== 'paired' || status.deviceId !== scope.deviceId)
+										throw Error('Reconnect this device before transferring files.');
+								},
+								conditions: async () => (await requestMobileFolders(scope.ownerId, { action: 'conditions' }, active.signal)).conditions!,
+								scanLocal: async () =>
+									(
+										await requestMobileFolders(scope.ownerId, { action: 'scan', rootId: saved.configuration.localRootId }, active.signal)
+									).entries!,
+								inventory: () => readCloudFolderInventory(syncScope, saved.configuration.remoteFolderId, { currentScope, signal: active.signal }),
+								source: async (entry) => mobileFolderSource(scope.ownerId, saved.configuration.localRootId, entry, active.signal),
+								journal: journal!,
+								runtime: {
+									currentScope,
+									origin: () => window.location.origin,
+									fetch: (url, init) => fetch(url, init),
+									requireCapability: requireThingtimeCapability
+								},
+								progress: publish
+							},
+							active.signal
+						);
+					},
+					undefined,
+					active.signal
+				);
+			} catch (cause) {
+				if (!active.signal.aborted)
+					publish({
+						stage: 'checking',
+						confirmed: 0,
+						total: 0,
+						message: cause instanceof Error ? cause.message : 'Upload interrupted. Retry to recover saved work.'
+					});
+				throw cause;
+			} finally {
+				journal?.close();
+				if (mounted.current) setActiveTransfer(null);
+			}
+		});
 	const start = () =>
 		edit({
 			version: 1,
@@ -257,7 +346,7 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 			persist(null);
 			setConflict(null);
 			cache([saved, ...connections.filter((row) => row.id !== saved.id)]);
-			setNotice('Connection saved. File transfers are not available yet.');
+			setNotice('Connection saved. Upload and backup connections can be run while this app stays open.');
 		});
 	return (
 		<Box borderTop="1px solid var(--tt-border, #ececef)" marginTop={4} paddingTop={3} minWidth={0}>
@@ -286,24 +375,65 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 				</Flex>
 			</Flex>
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				Save a connection between this device and a private folder in Things. Transfers are not available yet.
+				Upload or back up a selected folder while this app stays open. Stop or retry without losing saved work. Two-way, downloads and background
+				transfers are still being added.
 			</Text>
-			{connections.map((saved) => (
-				<Flex key={saved.id} marginTop={3} align="center" gap={2}>
-					<Box flex={1} minWidth={0} overflowWrap="anywhere">
-						<Text fontSize="13px" fontWeight={600}>
-							{saved.configuration.name}
-						</Text>
-						<Text fontSize="12px">
-							{saved.configuration.paused ? 'Paused' : 'Transfers unavailable'}
-							{!roots.some((root) => root.id === saved.configuration.localRootId) ? ' · Folder access missing' : ''}
-						</Text>
-					</Box>
-					<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy || !!draft || !ready} onClick={() => open(saved.id)}>
-						Edit
-					</Button>
-				</Flex>
-			))}
+			{connections.map((saved) => {
+				const progress = transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
+				const running = busy && activeTransfer === saved.id;
+				const supported = ['upload', 'backup'].includes(saved.configuration.mode);
+				const allowed =
+					supportsMobileSyncConditions() &&
+					scope.dataPlane === 'home' &&
+					supported &&
+					!saved.configuration.paused &&
+					roots.some((root) => root.id === saved.configuration.localRootId);
+				return (
+					<Flex key={saved.id} marginTop={3} align="center" gap={2} wrap="wrap">
+						<Box flex={1} minWidth={0} overflowWrap="anywhere">
+							<Text fontSize="13px" fontWeight={600}>
+								{saved.configuration.name}
+							</Text>
+							<Text fontSize="12px">
+								{saved.configuration.paused
+									? 'Paused'
+									: !supported
+									? 'This direction is not available yet'
+									: !supportsMobileSyncConditions()
+									? 'Update the mobile app to upload'
+									: 'Ready for a foreground upload'}
+								{!roots.some((root) => root.id === saved.configuration.localRootId) ? ' · Folder access missing' : ''}
+							</Text>
+							{progress && (
+								<Text role="status" fontSize="12px" marginTop={1} overflowWrap="anywhere">
+									{running
+										? progress.stage === 'scanning'
+											? 'Checking both folders…'
+											: progress.stage === 'verifying'
+											? 'Verifying completed work…'
+											: progress.path
+											? `${progress.path}: ${Math.round(((progress.bytes ?? 0) / Math.max(1, progress.size ?? 1)) * 100)}%`
+											: `${progress.confirmed} of ${progress.total} operations confirmed`
+										: progress.message ||
+										  (progress.stage === 'complete' ? 'Last upload finished.' : 'Upload stopped or interrupted. Retry to recover saved work.')}
+								</Text>
+							)}
+						</Box>
+						<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy || !!draft || !ready} onClick={() => open(saved.id)}>
+							Edit
+						</Button>
+						{running ? (
+							<Button size="sm" minHeight="40px" onClick={() => controller.current?.abort()}>
+								Stop upload
+							</Button>
+						) : (
+							<Button size="sm" minHeight="40px" isDisabled={!allowed || busy || !!draft || !ready} onClick={() => upload(saved)}>
+								{progress && progress.stage !== 'complete' ? 'Retry upload' : 'Upload now'}
+							</Button>
+						)}
+					</Flex>
+				);
+			})}
 			{connectionCursor && (
 				<Button size="sm" minHeight="40px" isDisabled={busy} onClick={() => void run(() => load('connections', connectionCursor))}>
 					More connections

@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMobileFolderResult, mobileFolderSource, requestMobileFolders, supportsMobileFolders } from './mobileFolders.client';
+import {
+	parseMobileFolderResult,
+	mobileFolderSource,
+	requestMobileFolders,
+	supportsMobileFolders,
+	supportsMobileSyncConditions
+} from './mobileFolders.client';
 import { nativeBridgeMessageEvent } from '../utils/nativeBridge';
 const rootId = '00000000-0000-4000-8000-000000000001';
 const expected = { requestId: 'request', ownerId: 'owner', origin: 'https://native.test' };
@@ -105,4 +111,21 @@ test('native source chunks reads, rechecks its version, and cancels the exact pe
 		if (previous) Object.defineProperty(globalThis, 'window', previous);
 		else delete (globalThis as any).window;
 	}
+});
+
+test('transfer conditions require the new native capability and reject missing or malformed policy signals', () => {
+	for (const [version, supported] of [
+		['1.0.0', false],
+		['1.1.0', true],
+		['2.0.0', false]
+	] as const)
+		assert.equal(supportsMobileSyncConditions({ platform: 'ios', isNativeWebView: true, fileAccessVersion: version } as any), supported);
+	for (const network of ['wifi', 'cellular', 'ethernet', 'offline', 'unknown'])
+		for (const charging of [true, false, null])
+			assert.deepEqual(parseMobileFolderResult(response({ conditions: { network, charging } }), expected, { action: 'conditions' })?.conditions, {
+				network,
+				charging
+			});
+	for (const conditions of [undefined, {}, { network: 'wifi' }, { network: 'wifi', charging: 1 }, { network: 'unmetered', charging: true }])
+		assert.throws(() => parseMobileFolderResult(response({ conditions }), expected, { action: 'conditions' }), /conditions are unavailable/);
 });

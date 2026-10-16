@@ -30,8 +30,11 @@ public class DeviceLiveTest {
         assertFalse(result.optString("error"),result.has("error"));return result;
     }
     private static void verifySelectedFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
-        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.0.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
+        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.1.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
         assertNotNull(folderRequest(web,scope,new JSONObject().put("action","list")).getJSONArray("roots"));
+        JSONObject conditions=folderRequest(web,scope,new JSONObject().put("action","conditions")).getJSONObject("conditions");
+        assertTrue(java.util.Arrays.asList("wifi","cellular","ethernet","offline","unknown").contains(conditions.getString("network")));
+        assertTrue(conditions.isNull("charging") || conditions.get("charging") instanceof Boolean);
         if(!"true".equals(InstrumentationRegistry.getArguments().getString("folderSelection"))) return;
         System.out.println("FOLDER_QA_READY: Choose folder and select Documents/ThingtimeSyncQA in the system picker.");
         long deadline=System.currentTimeMillis()+300000;

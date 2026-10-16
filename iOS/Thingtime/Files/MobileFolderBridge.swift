@@ -1,11 +1,14 @@
+import Network
 import UIKit
 import WebKit
 import UniformTypeIdentifiers
 
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '1.0.0';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '1.1.0';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private let store = MobileFolderStore()
+    private let networkMonitor = NWPathMonitor()
+    private var networkKind = "unknown"
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private var requestId: String?
@@ -15,11 +18,17 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var observer: NSObjectProtocol?
     override init() {
         super.init()
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            let kind = path.status != .satisfied ? "offline" : path.usesInterfaceType(.cellular) ? "cellular" : path.usesInterfaceType(.wifi) ? "wifi" : path.usesInterfaceType(.wiredEthernet) ? "ethernet" : "unknown"
+            Task { @MainActor in self?.networkKind = kind }
+        }
+        networkMonitor.start(queue: DispatchQueue(label: "com.thingtime.sync-network"))
         observer = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.suspend() }
         }
     }
-    deinit { if let observer { NotificationCenter.default.removeObserver(observer) }; task?.cancel() }
+    deinit { networkMonitor.cancel(); if let observer { NotificationCenter.default.removeObserver(observer) }; task?.cancel() }
     func suspend() {
         let cancelled = cancellationReply; cancellationReply = nil
         generation = UUID(); task?.cancel(); task = nil; requestId = nil
@@ -46,7 +55,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "read", "suspend"].contains(action),
+              ["list", "choose", "remove", "scan", "read", "conditions", "suspend"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -64,7 +73,11 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             do {
                 try check(); try await verifyOwner(scope, check); try check()
                 var result: [String: Any] = [:]
-                if action == "choose" {
+                if action == "conditions" {
+                    let battery = UIDevice.current.batteryState
+                    let charging: Any = battery == .unknown ? NSNull() : (battery == .charging || battery == .full)
+                    result["conditions"] = ["network": self.networkKind, "charging": charging]
+                } else if action == "choose" {
                     if let url = try await self.choose(webView: webView) {
                         try check(); try await verifyOwner(scope, check); try check()
                         _ = try self.store.add(scope, selected: url)

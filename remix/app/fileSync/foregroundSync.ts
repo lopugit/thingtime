@@ -1,0 +1,247 @@
+import { parseFileSyncConfiguration } from './configuration';
+import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration, type SyncConditions } from './configuredPlan';
+import { createSyncRun, executeSyncRun, type SyncRun } from './execute';
+import { advanceSyncBaseline, validateSyncCheckpoint } from './checkpoint';
+import { parseCloudSyncRun, prepareCloudInventoryRun, isCloudFolderWrite, type CloudSyncRun } from './cloudWrite';
+import { inventorySyncEntry, parseCloudInventory, type CloudInventory } from './cloudInventory';
+import { createCloudSyncPort } from './cloudSyncPort.client';
+import { createCloudFileTransport, createCloudFolderTransport, type CloudTransportRuntime } from './cloudTransport';
+import type { FingerprintSource } from './contentFingerprint';
+import type { openSyncJournal } from './journal.client';
+import { sameSyncScope, type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
+
+export type ForegroundSyncProgress = {
+	stage: 'checking' | 'scanning' | 'transferring' | 'verifying' | 'complete';
+	confirmed: number;
+	total: number;
+	path?: string;
+	bytes?: number;
+	size?: number;
+};
+type ConfiguredRun = CloudSyncRun & { configuration: ReturnType<typeof parseFileSyncConfiguration>; startingBaseline: SyncBaseline };
+/** One explicitly requested foreground run. The caller owns a root lock for
+ * this whole lifecycle; this never launches work merely because a Thing exists. */
+export async function runForegroundCloudSync(
+	reviewed: SavedFileSyncConfiguration,
+	scope: SyncScope,
+	input: {
+		currentScope(): SyncScope;
+		readConfiguration(): Promise<unknown>;
+		authorizeDevice(): Promise<void>;
+		conditions(): Promise<SyncConditions>;
+		scanLocal(): Promise<SyncEntry[]>;
+		inventory(): Promise<CloudInventory>;
+		source(entry: SyncEntry): Promise<FingerprintSource>;
+		journal: Awaited<ReturnType<typeof openSyncJournal>>;
+		runtime: CloudTransportRuntime;
+		progress(value: ForegroundSyncProgress): void;
+	},
+	signal: AbortSignal
+) {
+	const configuration = parseFileSyncConfiguration(reviewed.configuration);
+	if (!['upload', 'backup'].includes(configuration.mode))
+		throw Error('This app can currently upload or back up a folder. Two-way and download transfers are still being added.');
+	const approved = { ...structuredClone(reviewed), configuration, scope: { ...scope } };
+	const empty = { scope, complete: true, entries: [] };
+	const check = () => {
+		signal.throwIfAborted();
+		if (!sameSyncScope(scope, input.currentScope())) throw Error('Sync context changed.');
+	};
+	const authorize = async () => {
+		check();
+		const current = readOwnedFileSyncConfiguration(await input.readConfiguration(), scope.ownerId);
+		check();
+		await input.authorizeDevice();
+		check();
+		const conditions = await input.conditions();
+		check();
+		const result = planConfiguredFileSync({
+			saved: current,
+			approval: approved,
+			local: empty,
+			remote: empty,
+			baseline: { scope, entries: [] },
+			localRootId: configuration.localRootId,
+			remoteFolderId: configuration.remoteFolderId,
+			conditions
+		});
+		if (result.status === 'waiting')
+			throw Error(
+				{
+					paused: 'This connection is paused.',
+					offline: 'Waiting for an internet connection.',
+					network: 'Waiting for the selected network.',
+					charging: 'Waiting for this device to charge.'
+				}[result.reason]
+			);
+		return conditions;
+	};
+	input.progress({ stage: 'checking', confirmed: 0, total: 0 });
+	await authorize();
+	const checkpoint = await input.journal.checkpoint(scope);
+	check();
+	let baseline: SyncBaseline =
+		checkpoint && checkpoint.localRootId === configuration.localRootId && checkpoint.remoteFolderId === configuration.remoteFolderId
+			? checkpoint.baseline
+			: { scope, entries: [] };
+	const scan = async () => {
+		const entries = await input.scanLocal();
+		check();
+		const inventory = parseCloudInventory(await input.inventory(), configuration.remoteFolderId);
+		check();
+		return {
+			local: { scope, complete: true, entries },
+			remote: { scope, complete: true, entries: inventory.nodes.map(inventorySyncEntry) },
+			inventory
+		};
+	};
+	const runtime: CloudTransportRuntime = {
+		...input.runtime,
+		currentScope: input.currentScope,
+		fetch: async (url, init) => {
+			check();
+			if (init?.method && !['GET', 'HEAD'].includes(init.method)) await authorize();
+			check();
+			const result = await input.runtime.fetch(url, init);
+			check();
+			return result;
+		}
+	};
+	const existing = await input.journal.read(scope);
+	check();
+	const recordedBaseline = async (saved: ConfiguredRun) => {
+		validateSyncCheckpoint(
+			{
+				version: 1,
+				runId: saved.id,
+				localRootId: configuration.localRootId,
+				remoteFolderId: configuration.remoteFolderId,
+				baseline: saved.startingBaseline
+			},
+			scope
+		);
+		const pairs = new Map(saved.startingBaseline.entries.map((pair) => [pair.path, pair]));
+		const operations = new Map(saved.operations.map((operation) => [operation.id, operation]));
+		for (const write of saved.cloudWrites) {
+			const operation = operations.get(write.operation.id)!;
+			if (!operation.confirmed) continue;
+			const transport = isCloudFolderWrite(write)
+				? createCloudFolderTransport(runtime, write, signal)
+				: createCloudFileTransport(runtime, write, signal);
+			const result = await transport.lookup();
+			check();
+			if (result.status !== 'complete') throw Error('A confirmed operation receipt is unavailable. Its run and prior baseline were preserved.');
+			const m = operation.mutation;
+			if (m.kind === 'copy' && result.receipt.entry) pairs.set(m.path, { path: m.path, local: m.source, remote: result.receipt.entry });
+			else if (m.kind === 'trash') pairs.delete(m.path);
+		}
+		return { scope, entries: [...pairs.values()] };
+	};
+	if (
+		existing &&
+		existing.operations.every((op) => op.confirmed) &&
+		checkpoint?.runId !== existing.id &&
+		JSON.stringify((existing as ConfiguredRun).configuration) === JSON.stringify(configuration)
+	)
+		baseline = await recordedBaseline(parseCloudSyncRun(existing) as ConfiguredRun);
+	let run: ConfiguredRun;
+	if (existing && existing.operations.some((op) => !op.confirmed)) {
+		run = parseCloudSyncRun(existing) as ConfiguredRun;
+		validateSyncCheckpoint(
+			{
+				version: 1,
+				runId: run.id,
+				localRootId: configuration.localRootId,
+				remoteFolderId: configuration.remoteFolderId,
+				baseline: run.startingBaseline
+			},
+			scope
+		);
+		if (JSON.stringify(parseFileSyncConfiguration(run.configuration)) !== JSON.stringify(configuration))
+			throw Error('An unfinished upload belongs to different settings. Restore its original settings before retrying; its work has been preserved.');
+	} else {
+		input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
+		const observed = await scan();
+		// A completed run may have lost its checkpoint write. Fresh agreement can
+		// advance that baseline; divergent content retains the last common evidence.
+		baseline = advanceSyncBaseline(baseline, observed.local, observed.remote);
+		const conditions = await authorize();
+		const planned = planConfiguredFileSync({
+			saved: reviewed,
+			approval: approved,
+			...observed,
+			baseline,
+			localRootId: configuration.localRootId,
+			remoteFolderId: configuration.remoteFolderId,
+			conditions
+		});
+		if (planned.status !== 'ready') throw Error('Transfer conditions changed. Try again.');
+		const conflicts = planned.plan.decisions.filter((d) => d.kind === 'conflict');
+		if (conflicts.length)
+			throw Error(
+				`${conflicts.length} sync conflict${conflicts.length === 1 ? '' : 's'} need review. Both copies were preserved. First: ${conflicts[0].path}`
+			);
+		run = {
+			...prepareCloudInventoryRun(createSyncRun(planned.plan), observed.inventory),
+			configuration,
+			startingBaseline: structuredClone(baseline)
+		};
+	}
+	let confirmedCount = run.operations.filter((op) => op.confirmed).length;
+	const report = (value: SyncRun, stage: ForegroundSyncProgress['stage'] = 'transferring') => {
+		confirmedCount = value.operations.filter((op) => op.confirmed).length;
+		input.progress({ stage, confirmed: confirmedCount, total: value.operations.length });
+	};
+	const port = createCloudSyncPort(
+		run,
+		{
+			currentScope: input.currentScope,
+			persist: async (value) => {
+				check();
+				await input.journal.persist({ ...value, configuration } as ConfiguredRun);
+				check();
+				report(value);
+			},
+			readLocal: async (path) => {
+				const entries = await input.scanLocal();
+				check();
+				return entries.find((entry) => entry.path === path) ?? null;
+			},
+			openSource: async (entry) => {
+				await authorize();
+				return input.source(entry);
+			},
+			signal,
+			progress: (path, bytes, size) => {
+				check();
+				input.progress({
+					stage: 'transferring',
+					confirmed: confirmedCount,
+					total: run.operations.length,
+					path,
+					bytes,
+					size
+				});
+			}
+		},
+		runtime
+	);
+	const done = await executeSyncRun(run, port, signal);
+	check();
+	report(done, 'verifying');
+	await authorize();
+	baseline = await recordedBaseline({ ...run, operations: done.operations });
+	const observed = await scan();
+	baseline = advanceSyncBaseline(baseline, observed.local, observed.remote);
+	check();
+	await input.journal.complete({
+		version: 1,
+		runId: done.id,
+		localRootId: configuration.localRootId,
+		remoteFolderId: configuration.remoteFolderId,
+		baseline
+	});
+	check();
+	report(done, 'complete');
+	return done;
+}

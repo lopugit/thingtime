@@ -47,13 +47,13 @@ The executor cannot supply these guarantees for a blind-overwrite adapter.
 `cloudSyncPort.client.ts` now implements real cloud file upload/replace and remote
 Trash operations for explicitly pinned destinations. It also creates ordinary cloud folders before their child uploads, retaining
 preallocated parent IDs and exact canonical Timeline creation receipts. Its prepared metadata is
-retained with the existing journal run; no production UI starts these jobs yet.
+retained with the existing journal run. The mobile connection controls now start
+explicit foreground upload/backup runs, as described below.
 
 The current scan bound is 10,000 combined paths, and directories must appear
 alongside descendants. Large-root partitioning is still needed. Folder removal
 must account for revision changes caused by its own completed child removals;
-the current executor safely refuses a stale parent revision. No platform worker
-or production UI invokes these modules yet.
+the current executor safely refuses a stale parent revision. Native persistent workers remain pending.
 
 ## Native iOS pairing
 
@@ -81,11 +81,11 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; native writes/workers and transfer-status UI pending; mobile connection editor implemented |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; native writes/workers and full native transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
-| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; native approval store, retention/selective settings and worker integration remain pending |
+| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; persistent native approval store, retention/selective settings and background workers remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; native conflict handling, retention and UI pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
@@ -464,3 +464,48 @@ object-store acceptance is inferred from this local run.
 The 195 focused sync/Files/capability tests and full web/Vercel build pass.
 Real Mongo concurrency checks also verified identical-operation replay and one
 winner for case-equivalent paths. Raw TypeScript retains 91 baseline diagnostics.
+
+
+## Foreground mobile uploads — 2026-10-17
+
+`MobileSyncConnections` now offers **Upload now**, **Stop upload** and **Retry
+upload** for unpaused upload/backup connections with an available native grant.
+Each click reviews the saved configuration revision, paired device, account,
+origin and home data plane. Saving a Thing alone never starts work. iOS and
+Android advertise `fileAccessVersion` 1.1.0 and return bounded network/charging
+signals; older apps retain folder access but cannot start this runner.
+
+`foregroundSync.ts` owns planning, complete scans, cloud execution and progress
+under the existing per-root Web Lock. Network, charging, pairing and configuration
+are rechecked before mutations. Unknown policy signals fail closed when required.
+Stop, backgrounding or identity changes cancel the active work. Progress remains
+visible on reload, and retry uses the journal's original operations and receipts.
+Network/power checks occur between requests: an already-started byte part is not
+bound to an OS network or automatically cancelled by a policy change.
+
+The version-2 IndexedDB journal preserves version-1 runs and atomically writes a
+completion checkpoint only for the current fully confirmed run. The checkpoint
+uses the same scoped common-baseline contract, with explicit native/cloud roots.
+Fresh matching observations advance it; divergent copies retain prior common
+observations. If checkpoint storage fails after accepted writes, the next run
+recovers that baseline from immutable operation receipts before planning local
+edits. No second history, upload namespace or physical collection is introduced.
+
+Verification: 81 sync tests, targeted lint, full web/Vercel packaging, Android
+debug/JVM/lint and 9 emulator tests, iOS test build and 17 selected simulator
+tests pass. TypeScript retains the same 91 baseline diagnostics (47 normalized
+messages), with no additions. Browser synthetic controls verify network refusal,
+lost folder reply/reload/retry, Stop/reload/retry and responsive layout. The real
+loopback HTTP/storage acceptance `file-sync-foreground.integration.mts` verifies
+lost accepted upload recovery without byte reupload, a failed completion
+checkpoint followed by a local edit, replacement of the same cloud file,
+independent downloaded-byte hashes and a repeat scan without upload. Its native
+grants/conditions/source are test adapters; this is not native end-to-end upload
+acceptance. Temporary fixture configuration is removed and the managed server
+restarted after the test; tiny accounted byte versions remain in private Trash.
+
+Remaining: actual native byte-upload acceptance, persistent OS background
+transports/approvals, local download publication, folder deletion/rename
+convergence, Photos backup, peer behavior and Mac integration. The current native
+chunk reader rehashes the source per chunk and the runner rescans per operation;
+large-file and large-root performance still needs work before broad release.

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Mobile connections can start, stop and retry
+  foreground upload/backup runs with native connectivity/charging checks,
+  retained progress and recoverable completion baselines. Real local API/storage
+  acceptance covers lost replies and checkpoint failure followed by a local edit;
+  native background/download/Photos work remains pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Nested cloud uploads now create ordinary folders
   through the canonical Things/Timeline writer, pin parent IDs before transfers
   and recover lost creation replies without duplicate trees. Real local byte

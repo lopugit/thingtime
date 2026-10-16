@@ -16,7 +16,9 @@ real API storage/revision and editor lost-response recovery checks.
 Things through shared `configurationEditor.ts` save/recovery logic. Drafts are
 local, scoped and verified before writes; fixed IDs and revision guards survive
 reloads. A saved connection is not native execution approval. Native file
-write adapters, persistent workers and transfer-status integration are pending;
+write adapters and persistent workers remain pending. `foregroundSync.ts` now
+connects explicit mobile upload/backup controls to complete scans, live native
+policy signals, journal retries and durable common-baseline checkpoints;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.
 
@@ -37,7 +39,7 @@ through `/api/v1/files`. The shared `fileSync/cloudFile.ts` contract maps a file
 revision into a sync entry. Bound `file` attachments retain each byte version;
 Timeline stores the guarded commit/receipt and prior metadata. Run `test:files`
 and the opt-in `scripts/file-versions.integration.mts` acceptance. Retention,
-sharing and production sync UI remain tracked in the sync ledger.
+sharing and full native sync acceptance remain tracked in the sync ledger.
 
 `fileSync/cloudWrite.ts`, `cloudTransport.ts` and `cloudSyncPort.client.ts` connect
 prepared upload/backup and remote Trash runs to the real file/attachment APIs.

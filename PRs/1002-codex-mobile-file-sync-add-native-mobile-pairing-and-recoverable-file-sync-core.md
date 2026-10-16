@@ -410,3 +410,36 @@ Mongo races verified identical concurrent creation replay, one winner for distin
 case-equivalent paths, immutable receipts after ordinary edits, and rollback when
 normalization would change a folder name. All folder-only fixtures were removed
 through normal APIs and the disposable session was signed out.
+
+
+## Foreground upload controls and completion recovery — 2026-10-17
+
+Mobile upload/backup connections now expose Upload now, Stop and Retry through
+`foregroundSync.ts`. A button click supplies the reviewed revision; fresh checks
+fence pairing, root/account/origin/data plane and live network/charging conditions
+before mutations. Native file access 1.1.0 adds bounded policy signals using
+NWPathMonitor/battery state and Android ConnectivityManager/battery broadcasts.
+Existing native permission, ownership and origin checks still apply.
+
+Version-2 IDB preserves old pending runs and atomically checkpoints only the
+current confirmed run. Immutable cloud receipts recover the original common
+baseline if checkpoint storage fails after acceptance. This lets a later local
+edit replace the same file, while divergent remote changes remain conflicts.
+Progress is cached immediately and queued root locks can be cancelled.
+
+Validation: 81 sync tests; lint; full web/Vercel build; unchanged 91 TypeScript
+baseline diagnostics (47 normalized); Android debug/JVM/lint plus 9 emulator
+tests; iOS test build plus 17 selected simulator tests. Synthetic browser checks
+cover network refusal, accepted folder-response loss and reload recovery,
+Stop/reload/retry and desktop/mobile layout. Real local API/storage acceptance
+covers a lost accepted file commit without reupload, failed completion checkpoint,
+a later local edit, stable replacement, independent byte hash and repeat no-op.
+Fixture configuration/root cleanup used normal APIs; tiny charged versions remain
+in private Trash. Temporary fixture admin env was removed and PM2 restarted.
+
+Boundaries: native grants/conditions/source are adapters in the real HTTP test;
+actual native file upload remains unverified. This is foreground execution with
+policy checks between requests, not native background or network-bound transfer.
+Chunk rehashing and repeated root scans still require performance work. Native
+writes/downloads, Photos, persistent approvals/workers, peers and Mac integration
+remain on the full-scope ledger; this PR is not end-to-end delivery of that goal.

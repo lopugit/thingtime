@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
           };
           window.thingtimeDeviceTransport.onmessage = event => { try { receive(JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.3.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.0.0',
+            version:'1.3.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.1.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },
             offMessage:listener => listeners.delete(listener)
@@ -115,7 +115,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() { super.onResume(); active=true; if(web!=null) web.onResume(); if(folders!=null) folders.resume(); }
     @Override protected void onPause() { active=false; cancel(); if(folders!=null) folders.pause(); if(web!=null) web.onPause(); super.onPause(); }
-    @Override protected void onDestroy() { cancel(); if(folders!=null) folders.suspend(); if(web!=null) web.destroy(); super.onDestroy(); }
+    @Override protected void onDestroy() { cancel(); if(folders!=null) folders.close(); if(web!=null) web.destroy(); super.onDestroy(); }
     @Override protected void onActivityResult(int request,int result,Intent data) { super.onActivityResult(request,result,data); if(folders!=null) folders.activityResult(request,result,data); }
     @Override public void onBackPressed() { if(web!=null && web.canGoBack()) web.goBack(); else super.onBackPressed(); }
 }

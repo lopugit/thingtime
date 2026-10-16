@@ -1,15 +1,23 @@
+import type { SyncConditions } from './configuredPlan';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import { planFileSync, validSyncEntry, type SyncEntry } from './reconcile';
 import type { FingerprintSource } from './contentFingerprint';
 
 export type MobileFolder = { id: string; name: string };
 export type FolderRequest =
-	| { action: 'list' | 'choose' }
+	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
 	| { action: 'read'; rootId: string; path: string; version: string; offset: number; length: number };
-export type FolderResult = { roots: MobileFolder[]; entries?: SyncEntry[]; chunk?: { version: string; size: number; offset: number; data: string } };
+export type FolderResult = {
+	roots: MobileFolder[];
+	conditions?: SyncConditions;
+	entries?: SyncEntry[];
+	chunk?: { version: string; size: number; offset: number; data: string };
+};
 export const supportsMobileFolders = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
-	Boolean(bridge?.isNativeWebView && (bridge.platform === 'ios' || bridge.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? ''));
+	Boolean(
+		bridge?.isNativeWebView && (bridge.platform === 'ios' || bridge.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '')
+	);
 export function parseMobileFolderResult(
 	value: unknown,
 	expected: { requestId: string; ownerId: string; origin: string },
@@ -29,7 +37,12 @@ export function parseMobileFolderResult(
 	)
 		throw Error('Invalid native folder response.');
 	const result: FolderResult = { roots: payload.roots.map((r: any) => ({ id: r.id, name: r.name })) };
-	if (request.action === 'scan') {
+	if (request.action === 'conditions') {
+		const c = payload.conditions;
+		if (!c || !['wifi', 'cellular', 'ethernet', 'offline', 'unknown'].includes(c.network) || (c.charging !== null && typeof c.charging !== 'boolean'))
+			throw Error('Native transfer conditions are unavailable.');
+		result.conditions = { network: c.network, charging: c.charging };
+	} else if (request.action === 'scan') {
 		if (
 			payload.rootId !== request.rootId ||
 			payload.complete !== true ||
@@ -66,9 +79,13 @@ export function parseMobileFolderResult(
 	}
 	return result;
 }
+export const supportsMobileSyncConditions = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
+	supportsMobileFolders(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 1;
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (request.action === 'conditions' && !supportsMobileSyncConditions(bridge))
+		return Promise.reject(Error('Update the mobile app to run folder transfers.'));
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {

@@ -21,6 +21,18 @@ final class FolderBridge {
     interface Active { boolean get(); }
     private final Activity activity; private final String origin; private final Active active;
     private final AtomicLong generation=new AtomicLong();
+    private volatile String networkKind="unknown";
+    private android.net.Network observedNetwork;
+    private final android.net.ConnectivityManager connectivity;
+    private final android.net.ConnectivityManager.NetworkCallback networkCallback=new android.net.ConnectivityManager.NetworkCallback() {
+        @Override public synchronized void onAvailable(android.net.Network network) { observedNetwork=network;networkKind="unknown"; }
+        @Override public synchronized void onCapabilitiesChanged(android.net.Network network,android.net.NetworkCapabilities caps) {
+            if(!network.equals(observedNetwork)) return;
+            networkKind=!caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)?"offline":
+                caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)?"cellular":caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)?"wifi":caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)?"ethernet":"unknown";
+        }
+        @Override public synchronized void onLost(android.net.Network network) { if(network.equals(observedNetwork)){observedNetwork=null;networkKind="offline";} }
+    };
     private Request pending; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
     private CancellationSignal cancellation=new CancellationSignal();
     private static final class Request {
@@ -30,7 +42,12 @@ final class FolderBridge {
             base=new JSONObject().put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
         }
     }
-    FolderBridge(Activity activity,String origin,Active active) { this.activity=activity;this.origin=origin;this.active=active; }
+    FolderBridge(Activity activity,String origin,Active active) {
+        this.activity=activity;this.origin=origin;this.active=active;
+        connectivity=(android.net.ConnectivityManager)activity.getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+        try { if(connectivity!=null)connectivity.registerDefaultNetworkCallback(networkCallback); }catch(Exception unavailable){ networkKind="unknown"; }
+    }
+    void close() { suspend();try { if(connectivity!=null)connectivity.unregisterNetworkCallback(networkCallback); }catch(Exception ignored){} }
     void suspend() {
         Request old=pending;pending=null;selecting=false;selectedResult=null;resultArrived=false;generation.incrementAndGet();cancellation.cancel();cancellation=new CancellationSignal();
         if(old!=null) reply(old,new JSONObject(),"Folder access paused. Try again when the app is active.");
@@ -50,7 +67,7 @@ final class FolderBridge {
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
         DeviceScope scope=new DeviceScope(payload.getString("ownerId"),origin,BuildConfig.DEBUG);
         if(action.equals("suspend")) { if(pending!=null && pending.id.equals(id)) suspend();return; }
-        if(!java.util.Arrays.asList("list","choose","remove","scan","read").contains(action)) return;
+        if(!java.util.Arrays.asList("list","choose","remove","scan","read","conditions").contains(action)) return;
         if(pending!=null) { reply(new Request(payload,scope,reply,generation.get()),new JSONObject(),"Another folder request is running.");return; }
         Request request=new Request(payload,scope,reply,generation.incrementAndGet());pending=request;execute(request,null,false);
     }
@@ -83,7 +100,14 @@ final class FolderBridge {
                     });return;
                 }
                 JSONObject result=new JSONObject();
-                if(request.action.equals("choose")) {
+                if(request.action.equals("conditions")) {
+                    String kind=networkKind;
+                    Intent battery=activity.registerReceiver(null,new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                    int status=battery==null?-1:battery.getIntExtra(android.os.BatteryManager.EXTRA_STATUS,-1);
+                    Object charging=status<0 || status==android.os.BatteryManager.BATTERY_STATUS_UNKNOWN?JSONObject.NULL:
+                        status==android.os.BatteryManager.BATTERY_STATUS_CHARGING || status==android.os.BatteryManager.BATTERY_STATUS_FULL;
+                    result.put("conditions",new JSONObject().put("network",kind).put("charging",charging));
+                } else if(request.action.equals("choose")) {
                     if(selected!=null && selected.getData()!=null) {
                         Uri tree=FolderStore.tree(selected.getData().toString());
                         FolderReader.Doc root=new SafFolderProvider(activity.getContentResolver(),tree,signal).root();

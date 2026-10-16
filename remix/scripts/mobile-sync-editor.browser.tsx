@@ -12,6 +12,11 @@ const ownerId = 'sync-ui-fixture',
 let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
 	{ id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } }
 ];
+let transferFolders: any[] = JSON.parse(localStorage.getItem('tt:fixture:sync-transfer-folders') || '[]');
+let holdNextScan = false;
+let loseTransferReply = false,
+	network = 'wifi';
+const localEntries = [{ path: 'Upload sample', id: 'native-sample-folder', version: 'native-v1', kind: 'folder', size: 0, sha256: null }];
 let roots = [{ id: '11111111-1111-4111-8111-111111111111', name: 'Project documents' }],
 	loseReply = false,
 	unavailable = false;
@@ -20,6 +25,40 @@ const originalFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
 	const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);
 	init?.signal?.throwIfAborted();
+	if (url.pathname === '/api/v1/files') {
+		if (unavailable) throw Error('Fixture is offline');
+		const headers = new Headers(init?.headers);
+		if (headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
+			return Response.json({ ok: false }, { status: 409 });
+		if (init?.method === 'POST') {
+			const body = JSON.parse(String(init.body));
+			if (body.kind !== 'folder') throw Error('No real file uploads in this fixture');
+			const existing = transferFolders.find((row) => row.id === body.id);
+			if (existing) return Response.json({ ok: true, folder: existing, replayed: true });
+			const folder = { id: body.id, folderId: body.folderId, name: body.name, revision: 'fixture-' + body.id };
+			transferFolders.push(folder);
+			localStorage.setItem('tt:fixture:sync-transfer-folders', JSON.stringify(transferFolders));
+			if (loseTransferReply) {
+				loseTransferReply = false;
+				throw Error('Fixture lost accepted folder creation');
+			}
+			return Response.json({ ok: true, folder, replayed: false });
+		}
+		if (url.searchParams.has('rootId'))
+			return Response.json({
+				ok: true,
+				inventory: {
+					version: 1,
+					complete: true,
+					rootId: url.searchParams.get('rootId'),
+					rootRevision: 'fixture-root-v1',
+					nodes: transferFolders.map((row) => ({ kind: 'folder', path: row.name, id: row.id, folderId: row.folderId, revision: row.revision }))
+				}
+			});
+		const folder = transferFolders.find((row) => row.id === url.searchParams.get('folderId'));
+		if (url.searchParams.has('operationId')) return Response.json({ ok: true, receipt: folder ?? null });
+		return folder ? Response.json({ ok: true, folder }) : Response.json({ ok: false }, { status: 404 });
+	}
 	if (url.pathname !== '/api/v1/things') return originalFetch(input, init);
 	const headers = new Headers(init?.headers);
 	if (headers.get('X-Thingtime-Expected-Actor') !== ownerId || headers.get('X-Thingtime-Expected-Data-Plane') !== 'home')
@@ -63,10 +102,14 @@ window.thingtimeNativeBridge = {
 	platform: 'android',
 	isNativeWebView: true,
 	devicePairingVersion: '1.0.0',
-	fileAccessVersion: '1.0.0',
+	fileAccessVersion: '1.1.0',
 	postMessage(message) {
 		const request = message.payload as any;
 		if (request.action === 'suspend') return;
+		if (request.action === 'scan' && holdNextScan) {
+			holdNextScan = false;
+			return;
+		}
 		setTimeout(() => {
 			if (message.type === 'mobile-device')
 				window.dispatchEvent(
@@ -79,7 +122,12 @@ window.thingtimeNativeBridge = {
 					new CustomEvent(nativeBridgeMessageEvent, {
 						detail: {
 							type: 'mobile-files-result',
-							payload: { ...request, roots, ...(request.action === 'scan' ? { complete: true, entries: [] } : {}) }
+							payload: {
+								...request,
+								roots,
+								...(request.action === 'scan' ? { complete: true, entries: localEntries } : {}),
+								...(request.action === 'conditions' ? { conditions: { network: unavailable ? 'offline' : network, charging: true } } : {})
+							}
 						}
 					})
 				);
@@ -103,6 +151,38 @@ function Fixture() {
 						}}
 					>
 						Lose next save reply
+					</Button>
+					<Button
+						size="sm"
+						onClick={() => {
+							loseTransferReply = true;
+						}}
+					>
+						Lose next upload reply
+					</Button>
+					<Button
+						size="sm"
+						onClick={() => {
+							network = 'cellular';
+						}}
+					>
+						Use cellular
+					</Button>
+					<Button
+						size="sm"
+						onClick={() => {
+							network = 'wifi';
+						}}
+					>
+						Use Wi-Fi
+					</Button>
+					<Button
+						size="sm"
+						onClick={() => {
+							holdNextScan = true;
+						}}
+					>
+						Hold next scan
 					</Button>
 					<Button
 						size="sm"
