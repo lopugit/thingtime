@@ -1,4 +1,4 @@
-import { fingerprintFromVerifiedHead } from './contentFingerprint';
+import { fingerprintFromVerifiedHead, attachmentContentVersion } from './contentFingerprint';
 import { contentPartPlan, MIN_CONTENT_PART_BYTES, MAX_CONTENT_PART_BYTES, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import { ownedMediaDraftIds } from '../drafts/media';
 import { attachmentCountLimit } from '../../../schemas/attachmentLimits';
@@ -1371,7 +1371,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const current = await readableStoredAttachment(viewer, idInput, false, false);
 			if (current.ok === false) return current;
 			if (current.doc.objectVersionId !== head.versionId || current.doc.objectKey !== doc.objectKey) return fail(409, 'Attachment changed during fingerprint verification');
-			const version = createHash('sha256').update('thingtime-file-content-v1\0').update(doc.shareId).update('\0').update(doc.objectKey).update('\0').update(head.versionId).digest('hex');
+			const version = attachmentContentVersion(doc.shareId, doc.objectKey, head.versionId);
 			return { ok: true, id: doc.shareId, version, size: head.sizeBytes, fingerprint: value };
 		} catch (error) { return knownFailure(error) || unavailable('fingerprint', error); }
 	};

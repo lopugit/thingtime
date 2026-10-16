@@ -78,12 +78,12 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor and verified content fingerprints; stable file replacement and native adapters pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; native adapters and production UI pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal tests only; native schedulers and transfer adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real two-part attachment upload/download verified; resumable native sync transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Core direction/delete policy only; saved Things and settings UI pending |
-| Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | Core refuses destructive conflicts; storage/UI pending |
+| Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; native conflict handling, retention and UI pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
 
@@ -179,3 +179,41 @@ SHA-256, denied anonymous reads, and deleted the fixture. This verifies the
 canonical API/local storage integration; it is not a production S3 acceptance
 run or a native background sync run. Stable logical file identity, conditional
 version replacement, Timeline versions/trash and native workers are next.
+
+## Stable cloud files checkpoint — 2026-10-17
+
+`api.files` 1.0.0 provides the canonical stable file identity. POST commits an
+owned durable file upload or a previously retained version under one UUID file
+ID, one immutable UUID operation ID and an expected revision. A single home
+Mongo transaction binds the attachment, publishes current metadata, updates the
+existing account ledger and appends a `file-content` Timeline revision. Old
+attachments remain readable by their owner and charged. No new collection,
+index, version array or parallel history is introduced.
+
+The expected revision is the Timeline head, so canonical folder moves also
+invalidate stale file writes. Things 1.34.0 lists live file roots once, hiding
+retained attachments and trashed roots. Bulk 1.6.0 uses the existing managed
+placement writer. Folder deletion reparents the file and records its move.
+The byte fingerprint remains separate from the file revision: a rename or move
+changes revision without pretending the bytes changed.
+
+GET by file ID reads the current state; adding the original operation ID reads
+its exact committed receipt. Replaying a successful POST returns that original
+snapshot even after later changes. A different payload under the same operation,
+a stale revision, wrong bytes, a foreign/bound/blocked upload or a custom data
+plane is refused. Client-authored Timeline drafts cannot impersonate committed
+receipts. Retrying an absent receipt never means deleting a file.
+
+Trash and restore are new guarded commits. Prior bytes can be restored by
+selecting their retained attachment with the current expected revision. All
+retained versions currently remain charged indefinitely; purge/retention policy,
+version-selection UI, sharing, root inventories/path collisions, upload adapter
+integration and native workers remain required. The existing UI still uses the
+legacy manual transfer path; this API checkpoint is not end-to-end sync.
+
+The opt-in `file-versions.integration.mts` verifies real uploaded bytes,
+replacement, exactly one winner among concurrent commits, exact replay/lookup,
+private Timeline history, live library listing, guarded folder moves, folder
+deletion, Trash/restore and independent hashes of both retained versions.
+Generic hard deletion and anonymous reads are denied. Its tiny synthetic file
+stays in the disposable account's Trash because no purge bypass is permitted.

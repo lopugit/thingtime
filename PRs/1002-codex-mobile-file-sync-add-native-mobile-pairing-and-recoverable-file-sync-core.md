@@ -160,3 +160,34 @@ acceptance. Keep the full goal active until the evidence table is satisfied.
   consistency; it does not establish current semantic coverage for these docs.
   The browser scope test also rejects mutation of the caller's original scope
   object during a request, not only replacement with a different scope object.
+
+
+## Stable cloud file checkpoint — 2026-10-17
+
+- Added protected `file` Things with an atomic home-plane `/api/v1/files` writer.
+  Current content references immutable, separately charged attachments; previous
+  versions stay bound to the stable file. Timeline stores metadata revisions and
+  exact operation receipts. No parallel collection/history or new index.
+- Client UUIDs and immutable payload hashes provide replay identity; the current
+  Timeline head fences commits. Old retries return their original receipt after
+  later edits. Client-authored draft events cannot impersonate API completion.
+  Foreign, transient, blocked, linked, wrongly bound and unaccounted bytes fail.
+- Things 1.34.0 lists live roots once; bulk 1.6.0 and the canonical folder-delete
+  drain record file placement history, invalidating pre-move revisions. Trash
+  and older-byte restoration are guarded commits; no retained bytes are refunded.
+- Real local HTTP/Mongo/object-storage acceptance passed replacement with stable
+  identity, exactly one concurrent winner, replay/lookup, seven Timeline entries,
+  library listing, folder moves/deletion, Trash/restore, independent byte hashes,
+  protected generic deletion and anonymous denial. Synthetic tiny fixtures remain
+  privately in Trash with accounted versions; no cleanup backdoor was added.
+- Full sharing, purge/retention, root inventories/path collision handling,
+  production UI/transfer integration, native file/Photos workers and release
+  acceptance remain on the original goal. The current UI's manual transfer path
+  is unchanged. No native source changed in this checkpoint.
+
+- Verification: 8 file API tests, 36 sync tests, 297 attachment/script tests,
+  316 Things tests, 238 Timeline tests, 266 schema tests and 95 capability tests
+  pass (1,256 total). Targeted lint and web/Vercel build pass; both compiled
+  manifests expose the new contracts and the compiled file route rejects
+  anonymous requests. Raw TypeScript remains at its unchanged 91 diagnostics.
+  Large-document semantic coverage is reported separately from source/API proof.

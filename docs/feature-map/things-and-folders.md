@@ -312,3 +312,11 @@ so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+
+
+Stable file roots (`api.files` 1.0.0) use `api/utils/files/files.ts` with the
+shared `fileSync/cloudFile.ts` contract and `file-content` Timeline snapshots.
+Their byte versions are canonical bound attachments. `ownerLibraryQuery.ts`
+lists live roots once; existing managed placement/recordFolderPlacement handles
+file moves and folder deletion. `test:files` and `file-versions.integration.mts`
+cover the API; see the full mobile sync ledger for pending product integration.

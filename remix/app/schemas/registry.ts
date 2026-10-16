@@ -1042,6 +1042,19 @@ const postSchema: ThingtimeSchema = {
   }
 };
 
+const fileSchema: ThingtimeSchema = {
+  id: 'file', version: 1, kind: 'crystal', collection: null, title: 'File',
+  summary: 'A stable file identity with retained attachment versions and Timeline history.',
+  detail: 'The dedicated file writer changes the current content atomically using an expected revision and immutable operation identity. Bytes remain separately accounted attachment Things linked by parentId/targetId. Trash retains content until an explicit retention workflow removes it.',
+  createdVia: 'POST /api/v1/files',
+  example: { name: 'notes.txt', trashed: false, content: { attachmentId: 'att-example', version: 'a'.repeat(64), size: 1, fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } } },
+  fields: [
+    { name: 'name', type: 'string', required: true, max: 255, description: 'Editable filename.' },
+    { name: 'trashed', type: 'boolean', required: true, description: 'Recoverable trash state; retained bytes remain accounted.' },
+    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' }
+  ]
+};
+
 const attachmentSchema: ThingtimeSchema = {
 	id: ATTACHMENT_THINGTIME,
 	version: 2,
@@ -4201,6 +4214,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'file',
   'password-manager-entry',
   'draft',
   TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_NOTE_KIND, TIMELINE_VERSION_NAME_KIND,
@@ -4461,6 +4475,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   rootThingSchema,
   postSchema,
 	attachmentSchema,
+	fileSchema,
   commentSchema,
   reactionSchema,
   shareSchema,

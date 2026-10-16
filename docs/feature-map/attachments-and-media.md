@@ -11,6 +11,13 @@ adapters, conditional cloud replacement and product integration are pending;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.
 
+Stable file roots are protected `file` Things written by `api/utils/files/files.ts`
+through `/api/v1/files`. The shared `fileSync/cloudFile.ts` contract maps a file
+revision into a sync entry. Bound `file` attachments retain each byte version;
+Timeline stores the guarded commit/receipt and prior metadata. Run `test:files`
+and the opt-in `scripts/file-versions.integration.mts` acceptance. Retention,
+sharing and production sync adapters remain tracked in the sync ledger.
+
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).
 Every attachment is bound to exactly one target (post, comment, page, message,

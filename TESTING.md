@@ -9984,3 +9984,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Both compiled manifests advertise `api.attachment-content` 1.13.0.
   Full native transfers, zero-byte files, large-part streaming and production
   object-storage acceptance remain separate items in `docs/mobile-file-sync.md`.
+
+
+### Stable cloud file revisions (2026-10-17)
+
+- [ ] Run `test:files`, `test:file-sync`, `test:attachments`, `test:things`,
+  `test:timeline`, `test:schemas` and `test:api-capabilities`.
+- [ ] Run `file-versions.integration.mts` with the README's disposable local
+  fixture. Replace real bytes while retaining the file ID, race two expected-head
+  commits (one winner), replay an old operation after later edits and look up its
+  original receipt. Different input under an old operation must fail.
+- [ ] Verify every successful edit in the canonical Timeline; a failed append
+  or accounting operation must roll back file publication and attachment binding.
+  Never accept a client draft as proof that a file mutation ran.
+- [ ] Live files list once; retained byte attachments and Trash stay out of the
+  normal owner library. Move into a folder, reject a pre-move revision, delete
+  the folder and verify reparenting/history without losing file content.
+- [ ] Trash and restore through guarded commits, including an older attachment;
+  independently hash both versions. Generic hard deletion and bound attachment
+  cleanup must fail. Retained bytes stay charged. Verify anonymous/foreign
+  refusal, blocked/linked/expired/bound upload rejection and home-plane fencing.
+- [ ] Built manifests expose files 1.0.0, things 1.34.0 and bulk 1.6.0. Native
+  background transfers and the version/conflict/retention UI remain in the full
+  sync acceptance ledger; this backend acceptance does not substitute for them.

@@ -18,6 +18,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // Pinned projections. A diff here is a REVIEW PROMPT, not necessarily a bug:
 // a new registry field should appear (except a reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
+  file: ['name', 'trashed', 'content'],
   'password-manager-entry': ['title', 'passwordType', 'fields'],
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],

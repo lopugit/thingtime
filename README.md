@@ -4612,3 +4612,29 @@ cloud fingerprints, independently hashes the downloaded bytes, checks anonymous
 denial, then deletes its file and signs out its test session. Remove temporary
 `ADMIN_USERNAMES` entries and restart after acceptance. It does not exercise
 production S3, native background scheduling or complete cross-device sync.
+
+### Verifying stable file version commits locally
+
+`api.files` 1.0.0 adds `GET|POST /api/v1/files` on the home data plane. See the
+[stable file contract](docs/mobile-file-sync.md#stable-cloud-files-checkpoint--2026-10-17)
+and `/api/v1/files-docs` for the closed request shape. Clients must negotiate
+`api.files`, persist the complete immutable commit before sending, and reuse
+its UUID file ID, operation ID and expected revision after an uncertain result.
+Use an attachment-content fingerprint receipt for the exact uploaded bytes.
+A missing/failed operation lookup must preserve pending work.
+
+With the same disposable local account, normal upload approval, private fixture
+and local storage setup above, run:
+
+```sh
+cd remix
+node --import tsx scripts/file-versions.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This exercises real Mongo transactions and retained attachment bytes, concurrent
+replacement, exact retries, Timeline, library/folder integration and Trash/restore.
+It leaves a tiny synthetic file and its two accounted versions in that account's
+private Trash, and signs out. No hard-delete shortcut is used. Remove temporary
+fixture admin configuration and restart afterwards. No new secrets or indexes
+are required. Production S3, native file workers, retention/purge, sharing and
+sync settings/UI remain separate acceptance work.

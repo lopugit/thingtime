@@ -5888,7 +5888,7 @@ export const bulkThings = async (
     }
     if (op === 'move') {
       const owned = await things.findOne({ shareId: id, ownerId: viewer.id } as any) as unknown as ThingDoc | null;
-      if (owned?.thingtime?.length === 1 && ['attachment', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(owned.thingtime[0])) {
+      if (owned?.thingtime?.length === 1 && ['attachment', 'file', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(owned.thingtime[0])) {
         if (owned.thingtime[0] === 'chat-archive' && (context.archiveOwnerId !== viewer.id || viewer.pat)) {
           results.push({ id, ok: false, error: 'Only the first-party archive owner can move this history' });
           continue;

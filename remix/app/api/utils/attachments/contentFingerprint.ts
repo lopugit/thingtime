@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { contentPartPlan, type ContentFingerprint } from '../../../fileSync/contentFingerprint';
 import type { AttachmentObjectHead } from './privateS3';
 
@@ -15,3 +16,5 @@ export function fingerprintFromVerifiedHead(head: AttachmentObjectHead): Content
 		return { algorithm: 'sha256-parts-v1', ...plan, sha256: digest.toString('hex') };
 	} catch { return null; }
 }
+
+export const attachmentContentVersion = (id: string, objectKey: string, versionId: string): string => createHash('sha256').update('thingtime-file-content-v1\0').update(id).update('\0').update(objectKey).update('\0').update(versionId).digest('hex');
