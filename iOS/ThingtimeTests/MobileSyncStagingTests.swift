@@ -20,6 +20,96 @@ final class MobileSyncStagingTests: XCTestCase {
             mutation: .init(kind: "copy", from: "remote", path: entry.path, source: entry, expectedTarget: nil), confirmed: false)
         return (root, owner, .init(scope: scope, rootId: UUID().uuidString.lowercased(), operation: op))
     }
+    private func publicationFixture(_ bytes: Data, prior: Data? = nil, folder: Bool = false) throws -> (URL, URL, MobileDevicePairing.Scope, MobileSyncStaging.Request, Data, MobileSyncStaging.Stage) {
+        let (root, owner, original) = try fixture(bytes, folder: folder)
+        let selected = root.appendingPathComponent("selected"), storage = root.appendingPathComponent("private")
+        try FileManager.default.createDirectory(at: selected.appendingPathComponent("nested"), withIntermediateDirectories: true)
+        if let prior { try prior.write(to: selected.appendingPathComponent(original.operation.mutation.path)) }
+        let bookmark = try selected.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+        let expected = try MobileFolderReader.scan(bookmark: bookmark).first { $0.path == original.operation.mutation.path }
+        let request = MobileSyncStaging.Request(scope: original.scope, rootId: original.rootId, operation: .init(id: original.operation.id,
+            mutation: .init(kind: "copy", from: "remote", path: original.operation.mutation.path, source: original.operation.mutation.source, expectedTarget: expected), confirmed: false))
+        let staging = MobileSyncStaging(directory: storage)
+        _ = try staging.begin(request, owner: owner)
+        for offset in stride(from: 0, to: bytes.count, by: 65_536) { _ = try staging.append(request, owner: owner, offset: Int64(offset), bytes: bytes.subdata(in: offset..<min(bytes.count, offset + 65_536))) }
+        return (storage, selected, owner, request, bookmark, try XCTUnwrap(staging.finish(request, owner: owner).stage))
+    }
+    func testPublicationCreatesAndReplacesAtomicallyRetainingPriorBytes() throws {
+        for prior: Data? in [nil, Data("original".utf8)] {
+            let bytes = Data(repeating: 42, count: 131_079)
+            let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(bytes, prior: prior)
+            let staging = MobileSyncStaging(directory: storage)
+            XCTAssertEqual(try staging.lookup(request, owner: owner, bookmark: bookmark).status, "missing")
+            let receipt = try staging.publish(request, owner: owner, bookmark: bookmark, stage: stage)
+            XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent(request.operation.mutation.path)), bytes)
+            XCTAssertEqual(receipt.entry, try MobileFolderReader.scan(bookmark: bookmark).first { $0.path == request.operation.mutation.path })
+            let retained = storage.appendingPathComponent(stage.token).appendingPathComponent("publication")
+            if let prior { XCTAssertEqual(try Data(contentsOf: retained), prior) }
+            else { XCTAssertFalse(FileManager.default.fileExists(atPath: retained.path)) }
+            try Data("later local edit".utf8).write(to: selected.appendingPathComponent(request.operation.mutation.path))
+            XCTAssertEqual(try MobileSyncStaging(directory: storage).lookup(request, owner: owner, bookmark: bookmark).receipt, receipt)
+            XCTAssertEqual(try MobileSyncStaging(directory: storage).publish(request, owner: owner, bookmark: bookmark, stage: stage), receipt)
+            XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent(request.operation.mutation.path)), Data("later local edit".utf8))
+        }
+    }
+    func testInterruptedPublicationRecoversWithoutRepeatingSwap() throws {
+        struct Interrupted: Error {}
+        for prior: Data? in [nil, Data("original".utf8)] {
+            let bytes = Data("download".utf8)
+            let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(bytes, prior: prior)
+            let staging = MobileSyncStaging(directory: storage, afterPublication: { throw Interrupted() })
+            XCTAssertThrowsError(try staging.publish(request, owner: owner, bookmark: bookmark, stage: stage))
+            let lookup = try MobileSyncStaging(directory: storage).lookup(request, owner: owner, bookmark: bookmark)
+            XCTAssertEqual(lookup.status, "complete"); XCTAssertEqual(lookup.receipt?.entry.fingerprint, stage.entry.fingerprint)
+            XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent(request.operation.mutation.path)), bytes)
+            XCTAssertEqual(try MobileSyncStaging(directory: storage).publish(request, owner: owner, bookmark: bookmark, stage: stage), lookup.receipt)
+        }
+    }
+    func testPublicationRefusesLocalChangesAndSymlinkEscape() throws {
+        let bytes = Data("download".utf8)
+        for prior: Data? in [nil, Data("original".utf8)] {
+            let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(bytes, prior: prior)
+            let target = selected.appendingPathComponent(request.operation.mutation.path)
+            try Data("local edit".utf8).write(to: target)
+            XCTAssertThrowsError(try MobileSyncStaging(directory: storage).publish(request, owner: owner, bookmark: bookmark, stage: stage))
+            XCTAssertEqual(try Data(contentsOf: target), Data("local edit".utf8))
+        }
+        let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(bytes)
+        let outside = storage.deletingLastPathComponent().appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.removeItem(at: selected.appendingPathComponent("nested"))
+        try FileManager.default.createSymbolicLink(at: selected.appendingPathComponent("nested"), withDestinationURL: outside)
+        XCTAssertThrowsError(try MobileSyncStaging(directory: storage).publish(request, owner: owner, bookmark: bookmark, stage: stage))
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
+    }
+    func testCrashThenLocalEditRemainsPendingAndPreservesBothVersions() throws {
+        struct Interrupted: Error {}
+        let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(Data("download".utf8), prior: Data("original".utf8))
+        XCTAssertThrowsError(try MobileSyncStaging(directory: storage, afterPublication: { throw Interrupted() }).publish(request, owner: owner, bookmark: bookmark, stage: stage))
+        let target = selected.appendingPathComponent(request.operation.mutation.path)
+        try Data("local edit".utf8).write(to: target)
+        let staging = MobileSyncStaging(directory: storage)
+        XCTAssertEqual(try staging.lookup(request, owner: owner, bookmark: bookmark).status, "pending")
+        XCTAssertThrowsError(try staging.publish(request, owner: owner, bookmark: bookmark, stage: stage))
+        XCTAssertEqual(try Data(contentsOf: target), Data("local edit".utf8))
+        XCTAssertEqual(try Data(contentsOf: storage.appendingPathComponent(stage.token).appendingPathComponent("publication")), Data("original".utf8))
+        XCTAssertEqual(try Data(contentsOf: storage.appendingPathComponent(stage.token).appendingPathComponent("payload")), Data("download".utf8))
+    }
+    func testRacingUncoordinatedWriterIsRetainedAndNotReportedAsSuccess() throws {
+        let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(Data("download".utf8), prior: Data("original".utf8))
+        let target = selected.appendingPathComponent(request.operation.mutation.path)
+        let staging = MobileSyncStaging(directory: storage, beforePublication: { try Data("racing edit".utf8).write(to: target, options: .atomic) })
+        XCTAssertThrowsError(try staging.publish(request, owner: owner, bookmark: bookmark, stage: stage))
+        XCTAssertEqual(try staging.lookup(request, owner: owner, bookmark: bookmark).status, "pending")
+        XCTAssertEqual(try Data(contentsOf: storage.appendingPathComponent(stage.token).appendingPathComponent("publication")), Data("racing edit".utf8))
+        XCTAssertEqual(try Data(contentsOf: target), Data("download".utf8))
+    }
+    func testPublicationCreatesEmptyFolders() throws {
+        let (storage, selected, owner, request, bookmark, stage) = try publicationFixture(Data(), folder: true)
+        let receipt = try MobileSyncStaging(directory: storage).publish(request, owner: owner, bookmark: bookmark, stage: stage)
+        XCTAssertEqual(receipt.entry.kind, "folder")
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: selected.appendingPathComponent(request.operation.mutation.path).path).isEmpty)
+    }
     func testMultipartStagingResumesAfterReopenAndVerifiesEveryByte() throws {
         let bytes = Data(repeating: 13, count: 8 * 1024 * 1024 + 17)
         let (root, owner, request) = try fixture(bytes)
@@ -139,6 +229,27 @@ final class MobileSyncStagingTests: XCTestCase {
         XCTAssertTrue((stage["entry"] as? [String: Any])?["sha256"] is NSNull)
         XCTAssertEqual(authorizations, 6)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: selected.path), [])
+        let approval = MobileFolderStore.WriteApproval(scope: transfer.scope, configurationRevision: "v1", configurationHash: String(repeating: "a", count: 64))
+        let encodedApproval = try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))
+        func publish() async throws -> [String: Any] {
+            let complete = expectation(description: "publication"), id = UUID().uuidString
+            var response: [String: Any]?
+            bridge.handle(["payload": ["requestId": id, "ownerId": owner.ownerId, "rootId": grant.id,
+                "action": "publish", "transfer": encoded, "stage": stage, "approval": encodedApproval]],
+                webView: webView, root: owner.origin, currentRoot: { owner.origin }, verifyOwner: { supplied, check in
+                    XCTAssertEqual(supplied, owner); try check()
+                }, reply: { _, payload in response = payload; complete.fulfill() })
+            await fulfillment(of: [complete], timeout: 5); return try XCTUnwrap(response)
+        }
+        let denied = try await publish(); XCTAssertNotNil(denied["error"])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: selected.path), [])
+        // Synthetic consent only for this isolated test grant; production uses UIAlertController.
+        try store.approveWrite(owner, grant: grant, approval: approval)
+        try FileManager.default.createDirectory(at: selected.appendingPathComponent("nested"), withIntermediateDirectories: true)
+        let published = try await publish()
+        XCTAssertNil(published["error"])
+        XCTAssertEqual((published["publication"] as? [String: Any])?["status"] as? String, "complete")
+        XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent(transfer.operation.mutation.path)), bytes)
         bridge.suspend()
     }
 

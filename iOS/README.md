@@ -233,8 +233,14 @@ and unit tests do not prove APNs delivery or physical lock-screen behavior.
 folder bridge. Requests require the current origin/account and an owned folder
 grant. They write only to private application support storage, excluded from
 backup, and preserve immutable operation identity, acknowledged progress and
-verified content across reopen. Publication into user folders and background
-transfers remain pending; selecting a read-only grant does not grant writes.
+verified content across reopen. `filePublicationVersion` 1.0.0 adds native consent,
+publication and receipt lookup. Selecting a read-only grant does not grant writes.
+Approvals bind reviewed configuration revision/hash, device and connection and
+are cleared by removing/reselecting the folder. Publication uses coordinated,
+same-volume exclusive rename/swap, retains displaced inodes privately and refuses
+unsupported providers. A racing uncoordinated edit is retained as a pending
+conflict, not an automatic rollback. Existing transfer records carry receipts;
+background transfers, conflict/restore controls and retention remain pending.
 
 `MobileSyncStagingTests` verifies multipart bytes, replay, interrupted checkpoint
 recovery, checksum and symlink refusal, plus the real WebKit/native handler with

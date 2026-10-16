@@ -1,3 +1,4 @@
+import type { LocalSyncTarget } from './localSyncTarget';
 import { parseFileSyncConfiguration } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration, type SyncConditions } from './configuredPlan';
 import { createSyncRun, executeSyncRun, type SyncRun } from './execute';
@@ -32,6 +33,7 @@ export async function runForegroundCloudSync(
 		scanLocal(): Promise<SyncEntry[]>;
 		inventory(): Promise<CloudInventory>;
 		source(entry: SyncEntry): Promise<FingerprintSource>;
+		localTarget?: LocalSyncTarget;
 		journal: Awaited<ReturnType<typeof openSyncJournal>>;
 		runtime: CloudTransportRuntime;
 		progress(value: ForegroundSyncProgress): void;
@@ -39,8 +41,11 @@ export async function runForegroundCloudSync(
 	signal: AbortSignal
 ) {
 	const configuration = parseFileSyncConfiguration(reviewed.configuration);
-	if (!['upload', 'backup'].includes(configuration.mode))
-		throw Error('This app can currently upload or back up a folder. Two-way and download transfers are still being added.');
+	if (
+		!['upload', 'backup', 'download'].includes(configuration.mode) ||
+		(configuration.mode === 'download' && (!input.localTarget || configuration.propagateDeletes))
+	)
+		throw Error('Downloads require native write approval with deletion propagation disabled. Two-way sync is still being added.');
 	const approved = { ...structuredClone(reviewed), configuration, scope: { ...scope } };
 	const empty = { scope, complete: true, entries: [] };
 	const check = () => {
@@ -125,14 +130,22 @@ export async function runForegroundCloudSync(
 		for (const write of saved.cloudWrites) {
 			const operation = operations.get(write.operation.id)!;
 			if (!operation.confirmed) continue;
-			const transport = isCloudFolderWrite(write)
+			const downloading = operation.mutation.kind === 'copy' && operation.mutation.from === 'remote';
+			const transport = downloading
+				? { lookup: () => input.localTarget!.lookup({ ...write.operation, confirmed: false }, scope) }
+				: isCloudFolderWrite(write)
 				? createCloudFolderTransport(runtime, write, signal)
 				: createCloudFileTransport(runtime, write, signal);
 			const result = await transport.lookup();
 			check();
 			if (result.status !== 'complete') throw Error('A confirmed operation receipt is unavailable. Its run and prior baseline were preserved.');
 			const m = operation.mutation;
-			if (m.kind === 'copy' && result.receipt.entry) pairs.set(m.path, { path: m.path, local: m.source, remote: result.receipt.entry });
+			if (m.kind === 'copy' && result.receipt.entry)
+				pairs.set(m.path, {
+					path: m.path,
+					local: downloading ? result.receipt.entry : m.source,
+					remote: downloading ? m.source : result.receipt.entry
+				});
 			else if (m.kind === 'trash') pairs.delete(m.path);
 		}
 		return { scope, entries: [...pairs.values()] };
@@ -158,7 +171,9 @@ export async function runForegroundCloudSync(
 			scope
 		);
 		if (JSON.stringify(parseFileSyncConfiguration(run.configuration)) !== JSON.stringify(configuration))
-			throw Error('An unfinished upload belongs to different settings. Restore its original settings before retrying; its work has been preserved.');
+			throw Error(
+				'An unfinished transfer belongs to different settings. Restore its original settings before retrying; its work has been preserved.'
+			);
 	} else {
 		input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
 		const observed = await scan();
@@ -211,6 +226,19 @@ export async function runForegroundCloudSync(
 				await authorize();
 				return input.source(entry);
 			},
+			localTarget: input.localTarget
+				? {
+						lookup: (operation, current) => input.localTarget!.lookup(operation, current),
+						stage: async (operation, current, source) => {
+							await authorize();
+							return input.localTarget!.stage(operation, current, source);
+						},
+						publish: async (operation, current, staged) => {
+							await authorize();
+							return input.localTarget!.publish(operation, current, staged);
+						}
+				  }
+				: undefined,
 			signal,
 			progress: (path, bytes, size) => {
 				check();

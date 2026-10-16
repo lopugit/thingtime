@@ -1,6 +1,6 @@
 import { validateLocalStage, type LocalStagedCopy } from './localSyncTarget';
-import type { SyncOperation } from './execute';
-import type { SyncScope } from './reconcile';
+import type { SyncOperation, SyncReceiptLookup } from './execute';
+import { sameSyncScope, sameSyncContent, type SyncScope } from './reconcile';
 import type { SyncConditions } from './configuredPlan';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import { planFileSync, validSyncEntry, type SyncEntry } from './reconcile';
@@ -8,13 +8,19 @@ import type { FingerprintSource } from './contentFingerprint';
 
 export type MobileFolder = { id: string; name: string };
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
+export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string };
 export type FolderRequest =
 	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
 	| { action: 'read'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
 	| { action: 'stage-begin' | 'stage-finish'; rootId: string; transfer: MobileStageRequest }
-	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string };
+	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string }
+	| { action: 'write-approve'; rootId: string; approval: MobileWriteApproval }
+	| { action: 'publication-lookup'; rootId: string; transfer: MobileStageRequest }
+	| { action: 'publish'; rootId: string; transfer: MobileStageRequest; stage: LocalStagedCopy; approval: MobileWriteApproval };
 export type FolderResult = {
+	writeApproval?: MobileWriteApproval;
+	publication?: SyncReceiptLookup;
 	staging?: { received: number; stage?: LocalStagedCopy };
 	roots: MobileFolder[];
 	conditions?: SyncConditions;
@@ -44,7 +50,41 @@ export function parseMobileFolderResult(
 	)
 		throw Error('Invalid native folder response.');
 	const result: FolderResult = { roots: payload.roots.map((r: any) => ({ id: r.id, name: r.name })) };
-	if (request.action === 'stage-begin' || request.action === 'stage-append' || request.action === 'stage-finish') {
+	if (request.action === 'write-approve') {
+		const approved = payload.writeApproval;
+		if (
+			payload.rootId !== request.rootId ||
+			!approved ||
+			!sameSyncScope(approved.scope, request.approval.scope) ||
+			approved.configurationRevision !== request.approval.configurationRevision ||
+			approved.configurationHash !== request.approval.configurationHash
+		)
+			throw Error('Native folder write approval changed.');
+		result.writeApproval = structuredClone(request.approval);
+	} else if (request.action === 'publication-lookup' || request.action === 'publish') {
+		const publication = payload.publication,
+			receipt = publication?.receipt,
+			m = request.transfer.operation.mutation;
+		if (
+			payload.rootId !== request.rootId ||
+			!['missing', 'pending', 'complete'].includes(publication?.status) ||
+			(request.action === 'publish' && publication.status !== 'complete')
+		)
+			throw Error('Native publication is not confirmed.');
+		if (publication.status === 'complete') {
+			if (
+				m.kind !== 'copy' ||
+				m.from !== 'remote' ||
+				receipt?.operationId !== request.transfer.operation.id ||
+				!sameSyncScope(receipt?.scope, request.transfer.scope) ||
+				!validSyncEntry(receipt?.entry) ||
+				receipt.entry.path !== m.path ||
+				!sameSyncContent(receipt.entry, m.source)
+			)
+				throw Error('Invalid native publication receipt.');
+			result.publication = { status: 'complete', receipt: structuredClone(receipt) };
+		} else result.publication = { status: publication.status };
+	} else if (request.action === 'stage-begin' || request.action === 'stage-append' || request.action === 'stage-finish') {
 		const state = payload.staging,
 			m = request.transfer.operation.mutation;
 		if (
@@ -108,6 +148,8 @@ export const supportsMobileSyncConditions = (bridge: ThingtimeNativeBridge | und
 	supportsMobileFolders(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 1;
 export const supportsMobileStaging = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
 	supportsMobileFolders(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileStagingVersion ?? '');
+export const supportsMobilePublication = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
+	supportsMobileStaging(bridge) && /^1\.\d+\.\d+$/.test(bridge?.filePublicationVersion ?? '');
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
@@ -115,6 +157,8 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 		return Promise.reject(Error('Update the mobile app to run folder transfers.'));
 	if (request.action.startsWith('stage-') && !supportsMobileStaging(bridge))
 		return Promise.reject(Error('Update the mobile app to receive staged files.'));
+	if (['write-approve', 'publication-lookup', 'publish'].includes(request.action) && !supportsMobilePublication(bridge))
+		return Promise.reject(Error('Update the mobile app to download into selected folders.'));
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
@@ -153,7 +197,7 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				stop();
 				reject(Error('Folder access timed out. Your saved selections are preserved.'));
 			},
-			input.action === 'choose' || input.action === 'scan' || input.action === 'stage-begin' || input.action === 'stage-finish' ? 300_000 : 30_000
+			['choose', 'scan', 'stage-begin', 'stage-finish', 'write-approve', 'publish', 'publication-lookup'].includes(input.action) ? 300_000 : 30_000
 		);
 		window.addEventListener(nativeBridgeMessageEvent, listener);
 		signal.addEventListener('abort', abort, { once: true });

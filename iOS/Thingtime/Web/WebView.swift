@@ -112,7 +112,7 @@ struct WebView: UIViewRepresentable {
                 "notificationsVersion": "1.0.0",
                 "devicePairingVersion": "1.0.0",
                 "fileAccessVersion": MobileFolderBridge.accessVersion,
-                "fileStagingVersion": MobileFolderBridge.stagingVersion,
+                "fileStagingVersion": MobileFolderBridge.stagingVersion, "filePublicationVersion": MobileFolderBridge.publicationVersion,
                 "watchNotifications": true
             ])
         }

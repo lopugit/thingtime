@@ -7,7 +7,8 @@ import UniformTypeIdentifiers
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let accessVersion = "1.1.1"
     static let stagingVersion = "1.0.0"
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    static let publicationVersion = "1.0.0"
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)'; window.thingtimeNativeBridge.filePublicationVersion = '\(publicationVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private let store: MobileFolderStore
     private let staging: MobileSyncStaging
     private let networkMonitor = NWPathMonitor()
@@ -16,6 +17,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var generation = UUID()
     private var requestId: String?
     private var cancellationReply: (() -> Void)?
+    private var approvalDialog: UIAlertController?
+    private var approvalContinuation: CheckedContinuation<Bool, Error>?
     private var picker: UIDocumentPickerViewController?
     private var selection: CheckedContinuation<URL?, Error>?
     private var observer: NSObjectProtocol?
@@ -37,6 +40,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         let cancelled = cancellationReply; cancellationReply = nil
         generation = UUID(); task?.cancel(); task = nil; requestId = nil
         selection?.resume(throwing: CancellationError()); selection = nil; picker?.dismiss(animated: false); picker = nil
+        approvalContinuation?.resume(throwing: CancellationError()); approvalContinuation = nil
+        approvalDialog?.dismiss(animated: false); approvalDialog = nil
         cancelled?()
     }
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { if picker === controller { finishSelection(nil) } }
@@ -54,12 +59,35 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             selection = continuation; picker = controller; presenter.present(controller, animated: true)
         }
     }
+    private func approve(grant: MobileFolderStore.Grant, webView: WKWebView) async throws -> Bool {
+        guard var presenter = webView.window?.rootViewController else { throw MobileFolderStore.Failure.unavailable }
+        while let next = presenter.presentedViewController { presenter = next }
+        guard !(presenter is UIDocumentPickerViewController), !(presenter is UIAlertController) else { throw MobileFolderStore.Failure.unavailable }
+        return try await withCheckedThrowingContinuation { continuation in
+            let dialog = UIAlertController(title: "Allow downloads to \(grant.name)?",
+                message: "This sync connection on \(grant.scope.origin.absoluteString) can add and replace files in this folder while the app is open. Replaced copies are retained privately on this device. Removing or choosing the folder again clears this permission.", preferredStyle: .alert)
+            approvalContinuation = continuation; approvalDialog = dialog
+            for (title, approved) in [("Cancel", false), ("Allow downloads", true)] {
+                dialog.addAction(UIAlertAction(title: title, style: approved ? .default : .cancel) { [weak self, weak dialog] _ in
+                    guard let self, let dialog, self.approvalDialog === dialog else { return }
+                    self.approvalContinuation?.resume(returning: approved); self.approvalContinuation = nil; self.approvalDialog = nil
+                })
+            }
+            presenter.present(dialog, animated: true)
+        }
+    }
+    private func decode<T: Decodable>(_ value: Any?, as type: T.Type) throws -> T {
+        guard let value = value as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
+        let data = try JSONSerialization.data(withJSONObject: value)
+        guard data.count <= 32_768 else { throw MobileFolderStore.Failure.limit }
+        return try JSONDecoder().decode(type, from: data)
+    }
     func handle(_ body: [String: Any], webView: WKWebView, root: URL, currentRoot: @escaping () -> URL?,
                 verifyOwner: @escaping (MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> Void,
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "read", "conditions", "suspend", "stage-begin", "stage-append", "stage-finish"].contains(action),
+              ["list", "choose", "remove", "scan", "read", "conditions", "suspend", "stage-begin", "stage-append", "stage-finish", "write-approve", "publish", "publication-lookup"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -91,7 +119,37 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     if action == "remove" { try self.store.remove(scope, id: rootId) }
                     else {
                         let grant = try self.store.grant(scope, id: rootId)
-                        if action.hasPrefix("stage-") {
+                        if action == "write-approve" {
+                            let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
+                            try approval.validate(owner: scope)
+                            if try !self.store.isWriteApproved(scope, id: rootId, approval: approval) {
+                                guard try await self.approve(grant: grant, webView: webView) else { throw MobileFolderStore.Failure.unavailable }
+                                try check(); try await verifyOwner(scope, check); try check()
+                                try self.store.approveWrite(scope, grant: grant, approval: approval)
+                            }
+                            result = ["rootId": rootId, "writeApproval": try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))]
+                        } else if action == "publish" || action == "publication-lookup" {
+                            let request = try self.decode(payload["transfer"], as: MobileSyncStaging.Request.self)
+                            try request.validate(owner: scope)
+                            guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
+                            var stage: MobileSyncStaging.Stage?
+                            if action == "publish" {
+                                let approval = try self.decode(payload["approval"], as: MobileFolderStore.WriteApproval.self)
+                                guard approval.scope == request.scope, try self.store.isWriteApproved(scope, id: rootId, approval: approval) else { throw MobileFolderStore.Failure.unavailable }
+                                stage = try self.decode(payload["stage"], as: MobileSyncStaging.Stage.self)
+                            }
+                            let staged = stage, staging = self.staging
+                            let worker = Task.detached {
+                                try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
+                                if let staged {
+                                    let receipt = try staging.publish(request, owner: scope, bookmark: grant.bookmark, stage: staged)
+                                    return MobileSyncStaging.Lookup(status: "complete", receipt: receipt)
+                                }
+                                return try staging.lookup(request, owner: scope, bookmark: grant.bookmark)
+                            }
+                            let lookup = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            result = ["rootId": rootId, "publication": try JSONSerialization.jsonObject(with: JSONEncoder().encode(lookup))]
+                        } else if action.hasPrefix("stage-") {
                             guard let transfer = payload["transfer"] as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
                             let encoded = try JSONSerialization.data(withJSONObject: transfer)
                             guard encoded.count <= 32_768 else { throw MobileFolderStore.Failure.limit }

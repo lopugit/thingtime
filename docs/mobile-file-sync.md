@@ -48,7 +48,7 @@ The executor cannot supply these guarantees for a blind-overwrite adapter.
 Trash operations for explicitly pinned destinations. It also creates ordinary cloud folders before their child uploads, retaining
 preallocated parent IDs and exact canonical Timeline creation receipts. Its prepared metadata is
 retained with the existing journal run. The mobile connection controls now start
-explicit foreground upload/backup runs, as described below.
+explicit foreground upload/backup and approved iOS download runs, as described below.
 
 The current scan bound is 10,000 combined paths, and directories must appear
 alongside descendants. Large-root partitioning is still needed. Folder removal
@@ -81,12 +81,12 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; native writes/workers and full native transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android/Mac writes, workers and full native transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
-| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; persistent native approval store, retention/selective settings and background workers remain pending |
-| Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; native conflict handling, retention and UI pending |
+| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain write approvals implemented; Android/Mac approvals, retention/selective settings and background workers remain pending |
+| Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; restore/conflict UI and retention policy remain pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
 
@@ -647,3 +647,50 @@ acceptance, Android/Mac receivers and integration with download/two-way controls
 The shared cloud executor still refuses downloads without a complete native
 publisher; mobile controls remain foreground upload/backup. No end-to-end
 Drive/Photos/Resilio completion is claimed.
+
+
+## iOS approved foreground downloads — 2026-10-17
+
+The existing connection control offers Download now on `filePublicationVersion`
+1.0.0 with deletion propagation disabled. `approveMobileSyncTarget` hashes the
+canonical reviewed configuration and obtains native consent for the selected
+folder. `MobileFolderStore` keeps bounded, account/origin-scoped approvals in
+Keychain, bound to device, connection, settings revision/hash and native grant.
+Choosing the folder again or removing it clears consent. A persisted Thing or
+read grant alone cannot publish. Native prompts use the stored folder name and
+origin; main-frame/foreground/owner checks still surround bridge requests.
+
+`MobileSyncStaging` adds publication intent and the unchanged shared SyncReceipt
+to its existing transfer record. It re-verifies private staged bytes, copies in
+64 KiB buffers to a separate private candidate, checks the observed destination
+stamp/content under NSFileCoordinator and durably saves intent before rename.
+Same-volume `RENAME_EXCL` creates absent files/folders; `RENAME_SWAP` replaces
+files while retaining the displaced inode privately. Both require no-follow
+and beneath-root resolution. Case/Unicode aliases, symlinks, changed destinations,
+cross-volume targets and unsupported providers fail rather than fall back to
+in-place writes. No new cloud collection, history or Timeline format is added.
+
+A swap is not an OS compare-inode-and-swap primitive. A non-cooperating writer
+racing the final check can be displaced; its actual inode/bytes are retained and
+the operation remains pending for conflict review. It is never reported as a
+successful overwrite or blindly rolled back. Recovery after rename proves the
+new destination inode/content and retained original before saving a receipt.
+An edit before that receipt is durable remains pending. A durable receipt is
+returned unchanged after later edits/deletion without republishing. Retained
+versions have no restore UI or automated retention/cleanup yet.
+
+The foreground runner uses native lookup for download receipts and advances the
+same common baseline with native receipt/local and pinned source/remote entries.
+Network, device and reviewed configuration are rechecked before native stage and
+publication. Interrupted operations retain their original IDs. Two-way mode and
+local deletion propagation remain disabled.
+
+Verified: 31 selected iOS simulator tests (including real file creation/swap,
+post-rename interruption/reopen, retained racing edits, symlink refusal, scope/
+settings consent invalidation and the actual WK bridge refusing a read-only grant
+then publishing with synthetic consent); 91 shared sync tests; targeted lint and
+full web/Vercel packaging. The native tests use disposable files and synthetic
+owner/consent verification. They do not establish authenticated cloud-to-native,
+OS prompt click-through, physical-device/provider or actual process-kill/reboot
+acceptance. Those manual checks remain open, as do Android/Mac publication,
+background scheduling, Photos, peer sync, retention and conflict resolution.

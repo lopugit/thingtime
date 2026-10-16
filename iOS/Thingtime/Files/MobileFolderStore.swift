@@ -5,11 +5,23 @@ import Security
 /// reference these opaque IDs, never store a bookmark or an absolute path.
 @MainActor
 final class MobileFolderStore {
+    struct WriteApproval: Codable, Equatable, Sendable {
+        let scope: MobileSyncStaging.Scope
+        let configurationRevision: String
+        let configurationHash: String
+        func validate(owner: MobileDevicePairing.Scope) throws {
+            guard scope.origin == owner.origin.absoluteString, scope.ownerId == owner.ownerId, scope.dataPlane == "home",
+                  !scope.rootId.isEmpty, scope.rootId.utf16.count <= 4096, !scope.deviceId.isEmpty, scope.deviceId.utf16.count <= 4096,
+                  !configurationRevision.isEmpty, configurationRevision.utf8.count <= 128,
+                  configurationHash.count == 64, configurationHash.unicodeScalars.allSatisfy({ (48...57).contains($0.value) || (97...102).contains($0.value) }) else { throw Failure.invalid }
+        }
+    }
     struct Grant: Codable, Sendable {
         let id: String
         let scope: MobileDevicePairing.Scope
         let name: String
         let bookmark: Data
+        var writeApprovals: [WriteApproval]?
     }
     enum Failure: Error, LocalizedError {
         case unavailable, invalid, limit, changed, storage
@@ -33,6 +45,10 @@ final class MobileFolderStore {
         let rows = try JSONDecoder().decode([Grant].self, from: data)
         guard rows.count <= 32, Set(rows.map(\.id)).count == rows.count,
               rows.allSatisfy({ $0.scope == scope && UUID(uuidString: $0.id) != nil && !$0.name.isEmpty && $0.name.utf8.count <= 1024 && $0.bookmark.count <= 32 * 1024 }) else { throw Failure.storage }
+        for row in rows {
+            guard (row.writeApprovals?.count ?? 0) <= 32 else { throw Failure.storage }
+            for approval in row.writeApprovals ?? [] { try approval.validate(owner: scope) }
+        }
         return rows
     }
     func grant(_ scope: MobileDevicePairing.Scope, id: String) throws -> Grant {
@@ -41,6 +57,22 @@ final class MobileFolderStore {
     }
     func remove(_ scope: MobileDevicePairing.Scope, id: String) throws {
         let rows = try list(scope).filter { $0.id != id }; try persist(scope, rows)
+    }
+    func isWriteApproved(_ scope: MobileDevicePairing.Scope, id: String, approval: WriteApproval) throws -> Bool {
+        try approval.validate(owner: scope)
+        return try grant(scope, id: id).writeApprovals?.contains(approval) == true
+    }
+    /// Call only after the native consent dialog and fresh owner verification.
+    /// Re-selecting/removing a grant clears these bindings; editable Things alone
+    /// cannot create native write authority.
+    func approveWrite(_ scope: MobileDevicePairing.Scope, grant original: Grant, approval: WriteApproval) throws {
+        try approval.validate(owner: scope)
+        var rows = try list(scope)
+        guard let index = rows.firstIndex(where: { $0.id == original.id }), rows[index].bookmark == original.bookmark else { throw Failure.changed }
+        var approvals = (rows[index].writeApprovals ?? []).filter { $0.scope != approval.scope }
+        guard approvals.count < 32 else { throw Failure.limit }
+        approvals.append(approval); rows[index].writeApprovals = approvals
+        try persist(scope, rows)
     }
     private func persist(_ scope: MobileDevicePairing.Scope, _ rows: [Grant]) throws {
         let data = try JSONEncoder().encode(rows)

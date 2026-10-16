@@ -30,6 +30,24 @@ final class MobileFolderTests: XCTestCase {
         var data: Data?
         return (root, scope, MobileFolderStore(load: { _ in data }, save: { _, next in data = next }))
     }
+    func testWriteApprovalIsSeparateBoundedAndClearedByReselection() throws {
+        let (root, owner, store) = try fixture(), grant = try store.add(owner, selected: root)
+        let scope = MobileSyncStaging.Scope(origin: owner.origin.absoluteString, ownerId: owner.ownerId, dataPlane: "home", rootId: "connection", deviceId: "device")
+        let approval = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "v1", configurationHash: String(repeating: "a", count: 64))
+        XCTAssertFalse(try store.isWriteApproved(owner, id: grant.id, approval: approval))
+        try store.approveWrite(owner, grant: grant, approval: approval)
+        XCTAssertTrue(try store.isWriteApproved(owner, id: grant.id, approval: approval))
+        let changed = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "v2", configurationHash: approval.configurationHash)
+        XCTAssertFalse(try store.isWriteApproved(owner, id: grant.id, approval: changed))
+        let changedBytes = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "v1", configurationHash: String(repeating: "b", count: 64))
+        XCTAssertFalse(try store.isWriteApproved(owner, id: grant.id, approval: changedBytes))
+        let foreign = MobileSyncStaging.Scope(origin: owner.origin.absoluteString, ownerId: "other", dataPlane: "home", rootId: "connection", deviceId: "device")
+        XCTAssertThrowsError(try store.approveWrite(owner, grant: grant, approval: .init(scope: foreign, configurationRevision: "v1", configurationHash: approval.configurationHash)))
+        _ = try store.add(owner, selected: root)
+        XCTAssertFalse(try store.isWriteApproved(owner, id: grant.id, approval: approval))
+        try store.remove(owner, id: grant.id)
+        XCTAssertThrowsError(try store.approveWrite(owner, grant: grant, approval: approval))
+    }
     func testMultipartFingerprintMatchesSharedByteContractAndBoundedReads() throws {
         let (root, scope, store) = try fixture()
         let bytes = Data(repeating: 13, count: 8 * 1024 * 1024 + 17)

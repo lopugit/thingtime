@@ -5,9 +5,16 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
 import { readStampedCache, writeStampedCache, pruneCacheNamespace } from '~/hooks/localCache';
 import { rootIdentity } from '~/utils/rootIdentity';
-import { type MobileFolder, requestMobileFolders, mobileFolderSource, supportsMobileSyncConditions } from '~/fileSync/mobileFolders.client';
+import {
+	type MobileFolder,
+	requestMobileFolders,
+	mobileFolderSource,
+	supportsMobileSyncConditions,
+	supportsMobilePublication
+} from '~/fileSync/mobileFolders.client';
 import { openSyncJournal, withSyncRootLock, syncScopeKey } from '~/fileSync/journal.client';
 import { readCloudFolderInventory } from '~/fileSync/cloudInventory.client';
+import { approveMobileSyncTarget } from '~/fileSync/mobileSyncTarget.client';
 import { runForegroundCloudSync, type ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { requestMobileDevice } from './mobileDeviceBridge';
@@ -197,7 +204,7 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 		}
 	};
 	const progressKey = (id: string) => 'tt:sync-progress:' + syncScopeKey({ ...scope, rootId: id });
-	const upload = (saved: SavedFileSyncConfiguration) =>
+	const transfer = (saved: SavedFileSyncConfiguration) =>
 		void run(async (assertActive) => {
 			const active = controller.current!,
 				syncScope = { ...scope, rootId: saved.id };
@@ -220,11 +227,14 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 					syncScope,
 					async () => {
 						assertActive();
+						const localTarget = saved.configuration.mode === 'download' ? await approveMobileSyncTarget(saved, syncScope, active.signal) : undefined;
+						assertActive();
 						await runForegroundCloudSync(
 							saved,
 							syncScope,
 							{
 								currentScope,
+								localTarget,
 								readConfiguration: async () => {
 									const value = await apiRef.current.v1.things.get({ id: saved.id }, options());
 									assertActive();
@@ -264,7 +274,7 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 						stage: 'checking',
 						confirmed: 0,
 						total: 0,
-						message: cause instanceof Error ? cause.message : 'Upload interrupted. Retry to recover saved work.'
+						message: cause instanceof Error ? cause.message : 'Transfer interrupted. Retry to recover saved work.'
 					});
 				throw cause;
 			} finally {
@@ -346,7 +356,7 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 			persist(null);
 			setConflict(null);
 			cache([saved, ...connections.filter((row) => row.id !== saved.id)]);
-			setNotice('Connection saved. Upload and backup connections can be run while this app stays open.');
+			setNotice('Connection saved. Supported transfers can run while this app stays open.');
 		});
 	return (
 		<Box borderTop="1px solid var(--tt-border, #ececef)" marginTop={4} paddingTop={3} minWidth={0}>
@@ -375,13 +385,16 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 				</Flex>
 			</Flex>
 			<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-				Upload or back up a selected folder while this app stays open. Stop or retry without losing saved work. Two-way, downloads and background
-				transfers are still being added.
+				Transfer selected folders while this app stays open. Downloads require native folder approval and deletion propagation off. Two-way and
+				background transfers are still being added.
 			</Text>
 			{connections.map((saved) => {
 				const progress = transfers[saved.id] ?? readStampedCache<ForegroundSyncProgress & { message?: string }>(progressKey(saved.id));
 				const running = busy && activeTransfer === saved.id;
-				const supported = ['upload', 'backup'].includes(saved.configuration.mode);
+				const downloading = saved.configuration.mode === 'download';
+				const supported =
+					['upload', 'backup'].includes(saved.configuration.mode) ||
+					(downloading && supportsMobilePublication() && !saved.configuration.propagateDeletes);
 				const allowed =
 					supportsMobileSyncConditions() &&
 					scope.dataPlane === 'home' &&
@@ -398,9 +411,13 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 								{saved.configuration.paused
 									? 'Paused'
 									: !supported
-									? 'This direction is not available yet'
+									? downloading
+										? 'Downloads need an updated app and deletion propagation off'
+										: 'This direction is not available yet'
 									: !supportsMobileSyncConditions()
-									? 'Update the mobile app to upload'
+									? 'Update the mobile app to transfer files'
+									: downloading
+									? 'Ready to download with folder approval'
 									: 'Ready for a foreground upload'}
 								{!roots.some((root) => root.id === saved.configuration.localRootId) ? ' · Folder access missing' : ''}
 							</Text>
@@ -415,7 +432,7 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 											? `${progress.path}: ${Math.round(((progress.bytes ?? 0) / Math.max(1, progress.size ?? 1)) * 100)}%`
 											: `${progress.confirmed} of ${progress.total} operations confirmed`
 										: progress.message ||
-										  (progress.stage === 'complete' ? 'Last upload finished.' : 'Upload stopped or interrupted. Retry to recover saved work.')}
+										  (progress.stage === 'complete' ? 'Last transfer finished.' : 'Transfer stopped or interrupted. Retry to recover saved work.')}
 								</Text>
 							)}
 						</Box>
@@ -424,11 +441,11 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 						</Button>
 						{running ? (
 							<Button size="sm" minHeight="40px" onClick={() => controller.current?.abort()}>
-								Stop upload
+								Stop transfer
 							</Button>
 						) : (
-							<Button size="sm" minHeight="40px" isDisabled={!allowed || busy || !!draft || !ready} onClick={() => upload(saved)}>
-								{progress && progress.stage !== 'complete' ? 'Retry upload' : 'Upload now'}
+							<Button size="sm" minHeight="40px" isDisabled={!allowed || busy || !!draft || !ready} onClick={() => transfer(saved)}>
+								{progress && progress.stage !== 'complete' ? 'Retry transfer' : downloading ? 'Download now' : 'Upload now'}
 							</Button>
 						)}
 					</Flex>

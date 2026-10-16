@@ -52,18 +52,34 @@ final class MobileSyncStaging: @unchecked Sendable {
         let operationId: String; let scope: Scope; let token: String; let entry: Entry
     }
     struct Progress: Codable, Sendable { let received: Int64; let stage: Stage? }
+    struct Receipt: Codable, Equatable, Sendable {
+        let operationId: String; let scope: Scope; let entry: Entry
+    }
+    struct Lookup: Codable, Sendable {
+        let status: String; let receipt: Receipt?
+    }
+    private struct Publication: Codable {
+        let bookmarkHash: String
+        let rootIdentity: String
+        let candidate: Entry
+        var receipt: Receipt?
+        var conflict: Bool = false
+    }
     private struct Record: Codable {
         let version: Int
         let request: Request
         var received: Int64
         var stage: Stage?
+        var publication: Publication?
     }
     private let directory: URL
     private let afterBytesFlushed: (() throws -> Void)?
-    init(directory: URL? = nil, afterBytesFlushed: (() throws -> Void)? = nil) {
+    private let beforePublication: (() throws -> Void)?
+    private let afterPublication: (() throws -> Void)?
+    init(directory: URL? = nil, afterBytesFlushed: (() throws -> Void)? = nil, afterPublication: (() throws -> Void)? = nil, beforePublication: (() throws -> Void)? = nil) {
         self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MobileSyncStaging-v1", isDirectory: true)
-        self.afterBytesFlushed = afterBytesFlushed
+        self.afterBytesFlushed = afterBytesFlushed; self.afterPublication = afterPublication; self.beforePublication = beforePublication
     }
     private static func digest(_ s: String) -> Bool { s.count == 64 && s.unicodeScalars.allSatisfy { (48...57).contains($0.value) || (97...102).contains($0.value) } }
     private static func hex(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
@@ -195,10 +211,17 @@ final class MobileSyncStaging: @unchecked Sendable {
         }
     }
     private func verify(_ file: Int32, row: Record) throws {
-        let source = row.request.operation.mutation.source
+        guard row.received == row.request.operation.mutation.source.size else { throw Failure.changed }
+        try verifyContent(file, source: row.request.operation.mutation.source)
+        if let stage = row.stage {
+            guard stage.operationId == row.request.operation.id, stage.scope == row.request.scope, stage.token == (try key(row.request)),
+                  stage.entry == entry(try MobileFolderReader.info(file), source: row.request.operation.mutation.source) else { throw Failure.changed }
+        }
+    }
+    private func verifyContent(_ file: Int32, source: Entry) throws {
         let before = try MobileFolderReader.info(file)
         if source.kind == "file" {
-            guard row.received == source.size, before.st_size == source.size else { throw Failure.changed }
+            guard before.st_mode & S_IFMT == S_IFREG, before.st_nlink == 1, before.st_size == source.size else { throw Failure.changed }
             if let expected = source.fingerprint {
                 guard try MobileFolderReader.fingerprint(file, size: source.size) == expected else { throw Failure.changed }
             } else {
@@ -212,12 +235,8 @@ final class MobileSyncStaging: @unchecked Sendable {
                 }
                 guard hash.finalize().map({ String(format: "%02x", $0) }).joined() == source.sha256 else { throw Failure.changed }
             }
-        } else { guard try MobileFolderReader.names(file).isEmpty else { throw Failure.changed } }
+        } else { guard before.st_mode & S_IFMT == S_IFDIR, try MobileFolderReader.names(file).isEmpty else { throw Failure.changed } }
         guard try MobileFolderReader.stamp(MobileFolderReader.info(file)) == MobileFolderReader.stamp(before) else { throw Failure.changed }
-        if let stage = row.stage {
-            guard stage.operationId == row.request.operation.id, stage.scope == row.request.scope, stage.token == (try key(row.request)),
-                  stage.entry == entry(before, source: source) else { throw Failure.changed }
-        }
     }
     private func entry(_ info: stat, source: Entry) -> Entry {
         Entry(path: source.path, id: "\(info.st_dev):\(info.st_ino)", version: MobileFolderReader.stamp(info), kind: source.kind,
@@ -233,6 +252,189 @@ final class MobileSyncStaging: @unchecked Sendable {
                 try save(row, fd)
             }
             return Progress(received: row.received, stage: row.stage)
+        }
+    }
+
+    private static func identity(_ info: stat) -> String { "\(info.st_dev):\(info.st_ino)" }
+
+    /// Coordinate the exact target with Files providers. Both path resolution and
+    /// the final rename remain relative to the native grant; JavaScript supplies
+    /// no absolute URLs. A provider/volume without the required rename support
+    /// fails closed. Private staging is never copied directly over a destination.
+    private func destination<T>(_ request: Request, bookmark: Data, work: (Int32, Int32) throws -> T) throws -> T {
+        let parts = try MobileFolderReader.components(request.operation.mutation.path)
+        var stale = false
+        let url = try URL(resolvingBookmarkData: bookmark, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale)
+        guard url.isFileURL, !stale else { throw Failure.unavailable }
+        let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let root = open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard root >= 0 else { throw Failure.unavailable }; defer { close(root) }
+        let rootIdentity = try Self.identity(MobileFolderReader.info(root))
+        let target = parts.reduce(url) { $0.appendingPathComponent($1) }
+        var result: Result<T, Error>?, error: NSError?
+        NSFileCoordinator().coordinate(writingItemAt: target, options: .forReplacing, error: &error) { coordinated in
+            result = Result {
+                try Task.checkCancellation()
+                guard coordinated.standardizedFileURL == target.standardizedFileURL else { throw Failure.changed }
+                let current = open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                guard current >= 0 else { throw Failure.unavailable }; defer { close(current) }
+                guard try Self.identity(MobileFolderReader.info(current)) == rootIdentity else { throw Failure.changed }
+                var parent = dup(root); guard parent >= 0 else { throw Failure.storage }; defer { close(parent) }
+                for (index, name) in parts.enumerated() {
+                    // Refuse alternate case/Unicode spellings even on a case-sensitive volume.
+                    let alias = name.precomposedStringWithCanonicalMapping.lowercased()
+                    guard try MobileFolderReader.names(parent).allSatisfy({ $0 == name || $0.precomposedStringWithCanonicalMapping.lowercased() != alias }) else { throw Failure.changed }
+                    if index < parts.count - 1 {
+                        let next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                        guard next >= 0 else { throw Failure.unavailable }; close(parent); parent = next
+                    }
+                }
+                return try work(root, parent)
+            }
+        }
+        if let error { throw error }; guard let result else { throw Failure.unavailable }; return try result.get()
+    }
+    private func openDestination(_ root: Int32, path: String) throws -> Int32? {
+        let parts = try MobileFolderReader.components(path)
+        var parent = dup(root); guard parent >= 0 else { throw Failure.storage }; defer { close(parent) }
+        for name in parts.dropLast() {
+            let next = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard next >= 0 else { throw Failure.unavailable }; close(parent); parent = next
+        }
+        let file = openat(parent, parts.last!, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        if file < 0 { if errno == ENOENT { return nil }; throw Failure.unavailable }
+        return file
+    }
+    private func checkExpected(_ root: Int32, request: Request) throws {
+        let expected = request.operation.mutation.expectedTarget
+        guard let file = try openDestination(root, path: request.operation.mutation.path) else {
+            guard expected == nil else { throw Failure.changed }; return
+        }
+        defer { close(file) }
+        guard let expected, try entry(MobileFolderReader.info(file), source: expected) == expected else { throw Failure.changed }
+        try verifyContent(file, source: expected)
+        guard try MobileFolderReader.stamp(MobileFolderReader.info(file)) == expected.version else { throw Failure.changed }
+    }
+    private func prepareCandidate(_ fd: Int32, row: Record) throws -> Entry {
+        let source = row.request.operation.mutation.source
+        // Only an unjournaled, private temporary candidate may be discarded. The
+        // original verified payload is retained, including after publication.
+        if unlinkat(fd, "publication", source.kind == "folder" ? AT_REMOVEDIR : 0) != 0 && errno != ENOENT { throw Failure.storage }
+        if source.kind == "folder", mkdirat(fd, "publication", 0o700) != 0 { throw Failure.storage }
+        let candidate = openat(fd, "publication", (source.kind == "folder" ? O_RDONLY | O_DIRECTORY : O_RDWR | O_CREAT | O_EXCL) | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard candidate >= 0 else { throw Failure.storage }; defer { close(candidate) }
+        if source.kind == "file" {
+            let file = try payload(fd, row: row); defer { close(file) }
+            var bytes = [UInt8](repeating: 0, count: MobileFolderReader.maximumReadBytes), offset: Int64 = 0
+            while offset < source.size {
+                try Task.checkCancellation()
+                let n = pread(file, &bytes, Int(min(Int64(bytes.count), source.size - offset)), off_t(offset))
+                guard n > 0 else { throw Failure.changed }
+                var written = 0
+                while written < n {
+                    let count = bytes.withUnsafeBytes { pwrite(candidate, $0.baseAddress!.advanced(by: written), n - written, off_t(offset) + off_t(written)) }
+                    guard count > 0 else { throw Failure.storage }; written += count
+                }
+                offset += Int64(n)
+            }
+        }
+        try verifyContent(candidate, source: source)
+        guard fsync(candidate) == 0, fsync(fd) == 0 else { throw Failure.storage }
+        return entry(try MobileFolderReader.info(candidate), source: source)
+    }
+    private func recoverPublication(_ fd: Int32, root: Int32, parent: Int32, row: inout Record) throws -> Lookup {
+        guard let publication = row.publication else { return Lookup(status: "missing", receipt: nil) }
+        if let receipt = publication.receipt { return Lookup(status: "complete", receipt: receipt) }
+        if publication.conflict { return Lookup(status: "pending", receipt: nil) }
+        let candidate = openat(fd, "publication", O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        if candidate >= 0 {
+            defer { close(candidate) }
+            if try Self.identity(MobileFolderReader.info(candidate)) == publication.candidate.id {
+                guard try entry(MobileFolderReader.info(candidate), source: publication.candidate) == publication.candidate else { throw Failure.changed }
+                try verifyContent(candidate, source: row.request.operation.mutation.source)
+                return Lookup(status: "missing", receipt: nil) // Prepared, but rename has not happened.
+            }
+            // Flush displaced bytes before treating their retained name as durable,
+            // including when subsequent identity/content checks report a conflict.
+            guard fsync(candidate) == 0, fsync(fd) == 0, fsync(parent) == 0, fsync(root) == 0 else { throw Failure.storage }
+        } else if errno != ENOENT { throw Failure.storage }
+        // Never repeat an uncertain swap. Recovery proves the new inode and its
+        // content at the destination, plus the retained displaced inode. A local
+        // edit before receipt persistence remains pending for conflict review.
+        do {
+            guard let file = try openDestination(root, path: row.request.operation.mutation.path) else { throw Failure.changed }
+            defer { close(file) }
+            let before = try MobileFolderReader.info(file)
+            guard Self.identity(before) == publication.candidate.id else { throw Failure.changed }
+            try verifyContent(file, source: row.request.operation.mutation.source)
+            guard try MobileFolderReader.stamp(MobileFolderReader.info(file)) == MobileFolderReader.stamp(before) else { throw Failure.changed }
+            if let expected = row.request.operation.mutation.expectedTarget {
+                let old = openat(fd, "publication", O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+                guard old >= 0 else { throw Failure.changed }; defer { close(old) }
+                let info = try MobileFolderReader.info(old)
+                // rename changes ctime; identity, size, mtime and all bytes must match.
+                guard Self.identity(info) == expected.id,
+                      MobileFolderReader.stamp(info).split(separator: ":").dropLast(2).elementsEqual(expected.version.split(separator: ":").dropLast(2)) else { throw Failure.changed }
+                try verifyContent(old, source: expected)
+            } else if candidate >= 0 { throw Failure.changed }
+            guard fsync(file) == 0, fsync(parent) == 0, fsync(root) == 0, fsync(fd) == 0 else { throw Failure.storage }
+            let receipt = Receipt(operationId: row.request.operation.id, scope: row.request.scope,
+                                  entry: entry(before, source: row.request.operation.mutation.source))
+            row.publication?.receipt = receipt; try save(row, fd)
+            return Lookup(status: "complete", receipt: receipt)
+        } catch Failure.changed {
+            row.publication?.conflict = true; try save(row, fd)
+            return Lookup(status: "pending", receipt: nil)
+        }
+    }
+    func lookup(_ request: Request, owner: MobileDevicePairing.Scope, bookmark: Data) throws -> Lookup {
+        try withRecord(request, owner: owner, create: true) { fd, row in
+            guard let publication = row.publication else { return Lookup(status: "missing", receipt: nil) }
+            guard publication.bookmarkHash == Self.hex(bookmark) else { throw Failure.changed }
+            // A durable receipt is historical evidence, even if the user later
+            // edits/deletes the destination. Returning it performs no write there.
+            if let receipt = publication.receipt { return Lookup(status: "complete", receipt: receipt) }
+            return try destination(request, bookmark: bookmark) { root, parent in
+                guard try Self.identity(MobileFolderReader.info(root)) == publication.rootIdentity else { throw Failure.changed }
+                return try recoverPublication(fd, root: root, parent: parent, row: &row)
+            }
+        }
+    }
+    func publish(_ request: Request, owner: MobileDevicePairing.Scope, bookmark: Data, stage: Stage) throws -> Receipt {
+        try withRecord(request, owner: owner, create: false) { fd, row in
+            guard row.stage == stage else { throw Failure.changed }
+            if let publication = row.publication {
+                guard publication.bookmarkHash == Self.hex(bookmark) else { throw Failure.changed }
+                if let receipt = publication.receipt { return receipt }
+            }
+            let file = try payload(fd, row: row); defer { close(file) }; try verify(file, row: row)
+            return try destination(request, bookmark: bookmark) { root, parent in
+                let info = try MobileFolderReader.info(root)
+                guard info.st_dev == (try MobileFolderReader.info(fd)).st_dev else { throw Failure.unavailable }
+                if let publication = row.publication {
+                    guard publication.rootIdentity == Self.identity(info) else { throw Failure.changed }
+                    let recovered = try recoverPublication(fd, root: root, parent: parent, row: &row)
+                    if let receipt = recovered.receipt { return receipt }
+                    guard recovered.status == "missing" else { throw Failure.changed }
+                }
+                try checkExpected(root, request: request)
+                if row.publication == nil {
+                    let candidate = try prepareCandidate(fd, row: row)
+                    row.publication = Publication(bookmarkHash: Self.hex(bookmark), rootIdentity: Self.identity(info), candidate: candidate)
+                    try save(row, fd)
+                }
+                try Task.checkCancellation(); try checkExpected(root, request: request)
+                // Both flags are required: unsupported kernels/providers refuse.
+                // SWAP retains the old inode in private storage. A non-cooperating
+                // writer racing the precondition is detected during recovery; its
+                // displaced bytes are preserved and no blind rollback is attempted.
+                try beforePublication?()
+                let flags = UInt32(RENAME_NOFOLLOW_ANY | RENAME_RESOLVE_BENEATH | (request.operation.mutation.expectedTarget == nil ? RENAME_EXCL : RENAME_SWAP))
+                guard renameatx_np(fd, "publication", root, request.operation.mutation.path, flags) == 0 else { throw Failure.changed }
+                try afterPublication?()
+                let recovered = try recoverPublication(fd, root: root, parent: parent, row: &row)
+                guard let receipt = recovered.receipt else { throw Failure.changed }; return receipt
+            }
         }
     }
 }

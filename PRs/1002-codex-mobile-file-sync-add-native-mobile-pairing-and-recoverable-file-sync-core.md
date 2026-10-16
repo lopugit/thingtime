@@ -532,3 +532,35 @@ Still open: native write approval, destination publication and retained versions
 publication receipts, staging retention/cleanup, process-kill acceptance,
 Android/Mac receivers and download/two-way controls. The complete original goal
 remains active, including background workers, Photos, peers and release evidence.
+
+
+## Approved iOS download publication — 2026-10-17
+
+The connection control now connects downloads to the actual iOS private receiver
+and publisher, gated by `filePublicationVersion` 1.0.0 and deletion propagation
+off. A separate native consent dialog and Keychain binding authorize the native
+grant, owner/origin, device/connection and reviewed configuration revision/hash.
+Reselect/remove clears consent. The unchanged shared operation/receipt format
+extends the existing private transfer record and browser run/checkpoint.
+
+Publication coordinates the target, checks its expected stamp/content and uses
+same-volume exclusive rename or swap with beneath/no-follow flags. Displaced
+files remain private; no destructive copy fallback or blind rollback exists.
+A racing uncoordinated edit is retained as a pending conflict, because filesystem
+swap is not strict inode CAS. Recovery proves candidate/original identity and
+content before persisting receipt; a durable receipt survives later edits without
+republishing. Interrupted-before-receipt edits remain pending for conflict review.
+
+Validation: 31 native simulator tests and 91 shared sync tests pass; targeted lint,
+full web/Vercel packaging and build 32 compile pass. Whole-project TypeScript
+retains its existing diagnostics; no new normalized errors. The actual WK bridge
+refuses a read grant then publishes under isolated synthetic consent. Native
+filesystem tests use real disposable files; consent clicks, cloud-to-native UI,
+process kill/reboot, provider/physical-device behavior and conflict/restore controls
+remain acceptance work. This checkpoint does not finish the full goal or PR.
+
+Build 32 is installed on the local iPhone 17 Pro / iOS 26.5 simulator from
+`iOS/build/mobile-device-tests/Build/Products/Debug-iphonesimulator/Thingtime.app`.
+The installed executable, debug library and Info.plist match the rebuilt bundle;
+selected URL is `http://localhost:14900`. Launch rendering is checked separately
+from authenticated folder-transfer acceptance.

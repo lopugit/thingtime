@@ -4772,7 +4772,7 @@ This uses 17 MiB + 17 bytes, checks full and multipart hashes, anonymous denial,
 wrong-version refusal and source replacement. Normal cleanup retains accounted
 versions in private Trash; remove temporary fixture admin env and restart the
 managed stack afterward. Executor tests use a staged publisher fixture; actual
-native destination writes and UI download controls remain unavailable.
+the iOS publication path and its remaining native acceptance are described below.
 
 
 ### Native iOS download staging checks
@@ -4782,8 +4782,14 @@ It uses the existing account/origin and folder grant checks, keeps bytes and
 immutable operation metadata in protected application support storage excluded
 from backup, and verifies the entire planned fingerprint before returning a
 stage. No new secret, entitlement or server environment variable is required.
-This capability does not publish files into the selected folder; write approval,
-publication recovery and download controls remain pending.
+Staging itself does not publish. Updated iOS builds additionally expose
+`filePublicationVersion` 1.0.0: choose Download mode with deletion propagation off,
+then Download now requests native consent for that selected folder and reviewed
+settings. Consent is stored locally in Keychain and cleared by selecting/removing
+the grant. No new secret, entitlement or server environment variable is needed.
+Publication requires same-volume atomic rename/swap support; unsupported providers
+fail without a copying-over fallback. Displaced versions stay in private transfer
+storage; conflict/restore UI and retention cleanup remain pending.
 
 From `iOS/`, run `xcodegen generate`, choose a concrete simulator with
 `xcrun simctl list devices available`, then run:

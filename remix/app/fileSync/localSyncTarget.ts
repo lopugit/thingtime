@@ -4,7 +4,10 @@ import { sameSyncContent, sameSyncScope, validSyncEntry, type SyncEntry, type Sy
 
 /** Native implementation owns private staging, durable deduplication by the
  * complete immutable operation, root-scoped write approval, verified bytes and
- * atomic publication with the expected destination stamp. Retain displaced
+ * coordinated atomic publication after checking the expected destination stamp.
+ * A racing uncoordinated native writer must retain the displaced inode and
+ * leave the operation pending for conflict review, never claim strict filesystem
+ * compare-and-swap or blindly roll it back. Retain displaced
  * versions recoverably. A stage operation must never modify a user destination.
  * The existing SyncReceipt is persisted alongside native publication recovery;
  * it is not another file history. Lost replies reuse exactly the same operation.

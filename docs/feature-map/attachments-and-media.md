@@ -5,11 +5,18 @@ Attachment-content 1.14.0 also serves bounded exact-version byte ranges through
 checks current file metadata and exact range/ETag framing. Download operations
 reuse `CloudSyncRun` and the existing journal/executor; `LocalSyncTarget` requires
 verified private staging, atomic destination checks and durable native receipts.
-The adapter tests pass, but native destination publishers are not enabled yet.
-`MobileSyncStaging.swift` supplies iOS private, durable, fingerprint-verified byte
-reception through `fileStagingVersion` 1.0.0. `mobileStaging.client.ts` adapts the
-shared cloud source to it. Staging does not write into a selected folder; native
-write approval, publication receipts and Android/Mac receivers remain pending.
+`MobileSyncStaging.swift` supplies verified iOS staging (`fileStagingVersion`
+1.0.0) and coordinated publication (`filePublicationVersion` 1.0.0). Native
+Keychain approvals bind the account, origin, device, connection, selected grant
+and reviewed settings. `mobileSyncTarget.client.ts` connects stage/publish/lookup
+to the shared runner. iOS Download now is available with deletion propagation
+disabled; Android/Mac publication and background workers remain pending.
+Publication uses same-volume exclusive rename or swap with no-follow/beneath
+resolution, retains displaced inodes in the existing transfer record, and
+recovers durable receipts without touching later edits. This is not an inode-CAS
+primitive: a racing uncoordinated writer is retained and leaves a pending conflict.
+Unsupported providers/volumes refuse. Process-kill, provider and authenticated
+installed-app acceptance remain tracked in the full sync ledger.
 
 
 Persistent file sync work lives in `app/fileSync/`: `reconcile.ts` plans bounded
@@ -27,9 +34,9 @@ real API storage/revision and editor lost-response recovery checks.
 `components/Devices/MobileSyncConnections.tsx` connects selected roots to those
 Things through shared `configurationEditor.ts` save/recovery logic. Drafts are
 local, scoped and verified before writes; fixed IDs and revision guards survive
-reloads. A saved connection is not native execution approval. Native file
+reloads. A saved connection is not native execution approval. Android/Mac native file
 write adapters and persistent workers remain pending. `foregroundSync.ts` now
-connects explicit mobile upload/backup controls to complete scans, live native
+connects explicit mobile upload/backup and approved iOS download controls to complete scans, live native
 policy signals, journal retries and durable common-baseline checkpoints;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.
@@ -43,8 +50,8 @@ origin and home storage while reading it. Run `test:files`, `test:file-sync`
 and `scripts/file-versions.integration.mts`. Files 1.2.0 additionally supplies immutable folder-creation receipts through
 `api/utils/files/folders.ts`, composing the ordinary Things writer and Timeline.
 `prepareCloudInventoryRun` pins new parent IDs for nested uploads, and the cloud
-port resumes them through the same journal. Directory deletion/local writes and
-native workers remain pending.
+port resumes them through the same journal. Directory deletion, Android/Mac local writes and
+background workers remain pending.
 
 Stable file roots are protected `file` Things written by `api/utils/files/files.ts`
 through `/api/v1/files`. The shared `fileSync/cloudFile.ts` contract maps a file
@@ -58,7 +65,7 @@ prepared upload/backup and remote Trash runs to the real file/attachment APIs.
 Pinned destinations persist in the existing sync journal; multipart retries reuse
 the operation ID, and exact receipts recover accepted writes without reading the
 source again. `test:file-sync` and `scripts/file-sync-cloud.integration.mts` cover
-this path. Native workers and download publication remain separate work.
+this path. Background workers and cross-platform download acceptance remain separate work.
 
 `iOS/Thingtime/Files/` now supplies account/origin-scoped native picker grants,
 complete bounded scans and version-checked descriptor-relative reads.
