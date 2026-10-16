@@ -2,6 +2,21 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [x] Existing saved-file deletion receipts: in a disposable account, upload a
+      standalone file through the real storage lifecycle, then delete it with
+      `retainReceipt:true`, canonical `id` and a freshly read `expectedUpdatedAt`,
+      without its original upload request ID. Replaying after discarding the
+      response must return `deleted:true` and refuse the late original start.
+      Missing IDs return 404 without reserving a row. Guest, foreign owner/admin,
+      cross-origin, Watch durable operations, stale versions, bound/linked/import
+      drafts and unfinished uploads remain refused. Race an annotation with
+      deletion: exactly one wins. A lost cleanup claim or unconfirmed legacy
+      removal must not return a durable acknowledgement. Run attachment and
+      capability suites, `accountExistingFile.browser.test.ts` and the existing
+      `accountFiles.browser.test.ts` with their explicit loopback/admin fixtures.
+      Verify built attachment-delete 1.4.0 in both discovery manifests and docs.
+      Existing-account byte retention is still a separate outstanding gate.
+
 - [ ] Normal account files: use the Files picker offline, create a folder, move
       the file with Cut/Paste, download identical bytes and open its native media
       route at 1440/390/320px. Local completion must not await account listing or

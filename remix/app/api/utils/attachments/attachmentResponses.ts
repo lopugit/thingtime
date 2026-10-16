@@ -103,8 +103,10 @@ export const createAttachmentMutationAction = (
 			}
 
 			const body = await dependencies.readBody(request, ATTACHMENT_JSON_BODY_BYTES);
-			if (options.requestIdRequiresFullUser && usesDeviceCredential(request) && body && typeof body === 'object' && 'requestId' in body) {
-				return json({ ok: false, error: 'Durable upload cancellation requires a full user session' }, { status: 403 });
+			// Both durable modes are full-user operations; legacy Watch post cleanup
+			// remains available without either receipt control.
+			if (options.requestIdRequiresFullUser && usesDeviceCredential(request) && body && typeof body === 'object' && ('requestId' in body || 'retainReceipt' in body)) {
+				return json({ ok: false, error: 'Durable attachment cancellation or deletion requires a full user session' }, { status: 403 });
 			}
 			// File/media uploads are withheld per SCOPE from new accounts until an
 			// admin grants them (auth/users.ts userPublicUploadsEnabled /

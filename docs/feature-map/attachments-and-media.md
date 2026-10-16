@@ -221,3 +221,17 @@ with authorized account discovery without blocking local completion.
 contexts remain on their server authorization path. Tests: workspace, Things,
 attachments, `accountFileUi.browser.test.ts` and `accountFiles.browser.test.ts`.
 Existing remote byte retention and managed imports/exports remain completion gates.
+
+
+## Existing account file deletion receipts
+
+Delete 1.4.0 adds `retainReceipt:true` with an existing owned standalone file's
+canonical ID and observed version, without its original upload request ID. The
+service reuses exact-version cleanup and private accounted cancellation receipts.
+`attachmentDeleteClaimFence` keeps standalone eligibility atomic. Unlike the
+request-ID mode, missing IDs return 404 and are never reserved. Full-user and
+same-origin gates remain; uncertain legacy cleanup never acknowledges a fence.
+Run the attachment/capability suites and `accountExistingFile.browser.test.ts`
+with the same disposable loopback/admin setup as `accountFiles.browser.test.ts`.
+Existing-account byte retention remains unfinished; see the
+[local workspace checkpoint](../local-workspaces.md#existing-saved-file-deletion-receipts--2026-10-16).

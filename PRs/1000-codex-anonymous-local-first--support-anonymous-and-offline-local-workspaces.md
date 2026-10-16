@@ -1586,3 +1586,25 @@ Local checks: 893 unit/offline-shell checks plus both real browser scenarios;
 client and Node/Nitro builds pass (248 offline assets / 21,617,351 bytes).
 Focused lint is clean; TypeScript has 91 baseline diagnostics and none in changed
 source paths. Browser evidence and the full boundaries are in the linked checkpoint.
+
+
+## Existing saved-file deletion receipts — 2026-10-16
+
+Added attachment-delete 1.4.0 `retainReceipt:true` for a canonical existing owned
+standalone file and its observed version. Existing files do not retain the
+original upload request ID; this mode reuses exact-version cleanup and durable
+cancellation receipts without inventing one. Unlike request-ID cancellation, it
+never reserves missing IDs. Live version/purpose/target fences remain atomic;
+missing/foreign IDs, shared/bound/linked media and expiring imports are refused.
+Full-user auth, same-origin protection, rate limits and quota settlement remain.
+
+Verified locally with 312 attachment and 98 capability checks, the new disposable
+browser-context/storage integration scenario and the existing offline file
+lifecycle scenario. Both lost-response replay and delayed-start fencing pass.
+Node/Nitro build and focused lint pass; TypeScript has 91 baseline diagnostics,
+none in changed sources. Evidence: `tmp/owned-file-deletion-*.log`,
+`tmp/owned-file-deletion-browser/existing-file-deletion.json` and
+`tmp/owned-file-deletion-existing-lifecycle/verification.json`.
+Existing-account byte retention remains unfinished; this server prerequisite
+must not be described as end-to-end offline retention. No main merge or manual
+deployment was performed; CI/deployed verification remain separate.

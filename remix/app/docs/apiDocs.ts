@@ -5955,8 +5955,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
-		contractVersion: '1.3.0',
-		featureVersion: '1.3.0',
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
@@ -5973,6 +5973,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Optionally send expectedUpdatedAt from the current Thing read. A stale version returns 409 before claiming deletion, including a concurrent edit between read and claim.',
 			'After deletion is claimed, retrying resumes cleanup even if its lifecycle timestamp advanced. A deferred response includes retryAt; storage remains charged until cleanup is verified. Missing rows are idempotent success, not a durable cancellation fence against a delayed upload start.',
 			'For a standalone file created by an upload request, include requestId and expectedUpdatedAt with its canonical id, without targetId. This full-user mode returns deleted:true only after retaining a private accounted replay fence, including an already-missing file. Stale live versions still return 409; pending, finalizing and bound files are refused. The receipt never expires; delayed upload starts cannot recreate the deleted file.',
+			'For an existing saved standalone file whose upload requestId is unavailable, send retainReceipt:true and expectedUpdatedAt with its canonical id (attachment-delete 1.4.0). This full-user mode retains the same durable receipt, but never reserves a missing ID. Missing/foreign IDs return 404; linked files, expiring import drafts and bound files are refused. Do not send requestId or targetId with retainReceipt. A lost response can replay the identical request; an unconfirmed concurrent legacy removal returns 503 without deleted:true.',
 			'Retry a temporary 503 with the identical request; the source row stays charged until S3 deletion succeeds.'
 		],
 		requestExamples: [
@@ -5981,6 +5982,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				description: 'Delete one owned attachment.',
 				method: 'POST',
 				body: { id: '3bda8208-625c-4f5d-941f-348020021848', targetId: 'post_123' }
+			},
+			{
+				name: 'Delete existing saved file with a retry receipt',
+				description: 'Use a freshly read version of an owned standalone file. No original upload request ID is needed.',
+				method: 'POST',
+				body: { id: '3bda8208-625c-4f5d-941f-348020021848', expectedUpdatedAt: '2026-10-16T00:00:00.000Z', retainReceipt: true }
 			}
 		],
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]

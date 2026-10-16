@@ -2623,3 +2623,79 @@ test('durable file deletion refuses mismatched identities, unfinished/bound file
 	}
 	assert.equal((await createAttachmentService({ customMongoActive: () => true }).remove('user-1', input)).ok, false);
 });
+
+test('existing owned file deletion retains its canonical identity without the original request ID', async () => {
+	for (const id of [attachmentIdForRequest('user-1', 'older-upload'), 'legacy-file-uuid']) {
+		let doc: AttachmentDoc | null = attachmentDoc({ shareId: id, attachmentState: 'ready', attachmentPurpose: 'file', objectVersionId: 'immutable-version', uploadId: undefined, attachmentExpiresAt: undefined });
+		const deletes: unknown[] = [];
+		const service = createAttachmentService({ customMongoActive: () => false, now: () => now,
+			store: {
+				getOwned: async (owner: string, requested: string) => owner === doc?.ownerId && requested === doc.shareId ? doc : null,
+				getById: async () => doc, listExpiredOwned: async () => [],
+				reserveCancellation: async () => { throw Error('Existing-ID mode cannot reserve caller-chosen IDs'); },
+				claimDeleting: async (_owner: string, _id: string, _states: unknown, scope: any) => {
+					assert.equal(scope.standaloneFile, true); assert.equal(scope.retainCancellation, true);
+					doc = { ...doc!, attachmentState: 'deleting', attachmentCancellationRequested: true }; return doc;
+				},
+				removeDeleting: async () => { doc = cancelledAttachmentReceipt('user-1', id, now); return true; }
+			} as any, getS3: () => noopS3({ deleteObject: async input => { deletes.push(input); } })
+		});
+		const input = { id, retainReceipt: true, expectedUpdatedAt: now.toISOString() };
+		assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
+		assert.deepEqual(await service.remove('user-1', input), { ok: true, deleted: true, deferred: false });
+		assert.equal(deletes.length, 1); assert.equal((deletes[0] as any).versionId, 'immutable-version');
+		if (id.startsWith('att_')) {
+			const replay = await service.start('user-1', { requestId: 'older-upload', filename: 'old.txt', sizeBytes: 42, purpose: 'file' });
+			assert.equal(replay.ok, false); if (!replay.ok) assert.equal(replay.code, 'upload_cancelled');
+		}
+		const foreign = await service.remove('user-2', input); assert.equal(foreign.ok, false); if (!foreign.ok) assert.equal(foreign.status, 404);
+		doc = null;
+		const missing = await service.remove('user-1', input); assert.equal(missing.ok, false); if (!missing.ok) assert.equal(missing.status, 404);
+	}
+});
+
+test('existing file receipts reject malformed, non-library and stale deletion attempts before cleanup', async () => {
+	let reads = 0, doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined });
+	const service = createAttachmentService({ customMongoActive: () => false,
+		store: { getOwned: async () => { reads++; return doc; } } as any,
+		getS3: () => { throw Error('Must not touch storage'); }
+	});
+	const input = { id: doc.shareId, retainReceipt: true, expectedUpdatedAt: now.toISOString() };
+	for (const patch of [{ retainReceipt: false }, { retainReceipt: null }, { requestId: 'x' }, { expectedUpdatedAt: undefined }, { targetId: 'x' }, { ownerId: 'user-2' }]) {
+		const result = await service.remove('user-1', { ...input, ...patch }); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
+	}
+	assert.equal(reads, 0);
+	for (const patch of [{ attachmentState: 'pending' }, { attachmentState: 'finalizing' }, { targetId: 'post' }, { attachmentPurpose: 'recording' }, { attachmentExpiresAt: now }, { attachmentLinked: true }, { updatedAt: new Date(now.getTime() + 1) }]) {
+		doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined, ...patch } as any);
+		const result = await service.remove('user-1', input); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 409);
+	}
+	assert.equal((await createAttachmentService({ customMongoActive: () => true }).remove('user-1', input)).ok, false);
+});
+
+test('an existing file cleanup race never acknowledges an absent or unfenced row', async () => {
+	for (const race of ['missing', 'edited', 'receipt', 'deleting', 'unfenced'] as const) {
+		let doc: AttachmentDoc | null = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'file', attachmentExpiresAt: undefined, uploadId: undefined, objectVersionId: 'version' });
+		const input = { id: doc.shareId, retainReceipt: true, expectedUpdatedAt: now.toISOString() };
+		const service = createAttachmentService({ customMongoActive: () => false,
+			store: { getOwned: async () => doc, claimDeleting: async () => {
+				if (race === 'missing') doc = null;
+				else if (race === 'receipt') doc = cancelledAttachmentReceipt('user-1', input.id, now);
+				else if (race === 'edited') doc = { ...doc!, updatedAt: new Date(now.getTime() + 1) };
+				else doc = { ...doc!, attachmentState: 'deleting', attachmentCancellationRequested: race === 'deleting' ? true : undefined };
+				return null;
+			} } as any, getS3: () => noopS3({ deleteObject: async () => { throw Error('Losing claim must not delete bytes'); } })
+		});
+		const result = await service.remove('user-1', input);
+		if (race === 'receipt' || race === 'deleting') assert.deepEqual(result, { ok: true, deleted: true, deferred: race === 'deleting' });
+		else { assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, race === 'edited' ? 409 : 503); }
+	}
+});
+
+test('existing file delete claims retain standalone eligibility through concurrent changes and cleanup retries', () => {
+	const fence = attachmentDeleteClaimFence({ kind: 'draft', standaloneFile: true, retainCancellation: true, expectedUpdatedAt: now });
+	assert.equal(fence.attachmentPurpose, 'file');
+	assert.deepEqual(fence.targetId, { $exists: false });
+	assert.deepEqual(fence.attachmentLinked, { $ne: true });
+	assert.deepEqual(fence.$and, [{ $or: [{ attachmentState: 'deleting' }, { attachmentExpiresAt: { $exists: false } }] }]);
+	assert.equal(fence.updatedAt, now);
+});

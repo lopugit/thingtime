@@ -1237,7 +1237,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment deletion request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => !['id', 'targetId', 'expectedUpdatedAt', 'requestId'].includes(key))) return fail(400, 'Invalid attachment deletion request');
+			if (Object.keys(raw).some((key) => !['id', 'targetId', 'expectedUpdatedAt', 'requestId', 'retainReceipt'].includes(key))) return fail(400, 'Invalid attachment deletion request');
 			if (raw.expectedUpdatedAt !== undefined && (typeof raw.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(raw.expectedUpdatedAt)))) {
 				return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
 			}
@@ -1246,6 +1246,34 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const targetId = raw.targetId === undefined ? null : normalizeId(raw.targetId);
 			if (!id) return fail(400, 'Invalid attachment id');
 			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
+			if ('retainReceipt' in raw) {
+				if (raw.retainReceipt !== true || !expectedUpdatedAt || raw.targetId !== undefined || 'requestId' in raw)
+					return fail(400, 'Existing file deletion requires retainReceipt:true and expectedUpdatedAt, without requestId or targetId');
+				if (dependencies.customMongoActive()) return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+				// Existing account files do not store their original upload request ID.
+				// Only a current, exact owned ID can establish this receipt. Never
+				// reserve an arbitrary missing ID or interpret it as a request ID.
+				const existing = await dependencies.store.getOwned(ownerId, id);
+				if (!existing || existing.shareId !== id || existing.ownerId !== ownerId) return fail(404, 'Attachment not found');
+				if (existing.attachmentState === 'cancelled' && existing.attachmentCancellationRequested)
+					return { ok: true, deleted: true, deferred: false };
+				if (existing.targetId || existing.attachmentPurpose !== 'file' || existing.attachmentLinked ||
+					!['ready', 'deleting'].includes(existing.attachmentState) || (existing.attachmentState === 'ready' && existing.attachmentExpiresAt))
+					return fail(409, 'Only a saved standalone file can be deleted with an existing-file receipt');
+				if (existing.attachmentState !== 'deleting' && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime())
+					return fail(409, 'Attachment changed; refresh before deleting');
+				const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, {
+					kind: 'draft', standaloneFile: true, retainCancellation: true, expectedUpdatedAt
+				});
+				const receipt = await dependencies.store.getOwned(ownerId, id);
+				if (receipt?.shareId === id && receipt.ownerId === ownerId && receipt.attachmentCancellationRequested &&
+					['cancelled', 'deleting'].includes(receipt.attachmentState))
+					return { ...(outcome.status === 'skipped' ? deferredDeletingResponse(receipt) || { ok: true as const, deferred: receipt.attachmentState === 'deleting' } : cleanupResponse(outcome)), deleted: true };
+				if (receipt && receipt.attachmentState !== 'deleting') return fail(409, 'Attachment changed; refresh before deleting');
+				// A legacy cleanup may have removed the row concurrently. Absence
+				// cannot prove a replay fence, so keep the caller's recovery intent.
+				return fail(503, 'File deletion receipt is not confirmed; retry the same request', { retryable: true });
+			}
 			if ('requestId' in raw) {
 				const requestId = normalizeId(raw.requestId);
 				if (!requestId || !expectedUpdatedAt || raw.targetId !== undefined || attachmentIdForRequest(ownerId, requestId) !== id)

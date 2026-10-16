@@ -84,6 +84,9 @@ test('durable request cancellation requires full user auth while legacy Watch cl
 	});
 	assert.equal((await action({ request: request(true) })).status, 403); assert.equal(calls, 0);
 	assert.equal((await action({ request: request(false) })).status, 200);
+	body = { id: 'existing-file', retainReceipt: true, expectedUpdatedAt: '2026-10-16T00:00:00.000Z' };
+	assert.equal((await action({ request: request(true) })).status, 403); assert.equal(calls, 1);
+	assert.equal((await action({ request: request(false) })).status, 200);
 	body = { uploadId: 'legacy-upload' };
-	assert.equal((await action({ request: request(true) })).status, 200); assert.equal(calls, 2);
+	assert.equal((await action({ request: request(true) })).status, 200); assert.equal(calls, 3);
 });

@@ -2171,3 +2171,32 @@ Node/Nitro builds pass; the offline manifest verifies 248 assets / 21,617,351
 bytes. Focused lint has no errors or warnings beyond the tooling deprecation.
 Raw TypeScript retains 91 baseline diagnostics, with no changed-source errors.
 These are local results; CI and deployed acceptance are separate.
+
+
+## Existing saved-file deletion receipts — 2026-10-16
+
+Existing account files do not retain the original client upload request ID.
+`attachment-delete` 1.4.0 adds `retainReceipt:true` with the canonical file `id`
+and freshly read `expectedUpdatedAt`, without `requestId` or `targetId`. It uses
+the existing exact-version cleanup, private cancellation receipt and quota
+settlement. Only a full user may delete their existing standalone stored file;
+linked media, expiring imports, unfinished uploads and bound media are refused.
+
+This mode never reserves a caller-chosen absent ID or interprets it as an upload
+request ID. Missing/foreign IDs return 404. The deletion claim atomically checks
+owner, standalone purpose, target absence and live version; cleanup retries
+retain those scope restrictions. An existing receipt acknowledges a lost reply,
+and delayed original uploads remain cancelled. A concurrent legacy cleanup that
+leaves no receipt returns an unconfirmed error, never `deleted:true`.
+
+Local verification: 312 attachment checks and 98 capability checks pass. The new
+full-user browser-context integration fixture passes against the running app,
+disposable MongoDB and loopback object storage; the existing offline file
+lifecycle fixture also passes. The new fixture covers foreign owner/admin,
+anonymous and cross-origin refusal, stale versions, concurrent annotation,
+replay after discarding the first response and late-upload refusal. Unit coverage
+also checks missing-ID, purpose/expiry, Watch and interrupted-claim boundaries.
+Raw TypeScript retains 91 baseline diagnostics and none in changed source.
+This is a server prerequisite for existing-file retention, not completed offline
+retention or synchronization coverage. That adapter, managed transfers and the
+remaining account/media acceptance matrix are still open.

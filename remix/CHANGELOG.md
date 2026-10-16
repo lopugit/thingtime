@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Add durable deletion receipts for existing owned
+  standalone files without their original upload request ID, retaining version,
+  scope and authentication fences. Local storage/browser and capability checks
+  pass; existing-file offline retention remains in progress. Details in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Account Files picker, local folder moves,
   discovery and native previews now use scoped device persistence independently
   of upload. Preserve stable local IDs after sync, revoke retired media URLs and
