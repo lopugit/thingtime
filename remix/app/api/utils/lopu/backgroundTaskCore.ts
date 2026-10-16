@@ -35,5 +35,10 @@ export type AiBackgroundTask = {
 	error: string | null;
 };
 export const validAiTaskRequestId = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
+// Missing chat IDs do not identify a conversation: musings and generic AI
+// completions also have null IDs, as do chat requests before their meta frame.
+export const isRunningLopuChatTask = (task: AiBackgroundTask, chatId: string | null): boolean =>
+	!!chatId && task.chatId === chatId && task.path === '/api/v1/lopu/chats/reply' &&
+	(task.status === 'running' || task.workflowStatus === 'running');
 export const taskNeedsAttention = (stopReason: unknown) =>
 	['checkpoint', 'error', 'max_tokens', 'tool_limit', 'hop_limit', 'time_limit'].includes(String(stopReason));

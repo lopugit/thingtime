@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
+
 - 2026-10-16 — **Codex (AI)**: Post creation, editing, rich comments and plain
   comments/replies no longer await account draft sync or cleanup. Completed
   drafts retire locally immediately; late saves cannot overwrite the next
