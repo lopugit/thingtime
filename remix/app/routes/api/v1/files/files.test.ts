@@ -9,6 +9,7 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 		allowed = true,
 		calls = 0;
 	const handlers = createFilesHandlers({
+		folders: {} as any,
 		getUser: async () => user,
 		limit: async () => ({ allowed, unavailable: !allowed } as any),
 		inventory: async () => {
@@ -56,8 +57,8 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 
 test('file capability registers the real read and commit route', () => {
 	const manifest = thingtimeCapabilityManifest('https://example.test');
-	assert.equal(manifest.features['api.files'].version, '1.1.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.1.0');
+	assert.equal(manifest.features['api.files'].version, '1.2.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.2.0');
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/files' && op.methods.includes('GET') && op.methods.includes('POST')));
 });
 
@@ -66,6 +67,7 @@ test('inventory routing is private, full-account, rate-limited and rejects mixed
 		user: any = { id: 'owner', accountKind: 'user' },
 		allowed = true;
 	const handlers = createFilesHandlers({
+		folders: {} as any,
 		getUser: async () => user,
 		limit: async () => ({ allowed, unavailable: !allowed } as any),
 		service: {} as any,
@@ -90,4 +92,50 @@ test('inventory routing is private, full-account, rate-limited and rejects mixed
 	allowed = false;
 	assert.equal((await handlers.loader({ request: request() })).status, 503);
 	assert.equal(calls, 1);
+});
+
+test('folder reads/creates use the same private account and request guards', async () => {
+	let calls = 0;
+	const handlers = createFilesHandlers({
+		getUser: async () => ({ id: 'owner', accountKind: 'user' } as any),
+		limit: async () => ({ allowed: true } as any),
+		inventory: async () => {
+			throw Error('wrong inventory');
+		},
+		service: {} as any,
+		folders: {
+			read: async (owner: string, id: unknown, op: unknown) => {
+				assert.equal(owner, 'owner');
+				assert.equal(id, 'folder');
+				assert.equal(op, 'operation');
+				calls++;
+				return { ok: true, receipt: null };
+			},
+			create: async (owner: string, body: unknown) => {
+				assert.equal(owner, 'owner');
+				assert.equal((body as any).kind, 'folder');
+				calls++;
+				return { ok: true, folder: {} };
+			}
+		} as any
+	});
+	const request = (query: string) => new Request('https://example.test/api/v1/files?' + query);
+	assert.equal((await handlers.loader({ request: request('folderId=folder&operationId=operation') })).status, 200);
+	for (const query of [
+		'folderId=folder&id=file',
+		'folderId=folder&folderId=other',
+		'folderId=folder&operationId=a&operationId=b',
+		'folderId=folder&rootId=root'
+	])
+		assert.equal((await handlers.loader({ request: request(query) })).status, 400);
+	const response = await handlers.action({
+		request: new Request('https://example.test/api/v1/files', {
+			method: 'POST',
+			headers: { Origin: 'https://example.test', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ kind: 'folder' })
+		})
+	});
+	assert.equal(response.status, 200);
+	assert.match(response.headers.get('cache-control')!, /private.*no-store/);
+	assert.equal(calls, 2);
 });

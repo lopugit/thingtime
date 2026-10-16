@@ -45,7 +45,8 @@ exclusivity. Native/cloud adapters must implement idempotent receipts, atomic
 destination preconditions, verified staged publication and recoverable trash.
 The executor cannot supply these guarantees for a blind-overwrite adapter.
 `cloudSyncPort.client.ts` now implements real cloud file upload/replace and remote
-Trash operations for explicitly pinned destinations. Its prepared metadata is
+Trash operations for explicitly pinned destinations. It also creates ordinary cloud folders before their child uploads, retaining
+preallocated parent IDs and exact canonical Timeline creation receipts. Its prepared metadata is
 retained with the existing journal run; no production UI starts these jobs yet.
 
 The current scan bound is 10,000 combined paths, and directories must appear
@@ -421,3 +422,45 @@ workers, directory mutations, local writes and the full acceptance ledger remain
 unfinished; this inventory is not a claim that automatic sync is running.
 The 73 shared sync, 18 Files and 95 capability tests pass, as do targeted lint
 and the full web/Vercel build. TypeScript retains the existing 91 diagnostics.
+
+
+## Recoverable nested cloud uploads — 2026-10-17
+
+Files 1.2.0 adds ordinary folder creation through `POST /api/v1/files` with
+`kind: "folder"`, UUID `id`/`operationId`, `name` and an explicit `folderId`.
+`api/utils/files/folders.ts` composes the existing `createThing` writer with a
+single home transaction and deterministic `thing-content` Timeline capture.
+Quota, canonical folder validation, parent placement fencing and post-commit
+effects stay with that writer. There is no parallel folder/history collection.
+Private account/namespace/ancestry checks precede creation; occupied IDs and
+observed case/Unicode path aliases fail without adopting another folder.
+Concurrent creates fence the same parent and retry against the winning name.
+
+`GET folderId` reads current folder metadata; adding `operationId` reads the
+immutable creation receipt. Exact replay returns the original snapshot after
+later edits or deletion without recreating a deleted directory or charging twice.
+An operation with changed parent/name is rejected. Only server-authored canonical
+creation events qualify; client drafts cannot impersonate a receipt. The shared
+folder revision helper also supplies inventory stamps, so the two views agree.
+
+`prepareCloudInventoryRun` binds a run to its complete cloud observation and
+allocates new parent identities from existing operation IDs before effects.
+The cloud port creates parent directories before child files and never opens a
+byte source for a directory. These destinations remain in the same durable run
+across reloads. The folder adapter currently creates absent folders only;
+folder deletion, local directory publication, automatic native workers and the
+remaining full-goal ledger are still open. Ordinary folder schema limits still
+apply (120-character names); normalization that would alter a filename fails
+and rolls back rather than silently changing the path.
+
+Verification: unit service/route tests, journal reopen and nested executor tests;
+real loopback Mongo/storage acceptance recovered a lost parent-creation reply,
+interrupted multipart transfer and lost file-commit reply, then verified one
+nested tree and independent hashes of both retained byte versions. Normal API
+cleanup removes created folders, reparents the retained private Trash file and
+keeps original creation receipts readable. No native background or production
+object-store acceptance is inferred from this local run.
+
+The 195 focused sync/Files/capability tests and full web/Vercel build pass.
+Real Mongo concurrency checks also verified identical-operation replay and one
+winner for case-equivalent paths. Raw TypeScript retains 91 baseline diagnostics.

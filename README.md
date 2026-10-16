@@ -4674,11 +4674,15 @@ cd remix
 node --import tsx scripts/file-sync-cloud.integration.mts /absolute/path/to/private-fixture.json
 ```
 
-This drives the actual sync executor and cloud transport through an interrupted
-multipart upload, disk-journal reload and an accepted commit with its response
-lost. It verifies recovery without source access/reupload, replacement, retained
+This drives the actual sync executor and cloud transport through a lost
+folder-creation reply, nested directory uploads, an interrupted multipart upload,
+disk-journal reload and an accepted file commit with its response lost. Files
+1.2.0 composes ordinary Things folder creation and canonical Timeline receipts;
+no extra secrets, environment variables or indexes are required. It verifies recovery without source access/reupload, replacement, retained
 byte hashes, account/database fences and recoverable Trash. The synthetic file
-and both charged versions remain private in Trash. The temporary mode-0600 run
+and both charged versions remain private in Trash. Created folders are removed
+through the normal Things API, while their original receipts remain readable.
+The temporary mode-0600 run
 file is removed after success and retained after failure for inspection/recovery.
 Remove any temporary fixture admin setting and restart afterwards. This does
 not exercise OS background scheduling, native disk writes or production S3.

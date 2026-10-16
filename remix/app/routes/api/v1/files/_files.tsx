@@ -3,10 +3,11 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { isSameOriginAttachmentRequest, withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { readCloudInventory } from '~/api/utils/files/inventory';
+import { cloudFolders } from '~/api/utils/files/folders';
 import { cloudFiles } from '~/api/utils/files/files';
 
 export const createFilesHandlers = (
-	deps = { getUser: getCurrentUser, limit: enforceRateLimit, service: cloudFiles, inventory: readCloudInventory }
+	deps = { getUser: getCurrentUser, limit: enforceRateLimit, service: cloudFiles, inventory: readCloudInventory, folders: cloudFolders }
 ) => {
 	const handle =
 		(mutation: boolean) =>
@@ -32,8 +33,21 @@ export const createFilesHandlers = (
 					const result = await deps.inventory(user.id, url.searchParams.get('rootId'));
 					return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
 				}
+				if (!mutation && url.searchParams.has('folderId')) {
+					if (
+						url.searchParams.getAll('folderId').length !== 1 ||
+						url.searchParams.getAll('operationId').length > 1 ||
+						[...url.searchParams.keys()].some((key) => !['folderId', 'operationId'].includes(key))
+					)
+						return json({ ok: false, error: 'Use folderId with an optional operationId' }, { status: 400 });
+					const result = await deps.folders.read(user.id, url.searchParams.get('folderId'), url.searchParams.get('operationId') ?? undefined);
+					return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
+				}
+				const body = mutation ? await readJsonBody(request, 8192) : undefined;
 				const result = mutation
-					? await deps.service.commit(user.id, await readJsonBody(request, 8192))
+					? body?.kind === 'folder'
+						? await deps.folders.create(user.id, body)
+						: await deps.service.commit(user.id, body)
 					: await deps.service.read(user.id, url.searchParams.get('id'), url.searchParams.get('operationId') ?? undefined);
 				return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
 			});

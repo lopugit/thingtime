@@ -26,8 +26,11 @@ breadth queries produce exact file/folder observations; any inaccessible,
 ambiguous or oversized tree fails without partial data. `cloudInventory.ts`
 validates the shared response and `cloudInventory.client.ts` pins account,
 origin and home storage while reading it. Run `test:files`, `test:file-sync`
-and `scripts/file-versions.integration.mts`. Folder observations do not yet
-provide directory mutation receipts or launch native workers.
+and `scripts/file-versions.integration.mts`. Files 1.2.0 additionally supplies immutable folder-creation receipts through
+`api/utils/files/folders.ts`, composing the ordinary Things writer and Timeline.
+`prepareCloudInventoryRun` pins new parent IDs for nested uploads, and the cloud
+port resumes them through the same journal. Directory deletion/local writes and
+native workers remain pending.
 
 Stable file roots are protected `file` Things written by `api/utils/files/files.ts`
 through `/api/v1/files`. The shared `fileSync/cloudFile.ts` contract maps a file

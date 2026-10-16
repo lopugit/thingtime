@@ -4,11 +4,12 @@ import { readFile, stat, open, rename, rm } from 'node:fs/promises';
 import { randomUUID, createHash } from 'node:crypto';
 import { createSyncRun, executeSyncRun, type SyncRun } from '../app/fileSync/execute';
 import { cloudFileSyncEntry, type CloudFile } from '../app/fileSync/cloudFile';
-import { prepareCloudSyncRun, parseCloudSyncRun } from '../app/fileSync/cloudWrite';
+import { prepareCloudSyncRun, prepareCloudInventoryRun, parseCloudSyncRun } from '../app/fileSync/cloudWrite';
 import { createCloudSyncPort } from '../app/fileSync/cloudSyncPort.client';
 import { fingerprintSource, type FingerprintSource } from '../app/fileSync/contentFingerprint';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
 import type { CloudTransportRuntime } from '../app/fileSync/cloudTransport';
+import { parseCloudInventory } from '../app/fileSync/cloudInventory';
 import type { SyncEntry, SyncScope } from '../app/fileSync/reconcile';
 const path = process.argv[2];
 if (!path || ((await stat(path)).mode & 0o077)) throw Error('Pass a private mode-0600 fixture');
@@ -28,13 +29,17 @@ async function api(route: string, body?: unknown) {
 }
 const journalPath = `/tmp/thingtime-sync-run-${randomUUID()}.json`;
 const scope: SyncScope = { origin: base.origin, ownerId: fixture.userId, dataPlane: 'home', rootId: randomUUID(), deviceId: 'local-cloud-acceptance' };
-let dropPart = true, dropCommit = true, puts = 0, opens = 0, succeeded = false, fileId: string | null = null, current: CloudFile | null = null;
+let dropPart = true, dropCommit = true, dropFolder = true, rootId: string | null = null, nestedIds: string[] = [], puts = 0, opens = 0, succeeded = false, fileId: string | null = null, current: CloudFile | null = null;
 const runtime: CloudTransportRuntime = { currentScope: () => scope, origin: () => base.origin,
  requireCapability: async (feature, version) => { const manifest = await api('/.well-known/thingtime-capabilities.json'); assert.equal(manifest.origin, base.origin); assert.ok(capabilitySatisfies(manifest.features[feature]?.version, version), feature); },
  fetch: async (url: any, init: any) => {
   if (init.method === 'PUT') { puts++; if (dropPart && puts === 2) { dropPart = false; throw Error('Simulated interruption before second part'); } }
   const response = await sessionFetch(url, init);
-  if (new URL(String(url)).pathname === '/api/v1/files' && init.method === 'POST' && response.ok && dropCommit) { dropCommit = false; await response.body?.cancel(); throw Error('Simulated lost accepted file commit'); }
+  if (new URL(String(url)).pathname === '/api/v1/files' && init.method === 'POST' && response.ok) {
+   const body=JSON.parse(init.body);
+   if(body.kind === 'folder' && dropFolder) { dropFolder=false;await response.body?.cancel();throw Error('Simulated lost accepted folder create'); }
+   if(body.kind !== 'folder' && dropCommit) { dropCommit=false;await response.body?.cancel();throw Error('Simulated lost accepted file commit'); }
+  }
   return response;
  } };
 const persist = async (run: SyncRun) => {
@@ -46,22 +51,28 @@ const persist = async (run: SyncRun) => {
 };
 const reload = async () => parseCloudSyncRun(JSON.parse(await readFile(journalPath, 'utf8')));
 const source = (bytes: Uint8Array<ArrayBuffer>): FingerprintSource => ({ size: bytes.length, read: async (offset, length) => bytes.slice(offset, offset + length), check: () => {} });
-const makeEntry = async (bytes: Uint8Array<ArrayBuffer>, version: string): Promise<SyncEntry> => ({ path: 'cloud-transport-fixture.bin', id: 'local-fixture', version, kind: 'file', size: bytes.length, sha256: null, fingerprint: await fingerprintSource(source(bytes)) });
-const port = (run: SyncRun, entry: SyncEntry | null, bytes?: Uint8Array<ArrayBuffer>) => createCloudSyncPort(run, { currentScope: () => scope, persist, readLocal: async () => entry,
+const makeEntry = async (bytes: Uint8Array<ArrayBuffer>, version: string): Promise<SyncEntry> => ({ path: 'Documents/Nested/cloud-transport-fixture.bin', id: 'local-fixture', version, kind: 'file', size: bytes.length, sha256: null, fingerprint: await fingerprintSource(source(bytes)) });
+const localFolders: SyncEntry[] = ['Documents','Documents/Nested'].map(path=>({path,id:'local-'+path,version:'v1',kind:'folder',size:0,sha256:null}));
+const port = (run: SyncRun, entry: SyncEntry | null, bytes?: Uint8Array<ArrayBuffer>) => createCloudSyncPort(run, { currentScope: () => scope, persist, readLocal: async path => localFolders.find(folder=>folder.path===path) ?? entry,
  openSource: async expected => { assert.deepEqual(expected, entry); assert.ok(bytes); opens++; return source(bytes); } }, runtime);
 await api('/api/v1/login', { username: fixture.username, password: fixture.password });
 try {
  assert.equal((await api('/api/v1/auth/me')).user.id, fixture.userId);
  const firstBytes = new Uint8Array(8 * 1024 * 1024 + 17).fill(13), first = await makeEntry(firstBytes, 'first');
- let run = prepareCloudSyncRun(createSyncRun({ scope, decisions: [{ kind: 'copy', from: 'local', path: first.path, source: first, expectedTarget: null }] }), [{ folderId: null, before: null }]);
- fileId = run.operations[0].id;
+ rootId=(await api('/api/v1/things',{thingtime:['folder'],crystal:{name:'Sync acceptance '+randomUUID()}})).thing.id;
+ const inventory=parseCloudInventory((await api(`/api/v1/files?rootId=${rootId}`)).inventory,rootId!);
+ let run=prepareCloudInventoryRun(createSyncRun({scope,decisions:[...localFolders,first].map(source=>({kind:'copy',from:'local',path:source.path,source,expectedTarget:null}))}),inventory);
+ fileId=run.operations.find(op=>op.mutation.kind==='copy'&&op.mutation.source.kind==='file')!.id;
+ nestedIds=run.operations.filter(op=>op.mutation.kind==='copy'&&op.mutation.source.kind==='folder').map(op=>op.id);
+ await assert.rejects(executeSyncRun(run,port(run,first,firstBytes)),/lost accepted folder create/);
+ run=await reload();assert.equal((await api(`/api/v1/files?rootId=${rootId}`)).inventory.nodes.length,1);
  await assert.rejects(executeSyncRun(run, port(run, first, firstBytes)), /before second part/);
  run = await reload(); await assert.rejects(executeSyncRun(run, port(run, first, firstBytes)), /lost accepted file commit/);
  run = await reload(); const counts = { puts, opens };
  const recovered = await executeSyncRun(run, port(run, first, firstBytes)); assert.ok(recovered.operations.every(op => op.confirmed)); assert.deepEqual({ puts, opens }, counts);
  current = (await api(`/api/v1/files?id=${fileId}`)).file; const firstContent = current!.content;
  const secondBytes = new Uint8Array(257).fill(29), second = await makeEntry(secondBytes, 'second');
- run = prepareCloudSyncRun(createSyncRun({ scope, decisions: [{ kind: 'copy', from: 'local', path: second.path, source: second, expectedTarget: cloudFileSyncEntry(current, second.path) }] }), [{ folderId: null, before: current }]);
+ run = prepareCloudSyncRun(createSyncRun({ scope, decisions: [{ kind: 'copy', from: 'local', path: second.path, source: second, expectedTarget: cloudFileSyncEntry(current, second.path) }] }), [{ folderId: current!.folderId, before: current }]);
  await executeSyncRun(run, port(run, second, secondBytes)); current = (await api(`/api/v1/files?id=${fileId}`)).file;
  assert.equal(current!.id, fileId); assert.notEqual(current!.content.attachmentId, firstContent.attachmentId);
  for (const [content, expected] of [[firstContent, firstBytes], [current!.content, secondBytes]] as const) {
@@ -70,8 +81,14 @@ try {
  }
  const mismatch = await sessionFetch(new URL(`/api/v1/files?id=${fileId}`, base), { headers: { 'X-Thingtime-Expected-Actor': 'another-account' } }); assert.equal(mismatch.status,409); await mismatch.body?.cancel();
  const wrongPlane = await sessionFetch(new URL(`/api/v1/files?id=${fileId}`, base), { headers: { 'X-Thingtime-Expected-Data-Plane': 'custom-'+'0'.repeat(64) } }); assert.equal(wrongPlane.status,409); await wrongPlane.body?.cancel();
+ const complete=parseCloudInventory((await api(`/api/v1/files?rootId=${rootId}`)).inventory,rootId!);
+ assert.deepEqual(complete.nodes.map(node=>node.path).sort(),['Documents','Documents/Nested',second.path]);
+ assert.deepEqual(complete.nodes.filter(node=>node.kind==='folder').map(node=>node.id).sort(),[...nestedIds].sort());
+ for(const id of nestedIds) {
+  const created=await api(`/api/v1/files?folderId=${id}&operationId=${id}`);assert.equal(created.receipt.id,id);
+ }
  succeeded = true;
- console.log('PASS: real multipart interruption/resume; disk-restored executor; lost accepted commit recovered without source access or uploads; stable replacement; independent hashes of both retained versions; server account/database fences.');
+ console.log('PASS: complete inventory prepares nested parent identities; real folder creation reply loss and disk reload preserve one tree; nested byte publication; real multipart interruption/resume; disk-restored executor; lost accepted commit recovered without source access or uploads; stable replacement; independent hashes of both retained versions; server account/database fences.');
 } finally {
  try {
   if (succeeded && fileId) {
@@ -81,7 +98,13 @@ try {
     const cleanup = prepareCloudSyncRun(createSyncRun({ scope, decisions: [{ kind: 'trash', path: expected.path, side: 'remote', expected }] }), [{ folderId: current!.folderId, before: current }]);
     dropCommit = false; await executeSyncRun(cleanup, port(cleanup, null));
    }
-   console.log('Fixture retained privately in Trash:', fileId);
+   // Normal folder deletion reparents the retained Trash file; it does not
+   // discard byte versions or bypass accounting/history.
+   for(const id of [...nestedIds].reverse().concat(rootId ? [rootId] : [])) {
+    const deleted=await sessionFetch(new URL('/api/v1/things?id='+id,base),{method:'DELETE'});assert.equal(deleted.status,200);await deleted.body?.cancel();
+    if(nestedIds.includes(id)) assert.equal((await api(`/api/v1/files?folderId=${id}&operationId=${id}`)).receipt.id,id);
+   }
+   console.log('Fixture retained privately in Trash; created folders removed through normal API and original receipts still readable:', fileId);
   } else console.log('Interrupted fixture run retained for inspection:', journalPath);
  } finally { await api('/api/v1/auth/accounts/remove', { userId: fixture.userId }); }
 }

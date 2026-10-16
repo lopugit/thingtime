@@ -377,3 +377,36 @@ with Vercel output verification pass. Raw TypeScript still has the same 91
 pre-existing diagnostics, with no new normalized diagnostics. The preceding
 181da877 checkpoint's remote CodeQL check is now successful. A new scan must
 finish on the next pushed head before its CI can be described as clean.
+
+
+## Nested cloud upload checkpoint — 2026-10-17
+
+Files 1.2.0 creates ordinary private folders using the existing `createThing`
+transaction/accounting path and canonical `thing-content` Timeline capture.
+Immutable creation receipts retain the original identity/name/parent after later
+edits or deletion. Replays do not create a replacement folder. Parent fences,
+private ancestry checks, bounded sibling collision reads and operation validation
+reject conflicting input; quota/history failure rolls back before commit effects.
+Inventory and direct folder reads share one revision projection.
+
+The cloud run preparer binds complete inventories to preallocated parent IDs.
+The existing executor/journal creates nested parents before child byte uploads,
+without reading a byte source for folders. Real loopback API + Mongo + local
+storage acceptance passed a lost parent-creation reply, journal reload, multipart
+interruption, lost accepted file commit, stable replacement and independent hashes
+of both versions. Normal API cleanup removes folders and leaves accounted versions
+in private Trash; original folder receipts remain readable. Temporary disposable
+upload approval was removed and the managed app restarted successfully.
+
+The adapter creates absent folders only. Ordinary folder name limits remain;
+a name altered by schema normalization rolls back. Native schedulers, local
+writes, directory deletion, Photos, peer behavior and the full delivery ledger
+remain incomplete. This does not claim native background synchronization.
+
+Validation: 75 shared sync, 25 Files and 95 capability tests pass (195 total).
+Targeted lint and the full web/Vercel build pass. Raw TypeScript retains the same
+91 pre-existing diagnostics with no new normalized diagnostics. Additional real
+Mongo races verified identical concurrent creation replay, one winner for distinct
+case-equivalent paths, immutable receipts after ordinary edits, and rollback when
+normalization would change a folder name. All folder-only fixtures were removed
+through normal APIs and the disposable session was signed out.

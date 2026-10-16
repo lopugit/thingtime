@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { cloudFolderMetadata } from './folderMetadata';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { isFolderThing, folderThingMatch } from '../../../schemas/folderThing';
@@ -42,16 +42,7 @@ const owned = (doc: any, ownerId: string) =>
 	doc.sandboxSpace == null;
 const privateAudience = (doc: any, inherited: boolean) =>
 	Array.isArray(doc.acl) && doc.acl.length === 1 && (doc.acl[0] === 'tt:user' || (inherited && doc.acl[0] === 'tt:inherit'));
-const folderRevision = (doc: any): string => {
-	const updated = doc.updatedAt instanceof Date ? doc.updatedAt.toISOString() : doc.updatedAt;
-	if (typeof updated !== 'string' || !Number.isFinite(Date.parse(updated))) fail(409, 'A cloud folder has an invalid revision.');
-	return (
-		'folder-' +
-		createHash('sha256')
-			.update(JSON.stringify([doc.shareId, doc.folderId ?? null, doc.crystal?.name, updated, doc.timelineHeadId ?? null]))
-			.digest('hex')
-	);
-};
+const folderRevision = (doc: any) => cloudFolderMetadata(doc).revision;
 
 /** Read one tree in a Mongo snapshot transaction. Each breadth level is one
  * indexed query, never one request per file/folder. Every failure discards the

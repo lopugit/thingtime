@@ -40,7 +40,7 @@ let latest: any = null, signedIn = false, folderId: string | null = null;
 const inventoryFixtures: string[] = [];
 const id = randomUUID();
 try {
- const discovery = await ok('/.well-known/thingtime-capabilities.json'); assert.equal(discovery.features['api.files'].version, '1.1.0');
+ const discovery = await ok('/.well-known/thingtime-capabilities.json'); assert.equal(discovery.features['api.files'].version, '1.2.0');
  await ok('/api/v1/login', { username: fixture.username, password: fixture.password }); signedIn = true;
  assert.equal((await ok('/api/v1/auth/me')).user.id, fixture.userId);
  const a = await upload(Buffer.alloc(128, 11)), b = await upload(Buffer.alloc(257, 22));
