@@ -599,3 +599,51 @@ Validation for this checkpoint: 86 sync tests, 289 attachment-suite tests and
 TypeScript remains at 91 diagnostics / 47 normalized messages, with no new
 diagnostics against the preceding checkpoint. Structural graph refresh is
 included; semantic freshness is not claimed.
+
+
+## Native iOS download staging — 2026-10-17
+
+The iOS bridge now advertises a separate `fileStagingVersion` 1.0.0. File access
+1.1.1 aligns the ready event and injected feature versions through shared constants
+(the ready event previously still reported 1.0.0). The existing
+origin/main-frame/foreground and owner checks gate `stage-begin`, `stage-append`
+and `stage-finish`; every request also resolves an owned native folder grant and
+checks its bookmark access. These calls receive into private application support
+storage only. They do not grant write access or publish into the selected folder.
+
+`MobileSyncStaging.swift` retains the exact shared scope, root grant and immutable
+copy operation. It serializes disk effects with a file lock, writes at most 64 KiB
+per call, flushes bytes before an atomic checkpoint and rejects gaps, conflicting
+replays, changed operations and foreign contexts. Reopening resumes the last
+acknowledged offset. A tail written before a failed checkpoint is truncated to
+that offset; acknowledged bytes are retained. Finalization checks the complete
+canonical multipart fingerprint (or whole-file hash), including empty files, and
+returns the existing `LocalStagedCopy` shape. Completed stages are reverified on
+reopen. Traversal, symlinks, hard-linked files, malformed records and corrupted
+completed payloads fail closed. Cached transfer data is excluded from backup;
+there is no alternate file history. Root records and metadata are bounded.
+
+`stageMobileCopy` reads cloud data in at most 2 MiB buffers and feeds bounded
+native messages through the existing mobile request codec. Lost chunk replies
+resume from native durable progress; completed stages reuse their token. Capability
+negotiation, response identity, byte counts, cancellation and final stage proofs
+are checked before the caller can hand a stage to a publisher.
+
+Validation: 88 shared sync tests, targeted lint and the full web/Vercel build
+pass. TypeScript retains 91 existing diagnostics / 47 normalized messages with
+no additions. Twenty-four selected iOS simulator tests pass, including an
+8 MiB + 17 byte staged file, reopen/replay, failure between byte flush and
+checkpoint, checksum/symlink refusal and a real WebKit bridge dispatch that
+verifies capability negotiation, owner checks and encoded stage replies. That
+bridge test supplies a synthetic owner verifier and local bookmark fixture;
+it does not establish authenticated cloud-to-native transfer or picker acceptance.
+Build 31 was rebuilt, installed and launched on iPhone 17 Pro / iOS 26.5; the
+installed executable matches the build and the app renders its local web origin.
+
+Still required: explicit native write approval bound to the connection/grant,
+OS-coordinated destination publication, preservation of displaced versions,
+durable publication receipts, native staging cleanup/retention, process-kill
+acceptance, Android/Mac receivers and integration with download/two-way controls.
+The shared cloud executor still refuses downloads without a complete native
+publisher; mobile controls remain foreground upload/backup. No end-to-end
+Drive/Photos/Resilio completion is claimed.

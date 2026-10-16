@@ -5,8 +5,11 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '1.1.0';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
-    private let store = MobileFolderStore()
+    static let accessVersion = "1.1.1"
+    static let stagingVersion = "1.0.0"
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    private let store: MobileFolderStore
+    private let staging: MobileSyncStaging
     private let networkMonitor = NWPathMonitor()
     private var networkKind = "unknown"
     private var task: Task<Void, Never>?
@@ -16,7 +19,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var picker: UIDocumentPickerViewController?
     private var selection: CheckedContinuation<URL?, Error>?
     private var observer: NSObjectProtocol?
-    override init() {
+    init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging()) {
+        self.store = store ?? MobileFolderStore(); self.staging = staging
         super.init()
         UIDevice.current.isBatteryMonitoringEnabled = true
         networkMonitor.pathUpdateHandler = { [weak self] path in
@@ -55,7 +59,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "read", "conditions", "suspend"].contains(action),
+              ["list", "choose", "remove", "scan", "read", "conditions", "suspend", "stage-begin", "stage-append", "stage-finish"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -87,7 +91,37 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     if action == "remove" { try self.store.remove(scope, id: rootId) }
                     else {
                         let grant = try self.store.grant(scope, id: rootId)
-                        if action == "scan" {
+                        if action.hasPrefix("stage-") {
+                            guard let transfer = payload["transfer"] as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
+                            let encoded = try JSONSerialization.data(withJSONObject: transfer)
+                            guard encoded.count <= 32_768 else { throw MobileFolderStore.Failure.limit }
+                            let request = try JSONDecoder().decode(MobileSyncStaging.Request.self, from: encoded)
+                            try request.validate(owner: scope)
+                            guard request.rootId == rootId else { throw MobileFolderStore.Failure.invalid }
+                            var offset: Int64 = 0, bytes = Data()
+                            if action == "stage-append" {
+                                guard let number = payload["offset"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                                      number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue <= 9_007_199_254_740_991,
+                                      number.doubleValue.rounded() == number.doubleValue, let encodedBytes = payload["data"] as? String,
+                                      encodedBytes.utf8.count <= 87_384, let decoded = Data(base64Encoded: encodedBytes),
+                                      !decoded.isEmpty, decoded.count <= MobileFolderReader.maximumReadBytes else { throw MobileFolderStore.Failure.invalid }
+                                offset = number.int64Value; bytes = decoded
+                            }
+                            let chunkOffset = offset, chunkBytes = bytes, staging = self.staging
+                            let worker = Task.detached {
+                                try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
+                                let progress: MobileSyncStaging.Progress
+                                switch action {
+                                case "stage-begin": progress = try staging.begin(request, owner: scope)
+                                case "stage-append": progress = try staging.append(request, owner: scope, offset: chunkOffset, bytes: chunkBytes)
+                                default: progress = try staging.finish(request, owner: scope)
+                                }
+                                try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
+                                return progress
+                            }
+                            let progress = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            result = ["rootId": rootId, "staging": try JSONSerialization.jsonObject(with: JSONEncoder().encode(progress))]
+                        } else if action == "scan" {
                             let worker = Task.detached { try MobileFolderReader.scan(bookmark: grant.bookmark) }
                             let entries = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                             var encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entries)) as! [[String: Any]]

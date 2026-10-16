@@ -225,3 +225,20 @@ when both finish. Repeat across account/destination changes, manual stop, an
 automatic retry, a disabled Live Activities setting, and a user-dismissed activity.
 Verify a concurrent voice session retains its existing behavior. Simulator build
 and unit tests do not prove APNs delivery or physical lock-screen behavior.
+
+
+### Resumable private file staging
+
+`fileStagingVersion` 1.0.0 adds begin/append/finish calls to the existing native
+folder bridge. Requests require the current origin/account and an owned folder
+grant. They write only to private application support storage, excluded from
+backup, and preserve immutable operation identity, acknowledged progress and
+verified content across reopen. Publication into user folders and background
+transfers remain pending; selecting a read-only grant does not grant writes.
+
+`MobileSyncStagingTests` verifies multipart bytes, replay, interrupted checkpoint
+recovery, checksum and symlink refusal, plus the real WebKit/native handler with
+synthetic authentication and a local test grant. Run it with `MobileFolderTests`
+and `MobileDevicePairingTests` after `xcodegen generate`. See the root README for
+the concrete simulator command and `docs/mobile-file-sync.md` for remaining
+cloud, provider, permission and physical-device acceptance.

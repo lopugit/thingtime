@@ -13,6 +13,7 @@ export type ThingtimeNativeBridge = {
   notificationsVersion?: string;
   devicePairingVersion?: string;
   fileAccessVersion?: string;
+  fileStagingVersion?: string;
   platform: 'ios' | 'macos' | 'android';
   isNativeWebView: true;
   postMessage: (message: ThingtimeBridgeMessage) => void;

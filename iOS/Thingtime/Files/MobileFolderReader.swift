@@ -5,13 +5,16 @@ import Darwin
 /// Descriptor-relative reads within a native picker grant. No shell, symlink
 /// traversal, arbitrary URL reads, overwrites or deletion authority.
 struct MobileFolderReader {
-    struct Fingerprint: Encodable, Sendable {
-        let algorithm = "sha256-parts-v1"
+    struct Fingerprint: Codable, Equatable, Sendable {
+        let algorithm: String
+        init(partSizeBytes: Int64, partCount: Int, sha256: String) {
+            algorithm = "sha256-parts-v1"; self.partSizeBytes = partSizeBytes; self.partCount = partCount; self.sha256 = sha256
+        }
         let partSizeBytes: Int64
         let partCount: Int
         let sha256: String
     }
-    struct Entry: Encodable, Sendable {
+    struct Entry: Codable, Equatable, Sendable {
         let path: String
         let id: String
         let version: String
@@ -19,22 +22,30 @@ struct MobileFolderReader {
         let size: Int64
         let sha256: String?
         let fingerprint: Fingerprint?
+        enum CodingKeys: String, CodingKey { case path, id, version, kind, size, sha256, fingerprint }
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(path, forKey: .path); try c.encode(id, forKey: .id); try c.encode(version, forKey: .version)
+            try c.encode(kind, forKey: .kind); try c.encode(size, forKey: .size)
+            if let sha256 { try c.encode(sha256, forKey: .sha256) } else { try c.encodeNil(forKey: .sha256) }
+            try c.encodeIfPresent(fingerprint, forKey: .fingerprint)
+        }
     }
     struct Chunk: Encodable, Sendable { let version: String; let size: Int64; let offset: Int64; let data: String }
     typealias Failure = MobileFolderStore.Failure
     static let maximumEntries = 10_000
     static let maximumReadBytes = 65_536
-    private static func components(_ path: String) throws -> [String] {
+    static func components(_ path: String) throws -> [String] {
         guard !path.isEmpty, path.utf16.count <= 4096, !path.contains("\\"),
               !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) || $0.properties.generalCategory == .format }) else { throw Failure.invalid }
         let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
         guard parts.count <= 128, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && $0.utf16.count <= 255 }) else { throw Failure.invalid }
         return parts
     }
-    private static func info(_ fd: Int32) throws -> stat {
+    static func info(_ fd: Int32) throws -> stat {
         var result = stat(); guard fstat(fd, &result) == 0 else { throw Failure.unavailable }; return result
     }
-    private static func stamp(_ s: stat) -> String {
+    static func stamp(_ s: stat) -> String {
         "\(s.st_dev):\(s.st_ino):\(s.st_size):\(s.st_mtimespec.tv_sec):\(s.st_mtimespec.tv_nsec):\(s.st_ctimespec.tv_sec):\(s.st_ctimespec.tv_nsec)"
     }
     private static func openPath(_ root: Int32, path: String, directory: Bool = false) throws -> Int32 {
@@ -45,7 +56,7 @@ struct MobileFolderReader {
         }
         return fd
     }
-    private static func names(_ fd: Int32) throws -> [String] {
+    static func names(_ fd: Int32) throws -> [String] {
         let next = openat(fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard next >= 0 else { throw Failure.unavailable }
         guard let directory = fdopendir(next) else { close(next); throw Failure.unavailable }; defer { closedir(directory) }
@@ -61,7 +72,7 @@ struct MobileFolderReader {
         }
         return result.sorted { $0.utf8.lexicographicallyPrecedes($1.utf8) }
     }
-    private static func fingerprint(_ fd: Int32, size: Int64) throws -> Fingerprint? {
+    static func fingerprint(_ fd: Int32, size: Int64) throws -> Fingerprint? {
         if size == 0 { return nil }
         let mib: Int64 = 1_048_576, partSize = ((max(8 * mib, (size + 9_999) / 10_000) + mib - 1) / mib) * mib
         guard partSize <= 5 * 1024 * mib else { throw Failure.limit }
@@ -94,6 +105,7 @@ struct MobileFolderReader {
         }
         if let error { throw error }; guard let result else { throw Failure.unavailable }; return try result.get()
     }
+    static func checkAccess(bookmark: Data) throws { try access(bookmark) { _ in try Task.checkCancellation() } }
     static func scan(bookmark: Data) throws -> [Entry] {
         try access(bookmark) { root in
             let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), byteBudget = 0

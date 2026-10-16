@@ -111,7 +111,8 @@ struct WebView: UIViewRepresentable {
                 "lopuChatActivityVersion": "1.0.0",
                 "notificationsVersion": "1.0.0",
                 "devicePairingVersion": "1.0.0",
-                "fileAccessVersion": "1.0.0",
+                "fileAccessVersion": MobileFolderBridge.accessVersion,
+                "fileStagingVersion": MobileFolderBridge.stagingVersion,
                 "watchNotifications": true
             ])
         }

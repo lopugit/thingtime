@@ -4773,3 +4773,29 @@ wrong-version refusal and source replacement. Normal cleanup retains accounted
 versions in private Trash; remove temporary fixture admin env and restart the
 managed stack afterward. Executor tests use a staged publisher fixture; actual
 native destination writes and UI download controls remain unavailable.
+
+
+### Native iOS download staging checks
+
+The iOS shell advertises `fileStagingVersion` 1.0.0 for private resumable reception.
+It uses the existing account/origin and folder grant checks, keeps bytes and
+immutable operation metadata in protected application support storage excluded
+from backup, and verifies the entire planned fingerprint before returning a
+stage. No new secret, entitlement or server environment variable is required.
+This capability does not publish files into the selected folder; write approval,
+publication recovery and download controls remain pending.
+
+From `iOS/`, run `xcodegen generate`, choose a concrete simulator with
+`xcrun simctl list devices available`, then run:
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>'
+xcodebuild -project Thingtime.xcodeproj -scheme Thingtime -destination "$DEST" \
+  -only-testing:ThingtimeTests/MobileSyncStagingTests \
+  -only-testing:ThingtimeTests/MobileFolderTests \
+  -only-testing:ThingtimeTests/MobileDevicePairingTests test
+```
+
+The byte and WebKit tests use disposable local files and a synthetic owner verifier;
+real account, file-provider, process-kill and physical-device acceptance remain
+separate. See the [full sync ledger](docs/mobile-file-sync.md).

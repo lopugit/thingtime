@@ -6,6 +6,10 @@ checks current file metadata and exact range/ETag framing. Download operations
 reuse `CloudSyncRun` and the existing journal/executor; `LocalSyncTarget` requires
 verified private staging, atomic destination checks and durable native receipts.
 The adapter tests pass, but native destination publishers are not enabled yet.
+`MobileSyncStaging.swift` supplies iOS private, durable, fingerprint-verified byte
+reception through `fileStagingVersion` 1.0.0. `mobileStaging.client.ts` adapts the
+shared cloud source to it. Staging does not write into a selected folder; native
+write approval, publication receipts and Android/Mac receivers remain pending.
 
 
 Persistent file sync work lives in `app/fileSync/`: `reconcile.ts` plans bounded

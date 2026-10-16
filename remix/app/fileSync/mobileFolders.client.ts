@@ -1,14 +1,21 @@
+import { validateLocalStage, type LocalStagedCopy } from './localSyncTarget';
+import type { SyncOperation } from './execute';
+import type { SyncScope } from './reconcile';
 import type { SyncConditions } from './configuredPlan';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import { planFileSync, validSyncEntry, type SyncEntry } from './reconcile';
 import type { FingerprintSource } from './contentFingerprint';
 
 export type MobileFolder = { id: string; name: string };
+export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
 export type FolderRequest =
 	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
-	| { action: 'read'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true };
+	| { action: 'read'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
+	| { action: 'stage-begin' | 'stage-finish'; rootId: string; transfer: MobileStageRequest }
+	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string };
 export type FolderResult = {
+	staging?: { received: number; stage?: LocalStagedCopy };
 	roots: MobileFolder[];
 	conditions?: SyncConditions;
 	entries?: SyncEntry[];
@@ -37,7 +44,25 @@ export function parseMobileFolderResult(
 	)
 		throw Error('Invalid native folder response.');
 	const result: FolderResult = { roots: payload.roots.map((r: any) => ({ id: r.id, name: r.name })) };
-	if (request.action === 'conditions') {
+	if (request.action === 'stage-begin' || request.action === 'stage-append' || request.action === 'stage-finish') {
+		const state = payload.staging,
+			m = request.transfer.operation.mutation;
+		if (
+			payload.rootId !== request.rootId ||
+			m.kind !== 'copy' ||
+			m.from !== 'remote' ||
+			!Number.isSafeInteger(state?.received) ||
+			state.received < 0 ||
+			state.received > m.source.size ||
+			(request.action === 'stage-append' && state.received < request.offset + atob(request.data).length)
+		)
+			throw Error('Invalid native staging progress.');
+		if (state.stage !== undefined && state.stage !== null) {
+			validateLocalStage(state.stage, request.transfer.operation, request.transfer.scope);
+			if (state.received !== m.source.size) throw Error('Incomplete native stage.');
+		} else if (request.action === 'stage-finish') throw Error('Native bytes have not been verified.');
+		result.staging = { received: state.received, ...(state.stage ? { stage: structuredClone(state.stage) } : {}) };
+	} else if (request.action === 'conditions') {
 		const c = payload.conditions;
 		if (!c || !['wifi', 'cellular', 'ethernet', 'offline', 'unknown'].includes(c.network) || (c.charging !== null && typeof c.charging !== 'boolean'))
 			throw Error('Native transfer conditions are unavailable.');
@@ -81,11 +106,15 @@ export function parseMobileFolderResult(
 }
 export const supportsMobileSyncConditions = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
 	supportsMobileFolders(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 1;
+export const supportsMobileStaging = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
+	supportsMobileFolders(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileStagingVersion ?? '');
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
 	if (request.action === 'conditions' && !supportsMobileSyncConditions(bridge))
 		return Promise.reject(Error('Update the mobile app to run folder transfers.'));
+	if (request.action.startsWith('stage-') && !supportsMobileStaging(bridge))
+		return Promise.reject(Error('Update the mobile app to receive staged files.'));
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
@@ -124,7 +153,7 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				stop();
 				reject(Error('Folder access timed out. Your saved selections are preserved.'));
 			},
-			input.action === 'choose' || input.action === 'scan' ? 300_000 : 30_000
+			input.action === 'choose' || input.action === 'scan' || input.action === 'stage-begin' || input.action === 'stage-finish' ? 300_000 : 30_000
 		);
 		window.addEventListener(nativeBridgeMessageEvent, listener);
 		signal.addEventListener('abort', abort, { once: true });

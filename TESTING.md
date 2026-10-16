@@ -10218,3 +10218,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   account/origin must refuse publication. No native publisher must refuse the
   port entirely. Native platform staging/CAS/relaunch acceptance remains separate
   from these adapter tests; never enable download controls on fixture evidence.
+
+
+### iOS private download staging (2026-10-17)
+
+- [ ] Run `MobileSyncStagingTests`, `MobileFolderTests` and
+  `MobileDevicePairingTests` on a concrete simulator after XcodeGen. Receive
+  8 MiB + 17 bytes in bounded chunks, reopen, replay a lost acknowledgement and
+  verify the full multipart hash. Inject failure after byte flush but before the
+  checkpoint: resume at the acknowledged offset, discarding only the extra tail.
+- [ ] Reject changed immutable operations, foreign owner/origin, gaps, oversized
+  chunks, altered replay bytes, checksum mismatch, symlinks and corrupted finished
+  stages. Empty files/folders retain the shared JSON shape, including explicit
+  null `sha256`; completed stages are reverified before reuse.
+- [ ] Exercise actual WebKit capability injection and native handler dispatch
+  through an owned synthetic bookmark. Verify injected and ready-event file access
+  versions both use 1.1.1. Require owner checks before and after each
+  request and an untouched selected folder. This synthetic authentication test
+  must not be reported as cloud/native or OS-picker acceptance.
+- [ ] Run `test:file-sync`: missing/breaking staging capability, malformed native
+  progress/proofs, changed source and cancellation fail closed. Reopen after a lost
+  native chunk reply without writing acknowledged bytes again. Rebuild/install
+  the final simulator app, verify its binary and launch/render it. Native write
+  approval, publication CAS/retained conflicts and process-kill recovery still
+  require their own acceptance before enabling downloads.

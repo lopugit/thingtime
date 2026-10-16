@@ -502,3 +502,33 @@ Validation for this checkpoint: 86 sync tests, 289 attachment-suite tests and
 TypeScript remains at 91 diagnostics / 47 normalized messages, with no new
 diagnostics against the preceding checkpoint. Structural graph refresh is
 included; semantic freshness is not claimed.
+
+
+## Durable iOS private staging — 2026-10-17
+
+The separate `fileStagingVersion` 1.0.0 receives cloud download bytes through the
+existing scoped mobile bridge. Native records retain the exact shared operation,
+root grant and scope. A file lock serializes effects; byte flush precedes atomic
+progress, replayed ranges must match, and interrupted tails are discarded only
+beyond the durable offset. Full canonical hashes gate completion. Finished stages
+are reverified on reopen. Private transfer storage is protected, excluded from
+backup and bounded; it is not another file history or native write permission.
+
+The TypeScript adapter buffers at most 2 MiB of cloud data and sends 64 KiB native
+chunks. Lost replies resume from acknowledged progress; source checks, capability
+negotiation, response identity and stage verification remain mandatory. Shared
+entry encoding explicitly retains null SHA fields across Swift/JavaScript.
+
+Validation: 88 sync tests, targeted lint, full web/Vercel build and 24 selected
+iOS simulator tests pass; TypeScript remains at 91 baseline diagnostics / 47
+normalized messages. Native tests include 8 MiB + 17 bytes, reopen/replay,
+interrupted checkpoints, corrupted bytes and symlinks. A real WebKit/native handler
+test negotiates the feature and stages bytes through a native bookmark, with
+synthetic owner verification; this is not authenticated cloud/picker acceptance.
+Build 31 is installed and launched on iPhone 17 Pro / iOS 26.5, its executable
+matches the rebuilt binary, and its local web screen renders.
+
+Still open: native write approval, destination publication and retained versions,
+publication receipts, staging retention/cleanup, process-kill acceptance,
+Android/Mac receivers and download/two-way controls. The complete original goal
+remains active, including background workers, Photos, peers and release evidence.

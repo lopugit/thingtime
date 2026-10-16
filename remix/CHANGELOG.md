@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: iOS can receive resumable file chunks into
+  private native staging, with durable acknowledgements, immutable operation
+  checks and full fingerprint verification. Simulator byte/WebKit bridge tests
+  pass and the rebuilt app is installed. Publication into selected folders and
+  download controls remain pending. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Attachment-content 1.14.0 provides bounded,
   exact-version downloads beyond the browser cache limit. Download operations
   reuse the durable sync executor with verified staging and native receipt
