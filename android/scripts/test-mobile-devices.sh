@@ -4,6 +4,9 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="${1:-}"
 picker_test="${THINGTIME_FOLDER_PICKER_TEST:-0}"
+offline_test="${THINGTIME_OFFLINE_FILES_TEST:-0}"
+[[ "$offline_test" == 0 || "$offline_test" == 1 ]] || { echo 'THINGTIME_OFFLINE_FILES_TEST must be 0 or 1.' >&2; exit 1; }
+[[ "$offline_test" == 0 || -n "$fixture" ]] || { echo 'Offline Files acceptance requires a disposable local account fixture.' >&2; exit 1; }
 upload_test="${THINGTIME_FOLDER_UPLOAD_TEST:-0}"
 descriptor_test="${THINGTIME_FOLDER_DESCRIPTOR_TEST:-0}"
 approval_test="${THINGTIME_FOLDER_APPROVAL_TEST:-0}"
@@ -15,6 +18,7 @@ if [[ "$descriptor_test" == 1 ]]; then picker_test=1; fi
 if [[ "$upload_test" == 1 ]]; then picker_test=1; fi
 [[ "$picker_test" == 0 || "$picker_test" == 1 ]] || { echo 'THINGTIME_FOLDER_PICKER_TEST must be 0 or 1.' >&2; exit 1; }
 [[ "$picker_test" == 0 || -n "$fixture" ]] || { echo 'Picker acceptance requires a disposable local account fixture.' >&2; exit 1; }
+[[ "$offline_test" == 0 || "$picker_test" == 0 ]] || { echo 'Run offline Files and existing-folder acceptance separately.' >&2; exit 1; }
 serial="${ANDROID_SERIAL:-}"
 if [[ -z "$serial" ]]; then
   serial="$(adb devices | awk 'NR>1 && $2=="device" { print $1 }')"
@@ -46,8 +50,12 @@ if [[ -n "$fixture" ]]; then
 fi
 result="$(mktemp)"
 test_args=()
+if [[ "$offline_test" == 1 ]]; then
+  test_args+=(-e offlineSelection true)
+  echo 'Create ThingtimeOfflineQA through the native New offline folder flow. Inspect it in Android Files when prompted.'
+fi
 if [[ "$picker_test" == 1 ]]; then
-  test_args=(-e folderSelection true)
+  test_args+=(-e folderSelection true)
   if [[ "$descriptor_test" == 1 ]]; then test_args+=(-e folderDescriptor true); fi
   if [[ "$approval_test" == 1 ]]; then test_args+=(-e folderApproval true); fi
   if [[ "$upload_test" == 1 ]]; then test_args+=(-e folderUpload true); fi

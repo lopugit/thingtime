@@ -38,7 +38,7 @@ final class FolderBridge {
     private Request pending; private boolean selecting; private Intent selectedResult; private boolean resultArrived;
     private CancellationSignal cancellation=new CancellationSignal();
     private static final class Request {
-        FolderStore.Grant approvalGrant; WriteApproval approval;
+        FolderStore.Grant approvalGrant; WriteApproval approval; boolean chooseExisting; String offlineName;
         final String id,action;final DeviceScope scope;final JSONObject payload,base;final JavaScriptReplyProxy reply;final long generation;final long deadline;
         Request(JSONObject payload,DeviceScope scope,JavaScriptReplyProxy reply,long generation) throws Exception {
             this.payload=payload;this.scope=scope;this.reply=reply;this.generation=generation;id=payload.getString("requestId");action=payload.getString("action");deadline=android.os.SystemClock.elapsedRealtime()+((action.equals("choose") || action.equals("write-approve") || action.equals("scan") || action.equals("stage-begin") || action.equals("stage-finish"))?300000:30000);
@@ -96,10 +96,21 @@ final class FolderBridge {
                 PairingEngine auth=new PairingEngine(new KeystoreDeviceStore(activity),new DeviceHttpTransport(url->CookieManager.getInstance().getCookie(url),check),check);
                 auth.identity(request.scope);check.run();
                 if(request.action.equals("choose") && !pickerFinished) {
+                    if(!request.chooseExisting && request.offlineName==null) {choose(request,check);return;}
+                    Uri initial=null;
+                    if(request.offlineName!=null) {
+                        try(ManagedFileStore offline=new ManagedFileStore(activity,check)) {
+                            String root=offline.createRoot(request.scope,request.offlineName);
+                            offline.exposeInFiles(request.scope,root);initial=OfflineDocumentsProvider.rootUri(activity,root);
+                        }
+                        request.offlineName=null;request.chooseExisting=true;OfflineDocumentsProvider.changed(activity);
+                    }
+                    final Uri initialUri=initial;
                     activity.runOnUiThread(()-> {
                         try {
                             check.run();selecting=true;
                             Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                            if(initialUri!=null)intent.putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,initialUri);
                             activity.startActivityForResult(intent,PICK_FOLDER);
                         } catch(Exception error) { finish(request,new JSONObject(),"The system folder picker is unavailable."); }
                     });return;
@@ -115,6 +126,11 @@ final class FolderBridge {
                 } else if(request.action.equals("choose")) {
                     if(selected!=null && selected.getData()!=null) {
                         Uri tree=FolderStore.tree(selected.getData().toString());
+                        if(OfflineDocumentsProvider.authority(activity).equals(tree.getAuthority())) {
+                            try(ManagedFileStore offline=new ManagedFileStore(activity,check)) {
+                                offline.requireFilesRoot(request.scope,android.provider.DocumentsContract.getTreeDocumentId(tree));
+                            }
+                        }
                         FolderReader.Doc root=new SafFolderProvider(activity.getContentResolver(),tree,signal).root();
                         if(!root.directory) throw new FolderReader.Failure("Choose a folder.");
                         check.run();auth.identity(request.scope);check.run();store.add(request.scope,tree,selected.getFlags(),root.name);
@@ -170,6 +186,38 @@ final class FolderBridge {
             } catch(java.util.concurrent.CancellationException | android.os.OperationCanceledException cancelled) { finish(request,new JSONObject(),"Folder access paused. Try again when the app is active."); }
             catch(Exception failure) { finish(request,new JSONObject(),failure instanceof FolderReader.Failure || failure instanceof PairingEngine.Failure?failure.getMessage():"Folder access is unavailable. Check Files permissions or choose it again."); }
         });
+    }
+    private void choose(Request request,PairingEngine.Check check) {
+        activity.runOnUiThread(()-> {
+            try {
+                check.run();android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity)
+                    .setTitle("Choose folder")
+                    .setItems(new String[]{"Existing folder","New offline folder"},(d,which)-> {
+                        approvalDialog=null;
+                        if(which==0){request.chooseExisting=true;execute(request,null,false);}else nameOfflineFolder(request,check);
+                    }).setNegativeButton("Cancel",(d,w)->finish(request,new JSONObject(),"Folder selection cancelled.")).create();
+                dialog.setOnCancelListener(d->finish(request,new JSONObject(),"Folder selection cancelled."));approvalDialog=dialog;dialog.show();
+            }catch(Exception error){finish(request,new JSONObject(),"Folder access paused. Try again when the app is active.");}
+        });
+    }
+    private void nameOfflineFolder(Request request,PairingEngine.Check check) {
+        try {
+            check.run();android.widget.EditText name=new android.widget.EditText(activity);
+            name.setSingleLine(true);name.setText("Thingtime offline");name.setSelectAllOnFocus(true);
+            name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(128)});
+            android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(activity)
+                .setTitle("New offline folder")
+                .setMessage("Create a folder stored on this device and visible in Android Files, including when signed out. Other apps can read files you select there. Next, select this folder to connect it to your account. Removing access keeps its files; uninstalling Thingtime removes them.")
+                .setView(name).setNegativeButton("Cancel",(d,w)->finish(request,new JSONObject(),"Folder creation cancelled."))
+                .setPositiveButton("Create folder",null).create();
+            dialog.setOnCancelListener(d->finish(request,new JSONObject(),"Folder creation cancelled."));approvalDialog=dialog;dialog.show();
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(view-> {
+                try {
+                    check.run();String value=name.getText().toString().trim();FolderReader.path(value);if(value.contains("/"))throw new Exception();
+                    request.offlineName=value;dialog.dismiss();approvalDialog=null;execute(request,null,false);
+                }catch(Exception error){name.setError("Enter a folder name without slashes.");}
+            });
+        }catch(Exception error){finish(request,new JSONObject(),"Folder access paused. Try again when the app is active.");}
     }
     private void approve(Request request,PairingEngine.Check check) {
         activity.runOnUiThread(()-> {

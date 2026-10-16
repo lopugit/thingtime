@@ -320,3 +320,13 @@ Their byte versions are canonical bound attachments. `ownerLibraryQuery.ts`
 lists live roots once; existing managed placement/recordFolderPlacement handles
 file moves and folder deletion. `test:files` and `file-versions.integration.mts`
 cover the API; see the full mobile sync ledger for pending product integration.
+
+
+Android offline folders use the bounded native `ManagedFileStore` catalog and
+`OfflineDocumentsProvider`, exposed only after the native `FolderBridge`
+creation consent. Android Files gets read-only document snapshots; editable
+connection Things and Timeline remain shared. `OfflineDocumentsProviderTest`
+and the opt-in `THINGTIME_OFFLINE_FILES_TEST=1` installed-app flow cover root
+visibility, ancestry, read-only handles, migration and real picker/byte reads.
+See [mobile sync](../mobile-file-sync.md) for pending download integration and
+the broader cross-device requirements.

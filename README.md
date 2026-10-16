@@ -4893,9 +4893,10 @@ service is needed. Safe Android publication and background sync remain open.
 
 The Android app now includes a transactional backend for Thingtime-owned offline
 folders. It uses verified immutable native blobs plus an atomic entry/receipt
-transaction, and retains displaced versions. It is not yet connected to Android
-Files, native root creation or Download now. Existing selected SAF folders are
-not silently converted to another storage model or written by this backend.
+transaction, and retains displaced versions. Native **Choose folder → New offline
+folder** creates an explicitly consented root in Android Files. Files access is
+read-only; Download now integration remains pending. Existing selected SAF
+folders are not converted to another storage model or written by this backend.
 
 On a disposable emulator, run
 `THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-managed-process.sh`
@@ -4905,3 +4906,21 @@ Three actual process-exit scenarios verify rollback, completed-receipt recovery
 and retained replacements through the production shared mobile codec. See the
 [Android runbook](android/README.md#offline-folder-publication-backend-checks)
 for boundaries, evidence and fixture cleanup.
+
+
+### Android offline folders in Files
+
+Use **Things → Folder access → Choose folder → New offline folder** in the
+Android app. Native consent explains that the folder remains visible in Android
+Files while signed out, other apps can read documents selected there, removing
+account access keeps the files, and uninstalling Thingtime deletes them. Finish
+by selecting the created root in the system picker. **Existing folder** retains
+the ordinary SAF selection flow. No broad storage permission, secret, external
+service or new deployment configuration is needed.
+
+For the disposable local-account fixture and emulator setup above, run
+`THINGTIME_OFFLINE_FILES_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`.
+Follow the [Android Files acceptance steps](android/README.md#offline-folders-in-android-files),
+including visual inspection before confirming the test. This verifies native
+creation, selection, listing and reads of a synthetic published file; it does
+not establish cloud download, external editing or background synchronization.

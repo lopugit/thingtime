@@ -41,18 +41,33 @@ final class ManagedFileStore implements AutoCloseable {
         db=SQLiteDatabase.openOrCreateDatabase(catalog,null);
         try {
             db.disableWriteAheadLogging();db.execSQL("PRAGMA synchronous=FULL");db.execSQL("PRAGMA foreign_keys=ON");
-            int version=db.getVersion();if(version!=0 && version!=1)throw unavailable();
-            db.beginTransaction();
-            try {
-                db.execSQL("CREATE TABLE IF NOT EXISTS roots (id TEXT PRIMARY KEY, owner TEXT NOT NULL, origin TEXT NOT NULL, name TEXT NOT NULL)");
-                db.execSQL("CREATE TABLE IF NOT EXISTS entries (root TEXT NOT NULL REFERENCES roots(id), path TEXT NOT NULL, folded TEXT NOT NULL, entry TEXT NOT NULL, blob TEXT, PRIMARY KEY(root,path), UNIQUE(root,folded))");
-                db.execSQL("CREATE TABLE IF NOT EXISTS receipts (key TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), request TEXT NOT NULL, receipt TEXT NOT NULL)");
-                // Retained bytes and versions are recovery material. Timeline
-                // remains the user-facing history; retention/restore is separate.
-                db.execSQL("CREATE TABLE IF NOT EXISTS retained (id TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), operation TEXT NOT NULL, entry TEXT NOT NULL, blob TEXT NOT NULL)");
-                db.setVersion(1);db.setTransactionSuccessful();
-            } finally { db.endTransaction(); }
-            syncDirectory(directory);
+            if(db.getVersion()!=2) {
+                db.beginTransaction();
+                try {
+                    int version=db.getVersion();if(version<0 || version>2)throw unavailable();
+                    db.execSQL("CREATE TABLE IF NOT EXISTS roots (id TEXT PRIMARY KEY, owner TEXT NOT NULL, origin TEXT NOT NULL, name TEXT NOT NULL)");
+                    db.execSQL("CREATE TABLE IF NOT EXISTS entries (root TEXT NOT NULL REFERENCES roots(id), path TEXT NOT NULL, folded TEXT NOT NULL, entry TEXT NOT NULL, blob TEXT, PRIMARY KEY(root,path), UNIQUE(root,folded))");
+                    db.execSQL("CREATE TABLE IF NOT EXISTS receipts (key TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), request TEXT NOT NULL, receipt TEXT NOT NULL)");
+                    // Retained bytes and versions are recovery material. Timeline
+                    // remains the user-facing history; retention/restore is separate.
+                    db.execSQL("CREATE TABLE IF NOT EXISTS retained (id TEXT PRIMARY KEY, root TEXT NOT NULL REFERENCES roots(id), operation TEXT NOT NULL, entry TEXT NOT NULL, blob TEXT NOT NULL)");
+                    if(version<2) {
+                        db.execSQL("ALTER TABLE roots ADD COLUMN filesVisible INTEGER NOT NULL DEFAULT 0");
+                        db.execSQL("ALTER TABLE entries ADD COLUMN document TEXT");
+                        db.execSQL("ALTER TABLE entries ADD COLUMN parent TEXT");
+                        try(Cursor rows=db.rawQuery("SELECT root,path,entry FROM entries",null)) {
+                            while(rows.moveToNext()) {
+                                check.run();JSONObject entry=new JSONObject(rows.getString(2));ContentValues update=documentColumns(entry);
+                                db.update("entries",update,"root=? AND path=?",new String[]{rows.getString(0),rows.getString(1)});
+                            }
+                        }
+                        db.execSQL("CREATE UNIQUE INDEX entries_document ON entries(root,document)");
+                        db.execSQL("CREATE INDEX entries_parent ON entries(root,parent,path)");
+                    }
+                    db.setVersion(2);db.setTransactionSuccessful();
+                } finally { db.endTransaction(); }
+                syncDirectory(directory);
+            }
         } catch(Exception error) { db.close();throw error; }
     }
     public void close() { db.close(); }
@@ -169,7 +184,7 @@ final class ManagedFileStore implements AutoCloseable {
             if(slash>=0) {Entry parent=entry(root,path.substring(0,slash));if(parent==null || !parent.json.getString("kind").equals("folder"))throw changed();}
             if(previous==null && count("SELECT COUNT(*) FROM entries WHERE root=?",new String[]{root})>=FolderReader.MAX_ENTRIES)throw unavailable();
             JSONObject published=new JSONObject(source.toString()).put("id",previous==null?UUID.randomUUID().toString():previous.json.getString("id")).put("version",UUID.randomUUID().toString());
-            ContentValues values=new ContentValues();values.put("root",root);values.put("path",path);values.put("folded",folded(path));values.put("entry",SyncStaging.canonical(published));
+            ContentValues values=documentColumns(published);values.put("root",root);values.put("path",path);values.put("folded",folded(path));values.put("entry",SyncStaging.canonical(published));
             if(candidate.has("blob"))values.put("blob",candidate.getString("blob"));else values.putNull("blob");
             if(previous==null)db.insertOrThrow("entries",null,values);
             else {
@@ -214,4 +229,78 @@ final class ManagedFileStore implements AutoCloseable {
             return new JSONObject().put("data",java.util.Base64.getEncoder().encodeToString(bytes)).put("offset",offset).put("size",selected.json.getLong("size")).put("version",version);
         } finally {Os.close(fd);}
     }
+    private static ContentValues documentColumns(JSONObject entry) throws Exception {
+        String path=entry.getString("path");int slash=path.lastIndexOf('/');ContentValues values=new ContentValues();
+        values.put("document",uuid(entry.getString("id")));values.put("parent",slash<0?"":path.substring(0,slash));return values;
+    }
+    /** Explicit native creation consent precedes exposure in Android Files.
+     * Existing private roots stay hidden across the version-1 migration. */
+    void exposeInFiles(DeviceScope owner,String id) throws Exception {
+        root(owner,id);ContentValues values=new ContentValues();values.put("filesVisible",1);
+        if(db.update("roots",values,"id=? AND owner=? AND origin=?",new String[]{id,owner.owner,owner.origin})!=1)throw unavailable();
+    }
+    void requireFilesRoot(DeviceScope owner,String id) throws Exception {root(owner,id);if(document(id).entry!=null)throw unavailable();}
+    static final class Document {
+        final String root,id,name,path;final JSONObject entry;
+        Document(String root,String name,JSONObject entry) throws Exception {
+            this.root=root;this.entry=entry;this.path=entry==null?"":entry.getString("path");
+            this.id=entry==null?root:root+":"+uuid(entry.getString("id"));
+            this.name=entry==null?name:path.substring(path.lastIndexOf('/')+1);
+        }
+        boolean folder() throws Exception {return entry==null || entry.getString("kind").equals("folder");}
+    }
+    java.util.List<Document> filesRoots() throws Exception {
+        check.run();java.util.List<Document> result=new java.util.ArrayList<>();
+        try(Cursor rows=db.rawQuery("SELECT id,name FROM roots WHERE filesVisible=1 ORDER BY name,id LIMIT 129",null)) {
+            while(rows.moveToNext()){check.run();if(result.size()>=128)throw unavailable();result.add(new Document(uuid(rows.getString(0)),rows.getString(1),null));}
+        }
+        return result;
+    }
+    Document document(String id) throws Exception {
+        check.run();if(id==null || id.length()>73)throw unavailable();String[] pieces=id.split(":",-1);
+        if(pieces.length<1 || pieces.length>2)throw unavailable();String root=uuid(pieces[0]),name;
+        try(Cursor row=db.rawQuery("SELECT name FROM roots WHERE id=? AND filesVisible=1",new String[]{root})) {
+            if(!row.moveToFirst())throw unavailable();name=row.getString(0);
+        }
+        if(pieces.length==1)return new Document(root,name,null);
+        try(Cursor row=db.rawQuery("SELECT entry FROM entries WHERE root=? AND document=?",new String[]{root,uuid(pieces[1])})) {
+            if(!row.moveToFirst())throw unavailable();return new Document(root,name,new JSONObject(row.getString(0)));
+        }
+    }
+    java.util.List<Document> children(String parentId) throws Exception {
+        Document parent=document(parentId);if(!parent.folder())throw unavailable();java.util.List<Document> result=new java.util.ArrayList<>();int bytes=0;
+        try(Cursor rows=db.rawQuery("SELECT entry FROM entries WHERE root=? AND parent=? ORDER BY path LIMIT 10001",new String[]{parent.root,parent.path})) {
+            while(rows.moveToNext()) {
+                check.run();String json=rows.getString(0);bytes+=json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                if(result.size()>=FolderReader.MAX_ENTRIES || bytes>4*1024*1024)throw unavailable();
+                result.add(new Document(parent.root,"",new JSONObject(json)));
+            }
+        }
+        return result;
+    }
+    android.provider.DocumentsContract.Path documentPath(String parentId,String childId) throws Exception {
+        Document child=document(childId),parent=document(parentId==null?child.root:parentId);
+        if(!parent.id.equals(child.id) && !descendant(parent.id,child.id))throw unavailable();
+        java.util.LinkedList<String> ids=new java.util.LinkedList<>();ids.add(child.id);String path=child.path;
+        while(!path.equals(parent.path)) {
+            check.run();int slash=path.lastIndexOf('/');path=slash<0?"":path.substring(0,slash);
+            if(path.isEmpty())ids.addFirst(child.root);
+            else {Entry ancestor=entry(child.root,path);if(ancestor==null || !ancestor.json.getString("kind").equals("folder"))throw unavailable();ids.addFirst(child.root+":"+uuid(ancestor.json.getString("id")));}
+            if(ids.size()>256)throw unavailable();
+        }
+        return new android.provider.DocumentsContract.Path(parentId==null?child.root:null,ids);
+    }
+    boolean descendant(String parentId,String childId) throws Exception {
+        Document parent=document(parentId),child=document(childId);
+        return parent.folder() && parent.root.equals(child.root) && !parent.id.equals(child.id) && (parent.path.isEmpty() || child.path.startsWith(parent.path+"/"));
+    }
+    /** Returns a read-only, verified snapshot. Publication never mutates a blob;
+     * an already open reader keeps its original version across replacement. */
+    android.os.ParcelFileDescriptor openDocument(String id) throws Exception {
+        Document document=document(id);if(document.folder())throw unavailable();Entry selected=entry(document.root,document.path);
+        if(selected==null || selected.blob==null || !SyncStaging.canonical(selected.json).equals(SyncStaging.canonical(document.entry)))throw changed();
+        FileDescriptor fd=open(new File(blobs,uuid(selected.blob)),OsConstants.O_RDONLY);
+        try {verify(fd,selected.json,null,0,0);check.run();return android.os.ParcelFileDescriptor.dup(fd);}finally{Os.close(fd);}
+    }
+
 }

@@ -696,3 +696,46 @@ acceptance. OS Files edits, restore/retention, background workers, large-root
 partitioning, provider/physical-device/reboot tests and the rest of the full
 Drive/Photos/Resilio goal remain open. The current backend has a 10,000-blob
 safety bound and fully verifies reads; it is not the final large-file transport.
+
+
+### Android offline folders in Files (2026-10-17)
+
+Native **Choose folder → New offline folder** now creates a named local root
+with explicit disclosure of Android Files visibility, sign-out behavior,
+selected-document access by other apps, access removal and uninstall. Existing
+SAF selections keep their own flow. The new root opens at its canonical path
+in the system picker and is bound to its creating account/origin for Thingtime
+selection. Selection does not start a transfer.
+
+`OfflineDocumentsProvider` exposes only explicitly consented roots behind
+Android's `MANAGE_DOCUMENTS` permission and URI grants. Indexed, opaque document
+IDs remain stable across replacement; ancestry checks prevent cross-root or
+sibling access. Read-only verified snapshots preserve old open readers. Write,
+rename, delete and external editor operations remain unsupported. Catalog v2
+adds native document/parent indexes and Files visibility in an atomic migration;
+existing v1 roots stay private. Listings reject more than 10,000 children or
+4 MiB of metadata. Native paths and owner identifiers are not projected.
+
+Installed Android 15 / API 35 acceptance verified creation cancellation, native
+creation, actual Files selection, complete 8 MiB + 17-byte nested content through
+ContentResolver, bridge scan and **1 file checked**, visual Files navigation,
+and non-destructive access removal. The first manual attempt timed out before
+selection; the successful retry reused that empty root. Test cleanup now proves
+the selected root is empty before taking ownership, and deletes only its
+synthetic root/blob fixtures. An ungranted shell UID was denied root discovery.
+
+The successful manual suite reported `OK (43 tests)` (41 executed, two opt-in
+process tests skipped). Final production source, including the listing budget,
+passed `OK (44 tests)` (42 executed, two skipped), with seven provider tests,
+26 JVM tests, debug build and lint. All three actual process-exit publication
+scenarios passed again after migration, with native receipts accepted by the
+production TypeScript codec. No TypeScript source changed in this checkpoint.
+
+Android Download now remains disabled until per-root publication negotiation,
+current native approval checks and managed scan/read/publication dispatch are
+connected. No cloud-download claim is made from synthetic native publication.
+Root deletion/retention, writable Files edits, large-root performance, physical
+and API 26 devices, reboot/power loss, background scheduling, Photos, peer sync,
+Mac receivers and complete convergence/release acceptance remain open. The full
+goal remains active. Fork-safe setup and manual confirmation steps are in both
+READMEs; no new secret, service or broad storage permission is required.

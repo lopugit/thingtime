@@ -203,7 +203,7 @@ fixture from the picker section above, run:
 THINGTIME_FOLDER_APPROVAL_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json
 ```
 
-Select the fixture through **Choose folder**. Cancel the first native approval.
+Select the fixture through **Choose folder → Existing folder**. Cancel the first native approval.
 On the next dialog, choose **Continue to Files**, select the same test folder,
 and accept Android's access prompt. Cancel the next native dialog, which tests
 a changed configuration revision. The test verifies encrypted reload, exact
@@ -225,12 +225,12 @@ a supported adapter with explicit destination preconditions and durable recovery
 
 ## Offline-folder publication backend checks
 
-The app now contains `ManagedFileStore`, a native backend for future
-Thingtime-owned offline folders under `noBackupFilesDir/ManagedFiles-v1`.
-No Android Files root, broad storage permission or new web capability is exposed
-by this backend checkpoint. Generic selected SAF trees are never written by it.
-Normal sign-in and native write approval still need to be connected before any
-user-facing download can run.
+The app contains `ManagedFileStore`, the native backend for Thingtime-owned
+offline folders under `noBackupFilesDir/ManagedFiles-v1`. Native creation and
+read-only Android Files exposure are described below. Generic selected SAF
+trees are never written by this backend. Per-root publication capability and
+current native write approval still need integration before user-facing
+downloads can run. No broad storage permission is requested.
 
 Completed stages are copied through read-only descriptors, independently
 verified and fsynced. Synchronous SQLite transactions commit conditional file
@@ -262,3 +262,54 @@ do not delete it or start another prepare until that run is verified. Ordinary
 No dependency, secret, service or deployment variable is added. SQLite is the
 Android platform's local storage primitive; server file entities, settings and
 Timeline continue through the existing Thingtime APIs and shared contracts.
+
+
+## Offline folders in Android Files
+
+**Choose folder → New offline folder** opens native naming/consent, then the
+system picker at the new root. Cancel before creation leaves no root. Cancel in
+the subsequent picker leaves the created local folder in Files. Existing
+folders retain their normal SAF flow. Roots are bound to account/origin for
+Thingtime selection, but their explicitly consented Files visibility survives
+sign-out and removal of account access. Uninstall removes this app-private
+storage. Folder deletion/retention controls remain pending.
+
+`OfflineDocumentsProvider` requires Android's `MANAGE_DOCUMENTS` permission;
+other apps receive access only through the system picker's document/tree grants.
+It lists explicitly exposed roots, uses stable opaque IDs and indexed ancestry,
+and returns read-only verified snapshots. Replacement preserves an already-open
+reader's original bytes. No create/edit/rename/delete flags or writable handles
+are exposed. The v1→v2 catalog migration keeps existing private roots hidden.
+Listings fail closed above 10,000 children / 4 MiB metadata. Arbitrary providers
+are not treated as transactional destinations.
+
+With the private local-account fixture described above, use a disposable API 35
+emulator and run:
+
+```sh
+THINGTIME_OFFLINE_FILES_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json
+```
+
+At `OFFLINE_CREATE_QA_READY` in `adb logcat -s System.out:I`, cancel one native
+creation, then create **ThingtimeOfflineQA** and select its root in Files.
+The test publishes only synthetic nested data through the native backend,
+verifies every byte of an 8 MiB + 17-byte file through ContentResolver, then
+checks the real bridge and **Check folder** result. At `OFFLINE_FILES_QA_READY`,
+inspect **ThingtimeOfflineQA/nested/original.bin** in Files and return to
+Thingtime. Only after that inspection, acknowledge with:
+
+```sh
+adb shell run-as com.thingtime.mobile.dev touch files/offline-files-confirmed
+```
+
+The marker is test-only private state, not a production bridge command. Each
+manual phase has a five-minute timeout. The test removes its native grant and
+verifies that local files remain, then deletes only its synthetic root/blob
+fixtures. Never select a personal folder for this acceptance. If a run times out
+before selection, reuse its empty **ThingtimeOfflineQA** root through **Existing
+folder** on the next attempt instead of creating another root.
+
+This is Files access acceptance, not cloud Download now or OS editor support.
+Run the process-recovery script above after catalog changes. Physical devices,
+API 26, reboot/power loss, large files, background execution and writable Files
+operations remain separate acceptance work.

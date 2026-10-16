@@ -10363,8 +10363,35 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Android 15 emulator: actual process kills before/after commit and after
   replacement; verify from a fresh process and validate native receipts with
   the production TypeScript codec. Keep the run-ID proof on failure.
-- [ ] Integrate the OS Files provider, native create/remove and existing write
-  approval, per-folder capabilities and Download now. Verify real cloud bytes
+- [ ] Integrate native root removal and existing write approval, per-folder
+  capabilities and Download now; native creation/read-only Files are covered below. Verify real cloud bytes
   in the installed app before claiming user-facing Android download delivery.
 - [ ] Verify API 26/physical devices, reboot/power-loss, low storage, retention,
   Files edits, background scheduling and large-root behavior separately.
+
+
+### Android offline folders in Files (2026-10-17)
+
+- [x] Cancel native creation before confirming: no root/catalog is created.
+  Create a synthetic named offline folder, select it in the real system picker,
+  and verify **Check folder** reports its published file. Visually navigate
+  Files to the nested 8 MiB + 17-byte fixture and verify all bytes via the real
+  ContentResolver. The initial manual run timed out before selection; the
+  successful retry reused that empty root and cleaned its fixtures.
+- [x] An explicit canonical document path must open the correct starting folder
+  and breadcrumbs. Cross-root/ancestor requests and hostile IDs fail closed.
+  Stable file IDs survive replacement; existing readers keep original bytes.
+- [x] Refuse every writable descriptor mode, directories, cancelled opens,
+  corrupt/symlinked blobs and cross-account native root selection. Unknown
+  projection columns cannot disclose native paths or account identifiers.
+- [x] Installed provider requires `MANAGE_DOCUMENTS` plus explicit URI grants;
+  an ungranted shell UID cannot enumerate roots. Native exposure is required,
+  and v1 catalog migration keeps existing roots hidden with stable IDs.
+- [x] Removing Thingtime access keeps offline files. The acceptance fixture
+  separately removes only its synthetic root and blobs after verification.
+- [x] Refuse oversized child metadata without returning a partial listing;
+  provider queries must remain bounded even for a native catalog at the limit.
+- [x] Re-run all three process-loss publication cases after schema migration;
+  retained bytes and shared receipts remain recoverable.
+- [ ] Verify physical/API 26 devices, system reboot, low storage, cancellation
+  during creation, writable Files editing and cloud Download now separately.

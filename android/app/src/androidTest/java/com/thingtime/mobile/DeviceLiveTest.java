@@ -34,6 +34,61 @@ public class DeviceLiveTest {
         awaitTrue(web,"window.__folderTestReply !== null",request.optString("action").equals("write-approve")?300000:60000);
         return new JSONObject(new JSONTokener(evaluate(web,"JSON.stringify(window.__folderTestReply)")).nextValue().toString());
     }
+    private static void verifyOfflineFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
+        File confirmed=new File(context.getFilesDir(),"offline-files-confirmed");Files.deleteIfExists(confirmed.toPath());
+        FolderStore grants=new FolderStore(context);assertEquals("Use a disposable account without selected folders",0,grants.list(scope).length());
+        System.out.println("OFFLINE_CREATE_QA_READY: Cancel one creation, then create ThingtimeOfflineQA through Choose folder > New offline folder and select it in Files.");
+        long deadline=System.currentTimeMillis()+300000;String grantId=null;
+        while(System.currentTimeMillis()<deadline) {
+            JSONArray roots=grants.list(scope);
+            for(int i=0;i<roots.length();i++)if(roots.getJSONObject(i).getString("name").equals("ThingtimeOfflineQA"))grantId=roots.getJSONObject(i).getString("id");
+            if(grantId!=null)break;Thread.sleep(500);
+        }
+        assertNotNull("Create and select the synthetic offline folder",grantId);
+        android.net.Uri selected=grants.grant(scope,grantId);assertEquals(OfflineDocumentsProvider.authority(context),selected.getAuthority());
+        String root=android.provider.DocumentsContract.getTreeDocumentId(selected);
+        // Prove this is empty before entering cleanup that owns this test root.
+        // A mistakenly selected existing folder must never be deleted on failure.
+        try(ManagedFileStore store=new ManagedFileStore(context,()->{})) {
+            store.requireFilesRoot(scope,root);assertEquals(0,store.scan(scope,root).length());
+        }
+        ManagedFileStoreTest fixture=new ManagedFileStoreTest();fixture.before();
+        fixture.managed=new File(context.getNoBackupFilesDir(),"ManagedFiles-v1");fixture.root=root;fixture.fixture.owner=scope;fixture.fixture.grant=grantId;
+        try {
+            fixture.folder("nested");byte[] bytes=new byte[8*1024*1024+17];java.util.Arrays.fill(bytes,(byte)13);
+            JSONObject receipt=fixture.publish(fixture.request("nested/original.bin",bytes,true),bytes);String document=root+":"+receipt.getJSONObject("entry").getString("id");
+            try(android.os.ParcelFileDescriptor fd=context.getContentResolver().openFileDescriptor(OfflineDocumentsProvider.rootUri(context,document),"r");
+                InputStream input=new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)) {
+                assertArrayEquals(bytes,input.readAllBytes());
+            }
+            JSONObject scan=folderRequest(web,scope,new JSONObject().put("action","scan").put("rootId",grantId));assertTrue(scan.getBoolean("complete"));assertEquals(2,scan.getJSONArray("entries").length());
+            assertFalse(scan.toString().contains("content://"));assertFalse(scan.toString().contains("/data/"));
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Check folder')?.click()");
+            awaitTrue(web,"document.body.innerText.includes('1 file checked')");
+            android.content.Intent browse=new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,OfflineDocumentsProvider.rootUri(context,root));
+            context.startActivity(browse);
+            System.out.println("OFFLINE_FILES_QA_READY: Inspect ThingtimeOfflineQA/nested/original.bin in Android Files, return to Thingtime, then create files/offline-files-confirmed in the debug app.");
+            deadline=System.currentTimeMillis()+300000;while(!confirmed.exists() && System.currentTimeMillis()<deadline)Thread.sleep(500);
+            assertTrue("Confirm the rendered Files inspection",confirmed.exists());Files.delete(confirmed.toPath());
+            folderRequest(web,scope,new JSONObject().put("action","remove").put("rootId",grantId));
+            assertEquals(0,grants.list(scope).length());
+            try(ManagedFileStore store=fixture.store()){assertEquals(2,store.scan(scope,root).length());assertEquals(root,store.document(root).id);}
+            System.out.println("OFFLINE_FILES_QA_PASS: native creation, actual Files selection, scoped grant, nested provider bytes, bridge scan and non-destructive access removal.");
+        } finally {
+            grants.remove(scope,grantId);Files.deleteIfExists(confirmed.toPath());
+            java.util.List<String> blobs=new java.util.ArrayList<>();
+            try(android.database.sqlite.SQLiteDatabase db=android.database.sqlite.SQLiteDatabase.openDatabase(new File(fixture.managed,"catalog.sqlite").getPath(),null,0)) {
+                db.beginTransaction();try {
+                    try(android.database.Cursor rows=db.rawQuery("SELECT blob FROM entries WHERE root=? AND blob IS NOT NULL",new String[]{root})) {while(rows.moveToNext())blobs.add(rows.getString(0));}
+                    for(String table:new String[]{"receipts","retained","entries"})db.delete(table,"root=?",new String[]{root});
+                    db.delete("roots","id=?",new String[]{root});db.setTransactionSuccessful();
+                }finally{db.endTransaction();}
+            }
+            for(String blob:blobs){assertEquals(blob,java.util.UUID.fromString(blob).toString());Files.deleteIfExists(new File(new File(fixture.managed,"blobs"),blob).toPath());}
+            OfflineDocumentsProvider.changed(context);fixture.after();
+        }
+    }
     private static void verifySelectedFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
         awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.2.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
         assertNotNull(folderRequest(web,scope,new JSONObject().put("action","list")).getJSONArray("roots"));
@@ -48,6 +103,7 @@ public class DeviceLiveTest {
             .put("data",java.util.Base64.getEncoder().encodeToString(new byte[FolderReader.MAX_READ])));
         assertEquals("Folder access is unavailable. Choose it again.",denied.getString("error"));
         assertFalse(denied.toString().contains("content://"));
+        if("true".equals(InstrumentationRegistry.getArguments().getString("offlineSelection"))) {verifyOfflineFolder(web,context,scope);return;}
         if(!"true".equals(InstrumentationRegistry.getArguments().getString("folderSelection"))) return;
         System.out.println("FOLDER_QA_READY: Choose folder and select Documents/ThingtimeSyncQA in the system picker.");
         long deadline=System.currentTimeMillis()+300000;
