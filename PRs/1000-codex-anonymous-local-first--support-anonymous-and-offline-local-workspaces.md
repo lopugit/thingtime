@@ -1927,3 +1927,33 @@ unit/build/type logs: `tmp/bound-import-*.log`. This is local verification only.
 The full goal remains open: complete export manifests for previously remote bound
 content, parent deletion/binding reconciliation, linked/managed transfers and the
 remaining matrix still need implementation/acceptance. Do not merge from this checkpoint.
+
+
+## Retained export refusal checkpoint — 2026-10-17
+
+Reproduced a known read refusal removing an owned cached Thing while leaving its
+export snapshot readable. The shared refusal transaction now removes affected
+export closures, including export-only dependencies and canonical file aliases.
+Prepared plans/bundles recheck refusal watermarks and live file metadata through
+canonical JSON/clipboard/ZIP/download helpers. Refusals during remote preparation
+or ZIP encoding cannot produce a successful retained download. These callbacks
+are in-process only and never part of portable JSON. Pending authored edits remain
+recoverable. Ordinary cached Components now record definitive background-read
+403/404/410 failures; 401/session and transient errors preserve offline content.
+
+Local validation: 337 workspace tests plus 4 offline-shell tests, 322 Things tests
+and 11 focused transfer browser-helper tests pass (38 default browser skips are
+not acceptance). The explicitly enabled production-client
+`accountExportRefusal.browser.test.ts` passes normal Download, a real cross-tab
+404, offline redownload refusal, visible error and 1440/390/320px bounds with no
+second download, page errors or offline mutations. Evidence:
+`tmp/export-refusal-browser-final/`; logs: `tmp/export-refusal-*.log`.
+Client build verifies 247 offline assets. Focused lint has no errors or warnings;
+raw TypeScript reports 91 existing diagnostics, none in changed files.
+
+This closes retained/prepared export reuse after an observed refusal; it does
+not claim universal file-cache revocation or complete retained bound-media
+export. Fresh exports of retained standalone originals, dedicated remote export
+plans and the remaining local-first acceptance matrix still need their broader
+lifecycle checks. No merge, production deployment or public fixture is authorized
+by this checkpoint; the PR remains draft.

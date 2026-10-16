@@ -299,8 +299,9 @@ export class AccountFileSync {
 		});
 	}
 
-	async readFile(id: string, signal?: AbortSignal) {
-		const readable = () => this.tx('readonly', async tx => {
+	async assertFileReadable(id: string, signal?: AbortSignal) {
+		this.lease.assertCurrent(); signal?.throwIfAborted();
+		const readable = await this.tx('readonly', async tx => {
 			const row = await tx.get<LocalAttachment>('things', id), record = await tx.get<FileRecord>(COLLECTION, id);
 			if (!row || !isLocalAttachment(row) || !record || record.cancelled || record.cancelRequested || record.deleteRequested) return false;
 			if (libraryFileVisible(row, record)) return true;
@@ -308,9 +309,14 @@ export class AccountFileSync {
 			// refused/deleted parent must not leave its files readable through a URL.
 			return ['post','comment'].includes(record.request.purpose) && (!row.targetId || !!await tx.get('things', row.targetId));
 		});
-		if (!await readable()) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+		if (!readable) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+		this.lease.assertCurrent(); signal?.throwIfAborted();
+	}
+
+	async readFile(id: string, signal?: AbortSignal) {
+		await this.assertFileReadable(id, signal);
 		const result = await this.things.readFile(id, signal);
-		if (!await readable()) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+		await this.assertFileReadable(id, signal);
 		this.lease.assertCurrent(); signal?.throwIfAborted(); return result;
 	}
 

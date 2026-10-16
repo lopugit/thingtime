@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Invalidate retained account export closures and
+  prepared downloads after known read refusals or file cancellation. Cached
+  Components now share the definitive-refusal cleanup used by posts; session and
+  transient failures preserve offline content. Cross-tab native Download checks
+  pass locally at desktop/mobile widths. Full acceptance remains open in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17: Normal account ZIP imports now admit post/comment file bindings
   atomically on device, preserving order and independent receipt-dependent sync.
   Added canonical round-trip/refusal checks and extended native browser coverage.

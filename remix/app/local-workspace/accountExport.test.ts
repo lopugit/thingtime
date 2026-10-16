@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { AccountThingSync, type AccountThing } from './accountSync';
 import { exportAccountThings } from './accountExport';
+import { AccountDiscussionCache } from './accountDiscussions';
+import { bundleFromPlan } from '../utils/thingTransfer/browser';
 import { WorkspaceDatabase } from './storage';
 import { serializeTransfer, validateTransfer } from '../utils/thingTransfer/format';
 
 const setup = () => {
- const db = new WorkspaceDatabase(new IDBFactory()), scope = { kind: 'account', ownerId: 'owner', origin: 'https://thingtime.example', dataPlane: 'home' } as const;
+ const db = new WorkspaceDatabase(new IDBFactory(),undefined,undefined,IDBKeyRange), scope = { kind: 'account', ownerId: 'owner', origin: 'https://thingtime.example', dataPlane: 'home' } as const;
  let live = true, online = false;
  const lease = { assertCurrent() { if (!live) throw new Error('Workspace changed'); }, onInvalidate: () => () => {} };
  const sync = new AccountThingSync(db, scope, lease);
@@ -17,7 +19,7 @@ const setup = () => {
 };
 const row = (id: string, kind: string, crystal: any, folderId?: string): AccountThing => ({ id, thingtime: [kind], crystal, ...(folderId ? { folderId } : {}), createdAt: '2026-10-16T01:00:00.000Z', updatedAt: '2026-10-16T01:00:00.000Z', revision: 1, author: { id: 'owner' }, acl: ['tt:user'], visibility: 'private' });
 const portable = (thing: AccountThing) => ({ id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal, ...(thing.folderId ? { folderId: thing.folderId } : {}) });
-const manifest = (plan: any) => validateTransfer({ format: 'thingtime.transfer', version: 1, ...plan });
+const manifest = (plan: any) => validateTransfer({ format: 'thingtime.transfer', version: 1, roots:plan.roots,things:plan.things,files:plan.files });
 
 test('new account content exports canonical offline dependencies without sync or account authority', async () => {
  const f = setup(); try {
@@ -132,4 +134,61 @@ test('multi-root preparation refuses conflicting saved dependency contexts', asy
   await assert.rejects(exportAccountThings({ ids: [first.id, second.id] }, f.deps), /conflicting saved contexts/);
   assert.deepEqual(await f.db.transaction(f.sync.scope, 'readonly', f.lease, tx => tx.list('thing-export-snapshots')), []);
  } finally { await f.db.close(); }
+});
+
+
+test('known read refusals remove complete export snapshots and invalidate prepared JSON plans',async()=>{
+ const f=setup();try{
+  const post=row('post','post',{type:'text',text:'Private original'});await f.sync.remember(post);f.enable();
+  f.deps.remote=async()=>({ok:true,plan:{roots:[post.id],things:[portable(post)],files:[]}});
+  const prepared=await exportAccountThings({ids:[post.id]},f.deps);
+  await new AccountDiscussionCache(f.db,f.sync.scope,f.lease).forget(post.id,Date.now());
+  assert.equal(await f.sync.view(post.id),null);
+  assert.deepEqual(await f.db.transaction(f.sync.scope,'readonly',f.lease,tx=>tx.list('thing-export-snapshots')),[]);
+  f.deps.canRefresh=()=>false;
+  await assert.rejects(exportAccountThings({ids:[post.id]},f.deps));
+  await assert.rejects(bundleFromPlan(prepared.plan),/no longer available/);
+ }finally{await f.db.close();}
+});
+
+test('refused export-only dependencies invalidate every affected closure but preserve pending authored work',async()=>{
+ const f=setup();try{
+  const page=row('page','webpage',{name:'Original page',blocks:[{id:'card',type:'component',component:'foreign'}]});
+  const foreign=row('foreign','component',{name:'Foreign',componentKey:'foreign',version:1,render:{tag:'p',children:'Private source'}});
+  await f.sync.remember(page);f.enable();f.deps.remote=async()=>({ok:true,plan:{roots:[page.id],things:[page,foreign].map(portable),files:[]}});
+  const first=await exportAccountThings({ids:[page.id]},f.deps);
+  await f.sync.things.update({id:page.id,crystal:{name:'My pending edit'}});
+  const second=await exportAccountThings({ids:[page.id],includeChildren:false},f.deps);
+  await new AccountDiscussionCache(f.db,f.sync.scope,f.lease).forget(foreign.id);
+  assert.equal((await f.sync.view(page.id))!.crystal.name,'My pending edit');
+  assert.deepEqual(await f.db.transaction(f.sync.scope,'readonly',f.lease,tx=>tx.list('thing-export-snapshots')),[]);
+  for(const result of [first,second])await assert.rejects(bundleFromPlan(result.plan),/no longer available/);
+ }finally{await f.db.close();}
+});
+
+test('a refusal during an authorized export read cannot resurrect the snapshot; fresh reauthorization can export again',async()=>{
+ const f=setup();try{
+  const post=row('post','post',{type:'text',text:'Private original'});await f.sync.remember(post);f.enable();
+  const cache=new AccountDiscussionCache(f.db,f.sync.scope,f.lease),stamp=Date.now()+10;
+  const response={ok:true,plan:{roots:[post.id],things:[portable(post)],files:[]}};
+  f.deps.remote=async()=>{await cache.forget(post.id,stamp);return response;};
+  await assert.rejects(exportAccountThings({ids:[post.id]},f.deps),/no longer available/);
+  assert.deepEqual(await f.db.transaction(f.sync.scope,'readonly',f.lease,tx=>tx.list('thing-export-snapshots')),[]);
+  await f.sync.remember(post,stamp+1);f.deps.remote=async()=>response;
+  const fresh=await exportAccountThings({ids:[post.id]},f.deps);assert.equal(fresh.plan.things[0].id,post.id);
+  f.deps.canRefresh=()=>false;assert.equal((await exportAccountThings({ids:[post.id]},f.deps)).plan.things[0].id,post.id);
+  await cache.forget(post.id,stamp+2);await assert.rejects(bundleFromPlan(fresh.plan),/no longer available/);
+ }finally{await f.db.close();}
+});
+
+test('legacy export snapshots cannot bypass a refusal retained before this client version',async()=>{
+ const f=setup();try{
+  const post=row('post','post',{type:'text',text:'Private original'});await f.sync.remember(post);f.enable();
+  f.deps.remote=async()=>({ok:true,plan:{roots:[post.id],things:[portable(post)],files:[]}});
+  await exportAccountThings({ids:[post.id]},f.deps);
+  const saved=await f.db.transaction(f.sync.scope,'readonly',f.lease,tx=>tx.list<any>('thing-export-snapshots'));
+  await new AccountDiscussionCache(f.db,f.sync.scope,f.lease).forget(post.id);
+  await f.db.transaction(f.sync.scope,'readwrite',f.lease,async tx=>{const {refusals,...legacy}=saved[0].value;await tx.put('thing-export-snapshots',saved[0].id,legacy);});
+  f.deps.canRefresh=()=>false;await assert.rejects(exportAccountThings({ids:[post.id]},f.deps),/no longer available/);
+ }finally{await f.db.close();}
 });

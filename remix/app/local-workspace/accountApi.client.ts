@@ -263,45 +263,56 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const refresh = async (args: Record<string, unknown>, signal?: AbortSignal, retainPage?: (page: { ids: string[]; nextCursor: string | null }) => Promise<void>) => {
 		const { sync, files, transport, lease } = worker();
 		const startedAt = Date.now();
-		const result = await transport.read(args, signal);
-		lease.assertCurrent();
-		// Page membership belongs to the authorized server snapshot. Keep deleted
-		// IDs here; views hide tombstones and explicit conflict restoration can
-		// reveal them again without losing membership in the cached page.
-		const membership = Array.isArray(result.things) && result.things.every((thing: any) => accountThingCanCache(thing) && thing.author?.id === owner.id)
-			? { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null } : null;
-		const retain = async (thing: any) => {
-			if (thing.author?.id !== owner.id) return thing;
-			if (thing.thingtime?.some((kind: string) => ['post','comment'].includes(kind)) && Array.isArray(thing.attachments)) {
-				const existing = await sync.view(thing.id);
-				if (existing && existing.syncState !== 'synced') return project(existing);
-				try {
-					if (result.post?.attachmentsTruncated) throw new WorkspaceError('INCOMPLETE_POST_FILES', 'Load the complete post files before using them offline.', 409);
-					await files.retainPost(transport.files, thing, async admit => {
-						// Parent membership can change while original bytes are in flight.
-						const fresh = (await transport.read({ id: thing.id }, signal)).thing;
-						if (!fresh || fresh.updatedAt !== thing.updatedAt || JSON.stringify(fresh.attachments?.map((file: any) => file.id)) !== JSON.stringify(thing.attachments.map((file: any) => file.id))) throw new WorkspaceError('POST_CHANGED', 'The account post changed while retaining its files. Retry online.', 409);
-						await sync.remember(thing, startedAt, admit);
-					}, signal);
-					return project(await sync.view(thing.id));
-				} catch (error) {
-					lease.assertCurrent(); signal?.throwIfAborted();
-					if ([401,403,404,410].includes(Number((error as any)?.status))) throw error;
-					result.localCacheError = 'This post and its complete files could not be refreshed on this device. Retry online before relying on it offline.';
-					return thing;
+		try {
+			const result = await transport.read(args, signal);
+			lease.assertCurrent();
+			// Page membership belongs to the authorized server snapshot. Keep deleted
+			// IDs here; views hide tombstones and explicit conflict restoration can
+			// reveal them again without losing membership in the cached page.
+			const membership = Array.isArray(result.things) && result.things.every((thing: any) => accountThingCanCache(thing) && thing.author?.id === owner.id)
+				? { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null } : null;
+			const retain = async (thing: any) => {
+				if (thing.author?.id !== owner.id) return thing;
+				if (thing.thingtime?.some((kind: string) => ['post','comment'].includes(kind)) && Array.isArray(thing.attachments)) {
+					const existing = await sync.view(thing.id);
+					if (existing && existing.syncState !== 'synced') return project(existing);
+					try {
+						if (result.post?.attachmentsTruncated) throw new WorkspaceError('INCOMPLETE_POST_FILES', 'Load the complete post files before using them offline.', 409);
+						await files.retainPost(transport.files, thing, async admit => {
+							// Parent membership can change while original bytes are in flight.
+							const fresh = (await transport.read({ id: thing.id }, signal)).thing;
+							if (!fresh || fresh.updatedAt !== thing.updatedAt || JSON.stringify(fresh.attachments?.map((file: any) => file.id)) !== JSON.stringify(thing.attachments.map((file: any) => file.id))) throw new WorkspaceError('POST_CHANGED', 'The account post changed while retaining its files. Retry online.', 409);
+							await sync.remember(thing, startedAt, admit);
+						}, signal);
+						return project(await sync.view(thing.id));
+					} catch (error) {
+						lease.assertCurrent(); signal?.throwIfAborted();
+						if ([401,403,404,410].includes(Number((error as any)?.status))) throw error;
+						result.localCacheError = 'This post and its complete files could not be refreshed on this device. Retry online before relying on it offline.';
+						return thing;
+					}
 				}
+				if (!accountThingCanCache(thing)) return thing;
+				await sync.remember(thing, startedAt);
+				return project(await sync.view(thing.id));
+			};
+			if (result.thing) result.thing = await retain(result.thing);
+			if (result.things) result.things = (await Promise.all(result.things.map(retain))).filter(Boolean);
+			await retainInteractionProjection(result.discussion, startedAt);
+			if (membership && retainPage) await retainPage(membership);
+			await retainPosts(result, startedAt);
+			if (result.post && !result.localCacheError) result.post = await ownedPost(result.post.id, true) || result.post;
+			return result;
+		} catch (error) {
+			lease.assertCurrent();
+			// Definitive single-Thing refusals retire every retained projection,
+			// including ordinary Components and prepared export closures. Session
+			// expiry and transient failures do not revoke offline content.
+			if (typeof args.id === 'string' && !args.key && [403,404,410].includes(Number((error as any)?.status)) && await worker().posts.forget(args.id)) {
+				clearLocalCache(`tt-saved-${workspaceScopeKey(scope)}`); announceLocalWorkspaceChange([args.id]);
 			}
-			if (!accountThingCanCache(thing)) return thing;
-			await sync.remember(thing, startedAt);
-			return project(await sync.view(thing.id));
-		};
-		if (result.thing) result.thing = await retain(result.thing);
-		if (result.things) result.things = (await Promise.all(result.things.map(retain))).filter(Boolean);
-		await retainInteractionProjection(result.discussion, startedAt);
-		if (membership && retainPage) await retainPage(membership);
-		await retainPosts(result, startedAt);
-		if (result.post && !result.localCacheError) result.post = await ownedPost(result.post.id, true) || result.post;
-		return result;
+			throw error;
+		}
 	};
 	const changed = () => { announceLocalWorkspaceChange(); worker().wake(); };
 	const removeFile = async (id: string, localFileId: string | null, expectedUpdatedAt?: string) => {
@@ -699,15 +710,10 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				if (remoteId && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void retainFile(remoteId, options?.signal).catch(() => {});
 				return { ok: true, thing: { ...projectFile(row), ...(remoteId && service.fileRetentionErrors.has(remoteId) ? { localRetentionError: service.fileRetentionErrors.get(remoteId) } : {}) }, savedLocally: true };
 			}
-			const evictRefusedPost = async (error: unknown) => {
-				if ([403,404,410].includes(Number((error as any)?.status)) && await service.posts.forget(args.id)) {
-					clearLocalCache(`tt-saved-${workspaceScopeKey(scope)}`); announceLocalWorkspaceChange([args.id]);
-				}
-			};
 			const authoredPost = await ownedPost(args.id, true);
 			if (authoredPost) {
 				const context = await postContext(authoredPost);
-				if (authoredPost.syncState === 'synced' && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(async () => { if (JSON.stringify([await ownedPost(args.id,true),await postContext(authoredPost)]) !== JSON.stringify([authoredPost,context])) announceLocalWorkspaceChange([args.id]); }).catch(async error => { await evictRefusedPost(error); }).catch(() => {});
+				if (authoredPost.syncState === 'synced' && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(async () => { if (JSON.stringify([await ownedPost(args.id,true),await postContext(authoredPost)]) !== JSON.stringify([authoredPost,context])) announceLocalWorkspaceChange([args.id]); }).catch(() => {});
 				return { ok: true, thing: project(await sync.view(args.id)), post: authoredPost, ...context, localWorkspace: true };
 			}
 			const cachedPost = await service.posts.get(args.id);
@@ -716,7 +722,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				const context = await postContext(cachedPost);
 				if (!offline) void refresh(args, options?.signal).then(async () => {
 					if (JSON.stringify([await service.posts.get(args.id),await postContext(cachedPost)]) !== JSON.stringify([cachedPost,context])) announceLocalWorkspaceChange([args.id]);
-				}).catch(async error => { await evictRefusedPost(error); }).catch(() => {});
+				}).catch(() => {});
 				return {ok:true,thing:null,post:overlayAccountPost(cachedPost,new Map((await service.interactions.states()).map(state=>[state.id,state]))),...context,localWorkspace:true,incomplete:offline};
 			}
 			if (await sync.isDeleted(args.id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
@@ -725,15 +731,12 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				if (navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(() => {}).catch(() => {});
 				return { ok: true, thing: project(cached), savedLocally: cached.syncState !== 'synced' };
 			}
-			try {
-				const result = await refresh(args, options?.signal);
-				if (result.thing?.author?.id === owner.id && result.thing.thingtime?.length === 1 && result.thing.thingtime[0] === 'attachment' && !result.thing.targetId) {
-					try { result.thing = projectFile(await retainFile(args.id, options?.signal)); result.savedLocally = true; }
-					catch { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); result.thing.localRetentionError = service.fileRetentionErrors.get(args.id); }
-				}
-				return result;
+			const result = await refresh(args, options?.signal);
+			if (result.thing?.author?.id === owner.id && result.thing.thingtime?.length === 1 && result.thing.thingtime[0] === 'attachment' && !result.thing.targetId) {
+				try { result.thing = projectFile(await retainFile(args.id, options?.signal)); result.savedLocally = true; }
+				catch { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); result.thing.localRetentionError = service.fileRetentionErrors.get(args.id); }
 			}
-			catch (error) { await evictRefusedPost(error); throw error; }
+			return result;
 		},
 		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();

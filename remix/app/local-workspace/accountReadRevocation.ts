@@ -1,5 +1,7 @@
 import { WorkspaceError, WORKSPACE_LIMITS, type WorkspaceTransaction } from './storage';
+import type { ThingTransfer } from '../utils/thingTransfer/format';
 export const ACCOUNT_READ_COLLECTIONS = ['account-post-projections', 'account-discussion-projections'] as const;
+export const ACCOUNT_EXPORT_SNAPSHOTS = 'thing-export-snapshots';
 type Snapshot = { post: any | null; at: number; deniedAt?: number; parent?: string | null; root?: string | null };
 export const pruneAccountConversation = (post: any, denied: (id: string) => boolean): any => ({
  ...post,
@@ -14,14 +16,19 @@ export async function forgetAccountConversation(tx: WorkspaceTransaction, id: st
  const rows = (await Promise.all(ACCOUNT_READ_COLLECTIONS.map(async collection => (await tx.list<Snapshot>(collection)).map(row => ({ ...row, collection }))))).flat();
  const owned = (await tx.list<{state:string;base:unknown}>('thing-sync')).filter(row => row.value.state === 'synced' && row.value.base);
  const ownedBodies = await Promise.all(owned.map(async row => ({id:row.id,value:await tx.get<{targetId?:string}>('things',row.id)})));
+ const exports = await tx.list<{manifest:ThingTransfer;references?:string[]}>(ACCOUNT_EXPORT_SNAPSHOTS);
  const children = new Map<string, string[]>();
  for (const row of ownedBodies) if (row.value?.targetId) { const values=children.get(row.value.targetId)||[];values.push(row.id);children.set(row.value.targetId,values); }
+ for (const snapshot of exports) for (const row of snapshot.value.manifest.things) if (row.targetId) { const values=children.get(row.targetId)||[];values.push(row.id);children.set(row.targetId,values); }
  for (const row of rows) {
   for (const parent of [row.value.parent || row.value.post?.targetId, row.value.root]) if (typeof parent === 'string' && parent) { const values = children.get(parent) || []; values.push(row.id); children.set(parent, values); }
  }
  const denied = new Set([id]), pending = [id];
  while (pending.length) for (const child of children.get(pending.pop()!) || []) if (!denied.has(child)) { denied.add(child); pending.push(child); }
  let changed = false;
+ // Export-only dependencies are read caches too, never an enduring grant.
+ // Remove the whole closure; pruning a fragment would advertise a partial ZIP.
+ for (const row of exports) if (row.value.manifest.things.some(thing => denied.has(thing.id)) || row.value.references?.some(id=>denied.has(id))) { await tx.delete(ACCOUNT_EXPORT_SNAPSHOTS,row.id);changed=true; }
  // Synced owned rows are remote read caches too. Preserve unsynced authored
  // work, but do not resurrect deleted/refused comments through that cache.
  for (const row of ownedBodies) if (denied.has(row.id)) { await tx.delete('things',row.id);await tx.delete('thing-sync',row.id);changed=true; }

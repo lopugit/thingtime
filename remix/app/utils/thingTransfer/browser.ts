@@ -7,6 +7,7 @@ export const MAX_CLIPBOARD_BYTES = 32 * 1024 * 1024;
 const invalid = (message: string): never => { throw new TransferFormatError(message); };
 
 export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string; signal?: AbortSignal; fetch?: typeof fetch } = {}): Promise<TransferBundle> => {
+  if (typeof plan.assertCurrent === 'function') await plan.assertCurrent(options.signal);
   const manifest = validateTransfer({ format: TRANSFER_FORMAT, version: 1, roots: plan.roots, things: plan.things,
     ...(plan.links ? { links: plan.links } : {}), ...(plan.attachmentOrder ? { attachmentOrder: plan.attachmentOrder } : {}),
     files: plan.files.map((file, index) => ({ id: file.id, targetId: file.targetId, name: file.name, mime: file.mime, bytes: file.bytes, ...transferAnnotations(file),
@@ -70,11 +71,13 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
     files.set(entry.id, bytes);
   }
   options.signal?.throwIfAborted();
-  return { manifest, files };
+  if (typeof plan.assertCurrent === 'function') await plan.assertCurrent(options.signal);
+  return { manifest, files, ...(typeof plan.assertCurrent === 'function' ? {assertCurrent:plan.assertCurrent} : {}) };
 };
 
 export const transferClipboardText = async (bundle: TransferBundle, signal?: AbortSignal): Promise<string> => {
   signal?.throwIfAborted();
+  if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
   if (!bundle.manifest.files.length) {
     if (bundle.files.size) invalid('The transfer contains undeclared file bytes');
     return serializeTransfer(bundle.manifest);
@@ -128,10 +131,12 @@ export const writeTransferClipboard = (bundle: Promise<TransferBundle>, signal?:
 };
 
 export const downloadTransfer = async (bundle: TransferBundle, format: 'json' | 'zip' = 'zip', name = 'thingtime', signal?: AbortSignal) => {
+  if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
   if (format === 'json' && bundle.manifest.files.length) invalid('Use ZIP to include the file bytes');
   const blob = format === 'json' ? new Blob([serializeTransfer(bundle.manifest)], { type: 'application/json' })
     : new Blob([Uint8Array.from(await encodeTransferArchive(bundle, signal))], { type: 'application/zip' });
   signal?.throwIfAborted();
+  if (typeof bundle.assertCurrent === 'function') await bundle.assertCurrent(signal);
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

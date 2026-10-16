@@ -1,4 +1,5 @@
 import { localAttachmentFileId } from './attachments';
+import { ACCOUNT_EXPORT_SNAPSHOTS, accountReadRefusals } from './accountReadRevocation';
 import type { AccountFileSync } from './accountFiles';
 import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { type AccountThingSync, accountThingCanCache } from './accountSync';
@@ -9,8 +10,8 @@ import { transferChecksum } from '../utils/thingTransfer/archive';
 
 type Input = { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean };
 type State = Awaited<ReturnType<AccountThingSync['exportSnapshot']>>;
-type Snapshot = { manifest: ThingTransfer; revisions: Record<string, number>; savedAt: string };
-const STORE = 'thing-export-snapshots';
+type Snapshot = { manifest: ThingTransfer; revisions: Record<string, number>; savedAt: string; refusals?: Record<string,number>; references?:string[] };
+const STORE = ACCOUNT_EXPORT_SNAPSHOTS;
 class MissingExportSnapshot extends WorkspaceError {
  constructor(readonly id: string) { super('EXPORT_CACHE_INCOMPLETE', `Complete export content for ${id} is not saved on this device. Download it online once, then retry offline.`, 409); }
 }
@@ -38,7 +39,27 @@ export async function exportAccountThings(input: Input, deps: {
  check();
  const tx = <T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) =>
   db.transaction(sync.scope, mode, { assertCurrent: check, onInvalidate: lease.onInvalidate }, run);
- let baseline = await tx<Snapshot | undefined>('readonly', tx => tx.get<Snapshot>(STORE, key));
+ const initial = await tx('readonly', async tx => ({snapshot:await tx.get<Snapshot>(STORE,key),refusals:await accountReadRefusals(tx)}));
+ let baseline = initial.snapshot;
+ const watched = new Set(args.ids);
+ let selected = new Set<string>();
+ const watch = (manifest: Pick<ThingTransfer,'things'>) => { for(const row of manifest.things){watched.add(row.id);if(row.targetId)watched.add(row.targetId);} };
+ const unavailable = () => new WorkspaceError('EXPORT_ACCESS_REFUSED','This export includes content that is no longer available. Reopen it online before downloading again.',409);
+ const assertReadable = async (transaction: WorkspaceTransaction) => {
+  const [current,states] = await Promise.all([accountReadRefusals(transaction),transaction.list<{deleted?:unknown}>('thing-sync')]);
+  const deleted = new Set(states.filter(row=>row.value.deleted).map(row=>row.id));
+  for(const id of watched) {
+   if(current.get(id)?.at !== initial.refusals.get(id)?.at || (selected.has(id) && deleted.has(id))) throw unavailable();
+  }
+ };
+ if(baseline) {
+  const baselineIds = [...new Set([...args.ids,...baseline.references || [],...baseline.manifest.things.flatMap(row=>[row.id,...(row.targetId?[row.targetId]:[])])])];
+  // Old snapshots predate refusal fencing. Require a new authorized export
+  // whenever any of their content already has a refusal watermark.
+  if(baselineIds.some(id=>initial.refusals.has(id) && baseline!.refusals?.[id] !== initial.refusals.get(id)!.at)) {
+   await tx('readwrite',tx=>tx.delete(STORE,key));throw unavailable();
+  }
+ }
  const attempted = new Set<string>();
  const collect = async (state: State) => {
   const fileLibrary = await deps.files?.library(true); check();
@@ -74,7 +95,8 @@ export async function exportAccountThings(input: Input, deps: {
     if (record && !record.remote && !record.deleted) return;
     if (!captured.has(row.id)) throw new MissingExportSnapshot(row.id);
    }, new Set(state.records.filter(row => !row.deleted).map(row => row.id)));
-  check(); return bundle;
+  for(const [remote,local] of aliases) if(bundle.files.has(localAttachmentFileId(local))) watched.add(remote);
+  watch(bundle.manifest);selected=new Set(bundle.manifest.things.map(row=>row.id));check(); return bundle;
  };
  for (;;) {
   check(); const state = await sync.exportSnapshot(); check();
@@ -82,13 +104,21 @@ export async function exportAccountThings(input: Input, deps: {
    const bundle = await collect(state);
    // Retain the entire known closure before a later sync acknowledges new IDs.
    // Missing children/files never reach this point or become a success snapshot.
-   baseline = { manifest: bundle.manifest, revisions: Object.fromEntries(state.things.map(row => [row.id, row.revision])), savedAt: new Date().toISOString() };
+   baseline = { manifest: bundle.manifest, revisions: Object.fromEntries(state.things.map(row => [row.id, row.revision])), savedAt: new Date().toISOString(), references:[...watched], refusals:Object.fromEntries([...initial.refusals].filter(([id])=>watched.has(id)).map(([id,row])=>[id,row.at])) };
    const retainedOnDevice = await retain(baseline); check();
+   const assertCurrent = async (requestSignal?: AbortSignal) => {
+    check();requestSignal?.throwIfAborted();
+    // A prepared bundle must not outlive file cancellation/deletion either.
+    // Check metadata only; repeatedly loading immutable bytes is unnecessary.
+    for (const id of bundle.files.keys()) await deps.files!.assertFileReadable(id.slice(0,-':bytes'.length),requestSignal);
+    await tx('readonly',assertReadable);check();requestSignal?.throwIfAborted();
+   };
+   await assertCurrent();
    return { ok: true, localWorkspace: true, snapshotAt: baseline.savedAt, retainedOnDevice,
-    plan: { roots: bundle.manifest.roots, things: bundle.manifest.things, files: bundle.manifest.files,
+    plan: { assertCurrent, roots: bundle.manifest.roots, things: bundle.manifest.things, files: bundle.manifest.files,
      ...(bundle.manifest.attachmentOrder ? { attachmentOrder: bundle.manifest.attachmentOrder } : {}),
      ...(bundle.files.size ? { readLocalFile: async (id: string, requestSignal?: AbortSignal) => {
-      lease.assertCurrent(); requestSignal?.throwIfAborted();
+      await assertCurrent(requestSignal);
       const bytes = bundle.files.get(id);
       if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not in this export.', 404);
       return Uint8Array.from(bytes);
@@ -112,6 +142,7 @@ export async function exportAccountThings(input: Input, deps: {
     return deps.remote(args, { signal });
    }
    const manifest = parseTransfer(serializeTransfer({ format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: [] }));
+   watch(manifest);await tx('readonly',assertReadable);
    if (manifest.roots.length !== 1 || manifest.roots[0] !== error.id) throw new WorkspaceError('INVALID_EXPORT', 'The export returned a different root.');
    const merged = new Map(baseline?.manifest.things.map(row => [row.id, row]) || []);
    for (const row of manifest.things) {
@@ -130,6 +161,7 @@ export async function exportAccountThings(input: Input, deps: {
  }
  async function retain(snapshot: Snapshot) {
   try { await tx('readwrite', async tx => {
+   await assertReadable(tx);
    const entries = (await tx.list<Snapshot>(STORE)).filter(row => row.id !== key).sort((a,b) => a.value.savedAt.localeCompare(b.value.savedAt));
    // The normal workspace byte quota also applies to each retained snapshot.
    while (entries.length >= 16) await tx.delete(STORE, entries.shift()!.id);

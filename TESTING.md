@@ -10899,3 +10899,20 @@ Run `app/local-workspace/components.browser.test.ts` with
   cold Component/reply rendering at 1440/390/320px, approved private reconnect,
   exact originals and anonymous refusal. Run `accountFileImport.browser.test.ts`
   with the existing README fixture setup; do not count its default skip.
+
+
+### Retained account export refusal fences
+
+- [x] Refuse a retained root or export-only dependency: discard every affected
+  export closure, preserve pending authored edits, and reject prepared JSON/ZIP
+  plans. A delayed export cannot recreate the refused snapshot; a fresh
+  authorized read/export can establish a new one.
+- [x] Cancel/delete a file after preparing its bundle, or refuse its canonical
+  account ID: byte readers, clipboard and final ZIP encoding all reject it.
+  Keep availability checks in process; never serialize callbacks into transfers.
+- [x] Cached ordinary Thing refresh treats 403/404/410 as definitive refusals;
+  session expiry and transient failures preserve ordinary offline content.
+- [x] Enabled `accountExportRefusal.browser.test.ts`: normal Download succeeds,
+  another tab observes the dependency's real 404, and the reopened offline
+  Download dialog produces a visible error and no second file. Verify
+  1440/390/320px bounds and zero offline mutations in a disposable local account.

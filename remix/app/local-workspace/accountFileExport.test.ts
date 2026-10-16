@@ -5,9 +5,11 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { AccountFileSync } from './accountFiles';
 import { AccountThingSync } from './accountSync';
 import { exportAccountThings } from './accountExport';
+import { AccountDiscussionCache } from './accountDiscussions';
 import { LocalThings } from './things';
 import { WorkspaceDatabase } from './storage';
-import { bundleFromPlan } from '../utils/thingTransfer/browser';
+import { bundleFromPlan, transferClipboardText } from '../utils/thingTransfer/browser';
+import { encodeTransferArchive } from '../utils/thingTransfer/archive';
 import { serializeTransfer, validateTransfer } from '../utils/thingTransfer/format';
 
 function setup() {
@@ -138,4 +140,19 @@ test('an online managed-content fallback cannot silently omit pending device fil
   await f.files.things.move([unrelated.id], remoteFolder.id);
   await assert.rejects(exportAccountThings({ ids: [remoteFolder.id] }, { ...f.deps, canRefresh: () => true, remote: async () => ({ ok: true, plan: { roots: [remoteFolder.id], things: [remoteFolder], files: [{ id: 'unretained-file' }] } }) }), /Sync your device edits/);
  } finally { await f.db.close(); }
+});
+
+
+test('prepared byte readers cannot outlive deletion or a canonical account-file refusal',async()=>{
+ for(const mode of ['delete','refuse']){
+  const f=setup();try{
+   const file=mode==='delete'?await f.save():await f.retain();
+   const component=await f.sync.things.create({thingtime:['component'],crystal:{name:'File link',componentKey:'download',version:1,render:{tag:'a',props:{href:'/api/v1/attachments/content?id='+file.id},children:'Download'}}});
+   const result=await exportAccountThings({ids:[component.id]},f.deps),id=result.plan.files[0].id,prepared=await bundleFromPlan(result.plan);
+   if(mode==='delete')await f.files.cancel(file.id);else await new AccountDiscussionCache(f.db,f.scope,f.lease).forget('canonical-file');
+   await assert.rejects(result.plan.readLocalFile(id));await assert.rejects(bundleFromPlan(result.plan));
+   await assert.rejects(encodeTransferArchive(prepared));await assert.rejects(transferClipboardText(prepared));
+   if(mode==='refuse')assert.deepEqual(await f.db.transaction(f.scope,'readonly',f.lease,tx=>tx.list('thing-export-snapshots')),[]);
+  }finally{await f.db.close();}
+ }
 });
