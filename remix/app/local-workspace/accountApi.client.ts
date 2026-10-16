@@ -1,5 +1,5 @@
 import { AccountDiscussionCache } from './accountDiscussions';
-import { localThingReadProjection } from './posts';
+import { accountPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
 import { accountImportSupported } from './accountImport';
 import { AccountFileSync } from './accountFiles';
 import { localThingProjection } from './things';
@@ -158,6 +158,26 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		const remoteId = alias ? await service.files.remoteId(alias) : (await service.sync.exportSnapshot()).records.find(record => record.id === id)?.remote ? id : null;
 		return { post, remoteId };
 	};
+	const ownedPost = async (id: string, includeComments = false) => {
+		const service = worker(), row = await service.sync.view(id);
+		if (!row || !row.thingtime.some(kind => ['post','comment'].includes(kind))) return null;
+		const all = await service.sync.things.snapshot();
+		const post = localPostProjection(row, all, owner.id, includeComments);
+		const captured = await service.posts.get(id) || await service.discussions.get(id);
+		const author = owner.username ? owner : captured?.author?.id === owner.id ? captured.author : owner;
+		const cached = includeComments ? captured : null;
+		const authoredComments = post.comments.map(comment => ({ ...comment, author, localOnly: false, localWorkspace: true }));
+		const comments = new Map((cached?.comments || []).map(comment => [comment.id,comment]));
+		for (const comment of authoredComments) comments.set(comment.id,comment as any);
+		return { ...post, author, localOnly: false, localWorkspace: true, acl: row.acl, visibility: row.visibility, syncState: row.syncState,
+			commentCount: Math.max(post.commentCount || 0,cached?.commentCount || 0,comments.size), comments: [...comments.values()] };
+	};
+	const writePost = async (input: ReturnType<typeof accountPostInput>, update = false) => {
+		if (!input) throw new WorkspaceError('UNSUPPORTED_LOCAL_POST', 'This post needs its complete media or account adapter.', 409);
+		const service = worker();
+		const row = await service.sync.things.savePost(input, update); changed();
+		return { ok: true, id: row.id, thing: project(await service.sync.view(row.id)), post: await ownedPost(row.id, true), savedLocally: true };
+	};
 	const discussionOffline = () => navigator.onLine === false || !canSyncAccountWorkspace(scope);
 	const discussionRefusal = async (id: string, error: any) => {
 		if ([401,403,404,410].includes(Number(error?.status))) {
@@ -179,14 +199,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				await retainInteractionProjection(post, startedAt); return result;
 			} catch (error) { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); await discussionRefusal(target, error); failure = error; }
 		}
-		const post = await service.discussions.get(target) || local?.post;
+		const post = await ownedPost(target) || await service.discussions.get(target) || local?.post;
 		facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 		if (!post) throw failure || new WorkspaceError('LOCAL_DISCUSSION_MISSING', 'This discussion is not saved on this device. Open it online to retain it.', 409);
 		const states = new Map((await service.interactions.states()).map(state => [state.id,state]));
-		return { ok: true, thing: null, discussion: overlayAccountPost(post, states), post: null, parent: null, root: null, localWorkspace: true, incomplete: true };
+		return { ok: true, thing: null, discussion: overlayAccountPost(post as any, states), post: null, parent: null, root: null, localWorkspace: true, incomplete: true };
 	};
 	const readDiscussionComments = async (args: any, options?: { signal?: AbortSignal }) => {
 		const service = worker(), local = await localDiscussion(args.target), target = local?.remoteId || args.target;
+		const all = await service.sync.things.snapshot(), byTarget = localTargetIndex(all);
+		const authored = (await service.sync.views((byTarget.get(target) || []).filter(row => row.thingtime.includes('comment')).map(row => row.id))).map(row => ({ ...localPostProjection(row, all, owner.id, false, byTarget), author: owner, localOnly: false, localWorkspace: true, syncState: row.syncState }));
 		const deviceCursor = typeof args.cursor === 'string' && args.cursor.startsWith('device-search:');
 		if (!discussionOffline() && !deviceCursor && (!local || local.remoteId)) {
 			const startedAt = Date.now();
@@ -195,10 +217,11 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				if (!result?.ok) throw new WorkspaceError('DISCUSSION_READ_FAILED', result?.error || 'Could not read comments.', result?.status || 503);
 				try { await service.discussions.rememberPage(target, result.comments, startedAt); }
 				catch { facadeLease.assertCurrent(); result.localCacheError = 'These comments could not be retained. Retry online before going offline.'; }
+				if (authored.some(row => row!.syncState !== 'synced')) return service.discussions.comments(target, { limit: args.limit }, !!local, authored as any);
 				return result;
 			} catch (error) { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); await discussionRefusal(target, error); if (args.cursor) throw error; }
 		}
-		const result = await service.discussions.comments(target, { cursor: args.cursor, limit: args.limit }, !!local);
+		const result = await service.discussions.comments(target, { cursor: args.cursor, limit: args.limit }, !!local, authored as any);
 		facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); return result;
 	};
 	const retainPosts = async (result: any, startedAt: number) => {
@@ -219,7 +242,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		catch { facadeLease.assertCurrent(); result.localCacheError = 'Post interactions could not be retained on this device. Retry online before going offline.'; }
 		const states = new Map((await worker().interactions.states()).map(state => [state.id, state]));
 		for (const key of ['post', 'parent', 'root']) if (result[key]) result[key] = overlayAccountPost(result[key], states);
-		if (Array.isArray(result.posts)) result.posts = result.posts.map((post: any) => overlayAccountPost(post, states));
+		if (Array.isArray(result.posts)) result.posts = result.posts.map((post: any) => overlayAccountPost(post as any, states));
 		return result;
 	};
 	const refresh = async (args: Record<string, unknown>, signal?: AbortSignal, retainPage?: (page: { ids: string[]; nextCursor: string | null }) => Promise<void>) => {
@@ -234,7 +257,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			? { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null } : null;
 		const retain = async (thing: any) => {
 			if (!accountThingCanCache(thing) || thing.author?.id !== owner.id) return thing;
-			await sync.remember(thing);
+			await sync.remember(thing, startedAt);
 			return project(await sync.view(thing.id));
 		};
 		if (result.thing) result.thing = await retain(result.thing);
@@ -577,8 +600,20 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			});
 			return { ...local, refreshing: true };
 		},
+		comment: async ({ id, ...input }: { id: string } & Record<string, unknown>) => {
+			facadeLease.assertCurrent();
+			const mapped = accountPostInput({ type: 'text', ...input, thingtime: undefined });
+			if (!mapped || scope.dataPlane !== 'home') return online.things.comment({ id, ...input });
+			const service = worker();
+			let target = await ownedPost(id) || await service.discussions.get(id) || await service.posts.get(id) || (await localDiscussion(id))?.post;
+			if (!target) { const read = await readDiscussion({ id, commentProjection: true }); target = read.discussion || read.post; }
+			const result = await writePost({ ...mapped, thingtime: ['post','comment'], targetId: id });
+			return { ...result, comment: result.post, commentCount: (target?.commentCount || 0) + 1 };
+		},
 		create: async (input: AccountThingWrite) => {
 			facadeLease.assertCurrent();
+			const mapped = accountPostInput(input as Record<string, unknown>);
+			if (mapped) return writePost(mapped);
 			if (!accountThingCanCache(input) || !accountWriteSupported(input)) return online.things.create(input);
 			const { sync } = worker();
 			const row = await sync.things.create(input); changed();
@@ -588,6 +623,10 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			const { sync } = worker();
 			if (await sync.isDeleted(input.id)) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted. Restore it before editing.', 409);
 			let cached = await sync.view(input.id);
+			if (cached?.thingtime.includes('post')) {
+				const mapped = accountPostInput({ ...input, thingtime: cached.thingtime }, true);
+				if (mapped) return writePost(mapped, true);
+			}
 			if (!accountWriteSupported(input, true)) {
 				if (cached && cached.syncState !== 'synced') throw new WorkspaceError('UNSUPPORTED_LOCAL_WRITE', 'Sync this Thing before changing fields that require its online adapter.', 409);
 				return online.things.update(input);
@@ -624,6 +663,11 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 					clearLocalCache(`tt-saved-${workspaceScopeKey(scope)}`); announceLocalWorkspaceChange([args.id]);
 				}
 			};
+			const authoredPost = await ownedPost(args.id, true);
+			if (authoredPost) {
+				if (authoredPost.syncState === 'synced' && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(async () => { if (JSON.stringify(await ownedPost(args.id,true)) !== JSON.stringify(authoredPost)) announceLocalWorkspaceChange([args.id]); }).catch(() => {});
+				return { ok: true, thing: project(await sync.view(args.id)), post: authoredPost, parent: null, root: null, localWorkspace: true };
+			}
 			const cachedPost = await service.posts.get(args.id);
 			const offline = navigator.onLine === false || !canSyncAccountWorkspace(scope);
 			if (cachedPost && (offline || !cachedPost.thingtime.includes('comment'))) {

@@ -71,11 +71,9 @@ test('account import places unparented dependencies in the selected destination 
   for (const row of imported.things) assert.equal(row.folderId, folder.id);
  } finally { await f.db.close(); }
 });
-test('invalid, unsupported and cancelled account imports leave neither content nor queue entries', async () => {
+test('invalid and cancelled account imports leave neither content nor queue entries', async () => {
  const f = setup(); try {
   await assert.rejects(f.sync.things.import(bundle(), 'unknown-folder'), /not in this workspace/);
-  const unsupported = bundle(); unsupported.things.push({ id: 'post', thingtime: ['post'], crystal: { type: 'text', text: 'Needs its dedicated adapter' } } as any);
-  await assert.rejects(f.sync.things.import(unsupported), /dedicated/);
   const cyclic = bundle(); (cyclic.things[0] as any).targetId = 'data';
   await assert.rejects(f.sync.things.import(cyclic), /Circular/);
   const controller = new AbortController(); controller.abort();

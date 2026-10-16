@@ -1,3 +1,5 @@
+import { postThingReferences } from '../components/Feed/postThingReferences';
+import { accountReadRefusals, ACCOUNT_READ_COLLECTIONS } from './accountReadRevocation';
 import { LocalThings, type LocalThing, type ThingWrite, type LocalFileMutation } from './things';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
@@ -14,8 +16,8 @@ type AccountScope = Extract<WorkspaceScope, { kind: 'account' }>;
 export type SyncState = 'pending' | 'syncing' | 'conflict' | 'error' | 'synced';
 export type AccountThingWrite = ThingWrite & { acl?: string[]; visibility?: string };
 export type AccountThing = LocalThing & { author: { id: string }; acl: string[]; visibility: string };
-const LOCAL_KINDS = new Set(['data', 'folder', 'webpage', 'component', 'schema', 'action']);
-export const accountThingCanCache = (row: any): row is AccountThing => Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind));
+const LOCAL_KINDS = new Set(['data', 'folder', 'webpage', 'component', 'schema', 'action', 'post', 'comment']);
+export const accountThingCanCache = (row: any): row is AccountThing => (!Array.isArray(row?.attachments) || row.attachments.length === 0) && Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind));
 type FrozenWrite = { id: string; operationId: string; version: number; method: 'create' | 'update'; body: Record<string, unknown> };
 type FrozenDelete = Omit<FrozenWrite, 'method'> & { method: 'delete' };
 type SyncRecord = {
@@ -66,7 +68,14 @@ export class AccountThingSync {
 		private files?: { mutate: LocalFileMutation; prepare: (tx: WorkspaceTransaction, row: LocalThing) => Promise<LocalThing | null> }) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous workspaces never sync', 403);
 		this.things = new LocalThings(db, scope, lease, [], () => new Date(now()).toISOString(), uuid,
-			(tx, row, previous, input) => this.enqueue(tx, row, previous, input as AccountThingWrite), files?.mutate);
+			(tx, row, previous, input) => this.enqueue(tx, row, previous, input as AccountThingWrite), files?.mutate, async (tx, id) => {
+				const refusal = (await accountReadRefusals(tx)).get(id);
+				for (const collection of ACCOUNT_READ_COLLECTIONS) {
+					const row = await tx.get<{ post: unknown; at: number }>(collection, id);
+					if (row?.post && (!refusal || row.at > refusal.at)) return true;
+				}
+				return false;
+			});
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) { return this.db.transaction(this.scope, mode, this.lease, run); }
 	private checked(input: AccountThing): AccountThing {
@@ -81,19 +90,21 @@ export class AccountThingSync {
 			createdAt: input.createdAt, updatedAt: input.updatedAt, revision: 1,
 			author: { id: this.scope.ownerId }, acl: input.acl || ['tt:user'], visibility: input.visibility || 'private' }) as unknown as AccountThing;
 	}
-	async remember(input: AccountThing) { return (await this.rememberMany([input]))[0]; }
+	async remember(input: AccountThing, startedAt = this.now()) { return (await this.rememberMany([input], startedAt))[0]; }
 	/** One bounded catalogue page commits atomically; quota or invalid content
 	 * cannot leave a partially retained page presented as complete. */
-	async rememberMany(input: AccountThing[]) {
+	async rememberMany(input: AccountThing[], startedAt = this.now()) {
 		if (!Array.isArray(input) || input.length > 50) throw new WorkspaceError('INVALID_SYNC_BATCH', 'Invalid account cache page.', 400);
 		const remotes = input.map(row => this.checked(row));
 		return this.tx('readwrite', async tx => {
 			const result: (LocalThing | undefined)[] = [];
-			for (const remote of remotes) result.push(await this.rememberIn(tx, remote));
+			const refusals = await accountReadRefusals(tx);
+			for (const remote of remotes) result.push(await this.rememberIn(tx, remote, startedAt, refusals));
 			return result;
 		});
 	}
-	private async rememberIn(tx: WorkspaceTransaction, remote: AccountThing) {
+	private async rememberIn(tx: WorkspaceTransaction, remote: AccountThing, startedAt: number, refusals: Awaited<ReturnType<typeof accountReadRefusals>>) {
+		if ([remote.id, remote.targetId].some(id => id && (refusals.get(id)?.at ?? -Infinity) >= startedAt)) return undefined;
 		const sync = await tx.get<SyncRecord>(COLLECTION, remote.id);
 		if (sync?.deleted) return undefined;
 		// A background read cannot erase unsynced editing, nor regress the base.
@@ -107,11 +118,13 @@ export class AccountThingSync {
 		return cached;
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: AccountThingWrite) {
+		if (row.thingtime.some(kind => ['post','comment'].includes(kind)) && (await tx.list<LocalThing>('things')).some(item => item.value.thingtime.includes('attachment') && item.value.targetId === row.id)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_MEDIA', 'Bound post media requires its account binding adapter.', 409);
 		if (!accountThingCanCache(row)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_CONTENT', 'This kind requires its dedicated account sync adapter.', 409);
+		if (row.thingtime.includes('comment') && Object.entries(row.crystal).some(([key,value]) => value != null && !['type','text','richText','images','listing','thing','mediaLayout'].includes(key))) throw new WorkspaceError('UNSUPPORTED_COMMENT_CONTENT', 'This comment includes fields its account endpoint cannot preserve.', 409);
 		const existing = await tx.get<SyncRecord>(COLLECTION, row.id);
 		if (existing?.deleted) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted. Restore it before editing.', 409);
 		if (previous && !existing) throw new WorkspaceError('SYNC_BASE_MISSING', 'Load the account Thing before editing it offline', 409);
-		const acl = sanitizeAcl(input.acl ?? (input.visibility !== undefined ? aclFromVisibility(input.visibility) : existing?.audience.acl || ['tt:user']));
+		const acl = sanitizeAcl(row.thingtime.includes('comment') ? ['tt:inherit'] : input.acl ?? (input.visibility !== undefined ? aclFromVisibility(input.visibility) : existing?.audience.acl || ['tt:user']));
 		if (!Array.isArray(acl)) throw new WorkspaceError('INVALID_AUDIENCE', acl.error);
 		const audience = { acl, visibility: visibilityFromAcl(acl) };
 		await tx.put(COLLECTION, row.id, { ...existing, id: row.id, base: existing?.base || null, audience,
@@ -258,7 +271,7 @@ export class AccountThingSync {
 					}
 					if (candidate.deleted && rows.some(other => other.id !== candidate.id && other.state !== 'synced' &&
 						[other.base?.folderId, other.base?.targetId, other.pending?.body.folderId, other.pending?.body.targetId].includes(candidate.id))) continue;
-					if (!candidate.deleted && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
+					if (!candidate.deleted && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null, ...((content.thingtime.includes('post') || content.thingtime.includes('comment')) ? postThingReferences(content.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
 					let prepared = content;
 					if (!candidate.deleted && !candidate.pending && this.files) {
 						try {
@@ -329,7 +342,7 @@ export class AccountThingSync {
 					if (latest?.claim?.token !== claim.token) return;
 					const row = await tx.get<LocalThing>('things', pending.id);
 					const newer = !!latest.deleted || (row && row.revision !== pending.version);
-					if (!newer) await tx.put('things', pending.id, { ...remote, revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
+					if (!newer) await tx.put('things', pending.id, { ...remote, ...(row?.localSubmission ? { localSubmission: row.localSubmission } : {}), revision: row?.revision || 1, updatedAt: row?.updatedAt || remote.updatedAt });
 					await tx.put(COLLECTION, pending.id, { id: pending.id, state: newer ? 'pending' : 'synced', base: remote,
 						...(latest.deleted ? { deleted: latest.deleted } : {}),
 						audience: newer ? latest.audience : { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);

@@ -12,7 +12,10 @@ export const pruneAccountConversation = (post: any, denied: (id: string) => bool
 export async function forgetAccountConversation(tx: WorkspaceTransaction, id: string, at: number) {
  if (typeof id !== 'string' || !id || id.length > 200 || !Number.isFinite(at) || at < 0) throw new WorkspaceError('INVALID_READ_REFUSAL', 'Invalid account read refusal.', 400);
  const rows = (await Promise.all(ACCOUNT_READ_COLLECTIONS.map(async collection => (await tx.list<Snapshot>(collection)).map(row => ({ ...row, collection }))))).flat();
+ const owned = (await tx.list<{state:string;base:unknown}>('thing-sync')).filter(row => row.value.state === 'synced' && row.value.base);
+ const ownedBodies = await Promise.all(owned.map(async row => ({id:row.id,value:await tx.get<{targetId?:string}>('things',row.id)})));
  const children = new Map<string, string[]>();
+ for (const row of ownedBodies) if (row.value?.targetId) { const values=children.get(row.value.targetId)||[];values.push(row.id);children.set(row.value.targetId,values); }
  for (const row of rows) {
   const parent = row.value.parent || row.value.post?.targetId;
   if (typeof parent === 'string' && parent) { const values = children.get(parent) || []; values.push(row.id); children.set(parent, values); }
@@ -20,6 +23,9 @@ export async function forgetAccountConversation(tx: WorkspaceTransaction, id: st
  const denied = new Set([id]), pending = [id];
  while (pending.length) for (const child of children.get(pending.pop()!) || []) if (!denied.has(child)) { denied.add(child); pending.push(child); }
  let changed = false;
+ // Synced owned rows are remote read caches too. Preserve unsynced authored
+ // work, but do not resurrect deleted/refused comments through that cache.
+ for (const row of ownedBodies) if (denied.has(row.id)) { await tx.delete('things',row.id);await tx.delete('thing-sync',row.id);changed=true; }
  for (const row of rows) {
   if (denied.has(row.id)) { changed ||= !!row.value.post; await tx.delete(row.collection, row.id); }
   else if (row.value.post) {

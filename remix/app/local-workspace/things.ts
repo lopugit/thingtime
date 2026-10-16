@@ -68,7 +68,7 @@ const validated = (input: ThingWrite, postAttachments?: { hasAny: boolean; hasVi
 export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
-		private onFileWrite?: LocalFileMutation) {}
+		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -95,7 +95,7 @@ export class LocalThings {
 			if (!folder?.thingtime.includes('folder')) fail('INVALID_FOLDER', 'Destination folder is not in this workspace');
 			parent = folder!.folderId;
 		}
-		if (row.targetId && !await tx.get('things', row.targetId)) fail('INVALID_TARGET', 'Target is not in this workspace');
+		if (row.targetId && !await tx.get('things', row.targetId) && !await this.acceptsExternalTarget?.(tx, row.targetId)) fail('INVALID_TARGET', 'Target is not in this workspace');
 		if (row.thingtime.includes('data') && typeof row.crystal.schemaId === 'string') {
 			const schema = await tx.get<LocalThing>('things', row.crystal.schemaId) || this.builtins.find(doc => doc.id === row.crystal.schemaId);
 			if (!schema?.thingtime.includes('schema')) fail('INVALID_SCHEMA', 'Schema is not in this workspace');
@@ -139,11 +139,11 @@ export class LocalThings {
 	 * audience setting here can publish or authorize a remote operation. */
 	async savePost(input: ThingWrite & { shareId?: string; attachmentIds?: unknown }, update = false) {
 		this.lease.assertCurrent();
-		if (this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account posts require their sync adapter');
+		if (this.scope.kind !== 'anonymous' && !this.onWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account posts require their sync adapter');
 		input = JSON.parse(JSON.stringify(input));
 		const requestId = input.shareId || this.uuid();
 		if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,120}$/.test(requestId)) fail('INVALID_ID', 'Invalid local post request id');
-		const id = update ? input.id! : requestId.startsWith('local-') ? requestId : `local-post-${requestId}`;
+		const id = update ? input.id! : this.scope.kind === 'account' ? requestId : requestId.startsWith('local-') ? requestId : `local-post-${requestId}`;
 		const previous = update ? await this.get(id) : undefined;
 		if (previous && !previous.thingtime.includes('post')) fail('INVALID_THING', 'Select a local post');
 		const currentFiles = update ? (await this.snapshot()).filter(row => isLocalAttachment(row) && row.targetId === id).sort((a, b) => (a as LocalAttachment).localAttachment.order - (b as LocalAttachment).localAttachment.order) : [];
@@ -156,7 +156,7 @@ export class LocalThings {
 		const crystal = previous ? input.replaceCrystal ? input.crystal : { ...previous.crystal, ...input.crystal as object } : input.crystal;
 		const checked = validated({ ...previous, ...input, thingtime: previous?.thingtime || input.thingtime, crystal }, { hasAny: files.size > 0, hasVisual: [...files.values()].some(({ row }) => ['image', 'video'].includes(String(row.crystal.mediaKind))) });
 		if (!checked.thingtime.includes('post') || checked.thingtime.some(kind => !['post', 'comment'].includes(kind))) fail('INVALID_THING', 'Select a local post or comment');
-		if (checked.crystal.subspaceId || checked.crystal.flairId) fail('REMOTE_ACCOUNT_REQUIRED', 'Posting into a subspace requires a signed-in account');
+		if (this.scope.kind === 'anonymous' && (checked.crystal.subspaceId || checked.crystal.flairId)) fail('REMOTE_ACCOUNT_REQUIRED', 'Posting into a subspace requires a signed-in account');
 		const fingerprint = await transferChecksum(new TextEncoder().encode(JSON.stringify({ checked, ids, targetId: input.targetId || null })));
 		return this.transaction('readwrite', async tx => {
 			const stored = await tx.get<LocalThing>('things', id);
@@ -192,7 +192,7 @@ export class LocalThings {
 				delete latest.targetId; latest.localAttachment.expiresAt = new Date(Date.parse(this.now()) + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
 				await tx.put('things', file.id, latest);
 			}
-			await tx.put('things', id, row); return row;
+			await tx.put('things', id, row); await this.onWrite?.(tx, row, previous || null, input); return row;
 		});
 	}
 	async saveFile(input: { requestId: string; name: string; contentType: string; bytes: Uint8Array; folderId?: string | null; purpose?: 'file' | 'recording' | 'post' | 'comment' }, signal?: AbortSignal) {

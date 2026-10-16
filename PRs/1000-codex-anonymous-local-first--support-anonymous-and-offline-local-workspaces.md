@@ -1738,3 +1738,23 @@ regression. Client build/lint pass; 91 baseline TypeScript diagnostics remain,
 none in changed files. [Detailed evidence and limits](../docs/local-workspaces.md#account-discussion-reads-and-refusal-cleanup--2026-10-17).
 Account comment/post/reply writers, draft sync, complete membership and the rest
 of the full local-first matrix remain open. No merge or manual deployment.
+
+
+## Account post/comment/reply authorship — 2026-10-17
+
+Native text/rich-text posts and discussion replies now commit content plus intent
+locally through the existing canonical writer and account queue. Draft saving and
+network completion are independent. Stable IDs, linked dependency ordering,
+inherited comment audiences and the normal comment endpoint preserve retry and
+authorization semantics. Known read refusal also prunes synced owned caches;
+pending authorship stays available for recovery. Unsupported bound media/authority
+fields remain explicit rather than partially saved.
+
+900 unit/offline-shell checks and three enabled browser flows pass: native private
+post create/reload/sync, offline comments and nested replies plus refusal cleanup,
+and existing Saved/reaction isolation. Client build/lint pass with one existing
+lint warning; 91 baseline TypeScript diagnostics remain, none in changed files.
+Desktop/390/320px checks and zero offline mutation requests are recorded in the
+[checkpoint](../docs/local-workspaces.md#account-post-and-reply-authorship--2026-10-17).
+Bound media, full native mutation coverage, draft sync and the broader matrix stay
+open. CI/deployed acceptance is separate. No main merge or manual deployment.

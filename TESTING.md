@@ -10774,3 +10774,23 @@ Run `app/local-workspace/components.browser.test.ts` with
 - [x] Account nested reply reads with unused `sharedRoot: undefined` stay on the
   scoped local discussion adapter after a cold offline reload; defined shared
   access continues through the remote authorization path.
+
+
+### Account offline post and reply authorship (2026-10-17)
+
+- [x] In a disposable account browser, cold-reload offline, create a private
+  rich-text post through the native composer, and reload its permalink. Confirm
+  exact text, structured rich text, explicit pending sync and no network mutation.
+- [x] Create a comment and a reply beneath the pending comment offline. Reload,
+  reconnect/verify the same account, and observe exactly one canonical server
+  comment/reply with the correct parents. Draft saving is not a prerequisite.
+- [x] Retain stable submission identity after successful sync; reject changed
+  content with the same request identity. Queue linked local dependencies first.
+  Reject unsupported bound-media/authority payloads without partial acceptance.
+- [x] Refuse a retained discussion remotely and remove synced owned/display
+  cache copies; fence old reads while preserving pending authored text. Preserve
+  account/origin/data-plane isolation and normal remote comment authorization.
+- [x] Inspect desktop and 320px post rendering and measure 1440/390/320px overflow.
+  Known offline authors must not render as Anonymous or `@undefined`.
+- [ ] Complete bound media, full native edit/privacy/delete/conflict flows,
+  linked-Thing surfaces and account draft sync before the full merge gate closes.

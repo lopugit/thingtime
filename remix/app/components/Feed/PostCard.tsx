@@ -855,7 +855,7 @@ const CommentRow = (props: {
   const api = useApi();
   const sharedAccess = useSharedAccess();
   const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
-  const user = workspace?.localOnly === true && comment.author?.localOnly === true && comment.author.id === workspace.id ? workspace : accountUser;
+  const user = workspace?.localOnly === true && comment.author?.localOnly === true && comment.author.id === workspace.id ? workspace : accountUser || (workspace?.offline && !sharedAccess.key && !sharedAccess.sharedRoot ? workspace : null);
   const interactionUser = user || (workspace?.offline ? workspace : null);
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
@@ -1496,7 +1496,7 @@ function PostCardImpl(props: PostCardProps) {
   const api = useApi();
   const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
   const localOnly = workspace?.localOnly === true && post.author?.localOnly === true && post.author.id === workspace.id;
-  const user = localOnly ? workspace : accountUser;
+  const user = localOnly ? workspace : accountUser || (workspace?.offline && !sharedAccess.key && !sharedAccess.sharedRoot ? workspace : null);
   const interactionUser = user || (workspace?.offline ? workspace : null);
   const lopu = useLopu();
 
@@ -2246,12 +2246,12 @@ function PostCardImpl(props: PostCardProps) {
           <AuthorAvatar author={post.author} />
           <Box minWidth={0} flex="1">
             <Flex alignItems="baseline" columnGap={1.5} flexWrap="wrap" whiteSpace="normal">
-              {post.author?.username ? (
+              {post.author ? (
                 // named, and linked only where a link is honest — a third-party
                 // author the provider gave no url for stays plain text rather
                 // than borrowing a native /profile route (authorLinkTarget)
                 (() => {
-                  const link = authorLinkTarget(post.author);
+                  const link = post.author.username ? authorLinkTarget(post.author) : null;
                   const name = (
                     <Text as="span" fontSize="sm" fontWeight={700} color={INK} _hover={link ? { textDecoration: 'underline' } : undefined}>
                       {authorName(post.author)}
@@ -2273,7 +2273,7 @@ function PostCardImpl(props: PostCardProps) {
               )}
               <AuthorFlairChip flair={post.authorFlair} />
               <Text as="span" fontSize="xs" color={MUTED}>
-                {post.author ? `${getUserIdentityDetail(post.author)} · ` : ''}
+                {post.author?.username ? `${getUserIdentityDetail(post.author)} · ` : ''}
               </Text>
 							<TimestampLink id={post.id} createdAt={post.createdAt} to={mediaThing ? permalinkPath : undefined} />
               <Tooltip label={`${circle.label} — ${circle.hint}`} fontSize="xs" borderRadius="8px" hasArrow>

@@ -57,7 +57,7 @@ export class AccountDiscussionCache {
   if (!validId(id)) throw missing();
   return this.db.transaction(this.scope, 'readonly', this.lease, async tx => (await tx.get<Snapshot>(COLLECTION, id))?.post || null);
  }
- async comments(target: string, args: { cursor?: string; limit?: number } = {}, knownLocalTarget = false) {
+ async comments(target: string, args: { cursor?: string; limit?: number } = {}, knownLocalTarget = false, authored: PublicPost[] = []) {
   if (!validId(target)) throw missing();
   const rows = await this.db.transaction(this.scope, 'readonly', this.lease, async tx => {
    const root = await tx.get<Snapshot>(COLLECTION, target);
@@ -67,7 +67,8 @@ export class AccountDiscussionCache {
    return (await tx.list<Snapshot>(COLLECTION)).filter(row => row.value.post?.thingtime.includes('comment') && row.value.parent === target);
   });
   const byId = new Map(rows.map(row => [row.id, row.value.post!]));
-  const page = await searchLocalThings(rows.map(row => ({ id: row.id, thingtime: ['post'], crystal: { text: row.value.post!.text }, createdAt: row.value.post!.createdAt, updatedAt: row.value.post!.createdAt, revision: 0 })),
+  for (const post of authored) if (post.thingtime.includes('comment') && (post as any).targetId === target) byId.set(post.id, !post.author?.username && byId.get(post.id)?.author?.id === post.author?.id ? { ...post, author: byId.get(post.id)!.author } : post);
+  const page = await searchLocalThings([...byId.values()].map(post => ({ id: post.id, thingtime: ['post'], crystal: { text: post.text }, createdAt: post.createdAt, updatedAt: post.createdAt, revision: 0 })),
    { ...args, sort: 'oldest' }, `${workspaceScopeKey(this.scope)}:discussion:${target}`);
   return { ok: true, comments: page.things.map(row => byId.get(row.id)!), nextCursor: page.nextCursor, localWorkspace: true, incomplete: true };
  }

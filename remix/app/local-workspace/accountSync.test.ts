@@ -1,10 +1,11 @@
+import { forgetAccountConversation } from './accountReadRevocation';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { AccountThingSync, type AccountThing, type AccountSyncTransport } from './accountSync';
 import { WorkspaceDatabase, type WorkspaceLease } from './storage';
 const setup = () => {
- const factory = new IDBFactory(), db = new WorkspaceDatabase(factory);
+ const factory = new IDBFactory(), db = new WorkspaceDatabase(factory, undefined, undefined, IDBKeyRange);
  let time = Date.now(), active = true;
  const listeners = new Set<() => void>();
  const lease: WorkspaceLease = { assertCurrent() { if (!active) throw new Error('Workspace changed'); }, onInvalidate(fn) { listeners.add(fn); return () => listeners.delete(fn); } };
@@ -247,4 +248,62 @@ test('catalogue batches retain canonical owned content atomically without replac
   assert.equal(await f.sync.view('rolled-back'),null);
   await assert.rejects(f.sync.rememberMany(Array.from({length:51},(_,i)=>row(`row-${i}`))), /page/);
  } finally { await f.db.close(); }
+});
+
+test('account post and reply submissions commit locally, preserve replay identity and sync parents first', async () => {
+ const f = setup();
+ const postInput = { thingtime: ['post'], crystal: { type: 'text', text: 'An offline account post' }, shareId: 'account-post-replay', acl: ['tt:user'] };
+ const post = await f.sync.things.savePost(postInput);
+ const comment = await f.sync.things.savePost({ thingtime: ['post','comment'], crystal: { type: 'text', text: 'An offline comment' }, targetId: post.id, shareId: 'account-comment-replay' });
+ const reply = await f.sync.things.savePost({ thingtime: ['post','comment'], crystal: { type: 'text', text: 'An offline reply' }, targetId: comment.id, shareId: 'account-reply-replay' });
+ assert.equal(f.calls.length,0); assert.equal((await f.sync.status()).length,3);
+ assert.equal((await f.sync.things.savePost(postInput)).id,post.id);
+ await assert.rejects(f.sync.things.savePost({ ...postInput, crystal: { type: 'text', text: 'Different request' } }),/already used/);
+ assert.equal((await f.sync.view(comment.id))?.acl[0],'tt:inherit');
+ assert.equal((await f.sync.sync(f.transport)).completed,3);
+ assert.deepEqual(f.calls.map(call=>call.id),[post.id,comment.id,reply.id]);
+ assert.equal((await f.sync.things.savePost(postInput)).id,post.id,'same submission remains idempotent after sync receipt');
+ await f.sync.things.savePost({ id:post.id,crystal:{text:'Edited offline'},expectedUpdatedAt:(await f.sync.view(post.id))!.updatedAt },true);
+ assert.equal((await f.sync.view(post.id))?.crystal.text,'Edited offline');
+ assert.equal((await f.sync.sync(f.transport)).completed,1);
+ assert.equal(f.remote.get(post.id)?.crystal.text,'Edited offline');
+ await f.db.close();
+});
+
+test('retained foreign discussions allow local reply storage but never grant server write permission', async () => {
+ const f=setup();
+ await f.db.transaction(f.scope,'readwrite',f.lease,tx=>tx.put('account-discussion-projections','foreign',{post:{id:'foreign'},at:Date.now(),parent:null}));
+ const comment=await f.sync.things.savePost({thingtime:['post','comment'],crystal:{type:'text',text:'Local pending reply'},targetId:'foreign'});
+ await f.sync.sync({...f.transport,write:async()=>{throw {status:403};}});
+ assert.equal((await f.sync.status())[0].state,'error');
+ assert.equal((await f.sync.view(comment.id))?.crystal.text,'Local pending reply'); assert.equal(f.remote.size,0);
+ await f.db.transaction(f.scope,'readwrite',f.lease,tx=>tx.put('account-post-projections','foreign',{post:null,at:Date.now()+1,deniedAt:Date.now()+1,parent:null}));
+ await assert.rejects(f.sync.things.savePost({thingtime:['post','comment'],crystal:{type:'text',text:'After refusal'},targetId:'foreign'}),/not in this workspace/);
+ await f.db.close();
+});
+
+
+test('read refusal retires synced owned projections and fences older reads without discarding pending authorship', async()=>{
+ const f=setup(),stamp=new Date().toISOString();
+ const root={id:'owned-root',author:{id:'owner'},thingtime:['data'],crystal:{name:'Retained root'},createdAt:stamp,updatedAt:stamp,revision:1,acl:['tt:user'],visibility:'private'} as AccountThing;
+ await f.sync.remember(root,1);
+ const pending=await f.sync.things.savePost({thingtime:['post','comment'],crystal:{type:'text',text:'Keep unsynced text'},targetId:root.id});
+ await f.db.transaction(f.scope,'readwrite',f.lease,tx=>forgetAccountConversation(tx,root.id,10));
+ assert.equal(await f.sync.view(root.id),null);
+ assert.equal((await f.sync.view(pending.id))?.crystal.text,'Keep unsynced text');
+ assert.equal(await f.sync.remember(root,9),undefined);assert.equal(await f.sync.view(root.id),null);
+ assert.ok(await f.sync.remember(root,11),'only a later authorized read may restore the remote snapshot');
+ await f.db.close();
+});
+
+
+test('a post waits for linked device Things before attempting its account create',async()=>{
+ const f=setup();
+ const data=await f.sync.things.create({thingtime:['data'],crystal:{name:'Linked local data'}});
+ const post=await f.sync.things.savePost({shareId:'0-post-with-dependency',thingtime:['post'],crystal:{type:'thingtime',text:'A linked Thing',thing:{kind:'thing-collection',items:[{id:data.id,mode:'data'}]}}});
+ await f.sync.sync({...f.transport,write:async operation=>{assert.equal(operation.id,data.id);throw {status:403};}});
+ assert.equal((await f.sync.status()).find(row=>row.id===post.id)?.state,'pending');
+ await f.sync.retry(data.id);await f.sync.sync(f.transport);
+ assert.deepEqual(f.calls.map(call=>call.id),[data.id,post.id]);
+ await f.db.close();
 });

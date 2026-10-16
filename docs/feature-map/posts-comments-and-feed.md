@@ -137,3 +137,12 @@ and embedded references; watermarks fence older responses. Read snapshots never
 create owned Things or authorize writes. Run `test:local-workspace`, `test:feed`,
 `test:things`, and the opt-in `accountDiscussions.browser.test.ts`; see the
 [discussion checkpoint](../local-workspaces.md#account-discussion-reads-and-refusal-cleanup--2026-10-17).
+
+
+Account post/comment authorship reuses `LocalThings.savePost`, `AccountThingSync`
+and the normal `accountThingTransport` comment endpoint. Retained foreign
+projections authorize only device storage; server access is checked on sync.
+`accountAuthoring.browser.test.ts` exercises the native private post composer;
+`accountDiscussions.browser.test.ts` also creates offline comments and replies.
+Known refusal prunes synced owned read copies while preserving pending work.
+Bound media and remaining native mutation coverage stay open in the matrix.

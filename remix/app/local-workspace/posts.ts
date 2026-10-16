@@ -48,3 +48,16 @@ export function localPostProjection(row: LocalThing, all: LocalThing[], owner: s
   commentCount: children.length,
   comments: includeComments ? children.map(child => localPostProjection(child, all, owner, false, byTarget)) : [], ...(includeComments ? {} : { repliesLoaded: false as const }), shareCount: 0, isShare: false, shareOf: null } as PublicPost & { localOnly: true; targetId: string | null; repliesLoaded?: false };
 }
+
+/** Only complete composer payloads enter the account content queue. Bound media,
+ * geo and token grants keep their dedicated adapter until its local binding is
+ * available; an unsupported payload must never be accepted after dropping data. */
+export function accountPostInput(input: Record<string, unknown>, update = false) {
+ const fields = new Set(['type','text','richText','images','listing','thing','mediaLayout','title','subspaceId','flairId','thingtime','crystal','tags','shareId','folderId','targetId','acl','visibility','attachmentIds', ...(update ? ['id','expectedUpdatedAt','replaceCrystal'] : [])]);
+ if (!input || Object.entries(input).some(([key,value]) => value !== undefined && !fields.has(key))) return null;
+ if (input.attachmentIds !== undefined && (!Array.isArray(input.attachmentIds) || input.attachmentIds.length)) return null;
+ const mapped = localPostInput(input);
+ if (!Array.isArray(mapped.thingtime) || !mapped.thingtime.includes('post') || mapped.thingtime.some(kind => !['post','comment'].includes(kind))) return null;
+ return { ...mapped, ...(update ? { id: input.id as string, expectedUpdatedAt: input.expectedUpdatedAt as string | undefined, replaceCrystal: input.replaceCrystal as boolean | undefined } : {}),
+  ...(input.acl !== undefined ? { acl: input.acl as string[] } : {}), ...(input.visibility !== undefined ? { visibility: input.visibility as string } : {}) };
+}

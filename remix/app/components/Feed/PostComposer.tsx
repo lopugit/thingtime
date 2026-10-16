@@ -750,7 +750,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 				attachmentComposerRef.current?.markCommitted(attachmentIds);
 			}
       lopu({
-        title: user?.localOnly ? 'Saved on this device' : isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
+        title: user?.localOnly ? 'Saved on this device' : (created as any).syncState && (created as any).syncState !== 'synced' ? 'Saved on this device; account sync pending' : isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
         status: 'success',
         duration: 6000
       });

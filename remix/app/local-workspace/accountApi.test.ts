@@ -14,7 +14,7 @@ test('account local facade and native page resolution work offline without uploa
  let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; return { ok: true }; };
  try {
   bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
-  const api = accountApi({ actions: { run: remote }, things: { create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
+  const api = accountApi({ actions: { run: remote }, things: { comment: remote, create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
   const component: any = await api.things.create({ thingtime: ['component'], crystal: { name: 'Card', componentKey: 'card', version: 1, render: { tag: 'p', children: 'Locally rendered' } } } as any);
   const page: any = await api.things.create({ thingtime: ['webpage'], crystal: { name: 'Offline page', blocks: [{ id: 'card', type: 'component', component: 'card' }] } } as any);
   const resolved = await resolveAccountWebpage(scope, { kind: 'id', id: page.id });
@@ -80,7 +80,21 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal(remoteCalls, 1, 'duplicate controls cannot invoke an account request while unconfirmed');
 
 
-  await assert.rejects(api.things.import({ manifest: { format: 'thingtime.transfer', version: 1, roots: ['post'], things: [{ id: 'post', thingtime: ['post'], crystal: { type: 'text', text: 'Dedicated adapter' } }], files: [] } }), /offline/);
+  const authored: any = await api.things.create({type:'text',text:'Authored offline',acl:['tt:user'],shareId:'account-facade-post'} as any);
+  assert.equal(authored.savedLocally,true);assert.equal(authored.post.text,'Authored offline');
+  const child: any = await api.things.comment({id:authored.id,text:'Local child'});
+  const reply: any = await api.things.comment({id:child.id,text:'Local nested reply'});
+  assert.equal(reply.savedLocally,true);
+  const localComments: any = await api.things.list({target:authored.id,thingtime:'comment',commentProjection:true,sharedRoot:undefined});
+  assert.deepEqual(localComments.comments.map((row:any)=>row.id),[child.id]);
+  const localReplies: any = await api.things.list({target:child.id,thingtime:'comment',commentProjection:true});
+  assert.deepEqual(localReplies.comments.map((row:any)=>row.id),[reply.id]);
+  assert.equal(remoteCalls,1,'unconfirmed post and reply submission cannot make a remote call');
+  await assert.rejects(api.things.create({type:'text',text:'Must not partially save media',attachmentIds:['remote-file']} as any),/offline/);
+  await assert.rejects(api.things.comment({id:authored.id,text:'Hidden-link request',key:'private-link'} as any),/offline/);
+  assert.equal((await api.things.list({target:authored.id,thingtime:'comment',commentProjection:true}) as any).comments.length,1,'unsupported requests do not create partial local comments');
+  const importedPost: any = await api.things.import({ manifest: { format: 'thingtime.transfer', version: 1, roots: ['post'], things: [{ id: 'post', thingtime: ['post'], crystal: { type: 'text', text: 'Offline imported post' } }], files: [] } });
+  assert.equal((await api.things.get({ id: importedPost.roots[0] }) as any).post.text, 'Offline imported post');
   rootIdentity.changed(); bindLocalWorkspace(true, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {} } as any), /workspace changed/i);
   await assert.rejects(api.things.get({ id: page.id, key: 'old-key' } as any), /workspace changed/i);

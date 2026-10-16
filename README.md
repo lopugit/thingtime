@@ -4679,3 +4679,15 @@ Playwright/Chrome paths. It generates a WAV without using a microphone, checks
 native offline playback, exact-byte export, clean-context private retention,
 unsynced edit/delete and lost-response retry, plus anonymous offline playback.
 This fixture does not prove microphone capture or bound post/draft media.
+
+
+The opt-in native account post authoring check uses the same disposable loopback
+stack and clean Playwright/Chrome configuration as discussion QA. Run from
+`remix/` with `TT_LOCAL_AUTHORING_URL=http://127.0.0.1:<client-port>`, optional
+`TT_LOCAL_AUTHORING_ARTIFACTS=<local-output-directory>`, and the shared
+`TT_SHARED_PLAYWRIGHT_PATH` / `TT_SHARED_CHROME_PATH` values, then execute
+`node --import tsx --test app/local-workspace/accountAuthoring.browser.test.ts`.
+It creates a disposable account and private post, verifies cold offline creation
+and subsequent account sync, and deletes the post during cleanup. Never point
+these fixtures at production or an existing account. Account draft sync and bound
+post media remain outside this checkpoint's acceptance.

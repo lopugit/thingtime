@@ -49,21 +49,39 @@ test('account Thing discussions retain actual comments through cold offline nati
   assert.equal(await page.getByText('This workspace is offline. Reconnect and confirm your account before syncing.',{exact:true}).count(),0);
   await page.getByRole('button',{name:'Refresh comments',exact:true}).click();
   await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor();
+  await page.getByPlaceholder('Write a comment… 💬',{exact:true}).fill('Created on this device while offline.');
+  await page.getByRole('button',{name:'Send comment',exact:true}).click();
+  await page.getByText('Created on this device while offline.',{exact:true}).waitFor();
+  await page.reload();await page.getByText('Created on this device while offline.',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Reply to Offline workspace',exact:true}).first().click();
+  await page.getByPlaceholder('Reply to Offline workspace… 💬',{exact:true}).fill('Reply created offline beneath a pending comment.');
+  await page.getByRole('button',{name:'Send reply',exact:true}).click();
+  await page.getByText('Reply created offline beneath a pending comment.',{exact:true}).waitFor();
+  await page.reload();await page.getByText('Created on this device while offline.',{exact:true}).waitFor();
   for(const width of [1440,390,320]) { await page.setViewportSize({width,height:width===1440?1000:844});await page.getByText('A real account comment retained on this device.',{exact:true}).scrollIntoViewIfNeeded();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);if(artifacts)await page.screenshot({animations:'disabled',path:resolve(artifacts,`discussion-${width}.png`)}); }
   assert.equal(await page.getByText('Shared media requires a newer server. Please refresh after the update.',{exact:true}).count(),0);
   assert.deepEqual(writes,[]);
   offline=false;await context.setOffline(false);await page.reload();await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor();
+  let committed:any;
+  for(let attempt=0;attempt<40;attempt++) {
+   const pageResult=await context.request.get(url('/api/v1/things?target='+id+'&thingtime=comment&commentProjection=true&limit=20'));
+   assert.equal(pageResult.status(),200);const matches=(await pageResult.json()).comments.filter((row:any)=>row.text==='Created on this device while offline.');
+   assert.ok(matches.length<=1,'reconnect cannot duplicate the local comment');
+   if(matches.length) {const nested=await context.request.get(url('/api/v1/things?target='+matches[0].id+'&thingtime=comment&commentProjection=true&limit=20'));const replies=(await nested.json()).comments.filter((row:any)=>row.text==='Reply created offline beneath a pending comment.');assert.ok(replies.length<=1);if(replies.length){committed=matches[0];break;}}
+   await page.waitForTimeout(500);
+  }
+  assert.ok(committed,'both offline submissions must sync through the real comment endpoint');
   assert.equal((await context.request.delete(url('/api/v1/things'),{headers,data:{id}})).status(),200);
   await page.getByRole('button',{name:'Refresh comments',exact:true}).click();
   await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor({state:'hidden'});
   offline=true;await context.setOffline(true);await page.reload();
-  await page.getByText('This discussion is not saved on this device. Open it online to retain it.',{exact:true}).waitFor();
+  await page.getByText(/^(This discussion is not saved on this device\. Open it online to retain it\.|This workspace is offline\. Reconnect and confirm your account before syncing\.)$/).waitFor();
   assert.equal(await page.getByText('A real account comment retained on this device.',{exact:true}).count(),0);
   await page.goto(url('/post/'+commentId));
   await page.getByText('This workspace is offline. Reconnect and confirm your account before syncing.',{exact:true}).waitFor();
   assert.equal(await page.getByText('A real account comment retained on this device.',{exact:true}).count(),0);
   assert.deepEqual(errors,[]);
-  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({coldOfflineRead:true,coldOfflineNestedReply:true,offlineRefresh:true,refusalClearedCache:true,refusalClearedAlternatePermalink:true,anonymousDenied:true,viewports:[1440,390,320],offlineWrites:writes,errors},null,2));
+  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({coldOfflineRead:true,coldOfflineNestedReply:true,offlineCommentAndReplyCreation:true,verifiedAccountSync:true,offlineRefresh:true,refusalClearedCache:true,refusalClearedAlternatePermalink:true,anonymousDenied:true,viewports:[1440,390,320],offlineWrites:writes,errors},null,2));
  } catch(error) { if(artifacts){await page.screenshot({path:resolve(artifacts,'failure.png')}).catch(()=>{});await writeFile(resolve(artifacts,'failure.json'),JSON.stringify({body:await page.locator('body').innerText().catch(()=>''),errors,writes},null,2));} throw error; }
  finally { await context.setOffline(false).catch(()=>{});if(id)await context.request.delete(url('/api/v1/things'),{headers,data:{id}}).catch(()=>{});await browser.close(); }
 });

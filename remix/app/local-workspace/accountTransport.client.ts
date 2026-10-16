@@ -51,14 +51,14 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	fork(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/uploads/abort' | 'attachments/delete' | 'attachments/content' | 'things/bulk' = 'things', binary?: { cacheKey: string; size: number }) => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'things/comment' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'attachments/uploads/abort' | 'attachments/delete' | 'attachments/content' | 'things/bulk' = 'things', binary?: { cacheKey: string; size: number }) => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		const endpointCapability = ({ 'attachments/content': ['api.attachment-content', '1.14.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
+		const endpointCapability = ({ 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.14.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
 		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
@@ -135,6 +135,13 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		fork: (args, signal) => request('POST', args, signal, 'things/fork'),
 		get: async (id, signal) => (await request('GET', { id }, signal)).thing as AccountThing,
 		remove: async (operation, signal) => { await request('DELETE', operation.body, signal); },
-		write: async (operation, signal) => (await request(operation.method === 'create' ? 'POST' : 'PATCH', operation.body, signal)).thing as AccountThing
+		write: async (operation, signal) => {
+			if (operation.method === 'create' && Array.isArray(operation.body.thingtime) && operation.body.thingtime.includes('comment')) {
+				const crystal = operation.body.crystal as Record<string, unknown>;
+				await request('POST', { ...crystal, id: operation.body.targetId, shareId: operation.body.shareId, tags: operation.body.tags }, signal, 'things/comment');
+				return (await request('GET', { id: operation.id }, signal)).thing as AccountThing;
+			}
+			return (await request(operation.method === 'create' ? 'POST' : 'PATCH', operation.body, signal)).thing as AccountThing;
+		}
 	};
 }

@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Account post/comment/reply authorship commits locally
+  with independent verified-account sync, stable retries and refusal cleanup.
+  Native offline private post and nested reply checks pass; bound media/draft sync
+  remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Retain account discussion/comment reads offline
   with partial coverage, canonical comment-only kinds and atomic refusal cleanup
   across display caches. Native retained-file comments and schema-free Data
