@@ -81,7 +81,7 @@ change this pointer; logout/account changes revoke it.
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
 | Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue update recovery, cross-account coverage and real-device startup verification. Chromium offline-emulation module cancellations remain under investigation; request blocking is no longer accepted without its root-read failure probe; the latest checkpoint defaults to actual offline emulation and retains failures as merge gates. |
-| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Complete deletion/imports, protected-kind moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
+| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Complete imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
 
 ## Development verification
 
@@ -1474,3 +1474,57 @@ These are local results. CI and deployment have not verified this checkpoint.
 This closes basic global/site composition, draft recovery and source rendering;
 full control-editing recovery, account reset/delete sync, cross-device conflicts,
 and the broader acceptance matrix above remain merge gates.
+
+
+## Account deletion and reset — 2026-10-16
+
+The existing account queue now handles ordinary owned data, folders, webpages,
+components, schemas and Action definitions through canonical `DELETE /api/v1/things`.
+Deleting content and recording deletion intent commit atomically. Never-sent local
+creates disappear without a remote request. Attempted creates/updates retain their
+frozen request until its outcome is known, then delete using the acknowledged
+server timestamp. Ambiguous deletes require scoped absence readback; permission
+refusals cannot be mistaken for success. Identity retirement fences late responses.
+
+Folder deletion moves cached direct children to the surviving parent and syncs
+those moves first. Target-linked children delete first; a conflicting child holds
+its parent. Keeping a linked account version visibly blocks the parent deletion
+until that child is explicitly deleted. Unknown/protected content continues using
+its dedicated authorized adapter; this does not complete every deletion adapter.
+
+Before-images remain in the same bounded workspace storage while deletion is
+pending. Acknowledgment releases their content and retains a small tombstone to
+prevent stale list/resolve reads from resurrecting it. Conflict review offers the
+account version or deletion of the explicitly reviewed version. Cached list
+membership retains hidden IDs so restoration appears immediately; the Things UI
+refreshes visible folders after scoped workspace changes. A false browser online
+hint cannot make an unverified workspace fetch its reset page remotely.
+
+Local verification covers normal offline Things deletion and Builder global reset,
+cold reload, zero offline mutations, real server readback, child preservation and
+both conflict choices at 1440/390/320px. The existing account-move and three site
+composition browser scenarios also pass. Unit coverage includes reload/lost
+responses, in-flight create refusal, two-tab claims, permission refusals, retained
+content bounds, identity changes and dependency conflicts. Evidence lives under
+`tmp/local-account-delete-ui/` and `tmp/local-account-delete-*-tests.log`.
+
+Run from `remix/` against a disposable production client:
+
+```sh
+TT_LOCAL_ACCOUNT_DELETE_URL=http://127.0.0.1:22470 \
+TT_LOCAL_ACCOUNT_DELETE_ARTIFACTS=../tmp/local-account-delete-ui \
+TT_SHARED_PLAYWRIGHT_PATH=/absolute/path/to/playwright/index.mjs \
+TT_SHARED_CHROME_PATH=/absolute/path/to/chrome \
+node --import tsx --test app/local-workspace/accountDelete.browser.test.ts
+```
+
+These results are local, not deployed verification. The full matrix above remains
+the merge gate; protected History/account Timeline synchronization, dedicated
+adapters, imports and wider account discovery still need completion.
+
+Final local checks: 192 workspace tests and four offline-shell tests pass (19
+opt-in workspace/browser tests skipped in the default command). Five enabled
+browser scenarios pass; the deletion scenario was rerun after the final safety
+change. Client build: 247 verified static assets / 21,541,680 bytes. Raw
+TypeScript retains the same 91 normalized baseline diagnostics. Focused lint:
+zero errors and four existing ThingsPage hook warnings. No baseline was relaxed.

@@ -7705,6 +7705,22 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Check 1440/390/320px widths with no horizontal overflow. Account page saves
       and confirmed sync must finish while `/api/v1/drafts` POSTs never settle.
       `siteBlocks.browser.test.ts` exercises the disposable production client.
+- [ ] Account offline delete/reset: cache an owned folder, its child, a Data Thing
+      and a global page in a disposable account. Go fully offline, delete the
+      folder/Data Thing and reset the global page; reload. The child survives in
+      the parent folder, deleted content stays absent, and no mutation is sent.
+      Reconnect with a verified session; check canonical server state. Change a
+      queued Thing remotely and exercise both conflict choices at 1440/390/320px.
+      Keeping the account version must restore the visible list immediately.
+      Cover a false `navigator.onLine` hint with unverified account identity.
+      `accountDelete.browser.test.ts` performs this through normal UI and APIs.
+- [ ] Account deletion queue: lose a DELETE response, reopen the workspace and
+      verify the identical conditional retry; stale reads must never resurrect
+      it. Delete during an uncertain create/update; refused creates must not be
+      recreated. Identity changes, 403s and competing tab claims cannot clear
+      another operation. Linked child conflicts hold parent deletion; keeping
+      that child must prevent a parent cascade until explicitly deleted. Check
+      rollback, folder draining, quota bounds and before-image release after ack.
 - [ ] Global blocks (webpage-site-global doc) render on every page and do NOT
       refetch or remount on client navigation.
 - [ ] Admin seed POST /api/v1/admin/webpages/seed converges (re-run →

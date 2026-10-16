@@ -90,20 +90,51 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const online = guard(remote) as T;
 
 	const project = (thing: any) => thing ? { ...thing, author: owner } : thing;
-	const refresh = async (args: Record<string, unknown>, signal?: AbortSignal) => {
+	const refresh = async (args: Record<string, unknown>, signal?: AbortSignal, retainPage?: (page: { ids: string[]; nextCursor: string | null }) => Promise<void>) => {
 		const { sync, transport, lease } = worker();
 		const result = await transport.read(args, signal);
 		lease.assertCurrent();
+		// Page membership belongs to the authorized server snapshot. Keep deleted
+		// IDs here; views hide tombstones and explicit conflict restoration can
+		// reveal them again without losing membership in the cached page.
+		const membership = Array.isArray(result.things) && result.things.every((thing: any) => accountThingCanCache(thing) && thing.author?.id === owner.id)
+			? { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null } : null;
 		const retain = async (thing: any) => {
 			if (!accountThingCanCache(thing) || thing.author?.id !== owner.id) return thing;
 			await sync.remember(thing);
 			return project(await sync.view(thing.id));
 		};
 		if (result.thing) result.thing = await retain(result.thing);
-		if (result.things) result.things = await Promise.all(result.things.map(retain));
+		if (result.things) result.things = (await Promise.all(result.things.map(retain))).filter(Boolean);
+		if (membership && retainPage) await retainPage(membership);
 		return result;
 	};
 	const changed = () => { announceLocalWorkspaceChange(); worker().wake(); };
+	const remove = async (ids: string[], expectedUpdatedAt: string | undefined, fallback: () => Promise<any>) => {
+		facadeLease.assertCurrent();
+		if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
+			throw new WorkspaceError('INVALID_IDS', 'Choose between 1 and 200 distinct Things.');
+		const { sync } = worker();
+		let dedicated = false;
+		for (const id of ids) {
+			if (await sync.isDeleted(id)) continue;
+			if (!await sync.view(id)) {
+				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open these Things online once before deleting them offline.', 409);
+				const result = await refresh({ id });
+				if (!result.thing || !accountThingCanCache(result.thing) || result.thing.author?.id !== owner.id) dedicated = true;
+			}
+		}
+		if (dedicated) {
+			const pending = (await sync.status()).some(row => ids.includes(row.id) && (row.state !== 'synced' || row.deleted));
+			if (pending) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Delete pending device Things separately from items requiring their dedicated online adapter.', 409);
+			return fallback();
+		}
+		const remaining = [];
+		for (const id of ids) if (!await sync.isDeleted(id)) remaining.push(id);
+		const removed = remaining.length ? (await sync.remove(remaining, expectedUpdatedAt)).deleted : ids;
+		announceLocalWorkspaceChange(removed); worker().wake();
+		return { ok: true, savedLocally: true, succeeded: ids.length, failed: 0, results: ids.map(id => ({ id, ok: true })) };
+	};
 	// Explicit login/logout establish or revoke identity; other remote features require confirmation.
 	const browse = (kind: 'schema' | 'component') => async (args: Record<string, unknown> = {}) => {
 		facadeLease.assertCurrent();
@@ -120,8 +151,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	};
 	return { ...online, auth: remote.auth, login: remote.login,
 		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
+		remove: async (input: { id: string; expectedUpdatedAt?: string }) => {
+			if (Object.keys(input || {}).some(key => !['id', 'expectedUpdatedAt'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
+			return remove([input?.id], input?.expectedUpdatedAt, () => online.things.remove(input));
+		},
 		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
 			facadeLease.assertCurrent();
+			if (input?.op === 'delete') {
+				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
+				return remove(input.ids, undefined, () => online.things.bulk(input));
+			}
 			if (input?.op !== 'move') return online.things.bulk(input);
 			if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) ||
 				!Array.isArray(input.ids) || !input.ids.length || input.ids.length > 200 ||
@@ -217,6 +256,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		update: async (input: AccountThingWrite & { id: string }) => {
 			const { sync } = worker();
+			if (await sync.isDeleted(input.id)) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted. Restore it before editing.', 409);
 			let cached = await sync.view(input.id);
 			if (!accountWriteSupported(input, true)) {
 				if (cached && cached.syncState !== 'synced') throw new WorkspaceError('UNSUPPORTED_LOCAL_WRITE', 'Sync this Thing before changing fields that require its online adapter.', 409);
@@ -234,7 +274,9 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		get: async (args: any, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
 			if (Object.keys(args || {}).some(key => key !== 'id')) return online.things.get(args, options);
-			const { sync } = worker(); const cached = await sync.view(args.id);
+			const { sync } = worker();
+			if (await sync.isDeleted(args.id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
+			const cached = await sync.view(args.id);
 			if (cached) {
 				if (navigator.onLine !== false) void refresh(args, options?.signal).then(() => {}).catch(() => {});
 				return { ok: true, thing: project(cached), savedLocally: cached.syncState !== 'synced' };
@@ -271,11 +313,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); return things;
 			};
 			const readPage = async () => {
-				const result = await refresh(args, options?.signal);
-				// Cache only complete pages of the locally supported owned kinds.
-				// Other managed libraries continue using their dedicated adapters.
-				if (result.things?.every((thing: any) => accountThingCanCache(thing) && thing.author?.id === owner.id))
-					await db.transaction(scope, 'readwrite', lease, tx => tx.put('thing-pages', key, { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null }));
+				const result = await refresh(args, options?.signal, page => db.transaction(scope, 'readwrite', lease, tx => tx.put('thing-pages', key, page)));
 				return { ...result, things: await overlay(result.things || []) };
 			};
 			const page = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ ids: string[]; nextCursor: string | null }>('thing-pages', key));
@@ -296,6 +334,7 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
  if (target.kind === 'id' && target.key) return transport.resolve(args);
  const refresh = async () => {
   const result = await transport.resolve(args);
+  if (result.page?.id && await sync.isDeleted(result.page.id)) return { ok: true, page: null, source: null, components: [], refs: {} };
   if (result.page?.author?.id === scope.ownerId && accountThingCanCache(result.page)) {
    await sync.remember(result.page);
    for (const component of result.components || []) if (component.author?.id === scope.ownerId && accountThingCanCache(component)) await sync.remember(component);
@@ -311,14 +350,18 @@ export async function resolveAccountWebpage(scope: AccountScope, target: LocalWe
   return result;
  };
  const local = resolveWorkspacePage(await sync.things.snapshot(), target, scope.ownerId);
- if (!local.page && target.kind !== 'id' && navigator.onLine === false) return { ok: true, page: null, source: null, components: [], refs: {} };
- if (!local.page) return refresh();
- if (navigator.onLine !== false) void refresh().catch(() => {});
+ const canRefresh = navigator.onLine !== false && canSyncAccountWorkspace(scope);
+ if (!local.page && target.kind !== 'id' && !canRefresh) return { ok: true, page: null, source: null, components: [], refs: {} };
+ if (!local.page) {
+  if (target.kind === 'id' && await sync.isDeleted(target.id)) return { ok: true, page: null, source: null, components: [], refs: {} };
+  return refresh();
+ }
+ if (canRefresh) void refresh().catch(() => {});
  const dependencies = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ components: any[]; refs: Record<string, string | null> }>('page-components', local.page!.id));
  const components = new Map(local.components.map(row => [row.id, row]));
  for (const [ref, id] of Object.entries(local.refs)) if (!id) {
   const savedId = dependencies?.refs[ref], saved = dependencies?.components.find(row => row.id === savedId);
-  if (saved) { components.set(saved.id, saved); local.refs[ref] = saved.id; }
+  if (saved && !await sync.isDeleted(saved.id)) { components.set(saved.id, saved); local.refs[ref] = saved.id; }
  }
  const missing = Object.entries(local.refs).filter(([, id]) => !id).map(([ref]) => ref);
  if (missing.length) throw new WorkspaceError('MISSING_DEPENDENCY', `This page needs components that are not saved on this device: ${missing.join(', ')}`);

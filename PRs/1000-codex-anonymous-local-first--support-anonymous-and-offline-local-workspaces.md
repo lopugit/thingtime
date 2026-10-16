@@ -979,3 +979,34 @@ picker opens the actual native page in Builder with anonymous draft recovery.
 This is local validation, not CI/deployed proof. Control-editing recovery,
 account reset/delete sync, cross-device conflicts, and the rest of the acceptance
 matrix remain outstanding. No main merge or manual deployment in this checkpoint.
+
+
+## 2026-10-16 — Account deletion and reset checkpoint
+
+Ordinary owned Things now delete locally with durable conditional sync intent.
+Builder global/site reset uses that same adapter. Uncertain create/update outcomes
+settle before deletion, never-sent creates cancel without network work, folder
+children drain first, and linked child conflicts hold parent deletion. Explicitly
+keeping a linked account version blocks the parent cascade until reviewed again.
+Pending before-images share workspace quota and release after acknowledgment;
+minimal tombstones prevent stale read resurrection.
+
+The normal conflict UI restores the reviewed account version or deletes that
+version with its server timestamp. Server list membership and visible-folder
+refresh preserve immediate restoration. Offline reset also respects unverified
+workspace identity when the browser incorrectly reports online. Dedicated
+protected-kind adapters and server authentication remain unchanged.
+
+Local browser evidence covers normal Things delete, Builder global reset, cold
+reload, no offline mutations, actual server readback, folder child preservation,
+and both conflict choices at 1440/390/320px. Account move and all three site
+composition regressions pass too. Logs/artifacts: `tmp/local-account-delete-ui/`,
+`tmp/local-account-delete-browser-tests.log`. This remains an implementation
+checkpoint, not a complete local-first rollout or deployed verification.
+
+Final local checks: 192 workspace tests and four offline-shell tests pass (19
+opt-in workspace/browser tests skipped in the default command). Five enabled
+browser scenarios pass; the deletion scenario was rerun after the final safety
+change. Client build: 247 verified static assets / 21,541,680 bytes. Raw
+TypeScript retains the same 91 normalized baseline diagnostics. Focused lint:
+zero errors and four existing ThingsPage hook warnings. No baseline was relaxed.

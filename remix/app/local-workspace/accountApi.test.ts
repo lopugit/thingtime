@@ -54,6 +54,16 @@ test('account local facade and native page resolution work offline without uploa
   await api.things.bulk({ op: 'move', ids: [page.id, component.id], folderId: null });
   assert.equal((await api.things.list({ folder: destination.id }) as any).things.length, 0);
   assert.equal(remoteCalls, 1, 'unconfirmed account cannot fall through to any remote adapter');
+  await api.things.bulk({ op: 'delete', ids: [destination.id] });
+  assert.equal((await api.things.list({ folder: 'root' }) as any).things.some((row: any) => row.id === destination.id), false);
+  await api.things.bulk({ op: 'delete', ids: [page.id] });
+  // Browser online hints can stay true after an offline reload. The verified
+  // workspace binding, not that hint, decides whether a remote resolve may run.
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+  assert.equal((await resolveAccountWebpage(scope, { kind: 'global' })).page, null);
+  assert.equal((await resolveAccountWebpage(scope, { kind: 'path', path: '/ode' })).page, null);
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+  assert.equal((await api.things.list({ thingtime: 'webpage' }) as any).things.length, 0);
   rootIdentity.changed(); bindLocalWorkspace(true, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {} } as any), /workspace changed/i);
   await assert.rejects(api.things.get({ id: page.id, key: 'old-key' } as any), /workspace changed/i);
@@ -170,5 +180,37 @@ test('account folder lists overlay pending placement on fresh and cached pages w
  } finally {
   rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, saved);
   if (oldNav) Object.defineProperty(globalThis, 'navigator', oldNav); else Reflect.deleteProperty(globalThis, 'navigator');
+ }
+});
+
+test('cached account page membership survives deletion and explicit conflict restoration', async () => {
+ const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+ const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'restore-owner', dataPlane: 'home' } as const;
+ const nav = { onLine: false };
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), fetch: async () => { throw new Error('Unexpected network'); } });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: nav });
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const api = accountApi({ things: {} }, { id: scope.ownerId }, scope.dataPlane) as any;
+  const worker = accountWorkspaceWorker(scope), sync = worker.sync;
+  const row: any = { id: 'restore-fixture', thingtime: ['data'], crystal: { name: 'Original' }, author: { id: scope.ownerId }, createdAt: '2026-10-16T00:00:00.000Z', updatedAt: '2026-10-16T00:00:00.000Z', acl: ['tt:user'], visibility: 'private' };
+  await sync.remember(row); await sync.remove([row.id]);
+  const remote = { ...row, crystal: { name: 'Changed elsewhere' }, updatedAt: '2026-10-16T00:00:01.000Z' };
+  const transport = { get: async () => remote, remove: async () => { throw { status: 409 }; }, write: async () => { throw new Error('Unexpected write'); } };
+  await sync.sync(transport); assert.equal((await sync.status())[0].state, 'conflict');
+  worker.transport.read = async () => ({ ok: true, things: [structuredClone(remote)], nextCursor: null });
+  nav.onLine = true;
+  assert.deepEqual((await api.things.list({ folder: 'root' })).things, []);
+  const review = await sync.inspectConflict(transport, row.id);
+  await sync.resolveConflict(transport, { id: row.id, keep: 'remote', localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt });
+  // With no usable background refresh, cached membership must still expose the
+  // restored row immediately. Do not make restoration depend on a second GET.
+  worker.transport.read = async () => { throw new Error('Read unavailable'); };
+  assert.equal((await api.things.list({ folder: 'root' })).things[0].crystal.name, 'Changed elsewhere');
+ } finally {
+  rootIdentity.changed(); await workspaceDatabase().close();
+  Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
+  if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });

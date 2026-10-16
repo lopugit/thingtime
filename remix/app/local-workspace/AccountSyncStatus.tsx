@@ -4,7 +4,7 @@ import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useDataPlane } from '../hooks/useDataPlane';
 import { accountWorkspaceWorker } from './accountApi.client';
-import { LOCAL_WORKSPACE_CHANGED } from './runtime.client';
+import { LOCAL_WORKSPACE_CHANGED, announceLocalWorkspaceChange } from './runtime.client';
 import type { AccountThingSync } from './accountSync';
 
 type Review = Awaited<ReturnType<AccountThingSync['inspectConflict']>>;
@@ -33,7 +33,7 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string;
  const act = async (run: (service: ReturnType<typeof accountWorkspaceWorker>) => Promise<unknown>) => {
   const service = serviceRef.current; if (!service) return;
   setBusy(true); setError('');
-  try { await run(service); if (mounted.current) { setRows((await service.sync.status()).filter(row => row.state !== 'synced')); service.wake(); } }
+  try { await run(service); if (mounted.current) { setRows((await service.sync.status()).filter(row => row.state !== 'synced')); announceLocalWorkspaceChange(); service.wake(); } }
   catch (failure) { if (mounted.current) setError(failure instanceof Error ? failure.message : 'Could not complete sync. Your local edits are preserved.'); }
   finally { if (mounted.current) setBusy(false); }
  };
@@ -47,17 +47,18 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string;
     <Text fontSize="sm" flex="1" minW={0} overflowWrap="anywhere">{row.id}: {row.error || row.state}</Text>
     {row.state === 'conflict' ? <Button size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async service => { const next = await service.sync.inspectConflict(service.transport, row.id); if (mounted.current) setReview(next); })}>Compare versions</Button> :
      <Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void act(service => service.sync.retry(row.id))}>Retry sync</Button>}
+    {row.state === 'conflict' && row.deleted ? <Button size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(service => service.sync.retry(row.id))}>Check deletion again</Button> : null}
    </Flex>)}
    {rows.length > 20 ? <Text fontSize="sm">Showing the first 20 of {rows.length} pending Things.</Text> : null}
   </details>
   {review ? <Box mt={3}>
-   <Text fontWeight="bold">Choose the version to keep</Text>
-   <Text fontSize="sm">Keeping this device’s version will replace the reviewed account version. Keeping the account version will replace this device’s edits.</Text>
+   <Text fontWeight="bold">{review.deleted ? 'Review this deletion' : 'Choose the version to keep'}</Text>
+   <Text fontSize="sm">{review.deleted ? 'This Thing was deleted on this device, but its account version changed. Delete the reviewed version or restore the account version to this device.' : 'Keeping this device’s version will replace the reviewed account version. Keeping the account version will replace this device’s edits.'}</Text>
    <Flex gap={3} flexWrap="wrap" my={3}>
     {([{ name: 'This device', row: review.local }, { name: 'Account', row: review.remote }]).map(({ name, row }) => <Box key={name} flex="1" minW="min(260px, 100%)" maxW="100%"><Text>{name}</Text><Box as="pre" maxH="240px" overflow="auto" whiteSpace="pre-wrap" overflowWrap="anywhere" fontSize="xs">{JSON.stringify({ thingtime: row.thingtime, crystal: row.crystal, extended: row.extended, tags: row.tags, folderId: row.folderId, targetId: row.targetId, acl: row.acl }, null, 2)}</Box></Box>)}
    </Flex>
    <Flex gap={3} flexWrap="wrap">
-    {(['local', 'remote'] as const).map(keep => <Button key={keep} size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async service => { await service.sync.resolveConflict(service.transport, { id: review.local.id, keep, localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt }); if (mounted.current) setReview(null); })}>{keep === 'local' ? 'Keep this device’s version' : 'Keep account version'}</Button>)}
+    {(['local', 'remote'] as const).map(keep => <Button key={keep} size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async service => { await service.sync.resolveConflict(service.transport, { id: review.local.id, keep, localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt }); if (mounted.current) setReview(null); })}>{keep === 'local' ? review.deleted ? 'Delete reviewed account version' : 'Keep this device’s version' : 'Keep account version'}</Button>)}
     <Button size="sm" variant="ghost" onClick={() => setReview(null)}>Cancel</Button>
    </Flex>
   </Box> : null}

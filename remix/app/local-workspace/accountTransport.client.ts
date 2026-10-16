@@ -62,6 +62,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		read: (args, signal) => request('GET', args, signal),
 		resolve: (args, signal) => request('GET', args, signal, 'webpages/resolve'),
 		get: async (id, signal) => (await request('GET', { id }, signal)).thing as AccountThing,
+		remove: async (operation, signal) => { await request('DELETE', operation.body, signal); },
 		write: async (operation, signal) => (await request(operation.method === 'create' ? 'POST' : 'PATCH', operation.body, signal)).thing as AccountThing
 	};
 }

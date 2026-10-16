@@ -32,6 +32,10 @@ test('transport pins account and database on reads and writes and retires mismat
   const transport = accountThingTransport(scope, lease);
   await transport.get('thing', new AbortController().signal);
   await transport.write({ id: 'thing', operationId: 'write', version: 1, method: 'update', body: { id: 'thing' } }, new AbortController().signal);
+  result = Response.json({ ok: true });
+  await transport.remove!({ id: 'thing', operationId: 'delete', version: 1, method: 'delete', body: { id: 'thing', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' } }, new AbortController().signal);
+  assert.equal(calls.at(-1).init.method, 'DELETE');
+  assert.equal(JSON.parse(calls.at(-1).init.body).expectedUpdatedAt, '2026-01-01T00:00:00.000Z');
   for (const { init } of calls) { assert.equal(init.headers['X-Thingtime-Expected-Actor'], 'owner'); assert.equal(init.headers['X-Thingtime-Expected-Data-Plane'], 'home'); assert.equal(init.credentials, 'same-origin'); assert.equal(init.redirect, 'error'); }
   // An HTML refusal from an edge/WAF must keep its HTTP status so the sync
   // queue can classify it, instead of degrading to a status-less retry.

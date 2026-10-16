@@ -405,6 +405,22 @@ const ThingsLibraryPage = () => {
     if (currentKey !== 'root') ensureLoaded(null);
   }, [user?.id, folderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync conflict choices and other tabs mutate the same local workspace.
+  // Refresh visible folders as well as search, retaining their current paint.
+  useEffect(() => {
+    if (!user?.id) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void fetchFolder(folderId);
+        if (folderId) void fetchFolder(null);
+      }, 0);
+    };
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
+    return () => { clearTimeout(timer); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refresh); };
+  }, [user?.id, folderId, fetchFolder]);
+
   // deep-linked folder (?folder=) whose ancestry we haven't met yet — resolve
   // folder names upward so breadcrumbs/columns stay honest, cycle-safe
   useEffect(() => {

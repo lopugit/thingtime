@@ -517,3 +517,15 @@ scope invalidation after writes; recipients ignore other account/origin/data-pla
 scopes. `siteBlocks.browser.test.ts` verifies anonymous offline edits, scoped
 account sync, normal import remapping and native source rendering. See the
 [local workspace checkpoint](../local-workspaces.md#global-and-site-blocks--2026-10-16).
+
+
+Account ordinary deletion is handled by `local-workspace/accountSync.ts` and the
+existing `accountTransport.client.ts` conditional DELETE. Intent and content
+removal share a workspace transaction; pending before-images use the existing
+storage quota, and acknowledged tombstones suppress stale cache resurrection.
+Folder drains and target-linked deletions order their dependencies; reviewed
+child restoration blocks an outstanding parent cascade. `AccountSyncStatus.tsx`
+provides explicit review and restore/delete choices. `ThingsPage.tsx` refreshes
+visible folders on scoped local changes. `accountDelete.test.ts` and its browser
+counterpart cover failure/retry, scope and real offline UI behavior. Protected
+kinds retain their dedicated adapters; see the outstanding acceptance matrix.

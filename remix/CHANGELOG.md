@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Ordinary account deletion and Builder reset now
+  finish locally while offline and sync through conditional canonical deletes.
+  Conflict review restores the account version immediately or deletes the
+  reviewed version; folder/linked-child ordering and stale-read tombstones
+  protect pending work. Local browser evidence and remaining merge gates:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous/offline Builder global and site pages reuse
   canonical route definitions, native rendering and scoped draft recovery;
   bounded caches refresh across tabs without sharing content. Save/reset complete
