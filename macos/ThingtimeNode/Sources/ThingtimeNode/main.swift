@@ -3,6 +3,7 @@ import Darwin
 import Foundation
 import Security
 import ThingtimeNodeCore
+import AppleFileSync
 
 private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
     private let controller: ThingtimeNodeController
@@ -44,7 +45,9 @@ private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
                     return
                 }
             }
-            let response = await controller.handle(request)
+            let response = access == .folderSync
+                ? await controller.handleLocalFolderSync(request)
+                : await controller.handle(request)
             reply(Self.encoded(response))
         }
     }
@@ -416,8 +419,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 desktopChat: desktopChat,
                 controllerRelay: controllerRelay
             )
+            let folderDialogs = MacFolderSyncDialogs()
+            let folderSync = try MacFolderSync(origin: endpointScope.canonicalBaseURL,
+                store: MobileFolderStore(),
+                staging: MobileSyncStaging(directory: endpointScope.commandJournalFileURL().deletingLastPathComponent()
+                    .appendingPathComponent("FolderSync-v1-" + endpointScope.identifier, isDirectory: true)),
+                verify: { owner, device in try await apiClient.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
+                choose: { try await folderDialogs.choose() }, approve: { try await folderDialogs.approve($0) },
+                cancelDialog: { folderDialogs.cancel() })
             let controller = ThingtimeNodeController(
                 journal: journal,
+                folderSync: folderSync,
                 pairing: pairing,
                 connector: connector,
                 telemetry: telemetry,
@@ -425,6 +437,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 controlPlaneClient: apiClient,
                 desktopChat: desktopChat,
                 pairingScopeChanged: { _ in
+                    await folderSync.suspend()
                     try await controlPlaneRuntime.reconcile()
                     if try await pairing.status().paired == false {
                         await desktopChat.clearActiveSessions()

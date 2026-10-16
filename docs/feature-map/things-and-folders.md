@@ -356,4 +356,9 @@ local package. `FileSyncOwnerScope` preserves the pairing/grant key and JSON.
 `FolderBookmark` owns the iOS/macOS bookmark differences. Common folder and
 publication tests live under the package; iOS retains its host bridge extensions.
 The shared `PublicationProcessAcceptance` fixture runs through iOS's test host
-and Mac's test-only child executable. Mac desktop dispatch remains pending.
+and Mac's test-only child executable. `ThingtimeNodeCore/MacFolderSync.swift`
+now wraps that package in local XPC dispatch, live paired-identity checks,
+owner-scoped grants and configuration-bound native write consent. The Node app
+owns picker/approval dialogs and endpoint-isolated staging. Generic/leased
+commands cannot call it. Electron account verification/preload integration,
+installed acceptance and native streaming remain pending.

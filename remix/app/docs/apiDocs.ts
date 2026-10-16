@@ -247,6 +247,26 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
+        id: 'devices-disconnect', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+        title: 'Disconnect a paired device', endpoint: '/api/v1/devices/disconnect',
+        summary: 'Revoke the device credentials owned by the current account.',
+        detail: 'The exact deviceId must belong to the authenticated full account. All live device sessions for that owner/device are revoked in the home identity plane. Repeated calls are safe; unrelated devices and browser sessions remain active. Device history, sync configurations and local/cloud files are retained. Native hosts must pair again; replaying the old completed claim cannot reactivate a revoked credential. This does not recall work already authorized before revocation.',
+        auth: { mode: 'session-or-bearer', description: 'Full signed-in user session; scoped device, app and PAT credentials are refused.' },
+        methods: ['POST'], steps: ['Choose one of your paired devices.', 'Disconnect its account access.'],
+        requestExamples: [{ name: 'Disconnect', description: 'Revoke one owned connection.', method: 'POST', body: { deviceId: 'device-id' } }],
+        responseExamples: [{ status: 200, description: 'Disconnected; files and history retained.', body: { ok: true, deviceId: 'device-id', disconnected: true } }]
+    }),
+	endpoint({
+		id: 'devices-node-identity', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+		title: 'Read paired device identity', endpoint: '/api/v1/devices/node/identity',
+		summary: 'Returns only the owner and device fixed by a live device credential.',
+		detail: 'Native hosts use this private, uncached read before local folder access. The scoped ttnode_ credential must remain valid and its owned device must exist. Query/body IDs cannot select another identity. It grants no file access and exposes no session or credential fields.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only; ordinary browser sessions cannot read it.' },
+		methods: ['GET'], steps: ['Resolve the native credential at the configured origin.', 'Compare both IDs before using a native folder grant.'],
+		requestExamples: [{ name: 'Identity', description: 'Read this paired identity.', method: 'GET', headers: { Authorization: 'Bearer ttnode_…' } }],
+		responseExamples: [{ description: 'Paired identity', status: 200, body: { ok: true, ownerId: 'owner-id', deviceId: 'device-id' } }]
+	}),
+	endpoint({
 		id: 'devices-node-state',
     featureVersion: '1.10.0',
 		contractVersion: '1.10.0',

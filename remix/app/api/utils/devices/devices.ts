@@ -620,6 +620,12 @@ export const claimDevicePairing = async (input: ClaimDeviceInput): Promise<Claim
 	return deviceFail(400, 'Pairing claim op must be prepare or complete; legacy unproved claims are rejected');
 };
 
+/** Native clients may bind local grants only to the owner of their current device credential. */
+export const readDeviceIdentity = async (ownerId: string, deviceId: string): Promise<DeviceFail | { ok: true; ownerId: string; deviceId: string }> => {
+	if (!(await deviceOwnedBy(ownerId, deviceId))) return deviceFail(404, 'Device not found');
+	return { ok: true, ownerId, deviceId };
+};
+
 export const listDevices = async (
 	ownerId: string,
 	requestedDeviceId?: unknown

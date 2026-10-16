@@ -13,6 +13,7 @@ public enum ThingtimeNodeXPCRequestAccess: Equatable, Sendable {
     case onboardingRead
     case pairingMutation
     case permissionMutation
+    case folderSync
     case forbidden
 }
 
@@ -36,6 +37,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
     private static let permissionMutations: Set<String> = ["permissions.request"]
 
     public static func access(for method: String) -> ThingtimeNodeXPCRequestAccess {
+        if method == "folder-sync.request" { return .folderSync }
         if onboardingReads.contains(method) { return .onboardingRead }
         if pairingMutations.contains(method) { return .pairingMutation }
         if permissionMutations.contains(method) { return .permissionMutation }
@@ -54,6 +56,7 @@ public enum ThingtimeNodeXPCRequestPolicy {
 	}
 
 	public static func bridgeResponseTimeoutSeconds(for method: String) -> TimeInterval {
+		if method == "folder-sync.request" { return 5 * 60 }
 		let confirmation = confirmationTimeoutSeconds(for: method)
 		if confirmation > 0 { return confirmation + bridgeResponseGraceSeconds }
 		return access(for: method) == .onboardingRead ? 15 : bridgeResponseGraceSeconds

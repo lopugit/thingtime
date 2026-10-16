@@ -806,3 +806,21 @@ Mac library release build passed. Full results are recorded
 in the [delivery ledger](../docs/mobile-file-sync.md#shared-apple-receiver-and-mac-filesystem-recovery--2026-10-17).
 No installed Mac transfer is claimed: desktop picker/consent/dispatch, Keychain,
 TCC/sandbox, cloud UI and signed delivery remain open, alongside the full goal.
+
+
+## Mac local folder adapter and device revocation — 2026-10-17
+
+The signed Node now wraps the shared Apple folder core behind local-only XPC.
+Native selection/consent, exact connection approval, bounded bytes and matched
+cancellation are implemented. Fresh server identity selects the exact paired
+credential; owner-only disconnect revokes that device's sessions while preserving
+history/files. Both new routes are registered and versioned. No Electron preload
+or product transfer control is enabled before active browser-account verification.
+
+Validation passed 29 focused native checks, the Node release build, 94 device and
+95 capability checks, targeted lint and real loopback signed-pairing/revocation
+acceptance. TypeScript retains the exact previous 91 diagnostics. Broader controller
+checks abort in XCTest due to its missing Bluetooth usage description. Actual
+Mac dialogs/Keychain/TCC, host integration, streaming performance and signed release
+remain open. Details and retained fixture history are in the
+[delivery ledger](../docs/mobile-file-sync.md#mac-local-host-and-live-identity-boundary--2026-10-17).

@@ -82,7 +82,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; iOS mixed-direction acceptance, Mac host integration, workers and full cross-device transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; iOS mixed-direction acceptance, Electron host integration, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
@@ -1011,3 +1011,41 @@ LaunchAgent or user folder was changed. No server/API/storage-model change or
 new credential is introduced. Background workers, Photos, peer transport,
 rename/delete/conflict/restore controls, retention/selective availability and the
 remaining full-goal acceptance are still open.
+
+
+## Mac local host and live identity boundary — 2026-10-17
+
+`MacFolderSync` now adapts the shared Apple core to an exact local XPC method,
+with native picker/download consent, endpoint-isolated staging, owner-scoped
+bookmarks, bounded scan/read/staging/publication, matched cancellation and exact
+configuration approval. Generic and remotely leased commands reject this entry
+point. The helper verifies the selected credential's owner/device with the live
+server before and after work, and rejects local unpairing while a read is pending.
+
+The new optional identity endpoint is device-token-only and privately uncached.
+The full-user disconnect endpoint revokes only that owner's matching device
+sessions in the home transaction, retaining device history/configurations/files.
+An old pairing claim cannot restore a revoked credential. An already-authorized
+file mutation may finish before the final identity check; revocation is not rollback.
+
+Validation: 29 focused native tests (7 adapter, 11 API client, 11 wire codec),
+Node release build, 84 device tests plus 10 route/storage-mock tests, 95 capability
+tests and targeted ESLint passed. Full TypeScript has the same 91 diagnostics,
+byte-identical to the prior checkpoint. Real loopback acceptance passed signed
+pairing, private identity/projection, browser-cookie refusal, ignored caller IDs,
+owner-only disconnect, repeated disconnect, old-token 401 and old-claim 409,
+retained device history and unaffected browser account. Acceptance credentials,
+including the first fixture from the failed generic-delete attempt, were revoked;
+protected fixture device history remains intentionally retained. No real user
+folder or installed Mac app/helper/LaunchAgent was altered.
+
+Broader existing NodeController tests abort with TCC's missing
+`NSBluetoothAlwaysUsageDescription` in the XCTest host; those tests are not counted
+as passing. An initial Nitro runner readiness timeout recovered after the source
+rebuild; final live acceptance used the managed worktree stack. Actual AppKit
+interaction and signed Keychain/TCC are still unverified. Electron does not expose
+this service yet: active browser account verification, API-origin mapping, feature
+negotiation, timeouts and current run conditions remain required. Per-request live
+identity and 64 KiB chunks also need native streaming/throughput work before UI
+enablement. The complete original goal, including background work, Photos, peers,
+rename/delete convergence, conflict/restore and release acceptance, remains active.

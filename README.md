@@ -4962,5 +4962,13 @@ attachment backend; no new configuration or credentials are required.
 The iOS native folder reader, grants and recoverable publication now live in
 [`apple/FileSync`](apple/FileSync/README.md), a local Swift package that also runs
 on macOS. That runbook documents native consent, platform bookmarks, isolated
-staging and real process-exit checks. The Mac app still needs its picker/bridge
-integration before it can expose these transfers; no new secret is required.
+staging and real process-exit checks. The Mac helper now has a local folder
+adapter and native picker/approval dialogs. Its desktop UI bridge, active browser
+account check, installed Keychain/TCC and full transfer acceptance remain pending.
+See [Mac host setup](macos/ThingtimeNode/README.md#local-folder-sync-adapter).
+The companion server must advertise `api.devices-node-identity` 1.x; the optional
+feature is negotiated separately so older deployments can still pair. Native
+credentials remain in Keychain; no new secret is required. The full-account
+`POST /api/v1/devices/disconnect` revokes one owned device's credentials and keeps
+its history and files. Reconnect requires a new pairing; a completed old claim
+cannot revive a revoked credential.

@@ -13,9 +13,11 @@ let package = Package(
         .executable(name: "ThingtimeNodeBridge", targets: ["ThingtimeNodeBridge"]),
         .executable(name: "ThingtimeSpeech", targets: ["ThingtimeSpeech"])
     ],
+    dependencies: [.package(path: "../../apple/FileSync")],
     targets: [
         .target(
             name: "ThingtimeNodeCore",
+            dependencies: [.product(name: "AppleFileSync", package: "FileSync")],
             resources: [
                 .process("Resources")
             ],
@@ -41,7 +43,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "ThingtimeNode",
-            dependencies: ["ThingtimeNodeCore"]
+            dependencies: ["ThingtimeNodeCore", .product(name: "AppleFileSync", package: "FileSync")]
         ),
         .executableTarget(
             name: "ThingtimeNodeBridge",
@@ -59,7 +61,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ThingtimeNodeCoreTests",
-            dependencies: ["ThingtimeNodeCore"]
+            dependencies: ["ThingtimeNodeCore", .product(name: "AppleFileSync", package: "FileSync")]
         )
     ],
     swiftLanguageModes: [.v5]

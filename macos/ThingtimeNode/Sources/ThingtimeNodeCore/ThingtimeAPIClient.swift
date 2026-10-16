@@ -45,9 +45,11 @@ private final class ThingtimeAPIRedirectDelegate: NSObject, URLSessionTaskDelega
 private actor DeviceCapabilityCache {
     private var checkedAt: Date?
     private var batteryDetails = false
+    private var fileSyncIdentity = false
     func isFresh() -> Bool { checkedAt.map { Date().timeIntervalSince($0) < 300 } ?? false }
     func supportsBatteryDetails() -> Bool { batteryDetails }
-    func accept(supportsBatteryDetails: Bool) { batteryDetails = supportsBatteryDetails; checkedAt = Date() }
+    func supportsFileSyncIdentity() -> Bool { fileSyncIdentity }
+    func accept(supportsBatteryDetails: Bool, supportsFileSyncIdentity: Bool) { batteryDetails = supportsBatteryDetails; fileSyncIdentity = supportsFileSyncIdentity; checkedAt = Date() }
 }
 
 public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
@@ -81,8 +83,39 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         let parts = version.split(separator: ".").compactMap { Int($0) }
         return parts.count == 3 && parts[0] == 1 && parts[1] >= 10
     }
-    private func requireCapabilities() async throws {
-        if await capabilityCache.isFresh() { return }
+    static func supportsFileSyncIdentity(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-identity"]?["version"] as? String else { return false }
+        return version.range(of: "^1\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil
+    }
+
+    /// Select the exact native credential; never infer the owner from renderer input.
+    /// Identity is uncached, and local unpairing during the request also fails closed.
+    public func verifyFileSyncIdentity(ownerID: String, deviceID: String) async throws {
+        try Task.checkCancellation()
+        try await requireCapabilities(force: !(await capabilityCache.supportsFileSyncIdentity()))
+        guard await capabilityCache.supportsFileSyncIdentity() else { throw ThingtimeAPIClientError.incompatibleCapabilities }
+        let matching = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
+        guard matching.count == 1, let credential = matching.first else { throw ThingtimeAPIClientError.notPaired }
+        struct Identity: Decodable { let ok: Bool; let ownerId: String; let deviceId: String }
+        let url = URL(string: "/api/v1/devices/node/identity", relativeTo: baseURL)!.absoluteURL
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(credential.refreshToken)", forHTTPHeaderField: "Authorization")
+        let (data, raw) = try await session.data(for: request)
+        try Task.checkCancellation()
+        guard data.count <= 16_384, let response = raw as? HTTPURLResponse,
+              response.url == url else { throw ThingtimeAPIClientError.invalidResponse }
+        guard response.statusCode == 200 else { throw ThingtimeAPIClientError.rejected(status: response.statusCode) }
+        let identity = try decoder.decode(Identity.self, from: data)
+        guard identity.ok, identity.ownerId == ownerID, identity.deviceId == deviceID,
+              try await credentialStore.loadAll().contains(credential) else { throw ThingtimeAPIClientError.notPaired }
+    }
+
+    private func requireCapabilities(force: Bool = false) async throws {
+        if !force, await capabilityCache.isFresh() { return }
         guard let url = URL(string: "/.well-known/thingtime-capabilities.json", relativeTo: baseURL)?.absoluteURL else { throw ThingtimeAPIClientError.invalidBaseURL }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -90,7 +123,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
               response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
               data.count <= 2_097_152, Self.compatibleManifest(data, origin: baseURL) else { throw ThingtimeAPIClientError.incompatibleCapabilities }
-        await capabilityCache.accept(supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL))
+        await capabilityCache.accept(supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL), supportsFileSyncIdentity: Self.supportsFileSyncIdentity(data, origin: baseURL))
     }
 
 

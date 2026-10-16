@@ -71,7 +71,7 @@
     "test:desktop-oauth": "node --import tsx --test app/api/utils/apps/desktopOAuthCore.test.ts && node --import tsx --test app/api/utils/apps/accountScopes.test.ts app/api/utils/apps/widgetClient.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/scopedUser.test.mjs app/api/utils/auth/resolveActor.oauth.test.mjs app/api/utils/auth/oauthTokenRoute.test.mjs",
     "test:deployments": "node --import tsx --test app/api/utils/deployments/*.test.ts",
     "test:hooks": "node --import tsx --test app/hooks/*.test.ts",
-    "test:devices": "node --import tsx --test app/components/Devices/*.test.ts app/components/Watch/*.test.ts app/api/utils/devices/*.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/devices/pairingRoute.test.mts app/api/utils/devices/filesystemCommandRoute.test.mts",
+    "test:devices": "node --import tsx --test app/components/Devices/*.test.ts app/components/Watch/*.test.ts app/api/utils/devices/*.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/devices/pairingRoute.test.mts app/api/utils/devices/filesystemCommandRoute.test.mts app/api/utils/devices/deviceIdentityRoute.test.mts app/api/utils/devices/disconnectDevice.test.mts",
     "test:editorjs": "node --import tsx --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "test:embed": "node --import tsx --test app/embed/*.test.ts",
     "test:embed-bundle": "node --test scripts/embed-bundle-source-map.test.mjs",
