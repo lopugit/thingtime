@@ -220,3 +220,36 @@ acceptance. Keep the full goal active until the evidence table is satisfied.
   mode-0600 readback pass. The temporary fixture administrator was removed,
   PM2 restarted and non-admin identity plus private Trash state verified.
   Documentation semantic coverage remains separate from source/API acceptance.
+
+## iOS folder access checkpoint — 2026-10-17
+
+- Added `fileAccessVersion` 1.0.0 with explicit native Files selection and
+  account/origin-scoped, device-only Keychain bookmarks. The web receives opaque
+  root IDs, names, complete bounded inventories and requested version-pinned
+  chunks. No arbitrary path grant, local writes or file deletion operations.
+- Native scans coordinate provider access, use descriptor-relative no-follow
+  reads, hash incrementally using the shared multipart contract, and refuse
+  changed/missing/unsafe/incomplete roots. Native reads are limited to 64 KiB;
+  the web source adapter assembles at most 32 MiB per requested buffer.
+- The existing paired-device card exposes choose/check/remove access. Native
+  cancellation releases waiting UI, stale picker delegates cannot complete a
+  newer request, and StrictMode cleanup releases the pending-request slot.
+  Cached folders remain visible on failed reads. Selecting a folder does not
+  begin transfers; editable sync policy Things and native workers remain pending.
+- Browser fixture QA at 1280×800 and 390×844 verified choose/check/remove,
+  long-name wrapping, 40px action targets, no horizontal overflow, and retained
+  selections on error. Native tests include real multipart hashing, Keychain
+  isolation, traversal/symlink refusal, changed versions and request cancellation.
+- The simulator build targets `http://127.0.0.1:14900`, retains simulator
+  signing, and is installed/launched on iPhone 17 Pro / iOS 26.5. This does not
+  prove signed-in system-picker click-through or physical/provider acceptance.
+  Android folder access, native writes/schedulers, Photos and remaining full
+  sync requirements stay in the authoritative acceptance ledger.
+- Final native validation: 36 selected simulator tests passed (9 folder tests,
+  8 pairing tests, 19 destination tests). The final build is
+  `/tmp/thingtime-mobile-folder-build/Build/Products/Debug-iphonesimulator/Thingtime.app`,
+  version 1.0 build 31. Its installed simulator executable and debug library
+  hashes match the build, codesign verification passes, and launch succeeds.
+- Web validation: 46 sync tests and 88 device tests passed, targeted lint and
+  full Vercel web build passed. Raw TypeScript retains unrelated baseline
+  failures; this is not a clean project typecheck.

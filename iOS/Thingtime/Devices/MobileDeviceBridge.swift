@@ -43,23 +43,7 @@ final class MobileDeviceBridge {
                   let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
                   UIApplication.shared.applicationState == .active else { throw CancellationError() }
         }
-        let engine = MobileDevicePairing(load: MobileDeviceKeychain.load, save: MobileDeviceKeychain.save,
-            transport: { [session] request in
-                let (bytes, response) = try await session.bytes(for: request)
-                guard let http = response as? HTTPURLResponse else { throw MobileDevicePairing.Failure.invalid }
-                var data = Data()
-                for try await byte in bytes {
-                    guard data.count < 512 * 1024 else { throw MobileDevicePairing.Failure.invalid }
-                    data.append(byte)
-                }
-                return (data, http)
-            }, cookie: { [weak webView] url in
-                try check()
-                guard let webView else { throw CancellationError() }
-                let all = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
-                try check()
-                return HTTPCookie.requestHeaderFields(with: cookies(all, url))["Cookie"] ?? ""
-            }, check: check)
+        let engine = makeEngine(webView: webView, cookies: cookies, check: check)
         task = Task { [weak self] in
             defer { if self?.generation == operation { self?.task = nil } }
             do {
@@ -80,4 +64,29 @@ final class MobileDeviceBridge {
             }
         }
     }
+    func verifyOwner(_ scope: MobileDevicePairing.Scope, webView: WKWebView,
+                     cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie], check: @escaping () throws -> Void) async throws {
+        try await makeEngine(webView: webView, cookies: cookies, check: check).verifyIdentity(scope)
+    }
+    private func makeEngine(webView: WKWebView, cookies: @escaping ([HTTPCookie], URL) -> [HTTPCookie],
+                            check: @escaping () throws -> Void) -> MobileDevicePairing {
+        return MobileDevicePairing(load: MobileDeviceKeychain.load, save: MobileDeviceKeychain.save,
+            transport: { [session] request in
+                let (bytes, response) = try await session.bytes(for: request)
+                guard let http = response as? HTTPURLResponse else { throw MobileDevicePairing.Failure.invalid }
+                var data = Data()
+                for try await byte in bytes {
+                    guard data.count < 512 * 1024 else { throw MobileDevicePairing.Failure.invalid }
+                    data.append(byte)
+                }
+                return (data, http)
+            }, cookie: { [weak webView] url in
+                try check()
+                guard let webView else { throw CancellationError() }
+                let all = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
+                try check()
+                return HTTPCookie.requestHeaderFields(with: cookies(all, url))["Cookie"] ?? ""
+            }, check: check)
+    }
+
 }

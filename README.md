@@ -4575,6 +4575,22 @@ its explicit test environment. No developer account or signing secret belongs
 in this fixture. See [the full sync acceptance ledger](docs/mobile-file-sync.md)
 for Photos and transfer work that is still in progress.
 
+The iOS app also advertises `fileAccessVersion` 1.0.0. After pairing, **Folder
+access → Choose folder** uses the system Files picker. **Check folder** computes
+a bounded inventory and **Remove access** forgets the grant without deleting
+files. Selection alone does not start uploads. No new secret, entitlement or
+server environment variable is required: use the existing authenticated origin
+and retain normal app signing for Keychain access. Native security-scoped
+bookmarks stay in device-only Keychain storage, scoped to account and origin;
+web settings receive opaque IDs and display names. Follow Apple's
+[directory access contract](https://developer.apple.com/documentation/uikit/providing-access-to-directories).
+Use synthetic folders for acceptance. Unavailable providers, changed files,
+symlinks and oversized scans fail rather than yielding empty inventories. The
+current bounds are 32 grants, 10,000 entries / 4 MiB metadata per scan, and 64 KiB
+per native read. Android folder grants and persistent transfer workers remain
+pending. The UI fixture at `/scripts/mobile-folders.browser.html` tests controls
+with synthetic native replies; it does not verify the iOS system picker.
+
 The Android shell lives in `android/`. It requires JDK 17, Android SDK 35 and
 an updated System WebView on API 26+. Run `android/gradlew -p android assembleDebug`
 and install the resulting debug APK. A fork can select its HTTPS server with

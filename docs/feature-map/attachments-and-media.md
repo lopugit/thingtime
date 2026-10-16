@@ -7,7 +7,7 @@ The content endpoint also serves exact-version `sha256-parts-v1` fingerprints
 through `getAttachmentFingerprint`; `contentFingerprint.ts` shares part planning
 and bounded local hashing, and `attachmentFingerprint.client.ts` reads the
 authorized receipt. Run `test:file-sync` and `test:attachments`. Native file
-adapters and product integration are pending;
+write adapters, persistent workers and product sync integration are pending;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.
 
@@ -25,6 +25,14 @@ the operation ID, and exact receipts recover accepted writes without reading the
 source again. `test:file-sync` and `scripts/file-sync-cloud.integration.mts` cover
 this path. Platform inventory/selection, native workers and download publication
 remain separate work.
+
+`iOS/Thingtime/Files/` now supplies account/origin-scoped native picker grants,
+complete bounded scans and version-checked descriptor-relative reads.
+`fileSync/mobileFolders.client.ts` validates bridge replies and adapts chunked
+reads to the shared fingerprint/upload source contract. The paired-device card
+uses `MobileFolderAccess.tsx` to choose/check/remove access; it does not launch
+transfers. Bookmarks remain native. Android grants, destination writes and
+persistent schedulers remain pending.
 
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).

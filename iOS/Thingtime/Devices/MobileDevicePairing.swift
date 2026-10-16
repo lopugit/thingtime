@@ -5,7 +5,7 @@ import Security
 /// Native-only pairing material. Neither keys nor device credentials cross the web bridge.
 @MainActor
 final class MobileDevicePairing {
-    struct Scope: Codable, Equatable {
+    struct Scope: Codable, Equatable, Sendable {
         let ownerId: String
         let origin: URL
         init(ownerId: String, url: URL) throws {
@@ -96,7 +96,7 @@ final class MobileDevicePairing {
         guard Self.requirements.allSatisfy({ LopuVoiceContract.accepts(manifest, baseURL: scope.origin, feature: $0.key, minimum: $0.value) }) else { throw Failure.incompatible }
         try await verifyIdentity(scope)
     }
-    private func verifyIdentity(_ scope: Scope) async throws {
+    func verifyIdentity(_ scope: Scope) async throws {
         let identity = try await request(scope, "/api/v1/auth/me")
         guard let user = identity["user"] as? [String: Any], user["id"] as? String == scope.ownerId,
               user["accountKind"] as? String == "user", user["temporary"] as? Bool != true else { throw Failure.identity }

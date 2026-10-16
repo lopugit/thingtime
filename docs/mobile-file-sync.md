@@ -66,8 +66,7 @@ never cross the JavaScript bridge. The initial capability list is empty.
 `MobileDeviceBridge.swift` exposes `devicePairingVersion` 1.0.0 only on iOS.
 Things and Settings use the same `MobileDeviceSetupCard` and request codec.
 Foreground checks publish a bounded snapshot; app backgrounding and navigation
-cancel the worker. This is not a background file-sync scheduler. No file or photo
-permission is requested. Android now implements the same capability with the origin-restricted AndroidX bridge and Keystore-encrypted records.
+cancel the worker. This is not a background file-sync scheduler. Pairing itself requests no file or photo permission; the separate iOS folder control below explicitly opens Files. Android now implements the same capability with the origin-restricted AndroidX bridge and Keystore-encrypted records.
 
 The opt-in `iOS/scripts/test-mobile-devices.sh` uses a disposable API-created
 account on localhost to verify a real pairing, online readback, Keychain reload
@@ -81,11 +80,11 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter verified; native adapters and production UI pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter verified; iOS folder grants/scans/reads implemented; native writes/workers and production sync UI pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
-| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Core direction/delete policy only; saved Things and settings UI pending |
+| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Core direction/delete policy and iOS folder-access controls; editable sync Things and policy UI pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; native conflict handling, retention and UI pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
@@ -251,3 +250,32 @@ atomic path collision handling across concurrent creates, folder creation and
 removal, local download publication, empty files and native streaming for parts
 above 32 MiB remain required. Production UI/Builder integration, selected roots,
 sharing, Photos and release acceptance remain on the original goal.
+
+## iOS folder access checkpoint — 2026-10-17
+
+The paired-device card can explicitly choose, check and forget native Files
+folders through `fileAccessVersion` 1.0.0. Bookmarks remain private device-only
+Keychain records scoped to the authenticated owner and origin; only opaque IDs,
+names and bounded requested observations cross the bridge. These are OS access
+grants, not a separate sync configuration or history store. Future editable sync
+Things reference those IDs. Selection alone does not start uploads.
+
+Scans use coordinated, descriptor-relative reads, refuse symlinks and incomplete
+inventories, hash incrementally using the shared multipart contract and recheck
+observed file/directory versions. Reads are capped at 64 KiB and pinned to the
+scanned version. Native grants, scan entries and metadata are bounded. Empty
+files remain visible but cloud empty-file publication is still pending. Every
+operation verifies the full account before work and before returning private
+results; navigation/background cancellation fences late tasks and picker
+callbacks. Cancellation also releases the waiting web controls.
+
+Native reader/store/bridge and existing pairing/destination tests cover real
+multipart bytes, empty files, traversal/symlinks, changed versions, missing
+folders, Keychain reload/isolation, failed storage and matching cancellation.
+The web suite covers response identity, invalid/incomplete inventories, bounded
+chunk assembly and cancellation. Browser fixture QA covers StrictMode, long
+names, preserved state on errors and desktop/mobile bounds. The rebuilt app is
+installed and launches on iOS Simulator. Signed-in system-picker click-through,
+third-party Files providers and physical-device behavior remain unverified.
+Android folder access, cloud-to-native publication, persistent workers, Photos,
+editable sync controls, retention/sharing and release remain on the full goal.

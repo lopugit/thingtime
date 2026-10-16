@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
+import { MobileFolderAccess } from './MobileFolderAccess';
 import { getNativeBridge, nativeBridgeReadyEvent } from '~/utils/nativeBridge';
 import { requestMobileDevice, supportsMobileDevice, type MobileDeviceStatus } from './mobileDeviceBridge';
 
@@ -70,6 +71,7 @@ function MobileDeviceConnection({ ownerId, onPaired }: { ownerId: string; onPair
 				</Flex>
 			</Flex>
 			{error ? <Text role="alert" color="orange.600" fontSize="12px" marginTop={2}>{error}</Text> : null}
+            {isPaired ? <MobileFolderAccess ownerId={ownerId} /> : null}
 		</Box>
 	);
 }
