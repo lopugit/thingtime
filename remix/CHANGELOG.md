@@ -72,7 +72,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and safe projections, plus file-sync reconciliation, conditional execution
   and a durable browser operation journal. Native pairing, folder/photo
   workers and product integration remain in progress; see the
-  [acceptance ledger](../docs/mobile-file-sync.md).
+  [acceptance ledger](../docs/mobile-file-sync.md) and
+  [PR #1002 verification note](../PRs/1002-codex-mobile-file-sync-add-mobile-device-contracts-and-recoverable-file-sync-core.md).
 
 - 2026-10-16 — **Codex (AI)**: Keep fresh Lopu chats ready to send while unrelated background tasks run; scope busy checks and Stop to the selected conversation.
 
