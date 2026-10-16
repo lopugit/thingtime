@@ -16,6 +16,7 @@ import { NotificationRow } from './NotificationRow';
 import {
   NOTIFICATION_TYPES_BY_CATEGORY,
   NOTIFICATION_TYPE_META,
+  deviceSyncStatus,
   hasActiveNotificationFilters,
   notificationFiltersToParams,
   notificationFiltersToQuery,
@@ -302,7 +303,7 @@ const NotificationsHistory = ({ account, canReadAccount }: { account: boolean; c
             {canReadAccount && <Button size="sm" aria-pressed={account} variant={account ? 'solid' : 'outline'} onClick={() => setSearchParams({ source: 'account' })}>Account history</Button>}
           </Flex>
           {!account && <Text fontSize="xs" color={MUTED} role="status">
-            {user?.localOnly ? 'Anonymous messages stay on this device and never sync to an account.' : `${page.pendingCount} messages waiting to sync. ${page.failedCount ? `${page.failedCount} could not sync; they remain saved here.` : 'Account messages sync after your login is verified.'}`}
+            {user?.localOnly ? 'Anonymous messages stay on this device and never sync to an account.' : deviceSyncStatus(page.pendingCount, page.failedCount)}
           </Text>}
           {/* filters — the URL is the source of truth */}
           <Flex flexDirection="column" rowGap={3} background={CARD} border={BORDER} borderRadius={RADIUS} padding={[3, 4]}>
