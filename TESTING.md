@@ -10180,3 +10180,21 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   conditions, real selected-file upload, revoked grant, account switch,
   background/foreground and device revocation. Do not infer native background or
   continuous network enforcement from foreground/mock acceptance.
+
+
+### Android verified range reads (2026-10-17)
+
+- [ ] Scan an 8 MiB + 17 byte fixture and read every 64 KiB range through fresh
+  readers sharing scoped proofs: count exactly one file of provider bytes for
+  aligned ranges, and compare independent full hashes. Verify unaligned reads
+  spanning chunks. Same-size/same-timestamp changes must fail for touched chunks
+  and the full pre-publication verification, including a ready-upload retry.
+- [ ] Clear/evict proofs or change owner/origin/grant namespace: fall back to
+  full source verification. Cancellation and incomplete streams return no bytes.
+  Legacy clients must continue to get full-file checking by default.
+- [ ] Run Android debug/JVM/lint and the normal emulator suite. Separately run
+  optional `THINGTIME_FOLDER_UPLOAD_TEST=1` with only the documented synthetic
+  picker folder and disposable upload-approved local account. Verify the actual
+  Upload now control, cloud file identity and downloaded SHA-256; retain accounted
+  bytes in Trash and restore temporary admin env. Generated provider tests alone
+  do not prove this optional installed-app picker/upload path.

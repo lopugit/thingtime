@@ -101,3 +101,14 @@ test('remote Trash uses the pinned original attachment and a guarded receipt, wi
  const port = createCloudSyncPort(run, { currentScope: () => scope, persist: async () => {}, readLocal: async () => null, openSource: async () => { throw Error('must not open'); } }, f.runtime);
  await executeSyncRun(run, port); assert.equal(f.file()!.trashed, true); assert.equal(f.counts().puts, 1);
 });
+
+test('full native verification prevents publication after range reads and also checks a ready upload on retry', async () => {
+ const f=await fixture(),run=f.make();let checks=0;
+ const pinned={...source(),verify:async()=>{checks++;throw Error('Native source changed after its ranges were read');}};
+ await assert.rejects(createCloudFileTransport(f.runtime,run.cloudWrites[0]).apply(pinned),/Native source changed/);
+ assert.equal(f.counts().commits,0);assert.equal(f.counts().puts,1);assert.equal(checks,1);
+ await assert.rejects(createCloudFileTransport(f.runtime,run.cloudWrites[0]).apply(pinned),/Native source changed/);
+ assert.equal(f.counts().commits,0);assert.equal(f.counts().puts,1);assert.equal(checks,2);
+ await createCloudFileTransport(f.runtime,run.cloudWrites[0]).apply({...source(),verify:async()=>{checks++;}});
+ assert.equal(f.counts().commits,1);assert.equal(f.counts().puts,1);assert.equal(checks,3);
+});

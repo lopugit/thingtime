@@ -41,7 +41,7 @@ public final class MainActivity extends Activity {
           };
           window.thingtimeDeviceTransport.onmessage = event => { try { receive(JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.3.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.1.0',
+            version:'1.3.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.2.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },
             offMessage:listener => listeners.delete(listener)

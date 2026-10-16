@@ -7,7 +7,7 @@ export type MobileFolder = { id: string; name: string };
 export type FolderRequest =
 	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
-	| { action: 'read'; rootId: string; path: string; version: string; offset: number; length: number };
+	| { action: 'read'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true };
 export type FolderResult = {
 	roots: MobileFolder[];
 	conditions?: SyncConditions;
@@ -146,18 +146,29 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 export function mobileFolderSource(ownerId: string, rootId: string, scanned: SyncEntry, signal: AbortSignal): FingerprintSource {
 	const entry = structuredClone(scanned);
 	if (!validSyncEntry(entry) || entry.kind !== 'file') throw Error('Select a scanned file.');
-	const verify = async () => {
+	const chunkProofs =
+		getNativeBridge()?.platform === 'android' && supportsMobileFolders() && Number(getNativeBridge()!.fileAccessVersion!.split('.')[1]) >= 2;
+	const verify = async (full = false) => {
 		signal.throwIfAborted();
 		const result = await requestMobileFolders(
 			ownerId,
-			{ action: 'read', rootId, path: entry.path, version: entry.version, offset: 0, length: 1 },
+			{
+				action: 'read',
+				rootId,
+				path: entry.path,
+				version: entry.version,
+				offset: 0,
+				length: 1,
+				...(!full && chunkProofs ? { verifiedChunks: true as const } : {})
+			},
 			signal
 		);
 		if (result.chunk!.size !== entry.size) throw Error('Native source changed.');
 	};
 	return {
 		size: entry.size,
-		check: verify,
+		check: () => verify(),
+		verify: () => verify(true),
 		read: async (offset, length, callerSignal) => {
 			const readSignal = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
 			if (
@@ -174,7 +185,15 @@ export function mobileFolderSource(ownerId: string, rootId: string, scanned: Syn
 				readSignal.throwIfAborted();
 				const response = await requestMobileFolders(
 					ownerId,
-					{ action: 'read', rootId, path: entry.path, version: entry.version, offset: offset + at, length: Math.min(65536, length - at) },
+					{
+						action: 'read',
+						rootId,
+						path: entry.path,
+						version: entry.version,
+						offset: offset + at,
+						length: Math.min(65536, length - at),
+						...(chunkProofs ? { verifiedChunks: true as const } : {})
+					},
 					readSignal
 				);
 				if (response.chunk!.size !== entry.size) throw Error('Native source changed.');

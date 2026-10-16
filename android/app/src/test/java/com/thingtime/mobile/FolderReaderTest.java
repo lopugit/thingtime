@@ -67,4 +67,48 @@ public class FolderReaderTest {
         };
         p.file("file","file",new byte[]{1});assertThrows(Exception.class,()->p.reader().scan());
     }
+    @Test public void verifiedRangesReadLinearBytesAndFullCheckStillDetectsUnchangedTimestampEdits() throws Exception {
+        long[] reads={0};
+        Provider p=new Provider() {
+            @Override public InputStream open(String id) {
+                return new ByteArrayInputStream(bytes.get(id)) {
+                    @Override public synchronized int read(byte[] b,int off,int len) { int n=super.read(b,off,len);if(n>0)reads[0]+=n;return n; }
+                };
+            }
+        };
+        byte[] bytes=new byte[8*1024*1024+17];new Random(5).nextBytes(bytes);p.file("file","file",bytes);
+        FolderReader.ProofCache proofs=new FolderReader.ProofCache();
+        FolderReader reader=new FolderReader(p,()->{},proofs,"owner/root");
+        String version=reader.scan().getJSONObject(0).getString("version");assertEquals(bytes.length,reads[0]);reads[0]=0;
+        ByteArrayOutputStream observed=new ByteArrayOutputStream();
+        for(int offset=0;offset<bytes.length;offset+=FolderReader.MAX_READ) {
+            // Each bridge request uses a fresh reader with the same scoped proofs.
+            JSONObject chunk=new FolderReader(p,()->{},proofs,"owner/root").read("file",version,offset,FolderReader.MAX_READ,true);
+            observed.write(Base64.getDecoder().decode(chunk.getString("data")));
+        }
+        assertArrayEquals(bytes,observed.toByteArray());assertEquals(bytes.length,reads[0]);
+        JSONObject crossing=reader.read("file",version,FolderReader.MAX_READ-2,5,true);
+        assertArrayEquals(Arrays.copyOfRange(bytes,FolderReader.MAX_READ-2,FolderReader.MAX_READ+3),Base64.getDecoder().decode(crossing.getString("data")));
+        // Same ID/size/timestamp, change a byte outside a prefix read.
+        p.bytes.get("file")[bytes.length-1]^=1;
+        assertEquals(1,Base64.getDecoder().decode(reader.read("file",version,0,1,true).getString("data")).length);
+        assertThrows(Exception.class,()->reader.read("file",version,bytes.length-1,1,true));
+        assertThrows(Exception.class,()->reader.read("file",version,0,1)); // Full pre-publication verification.
+        assertThrows(Exception.class,()->new FolderReader(p,()->{},proofs,"different owner/root").read("file",version,0,1,true));
+        proofs.clear();assertThrows(Exception.class,()->reader.read("file",version,0,1,true));
+    }
+    @Test public void verifiedRangeEvictionFallsBackToFullValidationAndCancellationNeverReturnsBytes() throws Exception {
+        FolderReader.ProofCache proofs=new FolderReader.ProofCache();Provider p=new Provider();p.file("file","file",new byte[]{1,2,3});
+        FolderReader reader=new FolderReader(p,()->{},proofs,"scope");String version=reader.scan().getJSONObject(0).getString("version");
+        for(int i=0;i<FolderReader.ProofCache.MAX_FILES;i++)proofs.put("test-"+i,new byte[32]);
+        p.bytes.put("file",new byte[]{1,2,4});assertThrows(Exception.class,()->reader.read("file",version,0,1,true));
+        String current=reader.scan().getJSONObject(0).getString("version");
+        assertThrows(java.util.concurrent.CancellationException.class,()->new FolderReader(p,()->{throw new java.util.concurrent.CancellationException();},proofs,"scope").read("file",current,0,1,true));
+    }
+
+    @Test public void aRetiredReaderCannotRepopulateClearedProofs() {
+        FolderReader.ProofCache proofs=new FolderReader.ProofCache();long generation=proofs.generation();proofs.clear();
+        proofs.put("late",new byte[32],generation);assertNull(proofs.get("late",proofs.generation()));
+    }
+
 }

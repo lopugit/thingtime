@@ -18,7 +18,10 @@ public class DeviceLiveTest {
         String value=result.poll(10,java.util.concurrent.TimeUnit.SECONDS); assertNotNull("WebView evaluation timed out",value); return value;
     }
     private static void awaitTrue(android.webkit.WebView web,String js) throws Exception {
-        long end=System.currentTimeMillis()+60000;
+        awaitTrue(web,js,60000);
+    }
+    private static void awaitTrue(android.webkit.WebView web,String js,long timeout) throws Exception {
+        long end=System.currentTimeMillis()+timeout;
         while(System.currentTimeMillis()<end) { if("true".equals(evaluate(web,js))) return; Thread.sleep(250); }
         fail("Installed WebView did not satisfy: "+js);
     }
@@ -30,7 +33,7 @@ public class DeviceLiveTest {
         assertFalse(result.optString("error"),result.has("error"));return result;
     }
     private static void verifySelectedFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
-        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.1.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
+        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.2.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
         assertNotNull(folderRequest(web,scope,new JSONObject().put("action","list")).getJSONArray("roots"));
         JSONObject conditions=folderRequest(web,scope,new JSONObject().put("action","conditions")).getJSONObject("conditions");
         assertTrue(java.util.Arrays.asList("wifi","cellular","ethernet","offline","unknown").contains(conditions.getString("network")));
@@ -49,14 +52,15 @@ public class DeviceLiveTest {
         try {
             assertEquals(uri,new FolderStore(context).grant(scope,id));
             JSONObject scan=folderRequest(web,scope,new JSONObject().put("action","scan").put("rootId",id));assertTrue(scan.getBoolean("complete"));
-            JSONArray entries=scan.getJSONArray("entries");JSONObject file=null;
+            JSONArray entries=scan.getJSONArray("entries");assertEquals("Select only the documented synthetic fixture",1,entries.length());JSONObject file=null;
             for(int i=0;i<entries.length();i++) if(entries.getJSONObject(i).getString("path").equals("original.bin")) file=entries.getJSONObject(i);
             assertNotNull(file);assertEquals(8*1024*1024+17,file.getLong("size"));assertEquals(2,file.getJSONObject("fingerprint").getInt("partCount"));
             java.security.MessageDigest part=java.security.MessageDigest.getInstance("SHA-256"), composite=java.security.MessageDigest.getInstance("SHA-256");
             byte[] first=new byte[8*1024*1024],tail=new byte[17];java.util.Arrays.fill(first,(byte)13);java.util.Arrays.fill(tail,(byte)13);composite.update(part.digest(first));composite.update(part.digest(tail));
             assertEquals(FolderReader.hex(composite.digest()),file.getJSONObject("fingerprint").getString("sha256"));
-            JSONObject read=folderRequest(web,scope,new JSONObject().put("action","read").put("rootId",id).put("path","original.bin").put("version",file.getString("version")).put("offset",8*1024*1024).put("length",65536));
+            JSONObject read=folderRequest(web,scope,new JSONObject().put("action","read").put("rootId",id).put("path","original.bin").put("version",file.getString("version")).put("offset",8*1024*1024).put("length",65536).put("verifiedChunks",true));
             assertArrayEquals(tail,java.util.Base64.getDecoder().decode(read.getJSONObject("chunk").getString("data")));
+            if("true".equals(InstrumentationRegistry.getArguments().getString("folderUpload"))) verifySelectedUpload(web,context,scope,id);
             store.add(other,uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,"ThingtimeSyncQA");
             folderRequest(web,scope,new JSONObject().put("action","remove").put("rootId",id));
             assertThrows(Exception.class,()->store.grant(scope,rootId));
@@ -66,6 +70,44 @@ public class DeviceLiveTest {
             System.out.println("FOLDER_QA_PASS: system picker, persisted scoped grants, real provider multipart fingerprint/read, isolation and shared-grant removal.");
         } finally {
             store.remove(scope,rootId);JSONArray otherRoots=store.list(other);for(int i=0;i<otherRoots.length();i++) store.remove(other,otherRoots.getJSONObject(i).getString("id"));
+        }
+    }
+    private static JSONObject webApi(android.webkit.WebView web,String path,String method,JSONObject body) throws Exception {
+        evaluate(web,"window.__syncQA=null;(async()=>{try{const r=await fetch("+JSONObject.quote(path)+",{method:"+JSONObject.quote(method)+",headers:{'Content-Type':'application/json'},"+(body==null?"":"body:"+JSONObject.quote(body.toString())+",")+"redirect:'error'});const value=await r.json();window.__syncQA=r.ok?{ok:true,value}:{ok:false,status:r.status};}catch(e){window.__syncQA={ok:false,error:String(e)}}})()");
+        awaitTrue(web,"window.__syncQA!==null");
+        JSONObject result=new JSONObject(new JSONTokener(evaluate(web,"JSON.stringify(window.__syncQA)")).nextValue().toString());
+        assertTrue("Acceptance API failed: "+path+" "+result,result.getBoolean("ok"));return result.getJSONObject("value");
+    }
+    private static void verifySelectedUpload(android.webkit.WebView web,Context context,DeviceScope scope,String localRootId) throws Exception {
+        String remoteRoot=null,connectionId=null;
+        try {
+            remoteRoot=webApi(web,"/api/v1/things","POST",new JSONObject().put("thingtime",new JSONArray().put("folder")).put("crystal",new JSONObject().put("name","Android upload acceptance "+java.util.UUID.randomUUID()))).getJSONObject("thing").getString("id");
+            String deviceId=new KeystoreDeviceStore(context).load(scope).getString("deviceId");
+            JSONObject config=new JSONObject().put("configurationVersion",1).put("name","Android upload acceptance").put("deviceId",deviceId).put("localRootId",localRootId).put("remoteFolderId",remoteRoot).put("mode","backup").put("paused",false).put("propagateDeletes",false).put("network","any").put("chargingOnly",false).put("excludedPaths",new JSONArray());
+            connectionId=webApi(web,"/api/v1/things","POST",new JSONObject().put("thingtime",new JSONArray().put("file-sync")).put("crystal",config)).getJSONObject("thing").getString("id");
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Refresh'&&!b.disabled).click()");
+            awaitTrue(web,"document.body.innerText.includes('Android upload acceptance') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Upload now'&&!b.disabled)");
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Upload now'&&!b.disabled).click()");
+            awaitTrue(web,"document.body.innerText.includes('Last upload finished.')",240000);
+            JSONArray nodes=webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory").getJSONArray("nodes");JSONObject file=null;
+            for(int i=0;i<nodes.length();i++){JSONObject n=nodes.getJSONObject(i);if(n.getString("path").equals("original.bin"))file=n.getJSONObject("file");}
+            assertNotNull(file);assertEquals(8*1024*1024+17,file.getJSONObject("content").getLong("size"));
+            String attachment=file.getJSONObject("content").getString("attachmentId");
+            evaluate(web,"window.__syncHash=null;(async()=>{try{const r=await fetch("+JSONObject.quote("/api/v1/attachments/content?id="+attachment+"&cache=bytes")+");if(!r.ok)throw Error('download');const digest=await crypto.subtle.digest('SHA-256',await r.arrayBuffer());window.__syncHash=Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');}catch(e){window.__syncHash='error'}})()");
+            awaitTrue(web,"window.__syncHash!==null");
+            byte[] expected=new byte[8*1024*1024+17];java.util.Arrays.fill(expected,(byte)13);
+            String hash=FolderReader.hex(java.security.MessageDigest.getInstance("SHA-256").digest(expected));
+            assertEquals(hash,new JSONTokener(evaluate(web,"window.__syncHash")).nextValue());
+            System.out.println("FOLDER_UPLOAD_PASS: installed Android WebView control, real SAF bytes, configured executor, cloud multipart publication, independent downloaded-byte SHA-256.");
+        } finally {
+            if(remoteRoot!=null) {
+                JSONArray nodes=webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory").getJSONArray("nodes");
+                for(int i=0;i<nodes.length();i++){JSONObject node=nodes.getJSONObject(i);if(!node.getString("kind").equals("file"))continue;JSONObject f=node.getJSONObject("file"),c=f.getJSONObject("content");
+                    webApi(web,"/api/v1/files","POST",new JSONObject().put("id",f.getString("id")).put("operationId",java.util.UUID.randomUUID().toString()).put("expectedRevision",f.getString("revision")).put("name",f.getString("name")).put("folderId",f.get("folderId")).put("attachmentId",c.getString("attachmentId")).put("contentVersion",c.getString("version")).put("trashed",true));
+                }
+            }
+            if(connectionId!=null)webApi(web,"/api/v1/things?id="+connectionId,"DELETE",null);
+            if(remoteRoot!=null)webApi(web,"/api/v1/things?id="+remoteRoot,"DELETE",null);
         }
     }
     private static void verifyInstalledWebBridge(Context context,CookieManager jar,DeviceScope scope,KeystoreDeviceStore storage) throws Exception {

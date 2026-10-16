@@ -443,3 +443,29 @@ policy checks between requests, not native background or network-bound transfer.
 Chunk rehashing and repeated root scans still require performance work. Native
 writes/downloads, Photos, persistent approvals/workers, peers and Mac integration
 remain on the full-scope ledger; this PR is not end-to-end delivery of that goal.
+
+
+## Bounded verified Android ranges — 2026-10-17
+
+Android file access 1.2.0 opt-in ranges verify 64 KiB chunk proofs from a complete
+file scan. A process-local 512-file/8-MiB LRU is scoped to owner, origin, root
+grant, document metadata and content-derived version. Missing proofs fall back
+to full verification; old clients retain full-file reads. The shared source
+contract adds a final full verification before cloud publication, including
+retry when attachment upload is already complete. Changed sources preserve the
+unfinished operation and cannot publish a new stable file.
+
+Android's byte-count test reads one file of bytes per full aligned-range pass,
+while same-stamp edits, boundary-crossing reads, foreign scope, eviction and
+cancellation are guarded. Ten emulator tests pass, including generated real
+ContentResolver descriptors and the installed 1.2.0 bridge. All 82 sync tests,
+targeted lint, Android debug/JVM/lint and full web/Vercel build pass. Raw TS
+remains at the same prior baseline. iOS already used descriptor-relative bounded
+reads; the new full callback preserves those checks.
+
+An optional installed-app picker/upload acceptance is compiled and documented,
+but has not passed: the available computer-use surface cannot select the running
+emulator window. The passing provider test is not that acceptance. No permission
+or authentication bypass was added. Streaming-only providers may reread prefixes;
+large proof sets fall back to full checks, and whole-root scans per operation,
+background workers and remaining full-scope delivery remain open.

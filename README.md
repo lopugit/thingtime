@@ -4739,3 +4739,12 @@ normal Things APIs and retains its tiny accounted versions in private Trash.
 Remove any temporary fixture admin setting and restart with `npm run web-pms`
 after testing. Native end-to-end upload, production S3 and OS background behavior
 require separate acceptance; see [the sync ledger](docs/mobile-file-sync.md).
+
+
+Android builds with file access 1.2.0 support verified native chunk ranges while
+retaining a full pre-publication source check. For the optional installed-app
+picker/upload acceptance and its synthetic-file requirements, see
+[Android foreground upload acceptance](android/README.md#verified-reads-and-foreground-upload-acceptance).
+The optional `THINGTIME_FOLDER_UPLOAD_TEST=1` run uses the same disposable
+localhost account and normal upload-approval/storage setup; it needs no new
+service credentials. It remains separate from the passing provider/bridge tests.

@@ -506,6 +506,48 @@ restarted after the test; tiny accounted byte versions remain in private Trash.
 
 Remaining: actual native byte-upload acceptance, persistent OS background
 transports/approvals, local download publication, folder deletion/rename
-convergence, Photos backup, peer behavior and Mac integration. The current native
-chunk reader rehashes the source per chunk and the runner rescans per operation;
-large-file and large-root performance still needs work before broad release.
+convergence, Photos backup, peer behavior and Mac integration. The runner still rescans per operation; large-root and streaming/background
+performance need further work. Android verified ranges are described below; iOS
+already uses bounded descriptor-relative reads with before/after stat checks.
+
+
+## Verified Android ranges — 2026-10-17
+
+Android file access 1.2.0 adds opt-in `verifiedChunks` reads. A complete native
+file scan records SHA-256 proofs for 64 KiB chunks alongside the existing canonical
+multipart fingerprint. A process-local LRU caches at most 512 files / 8 MiB of
+proof bytes, keyed by account, origin, selected-root grant, complete document
+metadata and content-derived version. No native paths or proofs cross the bridge.
+Backgrounding/removing access clears the cache. Missing/evicted/oversized proofs
+fall back to full verification; grants and owner identity are still checked for
+every bridge request. Old clients retain the original full-file read behavior.
+
+Ranges verify every touched chunk before returning bytes, including unaligned
+reads spanning two chunks. Same-stamp provider mutations cannot substitute bytes.
+A mutation elsewhere can be discovered later; `FingerprintSource.verify` supplies
+a full native check immediately before cloud file publication, also on retry of
+an already-completed attachment. Failed verification preserves the operation and
+never commits a stable file. Final byte fingerprints remain checked independently
+by the canonical upload/commit pipeline. iOS retains its descriptor/stat checks.
+
+Validation: Android JVM byte-count regression reads an 8 MiB + 17 byte source
+once for the scan and once for all aligned ranges, instead of once per chunk.
+Tests cover cross-chunk reads, same-stamp edits, scope isolation, eviction and
+cancellation. Ten emulator tests pass, including real ContentResolver file
+descriptors, multipart range hashing, full source revalidation and installed
+bridge 1.2.0. The provider is a generated test fixture, not system-picker or
+third-party provider acceptance. All 82 sync tests, targeted lint, Android
+build/JVM/lint and full web/Vercel build pass; TypeScript keeps its prior baseline.
+
+The optional `THINGTIME_FOLDER_UPLOAD_TEST=1` Android acceptance now prepares a
+private cloud connection and drives the installed Upload now control after the
+operator chooses the documented synthetic folder. It independently hashes the
+download and cleans up via normal APIs, retaining accounted bytes in private
+Trash. This optional picker/upload test has been added but has **not passed**:
+the current computer-control surface cannot address the running emulator window.
+Other implementation work remains available; this is not a full-goal blocker.
+
+The optimization is for seekable provider descriptors. Providers whose `skip`
+streams bytes may still reread prefixes, and files whose proofs exceed the cache
+fall back safely. Native streaming/background transports and avoiding repeated
+whole-root scans remain required for broad large-file/root performance.

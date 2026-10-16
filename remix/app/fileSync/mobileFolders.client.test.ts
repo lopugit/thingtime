@@ -53,9 +53,9 @@ test('native source chunks reads, rechecks its version, and cancels the exact pe
 		changed = false,
 		hold = false;
 	target.thingtimeNativeBridge = {
-		platform: 'ios',
+		platform: 'android',
 		isNativeWebView: true,
-		fileAccessVersion: '1.0.0',
+		fileAccessVersion: '1.2.0',
 		postMessage(message: any) {
 			const p = message.payload;
 			requests.push(p);
@@ -97,6 +97,9 @@ test('native source chunks reads, rechecks its version, and cancels the exact pe
 			requests.map((r) => r.length),
 			[1, 65536, 65536, 1]
 		);
+		assert.ok(requests.every((r) => r.verifiedChunks === true));
+		await source.verify!();
+		assert.equal(requests.at(-1).verifiedChunks, undefined);
 		changed = true;
 		await assert.rejects(async () => source.check(), /File changed/);
 		changed = false;

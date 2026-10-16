@@ -107,3 +107,26 @@ Run that optional operator-assisted check with
 The standard script leaves it disabled. Prepare the named synthetic folder
 before starting; when the installed app appears, use **Choose folder** to select
 it within five minutes. The script's final result includes the picker assertions.
+
+
+### Verified reads and foreground upload acceptance
+
+File access 1.2.0 supports opt-in chunk-verified ranges, using a process-local
+cache bounded to 512 files / 8 MiB of proof bytes. Complete scans derive the
+proofs; account/origin/grant/content-version scope prevents cross-use. Missing
+proofs and legacy reads keep full verification. The web transport performs a
+full native source check before publishing a file. Seekable provider descriptors
+avoid rereading prefixes; streaming-only providers and oversized proof sets still
+need native transport work. This does not implement a background worker.
+
+`THINGTIME_FOLDER_UPLOAD_TEST=1 ANDROID_SERIAL=<test-device-id> android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`
+adds real cloud upload acceptance to the optional picker test. Use the existing
+disposable localhost account, normal upload approval and attachment storage
+setup documented in the root README. Select only the named synthetic folder
+containing the one documented file; additional entries fail before upload. The
+test creates a private cloud folder/configuration, presses Upload now, compares
+an independently downloaded SHA-256, then removes its settings/root through
+normal APIs and retains the accounted file in private Trash. Remove temporary
+fixture admin settings and restart the managed server afterward. This optional
+path is compiled but still awaits successful picker/upload execution; the normal
+10-test emulator suite uses generated providers and does not prove that path.

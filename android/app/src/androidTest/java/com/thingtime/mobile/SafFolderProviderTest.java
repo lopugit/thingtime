@@ -70,4 +70,16 @@ public class SafFolderProviderTest {
         for(String value:new String[]{"loading","missing","unknown","virtual"}) { mode=value;assertThrows(Exception.class,()->reader(new CancellationSignal()).scan()); }
         mode="normal";CancellationSignal signal=new CancellationSignal();signal.cancel();assertThrows(android.os.OperationCanceledException.class,()->reader(signal).scan());
     }
+    @Test public void verifiedMultipartRangesUseRealProviderDescriptorsAndFullValidation() throws Exception {
+        byte[] bytes=new byte[8*1024*1024+17];new Random(17).nextBytes(bytes);Files.write(file.toPath(),bytes);
+        CancellationSignal signal=new CancellationSignal();FolderReader reader=reader(signal);String version=reader.scan().getJSONObject(0).getString("version");
+        java.io.ByteArrayOutputStream actual=new java.io.ByteArrayOutputStream();
+        for(int offset=0;offset<bytes.length;offset+=FolderReader.MAX_READ)
+            actual.write(Base64.getDecoder().decode(reader.read("original.bin",version,offset,FolderReader.MAX_READ,true).getString("data")));
+        assertArrayEquals(java.security.MessageDigest.getInstance("SHA-256").digest(bytes),java.security.MessageDigest.getInstance("SHA-256").digest(actual.toByteArray()));
+        bytes[bytes.length-1]^=1;Files.write(file.toPath(),bytes);
+        assertThrows(Exception.class,()->reader.read("original.bin",version,bytes.length-1,1,true));
+        assertThrows(Exception.class,()->reader.read("original.bin",version,0,1));
+    }
+
 }

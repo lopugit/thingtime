@@ -21,6 +21,7 @@ final class FolderBridge {
     interface Active { boolean get(); }
     private final Activity activity; private final String origin; private final Active active;
     private final AtomicLong generation=new AtomicLong();
+    private final FolderReader.ProofCache proofs=new FolderReader.ProofCache();
     private volatile String networkKind="unknown";
     private android.net.Network observedNetwork;
     private final android.net.ConnectivityManager connectivity;
@@ -49,6 +50,7 @@ final class FolderBridge {
     }
     void close() { suspend();try { if(connectivity!=null)connectivity.unregisterNetworkCallback(networkCallback); }catch(Exception ignored){} }
     void suspend() {
+        proofs.clear();
         Request old=pending;pending=null;selecting=false;selectedResult=null;resultArrived=false;generation.incrementAndGet();cancellation.cancel();cancellation=new CancellationSignal();
         if(old!=null) reply(old,new JSONObject(),"Folder access paused. Try again when the app is active.");
     }
@@ -116,15 +118,15 @@ final class FolderBridge {
                     }
                 } else if(!request.action.equals("list")) {
                     String rootId=request.payload.getString("rootId");if(!UUID.fromString(rootId).toString().equalsIgnoreCase(rootId)) throw new FolderReader.Failure("Invalid folder selection.");
-                    if(request.action.equals("remove")) store.remove(request.scope,rootId);
+                    if(request.action.equals("remove")) { store.remove(request.scope,rootId);proofs.clear(); }
                     else {
-                        FolderReader reader=new FolderReader(new SafFolderProvider(activity.getContentResolver(),store.grant(request.scope,rootId),signal),check);
+                        FolderReader reader=new FolderReader(new SafFolderProvider(activity.getContentResolver(),store.grant(request.scope,rootId),signal),check,proofs,request.scope.origin+"\0"+request.scope.owner+"\0"+rootId);
                         result.put("rootId",rootId);
                         if(request.action.equals("scan")) result.put("complete",true).put("entries",reader.scan());
                         else {
                             String path=request.payload.getString("path"),version=request.payload.getString("version");
                             long offset=integer(request.payload,"offset",9007199254740991L),length=integer(request.payload,"length",FolderReader.MAX_READ);
-                            result.put("path",path).put("chunk",reader.read(path,version,offset,(int)length));
+                            result.put("path",path).put("chunk",reader.read(path,version,offset,(int)length,Boolean.TRUE.equals(request.payload.opt("verifiedChunks"))));
                         }
                     }
                 }

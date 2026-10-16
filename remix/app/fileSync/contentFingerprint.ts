@@ -33,6 +33,9 @@ export type FingerprintSource = {
 	 * must refuse changed files instead of returning bytes from another version. */
 	read(offset: number, length: number, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>>;
 	check(): void | Promise<void>;
+	/** Providers with cheap range checks perform their full source validation
+	 * here before publishing a file. Throwing preserves the unfinished run. */
+	verify?(): void | Promise<void>;
 };
 /** At most one canonical part is resident. Native large-part adapters may
  * provide incremental SHA-256; the browser adapter below has an explicit cap. */

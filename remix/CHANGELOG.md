@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Android foreground uploads use bounded scoped
+  chunk proofs to avoid rehashing whole files per read, with full native
+  verification before file publication and on ready-upload retries. Byte-count,
+  same-stamp mutation and real provider-descriptor tests pass; optional system
+  picker/upload acceptance is documented separately. Details:
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Mobile connections can start, stop and retry
   foreground upload/backup runs with native connectivity/charging checks,
   retained progress and recoverable completion baselines. Real local API/storage

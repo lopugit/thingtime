@@ -234,6 +234,8 @@ export function createCloudFileTransport(runtime: CloudTransportRuntime, saved: 
 			if (fingerprint.id !== upload.id || !sameSyncContent(cloudFileSyncEntry(candidate, m.path), m.source))
 				throw Error('Uploaded bytes do not match the planned fingerprint.');
 			await sourceCheck();
+			await source.verify?.();
+			await sourceCheck();
 			return commit(content);
 		}
 	};
