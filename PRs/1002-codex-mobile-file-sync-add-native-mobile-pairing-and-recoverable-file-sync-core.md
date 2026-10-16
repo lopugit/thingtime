@@ -191,3 +191,32 @@ acceptance. Keep the full goal active until the evidence table is satisfied.
   manifests expose the new contracts and the compiled file route rejects
   anonymous requests. Raw TypeScript remains at its unchanged 91 diagnostics.
   Large-document semantic coverage is reported separately from source/API proof.
+
+## Cloud execution checkpoint — 2026-10-17
+
+- Added prepared cloud destinations to the existing durable sync run, and a
+  real upload/replace/remote-Trash port for the shared executor. No parallel
+  history or queue database, new API/collection/index or native source change.
+- Every API request pins the account and home data plane through canonical
+  server headers. Signed part uploads omit credentials/referrers. Immutable
+  upload request IDs, per-part/composite byte verification and file revision
+  guards preserve interrupted work; no speculative abort/delete cleanup.
+- Exact receipt recovery uses the original commit metadata and retained byte
+  identity, so the server validates its request hash before returning a replay.
+  A lost accepted response needs neither source access nor a second upload.
+- Six new transport regressions pass (42 sync tests total). Real local
+  HTTP/Mongo/storage acceptance passed multipart interruption, disk-run reload,
+  accepted-write/lost-response recovery without source access, stable replacement,
+  independent hashes of both versions, server identity/database fences and Trash.
+  Synthetic versions remain privately in Trash and charged. Production S3 and
+  native/background behavior are not covered by this local test.
+- Explicitly resolved file destinations are supported. Directory inventories,
+  concurrent path-creation collisions, folder writes, download publication,
+  native streaming/empty files, production settings/worker UI, Photos, sharing,
+  retention and release acceptance remain on the full goal.
+- Final verification: 42 sync and 8 file API tests pass; targeted source/script
+  lint and full web/Vercel build pass. Raw TypeScript matches all 91 pre-existing
+  diagnostics with no additions/removals. Synced file/directory journal I/O and
+  mode-0600 readback pass. The temporary fixture administrator was removed,
+  PM2 restarted and non-admin identity plus private Trash state verified.
+  Documentation semantic coverage remains separate from source/API acceptance.

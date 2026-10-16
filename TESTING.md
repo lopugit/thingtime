@@ -10007,3 +10007,19 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Built manifests expose files 1.0.0, things 1.34.0 and bulk 1.6.0. Native
   background transfers and the version/conflict/retention UI remain in the full
   sync acceptance ledger; this backend acceptance does not substitute for them.
+
+### Cloud sync transport and interrupted execution
+
+- [ ] Run `test:file-sync`: close/reopen IndexedDB after an accepted commit loses
+  its response; resume with the same pinned folder/file identity and confirm that
+  no source is opened and no bytes are uploaded again.
+- [ ] Interrupt before publication after upload completion; retry reuses the
+  ready upload. Reject changed immutable journal destinations, stale revisions,
+  foreign receipts, mismatched bytes, oversized responses and unsupported APIs.
+- [ ] Switch account/root/origin during a request. Stop before further writes;
+  verify expected-actor/data-plane headers against the real API. Signed object
+  PUTs must omit cookies, account credentials and referrers.
+- [ ] Run the opt-in `scripts/file-sync-cloud.integration.mts` with a disposable
+  localhost account: real multipart interruption/restart, lost accepted commit,
+  stable replacement, independent hashes of retained versions and executor Trash.
+  Remove temporary test admin access and restart; verify the account is non-admin.

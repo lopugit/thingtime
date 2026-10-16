@@ -44,6 +44,9 @@ a Web Lock helper. Native workers must implement equivalent durable storage and
 exclusivity. Native/cloud adapters must implement idempotent receipts, atomic
 destination preconditions, verified staged publication and recoverable trash.
 The executor cannot supply these guarantees for a blind-overwrite adapter.
+`cloudSyncPort.client.ts` now implements real cloud file upload/replace and remote
+Trash operations for explicitly pinned destinations. Its prepared metadata is
+retained with the existing journal run; no production UI starts these jobs yet.
 
 The current scan bound is 10,000 combined paths, and directories must appear
 alongside descendants. Large-root partitioning is still needed. Folder removal
@@ -78,9 +81,9 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; native adapters and production UI pending |
-| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal tests only; native schedulers and transfer adapters pending |
-| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real two-part attachment upload/download verified; resumable native sync transport pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter verified; native adapters and production UI pending |
+| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
+| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Core direction/delete policy only; saved Things and settings UI pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; native conflict handling, retention and UI pending |
@@ -217,3 +220,34 @@ private Timeline history, live library listing, guarded folder moves, folder
 deletion, Trash/restore and independent hashes of both retained versions.
 Generic hard deletion and anonymous reads are denied. Its tiny synthetic file
 stays in the disposable account's Trash because no purge bypass is permitted.
+
+## Cloud execution checkpoint — 2026-10-17
+
+`prepareCloudSyncRun` pins each destination folder and prior file snapshot before
+execution. `createCloudSyncPort` persists that complete record through the existing
+journal and connects the executor to the canonical uploads and file-commit API.
+Uploads preserve original bytes, use the operation UUID as the upload request ID,
+verify every part checksum and the full composite fingerprint, then condition
+publication on the pinned file revision. No response failure deletes uploaded
+bytes or discards the run. Retrying an incomplete multipart transfer currently
+resends its parts with the same identity; a completed upload is reused.
+
+Operation lookup validates content/path/destination, then checks the server's
+immutable request hash by replaying the exact original metadata with the retained
+byte identity. An accepted write with a lost reply therefore recovers without
+source access or another upload, including after a restart. Account/origin/root
+changes stop work; expected-actor and expected-data-plane headers bind each API
+request on the server. Signed part PUTs omit account credentials and referrers.
+
+Acceptance covers six new transport regressions (42 sync tests total), real
+8 MiB + 17 byte multipart interruption, disk-restored runs, a lost accepted
+commit, stable replacement, independent hashes of both retained versions, and
+remote Trash through the executor. The real test uses local MongoDB and the
+documented storage stand-in, and leaves its synthetic versions privately in
+Trash. It does not prove native disk publication, OS background execution or S3.
+
+The adapter accepts explicitly resolved file destinations. Directory discovery,
+atomic path collision handling across concurrent creates, folder creation and
+removal, local download publication, empty files and native streaming for parts
+above 32 MiB remain required. Production UI/Builder integration, selected roots,
+sharing, Photos and release acceptance remain on the original goal.

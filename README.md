@@ -4638,3 +4638,21 @@ private Trash, and signs out. No hard-delete shortcut is used. Remove temporary
 fixture admin configuration and restart afterwards. No new secrets or indexes
 are required. Production S3, native file workers, retention/purge, sharing and
 sync settings/UI remain separate acceptance work.
+
+### Verifying cloud sync execution locally
+
+With the disposable local account, upload approval and storage setup above:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-cloud.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This drives the actual sync executor and cloud transport through an interrupted
+multipart upload, disk-journal reload and an accepted commit with its response
+lost. It verifies recovery without source access/reupload, replacement, retained
+byte hashes, account/database fences and recoverable Trash. The synthetic file
+and both charged versions remain private in Trash. The temporary mode-0600 run
+file is removed after success and retained after failure for inspection/recovery.
+Remove any temporary fixture admin setting and restart afterwards. This does
+not exercise OS background scheduling, native disk writes or production S3.

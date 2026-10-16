@@ -7,7 +7,7 @@ The content endpoint also serves exact-version `sha256-parts-v1` fingerprints
 through `getAttachmentFingerprint`; `contentFingerprint.ts` shares part planning
 and bounded local hashing, and `attachmentFingerprint.client.ts` reads the
 authorized receipt. Run `test:file-sync` and `test:attachments`. Native file
-adapters, conditional cloud replacement and product integration are pending;
+adapters and product integration are pending;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.
 
@@ -16,7 +16,15 @@ through `/api/v1/files`. The shared `fileSync/cloudFile.ts` contract maps a file
 revision into a sync entry. Bound `file` attachments retain each byte version;
 Timeline stores the guarded commit/receipt and prior metadata. Run `test:files`
 and the opt-in `scripts/file-versions.integration.mts` acceptance. Retention,
-sharing and production sync adapters remain tracked in the sync ledger.
+sharing and production sync UI remain tracked in the sync ledger.
+
+`fileSync/cloudWrite.ts`, `cloudTransport.ts` and `cloudSyncPort.client.ts` connect
+prepared upload/backup and remote Trash runs to the real file/attachment APIs.
+Pinned destinations persist in the existing sync journal; multipart retries reuse
+the operation ID, and exact receipts recover accepted writes without reading the
+source again. `test:file-sync` and `scripts/file-sync-cloud.integration.mts` cover
+this path. Platform inventory/selection, native workers and download publication
+remain separate work.
 
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).

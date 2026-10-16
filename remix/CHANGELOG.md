@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17: Connected prepared sync runs to real cloud upload/replacement and
+  Trash, with pinned durable destinations, exact retry identities, byte checks
+  and account/database guards. Real interruption and lost-response acceptance
+  passed; native workers and production sync UI remain pending. See [PR #1002
+  notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Stable cloud file revisions use canonical
   attachments, quota accounting and Timeline in one guarded transaction.
   Exact retry receipts, retained versions, Trash/restore and folder integration
