@@ -2,6 +2,19 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Conditional file metadata: run attachment, Things, capability and local
+      workspace suites, then enable `accountFiles.browser.test.ts`. Concurrent
+      annotations using one version must have one winner and one 409; stale
+      annotation/move must preserve current metadata, placement and bytes.
+      Malformed versions and conditional multi-item/non-move requests fail 400.
+      Verify both built-server manifests advertise annotation 1.2.0/bulk 1.6.0,
+      docs routes return JSON, and anonymous mutations remain 401. Clean completed
+      fixture uploads with `/attachments/delete`, assert success and content 404;
+      generic Thing DELETE cannot prove cleanup of protected attachments. Close
+      test browsers even when cleanup fails. These checks do not claim native
+      account picker or durable metadata reconciliation acceptance.
+
+
 - [ ] Durable account file adapter: `accountFiles.test.ts` and
       `accountTransport.test.ts` cover atomic metadata/bytes/intent quota rollback,
       original request identity, checksum-locked parts, permission refusals,

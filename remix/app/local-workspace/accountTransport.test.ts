@@ -25,7 +25,7 @@ test('transport pins account and database on reads and writes and retires mismat
  const lease = { assertCurrent() { if (rootIdentity.read().generation !== generation) throw new Error('Retired workspace'); }, onInvalidate: () => () => {} };
  let result = Response.json({ ok: true, thing: { id: 'thing' } });
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent(event: Event) { events.push(event.type); } }, fetch: async (url: string, init: RequestInit) => {
-  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.15.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things': { version: '1.33.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.15.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url, init }); return result.clone();
  } });
  try {
@@ -66,7 +66,7 @@ test('file transport negotiates uploads, preserves retry codes, and sends signed
  const calls: any[] = [];
  let response = Response.json({ ok: true, upload: { id: 'remote-file' } });
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent() {} }, fetch: async (url: string | URL, init: RequestInit) => {
-  if (String(url).includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (String(url).includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url: String(url), init }); return response.clone();
  } });
  try {
@@ -79,6 +79,17 @@ test('file transport negotiates uploads, preserves retry codes, and sends signed
   response = Response.json({ ok: false, code: 'upload_parts_retryable', retryable: true }, { status: 409, headers: { 'Retry-After': '30' } });
   await assert.rejects(transport.complete('remote-file', signal), (error: any) => error.code === 'upload_parts_retryable' && error.status === 409 && error.retryable === true && error.retryAfterMs === 30000);
   for (const { init } of calls) { assert.equal(init.headers['X-Thingtime-Expected-Actor'], scope.ownerId); assert.equal(init.headers['X-Thingtime-Expected-Data-Plane'], 'home'); }
+  const stamp = '2026-10-16T00:00:00.000Z';
+  response = Response.json({ ok: true, attachment: { id: 'remote-file', title: 'Updated title' }, updatedAt: stamp });
+  assert.equal((await transport.annotate({ id: 'remote-file', title: 'Updated title', expectedUpdatedAt: stamp }, signal)).updatedAt, stamp);
+  assert.equal(JSON.parse(calls.at(-1).init.body).expectedUpdatedAt, stamp);
+  response = Response.json({ ok: true, results: [{ id: 'remote-file', ok: true }], succeeded: 1, failed: 0 });
+  await transport.move('remote-file', null, stamp, signal);
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body), { op: 'move', ids: ['remote-file'], folderId: null, expectedUpdatedAt: stamp });
+  response = Response.json({ ok: true, results: [{ id: 'remote-file', ok: false, status: 409 }] });
+  await assert.rejects(transport.move('remote-file', null, stamp, signal), (error: any) => error.status === 409);
+  response = Response.json({ ok: true, results: [{ id: 'wrong-file', ok: true }] });
+  await assert.rejects(transport.move('remote-file', null, stamp, signal), /invalid file move result/);
   response = new Response(null, { status: 200 });
   const part = { partNumber: 1, url: '/api/v1/attachments/local-object?signature=opaque', headers: { 'x-amz-checksum-sha256': 'hash' }, expiresAt: '' };
   const bytes = Uint8Array.of(1,2,3);

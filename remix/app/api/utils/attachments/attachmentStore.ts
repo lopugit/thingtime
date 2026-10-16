@@ -937,11 +937,14 @@ export const commitRecordingImport = async (ownerId: string, id: string, expecte
   });
 };
 
-export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentDoc> =>
+export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch, options: { unboundPostOnly?: boolean; expectedUpdatedAt?: string } = {}): Promise<AttachmentDoc> =>
 	withHomeMongoTransaction(async (session) => {
 		const things = await getHomeThingsCollection();
 		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
 		if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+		if (options.expectedUpdatedAt !== undefined && new Date(options.expectedUpdatedAt).getTime() !== before.updatedAt.getTime()) {
+			throw new AttachmentBindingError(409, 'Attachment changed before this edit. Refresh and compare your changes.');
+		}
 		if (before.attachmentState !== 'ready') {
 			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
 		}
@@ -961,7 +964,7 @@ export const annotateOwnedAttachment = async (ownerId: string, id: string, patch
 			return before;
 		}
 
-		const next: AttachmentDoc = { ...before, crystal: nextCrystal, updatedAt: new Date() };
+		const next: AttachmentDoc = { ...before, crystal: nextCrystal, updatedAt: new Date(Math.max(Date.now(), before.updatedAt.getTime() + 1)) };
 		const nextSize = thingStorageSizeBytes(next);
 		const deltaBytes = nextSize - canonicalStoredBytes(before);
 		if (deltaBytes !== 0) await applyUserStorageDelta(ownerId, deltaBytes, session);

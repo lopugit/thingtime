@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Add conditional file annotation and single-item
+  placement to the existing APIs and account transport. Real local replica tests
+  verify concurrent/stale writes, private bytes and canonical fixture cleanup;
+  built Nitro discovery/docs/auth smoke passes. Native account file reconciliation
+  remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+
 - 2026-10-16 — **Codex (AI)**: Add the durable account file upload foundation:
   atomic device bytes/intent, scoped multipart recovery, permission-preserving
   retries, and native sync status. Local browser verification covers offline

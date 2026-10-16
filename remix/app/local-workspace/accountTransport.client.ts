@@ -1,4 +1,5 @@
 import type { AccountFileTransport } from './accountFiles';
+import type { PublicAttachment } from '../components/Attachments/attachmentTypes';
 import { interactionState, type InteractionWrite } from '../utils/interactionState';
 import type { InteractionTransport } from './accountInteractions';
 import { accountRemoteWorkspaceLease } from './runtime.client';
@@ -27,22 +28,25 @@ export const readBoundedJson = async (response: Response) => {
 };
 export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountSyncTransport & {
 	interactions: InteractionTransport;
-	files: AccountFileTransport;
+	files: AccountFileTransport & {
+		annotate(input: { id: string; expectedUpdatedAt: string; filenamePreview?: string | null; title?: string | null; description?: string | null }, signal?: AbortSignal): Promise<{ attachment: PublicAttachment; updatedAt: string }>;
+		move(id: string, folderId: string | null, expectedUpdatedAt: string, signal?: AbortSignal): Promise<void>;
+	};
 	browse(kind: 'schema' | 'component', args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	read(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	resolve(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	export(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 	fork(args: Record<string, unknown>, signal?: AbortSignal): Promise<any>;
 } {
-	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' = 'things') => {
+	const request = async (method: string, args: Record<string, unknown>, signal?: AbortSignal, endpoint: 'things' | 'webpages/resolve' | 'things/export' | 'things/fork' | 'components/browse' | 'schemas/browse' | 'things/interactions' | 'attachments/uploads' | 'attachments/uploads/parts' | 'attachments/uploads/complete' | 'attachments/annotate' | 'things/bulk' = 'things') => {
 		lease.assertCurrent();
 		const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
 		const retired = new AbortController();
 		const unsubscribe = remoteLease.onInvalidate(() => retired.abort());
 		try {
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
-		const uploadCapability = ({ 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'] } as Record<string, string[]>)[endpoint];
-		const capability = uploadCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
+		const endpointCapability = ({ 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
+		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.15.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
 		if (method === 'PATCH') await requireThingtimeCapability('api.things-update', '1.10.0');
@@ -66,7 +70,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 			throw new WorkspaceError('WORKSPACE_CHANGED', 'Account session changed. Local edits remain in their original workspace.', 409);
 		}
 		if (!response.ok || result?.ok !== true) {
-			const error = new WorkspaceError(uploadCapability && typeof result?.code === 'string' ? result.code : 'SYNC_REFUSED', 'The account request could not be completed', response.status);
+			const error = new WorkspaceError(endpointCapability && typeof result?.code === 'string' ? result.code : 'SYNC_REFUSED', 'The account request could not be completed', response.status);
 			const seconds = Number(response.headers.get('Retry-After'));
 			throw Object.assign(error, { retryable: result?.retryable === true, retryAfterMs: Number.isFinite(seconds) && seconds > 0 ? Math.min(86400,seconds)*1000 : 0 });
 		}
@@ -75,6 +79,12 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	};
 	return {
 		files: {
+			annotate: (input, signal) => request('POST', input, signal, 'attachments/annotate'),
+			move: async (id, folderId, expectedUpdatedAt, signal) => {
+				const result = await request('POST', { op: 'move', ids: [id], folderId, expectedUpdatedAt }, signal, 'things/bulk');
+				if (!Array.isArray(result.results) || result.results.length !== 1 || result.results[0].id !== id) throw new WorkspaceError('INVALID_MOVE_RECEIPT', 'The account returned an invalid file move result.', 502);
+				if (result.results[0].ok !== true) throw new WorkspaceError('FILE_MOVE_REFUSED', 'The account file could not be moved. Refresh and compare your changes.', result.results[0].status === 409 ? 409 : 400);
+			},
 			start: async (input, signal) => (await request('POST', input, signal, 'attachments/uploads')).upload,
 			parts: async (uploadId, parts, signal) => (await request('POST', { uploadId, parts }, signal, 'attachments/uploads/parts')).parts,
 			complete: async (uploadId, signal) => (await request('POST', { uploadId }, signal, 'attachments/uploads/complete')).attachment,

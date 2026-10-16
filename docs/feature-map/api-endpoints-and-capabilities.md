@@ -1,5 +1,14 @@
 # API endpoints and capabilities
 
+Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
+and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
+`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
+only for single-item moves and reports stale per-item status 409. Both manifests
+must carry these versions. `accountTransport.client.ts` negotiates them;
+`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
+and canonical attachment cleanup. Durable local metadata/delete reconciliation
+and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+
 `api.things-interactions` 1.0.0 adds the first-party private GET/POST
 `/api/v1/things/interactions` capability: bounded membership snapshots and
 conditional desired-state writes for independent account interaction sync.

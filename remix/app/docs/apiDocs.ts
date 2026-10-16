@@ -5845,7 +5845,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-annotate',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'attachments',
 		title: 'Annotate attachment',
 		endpoint: '/api/v1/attachments/annotate',
@@ -5860,7 +5861,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'POST the canonical attachment id with filenamePreview, title, and/or description.',
 			'Omit a field to leave it unchanged; send null or an empty string to clear it.',
-			'Store the returned attachment metadata (it includes the updated title/description).',
+			'Optionally send expectedUpdatedAt from the current Thing read to refuse stale edits atomically (409). Store the returned attachment metadata and updatedAt timestamp.',
 			'Retry a 409 after refreshing — the attachment changed or is still uploading.'
 		],
 		requestExamples: [
@@ -9854,8 +9855,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-bulk',
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     // 1.4.0: first-party owners can move complete private archive roots.
     // Dedicated home-plane moves also accept owned current-schema themes/algorithms.
     group: 'things',
@@ -9874,6 +9875,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST op (move, copy, delete, or share), ids (1–100 shareIds you own), and folderId for move/copy destinations.',
+      'A single-item move optionally accepts expectedUpdatedAt from the current Thing read. A stale source returns a per-item status 409 without moving; inspect results even when HTTP is 200. Other operations and multi-item moves reject this field.',
       'Move also supports owned durable standalone recordings through the dedicated home-plane placement writer. Folder-only placement preserves bytes, ACLs and accounting; drafts, bound/profile media and custom-endpoint placement are refused. Generic protected-record editing remains forbidden.',
       'share additionally takes acl (or legacy visibility) and optional recursive: true to flow a folder’s audience to everything inside.',
       'Read the per-item results list — each entry carries ok plus error (failures), newId (copies), and copied/applied/skipped counts for recursive folder ops.',

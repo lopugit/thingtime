@@ -1563,14 +1563,17 @@ export const createReadyAttachmentPostInsertHook =
 // POST /api/v1/attachments/annotate — owner-authored display metadata on a
 // ready attachment (draft or bound). The media's own Thing page and the post
 // lightbox render these; binding, audience, and object bytes are untouched.
-export const annotateAttachment = async (ownerId: string, input: unknown, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+export const annotateAttachment = async (ownerId: string, input: unknown, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata; updatedAt: string }>> => {
 	try {
 		if (isCustomMongoEndpointActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 		}
 		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-		if (Object.keys(record).some((key) => !['id', 'filenamePreview', 'title', 'description'].includes(key))) {
+		if (Object.keys(record).some((key) => !['id', 'filenamePreview', 'title', 'description', 'expectedUpdatedAt'].includes(key))) {
 			return fail(400, 'Invalid attachment annotation request');
+		}
+		if (record.expectedUpdatedAt !== undefined && (typeof record.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(record.expectedUpdatedAt)))) {
+			return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
 		}
 		const id = normalizeId(record.id);
 		if (!id) return fail(400, 'Invalid attachment id');
@@ -1586,10 +1589,10 @@ export const annotateAttachment = async (ownerId: string, input: unknown, option
 		if (title === undefined && description === undefined && filenamePreview === undefined) {
 			return fail(400, 'Provide a filename preview, title or description to update');
 		}
-		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description }, options);
+		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description }, { ...options, expectedUpdatedAt: record.expectedUpdatedAt as string | undefined });
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
 		if (!attachment) return fail(409, 'Attachment metadata failed validation after update');
-		return { ok: true, attachment };
+		return { ok: true, attachment, updatedAt: doc.updatedAt.toISOString() };
 	} catch (error) {
 		return knownFailure(error) || unavailable('annotate', error);
 	}

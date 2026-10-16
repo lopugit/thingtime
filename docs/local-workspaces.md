@@ -1902,3 +1902,41 @@ command skips 27 opt-in scenarios; the account file browser scenario is enabled
 separately. Raw TypeScript has the same 91 pre-existing diagnostics and none in
 the changed local-workspace files. No main merge or production verification is
 claimed; full native account files/posts and the wider acceptance matrix remain.
+
+
+## Conditional account file metadata — 2026-10-16
+
+The existing attachment annotation endpoint now accepts optional
+`expectedUpdatedAt`, checks it inside the canonical home transaction, and returns
+its committed timestamp. Real edits advance that timestamp monotonically.
+The existing bulk route accepts the same precondition for a single-item move;
+managed placement preserves it through its transactional source/destination
+checks. Per-item stale failures carry `status: 409` inside the normal HTTP 200
+bulk envelope. Other operations and multi-item conditional requests return 400.
+Both discovery manifests advertise annotation 1.2.0 and bulk 1.6.0; the account
+file transport negotiates these versions and handles per-item refusals.
+
+This supplies the server/transport prerequisites for safe file reconciliation.
+The durable local annotation/move/delete queue and ordinary account file picker,
+listing, media and post-binding integration remain incomplete. No login gate or
+permission check is removed by this change.
+
+Local verification: 947 unit checks passed (233 workspace, 4 offline shell,
+295 attachments, 96 capabilities, 319 Things), with 27 opt-in workspace scenarios
+skipped by the generic command. The file browser scenario was separately enabled
+against the disposable replica and real Vite app: offline bytes, upload approval
+refusal, one PUT after a lost completion response, exact private bytes, guest 404,
+stale/malformed annotation refusals, one winner from concurrent edits, and stale
+folder-move rejection all passed. Retry-panel widths 1440/390/320 had no overflow.
+The built Node/Nitro server served both manifests and both docs routes as JSON
+and refused anonymous mutation requests with 401. Evidence is in
+`tmp/account-file-metadata-ui/verification.json` and
+`tmp/account-file-metadata-built-smoke.json`. TypeScript still reports 91 baseline
+diagnostics, none in changed paths; focused lint has zero errors and three
+existing Things warnings. This is local verification, not production acceptance.
+
+The fixture now cleans completed uploads through the dedicated attachment delete
+API, asserts success and then confirms content returns 404. Its previous generic
+Thing DELETE could return 404 for protected attachments without cleaning bytes;
+previous fixture runs therefore did not prove completed-file cleanup. Browser
+closure now runs even when cleanup fails. Existing real accounts are untouched.

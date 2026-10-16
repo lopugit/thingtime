@@ -23,6 +23,7 @@ test(
 			url = (path: string) => new URL(path, base).href,
 			errors: string[] = [],
 			writes: any[] = [];
+		const folders: string[] = [];
 		let offline = false,
 			remoteId = '',
 			dropped = 0;
@@ -176,6 +177,49 @@ test(
 			assert.equal(content.status(), 200, await content.text());
 			assert.equal(await content.text(), text);
 			assert.equal((await guest.request.get(url(`/api/v1/attachments/content?id=${remoteId}`))).status(), 404);
+			const readRemote = async () => {
+				const response = await context.request.get(url(`/api/v1/things?id=${remoteId}`));
+				assert.equal(response.status(), 200);
+				const thing = (await response.json()).thing;
+				assert.equal(thing.author.id, owner.id);
+				return thing;
+			};
+			const original = await readRemote();
+			const annotate = (patch: any) => page.evaluate(async (patch) => {
+				const paths = ['/app/local-workspace/runtime.client.ts', '/app/local-workspace/accountApi.client.ts'];
+				const [runtime, api] = await Promise.all(paths.map(path => import(path)));
+				try { return { ok: true, ...await api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).transport.files.annotate(patch) }; }
+				catch (error: any) { return { ok: false, status: error.status }; }
+			}, { id: remoteId, ...patch });
+			const edited = await annotate({ title: 'Offline file title', expectedUpdatedAt: original.updatedAt });
+			assert.equal(edited.ok, true);
+			assert.ok(Date.parse(edited.updatedAt) > Date.parse(original.updatedAt));
+			assert.equal((await annotate({ title: 'Stale overwrite', expectedUpdatedAt: original.updatedAt })).status, 409);
+			assert.equal((await annotate({ title: 'Malformed version', expectedUpdatedAt: 'invalid' })).status, 400);
+			assert.equal((await readRemote()).crystal.title, 'Offline file title');
+			const raced = await Promise.all([
+				annotate({ title: 'First concurrent edit', expectedUpdatedAt: edited.updatedAt }),
+				annotate({ title: 'Second concurrent edit', expectedUpdatedAt: edited.updatedAt })
+			]);
+			assert.equal(raced.filter(result => result.ok).length, 1);
+			assert.equal(raced.filter(result => result.status === 409).length, 1);
+			const beforeMove = await readRemote();
+			const folder = await context.request.post(url('/api/v1/things'), { headers, data: { thingtime: ['folder'], crystal: { name: 'File placement fixture' }, visibility: 'private' } });
+			assert.equal(folder.status(), 200);
+			folders.push((await folder.json()).thing.id);
+			const move = (expectedUpdatedAt: string) => page.evaluate(async ({ id, folderId, expectedUpdatedAt }) => {
+				const paths = ['/app/local-workspace/runtime.client.ts', '/app/local-workspace/accountApi.client.ts'];
+				const [runtime, api] = await Promise.all(paths.map(path => import(path)));
+				try { await api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).transport.files.move(id, folderId, expectedUpdatedAt); return { ok: true }; }
+				catch (error: any) { return { ok: false, status: error.status }; }
+			}, { id: remoteId, folderId: folders[0], expectedUpdatedAt });
+			assert.equal((await move(original.updatedAt)).status, 409);
+			assert.equal((await readRemote()).folderId ?? null, null);
+			assert.equal((await move(beforeMove.updatedAt)).ok, true);
+			assert.equal((await readRemote()).folderId, folders[0]);
+			assert.equal((await move(beforeMove.updatedAt)).status, 409);
+			assert.equal((await readRemote()).crystal.title, beforeMove.crystal.title);
+			assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text);
 			assert.equal(dropped, 1);
 			assert.equal(writes.filter((row) => row.method === 'PUT').length, 1);
 			for (const row of writes.filter((row) => row.path?.startsWith('/api/v1/attachments/uploads'))) {
@@ -189,6 +233,9 @@ test(
 					JSON.stringify(
 						{
 							adapterOnly: true,
+							conditionalAnnotation: true,
+							concurrentEditSingleWinner: true,
+							conditionalPlacement: true,
 							offlineBytes: true,
 							permissionRefusalPreservesBytes: true,
 							privateUploadApprovedThroughAdminApi: true,
@@ -213,13 +260,19 @@ test(
 			}
 			throw error;
 		} finally {
-			await context.setOffline(false);
-			if (remoteId) await context.request.delete(url(`/api/v1/things?id=${remoteId}`), { headers });
-			for (const c of [context, admin, guest]) {
-				await c.request.post(url('/api/v1/auth/logout'), { headers });
-				await c.close();
+			try {
+				await context.setOffline(false);
+				if (remoteId) {
+					const removed = await context.request.post(url('/api/v1/attachments/delete'), { headers, data: { id: remoteId } });
+					assert.equal(removed.status(), 200, 'File fixture cleanup uses the dedicated attachment lifecycle');
+					assert.equal((await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}`))).status(), 404);
+				}
+				for (const id of folders) assert.equal((await context.request.delete(url(`/api/v1/things?id=${id}`), { headers })).status(), 200);
+			} finally {
+				try {
+					for (const c of [context, admin, guest]) await c.request.post(url('/api/v1/auth/logout'), { headers });
+				} finally { await browser.close(); }
 			}
-			await browser.close();
 		}
 	}
 );

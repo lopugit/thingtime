@@ -5876,6 +5876,7 @@ export type BulkOp = (typeof BULK_OPS)[number];
 export type BulkThingsInput = {
   op?: unknown;
   ids?: unknown;
+  expectedUpdatedAt?: unknown; // conditional single-item move
   folderId?: unknown; // move/copy destination (null/omitted = root)
   acl?: unknown; // share: the audience to apply
   visibility?: unknown; // share: legacy circle alias, mapped onto acl
@@ -5886,6 +5887,7 @@ export type BulkItemResult = {
   id: string;
   ok: boolean;
   error?: string;
+  status?: number;
   newId?: string;
   // recursive folder ops: how many descendants were copied / acl-updated and
   // how many were skipped (uncopyable kinds, inherit-locked audiences)
@@ -5954,6 +5956,10 @@ export const bulkThings = async (
     if (!ids.includes(id)) ids.push(id);
   }
   if (ids.length > MAX_BULK_IDS) return fail(400, `At most ${MAX_BULK_IDS} things per bulk request`);
+  if (input.expectedUpdatedAt !== undefined && (op !== 'move' || ids.length !== 1 || typeof input.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(input.expectedUpdatedAt)))) {
+    return fail(400, 'expectedUpdatedAt requires a single-item move and an ISO timestamp');
+  }
+  const expectedUpdatedAt = input.expectedUpdatedAt as string | undefined;
 
   // move/copy destination validated once up front so a bad folder fails the
   // whole request loudly instead of 100 identical per-item errors
@@ -6021,16 +6027,20 @@ export const bulkThings = async (
           results.push({ id, ok: false, error: 'This token cannot move that managed content' });
           continue;
         }
+        if (expectedUpdatedAt !== undefined && Date.parse(expectedUpdatedAt) !== new Date(owned.updatedAt).getTime()) {
+          results.push({ id, ok: false, status: 409, error: 'Content changed before the move. Refresh and compare your changes.' });
+          continue;
+        }
         try {
-          await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, new Date(owned.updatedAt).toISOString());
+          await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, expectedUpdatedAt ?? new Date(owned.updatedAt).toISOString());
           results.push({ id, ok: true });
-        } catch {
-          results.push({ id, ok: false, error: 'Content could not be moved. Refresh and check that it is saved managed content and the destination is in your own library. Legacy themes/algorithms must first be copied into the current library.' });
+        } catch (error) {
+          results.push({ id, ok: false, status: (error as { status?: number })?.status === 409 ? 409 : 400, error: 'Content could not be moved. Refresh and check that it is saved managed content and the destination is in your own library. Legacy themes/algorithms must first be copied into the current library.' });
         }
         continue;
       }
-      const result = await updateThing(viewer, id, { folderId });
-      results.push('error' in result ? { id, ok: false, error: result.error } : { id, ok: true });
+      const result = await updateThing(viewer, id, { folderId }, { expectedUpdatedAt });
+      results.push('error' in result ? { id, ok: false, status: result.status, error: result.error } : { id, ok: true });
       continue;
     }
 
