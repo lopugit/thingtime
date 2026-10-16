@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Local History now downloads saved-version archives
+  offline through the shared account resolver, retaining original content, names
+  and notes with bounded output and cancelled-editor download protection. Native
+  offline download and restored-page portable round-trip verified locally. See
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous History now restores, undoes and merges
   ordinary content offline through the shared account planner and atomic local
   writer, preserving independent recorded components and retry/CAS guarantees.

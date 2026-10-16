@@ -25,11 +25,12 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 	const [saving, setSaving] = React.useState(false); const [exporting, setExporting] = React.useState(false);
 	const [notice, setNotice] = React.useState(''); const [error, setError] = React.useState<{ message: string; stale: boolean } | null>(null);
 	const input = React.useRef<HTMLInputElement>(null);
+	const exportController = React.useRef<AbortController | null>(null);
 	const alive = React.useRef(true); const working = React.useRef(false);
 	// Keep an uncertain write identity until its exact result is known. A retry
 	// must not append another naming effect after a committed-but-lost reply.
 	const request = React.useRef<TimelineVersionNameCommand | null>(null);
-	React.useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+	React.useEffect(() => { alive.current = true; return () => { alive.current = false; exportController.current?.abort(); }; }, []);
 	// Focus returns after the operation ends: while saving the input is disabled and cannot take focus.
 	const wantFocus = React.useRef(false);
 	React.useEffect(() => { if (!saving && !exporting && wantFocus.current) { wantFocus.current = false; input.current?.focus(); } }, [saving, exporting]);
@@ -80,11 +81,14 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 	const exportVersion = async () => {
 		if (!connection || working.current) return;
 		working.current = true; setExporting(true); setError(null); setNotice('');
+		const attempt = new AbortController(); exportController.current = attempt;
 		try {
-			const filename = downloadTimelineVersionExport(await api.v1.timeline.exportVersion(connection.scope, event.id), event);
+			const result = await api.v1.timeline.exportVersion(connection.scope, event.id, { signal: attempt.signal });
+			if (!alive.current || attempt.signal.aborted) return;
+			const filename = downloadTimelineVersionExport(result, event);
 			if (alive.current) setNotice(`Exported ${live?.name ?? event.label} · ${filename}`);
 		} catch (failure: any) { if (alive.current) setError({ message: failure?.error || failure?.message || 'Could not export this version.', stale: false }); }
-		finally { working.current = false; if (alive.current) setExporting(false); }
+		finally { if (exportController.current === attempt) exportController.current = null; working.current = false; if (alive.current) setExporting(false); }
 	};
 	return <Flex as="form" className="history-version-controls" gap={2} align="center" wrap="wrap" px={1} pb={2} minW={0}
 		onClick={(click) => click.stopPropagation()}

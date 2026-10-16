@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import test from 'node:test';
 const base = process.env.TT_LOCAL_TIMELINE_URL;
@@ -113,6 +113,18 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByRole('tab', { name: 'Versions', exact: true }).click();
   assert.equal(await namedForm.getByRole('textbox', { name: 'Version name', exact: true }).inputValue(), 'Renamed offline checkpoint');
   if (artifacts) await page.screenshot({ path: resolve(artifacts, 'named-version-320.png'), fullPage: false, animations: 'disabled' });
+  const downloadReady = page.waitForEvent('download');
+  await namedForm.getByRole('button', { name: 'Export', exact: true }).click();
+  const downloaded = await downloadReady;
+  assert.equal(await downloaded.failure(), null);
+  const archive = JSON.parse(await readFile((await downloaded.path())!, 'utf8'));
+  assert.equal(archive.formatVersion, 1); assert.equal(archive.event.thingId, thingId); assert.equal(archive.event.ownerId, 'local-workspace');
+  assert.equal(archive.name.name, 'Renamed offline checkpoint'); assert.equal(archive.content.adapter, 'thing-content');
+  assert.equal(archive.content.value.crystal.blocks[0].type, 'component'); assert.ok(archive.event.dependencies.length);
+  assert.match(downloaded.suggestedFilename(), /^history-.*\.json$/);
+  await namedForm.getByText(/Exported Renamed offline checkpoint/).waitFor();
+  if (artifacts) { await downloaded.saveAs(resolve(artifacts, 'history-version.json')); await page.screenshot({ path: resolve(artifacts, 'history-export-320.png'), fullPage: false, animations: 'disabled' }); }
+
   await namedForm.getByRole('button', { name: 'Clear', exact: true }).click();
   await namedForm.getByText('Removed the version name.', { exact: true }).waitFor();
   await page.reload();
@@ -234,7 +246,7 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox').inputValue(), 'Offline history page');
   assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineHistoryArchiveDownload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
   if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); }
   throw error;

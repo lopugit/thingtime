@@ -2,6 +2,18 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Anonymous History export: offline, name a saved version, add a note, change
+      the current Thing and export the earlier version. Inspect the actual JSON:
+      original content/event/receipt, selected name and notes, no account HTTP.
+      Cold-reload and export a deletion's before-image. Missing compact ancestry
+      and oversized archives must fail clearly with retained history unchanged;
+      closing the editor or changing workspace must not trigger a late download.
+      History archives preserve dependency references, not inline transfer data.
+      For portable historical content, restore recorded components and use normal
+      Thing export/import; verify remapped IDs and unchanged shared components.
+      Run `timelineExport.test.ts`, the offline History browser download and the
+      guarded `timeline-versions.integration.mts` account regression.
+
 - [ ] Anonymous History: offline, undo one saved edit while preserving later
       independent fields, merge a variation into current content, and restore an
       earlier page with recorded components. Verify native previews and Builder

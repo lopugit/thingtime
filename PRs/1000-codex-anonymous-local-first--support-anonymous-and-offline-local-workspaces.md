@@ -604,3 +604,40 @@ constructor). These are local checks, separate from CI and deployment. Historica
 export, related history, protected-kind adapters/folder/storage controls, account
 Timeline sync and the remaining local-first matrix are still unfinished. Do not
 merge this checkpoint.
+
+
+### 2026-10-16: historical version archive export
+
+`LocalTimeline.exportVersion` now binds the existing archive contract to one
+readonly anonymous transaction. The account resolver moved to shared
+`timeline/exportVersion.ts`; server auth, scope, rate limits and response format
+remain in place. Compact ancestry and deleted before-images resolve from recorded
+history, never the live Thing. Names and notes are read consistently; invalid,
+missing, unsupported, cancelled and oversized exports fail without mutation.
+The version editor aborts export on unmount and checks before starting download.
+
+History archives have dependency references and are distinct from portable
+`thingtime.transfer` bundles. A meaningful normal-writer round-trip restores the
+old page with independent recorded component copies, exports it with normal Thing
+transfer and imports into a separate test workspace with remapped IDs. Original
+component text survives and the shared live component stays unchanged.
+
+Validation: six local export tests; 378 workspace/Timeline passes total (five
+opt-in browser cases skipped in the ordinary suite; the History browser case was
+run explicitly and passed). Clean logged-out production-shell browser downloaded
+and parsed the real archive offline, then passed the existing native History
+restore/merge/reload checks at 1440/390/320px with no account Timeline HTTP,
+mutations, page errors or overflow. Manual in-app Browser export downloaded a
+2,874-byte fixture archive with the expected old name, note and content. Evidence:
+`tmp/local-history-export-ui/`. The guarded real API version suite passed on the
+disposable replica, including export privacy and burst rate limits; only synthetic
+fixture accounts/Things were used, with created Things cleaned up.
+
+Build: 245 verified assets / 21,200,676 bytes. TypeScript retains exactly the same
+91 baseline errors. Targeted lint: zero errors, one existing constructor warning.
+These are local results; CI and deployed behavior need separate evidence.
+Related/protected History, Timeline folder/storage controls, account sync and the
+full local-first matrix remain incomplete. The audit also found that restored
+component IDs use `restored-` while several local detail/discussion/Action routing
+adapters still check only `local-`; follow up before claiming complete restored
+component editing across every surface. Do not merge this checkpoint.

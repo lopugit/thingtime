@@ -72,7 +72,7 @@ change this pointer; logout/account changes revoke it.
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
-| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical export, related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. |
+| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. Restored component IDs also need an audit of local detail/discussion/Action routing, which still assumes the local- prefix in several adapters. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
@@ -981,3 +981,36 @@ constructor). These are local checks, separate from CI and deployment. Historica
 export, related history, protected-kind adapters/folder/storage controls, account
 Timeline sync and the remaining local-first matrix are still unfinished. Do not
 merge this checkpoint.
+
+
+## 2026-10-16: offline historical version archives
+
+The existing Versions → Export control now uses anonymous authority through
+`LocalTimeline.exportVersion`. `timeline/exportVersion.ts` is the shared account
+and local resolver; the server remains behind its existing authentication,
+selected-plane checks and export rate limit. The local adapter takes one readonly
+workspace transaction for retained content, notes and names. It never reads the
+current Thing to fill missing history and makes no account requests. Compact
+folder revisions resolve their recorded ancestors; deletion exports the saved
+before-image. Missing/unsupported ancestry, non-revision events, retired scopes,
+invalid IDs and cancellation refuse. Large snapshot references are checked before
+parts reads; the final archive has the existing 4 MiB ceiling. A download cannot
+start after its version editor has unmounted.
+
+History archives retain the existing `formatVersion: 1` record: immutable event
+and receipt, resolved content, notes and name. Dependency links remain references;
+they are not a self-contained transfer bundle. To make a historical page portable,
+restore its recorded components, then use normal Thing export. The round-trip test
+uses the normal importer in an independent workspace, verifies remapped IDs and
+recorded component text, and leaves the formerly shared component unchanged.
+
+Local evidence: six export tests, 378 workspace/Timeline passes in total, a clean
+production-shell offline browser download, and manual in-app Browser export. The
+actual JSON and screenshots are in `tmp/local-history-export-ui/`. The browser
+retains the existing 1440/390/320px restore/merge/reload checks and reports zero
+account Timeline requests, mutations, page errors or document overflow. The real
+`timeline-versions.integration.mts` account regression passes against the guarded
+disposable loopback replica, including export privacy and rate limits. Build:
+245 assets / 21,200,676 bytes. TypeScript retains the identical 91 baseline errors;
+targeted lint has zero errors and one existing constructor warning. CI and deployed
+verification are separate. The full matrix above remains incomplete.

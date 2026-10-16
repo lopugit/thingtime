@@ -1,3 +1,4 @@
+import { createVersionExportReader } from '../timeline/exportVersion';
 import { createBranchMergePreviewService } from '../timeline/branchMergePreview';
 import type { BranchMergeRequest } from '../timeline/branchMerge';
 import { readRecordedComponents } from '../timeline/recordedComponentReader';
@@ -149,6 +150,21 @@ export class LocalTimeline {
   const event = parseTimelineEvent(input);
   if (event.ownerId !== LOCAL_TIMELINE_OWNER || event.actorId !== LOCAL_TIMELINE_OWNER || event.source !== 'client' || event.mode !== 'draft' || !event.clientId) fail('Only authored local drafts can be submitted.');
   return { ok: true as const, entry: await this.transaction('readwrite', tx => appendLocalTimeline(tx, event), signal) };
+ }
+ async exportVersion(eventId: string, signal?: AbortSignal) {
+  return this.transaction('readonly', async tx => {
+   const entries = async (ids: string[]) => { const found: TimelineEntry[] = []; for (const id of ids) { signal?.throwIfAborted(); const entry = await localTimelineEntry(tx, id); if (entry) found.push(entry); } return found; };
+   const result = await createVersionExportReader({
+    entries,
+    nodes: async ids => (await entries(ids)).map(({ event }) => ({ id: event.id, thingId: event.thingId, parentIds: event.parentIds, afterAdapter: event.after?.adapter ?? null })),
+    snapshot: async (entry, side) => entry.event[side],
+    notes: async entry => localNotesForEntry(await readLocalTimelineNotes(tx, LOCAL_TIMELINE_OWNER), entry),
+    names: async entry => localNamesForEntry(await readLocalVersionNames(tx, LOCAL_TIMELINE_OWNER), entry),
+    now: () => new Date(this.now()), refuse: (status, message) => fail(message, status), retainedLocation: 'this device'
+   })(LOCAL_TIMELINE_OWNER, eventId);
+   if (!result) fail('This version is not stored in this workspace.', 404);
+   return { ok: true as const, export: result! };
+  }, signal);
  }
  async branchMerge(input: BranchMergeRequest, signal?: AbortSignal) {
   return this.transaction('readonly', tx => {

@@ -447,4 +447,11 @@ head/timestamp/component preimages are rechecked inside the write transaction.
 `timelineVersions.test.ts` covers replay, recovery, races, copy isolation,
 validation and rollback. The ordinary offline browser test and both guarded
 version/component API integrations cover the native flow and account parity.
-Historical export, protected histories and account sync remain pending.
+Historical export now uses shared `timeline/exportVersion.ts`; `LocalTimeline`
+binds it to one readonly anonymous transaction. The same version archive retains
+content, notes, name and canonical dependency references. It is distinct from a
+portable Thing transfer: restore recorded content/components, then use normal
+Thing export/import for that workflow. `timelineExport.test.ts`, the offline
+History browser download and real version API integration cover both paths.
+Related/protected histories, restored-copy detail routing and account sync remain
+pending.

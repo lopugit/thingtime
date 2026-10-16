@@ -239,7 +239,7 @@ test('anonymous Timeline uses local authority, canonical component responses, an
  const remote = async (..._args: any[]): Promise<any> => { remoteCalls++; throw new Error('Unexpected remote Timeline'); };
  bindLocalWorkspace(true, rootIdentity.read().generation);
  try {
-  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote, branchHead: remote, branches: remote, checkoutBranch: remote, branchMerge: remote, version: remote }, things: { create: remote } });
+  const api = anonymousApi({ timeline: { discover: remote, page: remote, push: remote, entry: remote, componentBindings: remote, branch: remote, note: remote, nameVersion: remote, branchHead: remote, branches: remote, checkoutBranch: remote, branchMerge: remote, version: remote, exportVersion: remote }, things: { create: remote } });
   const row = await api.things.create({ thingtime: ['data'], crystal: { name: 'Local history adapter' } });
   const scope = { ownerId: 'local-workspace', dataPlane: 'local-workspace', apiOrigin: 'https://thingtime.example' };
   assert.equal((await api.timeline.discover(scope.ownerId)).dataPlane, scope.dataPlane);
@@ -269,11 +269,18 @@ test('anonymous Timeline uses local authority, canonical component responses, an
   await api.timeline.nameVersion(scope, named);
   assert.equal((await api.timeline.entry(scope, command.eventId)).names[0].name, named.name);
   await assert.rejects(async () => api.timeline.nameVersion({ ...scope, dataPlane: 'home' }, named), /another workspace/);
+  const archive = await api.timeline.exportVersion(scope, command.eventId);
+  assert.equal(archive.export.name.name, named.name); assert.equal(archive.export.notes[0].text, command.text);
+  await assert.rejects(async () => api.timeline.exportVersion({ ...scope, ownerId: 'foreign' }, command.eventId), /another workspace/);
+  await assert.rejects(async () => api.timeline.exportVersion({ ...scope, apiOrigin: 'https://other.example' }, command.eventId), /another workspace/);
+  const aborted = new AbortController(); aborted.abort();
+  await assert.rejects(api.timeline.exportVersion(scope, command.eventId, { signal: aborted.signal }), /abort/i);
   rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(async () => api.timeline.nameVersion(scope, named), /Workspace changed/);
   await assert.rejects(async () => api.timeline.branch(scope, branchCommand), /Workspace changed/);
   await assert.rejects(async () => api.timeline.branchMerge(scope, {}), /Workspace changed/);
   await assert.rejects(async () => api.timeline.version(scope, {}), /Workspace changed/);
+  await assert.rejects(async () => api.timeline.exportVersion(scope, command.eventId), /Workspace changed/);
   await assert.rejects(async () => api.timeline.checkoutBranch(scope, checkout), /Workspace changed/);
   await assert.rejects(async () => api.timeline.note(scope, command), /Workspace changed/);
   await assert.rejects(async () => api.timeline.entry(scope, page.entries[0].event.id), /Workspace changed/);
