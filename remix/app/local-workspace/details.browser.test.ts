@@ -55,10 +55,12 @@ test('anonymous Thing discussions and owner rename survive a cold offline reload
 		assert.equal(await page.getByText('Could not load comments.', { exact: true }).count(), 0);
 		await page.getByPlaceholder('Write a comment… 💬', { exact: true }).fill('A comment saved entirely on this device.');
 		await page.getByRole('button', { name: 'Send comment', exact: true }).click();
+		await page.waitForFunction(() => (document.querySelector('textarea[placeholder="Write a comment… 💬"]') as HTMLTextAreaElement)?.value === '');
 		await page.getByText('A comment saved entirely on this device.', { exact: true }).waitFor();
 		await page.getByRole('button', { name: 'Reply to Local workspace', exact: true }).click();
 		await page.getByPlaceholder('Reply to Local workspace… 💬', { exact: true }).fill('Nested reply stays local too.');
 		await page.getByRole('button', { name: 'Send reply', exact: true }).click();
+		await page.waitForFunction(() => (document.querySelector('textarea[placeholder="Reply to Local workspace… 💬"]') as HTMLTextAreaElement)?.value === '');
 		await page.getByText('Nested reply stays local too.', { exact: true }).waitFor();
 		await page.getByRole('button', { name: 'Thing actions', exact: true }).click();
 		assert.equal(await page.getByRole('menuitem', { name: /History|Send to Lopu/ }).count(), 0);

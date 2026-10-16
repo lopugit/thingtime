@@ -11027,3 +11027,26 @@ Run `app/local-workspace/components.browser.test.ts` with
 - [ ] Complete native account/origin/data-plane transitions during tree reads,
   recovery and broadcasts, whole-tree account sync, and root-reference semantics.
   These service/native recovery checks do not close the broader acceptance matrix.
+
+
+### Plain comment/reply recovery and multiline input (2026-10-17)
+
+- [x] Earlier text must not auto-fill a new selected workspace. Review/copy the
+  exact device source; if it changes during review, refuse copying until reviewed
+  again. Append to existing text, preserve all old bytes/IDs and never delete old
+  keys after submitting. Refuse invalid, oversized, wrong-editor and media-bearing
+  snapshots, including their pending variants, without replacing current text.
+- [x] Use Shift+Enter and recover text with line breaks. Cold reload offline and
+  retain those breaks in the actual native control. IME Enter must not send;
+  ordinary Enter must. Verify recovery and composer bounds/hit tests at
+  1440x1000, 390x844 and 320x844.
+- [x] In disposable IndexedDB only, make draft record writes throw. Wait for the
+  visible retry state, then submit a comment; local completion/input clearing
+  must finish. Reload, retain the completed comment and original legacy source,
+  and use normal Reconnect to verify exactly one matching account comment.
+- [x] Repeat anonymous comments, nested replies, rename, search and thread
+  navigation with no remote writes. Await actual input clearing after submit;
+  optimistic text alone must not be mistaken for completed submission.
+- [ ] Complete native live account/origin/data-plane changes during comment
+  review/submission, remote-only older drafts and rich/media recovery before
+  declaring the wider draft acceptance matrix complete.

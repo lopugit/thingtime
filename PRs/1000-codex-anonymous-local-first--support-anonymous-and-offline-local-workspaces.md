@@ -2172,3 +2172,48 @@ native tree rebuilds its root wrapper during hydration: arbitrary self-reference
 to that old root are not aliases of the newly constructed wrapper. Nested cyclic
 values are preserved; broader root-reference semantics remain an explicit audit
 item. No merge or manual deployment is performed by this checkpoint.
+
+
+## Plain comment draft recovery — 2026-10-17
+
+Plain comments and replies use the existing `useWorkspaceDraft` adapter, including
+its account/origin/data-plane context hash. UI state, pending submissions and
+recovery reads retain their captured identity and target. Keystrokes received
+while the context is prepared are captured once it is available; a late restore
+cannot replace those edits. The shared hook can explicitly disable account draft
+work when the current surface has no eligible workspace actor.
+
+Earlier plain localforage text, raw account recovery, former workspace-store and
+older hashed-context recovery keys are discoverable through a reviewed device
+copy. Nothing is automatically assigned to the current database or deleted on
+submission. Review checks bounded plain-text snapshots, surface/context and all
+pending draft variants; media or pending-submission fields are refused for the
+original editor to handle. Copy re-reads the exact source, checks the captured
+workspace and appends to the latest current text. It adopts no old draft ID or
+write operation. Invalid, changed and oversized sources stay intact with errors.
+Remote-only older account drafts and rich/media recovery remain separate work.
+
+The native fields are compact multiline textareas: Shift+Enter preserves line
+breaks, Enter sends, and IME confirmation does not send. A browser regression
+exposed that the previous single-line inputs stripped recovered line breaks.
+Comments/discussion checks now await actual input clearing after local completion;
+optimistic text appearing alone is not proof that submission completed.
+
+Local production-client evidence: `tmp/plain-comment-native-final/` covers review,
+changed-source refusal, current-text preservation, cold offline reload, deliberate
+IndexedDB draft-write failure with independent comment completion, source retention
+after posting, invalid-source preservation and exactly-once account reconnect via
+the normal Reconnect control. Screenshots and hit tests cover 1440/390/320px for
+both recovery and the multiline composer. The anonymous discussion/nested-reply,
+rename, search and thread-navigation regression also passes with zero remote writes
+(`tmp/plain-comment-anonymous-final/`). These checks use disposable loopback
+accounts and browser storage only, not existing account data.
+
+Run `plainCommentDraft.test.ts`, `test:drafts`, `test:local-workspace` and
+`test:feed`. Enable `plainCommentDraft.browser.test.ts` with
+`TT_LOCAL_PLAIN_COMMENT_URL`, `TT_SHARED_PLAYWRIGHT_PATH`, optional
+`TT_SHARED_CHROME_PATH` and `TT_LOCAL_PLAIN_COMMENT_ARTIFACTS`. Use the production
+client for cold offline reload; test registration must use a disposable local API.
+Native live account/origin/data-plane transitions, broader legacy rich-draft/media
+reconciliation and the existing full-suite matrix remain open. No merge or manual
+deployment is performed by this checkpoint.

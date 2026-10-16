@@ -1,44 +1,73 @@
 import React from 'react';
+import { LOCAL_WORKSPACE_OWNER } from '~/local-workspace/runtime.client';
 import localforage from 'localforage';
-import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { plainCommentContext, restorePlainComment, plainCommentLegacySources, reviewPlainComment, copyReviewedPlainComment, type PlainCommentLegacySource, type PlainCommentReview } from '~/drafts/plainCommentDraft';
+import { subscribeWorkspaceStorage, workspaceStorageBinding, workspaceStorageIdentity } from '~/local-workspace/storageStatus.client';
 
-// The plain comment/reply inputs share the account-backed draft protocol with
-// rich posts. Migrate the former per-device text only if nothing newer exists.
+const readLegacy = async (source: PlainCommentLegacySource) => source.store === 'text' ? localforage.getItem(source.key) : localStorage.getItem(source.key);
 export const useCommentDraft = (userId: string | null | undefined, targetId: string, isOpen = false) => {
-  const scope = `${userId || 'guest'}:${targetId}`;
-  const [state, setState] = React.useState({ scope, value: '' });
-  const live = React.useRef(state); live.current = state;
-  const pending = React.useRef(false);
-  const [restored, setRestored] = React.useState(false);
-  const value = state.scope === scope ? state.value : '';
-  const draft = useAccountDraft({ actor: userId, surface: 'comment', resumeRemote: isOpen, context: `comment:plain:${targetId}`,
-    onRestore: saved => {
-      const restored = JSON.parse(saved.snapshot);
-      if (typeof restored.text === 'string') { setState({ scope, value: restored.text }); setRestored(true); }
-    }
-  });
-  const { capture, current, retire: retireDraft } = draft;
-  const setValue = React.useCallback((next: string) => {
-    setState({ scope, value: next });
-    capture({ name: (next || 'Comment draft').slice(0, 160), surface: 'comment', context: `comment:plain:${targetId}`,
-      snapshot: JSON.stringify({ text: next }), attachmentIds: [] }, !!next, true);
-  }, [scope, targetId, capture]);
-  React.useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    void localforage.getItem<string>(`tt-draft:${userId}:${targetId}`).then(stored => {
-      if (!cancelled && stored && !current()) setValue(stored);
-    });
-    return () => { cancelled = true; };
-  }, [userId, targetId, setValue, current]);
-  const clear = React.useCallback(async (submitted?: string) => {
-    if (submitted !== undefined && live.current.value.trim() !== submitted) return;
-    setState({ scope, value: '' });
-    void retireDraft().catch(() => {});
-    if (userId) void localforage.removeItem(`tt-draft:${userId}:${targetId}`);
-  }, [scope, userId, targetId, retireDraft]);
-  return { value, setValue, clear, hydrated: restored, flush: draft.flush,
-    begin: () => { if (pending.current) return false; pending.current = true; return true; },
-    end: () => { pending.current = false; }
-  };
+ const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ const binding = React.useMemo(() => workspaceStorageBinding(), [identity]);
+ const enabled = !!binding && !!userId && (binding.scope.kind === 'account' ? binding.scope.ownerId === userId : userId === LOCAL_WORKSPACE_OWNER);
+ const scope = JSON.stringify([identity, userId, targetId]);
+ const active = React.useRef(scope); active.current = scope;
+ const mounted = React.useRef(true);
+ React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+ const [state, setState] = React.useState({ scope, value: '', touched: false, restored: false });
+ const live = React.useRef(state); live.current = state;
+ const pending = React.useRef<string | null>(null);
+ const lease = React.useMemo(() => ({ assertCurrent() {
+  if (!mounted.current || !binding || !enabled || active.current !== scope) throw Error('The comment workspace changed. Reopen this editor.');
+  binding.lease.assertCurrent();
+ } }), [binding, scope, enabled]);
+ const isCurrent = () => { try { lease.assertCurrent(); return true; } catch { return false; } };
+ const update = (next: typeof state) => { live.current = next; setState(next); };
+ const value = state.scope === scope ? state.value : '';
+ const draft = useWorkspaceDraft({ enabled, surface: 'comment', resumeRemote: isOpen, context: plainCommentContext(targetId), validateSnapshot: restorePlainComment,
+  onRestore: saved => {
+   if (isCurrent() && !(live.current.scope === scope && live.current.touched)) update({ scope, value: restorePlainComment(saved.snapshot), touched: false, restored: true });
+  }
+ });
+ const { capture, context, retire } = draft;
+ const setValue = (next: string) => {
+  lease.assertCurrent();
+  update({ scope, value: next, touched: true, restored: false });
+  if (context) capture({ name: (next || 'Comment draft').slice(0,160), surface: 'comment', context, snapshot: JSON.stringify({ text: next }), attachmentIds: [] }, !!next, true);
+ };
+ // A keystroke received while the scoped context hash is being prepared must
+ // survive preparation and must not be replaced by late automatic recovery.
+ React.useEffect(() => {
+  if (!context || live.current.scope !== scope || !live.current.touched) return;
+  const text = live.current.value;
+  capture({ name: (text || 'Comment draft').slice(0,160), surface: 'comment', context, snapshot: JSON.stringify({ text }), attachmentIds: [] }, !!text, true);
+ }, [capture, context, scope]);
+ const clear = async (submitted?: string) => {
+  if (!isCurrent() || live.current.scope !== scope || (submitted !== undefined && live.current.value.trim() !== submitted)) return;
+  update({ scope, value: '', touched: false, restored: false });
+  // Content completion does not await draft retirement, and never deletes an
+  // older device key that has not been explicitly adopted by this session.
+  void retire().catch(() => {});
+ };
+ const [legacy, setLegacy] = React.useState<{ scope: string; sources: PlainCommentLegacySource[]; error: string }>({ scope, sources: [], error: '' });
+ React.useEffect(() => {
+  let current = true;
+  if (binding && userId && enabled && isOpen) void (async () => {
+   const sources = await plainCommentLegacySources(location.origin, userId, targetId, binding.scope), keys = await localforage.keys();
+   lease.assertCurrent();
+   const localKeys = new Set(Object.keys(localStorage));
+   if (current) setLegacy({ scope, sources: sources.filter(source => source.store === 'text' ? keys.includes(source.key) : localKeys.has(source.key)), error: '' });
+  })().catch(error => { if (current && isCurrent()) setLegacy({ scope, sources: [], error: error.message || 'Earlier draft discovery failed.' }); });
+  return () => { current = false; };
+ // isCurrent checks the captured lease; it is deliberately not an effect identity.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ }, [binding, userId, targetId, isOpen, lease, scope, enabled]);
+ return { ...draft, value, setValue, clear, hydrated: state.scope === scope && state.restored,
+  legacySources: legacy.scope === scope ? legacy.sources : [], legacyError: legacy.scope === scope ? legacy.error : '', identity: scope,
+  reviewLegacy: (source: PlainCommentLegacySource) => reviewPlainComment(source, readLegacy, lease),
+  copyLegacy: (review: PlainCommentReview) => copyReviewedPlainComment(review, readLegacy, lease, () => live.current.scope === scope ? live.current.value : '', setValue),
+  begin: () => { if (!isCurrent() || pending.current === scope) return false; pending.current = scope; return true; },
+  end: () => { if (pending.current === scope) pending.current = null; }
+ };
 };

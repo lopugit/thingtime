@@ -153,3 +153,15 @@ saves/loads through the picker, reloads offline after a later edit, checks the
 picker at 1440/390/320px, and verifies corrupt recovery is retained. Native
 account/origin/data-plane switches across every editor remain a wider acceptance
 gate; a service-level retired-lease test does not establish that entire matrix.
+
+
+## Plain comment recovery
+
+`hooks/useCommentDraft.ts` uses `useWorkspaceDraft` with a captured eligible actor,
+workspace generation and target. `plainCommentDraft.ts` validates/reviews earlier
+text-only device copies; `PlainCommentDraftTools.tsx` exposes source review and
+append without replacing current text or adopting old operation IDs. Both native
+PostCard comment/reply fields share this flow. Earlier keys are retained after
+posting. Rich/media recovery stays in its original editor. Run the plain-comment
+unit/browser fixtures, workspace/draft/feed suites and anonymous discussion
+regression. Setup and remaining gates: [local workspaces](../local-workspaces.md#plain-comment-draft-recovery--2026-10-17).

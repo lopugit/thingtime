@@ -36,6 +36,7 @@ import { ArrowLeft, Bookmark, Eye, Flag, Heart, Maximize2, MessageCircle, Plus, 
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
+import { PlainCommentDraftTools } from '~/drafts/PlainCommentDraftTools';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { FeedShortcutsContext } from '~/hooks/useFeedShortcuts';
@@ -906,7 +907,8 @@ const CommentRow = (props: {
   const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
-	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = useCommentDraft(user?.id, comment.id, replyInputOpen);
+ const replyDraft = useCommentDraft(user?.id, comment.id, replyInputOpen);
+	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = replyDraft;
   const pending = isPendingComment(comment);
 
   // ＋ in the quick row opens the full custom picker (same as posts)
@@ -1414,9 +1416,11 @@ const CommentRow = (props: {
               (user ? (
                 <Flex flexDirection="column" rowGap={2}>
                   <Flex columnGap={2}>
-                    <Input
+                    <Textarea
                       size="xs"
-                      borderRadius="999px"
+                      borderRadius="20px"
+                      minH="32px" maxH="180px" minW={0} resize="vertical"
+                      rows={Math.min(6, Math.max(1, replyText.split('\n').length))}
                       borderColor="var(--tt-border, #ececef)"
                       color="var(--tt-ink-soft, #4f4f58)"
                       _placeholder={{ color: MUTED }}
@@ -1426,7 +1430,7 @@ const CommentRow = (props: {
                       value={replyText}
                       onChange={(event) => setReplyText(event.target.value)}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter' && !event.shiftKey) {
+                        if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                           event.preventDefault();
                           submitReply();
                         }
@@ -1452,6 +1456,7 @@ const CommentRow = (props: {
                       onClick={submitReply}
                     />
                   </Flex>
+                  <PlainCommentDraftTools draft={replyDraft} />
                   {richReplyOpen && (
 										<PostComposer parentId={comment.id} onPosted={handleRichReplied as any} onClose={() => setRichReplyOpen(false)} />
                   )}
@@ -1509,7 +1514,8 @@ function PostCardImpl(props: PostCardProps) {
   const navDirRef = React.useRef<'push' | 'pop'>('push');
   const focusedComment = focusStack.length ? focusStack[focusStack.length - 1] : null;
   // the comment text persists as a per-user draft — leave and pick it up later
-  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = useCommentDraft(user?.id, post.id, commentsOpen);
+  const commentDraft = useCommentDraft(user?.id, post.id, commentsOpen);
+  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = commentDraft;
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
   // one EMPTY reply input at a time across this card's comment tree
   const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
@@ -2785,9 +2791,11 @@ function PostCardImpl(props: PostCardProps) {
             {user ? (
               <Flex flexDirection="column" rowGap={2}>
                 <Flex columnGap={2}>
-                  <Input
+                  <Textarea
                     size="sm"
-                    borderRadius="999px"
+                    borderRadius="20px"
+                      minH="32px" maxH="180px" minW={0} resize="vertical"
+                      rows={Math.min(6, Math.max(1, commentText.split('\n').length))}
                     borderColor="var(--tt-border, #ececef)"
                     color="var(--tt-ink-soft, #4f4f58)"
                     _placeholder={{ color: MUTED }}
@@ -2797,7 +2805,7 @@ function PostCardImpl(props: PostCardProps) {
                     value={commentText}
                     onChange={(event) => setCommentText(event.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
+                      if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault();
                         submitComment();
                       }
@@ -2823,6 +2831,7 @@ function PostCardImpl(props: PostCardProps) {
                     onClick={submitComment}
                   />
                 </Flex>
+                <PlainCommentDraftTools draft={commentDraft} />
                 {richCommentOpen && (
                   <PostComposer parentId={post.id} onPosted={handleRichCommented as any} onClose={() => setRichCommentOpen(false)} />
                 )}

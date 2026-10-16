@@ -157,3 +157,13 @@ with descendants; generic parents remain discussion snapshots. Regressions:
 `threadContext.test.ts`, plus enabled `details.browser.test.ts`,
 `accountDiscussions.browser.test.ts` and `accountBoundRetention.browser.test.ts`.
 See the [context checkpoint](../local-workspaces.md#offline-conversation-context--2026-10-17).
+
+
+Plain comments and replies use the same scoped draft adapter as other workspace
+editors. `PlainCommentDraftTools` provides reviewed earlier-device recovery;
+`plainCommentDraft.ts` preserves current text and refuses changed/unsupported
+sources. PostCard's compact textareas retain line breaks and guard IME Enter.
+`plainCommentDraft.browser.test.ts` covers actual local draft-write failure,
+independent submission and verified private reconnect; the anonymous discussion
+fixture awaits real submission completion before asserting rendered comments.
+See [draft recovery](../local-workspaces.md#plain-comment-draft-recovery--2026-10-17).

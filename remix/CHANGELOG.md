@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Scope plain comment/reply drafts and offer reviewed
+  earlier-device recovery without replacing current text or removing the source.
+  Compact multiline fields preserve recovered line breaks and IME behavior.
+  Local native checks verify posting through device draft-write failure and
+  exactly-once verified reconnect. Full rollout gates stay open. Details:
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Scope the legacy native editor tree through the
   shared workspace storage boundary, retain old device bytes and offer reviewed
   account recovery into an independent item. Offline browser checks cover native
