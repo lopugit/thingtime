@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Page + related History resolves anonymous local
+  composition offline through canonical references, bounded membership and the
+  shared cursor contract. Includes race/scope regression coverage, native
+  offline browser checks and cleanup for the disposable account API fixture.
+  Preserves the review-bot cache-error fallback, verified with the combined build.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Restored local components now open in native detail
   pages and support local discussions, reactions and browser Actions. Routing
   uses scoped storage and local author projections, preserves deleted identities,

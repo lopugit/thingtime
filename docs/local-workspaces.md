@@ -72,7 +72,7 @@ change this pointer; logout/account changes revoke it.
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
-| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Related history, protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
+| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. Protected-kind adapters, actual Timeline folder/storage controls and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
@@ -80,7 +80,7 @@ change this pointer; logout/account changes revoke it.
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
-| Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue route navigation, update recovery and cross-account browser coverage. |
+| Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue update recovery, cross-account coverage and real-device startup verification. Chromium offline-emulation module cancellations remain under investigation; request-blocked cold navigation passes (see the latest History checkpoint). |
 | Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Complete deletion/moves/imports, attachments, all dedicated adapters, online cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
 
 ## Development verification
@@ -1048,3 +1048,64 @@ and two existing warnings. Evidence: `tmp/local-restored-routing-ui/` and
 unclassified offline startup failure and the separately tracked CI/preview state. Related and
 protected History, Timeline folder/storage controls, account sync and the full
 local-first matrix remain unfinished; this is not a merge-ready completion.
+
+## Anonymous Page + related History — 2026-10-16
+
+`LocalTimeline.page` now supports the existing related-scope contract. It reads
+only stored Things in the anonymous partition and traverses the canonical
+composition references, including saved/default and per-instance component args,
+Action steps, Data and Schema references. Component aliases reuse the normal
+selector; Action/schema aliases follow the local runtime ordering. Public caches
+and account partitions are not inputs, and discovery executes no Actions or
+network requests. Missing external dependencies contribute no event membership.
+
+Both account and local readers use the same request checks and sorted SHA-256
+membership identity in `timeline/relatedHistory.ts`. The local adapter hashes
+outside IndexedDB, then rechecks membership in the readonly event transaction.
+Concurrent changes produce an explicit refresh error. Membership changes since
+an existing cursor reset both paging directions, including when a newly related
+Thing has older history. Ordinary content edits keep the same membership hash.
+Bounds remain 128 Things, 512 contexts/references and the existing page byte cap.
+
+Seven new local tests cover five-kind traversal, exact membership hashing,
+reopen, both cursor directions, arg contexts, aliases, cycles, complexity/page
+limits, account/public isolation, cancellation and membership races. The guarded
+real account API integration retains its auth/source/privacy checks and now
+cleans up its own synthetic Things in `finally`; see the README disposable
+replica setup. Protected History, Timeline folder/storage controls, account sync
+and the other matrix rows remain unfinished.
+
+
+Local validation: 390 workspace/offline-shell and Timeline tests pass, with five
+ordinary opt-in skips. The production-shell History regression passes with all
+network requests rejected after the verified cache is ready, including related
+filter/cold reload, component membership replacement after restore and layout at
+1440/390/320px. It asserts root API reads are unavailable, with zero HTTP
+mutations, account Timeline requests, restored-ID public reads or page errors.
+Manual in-app Browser also verified related page/component events and reload at
+1440/390px; task tabs were closed and viewport overrides reset. Evidence:
+`tmp/local-related-ui/`, `tmp/local-related-network-blocked-ui/`.
+
+The History regression defaults to `TT_LOCAL_TIMELINE_NETWORK_MODE=blocked-requests`:
+Playwright rejects actual requests while allowing the service worker's cached
+responses. `navigator.onLine` remains true in this mode. Select
+`TT_LOCAL_TIMELINE_NETWORK_MODE=offline-emulation` to retain the browser's offline
+flag diagnosis. That mode intermittently cancelled cached module loads during
+cold navigation; this was reproduced independently at navigations 48 and 52.
+All 246 cache entries remained present and a failed module was still fetchable.
+The original app passed 80 cold navigations with requests blocked. Experimental
+preload removal and buffered cached responses were reverted: this evidence does
+not establish the cancellation cause or a general startup fix. Keep real-device
+offline startup and browser-emulation reliability open before full completion.
+
+Build: 245 verified assets / 21,203,554 bytes. TypeScript retains 91 baseline
+diagnostics; targeted lint has no errors and one existing constructor warning.
+These are local results, separate from CI and deployed behavior. The complete
+local-first rollout remains unfinished and must not be merged yet.
+
+
+The combined branch preserves review-bot commit `82eae71f6`: unreachable or
+damaged CacheStorage falls back to the real network for build assets; a failed
+navigation retains its original network error. Its four offline-shell tests and
+the rebuilt native History regression pass. This cache-error fallback does not
+establish a fix for the separately observed module cancellations.

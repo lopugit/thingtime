@@ -1,3 +1,5 @@
+import { createRelatedTimelineScope, validRelatedTimelineRequest } from '../timeline/relatedHistory';
+import { localRelatedThingIds } from './timelineRelated';
 import { createVersionExportReader } from '../timeline/exportVersion';
 import { createBranchMergePreviewService } from '../timeline/branchMergePreview';
 import type { BranchMergeRequest } from '../timeline/branchMerge';
@@ -16,7 +18,7 @@ import { thingContentSnapshot } from '../timeline/thingContent';
 import { captureComponentBindings, webpageComponentRefs, type ComponentBindings } from '../timeline/componentBindings';
 import { resolveWorkspacePage } from './webpageResolution';
 import { isProtectedThingtime } from '../schemas/registry';
-import type { TimelinePageRequest } from '../timeline/sync';
+import type { TimelinePage, TimelinePageRequest } from '../timeline/sync';
 import type { LocalThing } from './things';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceTransaction } from './storage';
 
@@ -132,6 +134,27 @@ export async function recordLocalThingChanges(tx: WorkspaceTransaction, changes:
  }
 }
 
+async function readLocalTimelinePage(tx: WorkspaceTransaction, request: TimelinePageRequest, targets?: ReadonlySet<string>, envelopeBytes = 0) {
+   const rows = (await tx.list<Header>(INDEX)).map(row => parseHeader(row.value, row.id)).filter(row => (targets ? targets.has(row.thingId) : !request.thingId || row.thingId === request.thingId) && (request.before === null || row.position < request.before) && (request.after === null || row.position > request.after))
+    .sort((a, b) => request.after === null ? b.position - a.position : a.position - b.position);
+   const entries: TimelineEntry[] = [], notes: TimelineNote[] = [], names: TimelineVersionName[] = []; let bytes = 512 + envelopeBytes;
+   const allNotes = await readLocalTimelineNotes(tx, LOCAL_TIMELINE_OWNER);
+   const allNames = await readLocalVersionNames(tx, LOCAL_TIMELINE_OWNER);
+   const limit = request.limit;
+   for (const row of rows) {
+    if (entries.length >= limit || bytes + row.bytes + 1 > PAGE_BYTES) break;
+    const entry = await localTimelineEntry(tx, row.id); if (!entry) fail('Local Timeline is incomplete.');
+    const attached = localNotesForEntry(allNotes, entry!);
+    const named = localNamesForEntry(allNames, entry!);
+    const size = row.bytes + byteLength(attached) + byteLength(named) + 3;
+    if (bytes + size > PAGE_BYTES) break;
+    entries.push(entry!); notes.push(...attached); names.push(...named); bytes += size;
+   }
+   if (rows.length && !entries.length) fail('This history entry exceeds the page limit.', 413);
+   const next = rows.length > entries.length ? entries.at(-1)!.receipt.position : null;
+   return { ok: true as const, entries, nextBefore: request.after === null ? next : null, nextAfter: request.after === null ? null : next, notes, names };
+}
+
 export class LocalTimeline {
  constructor(private db: WorkspaceDatabase, private lease: WorkspaceLease, readonly origin: string, private now = () => new Date().toISOString()) {}
  assertScope(scope: Pick<TimelineScope, 'ownerId' | 'dataPlane'> & Partial<Pick<TimelineScope, 'apiOrigin'>>) {
@@ -213,28 +236,26 @@ export class LocalTimeline {
  async entry(id: string, signal?: AbortSignal) {
   return this.transaction('readonly', async tx => { const entry = await localTimelineEntry(tx, id); if (!entry) fail('This version is not stored in this workspace.', 404); return { ok: true as const, entry: entry!, notes: localNotesForEntry(await readLocalTimelineNotes(tx, LOCAL_TIMELINE_OWNER), entry!), names: localNamesForEntry(await readLocalVersionNames(tx, LOCAL_TIMELINE_OWNER), entry!) }; }, signal);
  }
- async page(request: TimelinePageRequest, signal?: AbortSignal) {
-  if (request.related) fail('Related local history is not available yet.', 503);
+ async page(request: TimelinePageRequest, signal?: AbortSignal): Promise<TimelinePage & { ok: true; notes: TimelineNote[]; names: TimelineVersionName[] }> {
   if ((request.before !== null && request.after !== null) || [request.before, request.after].some(n => n !== null && (!Number.isSafeInteger(n) || n < 1)) || (request.thingId !== null && (typeof request.thingId !== 'string' || !request.thingId || request.thingId.length > 200)) || !Number.isSafeInteger(request.limit) || request.limit < 1 || request.limit > 40) fail('Invalid Timeline page.');
+  if (!request.related) {
+   if (request.relatedRevision !== undefined) fail('A related revision requires Page + related.');
+   return this.transaction('readonly', tx => readLocalTimelinePage(tx, request), signal);
+  }
+  if (!validRelatedTimelineRequest(request)) fail('Invalid related history request.');
+  const rootId = request.thingId;
+  const ids = await this.transaction('readonly', tx => localRelatedThingIds(tx, rootId), signal);
+  // SHA-256 must not suspend an IDB transaction. Recheck membership inside the
+  // read transaction after hashing, so a concurrent removal cannot leak stale
+  // scope rows or silently page against an obsolete membership revision.
+  const related = await createRelatedTimelineScope(rootId, ids, 0, text => transferChecksum(new TextEncoder().encode(text)));
+  const reset = request.relatedRevision !== undefined && request.relatedRevision !== related.revision;
   return this.transaction('readonly', async tx => {
-   const rows = (await tx.list<Header>(INDEX)).map(row => parseHeader(row.value, row.id)).filter(row => (!request.thingId || row.thingId === request.thingId) && (request.before === null || row.position < request.before) && (request.after === null || row.position > request.after))
-    .sort((a, b) => request.after === null ? b.position - a.position : a.position - b.position);
-   const entries: TimelineEntry[] = [], notes: TimelineNote[] = [], names: TimelineVersionName[] = []; let bytes = 512;
-   const allNotes = await readLocalTimelineNotes(tx, LOCAL_TIMELINE_OWNER);
-   const allNames = await readLocalVersionNames(tx, LOCAL_TIMELINE_OWNER);
-   const limit = request.limit;
-   for (const row of rows) {
-    if (entries.length >= limit || bytes + row.bytes + 1 > PAGE_BYTES) break;
-    const entry = await localTimelineEntry(tx, row.id); if (!entry) fail('Local Timeline is incomplete.');
-    const attached = localNotesForEntry(allNotes, entry!);
-    const named = localNamesForEntry(allNames, entry!);
-    const size = row.bytes + byteLength(attached) + byteLength(named) + 3;
-    if (bytes + size > PAGE_BYTES) break;
-    entries.push(entry!); notes.push(...attached); names.push(...named); bytes += size;
-   }
-   if (rows.length && !entries.length) fail('This history entry exceeds the page limit.', 413);
-   const next = rows.length > entries.length ? entries.at(-1)!.receipt.position : null;
-   return { ok: true as const, entries, nextBefore: request.after === null ? next : null, nextAfter: request.after === null ? null : next, notes, names };
+   const current = await localRelatedThingIds(tx, rootId);
+   if (JSON.stringify(current) !== JSON.stringify(ids)) fail('This page’s related Things changed while loading. Refresh History to continue.', 409);
+   const extra = { related, ...(reset ? { reset: true as const } : {}) };
+   const page = await readLocalTimelinePage(tx, reset ? { ...request, before: null, after: null } : request, new Set(ids), byteLength(extra));
+   return { ...page, ...extra };
   }, signal);
  }
  async componentBindings(id: string, signal?: AbortSignal) {

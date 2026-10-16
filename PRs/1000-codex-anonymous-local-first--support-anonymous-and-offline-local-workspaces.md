@@ -682,3 +682,59 @@ the same 91 baseline diagnostics. Targeted lint has no errors and two existing
 constructor warnings. These are local results, separate from CI or deployment.
 Related/protected History, Timeline folder/storage controls, account sync and the
 full local-first matrix remain incomplete. Do not merge this checkpoint.
+
+## 2026-10-16 — anonymous Page + related History
+
+The local Timeline adapter now resolves related page composition from the
+anonymous partition using canonical reference traversal and component selection.
+Stored defaults/args and each authored instance are included; Action/data/schema
+references are inspected without executing Actions or fetching remote content.
+Account partitions and public catalog caches grant no local membership.
+
+Request checks and sorted SHA-256 membership identity are shared with the account
+reader. Local hashing occurs between readonly transactions, with membership and
+workspace-lease checks before the final event read. A concurrent membership
+change returns an explicit refresh error; a changed revision on either paging
+cursor resets the stream so older newly linked events are not skipped. The
+existing 128-Thing, 512-context/reference and page-byte bounds remain in force.
+The real account API fixture now supports explicitly configured disposable
+replicas and removes only its own created Things in `finally`.
+
+Validation: seven new local tests and two account-reader unit tests pass;
+workspace/offline-shell plus Timeline suites pass 390 tests (five opt-in browser
+skips in the ordinary suite). Real related-history API integration and cleanup
+pass on the disposable loopback replica. TypeScript retains the same 91 baseline
+diagnostics; targeted lint has zero errors and one existing constructor warning.
+Production client build verifies 245 assets / 21,203,554 bytes.
+
+
+The full native History browser flow passes with requests blocked after the
+verified offline shell is ready. It checks the related filter/URL before reload,
+page/component events, restored membership replacement, and 1440/390/320px bounds
+with zero mutation/Timeline/public-restored reads or page errors. Manual in-app
+Browser related History and reload also passed at 1440/390px. Task tabs were
+closed and viewport overrides reset. Evidence: `tmp/local-related-ui/` and
+`tmp/local-related-network-blocked-ui/`.
+
+Two browser-test races are corrected: wait for the optimistic filter's URL
+transition before reload, and wait for the responsive detail host before opening
+restore. The separate startup problem is still unresolved. Chromium's offline
+emulation intermittently cancelled cached modules (independent repetitions
+failed at navigation 48 and 52), with the complete cache and module bytes still
+readable. The original app passed 80 navigations when actual requests were
+blocked instead. Preload removal and response-buffering experiments were
+reverted; there is no claimed startup fix. The History regression now defaults
+to request blocking, explicitly asserts root API reads fail, and retains
+`TT_LOCAL_TIMELINE_NETWORK_MODE=offline-emulation` for diagnosis. The browser's
+`navigator.onLine` remains true in the default mode. Real-device startup and
+emulation reliability remain acceptance gaps.
+
+Protected History, Timeline folder/storage controls, account sync and the full
+local-first matrix remain unfinished. Do not merge this checkpoint.
+
+
+The combined branch preserves review-bot commit `82eae71f6`: unreachable or
+damaged CacheStorage falls back to the real network for build assets; a failed
+navigation retains its original network error. Its four offline-shell tests and
+the rebuilt native History regression pass. This cache-error fallback does not
+establish a fix for the separately observed module cancellations.

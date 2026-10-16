@@ -4573,16 +4573,17 @@ draft bundles retain the standalone runtime URL and their existing policies. Kee
 `patch:vercel-output` and `verify:vercel-output` in deployment builds so runtime
 bytes and CSP remain paired. See [the offline execution checks](docs/local-workspaces.md#offline-web-platform-execution--2026-10-16).
 
-### Disposable Timeline restore regression
+### Disposable Timeline restore and related-history regressions
 
-The `remix/scripts/timeline-versions.integration.mts` and
-`timeline-published-components.integration.mts` scripts require a loopback
+The `remix/scripts/timeline-versions.integration.mts`,
+`timeline-published-components.integration.mts` and
+`timeline-related.integration.mts` scripts require a loopback
 `TIMELINE_TEST_BASE` and verify the server's database status before registering
 new fixture accounts. Their default replica is `timeline-rs` at
 `127.0.0.1:20337`. For a different explicitly disposable local replica, set
 `TIMELINE_TEST_MONGO_HOST=127.0.0.1:<disposable-mongo-port>` and
 `TIMELINE_TEST_REPLICA_SET=<disposable-replica-name>` as well. Never point the app
-at an existing account database for these checks. Both scripts clean up their own
+at an existing account database for these checks. All three scripts clean up their own
 created Things, including restored component copies, in `finally`; synthetic
 accounts and immutable audit remain in the disposable database. Run each from
 `remix` with `node --import tsx scripts/<script-name>.integration.mts`.

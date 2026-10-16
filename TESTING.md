@@ -10210,3 +10210,40 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   scope/filter and missing anchors require a fresh search. Advanced/public search
   keeps its separate contract. Run the opt-in `search.browser.test.ts` as documented
   in `docs/local-workspaces.md`.
+
+
+### Anonymous Page + related History (2026-10-16)
+
+- [ ] Import a page and component through the normal UI in a clean browser;
+  disconnect, open History, select Page + related and verify both event streams.
+  Wait for the URL transition, cold-reload, and check 1440/390/320px without
+  overflow. Switching back to This Thing must hide the component history.
+- [ ] Restore a recorded version with a new component copy, edit that copy and
+  revisit related History. Its events replace the previous component membership
+  after cold reload. Require zero account Timeline requests or HTTP mutations.
+- [ ] Resolve stored defaults, saved args and multiple instance args through the
+  canonical composition/reference rules. Check component version aliases,
+  Action/data/schema references, cycles, 128-Thing/512-context/512-edge limits,
+  page byte bounds and missing/deleted/non-page roots.
+- [ ] Add/remove related Things while paging in both directions. Changed
+  membership must reset stale cursors so older newly related events are not
+  missed. A change between membership hashing and reading must report a retry;
+  cancellation/account switches must retire the operation.
+- [ ] Keep account partitions and public catalog caches out of anonymous related
+  discovery; it must neither fetch remote references nor execute Actions.
+  Run `timelineRelated.test.ts`, `test:timeline` and the guarded disposable
+  `timeline-related.integration.mts` with fixture cleanup.
+
+- [ ] Run the History regression with both network modes when investigating
+  startup: default `TT_LOCAL_TIMELINE_NETWORK_MODE=blocked-requests` rejects
+  network reads while preserving cached service-worker responses;
+  `offline-emulation` uses Chromium's offline flag. Record module-load failures
+  separately and do not count automatic retries as uninterrupted startup. The
+  default asserts the root API is unreachable but leaves `navigator.onLine`
+  true. Real-device offline startup remains a separate acceptance check.
+
+- [ ] Make CacheStorage enumeration/open/match fail in the offline-shell reader.
+  Immutable build assets must fall back to the real network. Failed navigation
+  must preserve its original network error, and partial installs must never be
+  served as verified content. Run `node --test remix/scripts/offline-shell.test.mjs`;
+  account API/media authorization and cache exclusions must remain unchanged.

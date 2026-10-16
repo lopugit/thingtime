@@ -5,6 +5,7 @@ import test from 'node:test';
 const base = process.env.TT_LOCAL_TIMELINE_URL;
 const playwrightPath = process.env.TT_SHARED_PLAYWRIGHT_PATH;
 const artifacts = process.env.TT_LOCAL_TIMELINE_ARTIFACTS;
+const networkMode = process.env.TT_LOCAL_TIMELINE_NETWORK_MODE || 'blocked-requests';
 const fixture = { format: 'thingtime.transfer', version: 1, roots: ['page'], things: [
  { id: 'page', thingtime: ['webpage'], crystal: { name: 'Offline history page', blocks: [{ id: 'card', type: 'component', component: 'card' }] } },
  { id: 'card', thingtime: ['component'], crystal: { name: 'Offline history component', componentKey: 'history-card', version: 1, render: { tag: 'p', children: 'A saved local version stays here.' } } }
@@ -12,6 +13,7 @@ const fixture = { format: 'thingtime.transfer', version: 1, roots: ['page'], thi
 
 test('clean anonymous offline import, rename, history reload and native recorded preview never call account Timeline', { skip: !base || !playwrightPath, timeout: 120_000 }, async () => {
  assert.ok(['localhost', '127.0.0.1'].includes(new URL(base!).hostname));
+ assert.ok(['blocked-requests', 'offline-emulation'].includes(networkMode));
  const { chromium } = await import(playwrightPath!);
  const browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true, chromiumSandbox: true });
  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }), page = await context.newPage();
@@ -23,7 +25,15 @@ test('clean anonymous offline import, rename, history reload and native recorded
   if (url.pathname === '/api/v1/things' && [url.searchParams.get('id'), url.searchParams.get('target')].some(id => id?.startsWith('restored-'))) restoredPublicReads.push(url.pathname + url.search);
  });
  context.on('requestfailed', (request: any) => diagnostics.push(`${request.url()}: ${request.failure()?.errorText}`));
- page.on('console', (message: any) => { if (message.type() === 'error') diagnostics.push(message.text()); });
+ await context.addInitScript(() => window.addEventListener('error', event => {
+  const target = event.target as HTMLScriptElement | null;
+  if (target?.tagName === 'SCRIPT' && target.type === 'module') console.warn('Timeline fixture boot resource', JSON.stringify({ src: target.src, url: location.href, ready: document.readyState }));
+ }, true));
+ page.on('console', (message: any) => {
+  const moduleFailure = message.text().startsWith('Timeline fixture boot resource');
+  if (moduleFailure) failures.push(message.text()); // A recovered module failure is still a startup failure.
+  if (message.type() === 'error' || moduleFailure) diagnostics.push(message.text());
+ });
  page.on('pageerror', (error: Error) => failures.push(error.message));
  try {
   const root = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/root-data');
@@ -34,7 +44,12 @@ test('clean anonymous offline import, rename, history reload and native recorded
    for (const key of await caches.keys()) if (key.startsWith('thingtime:offline-shell:') && await (await caches.open(key)).match('/__thingtime_offline_shell_complete__')) return true;
    return false;
   });
-  await context.setOffline(true);
+  // Chromium offline emulation can intermittently cancel CacheStorage module
+  // loads during repeated cold navigation. Keep it opt-in for diagnosis; the
+  // default rejects actual requests while preserving service-worker responses.
+  if (networkMode === 'offline-emulation') await context.setOffline(true);
+  else await context.route('**/*', (route: any) => route.abort('internetdisconnected'));
+  assert.equal(await page.evaluate(async () => { try { await fetch('/api/root-data', { cache: 'no-store' }); return false; } catch { return true; } }), true, 'account/root network reads must be unavailable');
   await page.getByRole('button', { name: 'Import…', exact: true }).click();
   await page.getByRole('textbox', { name: 'Copied Thingtime content', exact: true }).fill(JSON.stringify(fixture));
   const read = page.getByRole('button', { name: 'Read pasted content', exact: true });
@@ -50,6 +65,24 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.getByRole('link', { name: 'Offline renamed history page', exact: true }).waitFor();
   await page.goto(new URL(`/history?thing=${encodeURIComponent(thingId)}`, base).href);
   await page.getByText('Saved on this device · never uploaded', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Page + related', exact: true }).click();
+  await page.getByRole('button', { name: /Created Thing Offline history component/ }).waitFor();
+  // The list responds optimistically before React Router commits the URL.
+  // Reload the completed navigation, rather than aborting it at the old URL.
+  await page.waitForURL((url: URL) => url.searchParams.get('scope') === 'related');
+  await page.reload();
+  await page.getByRole('button', { name: /Created Thing Offline history component/ }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('scope'), 'related');
+  const relatedBounds = [];
+  for (const [width, height] of [[1440, 1000], [390, 844], [320, 844]]) {
+   await page.setViewportSize({ width, height });
+   const measured = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+   assert.equal(measured.width, measured.scrollWidth); relatedBounds.push(measured);
+   if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, `related-history-${width}.png`), fullPage: false, animations: 'disabled' }); }
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('button', { name: 'This Thing', exact: true }).click();
+  await page.getByRole('button', { name: /Created Thing Offline history component/ }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: /Created Thing Offline history page/ }).click();
   await page.getByRole('tab', { name: 'Message', exact: true }).click();
   await page.getByRole('textbox', { name: 'Add a note to this change', exact: true }).fill('Kept locally, even without a connection.');
@@ -229,6 +262,8 @@ test('clean anonymous offline import, rename, history reload and native recorded
   const restoreBounds = [];
   for (const [width, height] of [[1440, 1000], [390, 844], [320, 844]]) {
    await page.setViewportSize({ width, height });
+   // Wait for the responsive detail host to remount before inspecting its controls.
+   await page.getByRole(width <= 820 ? 'dialog' : 'complementary', { name: 'Version details', exact: true }).waitFor();
    const openRestore = page.getByRole('button', { name: 'Restore this version…', exact: true });
    if (await openRestore.isVisible()) await openRestore.click();
    await page.getByRole('heading', { name: 'Review restore', exact: true }).waitFor();
@@ -280,10 +315,15 @@ test('clean anonymous offline import, rename, history reload and native recorded
    assert.equal(measured.width, measured.scrollWidth); restoredDetailBounds.push(measured);
    if (artifacts) await page.screenshot({ path: resolve(artifacts, `restored-detail-${width}.png`), fullPage: true, animations: 'disabled' });
   }
+  await page.goto(new URL(`/history?thing=${encodeURIComponent(thingId)}&scope=related`, base).href);
+  await page.getByRole('button', { name: /Edited Thing Restored component edited offline/ }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /Created Thing Offline history component/ }).count(), 0, 'the prior component leaves the cached related membership');
+  await page.reload();
+  await page.getByRole('button', { name: /Edited Thing Restored component edited offline/ }).waitFor();
   assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []); assert.deepEqual(restoredPublicReads, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineHistoryArchiveDownload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, restoredDetailRoutingCommentsRenameReload: true, restoredPublicReads, restoredDetailBounds, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, networkMode, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineHistoryArchiveDownload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, relatedHistoryOfflineColdReload: true, relatedMembershipResetAfterRestore: true, relatedBounds, restoredDetailRoutingCommentsRenameReload: true, restoredPublicReads, restoredDetailBounds, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
-  if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); await writeFile(resolve(artifacts, 'failure-diagnostics.json'), JSON.stringify({ failures, diagnostics }, null, 2)); }
+  if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); await writeFile(resolve(artifacts, 'failure-diagnostics.json'), JSON.stringify({ url: page.url(), networkMode, failures, diagnostics }, null, 2)); }
   throw error;
  } finally { await browser.close(); }
 });

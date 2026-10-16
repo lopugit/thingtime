@@ -459,4 +459,16 @@ PostCard comments/replies use matching local author projections. Local Actions
 and interactions resolve targets through scoped storage, never an ID prefix.
 `restoredRouting.test.ts` and the offline History/detail browser tests cover
 public/account isolation and native restored-copy editing.
-Related/protected histories and account sync remain pending.
+Page + related History now uses `local-workspace/timelineRelated.ts` to traverse
+only the active anonymous partition, with canonical composition references and
+component selection. Shared `timeline/relatedHistory.ts` supplies request checks
+and the sorted membership digest to both account and browser readers. Browser
+hashing occurs between readonly transactions; membership is rechecked before
+reading events. Changed cursor membership resets both paging directions, while
+a change between the two reads returns an explicit retry error. The offline
+History browser regression includes filter selection, cold reload, responsive
+bounds and membership replacement after restore. `timelineRelated.test.ts`
+covers args, aliases, caps, cycles, scope isolation and transaction races; the
+guarded `timeline-related.integration.mts` verifies the real account API and
+cleans up its own fixture Things. Protected histories and account sync remain
+pending.

@@ -401,7 +401,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 			{filters.related ? (
 				<Text fontSize="sm" color="var(--tt-muted)">
 					Changes to this page and your Things used by its current saved composition, including Components, Actions, Data and Schemas.
-					{timeline.related ? ` ${timeline.related.thingIds.length} owned Things included.` : ' Related Things are refreshed when online.'}
+					{timeline.related ? ` ${timeline.related.thingIds.length} owned Things included.` : timeline.localOnly ? ' Related Things are resolved on this device.' : ' Related Things are refreshed when online.'}
 					{timeline.related?.sharedCount
 						? ` ${timeline.related.sharedCount} shared Things are used here; their authors' private histories stay private.`
 						: ''}
