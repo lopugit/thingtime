@@ -1032,10 +1032,11 @@ const CommentRow = (props: {
     try {
       const page = await request.pager.load(cursor => api.v1.things.list({ target: comment.id, thingtime: 'comment', commentProjection: true, cursor, limit: 20, ...sharedAccess }, { signal: request.controller.signal }));
       if (request.controller.signal.aborted || !page) return;
+      if (page.localCacheError) setReplyLoadError(page.localCacheError);
       setReplies(previous => mergeReactionOverlays(started, mergeDiscussionComments(previous || [], page.comments)));
     } catch (failure: any) {
       if (request.controller.signal.aborted) return;
-      if ([401, 403, 404].includes(Number(failure?.status))) { setReplies([]); request.pager.dispose(); }
+      if ([401, 403, 404, 410].includes(Number(failure?.status))) { setReplies([]); request.pager.dispose(); }
       setReplyLoadError(failure instanceof Error ? failure.message : 'Could not load replies.');
     } finally {
       if (!request.controller.signal.aborted) {

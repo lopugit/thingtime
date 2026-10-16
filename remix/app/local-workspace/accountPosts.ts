@@ -1,3 +1,4 @@
+import { accountReadRefusals, forgetAccountConversation, pruneAccountConversation as prunePost } from './accountReadRevocation';
 import type { PublicPost, PostComment } from '../components/Feed/feedTypes';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { interactionState, type InteractionState } from '../utils/interactionState';
@@ -5,13 +6,7 @@ import { searchLocalThings } from './structuredSearch';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 
 const COLLECTION = 'account-post-projections';
-type CachedPost = { post: PublicPost | null; at: number; deniedAt?: number };
-const prunePost = (post: any, denied: (id: string) => boolean): any => ({
-	...post,
-	comments: (post.comments || []).filter((row: any) => !denied(row.id)).map((row: any) => prunePost(row, denied)),
-	...('shareOf' in post ? { shareOf: post.shareOf && !denied(post.shareOf.id) ? prunePost(post.shareOf, denied) : null } : {}),
-	...(post.linkedThings ? { linkedThings: post.linkedThings.map((row: any) => (denied(row.id) ? { ...row, thing: null } : row)) } : {})
-});
+type CachedPost = { post: PublicPost | null; at: number; deniedAt?: number; parent?: string | null };
 const fields = [
 	'id',
 	'type',
@@ -55,7 +50,7 @@ const pick = (value: Record<string, any>, keys: readonly string[]) =>
 	Object.fromEntries(keys.filter((key) => value[key] !== undefined).map((key) => [key, value[key]]));
 /** A retained server read is display data only. Never cache hidden-link bearer
  * keys, revealed values, or arbitrary server envelope fields as authority. */
-export function accountPostProjection(input: unknown): PublicPost {
+function accountConversationProjection(input: unknown, discussion = false): PublicPost {
 	let count = 0;
 	const project = (raw: unknown, depth = 0): any => {
 		if (
@@ -65,7 +60,7 @@ export function accountPostProjection(input: unknown): PublicPost {
 			raw.id.length > 200 ||
 			typeof raw.text !== 'string' ||
 			!Array.isArray(raw.thingtime) ||
-			!raw.thingtime.includes('post') ||
+			(!raw.thingtime.includes('post') && !raw.thingtime.includes('comment') && !(discussion && depth === 0 && raw.thingtime.length > 0 && raw.thingtime.length <= 32 && raw.thingtime.every((kind: unknown) => typeof kind === 'string'))) ||
 			!Number.isFinite(Date.parse(raw.createdAt)) ||
 			depth > 8 ||
 			++count > 250
@@ -121,6 +116,14 @@ export function accountPostProjection(input: unknown): PublicPost {
 	};
 	return snapshotTransferValue(project(input)) as unknown as PublicPost;
 }
+export const accountPostProjection = (input: unknown): PublicPost => accountConversationProjection(input);
+/** Bounded server discussion projections may represent any authorized Thing.
+ * Children are retained separately; a root never asserts complete membership. */
+export const accountDiscussionProjection = (input: unknown): PublicPost => {
+ if (!object(input) || !Array.isArray(input.comments) || input.comments.length || input.repliesLoaded !== false)
+  throw new WorkspaceError('INVALID_DISCUSSION_CACHE', 'Invalid account discussion snapshot.', 502);
+ return accountConversationProjection(input, true);
+};
 export function overlayAccountPost<T extends PublicPost | PostComment>(post: T, states: ReadonlyMap<string, InteractionState>): T {
 	const state = states.get(post.id);
 	return {
@@ -142,11 +145,15 @@ export class AccountPostCache {
 		const values = posts.map(accountPostProjection);
 		return this.db.transaction(this.scope, 'readwrite', this.lease, async (tx) => {
 			let changed = false;
-			const retained = new Map((await tx.list<CachedPost>(COLLECTION)).map((row) => [row.id, row.value]));
-			const denied = (id: string) => (retained.get(id)?.deniedAt ?? -Infinity) >= startedAt;
+			const retained = new Map((await tx.list<CachedPost>(COLLECTION)).map((row) => [row.id, row.value])), refusals = await accountReadRefusals(tx);
+			const denied = (id: string): boolean => {
+				const seen = new Set<string>(); let current: string | null = id;
+				while (current) { if (seen.has(current)) return true; seen.add(current); const row = retained.get(current); if (Math.max(row?.deniedAt ?? -Infinity, refusals.get(current)?.at ?? -Infinity) >= startedAt) return true; current = row?.parent || (row?.post as any)?.targetId || refusals.get(current)?.parent || null; }
+				return false;
+			};
 			for (const value of values) {
 				const old = retained.get(value.id);
-				if ((old && old.at > startedAt) || denied(value.id)) continue;
+				if ((old && old.at > startedAt) || denied(value.id) || ((value as any).targetId && denied((value as any).targetId))) continue;
 				const post = prunePost(value, denied);
 				if (old && JSON.stringify(old.post) === JSON.stringify(post)) {
 					if (startedAt > old.at) await tx.put(COLLECTION, post.id, { ...old, at: startedAt });
@@ -162,24 +169,9 @@ export class AccountPostCache {
 		return this.db.transaction(this.scope, 'readonly', this.lease, async (tx) => (await tx.get<{ post: PublicPost }>(COLLECTION, id))?.post || null);
 	}
 	async forget(id: string, at = Date.now()) {
-		return this.db.transaction(this.scope, 'readwrite', this.lease, async (tx) => {
-			let changed = false;
-			const prior = await tx.get<CachedPost>(COLLECTION, id);
-			// Keep a bounded, scoped refusal watermark even for a missing entry.
-			// Requests already in flight cannot resurrect it or its nested copies.
-			await tx.put(COLLECTION, id, { post: null, at: Math.max(at, prior?.at || 0), deniedAt: at });
-			changed = !!prior?.post;
-			for (const row of await tx.list<CachedPost>(COLLECTION)) {
-				if (!row.value.post) continue;
-				const post = prunePost(row.value.post, (target) => target === id);
-				if (JSON.stringify(post) !== JSON.stringify(row.value.post)) {
-					await tx.put(COLLECTION, row.id, { ...row.value, post });
-					changed = true;
-				}
-			}
-			return changed;
-		});
+		return this.db.transaction(this.scope, 'readwrite', this.lease, tx => forgetAccountConversation(tx, id, at));
 	}
+
 	async saved(states: InteractionState[], args: { cursor?: string; limit?: number } = {}) {
 		const membership = new Map(
 			states.map((state) => {

@@ -1,3 +1,5 @@
+import { AccountDiscussionCache } from './accountDiscussions';
+import { localThingReadProjection } from './posts';
 import { accountImportSupported } from './accountImport';
 import { AccountFileSync } from './accountFiles';
 import { localThingProjection } from './things';
@@ -32,6 +34,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const lease = accountWorkspaceLease(scope), db = workspaceDatabase();
 	const files = new AccountFileSync(db, scope, lease);
 	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
+	const discussions = new AccountDiscussionCache(db, scope, lease);
 	const controller = new AbortController();
 	const fileRetentionErrors = new Map<string, string>();
 	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
@@ -84,7 +87,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
-	return { sync, interactions, posts, files, fileRetentionErrors, transport, db, lease, wake, stop };
+	return { sync, interactions, posts, discussions, files, fileRetentionErrors, transport, db, lease, wake, stop };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
@@ -145,10 +148,66 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		const state = (await service.interactions.states()).find(state => state.id === row.id);
 		if (state) Object.assign(row, { saved: state.saved, viewerSaved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {} });
 	};
+	const localDiscussion = async (id: string) => {
+		const service = worker(), alias = await fileAlias(id);
+		if (alias === null || await service.sync.isDeleted(id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
+		const row = alias ? (await service.files.views([alias]))[0] : await service.sync.view(id);
+		if (!row) return null;
+		const result = localThingReadProjection(row, [], owner.id, true), post = result.discussion || result.post;
+		if (post) { post.author = owner as any; post.id = id; }
+		const remoteId = alias ? await service.files.remoteId(alias) : (await service.sync.exportSnapshot()).records.find(record => record.id === id)?.remote ? id : null;
+		return { post, remoteId };
+	};
+	const discussionOffline = () => navigator.onLine === false || !canSyncAccountWorkspace(scope);
+	const discussionRefusal = async (id: string, error: any) => {
+		if ([401,403,404,410].includes(Number(error?.status))) {
+			await worker().discussions.forget(id); announceLocalWorkspaceChange([id]); throw error;
+		}
+	};
+	const readDiscussion = async (args: any, options?: { signal?: AbortSignal }) => {
+		const service = worker(), local = await localDiscussion(args.id), target = local?.remoteId || args.id; let failure: unknown;
+		if (!discussionOffline() && (!local || local.remoteId)) {
+			const startedAt = Date.now();
+			try {
+				const result = await online.things.get({ ...args, id: target }, options); facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				if (!result?.ok) throw new WorkspaceError('DISCUSSION_READ_FAILED', result?.error || 'Could not read discussion.', result?.status || 503);
+				const post = result.discussion || result.post;
+				if (post) {
+					try { await service.discussions.remember({ ...post, targetId: result.thing?.targetId || post.targetId }, startedAt); }
+					catch { facadeLease.assertCurrent(); result.localCacheError = 'This discussion could not be retained. Retry online before going offline.'; }
+				}
+				await retainInteractionProjection(post, startedAt); return result;
+			} catch (error) { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); await discussionRefusal(target, error); failure = error; }
+		}
+		const post = await service.discussions.get(target) || local?.post;
+		facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+		if (!post) throw failure || new WorkspaceError('LOCAL_DISCUSSION_MISSING', 'This discussion is not saved on this device. Open it online to retain it.', 409);
+		const states = new Map((await service.interactions.states()).map(state => [state.id,state]));
+		return { ok: true, thing: null, discussion: overlayAccountPost(post, states), post: null, parent: null, root: null, localWorkspace: true, incomplete: true };
+	};
+	const readDiscussionComments = async (args: any, options?: { signal?: AbortSignal }) => {
+		const service = worker(), local = await localDiscussion(args.target), target = local?.remoteId || args.target;
+		const deviceCursor = typeof args.cursor === 'string' && args.cursor.startsWith('device-search:');
+		if (!discussionOffline() && !deviceCursor && (!local || local.remoteId)) {
+			const startedAt = Date.now();
+			try {
+				const result = await online.things.list({ ...args, target }, options); facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				if (!result?.ok) throw new WorkspaceError('DISCUSSION_READ_FAILED', result?.error || 'Could not read comments.', result?.status || 503);
+				try { await service.discussions.rememberPage(target, result.comments, startedAt); }
+				catch { facadeLease.assertCurrent(); result.localCacheError = 'These comments could not be retained. Retry online before going offline.'; }
+				return result;
+			} catch (error) { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); await discussionRefusal(target, error); if (args.cursor) throw error; }
+		}
+		const result = await service.discussions.comments(target, { cursor: args.cursor, limit: args.limit }, !!local);
+		facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); return result;
+	};
 	const retainPosts = async (result: any, startedAt: number) => {
+		if (result.post && result.thing?.id === result.post.id && typeof result.thing.targetId === 'string') result.post = { ...result.post, targetId: result.thing.targetId };
 		const rows = [result.post, result.parent, result.root, ...(Array.isArray(result.posts) ? result.posts : [])].filter(Boolean);
 		if (!rows.length) return result;
-		try { await worker().posts.remember(rows, startedAt); }
+		// A generic Thing parent is not a post. It must not make retention of
+		// the actual comment fail, nor become a post/owned Thing in this cache.
+		try { await worker().posts.remember(rows.filter(row => Array.isArray(row.thingtime) && (row.thingtime.includes('post') || row.thingtime.includes('comment'))), startedAt); }
 		catch (error) { facadeLease.assertCurrent(); result.localCacheError = 'These posts could not be retained on this device. Retry online before going offline.'; }
 		const pending = [...rows], seen = new Set<string>(), observed = [];
 		while (pending.length && seen.size < 250) {
@@ -544,6 +603,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		get: async (args: any, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
+			if (scope.dataPlane === 'home' && args?.commentProjection === true && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['id','key','commentProjection'].includes(key))) return readDiscussion(args, options);
 			if (Object.entries(args || {}).some(([key, value]) => value !== undefined && key !== 'id')) {
 				const startedAt = Date.now();
 				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post, startedAt); return result;
@@ -590,6 +650,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		},
 		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
+			if (scope.dataPlane === 'home' && args?.commentProjection === true && args.thingtime === 'comment' && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['target','thingtime','key','commentProjection','cursor','limit'].includes(key))) return readDiscussionComments(args, options);
 			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device'].includes(key))) return online.things.list(args, options);
 			const { db, lease, sync } = worker();
 			// A cold offline route may never have fetched this exact server page.

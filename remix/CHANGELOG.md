@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Retain account discussion/comment reads offline
+  with partial coverage, canonical comment-only kinds and atomic refusal cleanup
+  across display caches. Native retained-file comments and schema-free Data
+  previews use local paths. Local production-client checks pass; authoring/sync
+  remains open. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-discussion-reads-and-cross-cache-refusal--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Native imported-file metadata editing now uses
   scoped local record eligibility rather than upload ID syntax. Anonymous offline
   edit/reload/export and zero remote writes verified in the production-client

@@ -1714,3 +1714,27 @@ same run. Client build and lint pass (one existing warning); raw TypeScript has
 91 baseline diagnostics, none in changed files. Evidence and the account
 remote-only discussion-read gap are recorded in the [checkpoint](../docs/local-workspaces.md#anonymous-imported-file-metadata--2026-10-17).
 The complete local-first acceptance matrix remains open. No merge or manual deploy.
+
+
+## Account discussion reads and cross-cache refusal — 2026-10-17
+
+Authorized generic discussions and individual comments now retain scoped read
+snapshots. Offline readers show explicit partial coverage and paginate device
+records; unsynced owned Things use local identity/state. Retained file details
+no longer require reconnection merely to show comments, and schema-free owned
+Data avoids an unnecessary shared-media capability check.
+
+Live validation found canonical comment-only kinds and generic-parent cache
+batch failures. Both are handled without changing persisted kinds or ownership.
+Refusal cleanup now shares one atomic transaction across post and discussion
+projections, with descendant/embedded-copy removal, late-response fencing and
+quota-safe shared watermarks. Read-cache eviction never touches authored Things.
+
+709 unit/offline-shell checks and three enabled production-client browser flows
+pass: discussions with native nested replies and positive alternate-permalink
+retention before refusal;
+recording lifecycle with native offline comments; and shared-post Saved/reaction
+regression. Client build/lint pass; 91 baseline TypeScript diagnostics remain,
+none in changed files. [Detailed evidence and limits](../docs/local-workspaces.md#account-discussion-reads-and-refusal-cleanup--2026-10-17).
+Account comment/post/reply writers, draft sync, complete membership and the rest
+of the full local-first matrix remain open. No merge or manual deployment.

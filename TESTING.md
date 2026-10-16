@@ -2,6 +2,19 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [x] Retained account discussions: create a private Thing and comment through
+      the real local API/native composer, visit the comment permalink, then cold
+      reload both surfaces fully offline. Retain exact comment-only kinds and
+      authors, show partial coverage, refresh without remote writes, and check
+      1440/390/320px bounds. Delete the remote target, observe its refusal, then
+      verify both offline views omit the old comment. Run
+      `accountDiscussions.browser.test.ts`, the recording lifecycle browser
+      fixture (including already-retained offline file comments), and existing
+      `accountPosts.browser.test.ts`. Unit coverage must fence late reads across
+      both projection caches at byte/record quota, preserve authored data and
+      isolate account/data-plane/cursor scopes. New account comments/replies,
+      complete page membership and parent-thread offline recovery remain open.
+
 - [x] Anonymous imported file metadata: in a clean no-account browser, import a
       standalone recording ZIP offline through Things. Open its native detail,
       edit title, description and display filename, and cold reload. Download
@@ -10757,3 +10770,7 @@ Run `app/local-workspace/components.browser.test.ts` with
 - [ ] Finish native microphone capture, audio cache account-switch/revocation
   coverage, bound/linked/managed media and the full local-first matrix before
   merge. A generated WAV is playback evidence, not microphone evidence.
+
+- [x] Account nested reply reads with unused `sharedRoot: undefined` stay on the
+  scoped local discussion adapter after a cold offline reload; defined shared
+  access continues through the remote authorization path.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { WorkspaceDatabase } from './storage';
 import { AccountPostCache, accountPostProjection, overlayAccountPost } from './accountPosts';
 const scope = { kind: 'account' as const, origin: 'https://example.test', ownerId: 'viewer', dataPlane: 'home' },
@@ -24,7 +24,7 @@ const post = (id = 'post') => ({
 	tags: []
 });
 test('retained post snapshots exclude credentials and never acquire ownership or sync state', async () => {
-	const db = new WorkspaceDatabase(new IDBFactory()),
+	const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange),
 		cache = new AccountPostCache(db, scope, lease);
 	try {
 		await cache.remember([
@@ -65,7 +65,7 @@ test('retained post snapshots exclude credentials and never acquire ownership or
 	}
 });
 test('bounded post pages are atomic and older reads cannot replace newer retained content', async () => {
-	const db = new WorkspaceDatabase(new IDBFactory()),
+	const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange),
 		cache = new AccountPostCache(db, scope, lease);
 	try {
 		await cache.remember([post()], 20);
@@ -84,7 +84,7 @@ test('bounded post pages are atomic and older reads cannot replace newer retaine
 	}
 });
 test('Saved uses only local membership, bookmarks order, scoped pagination and preserved authors', async () => {
-	const db = new WorkspaceDatabase(new IDBFactory()),
+	const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange),
 		cache = new AccountPostCache(db, scope, lease);
 	try {
 		await cache.remember([post('first'), post('last'), post('unsaved')]);
@@ -123,7 +123,7 @@ test('projection and nested membership preserve content without transferring aut
 });
 
 test('known refusals prune all nested copies and fence older in-flight reads', async () => {
-	const db = new WorkspaceDatabase(new IDBFactory()),
+	const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange),
 		cache = new AccountPostCache(db, scope, lease);
 	try {
 		const container = {
@@ -148,4 +148,17 @@ test('known refusals prune all nested copies and fence older in-flight reads', a
 	} finally {
 		await db.close();
 	}
+});
+
+
+test('canonical comment-only projections retain their exact kind and target without becoming generic posts', async () => {
+ const db = new WorkspaceDatabase(new IDBFactory(), undefined, undefined, IDBKeyRange), cache = new AccountPostCache(db, scope, lease);
+ try {
+  const comment = { ...post('comment'), thingtime: ['comment'], targetId: 'data-parent' };
+  await cache.remember([comment],10);
+  assert.deepEqual((await cache.get('comment'))?.thingtime,['comment']);
+  assert.equal((await cache.get('comment') as any).targetId,'data-parent');
+  await cache.forget('data-parent',20); assert.equal(await cache.get('comment'),null);
+  await cache.remember([{...comment,id:'late'}],19); assert.equal(await cache.get('late'),null);
+ } finally { await db.close(); }
 });

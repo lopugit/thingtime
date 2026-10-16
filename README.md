@@ -4546,6 +4546,17 @@ agent host. No private environment variables are needed. See the
 
 ### Local workspace development (in progress)
 
+The account discussion browser check runs from `remix/` with
+`node --import tsx --test app/local-workspace/accountDiscussions.browser.test.ts`.
+Set `TT_LOCAL_DISCUSSIONS_URL` to your loopback production-client preview,
+`TT_SHARED_PLAYWRIGHT_PATH` to an installed Playwright module, and optionally
+`TT_SHARED_CHROME_PATH` to its Chromium executable and
+`TT_LOCAL_DISCUSSIONS_ARTIFACTS` to an output directory. Build the client first.
+Use an isolated local API/database: this creates and cleans up private fixture
+Things using a newly registered disposable account and the normal rate limits.
+It requires no production account, admin token or alternate auth configuration.
+See the [read-side limits](docs/local-workspaces.md#account-discussion-reads-and-refusal-cleanup--2026-10-17).
+
 The ordinary Builder now has a browser workspace adapter under
 `remix/app/local-workspace/`. See [coverage and limits](docs/local-workspaces.md)
 before treating the rollout as complete. IndexedDB requires a stable origin and

@@ -1,7 +1,8 @@
 # Posts, comments and feed
 
 Posts are `post` Things; comments share the post schema
-(`thingtime: ['post', 'comment']`, `targetId` = parent) so every comment is
+(`thingtime` includes `comment`, including canonical comment-only records;
+`targetId` = parent) so every comment is
 reactable and has a `/post/:id` permalink. Reactions, saves, votes and views are
 relational children aggregated on read (`FUNDAMENTALS.md` §3).
 
@@ -125,3 +126,14 @@ creates two disposable local accounts and a username-granted private post,
 then exercises offline Save/react, Saved/permalink reload, two tabs, reconnect,
 logout isolation and permission revocation. `test:local-workspace` includes its
 unit tests; enable the browser test separately against the disposable stack.
+
+
+Account generic discussions use `local-workspace/accountDiscussions.ts` through
+`accountApi.client.ts`. `accountDiscussionProjection` shares the post cache's
+allowlisted serializer while retaining the separate discussion shape. Native
+`ThingComments` and its pager carry partial-coverage/retention diagnostics.
+`accountReadRevocation.ts` atomically clears both read projections, descendants
+and embedded references; watermarks fence older responses. Read snapshots never
+create owned Things or authorize writes. Run `test:local-workspace`, `test:feed`,
+`test:things`, and the opt-in `accountDiscussions.browser.test.ts`; see the
+[discussion checkpoint](../local-workspaces.md#account-discussion-reads-and-refusal-cleanup--2026-10-17).
