@@ -1,5 +1,5 @@
 import { LocalThings, type LocalThing, type ThingWrite } from './things';
-import { WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { aclFromVisibility, sanitizeAcl, visibilityFromAcl, isProtectedThingtime, validateThingtimeCrystal } from '../schemas/registry';
 
@@ -176,7 +176,7 @@ export class AccountThingSync {
 						continue;
 					}
 					// Skip blocked children so their parents can progress first.
-					if ([content.folderId, content.targetId].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
+					if ([content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
 					record = candidate; row = content; break;
 				}
 				if (!record || !row) return null;

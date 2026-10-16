@@ -1,3 +1,4 @@
+import { browseLocalDefinitions } from './definitionCatalog';
 import { searchLocalThings } from './structuredSearch';
 import { readWorkspaceSearchCursor, workspaceSearchCursor } from './searchCursor';
 import { searchLocalLibrary } from './librarySearch';
@@ -104,7 +105,18 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	};
 	const changed = () => { announceLocalWorkspaceChange(); worker().wake(); };
 	// Explicit login/logout establish or revoke identity; other remote features require confirmation.
-	return { ...online, auth: remote.auth, login: remote.login, things: { ...online.things,
+	const browse = (kind: 'schema' | 'component') => async (args: Record<string, unknown> = {}) => {
+		facadeLease.assertCurrent();
+		if (args.device !== true) return online[kind === 'schema' ? 'schemas' : 'components'].browse(args);
+		const { sync } = worker();
+		const result = await browseLocalDefinitions(await sync.things.snapshot(), kind, args, workspaceScopeKey(scope), row => ({ id: row.id }));
+		const key = kind === 'schema' ? 'schemas' : 'components', entries = result[key];
+		const views = new Map((await sync.views(entries.map(row => row.id))).map(row => [row.id, project(row)]));
+		result[key] = entries.filter(row => views.has(row.id)).map(row => ({ ...row, ...views.get(row.id) }));
+		facadeLease.assertCurrent(); return { ...result, incomplete: true };
+	};
+	return { ...online, auth: remote.auth, login: remote.login,
+		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
 		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
 			facadeLease.assertCurrent();
 			if (input?.op !== 'move') return online.things.bulk(input);

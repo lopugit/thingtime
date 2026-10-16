@@ -895,3 +895,32 @@ This checkpoint provides the search dependency needed by schema forms. Schema
 creation/recovery, schema dependency copies, advanced local shortcut filters,
 account discovery caching and the rest of the coverage matrix remain open.
 It is not authorization to merge or deploy the incomplete rollout.
+
+
+## Schema catalogue, authoring and independent drafts — 2026-10-16
+
+- Device schema catalogue, Mine/Library, literal filtering before pagination,
+  relational usage/reaction projections and separate online discovery.
+- Anonymous/offline schema creation, canonical schema-driven data forms and
+  independent copies. No protected native write powers are delegated.
+- Schema and data creation no longer await draft flush/retirement. Draft
+  contexts and leases isolate accounts/origins/data planes; legacy recovery is
+  an explicit copy. Invalid device recovery stays intact with a visible message.
+- New account data waits for its unsynced schema dependency. A failed schema
+  sync preserves both local records and prevents an invalid early data write.
+- Local validation: drafts 31/31; schemas 265/265; workspace 175 passed with
+  13 opt-in skips, plus offline shell 4/4. All three enabled native browser
+  regressions passed, including actual offline root-read failure, cold reload,
+  1440/390/320px layout, zero anonymous mutation requests, three deliberately
+  stalled account draft requests and malformed-recovery byte preservation.
+- Production client build: 242 verified offline assets, 21,519,402 bytes. Raw
+  TypeScript still has the same 91 normalized baseline diagnostics; no new
+  diagnostics and no relaxed baseline. Focused lint passes.
+- Evidence: `tmp/local-schema-workflow-ui-final/`,
+  `tmp/local-schema-browser-tests-final.log`, and the scoped test/build logs.
+  These are local checks. CI/deployed status must be assessed for the pushed
+  revision separately. Full local-first merge gates remain in the coverage matrix.
+
+Preserved automated review commits `45b42c597` and `d1381d936`; the final local
+browser/workspace run includes their shared search constants and public-read
+error wording.

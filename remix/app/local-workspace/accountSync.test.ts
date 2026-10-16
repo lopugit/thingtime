@@ -214,3 +214,19 @@ test('a remote edit conflicts with an offline move and reviewed keep-local prese
   assert.equal(f.remote.get(row.id)!.folderId, folder.id); assert.equal(f.remote.get(row.id)!.crystal.name, 'Before');
  } finally { await f.db.close(); }
 });
+
+test('schema-based data waits for its copied definition after a failed schema sync', async () => {
+ const f = setup();
+ try {
+  const schema = await f.sync.things.create({ thingtime: ['schema'], crystal: { name: 'Offline shape', fields: [{ name: 'note', type: 'string' }] } });
+  const data = await f.sync.things.create({ thingtime: ['data'], crystal: { schemaId: schema.id, note: 'Authored offline' } });
+  const attempted: string[] = [];
+  await f.sync.sync({ ...f.transport, write: async op => { attempted.push(op.id); if (op.id === schema.id) throw { status: 422 }; return f.transport.write(op, new AbortController().signal); } });
+  assert.deepEqual(attempted, [schema.id]); assert.equal(f.remote.size, 0);
+  assert.equal((await f.sync.things.get(data.id)).crystal.note, 'Authored offline');
+  await f.sync.retry(schema.id); await f.sync.sync(f.transport);
+  assert.deepEqual(f.calls.map(call => call.id), [schema.id, data.id]);
+  assert.equal(f.remote.get(data.id)!.crystal.schemaId, schema.id);
+  assert.ok((await f.sync.status()).every(entry => entry.state === 'synced'));
+ } finally { await f.db.close(); }
+});

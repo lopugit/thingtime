@@ -7,11 +7,11 @@ import { LOCAL_WORKSPACE_OWNER } from '../local-workspace/runtime.client';
 import { draftRequest, listAccountDrafts } from './draftClient';
 import type { AccountDraft, DraftSummary, DraftSurface } from './draftCore';
 
-export function DraftSaveStatus({ status, error, retry }: { status: string; error: string; retry: () => Promise<void> }) {
+export function DraftSaveStatus({ status, error, retry, paused = false }: { status: string; error: string; retry: () => Promise<void>; paused?: boolean }) {
 	return (
 		<Flex alignItems="center" gap={2} flexWrap="wrap" minW={0}>
 			<Text fontSize="xs" color="var(--tt-muted, #777)" role="status">
-				{status === 'saved'
+				{paused ? 'Draft recovery needs attention' : status === 'saved'
 					? 'Saved to your drafts ✓'
 					: status === 'saving'
 					? 'Saving draft…'
@@ -21,7 +21,8 @@ export function DraftSaveStatus({ status, error, retry }: { status: string; erro
 					? 'Draft changed or was removed elsewhere'
 					: 'Changes save privately as drafts'}
 			</Text>
-			{error && (
+			{paused && error && <Text fontSize="xs" role="alert">{error}</Text>}
+			{error && !paused && (
 				<Button
 					size="xs"
 					variant="ghost"
@@ -40,6 +41,8 @@ export function DraftPicker({
 	actor,
 	surface,
 	targetId,
+	context,
+	label,
 	disabled,
 	beforeOpen,
 	onDeleted,
@@ -48,6 +51,8 @@ export function DraftPicker({
 	actor: string;
 	surface?: DraftSurface;
 	targetId?: string;
+	context?: string;
+	label?: string;
 	disabled?: boolean;
 	beforeOpen?: () => Promise<void>;
 	onDeleted?: (id: string) => Promise<void>;
@@ -59,7 +64,7 @@ export function DraftPicker({
 	const [search, setSearch] = React.useState(''),
 		[error, setError] = React.useState(''),
 		[busy, setBusy] = React.useState(false);
-	const cacheKey = `tt-draft-list:${location.origin}:${actor}:${surface || 'all'}`;
+	const cacheKey = `tt-draft-list:${location.origin}:${actor}:${surface || 'all'}${context ? `:${context}` : ''}`;
 	const [rows, setRows] = React.useState<DraftSummary[]>(() => readLocalCache<DraftSummary[]>(cacheKey) || []);
 	const [cursor, setCursor] = React.useState<string | null>(null);
 	const lopu = useLopu();
@@ -76,7 +81,7 @@ export function DraftPicker({
 	const refresh = async (next?: string) => {
 		setError('');
 		try {
-			const response = await listAccountDrafts(actor, { ...(surface ? { surface } : {}), ...(next ? { cursor: next } : {}) });
+			const response = await listAccountDrafts(actor, { ...(surface ? { surface } : {}), ...(context ? { context } : {}), ...(next ? { cursor: next } : {}) });
 			if (!mounted.current) return;
 			setRows((previous) => {
 				const combined = next ? [...previous, ...response.drafts] : response.drafts;
@@ -128,6 +133,7 @@ export function DraftPicker({
 	const visibleRows = rows.filter(
 		(row) =>
 			!row.context.startsWith('post:edit:') &&
+			(!context || row.context === context) &&
 			(!targetId || row.context.endsWith(`:${targetId}`)) &&
 			!localStorage.getItem(`tt-account-draft:${location.origin}:${actor}:${row.context}:retired:${row.id}`) &&
 			(filter === 'all' || row.mode === filter) &&
@@ -156,7 +162,7 @@ export function DraftPicker({
 					})();
 				}}
 			>
-				Load drafts & templates
+				{label || 'Load drafts & templates'}
 			</Button>
 			<Modal
 				isOpen={open}

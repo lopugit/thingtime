@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Schema catalogue, authoring, copying and data
+  forms now work in anonymous/offline workspaces. Schema and Thing creation
+  complete independently of draft saves; recovery stays scoped, malformed
+  snapshots are preserved, and account data waits for its schema to sync.
+  Local offline, stalled-draft and responsive evidence is recorded in the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: The native Search page now filters saved device
   Things anonymously and offline using the shared canonical field grammar.
   Source-scoped caches/cursors keep online and device results separate; anonymous

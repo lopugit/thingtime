@@ -1,3 +1,4 @@
+import { browseLocalDefinitions } from './definitionCatalog';
 import { searchLocalThings } from './structuredSearch';
 import { workspaceScopeKey } from './storage';
 import { LocalTimelineVersions } from './timelineVersions';
@@ -175,10 +176,9 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 	};
 	const browse = (kind: 'component' | 'schema') => async (args: Record<string, unknown> = {}) => {
 		lease.assertCurrent();
-		if (args.mine || args.library) {
-			const result = await service().list({ thingtime: kind, cursor: args.cursor as string | undefined, limit: Number(args.limit) || 50 });
-			const entries = result.things.map(project).filter(row => !args.q || JSON.stringify(row.crystal).toLowerCase().includes(String(args.q).toLowerCase()));
-			return { ok: true, [kind === 'component' ? 'components' : 'schemas']: entries, nextCursor: result.nextCursor };
+		if (args.device === true || args.mine || args.library) {
+			const result = await browseLocalDefinitions(await service().snapshot(), kind, args, workspaceScopeKey({ kind: 'anonymous' }), project);
+			lease.assertCurrent(); return result;
 		}
 		const query = new URLSearchParams(Object.entries(args).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
 		return publicWorkspaceRead(`/api/v1/${kind}s/browse?${query}`, `api.${kind}s-browse`, '1.0.0');

@@ -10308,3 +10308,25 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   must preserve its original network error, and partial installs must never be
   served as verified content. Run `node --test remix/scripts/offline-shell.test.mjs`;
   account API/media authorization and cache exclusions must remain unchanged.
+
+
+## Local schema workflow and independent draft saving (2026-10-16)
+
+- [x] In a clean anonymous context, load the production app, verify the static
+  offline shell, go offline and prove the root API cannot be reached. Author a
+  schema, reload its incomplete draft, save it and create a Thing from its form.
+  Reload an incomplete form and a completed form; preserve unfinished text and
+  never reopen the completed draft or duplicate its Thing.
+- [x] Copy a saved local schema, retain its fields/provenance, then save it to the
+  library. The library contains only saved definitions; text filters run before
+  pagination. Inspect the builder and detail at 1440/390/320px without overflow.
+- [x] Stall account draft writes in a disposable local fixture. Both schema and
+  data creation complete; their normal authenticated sync validates the copied
+  schema dependency first. Do not turn a draft failure into a content failure.
+- [x] Corrupt a synthetic device schema recovery tree. Show a clear paused-draft
+  message, preserve its original bytes, and permit content creation. Test scoped
+  contexts and callbacks across account/origin/data-plane changes.
+- [x] Run `test:drafts`, `test:schemas`, `test:local-workspace` and opt-in
+  `app/local-workspace/schemas.browser.test.ts` using the local-workspaces runbook.
+- [ ] Complete account catalogue discovery, account draft/interaction sync and
+  multi-tab UI acceptance before the full local-first rollout merges.
