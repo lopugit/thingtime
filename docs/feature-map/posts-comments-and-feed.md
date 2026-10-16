@@ -100,3 +100,11 @@ The normal Saved page is discoverable without login and isolates caches by full
 workspace scope. Content export excludes these managed activity rows; deletion
 cascades them. Account interaction sync and full acceptance remain tracked in the
 coverage matrix.
+
+
+Anonymous post/reply controls derive local identity from the adapter's local
+author projection matching the active workspace, including restored components'
+discussions. `PersistedThingMenu` uses workspace content identity and separately
+checks the resolved author for Rename. `restoredRouting.test.ts` plus the clean
+offline History/detail browser regressions cover this path; public discussions
+and remote recipient operations keep their account requirements.

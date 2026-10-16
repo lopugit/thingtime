@@ -80,7 +80,7 @@ test('anonymous API writes and exports use no network and a retired facade canno
 		assert.equal(saved.posts[0].id, poll.id); assert.equal(saved.posts[0].viewerSaved, true);
 		assert.equal(saved.posts[0].reactionCounts['🥰'], 1); assert.equal(saved.posts[0].pollVotes.viewerVote, 1);
 		assert.equal((await api.things.get({ id: poll.id })).post.votes.score, 1);
-		await assert.rejects(api.things.save({ id: 'private-remote-id' }), /device workspace/);
+		await assert.rejects(api.things.save({ id: 'private-remote-id' }), /not available for local interactions/);
 		assert.equal(remoteCalls, 0);
 		rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
 		await assert.rejects(api.things.create({ crystal: { name: 'Late callback' } }), /Workspace changed/);

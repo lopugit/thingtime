@@ -82,7 +82,7 @@ test('local request boundary rejects remote IDs, ownership, unsupported fields/v
 			await assert.rejects(invoke(step('POST', { ...body, ...extra })), /local adapter|cannot grant/);
 		}
 		await assert.rejects(invoke({ ...step('POST', body), minimumVersion: '99.0.0' }), /version without a local adapter/);
-		await assert.rejects(invoke(step('GET', undefined, { id: 'private-account-thing' })), /local workspace/);
+		await assert.rejects(invoke(step('GET', undefined, { id: 'private-account-thing' })), /not in this workspace/);
 		await assert.rejects(invoke(step('GET', undefined, { scope: 'public' })), /scope request field/);
 		await assert.rejects(invoke(step('POST', body), AbortSignal.abort()), /abort/i);
 		await assert.rejects(request(step('POST', body), 'other-owner', new AbortController().signal), /Workspace changed/);

@@ -15,12 +15,15 @@ test('clean anonymous offline import, rename, history reload and native recorded
  const { chromium } = await import(playwrightPath!);
  const browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true, chromiumSandbox: true });
  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }), page = await context.newPage();
- const mutations: string[] = [], timelineRequests: string[] = [], failures: string[] = [];
+ const mutations: string[] = [], timelineRequests: string[] = [], failures: string[] = [], diagnostics: string[] = [], restoredPublicReads: string[] = [];
  context.on('request', (request: any) => {
   const url = new URL(request.url());
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) mutations.push(url.pathname);
   if (url.pathname.startsWith('/api/v1/timeline')) timelineRequests.push(url.pathname);
+  if (url.pathname === '/api/v1/things' && [url.searchParams.get('id'), url.searchParams.get('target')].some(id => id?.startsWith('restored-'))) restoredPublicReads.push(url.pathname + url.search);
  });
+ context.on('requestfailed', (request: any) => diagnostics.push(`${request.url()}: ${request.failure()?.errorText}`));
+ page.on('console', (message: any) => { if (message.type() === 'error') diagnostics.push(message.text()); });
  page.on('pageerror', (error: Error) => failures.push(error.message));
  try {
   const root = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/root-data');
@@ -245,10 +248,42 @@ test('clean anonymous offline import, rename, history reload and native recorded
   await page.reload();
   await page.getByText('A saved local version stays here.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox').inputValue(), 'Offline history page');
-  assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineHistoryArchiveDownload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
+  await page.goto(new URL('/things', base).href);
+  await page.getByRole('textbox', { name: 'Search all your things and computers…', exact: true }).fill('Offline history component');
+  const restoredLink = page.locator('a[href*="/thing/restored-"]').filter({ hasText: 'Offline history component' }).first();
+  await restoredLink.waitFor(); const restoredId = new URL(await restoredLink.getAttribute('href'), base).pathname.split('/').at(-1)!;
+  assert.match(restoredId, /^restored-[a-f0-9]{48}$/);
+  await restoredLink.click();
+  await page.getByTestId('thing-component-live').getByText('A saved local version stays here.', { exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Comments', exact: true }).waitFor();
+  await page.getByPlaceholder('Write a comment… 💬', { exact: true }).fill('A restored component has its own local discussion.');
+  await page.getByRole('button', { name: 'Send comment', exact: true }).click();
+  await page.getByText('A restored component has its own local discussion.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Reply to Local workspace', exact: true }).click();
+  await page.getByPlaceholder('Reply to Local workspace… 💬', { exact: true }).fill('A nested reply stays offline.');
+  await page.getByRole('button', { name: 'Send reply', exact: true }).click();
+  await page.getByText('A nested reply stays offline.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Thing actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: '✏️ Rename', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Thing title', exact: true }).fill('Restored component edited offline');
+  await page.getByRole('button', { name: 'Rename', exact: true }).click();
+  await page.getByRole('heading', { name: 'Restored component edited offline', exact: true }).waitFor();
+  await page.reload();
+  await page.getByRole('heading', { name: 'Restored component edited offline', exact: true }).waitFor();
+  await page.getByText('A restored component has its own local discussion.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'View replies', exact: true }).click();
+  await page.getByText('A nested reply stays offline.', { exact: true }).waitFor();
+  const restoredDetailBounds = [];
+  for (const [width, height] of [[1440, 1000], [390, 844], [320, 844]]) {
+   await page.setViewportSize({ width, height });
+   const measured = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
+   assert.equal(measured.width, measured.scrollWidth); restoredDetailBounds.push(measured);
+   if (artifacts) await page.screenshot({ path: resolve(artifacts, `restored-detail-${width}.png`), fullPage: true, animations: 'disabled' });
+  }
+  assert.deepEqual(timelineRequests, []); assert.deepEqual(mutations, []); assert.deepEqual(failures, []); assert.deepEqual(restoredPublicReads, []);
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ anonymous: true, offlineImportAndRename: true, coldOfflineReload: true, nativeRecordedComponent: true, offlineNoteSaveReloadRemove: true, rejectedNinthNotePreservedAndDismissed: true, offlineVersionNameRenameClearReload: true, offlineVariationFieldsAndBuilderSaveReload: true, currentThingUnchanged: true, offlineBranchMergeConflictReviewSaveReload: true, offlineHistoryArchiveDownload: true, offlineUndoCurrentMergeRecordedRestoreReload: true, restoredDetailRoutingCommentsRenameReload: true, restoredPublicReads, restoredDetailBounds, restoreBounds, mergeBounds, branchBounds, mutations, timelineRequests, failures, bounds }, null, 2));
  } catch (error) {
-  if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); }
+  if (artifacts) { await mkdir(resolve(artifacts), { recursive: true }); await page.screenshot({ path: resolve(artifacts, 'failure.png'), fullPage: true }); await writeFile(resolve(artifacts, 'failure.txt'), await page.locator('body').innerText()); await writeFile(resolve(artifacts, 'failure-diagnostics.json'), JSON.stringify({ failures, diagnostics }, null, 2)); }
   throw error;
  } finally { await browser.close(); }
 });

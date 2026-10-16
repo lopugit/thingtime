@@ -15,8 +15,10 @@ const editableKinds = (kinds: unknown) => {
 	if (!Array.isArray(kinds) || !kinds.length || kinds.some((kind) => !['data', 'schema', 'component', 'action', 'webpage', 'folder'].includes(kind)))
 		refuse('This local request supports editable definitions, Data and folders; other kinds need their dedicated adapter');
 };
+// ID shape is not authority: every operation below resolves its target through
+// LocalThings in the leased anonymous partition, with no HTTP fallback.
 const id = (value: unknown): string =>
-	typeof value === 'string' && value.startsWith('local-') && value.length <= 200
+	typeof value === 'string' && value.length > 0 && value.length <= 200
 		? value
 		: refuse('This request requires an ID from the local workspace');
 

@@ -41,7 +41,7 @@ export class LocalInteractions {
  async toggle(kind: typeof LOCAL_INTERACTION_KINDS[number], id: unknown, value?: unknown) {
   this.lease.assertCurrent();
   if (this.scope.kind !== 'anonymous') return fail('Account interactions require their dedicated sync adapter', 403);
-  if (!LOCAL_INTERACTION_KINDS.includes(kind) || typeof id !== 'string' || !id.startsWith('local-')) return fail('Select a Thing in this device workspace', 404);
+  if (!LOCAL_INTERACTION_KINDS.includes(kind) || typeof id !== 'string' || !id || id.length > 200) return fail('Select a Thing in this device workspace', 404);
   const token = kind === 'reaction' ? sanitizeReactionToken(value) : null;
   if (kind === 'reaction' && value !== null && !token) return fail('Unsupported reaction');
   const direction = kind === 'updown' ? parseUpdownDirection(value) : null;

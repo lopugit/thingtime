@@ -29,7 +29,9 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const sharedAccess = useSharedAccess();
   const sharedPath = useSharedThingPath();
   const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
-  const localIdentity = (id.startsWith('local-') && workspace?.localOnly) || workspace?.offline;
+  // Workspace identity chooses the local adapter; the resolved author below
+  // still determines whether this Thing offers owner actions.
+  const localIdentity = workspace?.localOnly || workspace?.offline;
   const user = localIdentity ? workspace : accountUser;
   const scope = useWorkspaceScope();
   const navigate = useNavigate();

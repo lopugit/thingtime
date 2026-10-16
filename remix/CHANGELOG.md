@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Restored local components now open in native detail
+  pages and support local discussions, reactions and browser Actions. Routing
+  uses scoped storage and local author projections, preserves deleted identities,
+  and keeps public reads/account authority separate. See the local verification
+  in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Local History now downloads saved-version archives
   offline through the shared account resolver, retaining original content, names
   and notes with bounded output and cancelled-editor download protection. Native

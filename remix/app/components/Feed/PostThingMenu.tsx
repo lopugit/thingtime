@@ -24,7 +24,7 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
     downloadArchive?: () => void; shareDownloadLink?: () => void };
 }) {
   const accountUser = useCurrentUser(), workspace = useWorkspaceUser(), lopu = useLopu();
-  const localOnly = post.id.startsWith('local-') && workspace?.localOnly === true;
+  const localOnly = workspace?.localOnly === true && post.author?.localOnly === true && post.author.id === workspace.id;
   const user = localOnly ? workspace : accountUser;
   const [savingTemplate, setSavingTemplate] = React.useState(false);
   const templateId = React.useRef<string | null>(null);

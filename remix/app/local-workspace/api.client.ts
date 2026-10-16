@@ -103,7 +103,9 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		trending: async () => { lease.assertCurrent(); return publicWorkspaceRead('/api/v1/things/trending?anon=1', 'api.things-trending', '1.0.0'); },
 		get: async ({ id, key, sharedRoot, commentProjection }: { id: string; key?: string; sharedRoot?: string; commentProjection?: boolean }, options?: { signal?: AbortSignal }) => {
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
-			if (id.startsWith('local-')) {
+			const storedHere = id.startsWith('local-') || await service().hasReference(id);
+			lease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (storedHere) {
 				const things = service(), row = await things.get(id), all = await things.snapshot();
 				options?.signal?.throwIfAborted();
 				return localThingReadProjection(row, all, LOCAL_WORKSPACE_OWNER, commentProjection);
@@ -113,7 +115,9 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 		},
 		list: async (query: Parameters<ReturnType<typeof anonymousThings>['list']>[0] & { commentProjection?: boolean; key?: string }, options?: { signal?: AbortSignal }) => {
 			lease.assertCurrent(); options?.signal?.throwIfAborted();
-			if (query.commentProjection && query.target?.startsWith('local-')) {
+			const localDiscussion = query.commentProjection && query.target && (query.target.startsWith('local-') || await service().hasReference(query.target));
+			lease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (localDiscussion) {
 				const things = service(); await things.get(query.target);
 				const page = await things.list({ ...query, thingtime: 'comment' }), all = await things.snapshot(), index = localTargetIndex(all);
 				options?.signal?.throwIfAborted();
@@ -197,9 +201,11 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 }
 
 export async function resolveLocalWebpage(target: LocalWebpageTarget) {
-	const things = anonymousThings();
+	const lease = anonymousWorkspaceLease(), things = anonymousThings();
 	const resolved = resolveWorkspacePage(await things.snapshot(), target, LOCAL_WORKSPACE_OWNER);
-	if (!resolved.page && target.kind === 'id' && !target.id.startsWith('local-')) {
+	const localReference = target.kind === 'id' && (target.id.startsWith('local-') || await things.hasReference(target.id));
+	lease.assertCurrent();
+	if (!resolved.page && target.kind === 'id' && !localReference) {
 		return publicWorkspaceRead(`/api/v1/webpages/resolve?id=${encodeURIComponent(target.id)}${target.key ? `&key=${encodeURIComponent(target.key)}` : ''}`, 'api.webpages-resolve', '1.3.0');
 	}
 	return { ok: true, page: resolved.page ? localThingProjection(resolved.page, LOCAL_WORKSPACE_OWNER) : null,

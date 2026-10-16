@@ -855,7 +855,7 @@ const CommentRow = (props: {
   const api = useApi();
   const sharedAccess = useSharedAccess();
   const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
-  const user = comment.id.startsWith('local-') && workspace?.localOnly ? workspace : accountUser;
+  const user = workspace?.localOnly === true && comment.author?.localOnly === true && comment.author.id === workspace.id ? workspace : accountUser;
   const lopu = useLopu();
   const { recent, pushRecent } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
@@ -1493,7 +1493,7 @@ function PostCardImpl(props: PostCardProps) {
 
   const api = useApi();
   const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
-  const localOnly = post.id.startsWith('local-') && workspace?.localOnly === true;
+  const localOnly = workspace?.localOnly === true && post.author?.localOnly === true && post.author.id === workspace.id;
   const user = localOnly ? workspace : accountUser;
   const lopu = useLopu();
 

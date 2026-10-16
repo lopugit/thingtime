@@ -453,5 +453,10 @@ content, notes, name and canonical dependency references. It is distinct from a
 portable Thing transfer: restore recorded content/components, then use normal
 Thing export/import for that workflow. `timelineExport.test.ts`, the offline
 History browser download and real version API integration cover both paths.
-Related/protected histories, restored-copy detail routing and account sync remain
-pending.
+`LocalThings.hasReference` routes restored copies and retained deleted identities
+within the anonymous partition. GenericThingPage uses workspace ownership;
+PostCard comments/replies use matching local author projections. Local Actions
+and interactions resolve targets through scoped storage, never an ID prefix.
+`restoredRouting.test.ts` and the offline History/detail browser tests cover
+public/account isolation and native restored-copy editing.
+Related/protected histories and account sync remain pending.

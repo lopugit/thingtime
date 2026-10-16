@@ -641,3 +641,44 @@ full local-first matrix remain incomplete. The audit also found that restored
 component IDs use `restored-` while several local detail/discussion/Action routing
 adapters still check only `local-`; follow up before claiming complete restored
 component editing across every surface. Do not merge this checkpoint.
+
+
+## 2026-10-16 — restored component detail/discussion/Action routing
+
+Fixed the previously recorded `restored-` gap. Anonymous Thing and discussion
+reads resolve scoped local records or retained local History heads before public
+fallback. Deleted local copies stay local-not-found; unknown public restored IDs
+retain credential-free reads. The read lease is checked after asynchronous
+routing so an account switch retires the original operation.
+
+Generic detail pages and the shared Thing menu use workspace content identity
+and compare the resolved author before owner actions. Post/comment controls use
+a matching local author projection rather than the ID prefix. Local browser
+Actions and interactions accept the canonical restored identity only after
+resolving its target through scoped storage; supported-kind checks, private
+account partitions and no-network operation remain intact.
+
+Four new regression tests perform a normal recorded restore, cover local read,
+comment, reaction, save, rename, delete and Action GET/PATCH/DELETE, preserve the
+original shared component, reject account-only targets, keep public reads public,
+and reject identity changes during routing. Workspace/offline-shell: 144 passed
+(five opt-in skips); Timeline: 238; feed: 78. The clean production-shell History
+browser additionally passed in 30.1 seconds, including restored detail/comments/
+nested reply/rename/cold reload at 1440/390/320px, zero overflow, account Timeline
+requests, HTTP mutations, restored-ID public reads or page errors. The ordinary
+local-detail offline browser regression also passed. Evidence is in
+`tmp/local-restored-routing-ui/` and `tmp/local-restored-routing-details/`.
+
+Manual in-app Browser verification used only an existing disposable local test
+copy: native text, comment/reply, Rename and reload passed, with 390px bounds and
+screenshot evidence. Browser overrides were reset and both task tabs closed.
+An earlier browser run hit the boot recovery screen during offline navigation;
+it did not reproduce on the completed-build runs. Subsequent runs exposed the
+actual PostCard and shared-menu prefix gates, which are fixed and covered by the
+passing final flow. The startup failure's cause is not established.
+
+Final build: 245 verified offline assets / 21,201,007 bytes. TypeScript retains
+the same 91 baseline diagnostics. Targeted lint has no errors and two existing
+constructor warnings. These are local results, separate from CI or deployment.
+Related/protected History, Timeline folder/storage controls, account sync and the
+full local-first matrix remain incomplete. Do not merge this checkpoint.

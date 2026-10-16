@@ -288,8 +288,10 @@ function GenericThingPage() {
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const { v1 } = api;
-	const accountUser = useCurrentUser(), workspace = useWorkspaceUser();
-	const currentUser = id.startsWith('local-') && workspace?.localOnly ? workspace : accountUser;
+	// Content ownership follows the active workspace, including restored IDs
+	// and offline account copies. The projection's author must still match;
+	// account/data-plane gates above continue to require real authentication.
+	const currentUser = useWorkspaceUser();
 	const dataPlane = useDataPlane();
 	const lopu = useLopu();
 	const lopuRef = React.useRef(lopu);

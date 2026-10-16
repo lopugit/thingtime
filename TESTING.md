@@ -2,6 +2,17 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Restore a page with recorded components offline, open its `restored-` copy
+      from Things, verify the native preview, add a comment/nested reply, rename,
+      and cold-reload at desktop/390/320px. No account Timeline/mutation HTTP or
+      public fetch for the restored identity may occur. Local browser Actions
+      must read/update/delete the copy without altering the shared original.
+      A deleted copy must stay local-not-found; a public same-format ID must still
+      use credential-free reads. An ID present only in an account partition must
+      grant no anonymous mutation/Action access. Switch workspace while routing
+      and reject the stale read before transport. Run `restoredRouting.test.ts`
+      and both offline History/detail browser regressions.
+
 - [ ] Anonymous History export: offline, name a saved version, add a note, change
       the current Thing and export the earlier version. Inspect the actual JSON:
       original content/event/receipt, selected name and notes, no account HTTP.

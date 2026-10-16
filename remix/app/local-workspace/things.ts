@@ -253,6 +253,12 @@ export class LocalThings {
 		if (await transferChecksum(result.bytes) !== result.row.localAttachment.sha256) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
 		this.lease.assertCurrent(); signal?.throwIfAborted(); return result;
 	}
+	/** A routing hint from this partition, not an ownership grant. Retained
+	 * history also keeps deleted local identities from falling through to public
+	 * reads. The actual operation still resolves/validates the scoped Thing. */
+	async hasReference(id: string): Promise<boolean> {
+		return this.transaction('readonly', async tx => !!(await tx.get('things', id)) || !!(await tx.get('timeline-meta', `head:${id}`)));
+	}
 	async get(id: string): Promise<LocalThing> {
 		return this.transaction('readonly', async tx => {
 			const found = await tx.get<LocalThing>('things', id);

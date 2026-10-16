@@ -104,7 +104,7 @@ test('separate tabs serialize local toggles and retired/account callers cannot m
   await Promise.all([interactions.toggle('updown', post.id, 'up'), other.toggle('updown', post.id, 'down')]);
   assert.equal((await things.snapshot()).filter(row => row.thingtime.includes('updown')).length, 1);
   await assert.rejects(new LocalInteractions(db, account, lease).toggle('save', post.id), /sync adapter/);
-  await assert.rejects(interactions.toggle('save', 'remote-private-id'), /device workspace/);
+  await assert.rejects(interactions.toggle('save', 'remote-private-id'), /not available for local interactions/);
   await assert.rejects(interactions.toggle('save', 'local-absent'), /not available/);
   const retired = new LocalInteractions(db, scope, { ...lease, assertCurrent() { throw new Error('Workspace changed'); } });
   await assert.rejects(retired.toggle('save', post.id), /Workspace changed/);
