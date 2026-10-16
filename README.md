@@ -4606,7 +4606,7 @@ and store distribution remain separate setup; never commit signing keys.
 
 ### Verifying file-sync content fingerprints locally
 
-The existing content endpoint advertises `api.attachment-content` 1.13.0 and
+The existing content endpoint advertises `api.attachment-content` 1.14.0 and
 accepts `GET /api/v1/attachments/content?id=<attachment-id>&fingerprint=1`.
 Clients must negotiate that feature first. The fingerprint is a canonical
 multipart composite, not a whole-file SHA-256; see the [sync contract and
@@ -4748,3 +4748,28 @@ picker/upload acceptance and its synthetic-file requirements, see
 The optional `THINGTIME_FOLDER_UPLOAD_TEST=1` run uses the same disposable
 localhost account and normal upload-approval/storage setup; it needs no new
 service credentials. It remains separate from the passing provider/bridge tests.
+
+
+### Verifying bounded cloud download ranges
+
+The existing attachment-content API at 1.14.0 accepts
+`range=1&version=<opaque-version>&offset=<byte-offset>&length=<bytes>` for at most
+2 MiB per response. Use the canonical fingerprint receipt's version, require
+HTTP 206 with matching ETag/Content-Range, and verify the complete staged
+fingerprint before native publication. Capability negotiation is required; the
+older byte-cache path keeps its 16 MiB limit. This uses the same private storage,
+authorization and local stand-in setup described above, with no new secret or
+storage namespace.
+
+With the disposable local fixture and normal upload approval configured:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-foreground.integration.mts /absolute/path/to/private-fixture.json --large-download
+```
+
+This uses 17 MiB + 17 bytes, checks full and multipart hashes, anonymous denial,
+wrong-version refusal and source replacement. Normal cleanup retains accounted
+versions in private Trash; remove temporary fixture admin env and restart the
+managed stack afterward. Executor tests use a staged publisher fixture; actual
+native destination writes and UI download controls remain unavailable.

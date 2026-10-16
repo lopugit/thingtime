@@ -27,7 +27,7 @@ const identifier = (id: unknown): id is string => typeof id === 'string' && /^[A
 
 /** Authenticated JSON stays on one origin with server-enforced expected actor
  * and data-plane headers. Signed part requests carry no account credentials. */
-function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, signal?: AbortSignal) {
+export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, signal?: AbortSignal) {
 	const check = () => {
 		signal?.throwIfAborted();
 		if (runtime.origin() !== scope.origin || !sameSyncScope(scope, runtime.currentScope())) throw Error('Sync context changed.');
@@ -99,7 +99,7 @@ export function createCloudFileTransport(runtime: CloudTransportRuntime, saved: 
 	const write = parseCloudWrite(saved),
 		scope = write.scope,
 		m = write.operation.mutation;
-	if (isCloudFolderWrite(write)) throw Error('Use the cloud folder transport for directory creation.');
+	if (isCloudFolderWrite(write) || (m.kind==='copy' && m.from!=='local')) throw Error('Use the matching cloud folder or download transport.');
 	const { check, json, negotiate: negotiateRequirements } = cloudRequests(runtime, scope, signal);
 	const negotiate = () => negotiateRequirements(CLOUD_TRANSFER_REQUIREMENTS);
 	const fileId = write.before?.id ?? write.operation.id;
@@ -245,7 +245,7 @@ export function createCloudFolderTransport(runtime: CloudTransportRuntime, saved
 	const write = parseCloudWrite(saved),
 		scope = write.scope,
 		m = write.operation.mutation;
-	if (!isCloudFolderWrite(write)) throw Error('A folder creation operation is required.');
+	if (!isCloudFolderWrite(write) || m.kind!=='copy' || m.from!=='local') throw Error('A cloud folder creation operation is required.');
 	const input = parseCloudFolderCreate({
 		kind: 'folder',
 		id: write.operation.id,

@@ -1,4 +1,4 @@
-import { parseCloudFolderCreate } from './cloudFolder';
+import { parseCloudFolder, parseCloudFolderCreate } from './cloudFolder';
 import { parseCloudInventory, type CloudInventory } from './cloudInventory';
 import { cloudFileSyncEntry, parseCloudFile, parseCloudFileCommit, type CloudFile, type CloudFileCommit } from './cloudFile';
 import { sameSyncScope, sameSyncStamp, validateSyncScope, type SyncScope } from './reconcile';
@@ -14,6 +14,24 @@ export function parseCloudWrite(value: CloudWrite): CloudWrite {
 	if (row.scope.dataPlane !== 'home') throw Error('Cloud file sync requires the home data plane.');
 	const op = row.operation,
 		m = op?.mutation;
+	if (m?.kind === 'copy' && m.from === 'remote') {
+		if (m.source.kind === 'folder') {
+			if (row.before !== null || m.expectedTarget !== null || row.folderId === null)
+				throw Error('Local folders require an absent destination and a pinned cloud parent.');
+			parseCloudFolder({ id: m.source.id, revision: m.source.version, name: m.path.split('/').at(-1), folderId: row.folderId });
+		} else {
+			row.before = parseCloudFile(row.before);
+			if (
+				row.before.trashed ||
+				row.before.folderId !== row.folderId ||
+				row.before.name !== m.path.split('/').at(-1) ||
+				!m.source.fingerprint ||
+				!sameSyncStamp(m.source, cloudFileSyncEntry(row.before, m.path))
+			)
+				throw Error('Cloud download source changed before preparing the run.');
+		}
+		return row;
+	}
 	if (isCloudFolderWrite(row)) {
 		if (m.kind !== 'copy' || m.from !== 'local' || m.expectedTarget !== null || row.before !== null || row.folderId === null)
 			throw Error('Cloud folder writes only create an absent folder under an explicit parent.');
@@ -101,6 +119,16 @@ export function prepareCloudInventoryRun(run: SyncRun, value: CloudInventory): C
 			folderId = parents.get(parentPath);
 		if (!folderId) throw Error('A cloud parent is missing from the complete inventory and prepared run.');
 		const before = nodes.get(m.path);
+		if (m.kind === 'copy' && m.from === 'remote') {
+			if (!before || (m.source.kind === 'file' ? before.kind !== 'file' : before.kind !== 'folder'))
+				throw Error('Cloud download source is missing from the complete inventory.');
+			const observed =
+				before.kind === 'file'
+					? cloudFileSyncEntry(before.file, m.path)
+					: { path: before.path, id: before.id, version: before.revision, kind: 'folder' as const, size: 0, sha256: null };
+			if (!sameSyncStamp(m.source, observed)) throw Error('Cloud download source changed.');
+			return { folderId, before: before.kind === 'file' ? before.file : null };
+		}
 		if (m.kind === 'copy' && m.source.kind === 'folder') {
 			if (before || m.expectedTarget !== null || m.from !== 'local')
 				throw Error('Cloud folder destination already exists or requires another adapter.');

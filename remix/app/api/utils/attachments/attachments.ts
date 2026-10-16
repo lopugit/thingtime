@@ -1327,7 +1327,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const download = async (
 		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; version: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
 		try {
 			const readable = await readableStoredAttachment(viewer, idInput);
 			if (readable.ok === false) return readable;
@@ -1343,6 +1343,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			return {
 				ok: true,
 				...signed,
+				version: attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!),
 				// Opaque and viewer-scoped: never expose an object key, bucket or VersionId.
 				cacheKey: createHash('sha256')
 					.update(JSON.stringify([doc.shareId, doc.objectVersionId, viewer?.id || 'anonymous', forceDownload, doc.crystal.contentType]))

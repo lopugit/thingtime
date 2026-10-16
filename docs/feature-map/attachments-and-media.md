@@ -1,5 +1,13 @@
 # Attachments and media
 
+Attachment-content 1.14.0 also serves bounded exact-version byte ranges through
+`attachmentRanges.ts` and the existing content loader. `cloudDownloadSource.ts`
+checks current file metadata and exact range/ETag framing. Download operations
+reuse `CloudSyncRun` and the existing journal/executor; `LocalSyncTarget` requires
+verified private staging, atomic destination checks and durable native receipts.
+The adapter tests pass, but native destination publishers are not enabled yet.
+
+
 Persistent file sync work lives in `app/fileSync/`: `reconcile.ts` plans bounded
 three-way inventory reconciliation, `execute.ts` persists stable operations and
 resolves uncertain receipts, and `journal.client.ts` stores the browser queue.

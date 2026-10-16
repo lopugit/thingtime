@@ -469,3 +469,36 @@ emulator window. The passing provider test is not that acceptance. No permission
 or authentication bypass was added. Streaming-only providers may reread prefixes;
 large proof sets fall back to full checks, and whole-root scans per operation,
 background workers and remaining full-scope delivery remain open.
+
+
+## Exact-version download ranges and staged execution — 2026-10-17
+
+Attachment-content 1.14.0 extends the existing route with at most 2 MiB exact
+version ranges, strict storage framing, reauthorization before bytes return and
+private/no-store responses. The shared cloud source negotiates the capability,
+checks pinned file identity/name/parent/version and validates every response.
+No signed storage URL reaches the sync client; no new history or storage is added.
+
+Download folder/file operations now bind to the complete inventory and reuse the
+existing immutable run, IndexedDB queue and executor. `LocalSyncTarget` defines
+native private staging, verified bytes, destination CAS, recoverable replacement
+and durable receipts. Missing publishers refuse execution. Tests recover an
+accepted publication after response loss and journal reopen without rereading or
+republishing; local races, cloud edits and invalid staged proofs fail closed.
+
+The real loopback API/storage acceptance passes for a 17 MiB + 17 byte file:
+independent full SHA-256 and multipart hash, anonymous denial, wrong-version
+refusal, and stale-source refusal after replacement. The existing whole-byte
+cache still rejects that size. Cleanup used normal APIs, retaining charged file
+versions in private Trash; temporary fixture admin env was removed and PM2
+restarted. This verifies the API/source path; the executor publisher is a fixture.
+
+Native iOS/Android/Mac writers, download controls and interrupted native staging
+recovery are still unimplemented. The complete Drive/Photos/Resilio scope remains
+open. See the full delivery ledger for background, Photos, peers and release work.
+
+Validation for this checkpoint: 86 sync tests, 289 attachment-suite tests and
+89 capability tests pass. Targeted lint and full web/Vercel build pass. Raw
+TypeScript remains at 91 diagnostics / 47 normalized messages, with no new
+diagnostics against the preceding checkpoint. Structural graph refresh is
+included; semantic freshness is not claimed.

@@ -1,3 +1,4 @@
+import { createCloudDownloadSource } from '../app/fileSync/cloudDownloadSource';
 // Opt-in real cloud/API acceptance. Native grants/conditions are explicit test
 // adapters; browser and native UI acceptance is tracked separately.
 import assert from 'node:assert/strict';
@@ -54,7 +55,7 @@ let rootId: string | null = null,
 	lost = true,
 	failCheckpoint = true,
 	puts = 0,
-	bytes = new Uint8Array([1, 2, 3, 4]),
+	bytes = process.argv.includes('--large-download') ? new Uint8Array(17 * 1024 * 1024 + 17).fill(13) : new Uint8Array([1, 2, 3, 4]),
 	version = 'local-1';
 const source = () => ({ size: bytes.length, read: async (offset: number, length: number) => bytes.slice(offset, offset + length), check: () => {} });
 await api('/api/v1/login', { username: fixture.username, password: fixture.password });
@@ -130,6 +131,21 @@ try {
 	assert.ok((await journal.read(scope))!.operations.every((op) => op.confirmed));
 	assert.equal(await journal.checkpoint(scope), null);
 	const first = (await api('/api/v1/files?rootId=' + rootId)).inventory.nodes.find((node: any) => node.kind === 'file').file;
+	const downloadSource = createCloudDownloadSource(runtime, scope, first);
+	const downloaded = await downloadSource.read(0, bytes.length);
+	assert.equal(createHash('sha256').update(downloaded).digest('hex'), createHash('sha256').update(bytes).digest('hex'));
+	assert.deepEqual(await fingerprintSource(downloadSource), first.content.fingerprint);
+	const rangePath =
+		'/api/v1/attachments/content?' +
+		new URLSearchParams({ id: first.content.attachmentId, range: '1', version: first.content.version, offset: '0', length: '1' });
+	assert.equal((await fetch(new URL(rangePath, base), { redirect: 'error' })).status, 404);
+	assert.equal((await sessionFetch(new URL(rangePath.replace(first.content.version, 'f'.repeat(64)), base))).status, 409);
+	if (bytes.length > 16 * 1024 * 1024)
+		assert.equal((await sessionFetch(new URL('/api/v1/attachments/content?id=' + first.content.attachmentId + '&cache=bytes', base))).status, 413);
+	console.log(
+		'PASS: exact-version bounded cloud ranges, independent full byte hash and multipart fingerprint, anonymous denial and changed-version refusal; bytes:',
+		bytes.length
+	);
 	bytes = new Uint8Array([5, 6, 7, 8, 9]);
 	version = 'local-2';
 	await runForegroundCloudSync(saved, scope, input(), new AbortController().signal);
@@ -138,6 +154,7 @@ try {
 	file = (await api('/api/v1/files?rootId=' + rootId)).inventory.nodes.find((node: any) => node.kind === 'file').file;
 	assert.equal(file.id, first.id);
 	assert.notEqual(file.revision, first.revision);
+	await assert.rejects(downloadSource.read(0, 1), /Cloud source changed/);
 	const result = await sessionFetch(new URL('/api/v1/attachments/content?id=' + file.content.attachmentId + '&cache=bytes', base));
 	assert.equal(result.status, 200);
 	assert.equal(
@@ -169,7 +186,7 @@ try {
 						contentVersion: f.content.version,
 						trashed: true
 					});
-					console.log('Tiny accounted versions retained in private Trash:', f.id);
+					console.log('Accounted synthetic versions retained in private Trash:', f.id);
 				}
 			}
 		}

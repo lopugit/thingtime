@@ -81,7 +81,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; native writes/workers and full native transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; native writes/workers and full native transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
@@ -551,3 +551,51 @@ The optimization is for seekable provider descriptors. Providers whose `skip`
 streams bytes may still reread prefixes, and files whose proofs exceed the cache
 fall back safely. Native streaming/background transports and avoiding repeated
 whole-root scans remain required for broad large-file/root performance.
+
+
+## Bounded cloud downloads and staged executor — 2026-10-17
+
+Attachment-content 1.14.0 adds an exact-version range selector on the existing
+content route: `range=1&version=<opaque-version>&offset=<byte-offset>&length=<bytes>`.
+The 2 MiB bound leaves room for binary transport encoding beneath
+[hosted function payload limits](https://vercel.com/docs/functions/limitations).
+Each request reads at most 2 MiB, rechecks attachment authorization after reading,
+and returns private/no-store HTTP 206 only for the exact Content-Range and byte
+count. Wrong versions return 409, out-of-file ranges 416, and truncated, oversized,
+redirected or malformed storage responses fail without returning partial bytes.
+The fingerprint/version comes from the canonical attachment service; no signed
+storage URL, object key or new collection is exposed.
+
+`cloudDownloadSource.ts` splits bounded source reads into these ranges, checks
+account/origin/data plane, current file revision/name/parent, exact response ETag
+and byte framing, and supplies a final source check before publication. Complete
+staged bytes still require the planned multipart fingerprint. Downloads reuse
+`CloudSyncRun`, the existing browser journal and executor's immutable operations;
+they do not create another queue or history. Folder copies precede child copies.
+
+`LocalSyncTarget` is the required native boundary: private staging, scoped write
+approval, complete fingerprint verification, atomic destination preconditions,
+recoverable displaced versions and durable publication receipts. A missing native
+publisher refuses port creation. The shared port verifies the stage and source
+before invoking publication, then the executor validates the returned receipt.
+Tests reopen IndexedDB after an accepted publication loses its reply and recover
+using the same receipt without staging or reading bytes again. Concurrent local
+edits, changed cloud sources and invalid stage proofs refuse file publication.
+
+Real loopback API/storage acceptance with `--large-download` reads a 17 MiB + 17
+byte fixture through bounded ranges, independently matches its whole SHA-256 and
+multipart fingerprint, rejects anonymous/wrong-version reads, and refuses the
+old source after replacement. The legacy 16 MiB cache limit remains unchanged.
+Normal cleanup removes the synthetic configuration/root and retains accounted
+versions in private Trash; temporary admin env is removed and PM2 restarted.
+
+The publisher in executor tests is an adapter fixture. No iOS, Android or Mac
+native destination writer is enabled by this checkpoint, and mobile controls
+remain foreground upload/backup only. Native publication, native interrupted
+staging recovery and background transfers remain required acceptance work.
+
+Validation for this checkpoint: 86 sync tests, 289 attachment-suite tests and
+89 capability tests pass. Targeted lint and full web/Vercel build pass. Raw
+TypeScript remains at 91 diagnostics / 47 normalized messages, with no new
+diagnostics against the preceding checkpoint. Structural graph refresh is
+included; semantic freshness is not claimed.
