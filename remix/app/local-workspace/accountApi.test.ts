@@ -214,3 +214,33 @@ test('cached account page membership survives deletion and explicit conflict res
   if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });
+
+test('a mixed dedicated-adapter delete never removes a cached device copy remotely', async () => {
+ const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+ const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'mixed-owner', dataPlane: 'home' } as const;
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), fetch: async () => { throw new Error('Unexpected network'); } });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+ let remoteDeletes = 0;
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const api = accountApi({ things: { bulk: async () => { remoteDeletes++; return { ok: true }; } } }, { id: scope.ownerId }, scope.dataPlane) as any;
+  const worker = accountWorkspaceWorker(scope), sync = worker.sync;
+  const row: any = { id: 'cached-ordinary', thingtime: ['data'], crystal: { name: 'Cached' }, author: { id: scope.ownerId }, createdAt: '2026-10-16T00:00:00.000Z', updatedAt: '2026-10-16T00:00:00.000Z', acl: ['tt:user'], visibility: 'private' };
+  await sync.remember(row);
+  // 'vault' is not a locally cacheable kind, so this id needs its dedicated adapter.
+  worker.transport.read = async () => ({ ok: true, thing: { ...row, id: 'needs-adapter', thingtime: ['vault'] }, nextCursor: null });
+  // Falling back here would delete the cached copy on the server while leaving it
+  // readable on this device, with nothing left to re-read and correct it.
+  await assert.rejects(api.things.bulk({ op: 'delete', ids: [row.id, 'needs-adapter'] }), /separately/);
+  assert.equal(remoteDeletes, 0, 'a mixed batch must not reach the remote bulk adapter');
+  assert.equal((await sync.view(row.id))?.crystal.name, 'Cached', 'the cached device copy survives the refusal');
+  // A batch with no cached device copy still uses the dedicated online adapter.
+  assert.deepEqual(await api.things.bulk({ op: 'delete', ids: ['needs-adapter'] }), { ok: true });
+  assert.equal(remoteDeletes, 1);
+ } finally {
+  rootIdentity.changed(); await workspaceDatabase().close();
+  Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
+  if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator); else Reflect.deleteProperty(globalThis, 'navigator');
+ }
+});

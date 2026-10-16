@@ -115,18 +115,21 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		if (!Array.isArray(ids) || !ids.length || ids.length > 200 || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
 			throw new WorkspaceError('INVALID_IDS', 'Choose between 1 and 200 distinct Things.');
 		const { sync } = worker();
-		let dedicated = false;
+		let dedicated = false; const cached: string[] = [];
 		for (const id of ids) {
 			if (await sync.isDeleted(id)) continue;
 			if (!await sync.view(id)) {
 				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open these Things online once before deleting them offline.', 409);
 				const result = await refresh({ id });
-				if (!result.thing || !accountThingCanCache(result.thing) || result.thing.author?.id !== owner.id) dedicated = true;
+				if (!result.thing || !accountThingCanCache(result.thing) || result.thing.author?.id !== owner.id) { dedicated = true; continue; }
 			}
+			cached.push(id);
 		}
 		if (dedicated) {
-			const pending = (await sync.status()).some(row => ids.includes(row.id) && (row.state !== 'synced' || row.deleted));
-			if (pending) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Delete pending device Things separately from items requiring their dedicated online adapter.', 409);
+			// A mixed batch must never delete a cached device copy through the remote
+			// adapter. Unlike a move, nothing later re-reads a Thing the server no
+			// longer returns, so that copy would stay readable and editable here.
+			if (cached.length) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Delete saved device Things separately from items that require their dedicated online adapter.', 409);
 			return fallback();
 		}
 		const remaining = [];
