@@ -317,3 +317,15 @@ Run workspace, attachment, Things and capability suites plus the enabled
 target/purpose, concurrent edits, full quota and cold offline reload; existing
 remote bound-file retention/import remain separate gates. See the
 [checkpoint](../local-workspaces.md#account-post-and-comment-file-removal--2026-10-17).
+
+
+Existing owned post/comment originals use `AccountFileSync.retainPost` and the
+parent's conditional `AccountThingSync.remember` transaction. Content 1.15.0
+returns a whitelisted target/purpose descriptor; delete 1.7.0 supports an observed
+bound ID/version/target with `retainReceipt:true`. No upload identity is invented.
+`accountBoundRetention.test.ts` covers atomic admission, stale/read-refusal and
+quota races; `accountBoundRetention.browser.test.ts` uses a second clean context
+for native offline edits/removals and actual private reconnect. Comment update
+transport omits the inherited audience snapshot while preserving server policy.
+See the [fresh-device checkpoint](../local-workspaces.md#existing-account-post-and-comment-originals--2026-10-17)
+and README for the opt-in loopback fixture.

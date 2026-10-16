@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Retain existing owned post/comment originals on a
+  fresh device for native offline editing/removal, with atomic bounded admission,
+  verified private reconnect and durable existing-ID deletion receipts. Correct
+  inherited-audience comment PATCH payloads without relaxing server policy.
+  Local fresh-context browser evidence passes; full local-first acceptance remains
+  open. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Native post/comment media removal now commits
   offline and retries verified account cleanup with durable cancellation receipts.
   Delete 1.6.0 fences target/purpose/version; local bytes survive ambiguous replies

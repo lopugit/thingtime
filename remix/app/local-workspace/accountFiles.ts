@@ -13,6 +13,7 @@ import { accountSyncDeadline, type SyncState } from './accountSync';
 const COLLECTION = 'account-files';
 const CLAIM_MS = 60_000;
 const ATTEMPT_MS = 45_000;
+type RetainedBinding = { targetId: string; purpose: 'post' | 'comment'; order: number };
 type AccountScope = Extract<WorkspaceScope, { kind: 'account' }>;
 export type AccountFileRequest = {
 	requestId: string;
@@ -49,11 +50,11 @@ type FileRecord = {
 };
 const libraryFileVisible = (row: LocalAttachment | null, record: FileRecord | undefined | null): boolean => !!row && isLocalAttachment(row) && isStandaloneAttachmentPurpose(row.localAttachment.purpose) && !row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt && !!record && !record.cancelled && !record.cancelRequested && !record.deleteRequested;
 export type AccountFileRetentionTransport = {
-	retention(id: string, signal: AbortSignal): Promise<unknown>;
+	retention(id: string, signal: AbortSignal, bound?: boolean): Promise<unknown>;
 	bytes(id: string, cacheKey: string, size: number, signal: AbortSignal): Promise<Uint8Array>;
 };
 export type AccountFileTransport = {
-	remove?(input: { id: string; expectedUpdatedAt: string } & ({ requestId: string; targetId?: string; retainReceipt?: never } | { retainReceipt: true; requestId?: never }), signal: AbortSignal): Promise<{ deleted: true; deferred: boolean; retryAt?: string }>;
+	remove?(input: { id: string; expectedUpdatedAt: string } & ({ requestId: string; targetId?: string; retainReceipt?: never } | { retainReceipt: true; targetId?: string; requestId?: never }), signal: AbortSignal): Promise<{ deleted: true; deferred: boolean; retryAt?: string }>;
 	cancel?(requestId: string, signal: AbortSignal): Promise<{ cancelled: true; deferred: boolean; retryAt?: string }>;
 	start(request: Readonly<AccountFileRequest>, signal: AbortSignal): Promise<AccountFilePlan>;
 	parts(id: string, parts: { partNumber: number; checksumSha256: string }[], signal: AbortSignal): Promise<SignedUploadPart[]>;
@@ -170,63 +171,103 @@ export class AccountFileSync {
 		};
 		await this.putRecord(tx, record);
 	}
-	private checkedRetention(raw: any, id: string) {
+	private checkedRetention(raw: any, id: string, binding?: RetainedBinding) {
 		const file = raw?.file, attachment = normalizePublicAttachment(file?.attachment);
 		const purpose = file?.purpose;
-		if (!isStandaloneAttachmentPurpose(purpose) || !attachment || attachment.id !== id || file?.ownerId !== this.scope.ownerId || 'url' in file.attachment ||
+		if (!(binding ? purpose === binding.purpose && file?.targetId === binding.targetId : isStandaloneAttachmentPurpose(purpose) && !file?.targetId) || !attachment || attachment.id !== id || file?.ownerId !== this.scope.ownerId || 'url' in file.attachment ||
 			!Number.isSafeInteger(raw.size) || raw.size < 1 || raw.size !== attachment.size || raw.size > WORKSPACE_LIMITS.binaryBytes ||
 			!(/^[a-f0-9]{64}:original$/).test(raw.cacheKey || ''))
 			throw new WorkspaceError('INVALID_FILE_RETENTION', 'The account returned an invalid owned file descriptor.', 502);
 		const metadata = this.metadata.checked({ id, author: { id: file.ownerId }, thingtime: ['attachment'], crystal: attachment, updatedAt: file.updatedAt, folderId: file.folderId }, id);
 		const crystal = sanitizeAttachmentPublicMetadata(attachment);
 		if (!crystal.ok) throw new WorkspaceError('INVALID_FILE_RETENTION', 'The account returned invalid file metadata.', 502);
-		return { purpose, attachment, crystal: crystal.crystal, metadata, cacheKey: raw.cacheKey as string };
+		return { purpose: purpose as LocalAttachment['localAttachment']['purpose'], attachment, crystal: crystal.crystal, metadata, cacheKey: raw.cacheKey as string };
+	}
+	private async loadRetention(transport: AccountFileRetentionTransport, id: string, signal: AbortSignal, binding?: RetainedBinding) {
+		this.lease.assertCurrent(); signal.throwIfAborted();
+		if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(id) || id.startsWith('local-file-')) throw new WorkspaceError('INVALID_FILE_ID', 'A canonical account file ID is required.');
+		const observedAt = this.now(), snapshot = this.checkedRetention(await transport.retention(id, signal, !!binding), id, binding);
+		const known = await this.tx('readonly', async tx => (await tx.list<FileRecord>(COLLECTION)).find(row => row.value.remote?.id === id)?.value);
+		if (known?.deleteRequested || known?.cancelled || known?.cancelRequested) throw new WorkspaceError('FILE_DELETED', 'This file was deleted in this workspace.', 404);
+		const bytes = known?.retainedKey === snapshot.cacheKey ? (await this.readFile(known.id, signal)).bytes : await transport.bytes(id, snapshot.cacheKey, snapshot.attachment.size, signal);
+		if (!(bytes instanceof Uint8Array) || bytes.length !== snapshot.attachment.size) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes were incomplete. Retry while online.', 502);
+		const copy = Uint8Array.from(bytes), sha256 = await transferChecksum(copy);
+		const final = this.checkedRetention(await transport.retention(id, signal, !!binding), id, binding);
+		if (JSON.stringify(final) !== JSON.stringify(snapshot)) throw new WorkspaceError('FILE_CHANGED', 'The account file changed while being retained. Retry while online.', 409);
+		this.lease.assertCurrent(); signal.throwIfAborted();
+		const fallbackId = `local-file-account-${await transferChecksum(new TextEncoder().encode(id))}`;
+		return { id, snapshot, copy, sha256, observedAt, fallbackId, binding };
+	}
+	private async commitRetention(tx: WorkspaceTransaction, prepared: Awaited<ReturnType<AccountFileSync['loadRetention']>>, signal: AbortSignal) {
+		const { id, snapshot, copy, sha256, observedAt, fallbackId, binding } = prepared;
+		signal.throwIfAborted();
+		// Upload completion or another tab can establish an alias while bytes are in flight.
+		const alias = (await tx.list<FileRecord>(COLLECTION)).find(record => record.value.remote?.id === id)?.value;
+		const localId = alias?.id || fallbackId;
+		const prior = alias || await tx.get<FileRecord>(COLLECTION, localId), local = await tx.get<LocalAttachment>('things', localId);
+		if (prior?.deleteRequested || prior?.cancelRequested || prior?.cancelled) throw new WorkspaceError('FILE_DELETED', 'This file was deleted in this workspace.', 404);
+		if (prior && (!local || prior.remote?.id !== id || prior.request.purpose !== snapshot.purpose || local.localAttachment.purpose !== snapshot.purpose || prior.sha256 !== sha256 || (local.targetId || undefined) !== binding?.targetId || (prior.retainedKey && prior.retainedKey !== snapshot.cacheKey)))
+			throw new WorkspaceError('FILE_CHANGED', 'Retained file bytes or identity changed. The device copy has been preserved.', 409);
+		if (prior && local && ((prior.retainedObservedAt ?? -1) >= observedAt || (prior.retainedVersion && Date.parse(prior.retainedVersion) > Date.parse(snapshot.metadata.updatedAt)))) return { row: local, changed: false };
+		let row = local || createLocalAttachment(localId, { id: 'bytes', targetId: localId, path: 'files/000000', name: snapshot.attachment.name, mime: snapshot.attachment.contentType, bytes: copy.length, sha256 }, new Date(this.now()).toISOString(), snapshot.purpose, binding?.order || 0, binding ? { targetId: binding.targetId } : snapshot.metadata.metadata.folderId ? { folderId: snapshot.metadata.metadata.folderId } : {});
+		if (!local) row = { ...row, crystal: { ...snapshot.crystal } };
+		const flagsChanged = (binding && row.localAttachment.order !== binding.order) || row.localAttachment.nsfw !== snapshot.attachment.nsfw || row.localAttachment.pending !== snapshot.attachment.pending;
+		row = { ...row, localAttachment: { ...row.localAttachment, accountFileId: id, ...(binding ? { order: binding.order } : {}), nsfw: snapshot.attachment.nsfw ? true : undefined, pending: snapshot.attachment.pending }, ...(flagsChanged && local ? { revision: row.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(row.updatedAt) + 1)).toISOString() } : {}) };
+		if (!local || flagsChanged || local.localAttachment.accountFileId !== id) await tx.put('things', row.id, row);
+		if (!local) await tx.putBytes(row.id, copy);
+		await this.metadata.remember(tx, row, snapshot.metadata);
+		await this.putRecord(tx, { ...(prior || { id: row.id, source: 'account' as const, request: { filename: snapshot.attachment.name, contentType: snapshot.attachment.contentType, sizeBytes: copy.length, purpose: snapshot.purpose }, sha256, state: 'synced' as const, phase: 'complete' as const, uploaded: [], attempts: 0, retryAt: 0 }), remote: snapshot.attachment, retainedKey: snapshot.cacheKey, retainedVersion: snapshot.metadata.updatedAt, retainedObservedAt: observedAt });
+		const next = (await tx.get<LocalAttachment>('things', row.id))!;
+		return { row: next, changed: !local || next.revision !== local.revision };
 	}
 	/** Retain only bytes disclosed by the verified owned-file transport. The
 	 * descriptor is checked again after reading; no upload intent is invented. */
 	async retain(transport: AccountFileRetentionTransport, id: string, signal = new AbortController().signal) {
 		this.lease.assertCurrent(); signal.throwIfAborted();
-		if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(id) || id.startsWith('local-file-')) throw new WorkspaceError('INVALID_FILE_ID', 'A canonical account file ID is required.');
 		let operation = this.retaining.get(id);
 		if (!operation) {
 			if (this.retaining.size >= 3) throw new WorkspaceError('FILE_RETENTION_BUSY', 'Other files are being saved on this device. Retry shortly.', 503);
-			const observedAt = this.now();
 			operation = accountSyncDeadline(async child => {
-				const snapshot = this.checkedRetention(await transport.retention(id, child), id);
-				const known = await this.tx('readonly', async tx => (await tx.list<FileRecord>(COLLECTION)).find(row => row.value.remote?.id === id)?.value);
-				if (known?.deleteRequested || known?.cancelled || known?.cancelRequested) throw new WorkspaceError('FILE_DELETED', 'This file was deleted in this workspace.', 404);
-				const bytes = known?.retainedKey === snapshot.cacheKey ? (await this.readFile(known.id, child)).bytes : await transport.bytes(id, snapshot.cacheKey, snapshot.attachment.size, child);
-				if (!(bytes instanceof Uint8Array) || bytes.length !== snapshot.attachment.size) throw new WorkspaceError('INVALID_FILE_BYTES', 'File bytes were incomplete. Retry while online.', 502);
-				const copy = Uint8Array.from(bytes), sha256 = await transferChecksum(copy);
-				const final = this.checkedRetention(await transport.retention(id, child), id);
-				if (JSON.stringify(final) !== JSON.stringify(snapshot)) throw new WorkspaceError('FILE_CHANGED', 'The account file changed while being retained. Retry while online.', 409);
-				this.lease.assertCurrent(); child.throwIfAborted();
-				const fallbackId = `local-file-account-${await transferChecksum(new TextEncoder().encode(id))}`;
-				return this.tx('readwrite', async tx => {
-					child.throwIfAborted();
-					// Upload completion or another tab can establish an alias while bytes are in flight.
-					const alias = (await tx.list<FileRecord>(COLLECTION)).find(record => record.value.remote?.id === id)?.value;
-					const localId = alias?.id || fallbackId;
-					const prior = alias || await tx.get<FileRecord>(COLLECTION, localId), local = await tx.get<LocalAttachment>('things', localId);
-					if (prior?.deleteRequested || prior?.cancelRequested || prior?.cancelled) throw new WorkspaceError('FILE_DELETED', 'This file was deleted in this workspace.', 404);
-					if (prior && (!local || prior.remote?.id !== id || prior.request.purpose !== snapshot.purpose || local.localAttachment.purpose !== snapshot.purpose || prior.sha256 !== sha256 || (prior.retainedKey && prior.retainedKey !== snapshot.cacheKey)))
-						throw new WorkspaceError('FILE_CHANGED', 'Retained file bytes or identity changed. The device copy has been preserved.', 409);
-					if (prior && local && ((prior.retainedObservedAt ?? -1) >= observedAt || (prior.retainedVersion && Date.parse(prior.retainedVersion) > Date.parse(snapshot.metadata.updatedAt)))) return { row: local, changed: false };
-					let row = local || createLocalAttachment(localId, { id: 'bytes', targetId: localId, path: 'files/000000', name: snapshot.attachment.name, mime: snapshot.attachment.contentType, bytes: copy.length, sha256 }, new Date(this.now()).toISOString(), snapshot.purpose, 0, snapshot.metadata.metadata.folderId ? { folderId: snapshot.metadata.metadata.folderId } : {});
-					if (!local) row = { ...row, crystal: { ...snapshot.crystal } };
-					const flagsChanged = row.localAttachment.nsfw !== snapshot.attachment.nsfw || row.localAttachment.pending !== snapshot.attachment.pending;
-					row = { ...row, localAttachment: { ...row.localAttachment, accountFileId: id, nsfw: snapshot.attachment.nsfw ? true : undefined, pending: snapshot.attachment.pending }, ...(flagsChanged && local ? { revision: row.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(row.updatedAt) + 1)).toISOString() } : {}) };
-					if (!local || flagsChanged || local.localAttachment.accountFileId !== id) await tx.put('things', row.id, row);
-					if (!local) await tx.putBytes(row.id, copy);
-					await this.metadata.remember(tx, row, snapshot.metadata);
-					await this.putRecord(tx, { ...(prior || { id: row.id, source: 'account' as const, request: { filename: snapshot.attachment.name, contentType: snapshot.attachment.contentType, sizeBytes: copy.length, purpose: snapshot.purpose }, sha256, state: 'synced' as const, phase: 'complete' as const, uploaded: [], attempts: 0, retryAt: 0 }), remote: snapshot.attachment, retainedKey: snapshot.cacheKey, retainedVersion: snapshot.metadata.updatedAt, retainedObservedAt: observedAt });
-					const next = (await tx.get<LocalAttachment>('things', row.id))!;
-					return { row: next, changed: !local || next.revision !== local.revision };
-				}, child);
+				const prepared = await this.loadRetention(transport, id, child);
+				return this.tx('readwrite', tx => this.commitRetention(tx, prepared, child), child);
 			}, signal).finally(() => { this.retaining.delete(id); });
 			this.retaining.set(id, operation);
 		}
 		const result = await operation; this.lease.assertCurrent(); signal.throwIfAborted(); return result;
+	}
+	private retainingPost = false;
+	/** Fetch a complete owned binding before admitting anything. The admission
+	 * callback runs inside the parent's conditional cache transaction. */
+	async retainPost<T>(transport: AccountFileRetentionTransport, input: { id: string; thingtime: string[]; attachments?: unknown[] }, commitParent: (admit: (tx: WorkspaceTransaction) => Promise<void>) => Promise<T>, signal = new AbortController().signal) {
+		if (this.retainingPost) throw new WorkspaceError('FILE_RETENTION_BUSY', 'Another post is being saved on this device. Retry shortly.', 503);
+		const attachments = input.attachments?.map(normalizePublicAttachment);
+		if (!input.thingtime.some(kind => ['post','comment'].includes(kind)) || !attachments || attachments.length > 200 || attachments.some(file => !file || file.url) || new Set(attachments.map(file => file?.id)).size !== attachments.length || attachments.reduce((sum, file) => sum + (file?.size || 0), 0) > WORKSPACE_LIMITS.bytes)
+			throw new WorkspaceError('INVALID_POST_RETENTION', 'This post needs its complete stored-file binding.', 409);
+		this.retainingPost = true;
+		try {
+			const prepared = await accountSyncDeadline(async child => {
+				const result: Awaited<ReturnType<AccountFileSync['loadRetention']>>[] = [];
+				let total = 0;
+				for (const [order, file] of attachments.entries()) {
+					const retained = await this.loadRetention(transport, file!.id, child, { targetId: input.id, purpose: input.thingtime.includes('comment') ? 'comment' : 'post', order });
+					total += retained.copy.length;
+					if (total > WORKSPACE_LIMITS.bytes) throw new WorkspaceError('LOCAL_QUOTA', 'The post files exceed this device workspace limit.', 413);
+					result.push(retained);
+				}
+				return result;
+			}, signal);
+			return await commitParent(async (tx: WorkspaceTransaction) => {
+				this.lease.assertCurrent(); signal.throwIfAborted();
+				const ids = new Set(prepared.map(file => file.id));
+				const records = new Map((await tx.list<FileRecord>(COLLECTION)).map(row => [row.value.id, row.value]));
+				for (const { value: row } of await tx.list<LocalThing>('things')) if (isLocalAttachment(row) && row.targetId === input.id && !ids.has(records.get(row.id)?.remote?.id || '')) {
+					const record = records.get(row.id), metadata = await tx.get<{ state: string }>('account-file-metadata', row.id);
+					if (!record?.remote || record.state !== 'synced' || record.deleteRequested || record.cancelRequested || (metadata && metadata.state !== 'synced')) throw new WorkspaceError('FILE_CHANGED', 'Device file changes must finish or be reviewed before refreshing the post.', 409);
+					await tx.deleteBytes(row.id); await tx.delete('things', row.id); await tx.delete(COLLECTION, row.id); await this.metadata.discardUnuploaded(tx, row.id);
+				}
+				for (const file of prepared) await this.commitRetention(tx, file, signal);
+			});
+		} finally { this.retainingPost = false; }
 	}
 
 	/** Device library and upload aliases come from one scoped snapshot. Closed
@@ -240,7 +281,7 @@ export class AccountFileSync {
 			});
 			const visible = new Set(things.map(row => row.id));
 			const aliases = new Map<string, string | null>();
-			for (const record of records.values()) if ((isStandaloneAttachmentPurpose(record.request.purpose) || (includeBound && visible.has(record.id))) && record.remote) aliases.set(record.remote.id, visible.has(record.id) ? record.id : null);
+			for (const record of records.values()) if ((isStandaloneAttachmentPurpose(record.request.purpose) || (includeBound && ['post','comment'].includes(record.request.purpose))) && record.remote) aliases.set(record.remote.id, visible.has(record.id) ? record.id : null);
 			return { things, aliases };
 		});
 	}
@@ -480,7 +521,7 @@ export class AccountFileSync {
 					}
 					if (claimed.source !== 'account' && !claimed.request.requestId) throw new WorkspaceError('INVALID_DELETION', 'The file deletion identity is missing.', 409);
 					const deletion: Parameters<NonNullable<AccountFileTransport['remove']>>[0] = claimed.source === 'account'
-						? { id: claimed.remote.id, expectedUpdatedAt, retainReceipt: true }
+						? { id: claimed.remote.id, expectedUpdatedAt, retainReceipt: true, ...(claimed.deletingLocal.targetId ? { targetId: claimed.deletingLocal.targetId } : {}) }
 						: { id: claimed.remote.id, expectedUpdatedAt, requestId: claimed.request.requestId!, ...(claimed.deletingLocal.targetId ? { targetId: claimed.deletingLocal.targetId } : {}) };
 					const result = await run(() => transport.remove!(deletion, controller.signal));
 					if (result?.deleted !== true || typeof result.deferred !== 'boolean') throw new WorkspaceError('INVALID_DELETION', 'The account did not confirm durable deletion.', 502);

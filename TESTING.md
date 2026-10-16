@@ -10846,3 +10846,20 @@ Run `app/local-workspace/components.browser.test.ts` with
   review; stale reviews fail, and keeping the file restores exact bytes at quota.
 - [ ] Complete remote bound-file retention/import, parent deletion and broader
   account/device reconciliation before treating the full merge gate as passed.
+
+
+### Fresh-device retention of existing account post/comment media
+
+- [x] Create private post/comment files with the normal account API, then use a
+  separate clean browser context to open them. Check decoded original bytes,
+  offline cold reload and native editing/removal at desktop, 390px and 320px.
+- [x] Reconnect after editing both parents. Require persisted text and exact file
+  membership on the original records, no duplicate uploads, durable existing-ID
+  deletion receipts, and anonymous refusal of private records/bytes.
+- [x] Comment edit PATCH must omit its inherited audience snapshot; keep server
+  audience enforcement and never silently drop a different requested audience.
+- [x] Interrupted bytes, quota failure, wrong binding or a read refusal during
+  admission must leave no partial editable parent/files. Concurrent local edits
+  survive; unchanged retention must not cause revision/refresh loops.
+- [ ] Complete normal bound-media import/export, parent context/deletion and
+  cross-device reconciliation before closing the full local-first merge gate.

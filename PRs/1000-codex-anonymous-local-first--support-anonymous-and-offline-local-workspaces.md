@@ -1841,3 +1841,28 @@ bound-file retention/import, binding reconciliation, parent deletion and the
 remaining local-first matrix are still completion gates. Results are local;
 current-head CI/deployed acceptance is separate. No merge, manual deployment,
 public publishing or existing-account mutation was performed.
+
+
+## Existing bound originals checkpoint — 2026-10-17
+
+Fresh-device owned post/comment retention now admits complete original bytes and
+parent content atomically, preserving concurrent editing and read refusals. It
+reuses content 1.15.0 and deletion 1.7.0 with exact owner/target/purpose/version
+checks and durable receipts. Native offline edits/removals do not invent upload
+identities or depend on draft saving. A real reconnect failure exposed comment
+PATCH resending `tt:inherit`; transport now omits this saved audience snapshot and
+retains server enforcement and different audience requests.
+
+Local: 1,066 unit/offline-shell checks pass across workspace (327), attachments
+(320), Things (320), capabilities (99). The 37 generic browser skips are excluded.
+The enabled fresh-device production-client browser passes decoded byte equality,
+cold offline edit/removal, original-record reconnect, no duplicate uploads,
+anonymous refusal, no offline mutations/browser errors, and desktop/390/320px
+bounds. Narrow screenshots were inspected. Client build verifies 247 offline
+assets; focused lint passes. TypeScript reports 91 existing baseline diagnostics, none in changed files.
+Evidence: `tmp/account-bound-retention-browser/` and related logs. CI and deployed
+verification remain separate from this local result.
+
+Normal complete bound import/export, parent context/deletion, linked/managed
+media, cross-device reconciliation, account draft sync and the remaining matrix
+are still merge gates. No merge or manual deployment at this checkpoint.

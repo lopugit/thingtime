@@ -39,6 +39,12 @@ test('transport pins account and database on reads and writes and retires mismat
   const submission=calls.at(-2);assert.equal(submission.url,'/api/v1/things/comment');
   assert.deepEqual(JSON.parse(submission.init.body),{id:'parent',shareId:'queued-comment',type:'text',text:'Saved offline',tags:[],attachmentIds:['receipt-file']});
   assert.equal(calls.at(-1).url,'/api/v1/things?id=queued-comment','read the canonical receipt after the normal comment endpoint');
+  const edit = {id:'queued-comment',operationId:'comment-edit',version:2,method:'update' as const,body:{id:'queued-comment',targetId:'parent',thingtime:['post','comment'],crystal:{type:'text',text:'Edited offline'},acl:['tt:inherit'],visibility:'private',expectedUpdatedAt:'2026-10-17T00:00:00Z'}};
+  const frozen=structuredClone(edit);await transport.write(edit,new AbortController().signal);
+  const edited=JSON.parse(calls.at(-1).init.body);assert.equal(calls.at(-1).init.method,'PATCH');
+  assert.equal(edited.acl,undefined);assert.equal(edited.visibility,undefined);assert.equal(edited.targetId,'parent');assert.equal(edited.expectedUpdatedAt,edit.body.expectedUpdatedAt);assert.deepEqual(edit,frozen);
+  await transport.write({...edit,body:{...edit.body,acl:['tt:public']}},new AbortController().signal);
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body).acl,['tt:public'],'never silently discard a different audience request');
   const attachment={id:'actual-file',name:'test.png',size:16,contentType:'image/png',mediaKind:'image'};
   result=Response.json({ok:true,thing:{id:'thing'},post:{id:'thing',attachments:[attachment]}});
   assert.deepEqual((await transport.get('thing',new AbortController().signal) as any).attachments,[attachment]);
@@ -50,6 +56,8 @@ test('transport pins account and database on reads and writes and retires mismat
   assert.equal(JSON.parse(calls.at(-1).init.body).expectedUpdatedAt, '2026-01-01T00:00:00.000Z');
   const beforeBoundDelete=calls.length;
   await assert.rejects(transport.files.remove!({id:'file',requestId:'request',targetId:'post',expectedUpdatedAt:'2026-10-17T00:00:00Z'},new AbortController().signal),/incompatible/);
+  assert.equal(calls.length,beforeBoundDelete);
+  await assert.rejects(transport.files.retention('file',new AbortController().signal,true),/incompatible/);
   assert.equal(calls.length,beforeBoundDelete);
   await transport.export({ ids: ['thing'] }, new AbortController().signal);
   assert.equal(calls.at(-1).url, '/api/v1/things/export'); assert.equal(calls.at(-1).init.method, 'POST');

@@ -4708,3 +4708,17 @@ retry, private receipt retention and refusal of a delayed upload replay.
 Follow the local attachment-storage setup above;
 never point this fixture at production or provide an existing user account.
 See [remaining local-workspace acceptance](docs/local-workspaces.md).
+
+
+### Existing private post/comment media on a fresh device
+
+Run `node --import tsx --test app/local-workspace/accountBoundRetention.browser.test.ts`
+from `remix/` using the same disposable loopback setup and `TT_LOCAL_BOUND_MEDIA_URL`,
+`TT_LOCAL_BOUND_MEDIA_ARTIFACTS`, `TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE`,
+`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` placeholders described above.
+The fixture creates its own private post/comment files with the normal API, then
+opens them in a second clean context, edits/removes offline and checks reconnect.
+Only its newly registered user receives upload scope. It deletes its created
+content and closes its contexts; never supply an existing user or production URL.
+Owned bound retention needs content 1.15.0, existing-ID deletion needs delete 1.7.0;
+older servers fail explicitly while device edits remain saved.

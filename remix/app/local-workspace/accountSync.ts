@@ -95,32 +95,38 @@ export class AccountThingSync {
 			createdAt: input.createdAt, updatedAt: input.updatedAt, revision: 1, ...(input.thingtime.includes('post') ? { accountAttachmentIds: attachments.map((file: any) => file.id) } : {}),
 			author: { id: this.scope.ownerId }, acl: input.acl || ['tt:user'], visibility: input.visibility || 'private' }) as unknown as AccountThing;
 	}
-	async remember(input: AccountThing, startedAt = this.now()) { return (await this.rememberMany([input], startedAt))[0]; }
+	async remember(input: AccountThing, startedAt = this.now(), admitFiles?: (tx: WorkspaceTransaction) => Promise<void>) { return (await this.rememberMany([input], startedAt, admitFiles))[0]; }
 	/** One bounded catalogue page commits atomically; quota or invalid content
 	 * cannot leave a partially retained page presented as complete. */
-	async rememberMany(input: AccountThing[], startedAt = this.now()) {
-		if (!Array.isArray(input) || input.length > 50) throw new WorkspaceError('INVALID_SYNC_BATCH', 'Invalid account cache page.', 400);
+	async rememberMany(input: AccountThing[], startedAt = this.now(), admitFiles?: (tx: WorkspaceTransaction) => Promise<void>) {
+		if (!Array.isArray(input) || input.length > 50 || (admitFiles && input.length !== 1)) throw new WorkspaceError('INVALID_SYNC_BATCH', 'Invalid account cache page.', 400);
 		const remotes = input.map(row => this.checked(row));
 		return this.tx('readwrite', async tx => {
 			const result: (LocalThing | undefined)[] = [];
 			const refusals = await accountReadRefusals(tx);
-			for (const remote of remotes) result.push(await this.rememberIn(tx, remote, startedAt, refusals));
+			for (const remote of remotes) result.push(await this.rememberIn(tx, remote, startedAt, refusals, admitFiles));
 			return result;
 		});
 	}
-	private async rememberIn(tx: WorkspaceTransaction, remote: AccountThing, startedAt: number, refusals: Awaited<ReturnType<typeof accountReadRefusals>>) {
+	private async rememberIn(tx: WorkspaceTransaction, remote: AccountThing, startedAt: number, refusals: Awaited<ReturnType<typeof accountReadRefusals>>, admitFiles?: (tx: WorkspaceTransaction) => Promise<void>) {
 		if ([remote.id, remote.targetId].some(id => id && (refusals.get(id)?.at ?? -Infinity) >= startedAt)) return undefined;
 		const sync = await tx.get<SyncRecord>(COLLECTION, remote.id);
 		if (sync?.deleted) return undefined;
 		// A background read cannot erase unsynced editing, nor regress the base.
 		if (sync && sync.state !== 'synced') return tx.get<LocalThing>('things', remote.id);
 		const previous = await tx.get<LocalThing>('things', remote.id);
-		if (previous && sync?.base && Date.parse(sync.base.updatedAt) >= Date.parse(remote.updatedAt)) return previous;
+		if (previous && sync?.base && (Date.parse(sync.base.updatedAt) > Date.parse(remote.updatedAt) || (!admitFiles && Date.parse(sync.base.updatedAt) === Date.parse(remote.updatedAt)))) return previous;
+		if (admitFiles) await admitFiles(tx);
+		if (previous && sync?.base && Date.parse(sync.base.updatedAt) === Date.parse(remote.updatedAt)) {
+			const restored = this.files?.restore ? await this.files.restore(tx, previous) : previous;
+			if (stable(restored) === stable(previous)) return previous;
+		}
 		const cached = previous ? { ...remote, revision: previous.revision + 1,
 			updatedAt: new Date(Math.max(Date.parse(previous.updatedAt) + 1, Date.parse(remote.updatedAt))).toISOString() } : remote;
-		await tx.put('things', remote.id, cached);
+		const device = this.files?.restore ? await this.files.restore(tx, cached) : cached;
+		await tx.put('things', remote.id, device);
 		await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
-		return cached;
+		return device;
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: AccountThingWrite) {
 		if (!this.files && row.thingtime.some(kind => ['post','comment'].includes(kind)) && (await tx.list<LocalThing>('things')).some(item => item.value.thingtime.includes('attachment') && item.value.targetId === row.id)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_MEDIA', 'Bound post media requires its account binding adapter.', 409);

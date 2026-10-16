@@ -1248,8 +1248,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!id) return fail(400, 'Invalid attachment id');
 			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
 			if ('retainReceipt' in raw) {
-				if (raw.retainReceipt !== true || !expectedUpdatedAt || raw.targetId !== undefined || 'requestId' in raw)
-					return fail(400, 'Existing file deletion requires retainReceipt:true and expectedUpdatedAt, without requestId or targetId');
+				if (raw.retainReceipt !== true || !expectedUpdatedAt || 'requestId' in raw)
+					return fail(400, 'Existing file deletion requires retainReceipt:true and expectedUpdatedAt, without requestId');
 				if (dependencies.customMongoActive()) return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 				// Existing account files do not store their original upload request ID.
 				// Only a current, exact owned ID can establish this receipt. Never
@@ -1258,13 +1258,15 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				if (!existing || existing.shareId !== id || existing.ownerId !== ownerId) return fail(404, 'Attachment not found');
 				if (existing.attachmentState === 'cancelled' && existing.attachmentCancellationRequested)
 					return { ok: true, deleted: true, deferred: false };
-				if (existing.targetId || !isStandaloneAttachmentPurpose(existing.attachmentPurpose) || existing.attachmentLinked || existing.attachmentImportDraft || existing.attachmentProfileSlot ||
+				const contentPurpose = existing.attachmentPurpose === 'post' || existing.attachmentPurpose === 'comment' ? existing.attachmentPurpose : undefined;
+				const eligible = targetId ? !!contentPurpose && existing.targetId === targetId : !existing.targetId && isStandaloneAttachmentPurpose(existing.attachmentPurpose);
+				if (!eligible || existing.attachmentLinked || existing.attachmentImportDraft || existing.attachmentProfileSlot ||
 					!['ready', 'deleting'].includes(existing.attachmentState) || (existing.attachmentState === 'ready' && existing.attachmentExpiresAt))
-					return fail(409, 'Only a saved standalone file can be deleted with an existing-file receipt');
+					return fail(409, 'Only a saved standalone file or matching post/comment file can use an existing-file receipt');
 				if (existing.attachmentState !== 'deleting' && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime())
 					return fail(409, 'Attachment changed; refresh before deleting');
 				const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, {
-					kind: 'draft', standalonePurpose: existing.attachmentPurpose, retainCancellation: true, expectedUpdatedAt
+					...(targetId ? { kind: 'target' as const, targetId, contentPurpose } : { kind: 'draft' as const, standalonePurpose: existing.attachmentPurpose as 'file' | 'recording' }), retainCancellation: true, expectedUpdatedAt
 				});
 				const receipt = await dependencies.store.getOwned(ownerId, id);
 				if (receipt?.shareId === id && receipt.ownerId === ownerId && receipt.attachmentCancellationRequested &&
@@ -1438,12 +1440,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const download = async (
 		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainOwnedFile = false
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean; retention?: { purpose: 'file' | 'recording'; ownerId: string; updatedAt: string; folderId: string | null; attachment: AttachmentPublicMetadata } }>> => {
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean; retention?: { purpose: 'file' | 'recording' | 'post' | 'comment'; targetId?: string; ownerId: string; updatedAt: string; folderId: string | null; attachment: AttachmentPublicMetadata } }>> => {
 		try {
 			const readable = await readableStoredAttachment(viewer, idInput);
 			if (readable.ok === false) return readable;
 			const { doc } = readable;
-			if (retainOwnedFile && (viewer?.id !== doc.ownerId || viewer.sharedRoot || doc.targetId || !isStandaloneAttachmentPurpose(doc.attachmentPurpose) ||
+			if (retainOwnedFile && (viewer?.id !== doc.ownerId || viewer.sharedRoot || !(isStandaloneAttachmentPurpose(doc.attachmentPurpose) ? !doc.targetId : ['post','comment'].includes(doc.attachmentPurpose) && !!doc.targetId) ||
 				doc.attachmentExpiresAt || doc.attachmentImportDraft || doc.attachmentProfileSlot || doc.attachmentLinked || doc.moderation?.status === 'blocked'))
 				return fail(404, 'Saved owned file not found');
 			if (retainOwnedFile && doc.objectSizeBytes > 16 * 1024 * 1024) return fail(413, 'This file exceeds the device retention limit');
@@ -1469,7 +1471,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				disposition: attachmentContentDisposition(doc.crystal.name, inline),
 				image: inline && doc.crystal.mediaKind === 'image',
 				...(retainOwnedFile ? { retention: {
-					purpose: doc.attachmentPurpose as 'file' | 'recording', ownerId: doc.ownerId, updatedAt: doc.updatedAt.toISOString(), folderId: doc.folderId || null,
+					purpose: doc.attachmentPurpose as 'file' | 'recording' | 'post' | 'comment', ...(doc.targetId ? { targetId: doc.targetId } : {}), ownerId: doc.ownerId, updatedAt: doc.updatedAt.toISOString(), folderId: doc.folderId || null,
 					attachment: retainedMetadata!
 				} } : {})
 			};

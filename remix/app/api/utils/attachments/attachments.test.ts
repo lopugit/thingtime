@@ -2663,7 +2663,7 @@ test('existing file receipts reject malformed, non-library and stale deletion at
 		getS3: () => { throw Error('Must not touch storage'); }
 	});
 	const input = { id: doc.shareId, retainReceipt: true, expectedUpdatedAt: now.toISOString() };
-	for (const patch of [{ retainReceipt: false }, { retainReceipt: null }, { requestId: 'x' }, { expectedUpdatedAt: undefined }, { targetId: 'x' }, { ownerId: 'user-2' }]) {
+	for (const patch of [{ retainReceipt: false }, { retainReceipt: null }, { requestId: 'x' }, { expectedUpdatedAt: undefined }, { targetId: '' }, { ownerId: 'user-2' }]) {
 		const result = await service.remove('user-1', { ...input, ...patch }); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
 	}
 	assert.equal(reads, 0);
@@ -2773,4 +2773,34 @@ test('content-file receipt rejects foreign targets, purposes, versions and bindi
  }
  assert.equal(claims,0);doc=attachmentDoc({shareId:id,attachmentState:'ready',attachmentPurpose:'post',targetId:'post-1',attachmentExpiresAt:undefined});
  const race=await service.remove('user-1',input);assert.equal(race.ok,false);if(!race.ok)assert.equal(race.status,409);assert.equal(claims,1);
+});
+
+
+test('owned post/comment original retention keeps binding and access gates, without exposing storage identity',async()=>{
+ for(const purpose of ['post','comment'] as const){
+  let doc=attachmentDoc({attachmentState:'ready',attachmentPurpose:purpose,targetId:'parent',attachmentExpiresAt:undefined,objectVersionId:'version',uploadId:undefined});
+  const service=createAttachmentService({customMongoActive:()=>false,store:{getById:async()=>doc} as any,canViewTarget:async()=>true,getS3:()=>noopS3()});
+  const read=await service.download({id:'user-1'},doc.shareId,true,true);assert.equal(read.ok,true);
+  if(read.ok){assert.equal(read.retention?.targetId,'parent');assert.equal(read.retention?.purpose,purpose);assert.doesNotMatch(JSON.stringify(read.retention),/objectKey|objectVersionId|uploadId/);}
+  assert.equal((await service.download({id:'foreign',isAdmin:true},doc.shareId,true,true)).ok,false);
+  assert.equal((await service.download({id:'user-1',sharedRoot:'parent'},doc.shareId,true,true)).ok,false);
+  for(const patch of [{targetId:undefined},{attachmentImportDraft:true},{attachmentLinked:true},{attachmentProfileSlot:'avatar'},{attachmentExpiresAt:now},{moderation:{status:'blocked'}}]){
+   doc=attachmentDoc({attachmentState:'ready',attachmentPurpose:purpose,targetId:'parent',attachmentExpiresAt:undefined,objectVersionId:'version',...patch} as any);
+   assert.equal((await service.download({id:'user-1',isAdmin:true},doc.shareId,true,true)).ok,false);
+  }
+ }
+});
+
+test('existing bound-file deletion receipts fence exact target and never reserve a missing identity',async()=>{
+ for(const purpose of ['post','comment'] as const){
+  let doc:AttachmentDoc|null=attachmentDoc({attachmentState:'ready',attachmentPurpose:purpose,targetId:'parent',attachmentExpiresAt:undefined,objectVersionId:'version',uploadId:undefined});let deletes=0;
+  const service=createAttachmentService({customMongoActive:()=>false,store:{getOwned:async()=>doc,claimDeleting:async(_owner:string,_id:string,_states:any,scope:any)=>{
+   assert.deepEqual(attachmentDeleteClaimFence(scope),{targetId:'parent',attachmentPurpose:purpose,attachmentLinked:{$ne:true},attachmentImportDraft:{$ne:true},attachmentProfileSlot:{$exists:false},updatedAt:now});assert.equal(scope.retainCancellation,true);
+   doc={...doc!,attachmentState:'deleting',attachmentCancellationRequested:true};return doc;
+  },removeDeleting:async()=>{doc=cancelledAttachmentReceipt('user-1','attachment-1',now);return true;}} as any,getS3:()=>noopS3({deleteObject:async()=>{deletes++;}})});
+  const input={id:'attachment-1',targetId:'parent',expectedUpdatedAt:now.toISOString(),retainReceipt:true};
+  assert.equal((await service.remove('user-1',{...input,targetId:'foreign'})).ok,false);
+  assert.deepEqual(await service.remove('user-1',input),{ok:true,deleted:true,deferred:false});assert.deepEqual(await service.remove('user-1',input),{ok:true,deleted:true,deferred:false});assert.equal(deletes,1);
+  doc=null;const missing=await service.remove('user-1',input);assert.equal(missing.ok,false);if(!missing.ok)assert.equal(missing.status,404);
+ }
 });

@@ -5955,8 +5955,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
-		contractVersion: '1.6.0',
-		featureVersion: '1.6.0',
+		contractVersion: '1.7.0',
+		featureVersion: '1.7.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
@@ -5973,9 +5973,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Optionally send expectedUpdatedAt from the current Thing read. A stale version returns 409 before claiming deletion, including a concurrent edit between read and claim.',
 			'After deletion is claimed, retrying resumes cleanup even if its lifecycle timestamp advanced. A deferred response includes retryAt; storage remains charged until cleanup is verified. Missing rows are idempotent success, not a durable cancellation fence against a delayed upload start.',
 			'For a standalone file created by an upload request, include requestId and expectedUpdatedAt with its canonical id, without targetId. This full-user mode returns deleted:true only after retaining a private accounted replay fence, including an already-missing file. Stale live versions still return 409; pending, finalizing and bound files are refused. The receipt never expires; delayed upload starts cannot recreate the deleted file.',
+			'Version 1.7.0 additionally accepts targetId with retainReceipt:true for an existing owned post/comment file. The exact live binding, purpose and version are fenced; missing IDs are never reserved. No upload request ID is invented.',
 			'Version 1.6.0 additionally accepts requestId, expectedUpdatedAt and targetId for post/comment upload removal. It fences owner, exact target (or still-unbound draft), purpose and version while retaining the same durable receipt. Finish any uncertain parent write before requesting removal. Other bound purposes and linked/import/profile assets remain excluded.',
 			'Version 1.5.0 extends durable request-ID and retainReceipt deletion to standalone recordings, preserving purpose-specific claim fences. Bound media, linked/import drafts and profile assets stay excluded.',
-			'For an existing saved standalone file whose upload requestId is unavailable, send retainReceipt:true and expectedUpdatedAt with its canonical id (attachment-delete 1.4.0). This full-user mode retains the same durable receipt, but never reserves a missing ID. Missing/foreign IDs return 404; linked files, expiring import drafts and bound files are refused. Do not send requestId or targetId with retainReceipt. A lost response can replay the identical request; an unconfirmed concurrent legacy removal returns 503 without deleted:true.',
+			'For an existing saved standalone file whose upload requestId is unavailable, send retainReceipt:true and expectedUpdatedAt with its canonical id (attachment-delete 1.4.0). This full-user mode retains the same durable receipt, but never reserves a missing ID. Missing/foreign IDs return 404; linked files, expiring import drafts and bound files are refused. Do not send requestId with retainReceipt; targetId requires the post/comment contract in 1.7.0. A lost response can replay the identical request; an unconfirmed concurrent legacy removal returns 503 without deleted:true.',
 			'Retry a temporary 503 with the identical request; the source row stays charged until S3 deletion succeeds.'
 		],
 		requestExamples: [
@@ -5996,16 +5997,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		// 1.14.0: owner retention includes standalone recordings and a file.purpose discriminator.
-		contractVersion: '1.14.0',
-		featureVersion: '1.14.0',
+		// 1.15.0: owner retention includes exact post/comment target bindings.
+		contractVersion: '1.15.0',
+		featureVersion: '1.15.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Version 1.15.0: cache=retain also admits owned, durably bound post/comment originals and returns file.targetId. Revalidate the parent and atomically admit its complete binding before enabling local editing. Other bound purposes remain excluded. ' +
 			'Version 1.14.0: cache=retain also admits owned durable standalone recordings and returns file.purpose (file or recording). Purpose is preserved in local exports, uploads and deletion receipts. Existing moderation, scope, expiry, object-version and 16 MiB gates still apply. ' +
-			'Same-origin full users can request cache=retain&download=1 for an owned saved standalone file up to 16 MiB. This returns only public metadata, owner identity, observed version, folder placement and an opaque byte cache key for an explicit account-scoped device copy. Shared roots/keys, import drafts, linked/bound files and blocked media never grant retention. No signed URL or storage key is returned. Ordinary media cache validation still reauthorizes every read. ' +
+			'Same-origin full users can request cache=retain&download=1 for an owned saved standalone file up to 16 MiB. This returns only public metadata, owner identity, observed version, folder placement and an opaque byte cache key for an explicit account-scoped device copy. Shared roots/keys, import drafts, linked files, unsupported bound purposes and blocked media never grant retention. No signed URL or storage key is returned. Ordinary media cache validation still reauthorizes every read. ' +
 			'Standalone file-purpose attachments use the same exact-owner access checks as saved recordings, including moderation, object-version and storage gates. ' +
 			'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Unlisted post/page/comment media opens by canonical attachment id without a secret key. Current parent ACL, moderation and storage gates are rechecked on every request. Saved profile discoveries remain tied to the account or anonymous browser identity; IP metadata never grants access. ' +
