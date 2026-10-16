@@ -48,6 +48,9 @@ test('transport pins account and database on reads and writes and retires mismat
   await transport.remove!({ id: 'thing', operationId: 'delete', version: 1, method: 'delete', body: { id: 'thing', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' } }, new AbortController().signal);
   assert.equal(calls.at(-1).init.method, 'DELETE');
   assert.equal(JSON.parse(calls.at(-1).init.body).expectedUpdatedAt, '2026-01-01T00:00:00.000Z');
+  const beforeBoundDelete=calls.length;
+  await assert.rejects(transport.files.remove!({id:'file',requestId:'request',targetId:'post',expectedUpdatedAt:'2026-10-17T00:00:00Z'},new AbortController().signal),/incompatible/);
+  assert.equal(calls.length,beforeBoundDelete);
   await transport.export({ ids: ['thing'] }, new AbortController().signal);
   assert.equal(calls.at(-1).url, '/api/v1/things/export'); assert.equal(calls.at(-1).init.method, 'POST');
   await transport.fork({ id: 'thing' });

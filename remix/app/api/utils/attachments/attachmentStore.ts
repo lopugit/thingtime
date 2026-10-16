@@ -120,9 +120,9 @@ type LinkedReadyInput = {
 };
 
 export type AttachmentDeleteClaimScope = (
-	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date; retainCancellation?: true; standalonePurpose?: 'file' | 'recording' }
+	| { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date; standalonePurpose?: 'file' | 'recording' }
 	| { kind: 'target'; targetId: string }
-) & { expectedUpdatedAt?: Date };
+) & { expectedUpdatedAt?: Date; retainCancellation?: true; contentPurpose?: 'post' | 'comment' };
 export type AttachmentDraftDeleteClaimScope = Extract<AttachmentDeleteClaimScope, { kind: 'draft' }>;
 
 export const attachmentDeleteClaimFence = (scope: AttachmentDeleteClaimScope): Record<string, unknown> => {
@@ -138,6 +138,7 @@ export const attachmentDeleteClaimFence = (scope: AttachmentDeleteClaimScope): R
 			} : {}),
 			...(scope.expiredAtOrBefore ? { attachmentExpiresAt: { $lte: scope.expiredAtOrBefore } } : {})
 		}),
+		...(scope.contentPurpose ? { attachmentPurpose: scope.contentPurpose, attachmentLinked: { $ne: true }, attachmentImportDraft: { $ne: true }, attachmentProfileSlot: { $exists: false } } : {}),
 		...(scope.expectedUpdatedAt ? { updatedAt: scope.expectedUpdatedAt } : {})
 	};
 };
@@ -647,7 +648,7 @@ export const attachmentStore: AttachmentStore = {
 			uploadId: { $exists: false },
 			objectVersionId: { $exists: false }
 		};
-		return (scope.kind === 'draft' && scope.retainCancellation
+		return (scope.retainCancellation
 			? await things.findOneAndUpdate(retryFilter as any, { $set: { attachmentCancellationRequested: true } }, { returnDocument: 'after' })
 			: await things.findOne(retryFilter as any)) as any as AttachmentDoc | null;
 	},
@@ -676,7 +677,7 @@ export const attachmentStore: AttachmentStore = {
 						{
 							$set: {
 								attachmentState: 'deleting',
-								...(scope.kind === 'draft' && scope.retainCancellation ? { attachmentCancellationRequested: true } : {}),
+								...(scope.retainCancellation ? { attachmentCancellationRequested: true } : {}),
 								attachmentExpiresAt: {
 									$cond: [{ $eq: [{ $type: '$attachmentPartsIssuedAt' }, 'date'] }, attachmentMpuSettlementAt(now), attachmentDeletingRetryAt(now)]
 								},
@@ -697,7 +698,7 @@ export const attachmentStore: AttachmentStore = {
 			...attachmentDeleteClaimFence({ ...scope, expectedUpdatedAt: undefined }),
 			attachmentState: 'deleting'
 		};
-		return (scope.kind === 'draft' && scope.retainCancellation
+		return (scope.retainCancellation
 			? await things.findOneAndUpdate(retryFilter as any, { $set: { attachmentCancellationRequested: true } }, { returnDocument: 'after' })
 			: await things.findOne(retryFilter as any)) as any as AttachmentDoc | null;
 	},

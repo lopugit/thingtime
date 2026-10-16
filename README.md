@@ -4702,6 +4702,9 @@ set `TT_LOCAL_BOUND_MEDIA_URL=http://127.0.0.1:<preview-port>`,
 fixture, Playwright and Chrome variables used by the local file-sync tests, then
 run `node --import tsx --test app/local-workspace/accountBoundMedia.browser.test.ts`
 from `remix/`. The test accepts loopback origins only and grants upload scope only
-to its newly registered test user. Follow the local attachment-storage setup above;
+to its newly registered test user. It also removes post/comment images offline,
+reloads, and deliberately loses a real deletion response to verify identical
+retry, private receipt retention and refusal of a delayed upload replay.
+Follow the local attachment-storage setup above;
 never point this fixture at production or provide an existing user account.
 See [remaining local-workspace acceptance](docs/local-workspaces.md).

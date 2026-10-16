@@ -5955,8 +5955,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-delete',
-		contractVersion: '1.5.0',
-		featureVersion: '1.5.0',
+		contractVersion: '1.6.0',
+		featureVersion: '1.6.0',
 		group: 'attachments',
 		title: 'Delete attachment',
 		endpoint: '/api/v1/attachments/delete',
@@ -5973,6 +5973,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Optionally send expectedUpdatedAt from the current Thing read. A stale version returns 409 before claiming deletion, including a concurrent edit between read and claim.',
 			'After deletion is claimed, retrying resumes cleanup even if its lifecycle timestamp advanced. A deferred response includes retryAt; storage remains charged until cleanup is verified. Missing rows are idempotent success, not a durable cancellation fence against a delayed upload start.',
 			'For a standalone file created by an upload request, include requestId and expectedUpdatedAt with its canonical id, without targetId. This full-user mode returns deleted:true only after retaining a private accounted replay fence, including an already-missing file. Stale live versions still return 409; pending, finalizing and bound files are refused. The receipt never expires; delayed upload starts cannot recreate the deleted file.',
+			'Version 1.6.0 additionally accepts requestId, expectedUpdatedAt and targetId for post/comment upload removal. It fences owner, exact target (or still-unbound draft), purpose and version while retaining the same durable receipt. Finish any uncertain parent write before requesting removal. Other bound purposes and linked/import/profile assets remain excluded.',
 			'Version 1.5.0 extends durable request-ID and retainReceipt deletion to standalone recordings, preserving purpose-specific claim fences. Bound media, linked/import drafts and profile assets stay excluded.',
 			'For an existing saved standalone file whose upload requestId is unavailable, send retainReceipt:true and expectedUpdatedAt with its canonical id (attachment-delete 1.4.0). This full-user mode retains the same durable receipt, but never reserves a missing ID. Missing/foreign IDs return 404; linked files, expiring import drafts and bound files are refused. Do not send requestId or targetId with retainReceipt. A lost response can replay the identical request; an unconfirmed concurrent legacy removal returns 503 without deleted:true.',
 			'Retry a temporary 503 with the identical request; the source row stays charged until S3 deletion succeeds.'

@@ -77,7 +77,43 @@ test('native account media saves offline and binds exact private bytes after ver
   const ordered=await context.request.patch(url('/api/v1/things'),{headers,data:{id,expectedUpdatedAt:read.thing.updatedAt,crystal:{text},attachmentIds:reversed}});assert.equal(ordered.status(),200,await ordered.text());
   read=await(await context.request.get(url('/api/v1/things?id='+id))).json();assert.deepEqual(read.post.attachments.map((file:any)=>file.id),reversed);
   await page.reload();await page.getByText(text,{exact:true}).waitFor();await page.getByRole('button',{name:'View offline-portrait.png',exact:true}).scrollIntoViewIfNeeded();await image.waitFor();await image.evaluate((img:HTMLImageElement)=>img.decode());assert.deepEqual(errors,[]);
-  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({offlineCommentMedia:true,commentId,atomicAttachmentEdit:true,offlineNativeMedia:true,exactBytes:true,anonymousReadDenied:true,uploads:uploads.length,coldReload:true,privateSync:true,canonicalRichText:true,stableId:id,viewports:[1440,390,320],offlineWrites:writes,errors},null,2));
+  await page.getByRole('region',{name:'Account file sync',exact:true}).waitFor({state:'detached'});
+  const removedIds=[result.post.attachments.find((file:any)=>file.name==='second-portrait.png').id,comment.post.attachments[0].id];
+  offline=true;await context.setOffline(true);
+  for(const [target,name,body] of [[id,'second-portrait.png',text],[commentId,'reply-portrait.png',commentText]]){
+   await page.goto(url('/post/'+target));await page.getByText(body,{exact:true}).waitFor();
+   await page.getByRole('button',{name:'Post options',exact:true}).first().click();
+   await page.getByText('Edit',{exact:true}).click();
+   await page.getByRole('button',{name:'Delete '+name,exact:true}).click();
+   await page.getByRole('region',{name:'Account file sync',exact:true}).waitFor();
+   await page.reload();await page.getByText(body,{exact:true}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'View '+name,exact:true}).count(),0);
+   await page.getByText(body,{exact:true}).scrollIntoViewIfNeeded();
+   await page.evaluate(async()=>{await document.fonts.ready;await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),320);
+   if(artifacts)await page.screenshot({animations:'disabled',path:resolve(artifacts,target===id?'removed-post-320.png':'removed-comment-320.png')});
+  }
+  assert.deepEqual(writes,[]);
+  const deletions:any[]=[];let lost=false;
+  await page.route('**/api/v1/attachments/delete',async(route:any)=>{
+   if(route.request().method()!=='POST')return route.continue();
+   const body=route.request().postDataJSON();deletions.push(body);const response=await route.fetch();
+   if(!lost&&response.status()===200){lost=true;return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,error:'Simulated lost receipt'})});}
+   return route.fulfill({response});
+  });
+  offline=false;await context.setOffline(false);await page.reload();
+  await page.getByText(commentText,{exact:true}).waitFor();
+  for(let attempt=0;attempt<100&&deletions.length<3;attempt++)await page.waitForTimeout(500);
+  await page.getByRole('region',{name:'Account file sync',exact:true}).waitFor({state:'detached',timeout:60000});
+  assert.equal(lost,true);assert.ok(deletions.length>=3);
+  const first=deletions[0],retries=deletions.filter(row=>row.id===first.id);assert.ok(retries.length>=2);for(const retry of retries)assert.deepEqual(retry,first);
+  for(const fileId of removedIds)assert.equal((await context.request.get(url('/api/v1/attachments/content?id='+fileId))).status(),404);
+  const retainedPost=await(await context.request.get(url('/api/v1/things?id='+id))).json();assert.equal(retainedPost.post.attachments.length,1);assert.equal(retainedPost.thing.crystal.text,text);
+  const retainedComment=await(await context.request.get(url('/api/v1/things?id='+commentId))).json();assert.equal(retainedComment.post.attachments.length,0);assert.equal(retainedComment.thing.crystal.text,commentText);
+  const replay=await context.request.post(url('/api/v1/attachments/uploads'),{headers,data:{requestId:first.requestId,filename:'late.png',contentType:'image/png',sizeBytes:png.length,purpose:first.targetId===id?'post':'comment'}});
+  assert.equal(replay.status(),409);assert.equal((await replay.json()).code,'upload_cancelled');
+  await page.unroute('**/api/v1/attachments/delete');assert.deepEqual(errors,[]);
+  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({offlineBoundRemoval:true,durableDeletionReplay:true,offlineCommentMedia:true,commentId,atomicAttachmentEdit:true,offlineNativeMedia:true,exactBytes:true,anonymousReadDenied:true,uploads:uploads.length,coldReload:true,privateSync:true,canonicalRichText:true,stableId:id,viewports:[1440,390,320],offlineWrites:writes,errors},null,2));
  }catch(error){if(artifacts){await page.screenshot({path:resolve(artifacts,'failure.png')}).catch(()=>{});await writeFile(resolve(artifacts,'failure.json'),JSON.stringify({body:await page.locator('body').innerText().catch(()=>''),errors,writes,uploads},null,2));}throw error;}
  finally{await context.setOffline(false).catch(()=>{});if(id)await context.request.delete(url('/api/v1/things'),{headers,data:{id}}).catch(()=>{});await browser.close();}
 });

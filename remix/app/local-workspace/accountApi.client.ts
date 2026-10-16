@@ -418,8 +418,9 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			remove: async (input: { id: string; targetId?: string }) => {
 				const id = await fileAlias(input.id);
 				if (id === undefined) return online.attachments.remove(input);
-				if (Object.keys(input).some(key => key !== 'id')) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Remove bound media through its owning editor.');
+				if (Object.keys(input).some(key => !['id','targetId'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Invalid file removal request.');
 				if (id) {
+					if (input.targetId !== undefined) { await worker().files.removeBound(id, input.targetId); changed(); return { ok: true, savedLocally: true }; }
 					const file = await worker().files.things.get(id);
 					if (file && isLocalAttachment(file) && ['post','comment'].includes(file.localAttachment.purpose)) { await worker().files.discardSelection(id); changed(); return { ok: true, savedLocally: true }; }
 					if (await worker().files.remoteId(id)) await worker().files.remove(id); else await worker().files.cancel(id); changed(); }

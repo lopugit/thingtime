@@ -53,7 +53,7 @@ export type AccountFileRetentionTransport = {
 	bytes(id: string, cacheKey: string, size: number, signal: AbortSignal): Promise<Uint8Array>;
 };
 export type AccountFileTransport = {
-	remove?(input: { id: string; expectedUpdatedAt: string } & ({ requestId: string; retainReceipt?: never } | { retainReceipt: true; requestId?: never }), signal: AbortSignal): Promise<{ deleted: true; deferred: boolean; retryAt?: string }>;
+	remove?(input: { id: string; expectedUpdatedAt: string } & ({ requestId: string; targetId?: string; retainReceipt?: never } | { retainReceipt: true; requestId?: never }), signal: AbortSignal): Promise<{ deleted: true; deferred: boolean; retryAt?: string }>;
 	cancel?(requestId: string, signal: AbortSignal): Promise<{ cancelled: true; deferred: boolean; retryAt?: string }>;
 	start(request: Readonly<AccountFileRequest>, signal: AbortSignal): Promise<AccountFilePlan>;
 	parts(id: string, parts: { partNumber: number; checksumSha256: string }[], signal: AbortSignal): Promise<SignedUploadPart[]>;
@@ -117,6 +117,7 @@ export class AccountFileSync {
 			this.lease.assertCurrent();
 			const records = new Map((await tx.list<FileRecord>(COLLECTION)).map(({ value }) => [value.id, value]));
 			const isPost = row.thingtime.includes('post');
+			if (isPost && [...records.values()].some(file => file.deleteRequested && !file.cancelled && file.deletingLocal?.targetId === row.id)) return null;
 			const bound = isPost ? (await tx.list<LocalAttachment>('things')).map(item => item.value).filter(file => isLocalAttachment(file) && file.targetId === row.id).sort((a,b) => a.localAttachment.order - b.localAttachment.order) : [];
 			for (const file of bound) if (!records.has(file.id)) throw new WorkspaceError('MISSING_UPLOAD', 'A post file has no matching account upload intent.', 409);
 			const used = new Set([...bound.map(file => file.id), ...[...compositionAttachmentIds(row.thingtime, row.crystal)].filter(id => records.has(id))]);
@@ -332,6 +333,22 @@ export class AccountFileSync {
 			await this.putRecord(tx, { ...row, deleteRequested: true, deletingLocal: local, state: 'pending', claim: undefined, error: undefined, retryAt: 0 });
 		});
 	}
+	/** Removing bound content finishes on this device. A pending immutable post
+	 * write may still mention the file, so the upload/deletion worker settles
+	 * that write before deleting the account object and releasing recovery bytes. */
+	async removeBound(id: string, targetId: string) {
+		await this.tx('readwrite', async tx => {
+			const record = await tx.get<FileRecord>(COLLECTION, id);
+			if (!record || !['post','comment'].includes(record.request.purpose)) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching post file.', 404);
+			if (record.cancelled) return;
+			if (record.deleteRequested) { if (record.deletingLocal?.targetId !== targetId) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409); return; }
+			const local = await tx.get<LocalAttachment>('things', id), parent = await tx.get<LocalThing>('things', targetId);
+			if (!local || local.targetId !== targetId || local.localAttachment.draftId || !parent?.thingtime.includes('post')) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409);
+			if (record.started === false && !record.remote && !record.claim) return this.finishCancellation(tx, record);
+			await tx.delete('things', id);
+			await this.putRecord(tx, { ...record, deleteRequested: true, deletingLocal: local, state: record.claim ? record.state : 'pending', error: undefined, retryAt: 0 });
+		});
+	}
 	async inspectDeletion(transport: FileMetadataTransport, id: string, signal = new AbortController().signal) {
 		const row = await this.tx('readonly', tx => tx.get<FileRecord>(COLLECTION, id));
 		if (!row?.deleteRequested || row.state !== 'conflict' || !row.remote || !row.deletingLocal)
@@ -354,6 +371,7 @@ export class AccountFileSync {
 				await this.putRecord(tx, { ...row, deleteVersion: choice.remoteUpdatedAt, state: 'pending', claim: undefined, retryAt: 0, error: undefined });
 			} else {
 				const local = row.deletingLocal;
+				if (local.targetId && !await tx.get('things', local.targetId)) throw new WorkspaceError('MISSING_PARENT', 'Restore the owning post before keeping this file.', 409);
 				await this.putRecord(tx, { ...row, deleteRequested: undefined, deletingLocal: undefined, deleteVersion: undefined, state: 'synced', claim: undefined, retryAt: 0, error: undefined });
 				await tx.put('things', row.id, local);
 			}
@@ -394,7 +412,8 @@ export class AccountFileSync {
 					// Editor selections are device drafts. Submission binds them locally;
 					// only then may this queue create an account upload. Once started,
 					// finish the same request even if a newer editor removes the file.
-					if (value.started === false && ['post','comment'].includes(value.request.purpose)) {
+					if (value.deleteRequested && value.deletingLocal?.targetId && (await tx.get<any>('thing-sync', value.deletingLocal.targetId))?.pending) continue;
+					if (!value.deleteRequested && value.started === false && ['post','comment'].includes(value.request.purpose)) {
 						const local = await tx.get<LocalAttachment>('things', value.id);
 						if (!local?.targetId) continue;
 					}
@@ -440,7 +459,7 @@ export class AccountFileSync {
 			};
 			let phase = claimed.phase;
 			try {
-				if (claimed.deleteRequested) {
+				if (claimed.deleteRequested && claimed.remote) {
 					if (!transport.remove || !transport.get || !claimed.remote || !claimed.deletingLocal)
 						throw new WorkspaceError('DELETION_UNAVAILABLE', 'The account cannot confirm file deletion yet.', 503);
 					let expectedUpdatedAt = claimed.deleteVersion;
@@ -462,7 +481,7 @@ export class AccountFileSync {
 					if (claimed.source !== 'account' && !claimed.request.requestId) throw new WorkspaceError('INVALID_DELETION', 'The file deletion identity is missing.', 409);
 					const deletion: Parameters<NonNullable<AccountFileTransport['remove']>>[0] = claimed.source === 'account'
 						? { id: claimed.remote.id, expectedUpdatedAt, retainReceipt: true }
-						: { id: claimed.remote.id, expectedUpdatedAt, requestId: claimed.request.requestId! };
+						: { id: claimed.remote.id, expectedUpdatedAt, requestId: claimed.request.requestId!, ...(claimed.deletingLocal.targetId ? { targetId: claimed.deletingLocal.targetId } : {}) };
 					const result = await run(() => transport.remove!(deletion, controller.signal));
 					if (result?.deleted !== true || typeof result.deferred !== 'boolean') throw new WorkspaceError('INVALID_DELETION', 'The account did not confirm durable deletion.', 502);
 					await this.tx('readwrite', async tx => {
@@ -485,7 +504,9 @@ export class AccountFileSync {
 					});
 					completed++; continue;
 				}
-				const { row, bytes } = await this.things.readFile(claimed.id, controller.signal);
+				const { row, bytes } = claimed.deleteRequested && claimed.deletingLocal
+					? await this.tx('readonly', async tx => { const bytes = await tx.getBytes(claimed.id); if (!bytes) throw new WorkspaceError('MISSING_LOCAL_FILE', 'Recovery bytes are missing.', 404); return { row: claimed.deletingLocal!, bytes }; }, controller.signal)
+					: await this.things.readFile(claimed.id, controller.signal);
 				if (
 					row.localAttachment.sha256 !== claimed.sha256 ||
 					bytes.length !== claimed.request.sizeBytes ||
@@ -561,7 +582,7 @@ export class AccountFileSync {
 					throw new WorkspaceError('UPLOAD_IDENTITY', 'The completed file did not match this upload.', 409);
 				await this.update(current.id, token, (row) => ({
 					...row,
-					state: 'synced',
+					state: row.deleteRequested ? 'pending' : 'synced',
 					remote,
 					claim: undefined,
 					attempts: 0,
@@ -575,7 +596,7 @@ export class AccountFileSync {
 					retryPhase = phase === 'complete' ? attachmentCompleteRetryPhase(error) : null;
 				await this.update(claimed.id, token, (row) => ({
 					...row,
-					state: row.deleteRequested && status === 409 ? 'conflict' : [400, 401, 403, 404, 410, 413, 422].includes(status) || (status === 409 && (error as any)?.retryable !== true) ? 'error' : 'pending',
+					state: row.deleteRequested && !!row.remote && status === 409 ? 'conflict' : [400, 401, 403, 404, 410, 413, 422].includes(status) || (status === 409 && (error as any)?.retryable !== true) ? 'error' : 'pending',
 					claim: undefined,
 					attempts: row.attempts + 1,
 					retryAt: this.now() + Math.max(Math.min(60_000, 1000 * 2 ** Math.min(row.attempts, 6)), Number((error as any)?.retryAfterMs) || 0),

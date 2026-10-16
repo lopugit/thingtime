@@ -302,3 +302,18 @@ the same docs entry. Tests: `accountBoundMedia.test.ts`, opt-in
 `accountBoundMedia.browser.test.ts`, workspace/attachments/Things/capability suites.
 See the [binding checkpoint](../local-workspaces.md#account-post-file-admission-and-binding--2026-10-17)
 for explicit remaining coverage.
+
+
+## Offline removal of authored post/comment files
+
+`AccountFileSync.removeBound` atomically hides device media and preserves deletion
+intent/recovery bytes. `accountApi.client.ts` routes the normal editor removal and
+idempotent retries directly to that operation; it never waits for draft saving.
+`contentHooks.prepare` and the file worker order deletion against immutable parent
+writes. Delete 1.6.0 negotiates request-ID + target + version cleanup through the
+existing attachment service/store, retaining a private cancellation receipt.
+Run workspace, attachment, Things and capability suites plus the enabled
+`accountBoundMedia.browser.test.ts`. Cover lost upload/delete responses, wrong
+target/purpose, concurrent edits, full quota and cold offline reload; existing
+remote bound-file retention/import remain separate gates. See the
+[checkpoint](../local-workspaces.md#account-post-and-comment-file-removal--2026-10-17).

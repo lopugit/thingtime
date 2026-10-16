@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Native post/comment media removal now commits
+  offline and retries verified account cleanup with durable cancellation receipts.
+  Delete 1.6.0 fences target/purpose/version; local bytes survive ambiguous replies
+  and conflicts. Local browser evidence and remaining merge gates are in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-post-and-comment-file-removal--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Account post/comment media now stages device bytes
   before upload and binds submitted content through confirmed file receipts.
   Attachment order/additions share the normal conditional post transaction;

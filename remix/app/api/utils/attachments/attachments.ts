@@ -1277,8 +1277,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			}
 			if ('requestId' in raw) {
 				const requestId = normalizeId(raw.requestId);
-				if (!requestId || !expectedUpdatedAt || raw.targetId !== undefined || attachmentIdForRequest(ownerId, requestId) !== id)
-					return fail(400, 'Durable file deletion requires the matching upload request id and expectedUpdatedAt, without targetId');
+				if (!requestId || !expectedUpdatedAt || attachmentIdForRequest(ownerId, requestId) !== id)
+					return fail(400, 'Durable file deletion requires the matching upload request id and expectedUpdatedAt');
 				if (dependencies.customMongoActive()) return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 				// Reserve absence as well as existing uploads. A missing row alone is
 				// not proof against a delayed replay of the original start request.
@@ -1287,9 +1287,18 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					try { reserved = await dependencies.store.reserveCancellation(ownerId, id); }
 					catch (error) { if (Number((error as any)?.code) === 11000) continue; throw error; }
 					if (reserved.attachmentState === 'cancelled') return { ok: true, deleted: true, deferred: false };
-					if (reserved.targetId || !isStandaloneAttachmentPurpose(reserved.attachmentPurpose) || reserved.attachmentLinked || reserved.attachmentImportDraft || reserved.attachmentProfileSlot || (reserved.attachmentState === 'ready' && reserved.attachmentExpiresAt) || !['ready', 'deleting'].includes(reserved.attachmentState))
+					const contentPurpose = reserved.attachmentPurpose === 'post' || reserved.attachmentPurpose === 'comment' ? reserved.attachmentPurpose : undefined;
+					const eligible = targetId ? !!contentPurpose && (!reserved.targetId || reserved.targetId === targetId)
+						: !reserved.targetId && isStandaloneAttachmentPurpose(reserved.attachmentPurpose) && !(reserved.attachmentState === 'ready' && reserved.attachmentExpiresAt);
+					if (!eligible || reserved.attachmentLinked || reserved.attachmentImportDraft || reserved.attachmentProfileSlot || !['ready', 'deleting'].includes(reserved.attachmentState))
 						return fail(409, 'This upload must finish or be removed through its owning surface');
-					const result = await remove(ownerId, { id, expectedUpdatedAt: raw.expectedUpdatedAt }, { retainCancellation: true });
+					if (reserved.attachmentState !== 'deleting' && reserved.updatedAt.getTime() !== expectedUpdatedAt.getTime()) return fail(409, 'Attachment changed; refresh before deleting');
+					// A content-file receipt fences the exact target and immutable purpose
+					// in the same cleanup claim. Unbound ready uploads may be discarded
+					// before their local parent ever synchronizes.
+					const result = targetId ? cleanupResponse(await cleanupClaimedDoc(() => dependencies.getS3(), reserved, {
+						...(reserved.targetId ? { kind: 'target' as const, targetId } : { kind: 'draft' as const }), contentPurpose, expectedUpdatedAt, retainCancellation: true
+					})) : await remove(ownerId, { id, expectedUpdatedAt: raw.expectedUpdatedAt }, { retainCancellation: true });
 					if (!result.ok) return result;
 					const receipt = await dependencies.store.getById(id);
 					if (receipt?.ownerId === ownerId && receipt.attachmentCancellationRequested && ['cancelled', 'deleting'].includes(receipt.attachmentState))

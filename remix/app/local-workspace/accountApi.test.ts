@@ -14,7 +14,7 @@ test('account local facade and native page resolution work offline without uploa
  let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; return { ok: true }; };
  try {
   bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
-  const api = accountApi({ actions: { run: remote }, things: { comment: remote, create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
+  const api: any = accountApi({ actions: { run: remote }, things: { comment: remote, create: remote, update: remote, get: remote, list: remote, search: remote, bulk: remote, import: remote, export: remote, fork: remote } }, { id: scope.ownerId }, scope.dataPlane);
   const component: any = await api.things.create({ thingtime: ['component'], crystal: { name: 'Card', componentKey: 'card', version: 1, render: { tag: 'p', children: 'Locally rendered' } } } as any);
   const page: any = await api.things.create({ thingtime: ['webpage'], crystal: { name: 'Offline page', blocks: [{ id: 'card', type: 'component', component: 'card' }] } } as any);
   const resolved = await resolveAccountWebpage(scope, { kind: 'id', id: page.id });
@@ -95,6 +95,13 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal((await api.things.list({target:authored.id,thingtime:'comment',commentProjection:true}) as any).comments.length,1,'unsupported requests do not create partial local comments');
   const importedPost: any = await api.things.import({ manifest: { format: 'thingtime.transfer', version: 1, roots: ['post'], things: [{ id: 'post', thingtime: ['post'], crystal: { type: 'text', text: 'Offline imported post' } }], files: [] } });
   assert.equal((await api.things.get({ id: importedPost.roots[0] }) as any).post.text, 'Offline imported post');
+  const selected = await api.attachments.saveLocalFile({ requestId: crypto.randomUUID(), name: 'remove.png', contentType: 'image/png', bytes: new Uint8Array([1, 2, 3]), purpose: 'post' });
+  const withMedia: any = await api.things.create({ type: 'text', text: 'Keep the post', attachmentIds: [selected.attachment.id] } as any);
+  await assert.rejects(api.attachments.remove({ id: selected.attachment.id, targetId: 'wrong-post' }), /owning editor/);
+  await api.attachments.remove({ id: selected.attachment.id, targetId: withMedia.id });
+  await api.attachments.remove({ id: selected.attachment.id, targetId: withMedia.id });
+  assert.equal((await api.things.get({ id: withMedia.id }) as any).post.attachments.length, 0);
+  assert.equal(remoteCalls, 1, 'repeated native removal completes locally without account or draft requests');
   rootIdentity.changed(); bindLocalWorkspace(true, rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
   await assert.rejects(api.things.create({ thingtime: ['data'], crystal: {} } as any), /workspace changed/i);
   await assert.rejects(api.things.get({ id: page.id, key: 'old-key' } as any), /workspace changed/i);

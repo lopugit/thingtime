@@ -10812,7 +10812,7 @@ Run `app/local-workspace/components.browser.test.ts` with
   reordering preserve bytes and immutable request identity. Export the local post
   and validate its file closure. Tests: `accountBoundMedia.test.ts` and the opt-in
   `accountBoundMedia.browser.test.ts` with README's loopback fixture settings.
-- [ ] Finish bound-file removal/deletion, conflict reconciliation, retained remote
+- [ ] Finish binding reconciliation, parent deletion, retained remote
   bound files, import, and complete native comment/media/identity acceptance before
   considering the full local-first merge gate satisfied.
 
@@ -10825,3 +10825,24 @@ Run `app/local-workspace/components.browser.test.ts` with
   own and descendant file IDs while recoverable device bytes remain intact.
 - A client must refuse attachment PATCH writes before transport when the origin
   advertises `api.things-update` older than 1.11.0.
+
+
+### Offline removal of authored account post/comment files
+
+- [x] Remove an image from each native post/comment editor offline; reload and
+  verify text survives, removed images stay absent and no mutation request runs.
+  Inspect the 320px view, with the content scrolled into view before capture.
+- [x] Reconnect, lose a successful deletion response, and require an identical
+  retry before the sync indicator clears. Verify original bytes return 404 and
+  the original upload request cannot recreate them (`upload_cancelled`). Wait for
+  actual deletion requests; an initially absent status indicator is not completion.
+- [x] Repeat local removal after its file row is gone. The native facade must use
+  the retained intent and return success without a network or draft request.
+- [x] Remove before upload starts, after uncertain start, and while an immutable
+  parent write is pending. Cancel locally or settle the original request in order;
+  never release bytes or create a new upload identity to hide uncertainty.
+- [x] Wrong target/purpose, linked/import/profile files, stale versions and a
+  racing cleanup claim must not delete bytes. Account metadata conflicts require
+  review; stale reviews fail, and keeping the file restores exact bytes at quota.
+- [ ] Complete remote bound-file retention/import, parent deletion and broader
+  account/device reconciliation before treating the full merge gate as passed.

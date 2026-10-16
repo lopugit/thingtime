@@ -2615,7 +2615,7 @@ test('durable file deletion refuses mismatched identities, unfinished/bound file
 		getS3: () => { throw Error('Must not touch storage'); }
 	});
 	const input = { id, requestId, expectedUpdatedAt: now.toISOString() };
-	for (const patch of [{ requestId: 'wrong' }, { requestId: null }, { expectedUpdatedAt: undefined }, { targetId: 'post' }, { id: 'wrong' }]) {
+	for (const patch of [{ requestId: 'wrong' }, { requestId: null }, { expectedUpdatedAt: undefined }, { targetId: '' }, { id: 'wrong' }]) {
 		const result = await service.remove('user-1', { ...input, ...patch }); assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
 	}
 	assert.equal(reservations, 0);
@@ -2741,4 +2741,36 @@ test('post edit preflight admits additions alongside exact-target files without 
  assert.equal((await service.inspectForPost('user-1',['bound','new'],'post')).ok,false);
  assert.equal((await service.inspectForUpdate('user-1',['bound','new'],'post','other')).ok,false);
  assert.equal((await service.inspectForUpdate('user-1',['bound','new'],'comment','post')).ok,false);
+});
+
+
+test('post/comment deletion receipts fence the exact binding and survive lost replies and delayed starts',async()=>{
+ for(const purpose of ['post','comment'] as const) for(const bound of [true,false]){
+  const requestId='bound-removal',id=attachmentIdForRequest('user-1',requestId),targetId='post-1';
+  let doc=attachmentDoc({shareId:id,attachmentState:'ready',attachmentPurpose:purpose,objectVersionId:'exact-version',uploadId:undefined,...(bound?{targetId,attachmentExpiresAt:undefined}:{})});let deletes=0;
+  const service=createAttachmentService({customMongoActive:()=>false,now:()=>now,store:{
+   reserveCancellation:async()=>doc,getById:async()=>doc,getOwned:async()=>doc,listExpiredOwned:async()=>[],
+   claimDeleting:async(_owner:string,_id:string,_states:any,scope:any)=>{
+    assert.equal(scope.kind,bound?'target':'draft');assert.equal(scope.contentPurpose,purpose);assert.equal(scope.retainCancellation,true);
+    assert.deepEqual(attachmentDeleteClaimFence(scope),{targetId:bound?targetId:{$exists:false},attachmentPurpose:purpose,attachmentLinked:{$ne:true},attachmentImportDraft:{$ne:true},attachmentProfileSlot:{$exists:false},updatedAt:now});
+    doc={...doc,attachmentState:'deleting',attachmentCancellationRequested:true};return doc;
+   },removeDeleting:async()=>{doc=cancelledAttachmentReceipt('user-1',id,now);return true;}
+  } as any,getS3:()=>noopS3({deleteObject:async input=>{assert.equal(input.versionId,'exact-version');deletes++;}})});
+  const input={id,requestId,targetId,expectedUpdatedAt:now.toISOString()};
+  assert.deepEqual(await service.remove('user-1',input),{ok:true,deleted:true,deferred:false});
+  assert.deepEqual(await service.remove('user-1',input),{ok:true,deleted:true,deferred:false});assert.equal(deletes,1);
+  const replay=await service.start('user-1',{requestId,filename:'old.png',sizeBytes:42,purpose});assert.equal(replay.ok,false);if(!replay.ok)assert.equal(replay.code,'upload_cancelled');
+ }
+});
+
+test('content-file receipt rejects foreign targets, purposes, versions and binding races without touching bytes',async()=>{
+ const requestId='bound-refusal',id=attachmentIdForRequest('user-1',requestId),input={id,requestId,targetId:'post-1',expectedUpdatedAt:now.toISOString()};
+ let doc=attachmentDoc({shareId:id,attachmentState:'ready',attachmentPurpose:'post',targetId:'post-1',attachmentExpiresAt:undefined}),claims=0;
+ const service=createAttachmentService({customMongoActive:()=>false,store:{reserveCancellation:async()=>doc,getById:async()=>doc,claimDeleting:async()=>{claims++;doc={...doc,targetId:'other'};return null;}} as any,getS3:()=>noopS3({deleteObject:async()=>{throw Error('No bytes may be deleted');}})});
+ for(const patch of [{targetId:'other'},{attachmentPurpose:'file'},{attachmentPurpose:'message'},{attachmentLinked:true},{attachmentImportDraft:true},{attachmentProfileSlot:'avatar'},{updatedAt:new Date(now.getTime()+1)},{attachmentState:'finalizing'}]){
+  doc=attachmentDoc({shareId:id,attachmentState:'ready',attachmentPurpose:'post',targetId:'post-1',attachmentExpiresAt:undefined,...patch} as any);
+  const result=await service.remove('user-1',input);assert.equal(result.ok,false);if(!result.ok)assert.equal(result.status,409);
+ }
+ assert.equal(claims,0);doc=attachmentDoc({shareId:id,attachmentState:'ready',attachmentPurpose:'post',targetId:'post-1',attachmentExpiresAt:undefined});
+ const race=await service.remove('user-1',input);assert.equal(race.ok,false);if(!race.ok)assert.equal(race.status,409);assert.equal(claims,1);
 });

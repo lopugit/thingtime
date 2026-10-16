@@ -1802,3 +1802,42 @@ This is local verification, not current-head CI or deployed acceptance. Remainin
 work includes bound-media removal/deletion, conflict reconciliation of account
 media, existing bound-file retention and import, linked media and the rest of the
 matrix. No main merge, manual deployment or existing-account mutation occurred.
+
+
+## Account post and comment file removal — 2026-10-17
+
+The normal editor can now remove device-authored post/comment files offline.
+The local change commits independently of draft saving and hides the file on
+reload. Repeated removal returns the retained result. Files that never started
+uploading are cancelled locally; uncertain uploads resume the same request from
+recovery bytes before deletion. A pending immutable parent write settles before
+its file is deleted, while new content writes wait for that deletion to finish.
+
+`api.attachment-delete` 1.6.0 adds target-scoped durable deletion using the original
+upload request ID and observed file version. The existing cleanup claim fences
+owner, target, purpose, version and stored-file eligibility. A private cancellation
+receipt prevents a delayed upload from recreating deleted bytes. Lost replies
+retry the same request; local recovery bytes are released only after durable
+acknowledgement. Concurrent account metadata changes require review, and keeping
+the file restores its local binding and exact bytes even at the device quota.
+Authentication, same-origin, data-plane and rate-limit checks remain unchanged.
+
+Local validation: 1,054 unit/offline-shell checks pass across workspace (323),
+attachments (318), Things (320) and capability (93) suites. The 36 generic browser
+skips do not count as acceptance. The enabled production-client browser fixture
+creates private post/comment images offline, syncs exact bytes, removes one file
+from each native editor offline and reloads successfully. Reconnection includes
+a real deletion whose response is deliberately lost; the identical retry finishes,
+removed bytes return 404, remaining post/comment text survives and replaying the
+old upload request returns `upload_cancelled`. Offline mutation requests and
+browser errors are both zero. Desktop/390/320px checks pass without horizontal
+overflow; narrow removal screenshots are visually inspected. Evidence:
+`tmp/account-bound-delete-browser/` and `tmp/account-bound-delete-*.log`.
+The client build passes with 247 verified offline assets; focused lint is clean.
+Raw TypeScript retains 91 baseline diagnostics, with none in changed files.
+
+This covers removal of files authored in this device workspace. Existing remote
+bound-file retention/import, binding reconciliation, parent deletion and the
+remaining local-first matrix are still completion gates. Results are local;
+current-head CI/deployed acceptance is separate. No merge, manual deployment,
+public publishing or existing-account mutation was performed.
