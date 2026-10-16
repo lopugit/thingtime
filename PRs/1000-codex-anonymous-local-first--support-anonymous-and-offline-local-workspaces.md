@@ -774,3 +774,39 @@ functional work but failed on recovered entry-module errors. A later clean pass
 does not establish reliable startup. Storage controls, protected History,
 account sync and the full remaining matrix are still merge gates. No main merge
 or manual deployment was performed. CI and preview state are reported separately.
+
+
+## 2026-10-16 — scoped device storage controls
+
+Settings → Things now exposes device-workspace bytes/record limits and the
+browser's explicit persistence request without requiring login. Usage reads the
+existing quota ledger and key-only record count in one readonly transaction,
+scoped to anonymous or the exact account/origin/data plane. It never reads other
+partitions or origin-wide usage estimates. Invalid/missing accounting is an
+error, preserving last-known values and all saved content. Identity changes
+retire the old panel and in-flight work; offline account copies do not need
+remote confirmation to read local usage.
+
+Protection checks are passive; only clicking Protect requests eviction
+protection. Granted/denied/unsupported/failed/timed-out states are explicit,
+with late completions fenced, including protection requests after timeout. The screen explains origin-wide scope and that
+this is not a backup, and links ordinary Things export/management and History.
+No history purge, parallel export format, remote sync or auth change is added.
+
+Five new boundary tests plus the full workspace/offline-shell suites pass:
+159 checks, six opt-in browser skips. The enabled storage browser regression
+passes with actual offline emulation, cold reload, a second tab's writes,
+missing-ledger injection and repair, preserved Things, accurate browser denial,
+and no HTTP mutations or page/module errors. 1440/390/320px viewport and scroll
+widths match. Manual IAB desktop/390 layout also passes; tab/viewport cleanup
+completed. Evidence: `tmp/local-storage-controls-ui-late/` and manual captures
+in `tmp/local-storage-controls-ui/`.
+
+Build: 245 assets / 21,211,055 bytes. TypeScript: unchanged 91 diagnostics.
+Targeted lint: zero errors, one pre-existing constructor warning. These are local
+checks, separate from CI and deployment. Broader account UI sync, cross-account
+acceptance, reliable offline startup and the remaining feature matrix still gate
+merge. No main merge or manual deployment was performed.
+
+The branch review fix for a damaged Timeline view cache is included. Its library
+regression and the storage timeout boundary pass together (13 targeted checks).

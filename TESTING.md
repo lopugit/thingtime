@@ -2,6 +2,19 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Settings → Things → Device storage works without login and after a cold
+      offline reload. Import a local Thing in another tab and refresh the meter;
+      it includes local History/internal records without requesting an account.
+      A missing, malformed or count-mismatched ledger must show unavailable and
+      preserve last-known usage/content. Retry after repair must converge. Test
+      zero-byte files, quota rollback and every scope; account/origin/data-plane
+      changes retire pending reads immediately. Reading protection must never
+      call `persist()`. Explicit requests must report granted/denied/unsupported,
+      failed/timeout and stale-workspace outcomes accurately. A late `persisted()`
+      response after timeout must not start a protection request. Check desktop,
+      390/320px and normal Things/History links. Run `storageStatus.test.ts` and
+      the opt-in `storage.browser.test.ts` against a production client build.
+
 - [ ] After saving local content, find Timeline in Things and library search,
       open it, cold-reload offline, return to Things and rename a local item.
       Reload again and verify the name without a capability-manifest request.

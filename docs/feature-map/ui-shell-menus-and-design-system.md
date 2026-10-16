@@ -126,3 +126,21 @@ reuse `utils/thingTransfer/theme.ts` validation and the local import transaction
 Verify offline save/reload/apply/delete and transfer at desktop/390/320px with
 `test:local-workspace`, `test:things` and `test:theme`. Account theme sync and
 local history remain tracked in [the local coverage matrix](../local-workspaces.md).
+
+
+## Device workspace storage
+
+`Settings/ThingsSettings.tsx` includes `WorkspaceStorageSettings`, shared by the
+Settings page and drawer. `local-workspace/storageStatus.client.ts` binds only
+the active anonymous or account/origin/data-plane lease; identity invalidation
+clears old values before a new workspace renders. `WorkspaceTransaction.usage`
+reads the existing ledger and counts exact-scope keys without file-body reads.
+`storagePersistence.ts` separates passive browser protection checks from an
+explicit, bounded `StorageManager.persist()` request. No origin-wide usage
+estimate, account HTTP request or anonymous synchronization is introduced.
+Run `test:local-workspace`; `storage.browser.test.ts` uses `TT_LOCAL_STORAGE_URL`,
+`TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH` and
+`TT_LOCAL_STORAGE_ARTIFACTS` with the built local client. It verifies offline
+reload, other-tab writes, ledger failure/recovery, protection outcome and
+1440/390/320px layout. See the device-storage checkpoint in
+[local workspaces](../local-workspaces.md).

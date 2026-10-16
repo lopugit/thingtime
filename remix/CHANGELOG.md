@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Settings → Things now exposes scoped device
+  workspace usage and an explicit browser storage-protection request without
+  login. Missing accounting retains last-known values with an error; identity
+  changes retire reads. Offline reload, other-tab writes and native responsive
+  failure/recovery checks pass locally.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-16 — **Codex (AI)**: Anonymous Timeline is discoverable through the
   normal Things library and search, using a protected read projection over
   canonical local history. Cold offline rename no longer requests a server

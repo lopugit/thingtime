@@ -20,9 +20,11 @@ export type WorkspaceLease = {
 	onInvalidate(callback: () => void): () => void;
 };
 export type WorkspaceRecord<T = unknown> = { scope: string; collection: string; id: string; value: T; bytes: number };
-type Usage = { scope: string; records: number; bytes: number };
+export type WorkspaceUsage = { records: number; bytes: number };
+type Usage = WorkspaceUsage & { scope: string };
 const BINARY_COLLECTION = '@bytes';
 export type WorkspaceTransaction = {
+	usage(): Promise<WorkspaceUsage>;
 	getBytes(id: string): Promise<Uint8Array | undefined>;
 	putBytes(id: string, bytes: Uint8Array): Promise<void>;
 	deleteBytes(id: string): Promise<void>;
@@ -44,7 +46,7 @@ const validKey = (value: string) => {
 export class WorkspaceDatabase {
 	private opening: Promise<IDBDatabase> | null = null;
 	private cancelOpen: (() => void) | null = null;
-	constructor(private factory: IDBFactory, private name = 'thingtime.local-workspaces.v1', private openTimeoutMs = 10_000) {}
+	constructor(private factory: IDBFactory, private name = 'thingtime.local-workspaces.v1', private openTimeoutMs = 10_000, private keyRanges: Pick<typeof IDBKeyRange, 'bound'> = globalThis.IDBKeyRange) {}
 	private open() {
 		if (this.opening) return this.opening;
 		const opening = new Promise<IDBDatabase>((resolve, reject) => {
@@ -119,6 +121,22 @@ export class WorkspaceDatabase {
 		};
 
 		const tx: WorkspaceTransaction = {
+			usage: async () => {
+				lease.assertCurrent();
+				// Count keys only in this exact partition; never load other accounts or
+				// clone file bytes just to display a storage meter. Arrays sort after
+				// strings, so the upper key contains every collection/id in this scope.
+				const count = await request(records.count(this.keyRanges.bound([scopeKey], [scopeKey, []])));
+				const usage = await request(usageStore.get(scopeKey)) as Usage | undefined;
+				lease.assertCurrent();
+				if (!usage && count === 0) return { records: 0, bytes: 0 };
+				if (!usage || usage.scope !== scopeKey || usage.records !== count ||
+					!Number.isSafeInteger(usage.records) || usage.records < 0 || !Number.isSafeInteger(usage.bytes) || usage.bytes < 0 ||
+					(count === 0 && usage.bytes !== 0)) {
+					throw new WorkspaceError('LOCAL_ACCOUNTING_UNAVAILABLE', 'Device storage usage is unavailable. Your saved content has not been changed.', 503);
+				}
+				return { records: usage.records, bytes: usage.bytes };
+			},
 			get: async <V>(collection: string, id: string) => {
 				check(collection, id); const found = await request(records.get([scopeKey, collection, id])) as WorkspaceRecord<V> | undefined;
 				lease.assertCurrent(); return found?.value;

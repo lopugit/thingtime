@@ -1,4 +1,5 @@
 import React from 'react';
+import { WorkspaceStorageSettings } from './WorkspaceStorageSettings';
 import { Switch, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
@@ -16,6 +17,7 @@ export function ThingsSettings() {
 	const [dismissed, setDismissed] = useNodePanelPreference(user?.id);
 	return (
 		<>
+			<WorkspaceStorageSettings />
 			<SettingsSection eyebrow="This Mac" description="Your local connection and privacy access are always available here.">
 				{node.available ? (
 					<>

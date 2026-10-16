@@ -66,13 +66,13 @@ change this pointer; logout/account changes revoke it.
 
 | Area | Current evidence / required completion |
 | --- | --- |
-| Local storage and account boundaries | Unit-tested persistence, atomic rollback, concurrent edits, scope isolation and identity invalidation. Add browser multi-tab and account-switch regressions. |
+| Local storage and account boundaries | Unit-tested persistence, atomic rollback, concurrent edits, scope isolation and identity invalidation. Settings now shows scoped device usage and offers browser eviction protection without login, with offline reload, other-tab writes and failed-accounting browser checks. Finish broader multi-tab and account-switch regressions. |
 | Builder pages | Live logged-out create, text edit, save and reload verified. Component reference maps now reuse canonical selection, with export/render agreement tested for versioned aliases. Finish responsive, component UI, global/site block and interaction checks. |
 | Things and folders | Core CRUD, folder placement, cycle checks, copy/move/delete and portable text/component transfer implemented. Library text search now works across folders offline, with bounded cursor pages and visible error/retry states. Clean-browser acceptance covers 61 matches, kind filters, rename/reload and grid/list mouse selection at 1440/390/320px. The earlier checkbox report came from targeting its hidden input; clicking the visible label works, and descriptive labels/regressions now cover it. Structured/public search and remaining normal UI flows still require completion. |
 | Drafts and templates | Shared snapshot/retry/conflict/tombstone semantics implemented locally and unit-tested. Post template creation, independent media copies and reuse pass offline browser checks. Finish definition/schema recovery, other media kinds and account sync. |
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. Finish other catalog surfaces, copies, argument editing, schema forms and offline creation. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
-| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Protected-kind adapters, storage controls and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
+| Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Scoped device usage and browser protection controls are available in Settings. Protected-kind adapters and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Linked Things, cross-account/multi-tab browser acceptance and complete account sync remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
@@ -1148,3 +1148,52 @@ entry-module load errors; the final run passed. This is not a startup reliabilit
 fix. Real-device/offline startup, protected History, local storage controls,
 account sync and the rest of the matrix remain unfinished. These are local
 results, not CI or deployed acceptance. Do not merge yet.
+
+
+## Device storage settings — 2026-10-16
+
+Settings → Things now shows the current device workspace's accounted bytes and
+record count against the existing 64 MiB / 10,000-record limits. The readonly
+usage operation compares its scoped ledger with a key-only count in the same
+transaction. It does not enumerate other partitions, load file bodies, request
+account data or display browser-wide usage estimates. Missing/malformed or
+count-mismatched accounting is unavailable, never an empty-success meter;
+refresh retains the previous values with an explicit last-known label.
+
+Anonymous, account, API-origin and data-plane partitions stay separate. The
+Settings binding uses the existing workspace lease, including offline account
+copies whose remote session is unconfirmed. Identity changes hide the previous
+meter immediately and retire pending operations. Refreshes also run on local
+writes, focus and a bounded 15-second timer, with newer results winning.
+
+The explicit Protect device storage button requests the browser's standard
+origin-wide eviction protection. Merely reading settings never requests it.
+Granted, declined, unsupported, failed and timed-out results are distinct;
+late completion cannot update a retired workspace or start a protection request
+after the check has timed out. Protection is not a backup
+or protection from manually cleared site data. Normal Things export/management
+and History are linked from the same section. No content or history purge,
+new transfer format, remote sync or account permission is added.
+
+Five new tests cover logical JSON/binary/zero-byte usage, rollback, exact scope
+separation, damaged accounting without content loss, persistence results and
+late completion, missing storage APIs, immediate identity retirement and
+unconfirmed offline-account reads. The workspace/offline-shell suites pass
+159 checks (six opt-in browser skips). The enabled clean-browser storage case
+passes with actual networking disabled: import, cold Settings reload, a second
+tab's local write, refresh, injected missing ledger, retained last-known usage,
+ledger recovery and unchanged Things. The real browser declined protection and
+the UI reported that result. No HTTP mutations or page/module errors occurred;
+1440/390/320px views have matching viewport/scroll widths. Manual IAB desktop and
+390px views also passed; task tab and viewport override were cleaned up.
+
+Evidence: `tmp/local-storage-controls-ui-late/verification.json` and screenshots;
+manual screenshots are in `tmp/local-storage-controls-ui/`. Production client
+build: 245 verified assets / 21,211,055 bytes. TypeScript retains the previous
+91 diagnostics. Targeted lint has zero errors and one existing constructor
+warning. These are local results; account UI sync coverage, broader cross-account
+acceptance, offline startup reliability and the unfinished matrix still gate
+merge. Browser storage protection does not repair the known startup issue.
+
+The branch review fix for a damaged Timeline view cache is included. Its library
+regression and the storage timeout boundary pass together (13 targeted checks).
