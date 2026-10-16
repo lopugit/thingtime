@@ -1,5 +1,7 @@
 import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Stack, Text, Textarea } from '@chakra-ui/react';
+import type { FolderHost } from '~/fileSync/desktopFolders.client';
+import { getNativeBridge } from '~/utils/nativeBridge';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useDataPlane } from '~/hooks/useDataPlane';
@@ -32,15 +34,44 @@ import {
 	type ConfigurationEditorScope
 } from '~/fileSync/configurationEditor';
 
-export function MobileSyncConnections({ ownerId, deviceId, roots }: { ownerId: string; deviceId: string; roots: MobileFolder[] }) {
+type ConnectionsProps = { ownerId: string; deviceId: string; roots: MobileFolder[]; host?: FolderHost };
+export function MobileSyncConnections({ ownerId, deviceId, roots, host }: ConnectionsProps) {
 	const owner = useCurrentUser(),
 		dataPlane = useDataPlane();
 	const identity = useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
 	if (!dataPlane || owner?.id !== ownerId || identity.pending) return null;
-	const scope = { origin: window.location.origin, ownerId, dataPlane, deviceId };
-	return <Connections key={`${configurationDraftKey(scope)}:${identity.generation}`} scope={scope} generation={identity.generation} roots={roots} />;
+	const scope = { origin: host?.origin() ?? window.location.origin, ownerId, dataPlane, deviceId };
+	return (
+		<Connections
+			key={`${configurationDraftKey(scope)}:${identity.generation}`}
+			scope={scope}
+			generation={identity.generation}
+			roots={roots}
+			host={host}
+		/>
+	);
 }
-function Connections({ scope, generation, roots }: { scope: ConfigurationEditorScope; generation: number; roots: MobileFolder[] }) {
+function Connections({
+	scope,
+	generation,
+	roots,
+	host
+}: {
+	scope: ConfigurationEditorScope;
+	generation: number;
+	roots: MobileFolder[];
+	host?: FolderHost;
+}) {
+	const requestFolders = host?.request ?? requestMobileFolders;
+	const capabilities = host ? host.capabilities : getNativeBridge();
+	const runtimeOrigin = host?.origin ?? (() => window.location.origin);
+	const runtimeFetch = host?.fetch ?? fetch;
+	const requireCapability = host?.requireCapability ?? requireThingtimeCapability;
+	const authorizeDevice = async (deviceId: string, signal: AbortSignal) => {
+		if (host) return host.authorizeDevice(scope.ownerId, deviceId, signal);
+		const status = await requestMobileDevice(scope.ownerId, 'status', signal);
+		if (status.state !== 'paired' || status.deviceId !== deviceId) throw Error('Reconnect this device before transferring files.');
+	};
 	const api = useApi(),
 		apiRef = useRef(api);
 	apiRef.current = api;
@@ -92,11 +123,16 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 	const controller = useRef<AbortController | null>(null),
 		mounted = useRef(false);
 	const assertCurrent = () => {
-		if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || window.location.origin !== scope.origin)
+		if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || runtimeOrigin() !== scope.origin)
 			throw Error('The account or storage destination changed.');
 		controller.current?.signal.throwIfAborted();
 	};
-	const options = () => ({ expectedActor: scope.ownerId, expectedDataPlane: scope.dataPlane, signal: controller.current?.signal });
+	const options = () => ({
+		...(host ? { expectedApiOrigin: scope.origin } : {}),
+		expectedActor: scope.ownerId,
+		expectedDataPlane: scope.dataPlane,
+		signal: controller.current?.signal
+	});
 	const persist = (next: ConfigurationDraft | null) => {
 		assertCurrent();
 		raw.current = persistConfigurationDraft(window.localStorage, key, raw.current, next);
@@ -228,7 +264,7 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 					async () => {
 						assertActive();
 						const localTarget = ['download', 'two-way'].includes(saved.configuration.mode)
-							? await approveMobileSyncTarget(saved, syncScope, active.signal)
+							? await approveMobileSyncTarget(saved, syncScope, active.signal, requestFolders, capabilities)
 							: undefined;
 						assertActive();
 						await runForegroundCloudSync(
@@ -243,24 +279,30 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 									return value.thing;
 								},
 								authorizeDevice: async () => {
-									const status = await requestMobileDevice(scope.ownerId, 'status', active.signal);
+									await authorizeDevice(scope.deviceId, active.signal);
 									assertActive();
-									if (status.state !== 'paired' || status.deviceId !== scope.deviceId)
-										throw Error('Reconnect this device before transferring files.');
 								},
-								conditions: async () => (await requestMobileFolders(scope.ownerId, { action: 'conditions' }, active.signal)).conditions!,
+								conditions: async () => (await requestFolders(scope.ownerId, { action: 'conditions' }, active.signal)).conditions!,
 								scanLocal: async () =>
 									(
-										await requestMobileFolders(scope.ownerId, { action: 'scan', rootId: saved.configuration.localRootId }, active.signal)
+										await requestFolders(scope.ownerId, { action: 'scan', rootId: saved.configuration.localRootId }, active.signal)
 									).entries!,
-								inventory: () => readCloudFolderInventory(syncScope, saved.configuration.remoteFolderId, { currentScope, signal: active.signal }),
-								source: async (entry) => mobileFolderSource(scope.ownerId, saved.configuration.localRootId, entry, active.signal),
+								inventory: () =>
+									readCloudFolderInventory(syncScope, saved.configuration.remoteFolderId, {
+										currentScope,
+										signal: active.signal,
+										origin: runtimeOrigin,
+										fetch: runtimeFetch,
+										requireCapability
+									}),
+								source: async (entry) =>
+									mobileFolderSource(scope.ownerId, saved.configuration.localRootId, entry, active.signal, requestFolders, capabilities),
 								journal: journal!,
 								runtime: {
 									currentScope,
-									origin: () => window.location.origin,
-									fetch: (url, init) => fetch(url, init),
-									requireCapability: requireThingtimeCapability
+									origin: runtimeOrigin,
+									fetch: runtimeFetch,
+									requireCapability
 								},
 								progress: publish
 							},
@@ -338,10 +380,9 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 						return apiRef.current.v1.things.update({ id, crystal: configuration, expectedUpdatedAt, replaceCrystal: true }, options());
 					},
 					verifyDeviceRoot: async (deviceId, rootId) => {
-						const status = await requestMobileDevice(scope.ownerId, 'status', controller.current!.signal);
+						await authorizeDevice(deviceId, controller.current!.signal);
 						assertCurrent();
-						if (status.state !== 'paired' || status.deviceId !== deviceId) throw Error('Pair this device with the current account before saving.');
-						const access = await requestMobileFolders(scope.ownerId, { action: 'list' }, controller.current!.signal);
+						const access = await requestFolders(scope.ownerId, { action: 'list' }, controller.current!.signal);
 						assertCurrent();
 						if (!access.roots.some((root) => root.id === rootId))
 							throw Error('Folder access was removed. Restore access to this folder before retrying.');
@@ -398,10 +439,13 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 				const supported =
 					['upload', 'backup'].includes(saved.configuration.mode) ||
 					((downloading || twoWay) &&
-						supportsMobileFolderPublication(roots.find((root) => root.id === saved.configuration.localRootId)) &&
+						supportsMobileFolderPublication(
+							roots.find((root) => root.id === saved.configuration.localRootId),
+							capabilities
+						) &&
 						!saved.configuration.propagateDeletes);
 				const allowed =
-					supportsMobileSyncConditions() &&
+					supportsMobileSyncConditions(capabilities) &&
 					scope.dataPlane === 'home' &&
 					supported &&
 					!saved.configuration.paused &&
@@ -419,8 +463,8 @@ function Connections({ scope, generation, roots }: { scope: ConfigurationEditorS
 									? downloading || twoWay
 										? 'Downloads and two-way sync need a supported device folder and deletion propagation off'
 										: 'This direction is not available yet'
-									: !supportsMobileSyncConditions()
-									? 'Update the mobile app to transfer files'
+									: !supportsMobileSyncConditions(capabilities)
+									? 'Update this app to transfer files'
 									: twoWay
 									? 'Ready for two-way sync with folder approval'
 									: downloading

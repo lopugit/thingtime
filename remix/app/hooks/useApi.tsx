@@ -44,14 +44,19 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string };
+export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string };
 const getJson = async (url: string, options?: ThingRequestOptions) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal,
-      headers: { ...(options?.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options?.expectedActor ? { 'X-Thingtime-Expected-Actor': options.expectedActor } : {}) } });
+      ...(options?.expectedApiOrigin ? { redirect: 'error' as const, cache: 'no-store' as const } : {}),
+      headers: { ...(options?.expectedApiOrigin ? { 'X-Thingtime-Expected-Api-Origin': options.expectedApiOrigin } : {}), ...(options?.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options?.expectedActor ? { 'X-Thingtime-Expected-Actor': options.expectedActor } : {}) } });
+    if (options?.expectedApiOrigin && (response.redirected || (options.expectedApiOrigin !== window.location.origin && response.headers.get('x-thingtime-api-fallback') !== options.expectedApiOrigin))) {
+      await response.body?.cancel().catch(() => {});
+      throw Error('The selected API server changed.');
+    }
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
     recordApiCall({
@@ -1156,7 +1161,7 @@ export function useApi() {
               // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, signal: options?.signal }
+            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin, signal: options?.signal }
           );
         },
         [asyncFetcher]
@@ -1217,7 +1222,7 @@ export function useApi() {
           if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
-					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor, expectedDataPlane }), 30_000, options?.signal);
+					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin }), 30_000, options?.signal);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
 					}

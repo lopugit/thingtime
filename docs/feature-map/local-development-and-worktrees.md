@@ -95,3 +95,11 @@ normal client builds and PM2 development include it. The generated policy is
 shared by Vite/Vercel headers and the offline MCP capture process. See
 [no-login draft setup](../no-login-draft-preview.md); its QA uses a uniquely
 named canonical PM2 app on ports 22460–22462 and a new disposable replica.
+
+
+`electron test/fixtures/folder-sync-host.cjs` is an isolated desktop folder-host
+check: new temporary profile, real Chromium session/IPC, synthetic native dispatch.
+It never registers or reconfigures the installed Node. The shared browser fixture
+`/scripts/mobile-sync-editor.browser.html?platform=desktop` exercises the actual
+editor with synthetic native/API replies. Neither proves signed installed Mac
+transfers, restart journal recovery or native streaming throughput.

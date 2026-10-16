@@ -18,6 +18,7 @@ import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
 import { deviceThingsPageHref } from '~/components/Devices/deviceNavigation';
+import { DesktopFolderAccess } from '~/components/Devices/DesktopFolderAccess';
 import { shouldHideLocalNodePanel } from '~/components/Devices/localNodePanel';
 import { useNodePanelPreference } from '~/components/Devices/useNodePanelPreference';
 import { MobileDeviceSetupCard } from '~/components/Devices/MobileDeviceSetupCard';
@@ -1547,6 +1548,7 @@ const ThingsLibraryPage = () => {
 				{devicesEnabled && !folderId && !searchMode && !shouldHideLocalNodePanel(localNode, nodePanelDismissed) ? (
 					<LocalNodeSetupCard onDismiss={() => setNodePanelDismissed(true)} onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
 				) : null}
+        {devicesEnabled && !folderId && !searchMode && user?.id ? <DesktopFolderAccess ownerId={user.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} /> : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
             as="h1"

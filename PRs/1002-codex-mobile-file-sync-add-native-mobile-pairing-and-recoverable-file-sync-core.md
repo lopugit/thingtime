@@ -824,3 +824,40 @@ checks abort in XCTest due to its missing Bluetooth usage description. Actual
 Mac dialogs/Keychain/TCC, host integration, streaming performance and signed release
 remain open. Details and retained fixture history are in the
 [delivery ledger](../docs/mobile-file-sync.md#mac-local-host-and-live-identity-boundary--2026-10-17).
+
+## Desktop folder host and shared controls — 2026-10-17
+
+The Mac folder adapter now connects to the existing folder/configuration editor
+and foreground runner in Things and Settings. The Electron host verifies its own
+current cookie-session account, exact bundled main frame and configured server
+around native XPC; the node separately verifies its paired owner/device. Public
+server capabilities are anonymously fetched and projected. Native results now
+include the shared complete-scan/read identity and network/charging contract.
+
+The renderer runtime keeps the server origin in sync scope and maps authenticated
+API calls onto the bundled cookie session. Expected actor/home/API-origin guards
+permit only the narrow desktop sync proxy route family; endpoint changes fail
+before mutation bytes are forwarded. Response origins/redirects are checked;
+signed upload URLs never receive account cookies. Generic Browser Actions remain
+blocked from fallback. Queueing preserves original request/cancellation identity
+across StrictMode remounts; no copied editor, cloud writer or alternate history
+schema was introduced.
+
+Verification: 109 shared-sync/proxy tests, one module-mock transport test, 111
+Electron tests and 30 focused native tests passed (251 total). The native release
+build passed. A real isolated Electron/Chromium profile passed session account,
+anonymous capability, proxy destination, subframe and cookie-cancellation checks;
+its native dispatch was synthetic. In-app browser exercised actual shared controls
+with synthetic APIs/grants: scan, save, foreground completion, unsaved draft reload
+and 390px bounds; mobile controls still passed. Targeted lint has zero errors and
+five existing ThingsPage hook warnings. Full TypeScript is still the identical
+91-diagnostic baseline. Full web/Vercel build and packaged-output verification
+passed. The final Graphify refresh establishes structural coverage only.
+
+Do not release this as completed Mac synchronization yet. Real signed installed
+picker/consent/Keychain/TCC and cloud transfer acceptance, native streaming/rate
+limits and durable desktop restart storage remain open. Desktop currently uses
+an ephemeral loopback origin; a same-page reload does not prove its IndexedDB or
+local drafts survive a complete app restart. Background workers, Photos, peers,
+rename/delete convergence, conflict/restore UI, retention/selective availability
+and physical-device coverage remain part of the active original goal.

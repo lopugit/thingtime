@@ -360,5 +360,10 @@ and Mac's test-only child executable. `ThingtimeNodeCore/MacFolderSync.swift`
 now wraps that package in local XPC dispatch, live paired-identity checks,
 owner-scoped grants and configuration-bound native write consent. The Node app
 owns picker/approval dialogs and endpoint-isolated staging. Generic/leased
-commands cannot call it. Electron account verification/preload integration,
-installed acceptance and native streaming remain pending.
+commands cannot call it. `electron/lib/folder-sync.cjs` now verifies the active
+Chromium account and selected origin around native dispatch. `DesktopFolderAccess`
+reuses `MobileFolderAccess`/`MobileSyncConnections` through a `FolderHost`; the
+desktop runtime maps canonical API requests onto the bundled cookie proxy and
+preserves anonymous signed uploads. Native network/power conditions use the shared
+contract. Installed acceptance, restart persistence and native streaming remain
+pending; see the current release boundary in the mobile sync ledger.

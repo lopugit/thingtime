@@ -42,6 +42,7 @@ const {
 	validateDeviceRequest
 } = require('./lib/thingtime-node-bridge.cjs');
 
+const { DesktopFolderSync } = require('./lib/folder-sync.cjs');
 const { DesktopSpeechRecognition, requireSpeechSender } = require('./lib/speech-recognition.cjs');
 const desktopSpeech = new DesktopSpeechRecognition({ executable: app.isPackaged
 	? path.join(process.resourcesPath, '..', 'Helpers', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeSpeech')
@@ -71,6 +72,13 @@ let desktopSettingsLastError = null;
 let endpointCompatibility = null;
 const aiSyncSessions = new Map();
 const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname });
+const desktopFolderSync = new DesktopFolderSync({
+    context: () => ({ enabled: process.platform === 'darwin' && !parallelDevMode, window: mainWindow, appOrigin,
+        apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
+    requestNative: (method, parameters) => thingtimeNode.request(method, parameters)
+});
+app.on('before-quit', () => desktopFolderSync.invalidate());
+
 
 function getSessionHash() {
   if (!sessionHash) {
@@ -286,6 +294,7 @@ function normalizeDesktopUrl(rawUrl) {
 }
 
 function setApiFallbackEndpoint(rawUrl) {
+	desktopFolderSync.invalidate();
 	const endpointUrl = normalizeDesktopUrl(rawUrl);
 	process.env.THINGTIME_API_FALLBACK_ORIGIN = new URL(endpointUrl).origin;
 	return endpointUrl;
@@ -1641,10 +1650,17 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) desktopSpeech.stop();
+    if (isMainFrame && !isInPlace) { desktopSpeech.stop(); desktopFolderSync.invalidate(); }
   });
-  mainWindow.webContents.on('render-process-gone', () => desktopSpeech.stop());
-  mainWindow.on('closed', () => desktopSpeech.stop());
+  mainWindow.webContents.on('render-process-gone', () => { desktopSpeech.stop(); desktopFolderSync.invalidate(); });
+  const folderCookies = mainWindow.webContents.session.cookies;
+  const folderAccountChanged = (_event, cookie) => {
+    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') desktopFolderSync.invalidate();
+  };
+  folderCookies.on('changed', folderAccountChanged);
+  mainWindow.on('closed', () => {
+    desktopSpeech.stop(); desktopFolderSync.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -1674,6 +1690,8 @@ function createWindow() {
 		showLoadUrlError(error);
 	});
 }
+
+ipcMain.handle('thingtime-desktop:folder-sync', (event, request) => desktopFolderSync.request(event, request));
 
 ipcMain.handle('thingtime-desktop:speech-start', (event, request) => {
 	requireSpeechSender(event, mainWindow, appOrigin);

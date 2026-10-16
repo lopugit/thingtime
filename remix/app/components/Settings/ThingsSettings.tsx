@@ -3,6 +3,7 @@ import { Switch, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MobileDeviceSetupCard } from '~/components/Devices/MobileDeviceSetupCard';
 import { supportsMobileDevice } from '~/components/Devices/mobileDeviceBridge';
+import { DesktopFolderAccess } from '~/components/Devices/DesktopFolderAccess';
 import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
 import { useLocalThingtimeNode } from '~/components/Devices/useLocalThingtimeNode';
 import { useDeviceStore } from '~/components/Devices/useDeviceStore';
@@ -24,6 +25,7 @@ export function ThingsSettings() {
 				{node.available ? (
 					<>
 						<LocalNodeSetupCard state={node} controlFor={node.controlFor} onAction={node.executeAction} onRefresh={node.refresh} />
+                        {user?.id ? <DesktopFolderAccess ownerId={user.id} pairedDeviceIds={node.pairedDeviceIds} ownedDeviceIds={ids} /> : null}
 						<SettingRow
 							label="Show connection panel on Things"
 							hint="When off, the panel returns whenever the node or its permissions need attention."

@@ -3,7 +3,7 @@ import type { SavedFileSyncConfiguration } from './configuredPlan';
 import { parseFileSyncConfiguration } from './configuration';
 import type { LocalSyncTarget } from './localSyncTarget';
 import { sameSyncScope, validateSyncScope, type SyncScope } from './reconcile';
-import { requestMobileFolders, supportsMobileFolderPublication, type MobileWriteApproval } from './mobileFolders.client';
+import { requestMobileFolders, supportsMobileFolderPublication, type FolderCapabilities, type MobileWriteApproval } from './mobileFolders.client';
 import { stageMobileCopy } from './mobileStaging.client';
 
 /** Native consent is separate from the editable configuration. Its binding is
@@ -13,7 +13,7 @@ export async function approveMobileSyncTarget(
 	scope: SyncScope,
 	signal: AbortSignal,
 	request = requestMobileFolders,
-	bridge = getNativeBridge()
+	bridge: FolderCapabilities | undefined = getNativeBridge()
 ): Promise<LocalSyncTarget> {
 	validateSyncScope(scope);
 	const configuration = parseFileSyncConfiguration(saved.configuration),

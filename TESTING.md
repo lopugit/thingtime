@@ -10476,3 +10476,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   origin mapping, native capability/timeouts and network/power conditions exist.
 - [ ] Verify real Mac picker/consent, signed Keychain/TCC, interrupted cloud
   transfers, sustained throughput/rate limits, release/install and mobile regressions.
+
+### Desktop folder bridge and proxy scope (2026-10-17)
+
+- [x] Real isolated Electron profile: main-frame IPC + cookie-session account
+  checks reject wrong accounts, proxy destinations and child frames. Public
+  capability discovery carries no cookies. Cookie changes cancel pending work.
+  Native dispatch is synthetic; do not count this as a signed Mac transfer.
+- [x] Shared renderer runtime: exact owner/device/origin/request replies, bounded
+  native source reads, cancellation before/after context negotiation, anonymous
+  signed uploads and canonical-to-bundled API mapping. Reject missing actor/home
+  headers, redirects, foreign destinations and wrong proxy response headers.
+- [x] Proxy regression: only the explicit desktop sync route/method family may
+  forward expected-actor requests. Ordinary web deployments and Browser Actions
+  remain denied. Changed destinations fail before consuming mutation bodies.
+- [x] Browser StrictMode fixture: desktop folder scan, configuration save,
+  foreground completion and unsaved draft reload; desktop and 390px controls have
+  no horizontal overflow. Existing mobile folder controls still work.
+- [ ] Signed installed Mac: real picker/consent, account switch while dialogs are
+  open, Keychain/TCC, upload/download/two-way bytes and interrupted receipts.
+- [ ] Before release, preserve the shared browser journal/drafts across complete
+  desktop restarts despite the current ephemeral loopback origin. Prove the same
+  operation IDs/baseline survive; do not infer this from same-page reload tests.
+- [ ] Measure native streaming throughput and identity-rate-limit behavior on
+  large files/roots; per-64-KiB bridge correctness tests do not establish scale.

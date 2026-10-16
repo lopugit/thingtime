@@ -207,14 +207,19 @@ device sessions; it retains the protected device history, sync Things and files.
 A mutation already authorized when revocation occurs may finish; revocation does
 not roll it back.
 
-The new service is **not exposed by Electron preload/UI yet**. The host still
-needs to verify the active browser account, map the configured API origin,
-negotiate native capability/timeouts, and supply current run conditions. Do not
-route renderer JSON directly to XPC. Parallel development still avoids the installed
-Node; establish an isolated native lane before installed picker/consent acceptance.
-The focused tests use injected grant persistence/dialogs and real temporary files;
-they do not prove signed Keychain, sandbox/TCC or actual AppKit interaction.
+Electron now verifies the active browser account using its own session, derives
+the configured server origin, negotiates public capabilities and exposes only the
+exact folder method to the bundled main frame. The shared web controls use this
+adapter in Things/Settings. The helper returns network class and charging/unknown,
+without SSIDs, interface addresses or raw power-source metadata.
+
+Parallel development still avoids the installed Node; establish an isolated
+native lane before installed picker/consent acceptance. Focused tests use injected
+grant persistence/dialogs and real temporary files; they do not prove signed
+Keychain, sandbox/TCC or actual AppKit interaction. The Electron host verification
+uses a real isolated Chromium session with synthetic native dispatch.
 
 Current 64 KiB bridge chunks and fresh identity reads are correctness scaffolding;
 the `devices.read` rate limit can stop sustained transfers. Native streaming and
-measured throughput are required before enabling this in the product UI.
+measured throughput, durable restart journals despite Desktop's ephemeral local
+origin, and real installed cloud transfers remain required before release.

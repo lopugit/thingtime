@@ -9,7 +9,7 @@ import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/
 import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
-import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
+import { desktopSyncProxyAllowed, proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
   loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
@@ -386,6 +386,11 @@ export default defineHandler(async (event) => {
     // Fresh vault verification must stay on the selected deployment. Never
     // forward passwords/assertions to a fallback origin or reveal its keys.
     if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
+      if (desktopSyncProxyAllowed(event.req)) {
+        const headers = new Headers(event.req.headers);
+        headers.delete('x-forwarded-host'); headers.delete('x-forwarded-proto');
+        return proxyApiRequestToFallback(new Request(event.req, { headers }));
+      }
       return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     }
     if (path === 'v1/passwords') {

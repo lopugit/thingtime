@@ -5,7 +5,18 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.0.0"
+    public static let version = "1.1.0"
+    public struct Conditions: Codable, Sendable {
+        public let network: String
+        public let charging: Bool?
+        public init(network: String, charging: Bool?) { self.network = network; self.charging = charging }
+        private enum CodingKeys: String, CodingKey { case network, charging }
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(network, forKey: .network)
+            try container.encode(charging, forKey: .charging)
+        }
+    }
     private struct Request: Decodable {
         let requestId: String; let ownerId: String; let deviceId: String; let origin: String; let action: String
         let rootId: String?; let path: String?; let version: String?; let offset: Int64?; let length: Int?; let data: String?
@@ -18,15 +29,17 @@ public final class MacFolderSync {
     private let choose: () async throws -> URL?
     private let approve: (MobileFolderStore.Grant) async throws -> Bool
     private let cancelDialog: () -> Void
+    private let conditions: () -> Conditions
     private var active: (id: String, owner: String, device: String, task: Task<JSONValue, Error>)?
 
     public init(origin: URL, store: MobileFolderStore, staging: MobileSyncStaging,
                 verify: @escaping (String, String) async throws -> Void,
                 choose: @escaping () async throws -> URL?, approve: @escaping (MobileFolderStore.Grant) async throws -> Bool,
-                cancelDialog: @escaping () -> Void = {}) throws {
+                cancelDialog: @escaping () -> Void = {},
+                conditions: @escaping () -> Conditions = { .init(network: "unknown", charging: nil) }) throws {
         self.origin = try FileSyncOwnerScope(ownerId: "origin-validation", url: origin).origin
         self.store = store; self.staging = staging; self.verify = verify
-        self.choose = choose; self.approve = approve; self.cancelDialog = cancelDialog
+        self.choose = choose; self.approve = approve; self.cancelDialog = cancelDialog; self.conditions = conditions
     }
 
     public func suspend() { active?.task.cancel(); cancelDialog() }
@@ -43,7 +56,7 @@ public final class MacFolderSync {
             return .object([:])
         }
         guard active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["list", "choose", "remove", "scan", "read", "stage-begin", "stage-append", "stage-finish", "write-approve", "publication-lookup", "publish"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        guard ["context", "conditions", "list", "choose", "remove", "scan", "read", "stage-begin", "stage-append", "stage-finish", "write-approve", "publication-lookup", "publish"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
         let task = Task { try await self.execute(r, owner: owner) }
         active = (r.requestId, r.ownerId, r.deviceId, task)
         let timeout = Task {
@@ -70,8 +83,12 @@ public final class MacFolderSync {
 
     private func execute(_ r: Request, owner: FileSyncOwnerScope) async throws -> JSONValue {
         try await authorized(r)
-        var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "origin": .string(r.origin)]
-        if r.action == "choose" {
+        var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "deviceId": .string(r.deviceId), "origin": .string(r.origin)]
+        if r.action == "context" {
+            result["capabilities"] = .object(["fileAccessVersion": .string("1.1.0"), "fileStagingVersion": .string("1.0.0"), "filePublicationVersion": .string("1.1.0")])
+        } else if r.action == "conditions" {
+            result["conditions"] = try value(conditions())
+        } else if r.action == "choose" {
             if let url = try await choose() {
                 try await authorized(r)
                 _ = try store.add(owner, selected: url)
@@ -94,8 +111,10 @@ public final class MacFolderSync {
                     result["writeApproval"] = try value(approval)
                 } else if r.action == "scan" {
                     result["entries"] = try value(await worker { try MobileFolderReader.scan(bookmark: grant.bookmark) })
+                    result["complete"] = .bool(true)
                 } else if r.action == "read" {
                     guard let path = r.path, let version = r.version, let offset = r.offset, let length = r.length else { throw MobileFolderStore.Failure.invalid }
+                    result["path"] = .string(path)
                     result["chunk"] = try value(await worker { try MobileFolderReader.read(bookmark: grant.bookmark, path: path, version: version, offset: offset, length: length) })
                 } else {
                     guard let transfer = r.transfer, transfer.rootId == root, transfer.scope.deviceId == r.deviceId else { throw MobileFolderStore.Failure.invalid }

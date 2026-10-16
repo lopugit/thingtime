@@ -1,14 +1,24 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { requestMobileFolders, supportsMobileFolders, type FolderRequest, type MobileFolder } from '~/fileSync/mobileFolders.client';
+import type { FolderHost } from '~/fileSync/desktopFolders.client';
 import { MobileSyncConnections } from './MobileSyncConnections';
 const cached = new Map<string, MobileFolder[]>();
-export function MobileFolderAccess({ ownerId, deviceId }: { ownerId: string; deviceId: string }) {
-	if (!supportsMobileFolders()) return null;
-	return <FolderAccess key={`${window.location.origin}:${ownerId}`} ownerId={ownerId} deviceId={deviceId} />;
+type FolderAccessProps = { ownerId: string; deviceId: string; host?: FolderHost };
+export function MobileFolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
+	if (!host && !supportsMobileFolders()) return null;
+	return (
+		<FolderAccess
+			key={JSON.stringify([host?.origin() ?? window.location.origin, ownerId, deviceId])}
+			ownerId={ownerId}
+			deviceId={deviceId}
+			host={host}
+		/>
+	);
 }
-function FolderAccess({ ownerId, deviceId }: { ownerId: string; deviceId: string }) {
-	const key = `${window.location.origin}:${ownerId}`;
+function FolderAccess({ ownerId, deviceId, host }: FolderAccessProps) {
+	const key = JSON.stringify([host?.origin() ?? window.location.origin, ownerId, deviceId]);
+	const requestFolders = host?.request ?? requestMobileFolders;
 	const [roots, setRoots] = useState<MobileFolder[]>(() => cached.get(key) ?? []),
 		[busy, setBusy] = useState(false),
 		[error, setError] = useState('');
@@ -22,7 +32,7 @@ function FolderAccess({ ownerId, deviceId }: { ownerId: string; deviceId: string
 			setBusy(true);
 			setError('');
 			try {
-				const result = await requestMobileFolders(ownerId, request, controller.signal);
+				const result = await requestFolders(ownerId, request, controller.signal);
 				if (controller.signal.aborted) return;
 				setRoots(result.roots);
 				cached.set(key, result.roots);
@@ -46,7 +56,7 @@ function FolderAccess({ ownerId, deviceId }: { ownerId: string; deviceId: string
 				}
 			}
 		},
-		[ownerId, key]
+		[ownerId, key, requestFolders]
 	);
 	useEffect(() => {
 		void run({ action: 'list' });
@@ -101,7 +111,7 @@ function FolderAccess({ ownerId, deviceId }: { ownerId: string; deviceId: string
 					{error}
 				</Text>
 			) : null}
-			<MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={roots} />
+			<MobileSyncConnections ownerId={ownerId} deviceId={deviceId} roots={roots} host={host} />
 		</Box>
 	);
 }

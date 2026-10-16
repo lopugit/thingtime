@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
+	folderSyncRequest: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync', request),
 	speechRecognitionVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
 	startSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-start', request),
 	stopSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-stop', request),

@@ -27,6 +27,9 @@ export type FolderResult = {
 	entries?: SyncEntry[];
 	chunk?: { version: string; size: number; offset: number; data: string };
 };
+export type FolderCapabilities = Pick<ThingtimeNativeBridge, 'platform' | 'fileAccessVersion' | 'fileStagingVersion' | 'filePublicationVersion'>;
+export const supportsFolderAccess = (bridge: FolderCapabilities | undefined) =>
+	Boolean(bridge && ['ios', 'android', 'macos'].includes(bridge.platform) && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? ''));
 export const supportsMobileFolders = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
 	Boolean(
 		bridge?.isNativeWebView && (bridge.platform === 'ios' || bridge.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? '')
@@ -157,15 +160,15 @@ export function parseMobileFolderResult(
 	}
 	return result;
 }
-export const supportsMobileSyncConditions = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
-	supportsMobileFolders(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 1;
-export const supportsMobileStaging = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
-	supportsMobileFolders(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileStagingVersion ?? '');
-export const supportsMobilePublication = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
+export const supportsMobileSyncConditions = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsFolderAccess(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 1;
+export const supportsMobileStaging = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsFolderAccess(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileStagingVersion ?? '');
+export const supportsMobilePublication = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobileStaging(bridge) && /^1\.\d+\.\d+$/.test(bridge?.filePublicationVersion ?? '');
 /** Publication 1.1 adds explicit per-folder capability. Earlier iOS 1.0
  * adapters support their selected roots; Android never falls back to that rule. */
-export function supportsMobileFolderPublication(folder: MobileFolder | undefined, bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) {
+export function supportsMobileFolderPublication(folder: MobileFolder | undefined, bridge: FolderCapabilities | undefined = getNativeBridge()) {
 	if (!folder || !supportsMobilePublication(bridge)) return false;
 	if (Number(bridge!.filePublicationVersion!.split('.')[1]) >= 1) return /^1\.\d+\.\d+$/.test(folder.publicationVersion ?? '');
 	return bridge!.platform === 'ios';
@@ -236,14 +239,20 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 /** Bounded native reads can feed the shared fingerprint/upload source contract.
  * Production native workers can stream directly without round-tripping bytes
  * through JavaScript. Every chunk remains tied to the scanned source version. */
-export function mobileFolderSource(ownerId: string, rootId: string, scanned: SyncEntry, signal: AbortSignal): FingerprintSource {
+export function mobileFolderSource(
+	ownerId: string,
+	rootId: string,
+	scanned: SyncEntry,
+	signal: AbortSignal,
+	request = requestMobileFolders,
+	bridge: FolderCapabilities | undefined = getNativeBridge()
+): FingerprintSource {
 	const entry = structuredClone(scanned);
 	if (!validSyncEntry(entry) || entry.kind !== 'file') throw Error('Select a scanned file.');
-	const chunkProofs =
-		getNativeBridge()?.platform === 'android' && supportsMobileFolders() && Number(getNativeBridge()!.fileAccessVersion!.split('.')[1]) >= 2;
+	const chunkProofs = bridge?.platform === 'android' && supportsFolderAccess(bridge) && Number(bridge!.fileAccessVersion!.split('.')[1]) >= 2;
 	const verify = async (full = false) => {
 		signal.throwIfAborted();
-		const result = await requestMobileFolders(
+		const result = await request(
 			ownerId,
 			{
 				action: 'read',
@@ -276,7 +285,7 @@ export function mobileFolderSource(ownerId: string, rootId: string, scanned: Syn
 			const bytes = new Uint8Array(length);
 			for (let at = 0; at < length; at += 65536) {
 				readSignal.throwIfAborted();
-				const response = await requestMobileFolders(
+				const response = await request(
 					ownerId,
 					{
 						action: 'read',

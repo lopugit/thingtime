@@ -4963,8 +4963,9 @@ The iOS native folder reader, grants and recoverable publication now live in
 [`apple/FileSync`](apple/FileSync/README.md), a local Swift package that also runs
 on macOS. That runbook documents native consent, platform bookmarks, isolated
 staging and real process-exit checks. The Mac helper now has a local folder
-adapter and native picker/approval dialogs. Its desktop UI bridge, active browser
-account check, installed Keychain/TCC and full transfer acceptance remain pending.
+adapter and native picker/approval dialogs. Its Electron account bridge and shared
+folder controls are implemented; installed Keychain/TCC, real cloud transfer and
+desktop restart persistence remain release acceptance requirements.
 See [Mac host setup](macos/ThingtimeNode/README.md#local-folder-sync-adapter).
 The companion server must advertise `api.devices-node-identity` 1.x; the optional
 feature is negotiated separately so older deployments can still pair. Native
@@ -4972,3 +4973,25 @@ credentials remain in Keychain; no new secret is required. The full-account
 `POST /api/v1/devices/disconnect` revokes one owned device's credentials and keeps
 its history and files. Reconnect requires a new pairing; a completed old claim
 cannot revive a revoked credential.
+
+
+### Desktop sync host validation
+
+From the repository root, install the locked Electron dependencies with
+`corepack pnpm --dir electron install --frozen-lockfile`, then run
+`corepack pnpm --dir electron run verify:folder-sync-host`. The test launches a
+fresh temporary Electron profile and synthetic loopback servers, exercises real
+Chromium cookies and IPC sender checks, and removes its profile on completion.
+It uses no account secret, installed Node, LaunchAgent or real user folder;
+native XPC replies are explicitly synthetic. A usable graphical macOS session
+and the Electron binary are required.
+
+For rendered shared controls, use the canonical PM2 stack and open
+`/scripts/mobile-sync-editor.browser.html?platform=desktop`. This fixture uses
+synthetic grants/API replies with the production editor and desktop runtime.
+The native host negotiates the selected endpoint's public capabilities and keeps
+credentials in their existing cookie session/Keychain. The bundled proxy requires
+`THINGTIME_DESKTOP=1` (set by Desktop) and its selected API endpoint; do not set
+this mode on an ordinary public web deployment. No additional secret is needed.
+See the [desktop acceptance boundary](docs/mobile-file-sync.md#desktop-folder-host-and-shared-controls--2026-10-17)
+before release; page reload is not yet full desktop restart recovery.

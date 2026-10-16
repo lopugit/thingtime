@@ -148,6 +148,7 @@ function nodeRequest(method, parameters = {}, suppliedCommandId) {
 }
 
 function nodeRequestTimeoutMs(method) {
+	if (method === 'folder-sync.request') return 305_000;
 	if (method === 'pairing.claim' || method === 'pairing.resume') return PAIRING_BRIDGE_TIMEOUT_MS;
 	if (method === 'pairing.unpair' || method === 'permissions.request') return PRESENCE_BRIDGE_TIMEOUT_MS;
 	return BRIDGE_TIMEOUT_MS;

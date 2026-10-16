@@ -36,16 +36,28 @@ final class MacFolderSyncTests: XCTestCase {
     private func rejects(_ work: () async throws -> JSONValue) async {
         do { _ = try await work(); XCTFail("Unauthorized request succeeded") } catch { }
     }
+    func testContextAndUnknownConditionsUseTheSharedFolderContract() async throws {
+        let service = try service()
+        let context = try await service.handle(request("context")).decode([String: JSONValue].self)
+        XCTAssertEqual(context["deviceId"], .string("device"))
+        let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.1.0", "fileStagingVersion": "1.0.0", "filePublicationVersion": "1.1.0"])
+        let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
+        XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
+    }
+
     func testNativeSelectionReadAndAccountDeviceOriginFences() async throws {
         let service = try service(), bytes = Data([1,2,3])
         try bytes.write(to: folder.appendingPathComponent("selected/file.bin"))
         let id = try await root(service)
         let scanned = try await service.handle(request("scan", ["rootId": .string(id)]))
         let body = try scanned.decode([String: JSONValue].self)
+        XCTAssertEqual(body["complete"], .bool(true))
         let entries = try XCTUnwrap(body["entries"]).decode([MobileFolderReader.Entry].self)
         XCTAssertEqual(entries.count, 1)
         let read = try await service.handle(request("read", ["rootId": .string(id), "path": .string("file.bin"), "version": .string(entries[0].version), "offset": .number(0), "length": .number(3)]))
         let json = try read.decode([String: JSONValue].self)
+        XCTAssertEqual(json["path"], .string("file.bin"))
         let chunk = try XCTUnwrap(json["chunk"]).decode([String: JSONValue].self)
         XCTAssertEqual(chunk["data"], .string(bytes.base64EncodedString()))
         for fields: [String: JSONValue] in [["ownerId": .string("foreign")], ["deviceId": .string("other")], ["origin": .string("https://foreign.test")]] {

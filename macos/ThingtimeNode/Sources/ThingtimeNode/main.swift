@@ -420,13 +420,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 controllerRelay: controllerRelay
             )
             let folderDialogs = MacFolderSyncDialogs()
+            let folderConditions = MacSyncConditions()
             let folderSync = try MacFolderSync(origin: endpointScope.canonicalBaseURL,
                 store: MobileFolderStore(),
                 staging: MobileSyncStaging(directory: endpointScope.commandJournalFileURL().deletingLastPathComponent()
                     .appendingPathComponent("FolderSync-v1-" + endpointScope.identifier, isDirectory: true)),
                 verify: { owner, device in try await apiClient.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
                 choose: { try await folderDialogs.choose() }, approve: { try await folderDialogs.approve($0) },
-                cancelDialog: { folderDialogs.cancel() })
+                cancelDialog: { folderDialogs.cancel() }, conditions: { folderConditions.snapshot() })
             let controller = ThingtimeNodeController(
                 journal: journal,
                 folderSync: folderSync,

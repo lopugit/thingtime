@@ -68,6 +68,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Connect the Mac folder adapter to the shared Things/Settings sync controls. Electron independently checks the current account, paired device and selected server; the desktop proxy pins owner/home/origin before forwarding bounded sync requests. Add native network/power conditions and isolated Chromium/renderer regression checks. Signed installed transfers, restart persistence and streaming remain release gates. [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Add the Mac local folder adapter with paired
   identity checks and native consent, plus private identity and owner-only device
   disconnect APIs. Verify real loopback pairing/revocation and preserve history

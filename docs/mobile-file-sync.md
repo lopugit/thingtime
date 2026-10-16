@@ -82,11 +82,11 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; iOS mixed-direction acceptance, Electron host integration, workers and full cross-device transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls and synthetic browser foreground acceptance implemented; iOS mixed-direction acceptance, Mac installed transfers/restart persistence, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
-| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac approvals, retention/selective settings and background workers remain pending |
+| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; restore/conflict UI and retention policy remain pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
@@ -1049,3 +1049,50 @@ negotiation, timeouts and current run conditions remain required. Per-request li
 identity and 64 KiB chunks also need native streaming/throughput work before UI
 enablement. The complete original goal, including background work, Photos, peers,
 rename/delete convergence, conflict/restore and release acceptance, remains active.
+
+## Desktop folder host and shared controls — 2026-10-17
+
+Electron now exposes a narrow main-frame-only folder request. The host verifies
+its own Chromium cookie-session account before and after native work, and the
+native helper independently verifies the paired device credential. The selected
+API origin is host-derived; public capability negotiation is anonymous, bounded
+and projected. Account cookies, navigation, renderer loss, endpoint switches and
+matching cancellation invalidate pending work without retargeting its scope.
+
+`desktopFolders.client.ts` supplies the existing folder editor/foreground runner
+with the canonical server origin and host-verified capabilities. Authenticated
+API requests stay on the bundled cookie proxy with expected owner, home storage
+and API-origin headers. The proxy permits only the explicit desktop sync route
+family; it rejects destination changes before reading or forwarding mutations.
+Redirects and wrong/missing proxy response headers fail closed. Signed upload
+URLs remain unchanged with credentials omitted. Generic Browser Actions remain
+blocked from fallback. Mac native conditions expose only network class and
+charging/unknown; complete scans and read replies now match the shared contract.
+
+`DesktopFolderAccess` appears beside the local connection card in Things and
+Settings, including when onboarding is dismissed. Candidate IDs are intersected
+with the current account's device list, then freshly verified by both hosts.
+Multiple candidates require an explicit choice. No second configuration schema,
+cloud writer, journal format, history store or copied transfer editor was added.
+
+Evidence: isolated Electron with real IPC sender frames and Chromium cookie
+sessions passed account/proxy/subframe/cancellation checks; native dispatch was
+synthetic. Browser StrictMode fixture passed folder scan, ordinary configuration
+save, foreground completion and local draft reload at desktop/390px, with no
+horizontal overflow. Both Mac and mobile controls were exercised. Native release
+build and 251 focused checks (109 shared-sync/proxy, one module-mock transport,
+111 Electron and 30 native) pass. Full TypeScript remains the identical 91-diagnostic
+baseline; targeted lint has zero errors and five existing ThingsPage hook warnings.
+Full web/Vercel build and packaged-output verification passed. These are separate layers,
+not an installed signed Mac transfer acceptance.
+
+Release acceptance remains open: installed AppKit/Keychain/TCC and real cloud
+mixed-direction transfer, current-account revocation during native operations,
+large-file throughput/rate-limit work, and durable desktop restart storage. The
+bundled app currently chooses a new loopback port on launch, so its IndexedDB and
+local drafts cannot yet be claimed to recover across full app restarts even
+though record keys contain the canonical server origin. Keep this integration
+unreleased until that persistence boundary and the real-native acceptance lane
+are resolved. Background workers, Photos, peers, rename/delete convergence,
+conflict/restore UI, retention/selective availability and physical-device tests
+remain required by the original goal.
