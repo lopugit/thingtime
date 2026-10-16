@@ -1866,3 +1866,64 @@ verification remain separate from this local result.
 Normal complete bound import/export, parent context/deletion, linked/managed
 media, cross-device reconciliation, account draft sync and the remaining matrix
 are still merge gates. No merge or manual deployment at this checkpoint.
+
+
+## Offline conversation links checkpoint — 2026-10-17
+
+Comment permalinks now resolve parent/root links from their scoped local content
+and read snapshots. Anonymous nested replies and account generic/private post
+comments can return to retained parents offline. Canonical root references cover
+unvisited intermediate ancestors; direct discussion refresh cannot erase them.
+Generic parents and foreign authors never gain local ownership. Pending edits
+outrank stale snapshots; refusal/deletion fences suppress descendant links while
+preserving recoverable authored content. No network or anonymous sync is added.
+
+Local evidence: workspace/offline-shell 332 and feed 79 checks pass; 37 generic
+browser skips are excluded. Three enabled production-client fixtures pass native
+cold-offline parent/root navigation, anonymous no-write checks and account
+edit/removal/reconnect. Desktop/390/320px bounds pass; narrow screenshots were
+inspected. Client build verifies 247 assets, focused lint passes, and TypeScript
+has 91 baseline diagnostics with none in changed files. Evidence lives in
+`tmp/thread-context-*`. CI/deployed verification remains separate.
+
+The next open media gate is the normal bound-file importer/exporter. Audit found
+that `LocalThings.import` already has canonical binding/remapping and atomic file
+queue admission, but its account gate and `accountImportSupported` still exclude
+all bound files. Existing-file normal export also routes media plans online and
+requires a complete snapshot: retaining bytes alone must not weaken that check.
+Finish these paths with actual normal-dialog round-trips, then continue the full
+matrix. Parent deletion/reconciliation and other feature families remain open.
+
+Deep-thread follow-up: the account browser regression also visits a depth-eight
+comment permalink after cold offline reload, with intervening comments unvisited,
+and follows its authorized generic-Thing root. Local traversal covers 70 levels
+without a depth cap; cycle detection remains the terminator.
+
+
+## Bound post/comment ZIP import checkpoint — 2026-10-17
+
+The normal account importer now admits validated post/comment files through its
+existing atomic content/byte transaction and upload/content queues. It creates
+independent private IDs, preserves attachment order and reply targets, and leaves
+remote completion dependent on verified identity and confirmed upload receipts.
+No draft save or upload completion gates local import. Generic component-bound,
+linked and managed transfers retain their dedicated paths pending implementation.
+
+Validation: 335 workspace/offline-shell and 320 Things tests pass (37 default
+browser skips excluded). Three new bound-import tests cover ordered receipts,
+independent content progress, anonymous/account exact-byte round trips and atomic
+refusals. The enabled production-client `accountFileImport.browser.test.ts` passes
+normal offline Import/Download, cold native Component/reply rendering, private
+reconnect with four real uploads, inherited replies, exact originals and anonymous
+refusal. Dialog/page/reply bounds pass at 1440/390/320px. The mixed fixture needs
+both existing standalone-file and post-media upload approvals on its new disposable
+account; initial runs confirmed either missing approval is refused.
+
+Client build passes with 247 verified offline assets. Lint has no errors and the
+existing LocalThings constructor warning; TypeScript retains 91 baseline errors,
+none in changed files. Successful browser evidence: `tmp/bound-import-browser-complete/`;
+unit/build/type logs: `tmp/bound-import-*.log`. This is local verification only.
+
+The full goal remains open: complete export manifests for previously remote bound
+content, parent deletion/binding reconciliation, linked/managed transfers and the
+remaining matrix still need implementation/acceptance. Do not merge from this checkpoint.

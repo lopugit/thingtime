@@ -10863,3 +10863,39 @@ Run `app/local-workspace/components.browser.test.ts` with
   survive; unchanged retention must not cause revision/refresh loops.
 - [ ] Complete normal bound-media import/export, parent context/deletion and
   cross-device reconciliation before closing the full local-first merge gate.
+
+
+### Offline conversation parent/root navigation
+
+- [x] In a clean anonymous browser, import a Component, create a comment and
+  nested reply offline, cold reload, then follow the reply's parent and root
+  links back to the native discussion. Check desktop, 390px and 320px bounds.
+- [x] In a disposable account, open a comment on a generic Thing and on a private
+  media post. Cold offline reload must retain the real parent link; following it
+  must render the retained parent and its device edits without network writes.
+- [x] Preserve foreign authors and explicit authorized roots when intermediate
+  ancestors are unvisited. A newer direct discussion read cannot erase root
+  context; neither snapshot format creates ownership or account sync intent.
+- [x] Missing/cyclic ancestors, other account/data-plane scopes, known root
+  refusals and pending parent deletion cannot expose stale conversation links.
+  Keep unsynced authored content recoverable after refusal.
+
+- [x] A depth-eight retained account reply with unvisited intermediate ancestors
+  keeps its real parent/root links after cold offline reload. Local traversal at
+  70 levels reaches the root without adding a depth rail.
+
+
+### Offline account bound-file imports
+
+- [x] Unit coverage: import a post with reversed portable attachment order and a
+  reply with its own file; all original bytes and both queues commit atomically.
+  Independent content syncs before upload receipts, then the post and reply bind
+  the confirmed account IDs in order with private/inherited audiences.
+- [x] Unit coverage: export/re-import through anonymous and account adapters with
+  fresh IDs, exact bytes and no portable ownership/authorization fields. Missing
+  targets, corrupt bytes, too many comment files and mixed managed kinds leave
+  no content, bytes or queue intent.
+- [x] Enabled loopback browser fixture: normal offline Import/Download dialogs,
+  cold Component/reply rendering at 1440/390/320px, approved private reconnect,
+  exact originals and anonymous refusal. Run `accountFileImport.browser.test.ts`
+  with the existing README fixture setup; do not count its default skip.

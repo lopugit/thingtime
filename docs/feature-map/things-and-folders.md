@@ -4,8 +4,10 @@ Normal account ZIP import uses `local-workspace/accountImport.ts` for shared
 UI/facade routing, and `AccountThingSync` plus `AccountFileSync.contentHooks`
 for atomic local admission and receipt-dependent media remapping. Regressions:
 `accountFileImport.test.ts` and opt-in production-client
-`accountFileImport.browser.test.ts`. Standalone files, recordings and ordinary content use this path;
-bound, linked and managed imports remain separate acceptance work. Native
+`accountFileImport.browser.test.ts`. Standalone files, recordings, post/comment files and ordinary content use this path.
+`accountBoundImport.test.ts` covers ordered bindings, private receipt-dependent
+sync, exact-byte round trips and atomic refusal. Linked and managed imports
+remain separate acceptance work. Native
 library bulk deletion routes saved files through `AccountFileSync`, cancels
 unstarted uploads and reports partial failures without a remote fallback for
 device bytes. Regression: `accountApi.test.ts` and

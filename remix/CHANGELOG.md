@@ -68,6 +68,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17: Normal account ZIP imports now admit post/comment file bindings
+  atomically on device, preserving order and independent receipt-dependent sync.
+  Added canonical round-trip/refusal checks and extended native browser coverage.
+  Full acceptance remains open in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Restore offline comment parent/root navigation
+  for anonymous and account workspaces, including generic Thing discussions.
+  Preserve actual authors, pending device edits and authorized root context;
+  hide refused/deleted ancestor links. Three native browser fixtures pass.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Retain existing owned post/comment originals on a
   fresh device for native offline editing/removal, with atomic bounded admission,
   verified private reconnect and durable existing-ID deletion receipts. Correct

@@ -74,14 +74,14 @@ change this pointer; logout/account changes revoke it.
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Scoped device usage and browser protection controls are available in Settings. Protected-kind adapters and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
 | Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Account upload and metadata queues now have local service/browser acceptance, including reviewed conflicts and folder dependencies. Completed standalone-file deletion has a durable scoped queue, native review and replay fencing. Ordinary account picker/list/media integration, existing-file retention and file ZIP transfer have browser evidence in the checkpoints below. Standalone recording import/retention and independent offline edit/delete use the shared path (checkpoint below). Finish bound/linked/managed media, native microphone capture, audio cache identity/revocation and remaining audio/video acceptance. Never treat a cached cloud attachment as locally authorized bytes. |
-| Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Retained account posts now support offline bookmarks/reactions, Saved/permalink reload and cross-tab membership, with independent conditional sync and known-refusal eviction (checkpoint below). Generic account discussions and canonical comment-only permalinks now retain scoped offline reads with explicit partial coverage and atomic cross-projection refusal cleanup (checkpoint below). Account text/rich-text post and comment/reply authorship now commits locally with independent verified-account sync (checkpoint below). Account post/comment file admission, upload dependency tracking and canonical binding now use the device queue (checkpoint below). Device-authored bound-media removal now has offline/retry coverage (checkpoint below). Existing owned bound-file retention now has fresh-device offline edit/removal and reconnect evidence (checkpoint below). Bound-file import and reconciliation, remaining linked-Thing surfaces, full edit/privacy/deletion browser coverage and broader cross-account/device acceptance remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
+| Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Retained account posts now support offline bookmarks/reactions, Saved/permalink reload and cross-tab membership, with independent conditional sync and known-refusal eviction (checkpoint below). Generic account discussions and canonical comment-only permalinks now retain scoped offline reads with explicit partial coverage and atomic cross-projection refusal cleanup (checkpoint below). Account text/rich-text post and comment/reply authorship now commits locally with independent verified-account sync (checkpoint below). Account post/comment file admission, upload dependency tracking and canonical binding now use the device queue (checkpoint below). Device-authored bound-media removal now has offline/retry coverage (checkpoint below). Existing owned bound-file retention now has fresh-device offline edit/removal and reconnect evidence (checkpoint below). Offline parent/root navigation now has anonymous/account native-browser evidence, including generic Thing discussions (checkpoint below). Bound-file import and reconciliation, remaining linked-Thing surfaces, full edit/privacy/deletion browser coverage and broader cross-account/device acceptance remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
 | Offline startup | Verified static-shell cache implementation and policy tests added. Production-build offline reload, editing, save and second reload passed in a clean local origin. A rebuilt shell also passed account cold reload/edit/reload with no networking. Continue update recovery, cross-account coverage and real-device startup verification. Chromium offline-emulation module cancellations remain under investigation; request blocking is no longer accepted without its root-read failure probe; the latest checkpoint defaults to actual offline emulation and retains failures as merge gates. |
-| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Ordinary JSON imports now create private independent local copies with atomic queue intent and verified canonical server round-trip (checkpoint below). Ordinary JSON downloads now use device content and complete scoped export snapshots, with native offline dialog/download/reload and normal-importer round-trip evidence (checkpoint below). Standalone file ZIP imports/exports now finish locally through the normal dialogs (checkpoints below). Complete bound/recording/linked/managed imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
+| Signed-in local-first operation | Owned data/folder/page/component/schema/Action creates and updates now have an atomic account-scoped queue, immutable ambiguous retries, conditional updates and reviewed conflict choices. Native Builder resolves pending pages locally. Local fixture create/edit/reload/reconnect and conflict review passed. Account offline cold startup, native page editing and reconnect verification now pass locally. Ordinary account bulk moves now commit locally with queue intent, survive cold offline folder reload, and sync conditionally after verified reconnect. Ordinary account deletion and Builder reset now commit locally, retain conditional deletion intent and expose reviewed conflicts (checkpoint below). Ordinary JSON imports now create private independent local copies with atomic queue intent and verified canonical server round-trip (checkpoint below). Ordinary JSON downloads now use device content and complete scoped export snapshots, with native offline dialog/download/reload and normal-importer round-trip evidence (checkpoint below). Standalone file ZIP imports/exports now finish locally through the normal dialogs (checkpoints below). Post/comment ZIP imports now use the same local transaction and receipt-dependent queue (checkpoint below). Complete linked/managed imports, protected-kind deletion/moves, attachments, all dedicated adapters, full cached-list membership/pagination and multi-tab UI refresh before merge. No anonymous sync queue may be replayed as account content. |
 
 ## Development verification
 
@@ -2653,3 +2653,82 @@ snapshot and the remaining importer/reconciliation work. Parent context on the
 comment permalink, parent deletion, linked/managed media, cross-device conflicts,
 draft sync and the rest of the matrix remain open. No merge, manual deployment,
 public publishing or existing-account mutation was performed.
+
+
+## Offline conversation context — 2026-10-17
+
+Anonymous and account comment permalinks now resolve parent and root navigation
+from the same scoped device records used by their normal content read. Missing
+or cyclic local ancestors cannot invent a root. Retained account responses keep
+explicit authorized root references when intervening comments have not been
+visited; a later direct discussion read does not erase that context. Generic
+Thing parents remain display snapshots and never become owned post records.
+Locally authored edits outrank stale snapshots, while other authors retain their
+actual author projection.
+
+The account context resolves in one read transaction. Known read refusals and
+pending deletions suppress ancestor/descendant links, including a stored root
+shortcut through unvisited intermediate comments. Refusal cleanup includes those
+root references and still preserves unsynced authored content for recovery.
+Background refresh announces a context change even when the comment body is
+unchanged. Ordinary post reads do not scan comment ancestry. No remote fetch,
+anonymous sync or new account authority is introduced by navigation.
+
+Local verification: 332 workspace/offline-shell checks and 79 feed checks pass;
+37 generic browser cases remain opt-in skips. Three enabled production-client
+browser fixtures pass: anonymous component discussion with nested replies and
+native parent/root navigation after cold offline reload; an account comment
+returning to a generic Thing; and fresh-device private post/comment media edits
+with offline parent navigation and successful reconnect. Desktop, 390px and
+320px checks have no horizontal overflow; narrow thread screenshots were
+visually inspected. Evidence: `tmp/thread-context-{anonymous,discussions,bound}/`
+and `tmp/thread-context-*.log`. The client build verifies 247 offline assets;
+focused lint passes and raw TypeScript remains at 91 baseline diagnostics, none
+in changed files.
+
+This closes the missing offline conversation links, not the entire deletion or
+media transfer matrix. Bound import/export, parent deletion/reconciliation,
+linked/managed media, draft sync and the other full-suite gates remain required.
+This checkpoint is local evidence; CI and deployed acceptance are separate.
+
+Deep-thread follow-up: the account browser regression also visits a depth-eight
+comment permalink after cold offline reload, with intervening comments unvisited,
+and follows its authorized generic-Thing root. Local traversal covers 70 levels
+without a depth cap; cycle detection remains the terminator.
+
+
+## Account post/comment ZIP imports — 2026-10-17
+
+The normal Import dialog now accepts canonical post/comment file bindings in an
+account workspace without waiting for a network connection or draft save. The
+existing importer validates the full transfer, hashes every byte, remaps independent
+content/file identities, and atomically commits content, bytes and both queue
+intents. It preserves the transfer's attachment order and comment target.
+
+Uploads use the existing post/comment purposes and approval gates. Content writes
+wait for confirmed file receipts, preserve private roots/inherited replies, and use
+canonical account IDs. Unrelated content can sync independently. No permission,
+server ownership, upload receipt or moderation state is inferred from a ZIP.
+
+`accountBoundImport.test.ts` checks ordered post/reply bindings, independent queue
+progress, anonymous/account round trips, exact bytes, and atomic rejection of
+missing targets, corrupt bytes, excess comment attachments and managed kinds.
+The extended `accountFileImport.browser.test.ts` exercises the existing normal
+Import and Download dialogs, cold offline native Component/reply rendering,
+private reconnect, canonical byte readback and anonymous access refusal. It uses
+the existing README loopback fixture setup; approval is granted only to the new
+disposable test account.
+
+This closes the bound post/comment import admission gap. It does not establish
+complete exports for previously remote bound content, linked/managed transfers,
+parent deletion/binding reconciliation, or the full matrix above.
+
+Local verification: 335 workspace/offline-shell checks and 320 Things checks
+pass; 37 opt-in browser skips are excluded. The separately enabled production-client
+import fixture passes with four real uploads, private/inherited bindings, exact
+original-byte readback, zero offline mutations and no browser errors. Native
+Component/reply and dialog bounds pass at 1440×1000, 390×844 and 320×844.
+Client build verifies 247 offline assets. Targeted lint has no errors and one
+existing constructor warning; raw TypeScript has 91 baseline diagnostics and none
+in changed files. Evidence is in `tmp/bound-import-*`, with the successful browser
+run in `tmp/bound-import-browser-complete/`. CI and deployed acceptance are separate.

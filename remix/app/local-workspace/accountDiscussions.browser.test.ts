@@ -33,15 +33,23 @@ test('account Thing discussions retain actual comments through cold offline nati
   await page.reload();await page.getByRole('button',{name:'View replies',exact:true}).first().click();await page.getByText('A retained nested account reply.',{exact:true}).waitFor();
   const comments = await context.request.get(url('/api/v1/things?target='+id+'&thingtime=comment&commentProjection=true&limit=20'));
   assert.equal(comments.status(),200); const commentId = (await comments.json()).comments[0].id;
+  let deepId=commentId,deepParent=commentId;
+  for(let depth=0;depth<7;depth++){deepParent=deepId;const response=await context.request.post(url('/api/v1/things/comment'),{headers,data:{id:deepParent,shareId:randomUUID(),text:'Deep retained reply '+depth}});assert.equal(response.status(),200,await response.text());deepId=(await response.json()).comment.id;}
   const canonical = await context.request.get(url('/api/v1/things?id='+commentId)); assert.equal(canonical.status(),200); const canonicalBody=await canonical.json();
   try { accountPostProjection(canonicalBody.post); } catch(error) { if(artifacts)await writeFile(resolve(artifacts,'projection-failure.json'),JSON.stringify({error:String(error),post:canonicalBody.post},null,2));throw error; }
   await page.goto(url('/post/'+commentId)); await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor();
   if(artifacts)await writeFile(resolve(artifacts,'online-post.txt'),await page.locator('body').innerText());
+  await page.goto(url('/post/'+deepId));await page.getByText('Deep retained reply 6',{exact:true}).waitFor();await page.getByRole('link',{name:'Go to the top of the thread 🧵',exact:true}).waitFor();
   await page.goto(url('/thing/'+id)); await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor();
   await page.waitForFunction(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)return false;for(const key of await caches.keys())if(key.startsWith('thingtime:offline-shell:')&&await(await caches.open(key)).match('/__thingtime_offline_shell_complete__'))return true;return false;});
   assert.equal((await guest.request.get(url('/api/v1/things?id='+id+'&commentProjection=true'))).status(),404);
   offline=true;await context.setOffline(true);
+  await page.goto(url('/post/'+deepId));await page.reload();await page.getByText('Deep retained reply 6',{exact:true}).waitFor();
+  const deepLink=page.getByRole('link',{name:'View parent comment 💬',exact:true}),rootLink=page.getByRole('link',{name:'Go to the top of the thread 🧵',exact:true});await deepLink.waitFor();await rootLink.waitFor();assert.equal(await deepLink.getAttribute('href'),'/post/'+deepParent);assert.equal(await rootLink.getAttribute('href'),'/thing/'+id);
+  await deepLink.scrollIntoViewIfNeeded();
+  if(artifacts)await page.screenshot({path:resolve(artifacts,'deep-offline-thread.png')});await rootLink.click();await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor();
   await page.goto(url('/post/'+commentId));await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor();
+  const conversation=page.getByRole('link',{name:'View full conversation 🧵',exact:true});await conversation.waitFor();assert.equal(await conversation.getAttribute('href'),'/thing/'+id);await conversation.click();await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor();
   await page.goto(url('/thing/'+id));await page.reload();
   await page.getByText('A real account comment retained on this device.',{exact:true}).waitFor();
   await page.getByText('Showing discussions saved on this device. More comments may be available online.',{exact:true}).waitFor();

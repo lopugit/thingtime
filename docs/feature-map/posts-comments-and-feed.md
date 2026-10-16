@@ -146,3 +146,14 @@ projections authorize only device storage; server access is checked on sync.
 `accountDiscussions.browser.test.ts` also creates offline comments and replies.
 Known refusal prunes synced owned read copies while preserving pending work.
 Bound media and remaining native mutation coverage stay open in the matrix.
+
+
+Offline permalink parent/root navigation uses `posts.postThreadContext` and
+`AccountDiscussionCache.threadContext`. Account context reads owned content,
+read-only snapshots and refusal/deletion fences in one scoped transaction.
+`AccountPostCache` retains the canonical response's root reference without
+fabricating intervening targets. `accountReadRevocation` clears those references
+with descendants; generic parents remain discussion snapshots. Regressions:
+`threadContext.test.ts`, plus enabled `details.browser.test.ts`,
+`accountDiscussions.browser.test.ts` and `accountBoundRetention.browser.test.ts`.
+See the [context checkpoint](../local-workspaces.md#offline-conversation-context--2026-10-17).

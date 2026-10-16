@@ -86,11 +86,24 @@ test('anonymous Thing discussions and owner rename survive a cold offline reload
 			bounds.push(measurement);
 			if (dir) await page.screenshot({ path: resolve(dir, `offline-discussion-${width}.png`), fullPage: true });
 		}
+		const moreReplies=page.getByRole('button',{name:'View replies',exact:true});if(await moreReplies.count())await moreReplies.click();
+		await page.getByText('Nested reply stays local too.',{exact:true}).waitFor();
+		const rootPath = new URL(page.url()).pathname;
+		const links = await page.locator('a[href^="/post/"]').evaluateAll((anchors: HTMLAnchorElement[]) => [...new Set(anchors.map(anchor => anchor.getAttribute('href')))]);
+		assert.equal(links.length,2);await page.goto(new URL(links[1]!,base).href);await page.reload();
+		await page.getByText('Nested reply stays local too.',{exact:true}).waitFor();
+		const parent=page.getByRole('link',{name:'View parent comment 💬',exact:true}),rootLink=page.getByRole('link',{name:'Go to the top of the thread 🧵',exact:true});
+		await parent.waitFor();await rootLink.waitFor();
+		assert.equal(await parent.getAttribute('href'),links[0]);assert.equal(await rootLink.getAttribute('href'),rootPath);
+		for(const width of [1440,390,320]){await page.setViewportSize({width,height:width===1440?1000:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth),width);if(dir)await page.screenshot({path:resolve(dir,`offline-reply-context-${width}.png`)});}
+		await parent.click();await page.getByText('A comment saved entirely on this device.',{exact:true}).waitFor();
+		await page.getByRole('link',{name:'View full conversation 🧵',exact:true}).click();await page.getByRole('heading',{name:'Renamed entirely offline',exact:true}).waitFor();
+		assert.deepEqual(mutations,[]);
 		if (dir)
 			await writeFile(
 				resolve(dir, 'browser-verification.json'),
 				JSON.stringify(
-					{ anonymous: true, coldOfflineReload: true, commentAndReply: true, ownerRename: true, commentSearch: true, mutations, bounds },
+					{ anonymous: true, coldOfflineReload: true, commentAndReply: true, offlineThreadNavigation: true, ownerRename: true, commentSearch: true, mutations, bounds },
 					null,
 					2
 				)

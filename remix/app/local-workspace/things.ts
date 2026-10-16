@@ -382,7 +382,8 @@ export class LocalThings {
 		await verifyTransferFiles({ manifest, files: bytes }, signal); this.lease.assertCurrent();
 		const recordings = manifest.things.filter(isTransferRecording);
 		for (const row of recordings) recordingTransferFile(row, manifest);
-		if (this.scope.kind === 'account' && manifest.files.some(file => !recordings.some(row => row.id === file.targetId))) fail('LOCAL_OPERATION_UNAVAILABLE', 'Bound media requires its dedicated account import adapter');
+		const accountFileTargets = new Set([...recordings, ...manifest.things.filter(row => row.thingtime.includes('post'))].map(row => row.id));
+		if (this.scope.kind === 'account' && manifest.files.some(file => !accountFileTargets.has(file.targetId))) fail('LOCAL_OPERATION_UNAVAILABLE', 'This media target requires its dedicated account import adapter');
 		const map = new Map(manifest.things.map(row => [row.id, this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()]));
 		const accountSuffix = this.scope.kind === 'account' ? this.uuid().slice(0, 8) : null;
 		const fileMap = new Map(manifest.files.map(file => [file.id, `${this.scope.kind === 'account' ? 'local-file' : 'local'}-${this.uuid()}`]));

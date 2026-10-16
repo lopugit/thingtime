@@ -173,6 +173,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		return { ...post, author, localOnly: false, localWorkspace: true, acl: row.acl, visibility: row.visibility, syncState: row.syncState,
 			commentCount: Math.max(post.commentCount || 0,cached?.commentCount || 0,comments.size), comments: [...comments.values()] };
 	};
+	const postContext = async (post: {id:string;thingtime:string[]}) => post.thingtime.includes('comment') ? worker().discussions.threadContext(post.id,owner as any) : {parent:null,root:null};
 	const mapPostInput = async (input: Record<string, unknown>, update = false) => {
 		const mapped = accountPostInput(input, update);
 		if (!mapped || !Array.isArray(mapped.attachmentIds) || !mapped.attachmentIds.length) return mapped;
@@ -242,8 +243,10 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		if (!rows.length) return result;
 		// A generic Thing parent is not a post. It must not make retention of
 		// the actual comment fail, nor become a post/owned Thing in this cache.
-		try { await worker().posts.remember(rows.filter(row => Array.isArray(row.thingtime) && (row.thingtime.includes('post') || row.thingtime.includes('comment'))), startedAt); }
+		try { await worker().posts.remember(rows.filter(row => Array.isArray(row.thingtime) && (row.thingtime.includes('post') || row.thingtime.includes('comment'))), startedAt, result.post ? {id:result.post.id,parent:result.parent?.id || null,root:result.root?.id || null} : undefined); }
 		catch (error) { facadeLease.assertCurrent(); result.localCacheError = 'These posts could not be retained on this device. Retry online before going offline.'; }
+		try { for (const row of rows.filter(row => Array.isArray(row.thingtime) && !row.thingtime.includes('post') && !row.thingtime.includes('comment'))) await worker().discussions.remember({ ...row, comments: [], repliesLoaded: false }, startedAt); }
+		catch { facadeLease.assertCurrent(); result.localCacheError = 'The conversation context could not be retained on this device. Retry online before going offline.'; }
 		const pending = [...rows], seen = new Set<string>(), observed = [];
 		while (pending.length && seen.size < 250) {
 			const row = pending.shift(); if (!row || seen.has(row.id)) continue; seen.add(row.id);
@@ -703,16 +706,18 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			};
 			const authoredPost = await ownedPost(args.id, true);
 			if (authoredPost) {
-				if (authoredPost.syncState === 'synced' && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(async () => { if (JSON.stringify(await ownedPost(args.id,true)) !== JSON.stringify(authoredPost)) announceLocalWorkspaceChange([args.id]); }).catch(async error => { await evictRefusedPost(error); }).catch(() => {});
-				return { ok: true, thing: project(await sync.view(args.id)), post: authoredPost, parent: null, root: null, localWorkspace: true };
+				const context = await postContext(authoredPost);
+				if (authoredPost.syncState === 'synced' && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(async () => { if (JSON.stringify([await ownedPost(args.id,true),await postContext(authoredPost)]) !== JSON.stringify([authoredPost,context])) announceLocalWorkspaceChange([args.id]); }).catch(async error => { await evictRefusedPost(error); }).catch(() => {});
+				return { ok: true, thing: project(await sync.view(args.id)), post: authoredPost, ...context, localWorkspace: true };
 			}
 			const cachedPost = await service.posts.get(args.id);
 			const offline = navigator.onLine === false || !canSyncAccountWorkspace(scope);
 			if (cachedPost && (offline || !cachedPost.thingtime.includes('comment'))) {
+				const context = await postContext(cachedPost);
 				if (!offline) void refresh(args, options?.signal).then(async () => {
-					if (JSON.stringify(await service.posts.get(args.id)) !== JSON.stringify(cachedPost)) announceLocalWorkspaceChange([args.id]);
+					if (JSON.stringify([await service.posts.get(args.id),await postContext(cachedPost)]) !== JSON.stringify([cachedPost,context])) announceLocalWorkspaceChange([args.id]);
 				}).catch(async error => { await evictRefusedPost(error); }).catch(() => {});
-				return {ok:true,thing:null,post:overlayAccountPost(cachedPost,new Map((await service.interactions.states()).map(state=>[state.id,state]))),parent:null,root:null,localWorkspace:true,incomplete:offline};
+				return {ok:true,thing:null,post:overlayAccountPost(cachedPost,new Map((await service.interactions.states()).map(state=>[state.id,state]))),...context,localWorkspace:true,incomplete:offline};
 			}
 			if (await sync.isDeleted(args.id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
 			const cached = await sync.view(args.id);

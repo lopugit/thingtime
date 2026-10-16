@@ -39,6 +39,7 @@ test('a fresh device retains existing private post/comment originals and edits/r
   offline=true;await device.setOffline(true);
   for(const [id,text,name] of [[root,'Existing private post.','retained-second.png'],[replyId,'Existing private reply.','retained-reply.png']]){
    await page.goto(url('/post/'+id));await page.reload();await page.getByText(text,{exact:true}).waitFor();
+   if(id===replyId){const conversation=page.getByRole('link',{name:'View full conversation 🧵',exact:true});await conversation.waitFor();assert.equal(await conversation.getAttribute('href'),'/post/'+root);await conversation.click();await page.getByText('Existing private post. Edited offline.',{exact:true}).waitFor();await page.goto(url('/post/'+id));await page.getByText(text,{exact:true}).waitFor();}
    await page.getByRole('button',{name:'View '+name,exact:true}).locator('img').evaluate((img:HTMLImageElement)=>img.decode());
    await page.getByRole('button',{name:'Post options',exact:true}).first().click();await page.getByText('Edit',{exact:true}).click();
    await page.getByRole('button',{name:'Delete '+name,exact:true}).click();await page.getByRole('region',{name:'Account file sync',exact:true}).waitFor();
@@ -57,7 +58,7 @@ test('a fresh device retains existing private post/comment originals and edits/r
   assert.equal(settled,true);assert.ok(deletions.length>=2);assert.ok(deletions.every(input=>input.retainReceipt===true&&!('requestId'in input)&&[root,replyId].includes(input.targetId)));assert.deepEqual(uploadRequests,[]);
   for(const id of [second,replyFile])assert.equal((await seed.request.get(url('/api/v1/attachments/content?id='+id))).status(),404);
   assert.deepEqual(await(await seed.request.get(url('/api/v1/attachments/content?id='+first+'&download=1'))).body(),png);assert.equal((await guest.request.get(url('/api/v1/things?id='+root))).status(),404);assert.deepEqual(errors,[]);
-  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({freshDevice:true,existingPrivatePostAndComment:true,exactRetainedBytes:true,offlineEditAndRemoval:true,existingIdDeletionReceipts:true,noUploads:true,privateReadDenied:true,viewports:[1440,390,320],writes,errors},null,2));
+  if(artifacts)await writeFile(resolve(artifacts,'verification.json'),JSON.stringify({freshDevice:true,existingPrivatePostAndComment:true,offlineParentNavigation:true,exactRetainedBytes:true,offlineEditAndRemoval:true,existingIdDeletionReceipts:true,noUploads:true,privateReadDenied:true,viewports:[1440,390,320],writes,errors},null,2));
  }catch(error){await page.getByText('Review sync',{exact:true}).click({timeout:2000}).catch(()=>{});if(artifacts){await page.screenshot({path:resolve(artifacts,'failure.png')}).catch(()=>{});await writeFile(resolve(artifacts,'failure.json'),JSON.stringify({body:await page.locator('body').innerText().catch(()=>''),errors,writes,uploadRequests,deletions,responses,readbacks},null,2));}throw error;}
  finally{await device.setOffline(false).catch(()=>{});if(root)await seed.request.delete(url('/api/v1/things'),{headers,data:{id:root}}).catch(()=>{});for(const id of uploaded)await seed.request.post(url('/api/v1/attachments/delete'),{headers,data:{id}}).catch(()=>{});await browser.close();}
 });

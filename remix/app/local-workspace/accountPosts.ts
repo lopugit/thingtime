@@ -6,7 +6,7 @@ import { searchLocalThings } from './structuredSearch';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 
 const COLLECTION = 'account-post-projections';
-type CachedPost = { post: PublicPost | null; at: number; deniedAt?: number; parent?: string | null };
+type CachedPost = { post: PublicPost | null; at: number; deniedAt?: number; parent?: string | null; root?: string | null };
 const fields = [
 	'id',
 	'type',
@@ -139,10 +139,11 @@ export class AccountPostCache {
 	constructor(private db: WorkspaceDatabase, private scope: WorkspaceScope, private lease: WorkspaceLease) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Account snapshots require their original workspace.', 403);
 	}
-	async remember(posts: unknown[], startedAt = Date.now()) {
+	async remember(posts: unknown[], startedAt = Date.now(), thread?: { id: string; parent: string | null; root: string | null }) {
 		if (!Array.isArray(posts) || posts.length > 50 || !Number.isFinite(startedAt))
 			throw new WorkspaceError('INVALID_POST_CACHE', 'Invalid post snapshot page.', 502);
 		const values = posts.map(accountPostProjection);
+		if (thread && (!values.some(post=>post.id===thread.id) || [thread.parent,thread.root].some(id=>id!==null&&(typeof id!=='string'||!id||id.length>200)) || [thread.parent,thread.root].includes(thread.id))) throw new WorkspaceError('INVALID_POST_CACHE','Invalid conversation context.',502);
 		return this.db.transaction(this.scope, 'readwrite', this.lease, async (tx) => {
 			let changed = false;
 			const retained = new Map((await tx.list<CachedPost>(COLLECTION)).map((row) => [row.id, row.value])), refusals = await accountReadRefusals(tx);
@@ -152,14 +153,16 @@ export class AccountPostCache {
 				return false;
 			};
 			for (const value of values) {
-				const old = retained.get(value.id);
-				if ((old && old.at > startedAt) || denied(value.id) || ((value as any).targetId && denied((value as any).targetId))) continue;
+				const old = retained.get(value.id), parent = (value as any).targetId || old?.parent || null;
+				const context = thread?.id === value.id ? { parent: thread.parent || parent, root: thread.root } : {parent, root: parent === (old?.parent || (old?.post as any)?.targetId || null) ? old?.root : undefined};
+				if ((thread?.id === value.id && thread.root && denied(thread.root)) || (old && old.at > startedAt) || denied(value.id) || ((value as any).targetId && denied((value as any).targetId))) continue;
 				const post = prunePost(value, denied);
 				if (old && JSON.stringify(old.post) === JSON.stringify(post)) {
-					if (startedAt > old.at) await tx.put(COLLECTION, post.id, { ...old, at: startedAt });
+					changed ||= old.parent !== context.parent || old.root !== context.root;
+					if (startedAt > old.at || old.parent !== context.parent || old.root !== context.root) await tx.put(COLLECTION, post.id, { ...old, ...context, at: startedAt });
 					continue;
 				}
-				await tx.put(COLLECTION, post.id, { post, at: startedAt, ...(old?.deniedAt !== undefined ? { deniedAt: old.deniedAt } : {}) });
+				await tx.put(COLLECTION, post.id, { post, at: startedAt, ...context, ...(old?.deniedAt !== undefined ? { deniedAt: old.deniedAt } : {}) });
 				changed = true;
 			}
 			return changed;

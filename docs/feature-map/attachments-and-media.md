@@ -329,3 +329,15 @@ for native offline edits/removals and actual private reconnect. Comment update
 transport omits the inherited audience snapshot while preserving server policy.
 See the [fresh-device checkpoint](../local-workspaces.md#existing-account-post-and-comment-originals--2026-10-17)
 and README for the opt-in loopback fixture.
+
+
+## Offline account post/comment ZIP import
+
+`accountImportSupported` and `LocalThings.import` admit validated bound post/comment
+files through the existing `AccountFileSync.contentHooks` transaction. All content,
+bytes and queue intents commit locally; upload approval and exact account/plane
+verification remain remote requirements. The normal Import dialog does not wait
+for uploads. Regressions: `accountBoundImport.test.ts` and the expanded
+`accountFileImport.browser.test.ts` using README's existing loopback fixture.
+Complete exports of previously remote bound content still require the separate
+complete-snapshot acceptance work; partial read caches never prove completeness.

@@ -1,11 +1,13 @@
-import { accountReadRefusals, forgetAccountConversation } from './accountReadRevocation';
+import { localPostProjection, localTargetIndex, postThreadContext } from './posts';
+import type { LocalThing } from './things';
+import { ACCOUNT_READ_COLLECTIONS, accountReadRefusals, forgetAccountConversation } from './accountReadRevocation';
 import type { PublicPost } from '../components/Feed/feedTypes';
 import { accountDiscussionProjection } from './accountPosts';
 import { searchLocalThings } from './structuredSearch';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 
 const COLLECTION = 'account-discussion-projections';
-type Snapshot = { post: PublicPost | null; at: number; deniedAt?: number; parent: string | null };
+type Snapshot = { post: PublicPost | null; at: number; deniedAt?: number; parent: string | null; root?: string | null };
 const validId = (id: unknown): id is string => typeof id === 'string' && !!id && id.length <= 200;
 const missing = () => new WorkspaceError('LOCAL_DISCUSSION_MISSING', 'This discussion is not saved on this device. Open it online to retain it.', 409);
 
@@ -56,6 +58,38 @@ export class AccountDiscussionCache {
  async get(id: string) {
   if (!validId(id)) throw missing();
   return this.db.transaction(this.scope, 'readonly', this.lease, async tx => (await tx.get<Snapshot>(COLLECTION, id))?.post || null);
+ }
+ /** Read context and its refusal/deletion fences in one scoped revision. */
+ async threadContext(id: string, author: PublicPost['author']) {
+  return this.db.transaction(this.scope, 'readonly', this.lease, async tx => {
+   const all = (await tx.list<LocalThing>('things')).map(row=>row.value), byId = new Map(all.map(row=>[row.id,row])), byTarget=localTargetIndex(all);
+   const states = new Map((await tx.list<{state:string;deleted?:unknown;audience:{acl:string[];visibility:PublicPost['visibility']}}>('thing-sync')).map(row=>[row.id,row.value]));
+   const snapshots = new Map<string,Snapshot>(), threadRoots = new Map<string,string>();
+   for (const collection of ACCOUNT_READ_COLLECTIONS) for (const row of await tx.list<Snapshot>(collection)) {
+    if (row.value.root) threadRoots.set(row.id,row.value.root);
+    if (!snapshots.has(row.id) || snapshots.get(row.id)!.at < row.value.at) snapshots.set(row.id,row.value);
+   }
+   const refusals = await accountReadRefusals(tx), blocked = new Set([...states].filter(([,state])=>state.deleted).map(([key])=>key));
+   for (const [key,refusal] of refusals) if ((!byId.has(key) || states.get(key)?.state!=='synced') && (!snapshots.get(key)?.post || snapshots.get(key)!.at<=refusal.at)) blocked.add(key);
+   const children=new Map<string,Set<string>>();
+   for(const key of new Set([...byId.keys(),...snapshots.keys()])) for(const parent of [byId.get(key)?.targetId,snapshots.get(key)?.parent,(snapshots.get(key)?.post as any)?.targetId,threadRoots.get(key)]) if(parent){const ids=children.get(parent)||new Set<string>();ids.add(key);children.set(parent,ids);}
+   const pending=[...blocked];while(pending.length)for(const child of children.get(pending.pop()!)||[])if(!blocked.has(child)){blocked.add(child);pending.push(child);}
+   const projected = new Map<string,PublicPost & {targetId?:string|null}>();
+   const lookup = (target: string) => {
+    if (projected.has(target)) return projected.get(target)!;
+    const state=states.get(target), local=byId.get(target), snapshot=snapshots.get(target);
+    if (blocked.has(target)) return null;
+    // Known refusals remove synced owned rows atomically. Pending authored work
+    // remains recoverable but cannot supply refused conversation context.
+    const post = local && state ? { ...localPostProjection(local,all,this.scope.kind==='account'?this.scope.ownerId:'',false,byTarget), ...state.audience, author, localOnly:false, localWorkspace:true } : snapshot?.post;
+    if (!post) return null;
+    const withTarget = {...post,targetId:(post as any).targetId || snapshot?.parent || null};
+    projected.set(target,withTarget);return withTarget;
+   };
+   const row=lookup(id);if(!row)return {parent:null,root:null};
+   const context=postThreadContext(row,lookup), rootId=threadRoots.get(id);
+   return {...context,root:context.root || (rootId && rootId!==id ? lookup(rootId) : null)};
+  });
  }
  async comments(target: string, args: { cursor?: string; limit?: number } = {}, knownLocalTarget = false, authored: PublicPost[] = []) {
   if (!validId(target)) throw missing();

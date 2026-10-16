@@ -1,6 +1,6 @@
 import { WorkspaceError, WORKSPACE_LIMITS, type WorkspaceTransaction } from './storage';
 export const ACCOUNT_READ_COLLECTIONS = ['account-post-projections', 'account-discussion-projections'] as const;
-type Snapshot = { post: any | null; at: number; deniedAt?: number; parent?: string | null };
+type Snapshot = { post: any | null; at: number; deniedAt?: number; parent?: string | null; root?: string | null };
 export const pruneAccountConversation = (post: any, denied: (id: string) => boolean): any => ({
  ...post,
  comments: (post.comments || []).filter((row: any) => !denied(row.id)).map((row: any) => pruneAccountConversation(row, denied)),
@@ -17,8 +17,7 @@ export async function forgetAccountConversation(tx: WorkspaceTransaction, id: st
  const children = new Map<string, string[]>();
  for (const row of ownedBodies) if (row.value?.targetId) { const values=children.get(row.value.targetId)||[];values.push(row.id);children.set(row.value.targetId,values); }
  for (const row of rows) {
-  const parent = row.value.parent || row.value.post?.targetId;
-  if (typeof parent === 'string' && parent) { const values = children.get(parent) || []; values.push(row.id); children.set(parent, values); }
+  for (const parent of [row.value.parent || row.value.post?.targetId, row.value.root]) if (typeof parent === 'string' && parent) { const values = children.get(parent) || []; values.push(row.id); children.set(parent, values); }
  }
  const denied = new Set([id]), pending = [id];
  while (pending.length) for (const child of children.get(pending.pop()!) || []) if (!denied.has(child)) { denied.add(child); pending.push(child); }
