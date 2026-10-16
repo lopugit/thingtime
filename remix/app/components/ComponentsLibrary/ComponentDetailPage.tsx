@@ -1,3 +1,4 @@
+import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
 import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
 import { restoreComponentSourceDraft } from '~/drafts/componentSourceDraft';
 import { useComponentVersionDraft } from '~/drafts/useComponentVersionDraft';
@@ -500,6 +501,7 @@ const ComponentDetailWorkspace = ({ docsFocus }: { docsFocus: boolean }) => {
         if (seq !== requestSeqRef.current) return;
         if (!resp?.ok) throw resp;
         if (resp.components.length) {
+          if (resp.localCacheError) setLoadError(resp.localCacheError);
           setEntries(resp.components);
           setNotFound(false);
           if (familyCacheKeyRef.current) {
@@ -521,6 +523,8 @@ const ComponentDetailWorkspace = ({ docsFocus }: { docsFocus: boolean }) => {
     setEntries([]);
     setNotFound(true);
   }, [key, catalog]);
+
+  useWorkspaceRefresh(() => { void loadFamily(); }, catalog !== 'online');
 
   const mountedKeyRef = React.useRef(key);
   React.useEffect(() => {

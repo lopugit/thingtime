@@ -230,3 +230,21 @@ test('schema-based data waits for its copied definition after a failed schema sy
   assert.ok((await f.sync.status()).every(entry => entry.state === 'synced'));
  } finally { await f.db.close(); }
 });
+
+
+test('catalogue batches retain canonical owned content atomically without replacing pending edits or deletions', async () => {
+ const f = setup(), stamp = new Date().toISOString();
+ const row = (id: string, text = id) => ({ id, author: { id: 'owner' }, thingtime: ['component'], crystal: { name: text, componentKey: id, version: 1, render: { tag: 'p', children: text } }, createdAt: stamp, updatedAt: stamp, acl: ['tt:user'], visibility: 'private', revision: 1 } as AccountThing);
+ try {
+  await assert.rejects(f.sync.rememberMany([row('first'), { ...row('foreign'), author: { id: 'other' } }]), /belong/);
+  assert.equal((await f.sync.things.snapshot()).length, 0);
+  await f.sync.rememberMany([row('first'),row('second')]);
+  await f.sync.things.update({ id:'first',crystal:{name:'Pending edit'} }); await f.sync.remove(['second']);
+  const retained = await f.sync.rememberMany([row('first','Remote old'),row('second'),row('third')]);
+  assert.equal(retained[0]?.crystal.name,'Pending edit'); assert.equal(retained[1],undefined); assert.equal(retained[2]?.id,'third');
+  // A valid but oversized record fails during the transaction after the first put.
+  await assert.rejects(f.sync.rememberMany([row('rolled-back'),{...row('too-large'),extended:{text:'x'.repeat(1024*1024)}}]), /large|limit|exceeds/i);
+  assert.equal(await f.sync.view('rolled-back'),null);
+  await assert.rejects(f.sync.rememberMany(Array.from({length:51},(_,i)=>row(`row-${i}`))), /page/);
+ } finally { await f.db.close(); }
+});

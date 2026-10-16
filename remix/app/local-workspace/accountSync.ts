@@ -80,25 +80,30 @@ export class AccountThingSync {
 			createdAt: input.createdAt, updatedAt: input.updatedAt, revision: 1,
 			author: { id: this.scope.ownerId }, acl: input.acl || ['tt:user'], visibility: input.visibility || 'private' }) as unknown as AccountThing;
 	}
-	async remember(input: AccountThing) {
-		const remote = this.checked(input);
+	async remember(input: AccountThing) { return (await this.rememberMany([input]))[0]; }
+	/** One bounded catalogue page commits atomically; quota or invalid content
+	 * cannot leave a partially retained page presented as complete. */
+	async rememberMany(input: AccountThing[]) {
+		if (!Array.isArray(input) || input.length > 50) throw new WorkspaceError('INVALID_SYNC_BATCH', 'Invalid account cache page.', 400);
+		const remotes = input.map(row => this.checked(row));
 		return this.tx('readwrite', async tx => {
-			const sync = await tx.get<SyncRecord>(COLLECTION, remote.id);
-			// A stale list/resolve response cannot resurrect a local deletion,
-			// including after the server has acknowledged it.
-			if (sync?.deleted) return undefined;
-			// A background read is never allowed to erase unsynced editing.
-			if (sync && sync.state !== 'synced') return tx.get<LocalThing>('things', remote.id);
-			const previous = await tx.get<LocalThing>('things', remote.id);
-			// Local timestamps are editor concurrency tokens, not server clocks.
-			// An acknowledgement must not invalidate an editor's next save.
-			if (previous && sync?.base && Date.parse(sync.base.updatedAt) >= Date.parse(remote.updatedAt)) return previous;
-			const cached = previous ? { ...remote, revision: previous.revision + 1,
-				updatedAt: new Date(Math.max(Date.parse(previous.updatedAt) + 1, Date.parse(remote.updatedAt))).toISOString() } : remote;
-			await tx.put('things', remote.id, cached);
-			await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
-			return cached;
+			const result: (LocalThing | undefined)[] = [];
+			for (const remote of remotes) result.push(await this.rememberIn(tx, remote));
+			return result;
 		});
+	}
+	private async rememberIn(tx: WorkspaceTransaction, remote: AccountThing) {
+		const sync = await tx.get<SyncRecord>(COLLECTION, remote.id);
+		if (sync?.deleted) return undefined;
+		// A background read cannot erase unsynced editing, nor regress the base.
+		if (sync && sync.state !== 'synced') return tx.get<LocalThing>('things', remote.id);
+		const previous = await tx.get<LocalThing>('things', remote.id);
+		if (previous && sync?.base && Date.parse(sync.base.updatedAt) >= Date.parse(remote.updatedAt)) return previous;
+		const cached = previous ? { ...remote, revision: previous.revision + 1,
+			updatedAt: new Date(Math.max(Date.parse(previous.updatedAt) + 1, Date.parse(remote.updatedAt))).toISOString() } : remote;
+		await tx.put('things', remote.id, cached);
+		await tx.put(COLLECTION, remote.id, { id: remote.id, state: 'synced', base: remote, audience: { acl: remote.acl, visibility: remote.visibility }, attempts: 0, retryAt: 0 } satisfies SyncRecord);
+		return cached;
 	}
 	private async enqueue(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: AccountThingWrite) {
 		if (!accountThingCanCache(row)) throw new WorkspaceError('UNSUPPORTED_ACCOUNT_CONTENT', 'This kind requires its dedicated account sync adapter.', 409);
@@ -169,14 +174,17 @@ export class AccountThingSync {
 			return { ...thing, ...sync.audience, author: { id: this.scope.ownerId }, syncState: sync.state, localOnly: false, localWorkspace: true };
 		});
 	}
-	async views(ids: string[]) {
+	async views(ids: string[]) { return (await this.viewSnapshot(ids)).rows; }
+	/** Content and tombstones come from one read revision across tabs. */
+	async viewSnapshot(ids: string[]) {
 		return this.tx('readonly', async tx => {
-			const rows = [];
+			const rows = [], deleted = new Set<string>();
 			for (const id of ids) {
 				const thing = await tx.get<LocalThing>('things', id), sync = await tx.get<SyncRecord>(COLLECTION, id);
+				if (sync?.deleted) deleted.add(id);
 				if (thing && sync && !sync.deleted) rows.push({ ...thing, ...sync.audience, author: { id: this.scope.ownerId }, syncState: sync.state, localOnly: false, localWorkspace: true });
 			}
-			return rows;
+			return { rows, deleted };
 		});
 	}
 	async status() { return this.tx('readonly', async tx => (await tx.list<SyncRecord>(COLLECTION)).map(({ value }) => ({ id: value.id, state: value.state, deleted: !!value.deleted, error: value.error, attempts: value.attempts, retryAt: value.retryAt }))); }

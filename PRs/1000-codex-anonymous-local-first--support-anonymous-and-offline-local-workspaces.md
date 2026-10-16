@@ -1113,3 +1113,39 @@ These checks cover the shared ThingDefinitionEditor and Component source control
 They do not claim raw-number recovery in other DefinitionValueEditor consumers,
 cross-device draft conflict UI, account file/managed copies or the remaining
 full-suite acceptance matrix. No main merge or manual deployment.
+
+## Account catalogue discovery and cross-tab refresh — 2026-10-16
+
+Visiting online Component or Schema catalogue pages now retains their owned
+ordinary definitions in the same account workspace used by Things and Builder.
+Requests use the existing bounded account transport with expected-actor and
+data-plane headers, capability checks, identity cancellation and response limits.
+Shared/system entries remain read-only catalogue results; they never become
+editable owned records or sync intent just because they were displayed.
+
+`AccountThingSync.rememberMany` validates and commits at most 50 owned records
+atomically. Invalid content or quota failure cannot partially retain a catalogue
+page; the online result remains usable with a device-save warning. Incoming
+snapshots cannot overwrite pending edits or revive deletion tombstones. Repeated
+identical reads do not broadcast changes. Device Component/Schema catalogues and
+Component detail previews now re-read after scoped workspace invalidations from
+other tabs, keeping current paint and editor state while reloading. Component
+family caches are invalidated too.
+
+Local verification: 208 workspace, four offline-shell, 52 component and 265 schema
+tests pass; 23 general-suite opt-in cases are skipped. The enabled catalogue
+browser scenario creates 23 private server Components and a Schema through real
+APIs in a disposable account, discovers both Component pages, then disables all
+networking. All 23 remain pageable after cold reload, rename works natively and
+updates another open catalogue/detail, the discovered Schema creates local Data,
+and a newly authored Schema appears in another tab. Offline mutation requests
+and browser errors are zero. Existing anonymous/account Component browser
+regressions also pass. Actual 1440/390/320px PNGs and request/header/bounds evidence
+are in `tmp/local-catalog-ui/`. The client build contains 248 verified offline
+assets. Targeted lint is clean; raw TypeScript retains 91 baseline diagnostics.
+These results are local, separate from CI and deployed verification.
+
+This covers visited catalogue pages, not automatic download of an account's
+entire library or complete discovery of unvisited pages. Wider cached Things
+membership/pagination, account bookmark/social adapters and cross-account/device
+acceptance remain on the full matrix. No main merge or manual deployment.

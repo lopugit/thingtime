@@ -10440,3 +10440,24 @@ Run `app/local-workspace/components.browser.test.ts` with
   Verify zero offline mutation requests and no browser errors. Regression command:
   enable `TT_LOCAL_DEFINITION_URL`, `TT_LOCAL_DEFINITION_ARTIFACTS` and shared
   Playwright/Chrome paths for `app/local-workspace/definition.browser.test.ts`.
+
+
+### Account catalogue retention and tab refresh (2026-10-16)
+
+- In a disposable account, create more than one page of Components and a Schema
+  through real server APIs, then browse Online catalogue / Mine. Requests must
+  carry the expected account and data plane. Visit every page to be tested.
+- Go fully offline and switch to This device / Mine: all visited owned entries
+  remain pageable after cold reload. Render and rename an owned Component;
+  another open device catalogue and detail preview must refresh without reload.
+- Open the discovered Schema offline and create Data through its native form.
+  Create another Schema in a second tab; the first Schema catalogue must update.
+- Server catalogue results must not overwrite pending local edits or resurrect
+  local deletions. Shared/system entries must never enter owned editable storage.
+  Malformed or oversized owned batches roll back completely and show a device
+  retention warning while the valid online response stays available. Repeating
+  identical catalogue reads must not cause invalidation loops.
+- Inspect desktop/390px/320px screenshots and overflow. Confirm zero offline
+  mutation requests and browser errors. Enable `TT_LOCAL_CATALOG_URL`,
+  `TT_LOCAL_CATALOG_ARTIFACTS` and the shared Playwright/Chrome paths to run
+  `app/local-workspace/catalog.browser.test.ts` against a disposable local stack.

@@ -1,3 +1,4 @@
+import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
 import React from 'react';
 import {
   Badge,
@@ -616,6 +617,7 @@ const SchemasWorkspace = ({ device }: { device: boolean }) => {
         })) as BrowseSchemasResponse;
         if (seq !== requestSeqRef.current) return;
         if (!resp?.ok) throw resp;
+        if (resp.localCacheError) lopuRef.current({ title: resp.localCacheError, status: 'warning' });
 
         setEntries((prev) => {
           if (!cursor) return resp.schemas;
@@ -649,6 +651,8 @@ const SchemasWorkspace = ({ device }: { device: boolean }) => {
     },
     [view, device]
   );
+
+  useWorkspaceRefresh(() => { void runBrowse(); }, device);
 
   // reconcile cached paint with fresh data
   React.useEffect(() => {

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Visited account Component/Schema catalogues now
+  retain owned definitions atomically for offline editing; scoped tab changes
+  refresh device catalogues and native Component previews. Verified multi-page
+  retention, offline schema data creation, cross-tab edits and responsive bounds.
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-16 — **Codex (AI)**: Builder definition and Component source controls
   recover unfinished fields offline in isolated anonymous/account workspaces.
   Content saves no longer await draft/Timeline queues; private ordinary copies

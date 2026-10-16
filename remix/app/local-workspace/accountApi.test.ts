@@ -261,3 +261,31 @@ test('a mixed dedicated-adapter delete never removes a cached device copy remote
   if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });
+
+
+test('online catalogue discovery retains owned definitions for device paging without adopting shared entries', async () => {
+ const saved = { window: globalThis.window, indexedDB: globalThis.indexedDB, navigator: Object.getOwnPropertyDescriptor(globalThis,'navigator') };
+ const target = new EventTarget(), scope = { kind:'account', origin:'https://thingtime.example', ownerId:'catalog-owner', dataPlane:'home' } as const;
+ Object.assign(globalThis,{ window:{location:{origin:scope.origin},addEventListener:target.addEventListener.bind(target),removeEventListener:target.removeEventListener.bind(target),dispatchEvent:target.dispatchEvent.bind(target)},indexedDB:new IDBFactory() });
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{onLine:false}});
+ try {
+  bindLocalWorkspace(false,rootIdentity.read().generation,scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const worker=accountWorkspaceWorker(scope), api=accountApi({components:{browse:async(_args:any)=>{throw new Error('Unfenced remote path');}},things:{get:async(_args:any)=>{}}},{id:scope.ownerId},scope.dataPlane);
+  const stamp = new Date().toISOString(), row=(id:string,owner=scope.ownerId)=>({id,author:{id:owner},thingtime:['component'],crystal:{name:id,componentKey:id,version:1,render:{tag:'p',children:id}},createdAt:stamp,updatedAt:stamp,revision:1,acl:['tt:user'],visibility:'private'});
+  const rows=[row('one'),row('two'),row('shared','another' as any)]; let invalidations=0;
+  target.addEventListener('thingtime:local-workspace-changed',()=>invalidations++);
+  worker.transport.browse=async()=>({ok:true,components:rows,nextCursor:'remote-next',total:3,totalCapped:false});
+  const online:any=await api.components.browse({}); assert.equal(online.components.length,3); assert.equal(online.nextCursor,'remote-next');
+  assert.equal(await worker.sync.view('shared'),null); assert.equal(invalidations,1);
+  await api.components.browse({}); assert.equal(invalidations,1,'identical background reads do not create invalidation loops');
+  const first:any=await api.components.browse({device:true,mine:true,limit:1,sort:'oldest'});
+  const next:any=await api.components.browse({device:true,mine:true,limit:1,sort:'oldest',cursor:first.nextCursor});
+  assert.deepEqual(new Set([first.components[0].id,next.components[0].id]),new Set(['one','two'])); assert.equal(next.nextCursor,null);
+  await worker.sync.things.update({id:'one',crystal:{name:'Pending name'}}); await worker.sync.remove(['two']);
+  const refreshed:any=await api.components.browse({}); assert.equal(refreshed.components.find((r:any)=>r.id==='one').crystal.name,'Pending name'); assert.equal(refreshed.components.some((r:any)=>r.id==='two'),false);
+  worker.transport.browse=async()=>({ok:true,components:[{...row('oversized'),extended:{text:'x'.repeat(1024*1024)}}]});
+  const full:any=await api.components.browse({}); assert.ok(full.localCacheError); assert.equal(full.components.length,1); assert.equal(await worker.sync.view('oversized'),null);
+  rootIdentity.changed(); bindLocalWorkspace(true,rootIdentity.read().generation); rootIdentity.confirm(rootIdentity.read().generation);
+  await assert.rejects(api.components.browse({device:true}),/changed/i);
+ } finally { rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis,{window:saved.window,indexedDB:saved.indexedDB}); if(saved.navigator) Object.defineProperty(globalThis,'navigator',saved.navigator); }
+});

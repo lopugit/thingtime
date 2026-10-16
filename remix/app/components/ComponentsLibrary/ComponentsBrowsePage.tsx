@@ -1,3 +1,4 @@
+import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
 import { useComponentVersionDraft } from '~/drafts/useComponentVersionDraft';
 import { createWithDraft } from '~/drafts/createWithDraft';
 import { DraftSaveStatus } from '~/drafts/DraftPicker';
@@ -882,6 +883,7 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
         })) as BrowseComponentsResponse;
         if (seq !== requestSeqRef.current) return;
         if (!resp?.ok) throw resp;
+        if (resp.localCacheError) lopuRef.current({ title: resp.localCacheError, status: 'warning' });
 
         setEntries((prev) => {
           if (!cursor) return resp.components;
@@ -917,6 +919,9 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
     [view, device]
   );
 
+  const familyCacheRef = React.useRef(new Map<string, BrowseComponentEntry[]>());
+  useWorkspaceRefresh(() => { familyCacheRef.current.clear(); void runBrowse(); }, device);
+
   // reconcile cached paint with fresh data
   React.useEffect(() => {
     runBrowse();
@@ -937,7 +942,6 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
   const sources = React.useMemo(() => collapseEntriesByFamily(entries), [entries]);
 
   // family design rosters hydrate lazily on first switch, cached per key
-  const familyCacheRef = React.useRef(new Map<string, BrowseComponentEntry[]>());
   const loadFamily = React.useCallback(async (key: string): Promise<BrowseComponentEntry[]> => {
     const cached = familyCacheRef.current.get(key);
     if (cached) return cached;

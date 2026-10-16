@@ -560,3 +560,11 @@ covers missing coverage, stale copies, pending edits, alias ownership, quota,
 cancellation and identity fencing. `accountImport.browser.test.ts` exercises
 real offline normal-dialog downloads and round-trips the downloaded file.
 File/linked-gallery and managed-account offline export remain separate work.
+
+
+Account catalogue discovery uses `accountThingTransport.browse` and bounded
+`AccountThingSync.rememberMany` to retain only owned Component/Schema definitions.
+Online projections retain shared entries without giving them local ownership.
+`useWorkspaceRefresh` coalesces scope-only invalidations for device catalogues
+and Component detail; family rosters clear before re-reading. See the
+[account catalogue checkpoint](../local-workspaces.md#account-catalogue-discovery-and-cross-tab-refresh--2026-10-16).

@@ -144,8 +144,30 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	// Explicit login/logout establish or revoke identity; other remote features require confirmation.
 	const browse = (kind: 'schema' | 'component') => async (args: Record<string, unknown> = {}) => {
 		facadeLease.assertCurrent();
-		if (args.device !== true) return online[kind === 'schema' ? 'schemas' : 'components'].browse(args);
-		const { sync } = worker();
+		const { sync, transport } = worker();
+		if (args.device !== true) {
+			const result = await transport.browse(kind, args);
+			const key = kind === 'schema' ? 'schemas' : 'components';
+			if (!Array.isArray(result[key]) || result[key].length > 50) throw new WorkspaceError('INVALID_CATALOG', 'Invalid catalogue response.', 502);
+			// Only authenticated owned content enters the editable device store.
+			// Shared/system entries remain read-only response projections. Pending
+			// edits and deletion tombstones retain priority over catalogue snapshots.
+			const owned = result[key].filter((row: any) => accountThingCanCache(row) && row.thingtime.includes(kind) && row.author?.id === owner.id);
+			const before = new Map((await sync.views(owned.map((row: any) => row.id))).map(row => [row.id, row.revision]));
+			let changed = false;
+			try {
+				const retained = await sync.rememberMany(owned);
+				changed = retained.some(row => row && row.revision !== before.get(row.id));
+			} catch (error) {
+				facadeLease.assertCurrent();
+				result.localCacheError = `These account definitions could not be saved on this device: ${error instanceof Error ? error.message : 'Device storage failed'}. Retry the catalogue before going offline.`;
+			}
+			const snapshot = await sync.viewSnapshot(owned.map((row: any) => row.id));
+			const views = new Map(snapshot.rows.map(row => [row.id, project(row)])), deleted = snapshot.deleted;
+			result[key] = result[key].filter((row: any) => !deleted.has(row.id)).map((row: any) => views.has(row.id) ? { ...row, ...views.get(row.id) } : row);
+			facadeLease.assertCurrent(); if (changed) announceLocalWorkspaceChange();
+			return result;
+		}
 		const bundled = kind === 'component' ? (await import('../components/ComponentsLibrary/bundledComponentCatalog')).bundledComponentEntries() : [];
 		facadeLease.assertCurrent();
 		const result = await browseLocalDefinitions(await sync.things.snapshot(), kind, args, workspaceScopeKey(scope), row => ({ id: row.id }), bundled);
