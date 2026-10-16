@@ -62,3 +62,42 @@ test('account-only post templates use the canonical copy and retain the result; 
   assert.equal((await client.request(undefined,{id:'template'})).draft.mode,'template');
  }finally{await db.close();}
 });
+
+test('explicit account review reads fresh source without retaining bodies, files, catalogue or write intent',async()=>{
+ const db=new WorkspaceDatabase(new IDBFactory(),undefined,undefined,IDBKeyRange),files=new AccountFileSync(db,scope,lease),drafts=new AccountDraftSync(db,scope,lease,files.draftHooks),catalog=new AccountDraftCatalog(db,scope,lease);
+ const context='comment:plain:target',remote={...content,surface:'comment' as const,context,id:'original',mode:'template' as const,revision:7,createdAt:'2026-10-17T00:00:00Z',updatedAt:'2026-10-17T00:00:00Z',attachmentIds:['original-file']};
+ const calls:unknown[]=[];let reads=0,online=true;
+ const fail=async()=>{assert.fail('Review must not write or fetch media');};
+ const client=new AccountDraftClient({db,lease,files,drafts,catalog,wake:()=>assert.fail('Review must not wake sync'),transport:{drafts:{read:async()=>{reads++;return remote;},write:fail,list:async query=>{calls.push(query);return {drafts:[remote],nextCursor:'next'};}},files:{retention:fail,bytes:fail}}},scope,()=>online,()=>assert.fail('Review must not change workspace data'));
+ try{
+  const page=await client.reviewList(context);assert.equal(page.drafts[0].id,'original');assert.equal('snapshot' in page.drafts[0],false);assert.equal(reads,0);assert.equal(page.nextCursor,'next');
+  await client.reviewList(context,'next-page');assert.deepEqual(calls,[{surface:'comment',context},{surface:'comment',context,cursor:'next-page'}]);
+  assert.equal((await client.reviewRead('original')).revision,7);remote.revision=8;assert.equal((await client.reviewRead('original')).revision,8);assert.equal(reads,2);
+  assert.deepEqual(await db.transaction(scope,'readonly',lease,tx=>tx.usage()),{records:0,bytes:0});
+  // Even a locally retained draft must not mask a newer account review.
+  await drafts.remember({...remote,attachmentIds:[],snapshot:'{"text":"Old retained body"}'});
+  const before=await db.transaction(scope,'readonly',lease,tx=>tx.usage());
+  assert.equal((await client.reviewRead('original')).snapshot,remote.snapshot);
+  assert.equal((await drafts.drafts.request(undefined,{id:'original'})).draft.snapshot,'{"text":"Old retained body"}');
+  assert.deepEqual(await db.transaction(scope,'readonly',lease,tx=>tx.usage()),before);
+  online=false;await assert.rejects(client.reviewRead('original'),/Reconnect/);await assert.rejects(client.reviewList(context),/Reconnect/);assert.equal(reads,3);
+ }finally{await db.close();}
+});
+
+test('account review rejects invalid pages, wrong IDs and delayed results after workspace retirement',async()=>{
+ let active=true,release!:(value:any)=>void;const bound={assertCurrent(){if(!active)throw Error('Retired workspace');},onInvalidate:()=>()=>{}};
+ const db=new WorkspaceDatabase(new IDBFactory(),undefined,undefined,IDBKeyRange),files=new AccountFileSync(db,scope,bound),drafts=new AccountDraftSync(db,scope,bound,files.draftHooks),catalog=new AccountDraftCatalog(db,scope,bound);
+ const context='comment:plain:target',remote={...content,surface:'comment' as const,context,id:'original',mode:'draft' as const,revision:1,createdAt:'2026-10-17T00:00:00Z',updatedAt:'2026-10-17T00:00:00Z'};
+ let page:any={drafts:[{...remote,context:'wrong'}],nextCursor:null},defer=false,calls=0;
+ const fail=async()=>{assert.fail('No writes or media');};
+ const client=new AccountDraftClient({db,lease:bound,files,drafts,catalog,wake(){},transport:{drafts:{read:async()=>{calls++;return defer?new Promise(resolve=>{release=resolve;}):{...remote,id:'wrong'};},write:fail,list:async()=>{calls++;return defer?new Promise(resolve=>{release=resolve;}):page;}},files:{retention:fail,bytes:fail}}},scope,()=>true,()=>{});
+ try{
+  await assert.rejects(client.reviewList(context),/invalid data/);page={drafts:[remote,remote],nextCursor:null};await assert.rejects(client.reviewList(context),/invalid data/);
+  page={drafts:Array(31).fill(remote),nextCursor:null};await assert.rejects(client.reviewList(context),/invalid data/);
+  page={drafts:[remote],nextCursor:'loop'};await assert.rejects(client.reviewList(context,'loop'),/invalid data/);
+  const before=calls;await assert.rejects(client.reviewList(''),/Choose a comment/);await assert.rejects(client.reviewList(context,'x'.repeat(257)),/invalid data/);await assert.rejects(client.reviewRead('../bad'),/Invalid draft/);assert.equal(calls,before);
+  await assert.rejects(client.reviewRead('original'),/invalid draft/);
+  defer=true;const read=client.reviewRead('original');active=false;release(remote);await assert.rejects(read,/Retired/);
+  active=true;const list=client.reviewList(context);active=false;release({drafts:[remote],nextCursor:null});await assert.rejects(list,/Retired/);
+ }finally{await db.close();}
+});

@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Added explicit read-only recovery of account-only
+  older plain comment drafts/templates. Fresh review and changed-source checks
+  preserve originals while independent copies survive offline reload; anonymous
+  editing makes no account-draft requests. Local phone and account-switch acceptance
+  passes. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Added native cross-tab account-switch regression
   coverage for delayed draft recovery reads/copies and an uncertain private-comment
   response, including original-queue acknowledgment and exactly-once server readback.

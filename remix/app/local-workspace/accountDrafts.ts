@@ -21,7 +21,7 @@ export type AccountDraftHooks = Omit<LocalDraftHooks, 'changed'> & {
  /** Resolve only already confirmed file receipts, inside the snapshot transaction. */
  prepare?: (tx: WorkspaceTransaction, draft: AccountDraft) => Promise<DraftContent | null>;
 };
-const checked = (input: AccountDraft, id = input?.id): AccountDraft => {
+export const validateAccountDraft = (input: AccountDraft, id = input?.id): AccountDraft => {
  let content: DraftContent;
  try { content = validateDraftContent(input); } catch { throw new WorkspaceError('INVALID_ACCOUNT_DRAFT', 'The account returned an invalid draft snapshot.', 502); }
  if (!validDraftId(input.id) || input.id !== id || !['draft','template'].includes(input.mode) ||
@@ -29,6 +29,7 @@ const checked = (input: AccountDraft, id = input?.id): AccountDraft => {
   throw new WorkspaceError('INVALID_ACCOUNT_DRAFT', 'The account returned an invalid draft.', 502);
  return { ...content, id: input.id, mode: input.mode, revision: input.revision, createdAt: input.createdAt, updatedAt: input.updatedAt };
 };
+const checked = validateAccountDraft;
 
 /** Local draft revisions belong to the editor. Remote revisions and frozen
  * retries belong to this separate, account-scoped queue. Neither blocks posting. */

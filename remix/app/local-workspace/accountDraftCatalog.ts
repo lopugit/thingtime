@@ -15,6 +15,15 @@ const summary = (input: any): DraftSummary => {
  return { id: input.id, mode: input.mode, surface: input.surface, name: input.name, context: input.context, revision: input.revision, createdAt: input.createdAt, updatedAt: input.updatedAt };
 };
 const compare = (a: {createdAt:string;id:string}, b: {createdAt:string;id:string}) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id);
+export function validateDraftSummaryPage(query: Filters, cursor: string | null, result: { drafts: DraftSummary[]; nextCursor: string | null }) {
+ if ((query.surface && !DRAFT_SURFACES.includes(query.surface as any)) || (query.context && query.context.length > 300) ||
+  (cursor !== null && (typeof cursor !== 'string' || !cursor || cursor.length > 256)) ||
+  !Array.isArray(result?.drafts) || result.drafts.length > 30 ||
+  (result.nextCursor !== null && (typeof result.nextCursor !== 'string' || !result.nextCursor || result.nextCursor.length > 256 || result.nextCursor === cursor))) throw invalid();
+ const drafts = result.drafts.map(summary);
+ if (new Set(drafts.map(row=>row.id)).size !== drafts.length || drafts.some(row => (query.context && query.context !== row.context) || (query.surface && query.surface !== row.surface))) throw invalid();
+ return { drafts, nextCursor: result.nextCursor };
+}
 const digest = async (text: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map(x => x.toString(16).padStart(2,'0')).join('');
 /** Bounded summary pages are discovery only. No body, bytes or editable ownership
  * is inferred until the exact canonical draft and its originals are retained. */
@@ -37,10 +46,8 @@ export class AccountDraftCatalog {
  }
  async remember(query: Filters, cursor: string | null, result: { drafts: DraftSummary[]; nextCursor: string | null }, startedAt: number) {
   const key = this.key(query), id = await digest(JSON.stringify([key,cursor]));
-  if (!Number.isFinite(startedAt) || !Array.isArray(result?.drafts) || result.drafts.length > 30 ||
-   (result.nextCursor !== null && (typeof result.nextCursor !== 'string' || !result.nextCursor || result.nextCursor.length > 256 || result.nextCursor === cursor))) throw invalid();
-  const drafts = result.drafts.map(summary);
-  if (new Set(drafts.map(row=>row.id)).size !== drafts.length || drafts.some(row => (query.context && query.context !== row.context) || (query.surface && query.surface !== row.surface))) throw invalid();
+  if (!Number.isFinite(startedAt)) throw invalid();
+  const { drafts } = validateDraftSummaryPage(query, cursor, result);
   return this.db.transaction(this.scope, 'readwrite', this.lease, async tx => {
    const pages = await tx.list<Page>(COLLECTION), previous = pages.find(row => row.id === id)?.value;
    if ((previous?.at ?? -1) > startedAt) return false;

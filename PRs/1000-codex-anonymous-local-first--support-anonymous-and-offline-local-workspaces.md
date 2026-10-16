@@ -2251,3 +2251,55 @@ This proves live cross-tab account switching for these recovery and plain-commen
 paths. Origin/data-plane transitions, rich/media drafts, remote-only legacy
 recovery and the remaining full-suite matrix still require acceptance. CI and
 current-head deployment are not established by this local fixture.
+
+
+## Account-only older plain drafts — 2026-10-17
+
+Plain comment/reply recovery now discovers older account drafts using their exact
+unscoped `comment:plain:<target>` context after an explicit “Find earlier account
+drafts” action. Discovery reads at most 30 summaries per page and exposes the
+existing continuation cursor. It does not automatically restore content or assign
+an older home-plane draft to the selected database.
+
+`AccountDraftClient.reviewList` and `reviewRead` reuse the bound account transport
+and canonical summary/body validators. These fresh, read-only requests bypass
+retained bodies and never admit source IDs, media, catalogue records or sync
+operations into the current workspace. The transport preserves authentication,
+expected actor/data-plane checks, same-origin policy, response limits, rate limits
+and cancellation; the review adds a 20-second signal and captured editor guards.
+Anonymous workspaces never construct this account review facade. Offline account
+review gives an explicit reconnect error without issuing a request.
+
+The shared recovery dialog previews the original text. Copy re-reads the source
+and rejects any changed revision/content, invalid editor/context, media, rich or
+pending-submission snapshot. It appends only bounded plain text to the latest
+current editor, whose existing scoped draft session owns the independent copy.
+Original working drafts and templates keep their IDs, mode, contents and revision;
+no instantiate/recover/delete operation is sent for them. Copied text remains
+editable through a cold offline reload, and content completion still does not
+wait on draft saving.
+
+Local acceptance uses `remotePlainComment.browser.test.ts` with a real private
+parent and account-only draft/template in a clean browser. It verifies no automatic
+adoption, zero review/source writes, no retained source IDs, fresh changed-source
+refusal, current text and template preservation, offline copy reload, explicit
+offline review refusal, and screenshot/bounds/button-hit checks at 1440/390/320px.
+Enable it with loopback `TT_LOCAL_REMOTE_PLAIN_URL`, `TT_SHARED_PLAYWRIGHT_PATH`,
+optional `TT_SHARED_CHROME_PATH` and `TT_LOCAL_REMOTE_PLAIN_ARTIFACTS`.
+
+The native account-switch fixture now also delays real account review/copy
+responses across a switch and proves no cross-account adoption. Device recovery,
+failed-draft independent posting and anonymous offline discussion regressions pass;
+the latter records zero account-draft requests as well as zero remote writes.
+Evidence: `tmp/remote-plain-native-final/verification.json`,
+`tmp/remote-plain-switch-final/verification.json`,
+`tmp/remote-plain-device/verification.json`, and
+`tmp/remote-plain-anonymous/browser-verification.json`.
+
+Validation: 431 workspace/draft plus 79 feed checks pass (45 default opt-in skips
+excluded); all four relevant browser fixtures were separately enabled. The client
+build verifies 247 offline assets (21,710,050 bytes). Focused lint is clean;
+TypeScript retains 91 baseline diagnostics, none in changed files. This closes
+remote-only recovery for old raw-context plain drafts. Rich/media reconciliation,
+origin/data-plane transitions, the remaining local-first matrix, current-head CI
+and deployed acceptance remain open. No merge or manual deployment is included.

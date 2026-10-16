@@ -13,9 +13,10 @@ test('anonymous Thing discussions and owner rename survive a cold offline reload
 	try {
 		const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } }),
 			page = await context.newPage();
-		const mutations: string[] = [];
+		const mutations: string[] = [], accountDraftRequests: string[] = [];
 		context.on('request', (request: any) => {
 			if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) mutations.push(`${request.method()} ${new URL(request.url()).pathname}`);
+			if (new URL(request.url()).pathname === '/api/v1/drafts') accountDraftRequests.push(request.method());
 		});
 		const root = page.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/root-data');
 		await page.goto(new URL('/things', base).href);
@@ -101,11 +102,12 @@ test('anonymous Thing discussions and owner rename survive a cold offline reload
 		await parent.click();await page.getByText('A comment saved entirely on this device.',{exact:true}).waitFor();
 		await page.getByRole('link',{name:'View full conversation 🧵',exact:true}).click();await page.getByRole('heading',{name:'Renamed entirely offline',exact:true}).waitFor();
 		assert.deepEqual(mutations,[]);
+		assert.deepEqual(accountDraftRequests,[]);
 		if (dir)
 			await writeFile(
 				resolve(dir, 'browser-verification.json'),
 				JSON.stringify(
-					{ anonymous: true, coldOfflineReload: true, commentAndReply: true, offlineThreadNavigation: true, ownerRename: true, commentSearch: true, mutations, bounds },
+					{ anonymous: true, coldOfflineReload: true, commentAndReply: true, offlineThreadNavigation: true, ownerRename: true, commentSearch: true, mutations, accountDraftRequests, bounds },
 					null,
 					2
 				)

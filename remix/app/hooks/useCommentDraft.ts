@@ -2,6 +2,7 @@ import React from 'react';
 import { LOCAL_WORKSPACE_OWNER } from '~/local-workspace/runtime.client';
 import localforage from 'localforage';
 import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { accountDraftReview } from '~/drafts/draftClient';
 import { plainCommentContext, restorePlainComment, plainCommentLegacySources, reviewPlainComment, copyReviewedPlainComment, type PlainCommentLegacySource, type PlainCommentReview } from '~/drafts/plainCommentDraft';
 import { subscribeWorkspaceStorage, workspaceStorageBinding, workspaceStorageIdentity } from '~/local-workspace/storageStatus.client';
 
@@ -23,6 +24,13 @@ export const useCommentDraft = (userId: string | null | undefined, targetId: str
   binding.lease.assertCurrent();
  } }), [binding, scope, enabled]);
  const isCurrent = () => { try { lease.assertCurrent(); return true; } catch { return false; } };
+ const accountRecovery = enabled && binding?.scope.kind === 'account';
+ const readSource = async (source: PlainCommentLegacySource) => {
+  lease.assertCurrent();
+  if (source.store !== 'account') return readLegacy(source);
+  if (!accountRecovery) throw Error('Reconnect to your account to review this draft.');
+  return JSON.stringify(await accountDraftReview(userId!, binding!.lease).read(source.key));
+ };
  const update = (next: typeof state) => { live.current = next; setState(next); };
  const value = state.scope === scope ? state.value : '';
  const draft = useWorkspaceDraft({ enabled, surface: 'comment', resumeRemote: isOpen, context: plainCommentContext(targetId), validateSnapshot: restorePlainComment,
@@ -65,8 +73,14 @@ export const useCommentDraft = (userId: string | null | undefined, targetId: str
  }, [binding, userId, targetId, isOpen, lease, scope, enabled]);
  return { ...draft, value, setValue, clear, hydrated: state.scope === scope && state.restored,
   legacySources: legacy.scope === scope ? legacy.sources : [], legacyError: legacy.scope === scope ? legacy.error : '', identity: scope,
-  reviewLegacy: (source: PlainCommentLegacySource) => reviewPlainComment(source, readLegacy, lease),
-  copyLegacy: (review: PlainCommentReview) => copyReviewedPlainComment(review, readLegacy, lease, () => live.current.scope === scope ? live.current.value : '', setValue),
+  accountRecovery,
+  listLegacyAccount: async (cursor: string | null = null) => {
+   lease.assertCurrent(); if (!accountRecovery) throw Error('Reconnect to your account to review earlier drafts.');
+   const page = await accountDraftReview(userId!, binding!.lease).list(plainCommentContext(targetId), cursor); lease.assertCurrent();
+   return { sources: page.drafts.map(saved => ({ key: saved.id, store: 'account' as const, context: saved.context, label: saved.name || 'Untitled account draft' })), nextCursor: page.nextCursor };
+  },
+  reviewLegacy: (source: PlainCommentLegacySource) => reviewPlainComment(source, readSource, lease),
+  copyLegacy: (review: PlainCommentReview) => copyReviewedPlainComment(review, readSource, lease, () => live.current.scope === scope ? live.current.value : '', setValue),
   begin: () => { if (!isCurrent() || pending.current === scope) return false; pending.current = scope; return true; },
   end: () => { if (pending.current === scope) pending.current = null; }
  };

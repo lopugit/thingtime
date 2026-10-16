@@ -174,3 +174,18 @@ for the original queue acknowledgment before asserting one server comment.
 Use the loopback-only setup in [local workspaces](../local-workspaces.md#native-cross-tab-draft-isolation--2026-10-17).
 This closes those account-switch cases; origin/data-plane and rich/media cases
 remain open.
+
+
+## Read-only account legacy review
+
+`AccountDraftClient.reviewList/reviewRead` use fresh bound account reads without
+retaining original IDs, media or queue state. Shared summary/body validators serve
+both normal retention and review. The `accountDraftReview` facade captures the
+editor lease before resolving a worker. Plain-comment recovery discovers only the
+exact older raw context, paginates bounded summaries, previews, then re-reads before
+appending plain text into an independent scoped draft. It preserves working drafts
+and templates, refuses rich/media/pending-submission state, and requires verified
+account connectivity only for fetching the account-only source. Anonymous/device
+editing and already copied text remain local. Run `accountDraftClient.test.ts`,
+`plainCommentDraft.test.ts`, the enabled remote-plain and account-switch browser
+fixtures, and the existing device/anonymous regressions. [Setup and evidence](../local-workspaces.md#account-only-older-plain-drafts--2026-10-17).

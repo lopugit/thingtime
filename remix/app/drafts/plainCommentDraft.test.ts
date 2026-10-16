@@ -55,3 +55,16 @@ test('append refuses combined overflow and rechecks identity after a delayed cop
  const copying=copyReviewedPlainComment(review,()=>new Promise(resolve=>{release=resolve;}),lease,()=>'',()=>assert.fail());
  lease.retire();release(text);await assert.rejects(copying,/Retired/);
 });
+
+test('account source review and copy preserve template identity and refuse stale revisions or non-plain content',async()=>{
+ const source={key:'remote-id',store:'account' as const,context:'comment:plain:target',label:'Earlier account template'};
+ const saved={id:source.key,revision:2,mode:'template',createdAt:'2026-10-17T00:00:00Z',updatedAt:'2026-10-17T00:00:00Z',name:'Earlier',surface:'comment',context:source.context,snapshot:'{"text":"Account-only text\\nwith breaks"}',attachmentIds:[] as string[]};
+ const lease=guard(),read=async()=>JSON.stringify(saved);let editor='Current';
+ const review=await reviewPlainComment(source,read,lease);await copyReviewedPlainComment(review,read,lease,()=>editor,text=>{editor=text;});
+ assert.equal(editor,'Current\n\nAccount-only text\nwith breaks');assert.equal(saved.id,'remote-id');assert.equal(saved.mode,'template');assert.equal(saved.revision,2);
+ saved.revision++;await assert.rejects(copyReviewedPlainComment(review,read,lease,()=>editor,()=>assert.fail()),/changed/);
+ saved.attachmentIds=['file'];await assert.rejects(reviewPlainComment(source,read,lease),/contains files/);saved.attachmentIds=[];
+ saved.snapshot='{"text":"Rich","pendingSubmission":{"id":"old-post"}}';await assert.rejects(reviewPlainComment(source,read,lease),/not a plain-text/);
+ saved.snapshot='{"text":"plain"}';saved.context='comment:plain:other';await assert.rejects(reviewPlainComment(source,read,lease),/different editor/);
+ saved.context=source.context;saved.id='other';await assert.rejects(reviewPlainComment(source,read,lease),/invalid draft/);
+});

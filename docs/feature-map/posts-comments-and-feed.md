@@ -167,3 +167,11 @@ sources. PostCard's compact textareas retain line breaks and guard IME Enter.
 independent submission and verified private reconnect; the anonymous discussion
 fixture awaits real submission completion before asserting rendered comments.
 See [draft recovery](../local-workspaces.md#plain-comment-draft-recovery--2026-10-17).
+
+
+Older account-only plain comment/reply drafts are discoverable through the existing
+recovery dialog. Explicit read-only review uses the exact target context; copying
+rechecks the source and appends text to an independent workspace draft. Original
+IDs/templates remain unchanged, rich/media state is refused, and anonymous fields
+never query account drafts. See [account draft recovery](account-drafts-and-templates.md#read-only-account-legacy-review)
+for native offline and account-switch acceptance.

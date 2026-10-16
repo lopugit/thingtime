@@ -56,7 +56,8 @@ test('native cross-tab account switches retire held legacy draft review and copy
  const url = (path: string) => new URL(path, base).href, headers = { Origin: new URL(base!).origin };
  const users: { id: string; username: string }[] = [], errors: string[] = [], evidence: string[] = [];
  let releaseResponse = () => {}, responseFinished: Promise<unknown> | undefined;
- let parent = '';
+ const heldReviewResponses: Promise<unknown>[] = [];
+ let parent = ''; const remoteDraftId = randomUUID();
  for (const page of [control, tree, comment]) { page.setDefaultTimeout(20_000); page.on('pageerror', (error: Error) => errors.push(error.message)); }
  const editor = tree.locator('.string-atomic-wrapper [contenteditable="true"]');
  const input = comment.getByPlaceholder('Write a comment… 💬', { exact: true });
@@ -88,6 +89,9 @@ test('native cross-tab account switches retire held legacy draft review and copy
    if (!index) {
     const created = await context.request.post(url('/api/v1/things'), { headers, data: { thingtime: ['data'], crystal: { name: 'Private switch fixture' }, acl: ['tt:user'] } });
     assert.equal(created.status(), 200, await created.text()); parent = (await created.json()).thing.id;
+    const remoteDraft = await context.request.post(url('/api/v1/drafts'), { headers, data: { operation: 'save', id: remoteDraftId, writeId: randomUUID(), revision: 0, mode: 'draft', expectedActor: users[0].id,
+     content: { name: 'Account-only recovery source', surface: 'comment', context: 'comment:plain:' + parent, snapshot: JSON.stringify({ text: 'Account A remote private draft' }), attachmentIds: [] } } });
+    assert.equal(remoteDraft.status(), 200, await remoteDraft.text());
    }
   }
   const [a, b] = users, treeKey = `thingtime:account:${a.id}`, commentKey = `tt-draft:${a.id}:${parent}`;
@@ -139,6 +143,29 @@ test('native cross-tab account switches retire held legacy draft review and copy
   await treeDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await commentDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await treeDialog.waitFor({ state: 'hidden' }); await commentDialog.waitFor({ state: 'hidden' });
+  for (const phase of ['review', 'copy']) {
+   await comment.getByRole('button', { name: 'Recover earlier comment draft', exact: true }).click();
+   await commentDialog.getByRole('button', { name: 'Find earlier account drafts', exact: true }).click();
+   const source = commentDialog.getByRole('button', { name: 'Account-only recovery source', exact: true }); await source.waitFor();
+   if (phase === 'copy') { await source.click(); await commentDialog.locator('pre').getByText('Account A remote private draft', { exact: true }).waitFor(); }
+   const step = { started: false, release: () => {}, finished: undefined as Promise<unknown> | undefined };
+   const gate = new Promise<void>(resolve => { step.release = resolve; }); releaseResponse = step.release;
+   await comment.route('**/api/v1/drafts?*', async (route: any) => {
+    if (route.request().method() !== 'GET' || new URL(route.request().url()).searchParams.get('id') !== remoteDraftId) return route.continue();
+    step.finished = (async () => { const response = await route.fetch(); assert.equal(response.status(), 200); step.started = true; await gate; await route.fulfill({ response }).catch(() => {}); })();
+    heldReviewResponses.push(step.finished); await step.finished;
+   });
+   if (phase === 'review') await source.click();
+   else await commentDialog.getByRole('button', { name: 'Append to comment', exact: true }).click();
+   for (let attempt = 0; attempt < 80 && !step.started; attempt++) await comment.waitForTimeout(100);
+   assert.equal(step.started, true); await switchTo(b); await input.waitFor({ state: 'hidden' });
+   step.release(); await step.finished; await comment.unroute('**/api/v1/drafts?*');
+   assert.equal(await commentDialog.count(), 0); assert.equal(await comment.getByText('Account A remote private draft', { exact: true }).count(), 0);
+   await switchTo(a); await input.waitFor();
+   await comment.waitForFunction(() => (document.querySelector('textarea[placeholder="Write a comment… 💬"]') as HTMLTextAreaElement)?.value === 'Account A current comment');
+   const original = await context.request.get(url('/api/v1/drafts?id=' + remoteDraftId)); assert.equal(original.status(), 200); assert.equal((await original.json()).draft.revision, 1);
+   evidence.push(`account ${phase}: fresh remote result held across native switch; no adoption and original source unchanged`);
+  }
   const submitted = 'Private comment with a delayed account response';
   let remoteStatus = 0, remoteStarted = false;
   const responseGate = new Promise<void>(resolve => { releaseResponse = resolve; });
@@ -197,9 +224,10 @@ test('native cross-tab account switches retire held legacy draft review and copy
   }
   throw error;
  } finally {
-  releaseResponse(); await responseFinished?.catch(() => {});
+  releaseResponse(); await responseFinished?.catch(() => {}); await Promise.allSettled(heldReviewResponses);
   try {
    if (users[0]) await context.request.post(url('/api/v1/auth/accounts/switch'), { headers, data: { userId: users[0].id } });
+   if (users[0]) { const response = await context.request.get(url('/api/v1/drafts?id=' + remoteDraftId)); if (response.status() === 200) await context.request.post(url('/api/v1/drafts'), { headers, data: { operation: 'delete', id: remoteDraftId, revision: (await response.json()).draft.revision, expectedActor: users[0].id } }); }
    if (parent) await context.request.delete(url('/api/v1/things'), { headers, data: { id: parent } });
    if (users.length) await context.request.post(url('/api/v1/auth/logout'), { headers, data: { all: true } });
   } finally { await browser.close(); }

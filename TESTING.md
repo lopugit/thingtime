@@ -11069,3 +11069,27 @@ Run `app/local-workspace/components.browser.test.ts` with
   so modal focus restoration is not mistaken for submission completion.
 - [ ] Continue the separate origin/data-plane, rich/media and remote-only legacy
   draft matrix; these cross-tab account checks do not establish those boundaries.
+
+
+### Account-only older plain-draft recovery (2026-10-17)
+
+- [ ] Seed a private old raw-context comment draft and template in a disposable
+  account without device copies. Opening the comment must not auto-adopt either.
+  Find earlier account drafts, review one, and verify no writes, media fetches or
+  retained source IDs/queue state. Summary pages stay bounded and validate context.
+- [ ] Change the source after review. Copy must refuse, retain current text and
+  require review again. Copy an unchanged source/template and verify current text
+  is preserved, only text is appended, and original IDs/mode/revisions stay intact.
+- [ ] Reload the independent copy offline. Earlier account review must explain
+  reconnect and make no account request; anonymous discussions must never query
+  `/api/v1/drafts` or sync account data.
+- [ ] At 1440/390/320px, verify long source names wrap, the dialog fits and Copy
+  stays reachable above floating controls. Run `remotePlainComment.browser.test.ts`
+  with the loopback setup in `docs/local-workspaces.md`.
+- [ ] Hold fresh account review and copy responses across a native cross-tab
+  account switch. Neither the old preview nor copied text may enter the new
+  account; returning preserves current edits and the original source revision.
+  Run the expanded `workspaceSwitch.browser.test.ts`.
+- [ ] Keep rich/media/pending-submission reconciliation and origin/data-plane
+  transitions as separate acceptance gates; refusing those payloads here is not
+  complete recovery support for their original editors.

@@ -2,6 +2,7 @@ import { LocalDrafts } from '../local-workspace/drafts';
 import { accountWorkspaceWorker } from '../local-workspace/accountApi.client';
 import { currentAccountWorkspace, anonymousWorkspaceDatabase, anonymousWorkspaceLease, LOCAL_WORKSPACE_OWNER } from '../local-workspace/runtime.client';
 import type { AccountDraft, DraftSummary } from './draftCore';
+import type { WorkspaceLease } from '../local-workspace/storage';
 export class DraftRequestError extends Error {
  constructor(public status:number,message:string){super(message);}
 }
@@ -12,3 +13,15 @@ export async function draftRequest<T = { ok:true;draft:AccountDraft }>(actor:str
  return accountWorkspaceWorker(scope).draftClient.request(input,query) as Promise<T>;
 }
 export const listAccountDrafts=(actor:string,query:Record<string,string>={})=>draftRequest<{drafts:DraftSummary[];nextCursor:string|null;partial?:boolean}>(actor,undefined,query);
+
+/** Capture the editor's lease before resolving any current worker. Anonymous
+ * content cannot select an account, and an old callback cannot borrow a new one. */
+export function accountDraftReview(actor: string, lease: WorkspaceLease) {
+ lease.assertCurrent(); const scope = currentAccountWorkspace();
+ if (!scope || scope.ownerId !== actor || actor === LOCAL_WORKSPACE_OWNER) throw new DraftRequestError(409, 'Draft account changed. Reopen this editor.');
+ const client = accountWorkspaceWorker(scope).draftClient;
+ return {
+  list: async (context: string, cursor: string | null = null) => { lease.assertCurrent(); const result = await client.reviewList(context, cursor); lease.assertCurrent(); return result; },
+  read: async (id: string) => { lease.assertCurrent(); const result = await client.reviewRead(id); lease.assertCurrent(); return result; }
+ };
+}

@@ -3,6 +3,7 @@ import { inspectDraftRecovery } from './draftRecovery';
 import type { LocalDraft } from './draftSession';
 import { workspaceDraftContext, workspaceDraftRecoveryKey } from './workspaceDraft';
 import type { WorkspaceScope, WorkspaceLease } from '../local-workspace/storage';
+import { validateAccountDraft } from '../local-workspace/accountDrafts';
 
 export const plainCommentContext = (target: string) => `comment:plain:${target}`;
 export function restorePlainComment(snapshot: string) {
@@ -12,7 +13,7 @@ export function restorePlainComment(snapshot: string) {
   throw Error('This is not a plain-text comment draft. Open its original editor; the saved copy has been kept.');
  return value.text as string;
 }
-export type PlainCommentLegacySource = { key: string; store: 'text' | 'draft'; context?: string; label: string };
+export type PlainCommentLegacySource = { key: string; store: 'text' | 'draft' | 'account'; context?: string; label: string };
 export type PlainCommentReview = { source: PlainCommentLegacySource; raw: string; text: string };
 export async function plainCommentLegacySources(origin: string, actor: string, target: string, scope: WorkspaceScope) {
  const context = plainCommentContext(target), hashed = await workspaceDraftContext(scope, context);
@@ -30,6 +31,11 @@ export async function reviewPlainComment(source: PlainCommentLegacySource, read:
  if (typeof raw !== 'string' || raw.length > DRAFT_MAX_BYTES * 4) throw Error('The earlier comment draft could not be read. Its original copy has been kept.');
  let text: string;
  if (source.store === 'text') text = restorePlainComment(JSON.stringify({ text: raw }));
+ else if (source.store === 'account') {
+  const value = validateAccountDraft(JSON.parse(raw), source.key);
+  if (value.surface !== 'comment' || value.context !== source.context || value.attachmentIds.length) throw Error('This draft belongs to a different editor or contains files. Its original copy has been kept.');
+  text = restorePlainComment(value.snapshot);
+ }
  else {
   const value = JSON.parse(raw) as LocalDraft, inspected = inspectDraftRecovery(value, restorePlainComment);
   if (inspected.error || !inspected.seed) throw Error(inspected.error || 'The earlier comment draft is missing.');

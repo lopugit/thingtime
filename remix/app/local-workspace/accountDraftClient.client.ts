@@ -1,10 +1,11 @@
-import type { AccountDraftSync, AccountDraftTransport } from './accountDrafts';
-import type { AccountDraftCatalog } from './accountDraftCatalog';
+import { validateAccountDraft, type AccountDraftSync, type AccountDraftTransport } from './accountDrafts';
+import { validateDraftSummaryPage, type AccountDraftCatalog } from './accountDraftCatalog';
 import type { AccountFileSync, AccountFileRetentionTransport } from './accountFiles';
 import { accountReadRefusals, forgetAccountConversation } from './accountReadRevocation';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 import type { StoredDraft } from './drafts';
-import type { DraftSummary } from '../drafts/draftCore';
+import { validDraftId, type DraftSummary } from '../drafts/draftCore';
+const REVIEW_OFFLINE = 'Reconnect to review the latest account draft. Any device copy is kept.';
 
 type Services = { drafts: AccountDraftSync; catalog: AccountDraftCatalog; files: AccountFileSync; db: WorkspaceDatabase; lease: WorkspaceLease;
  transport: { drafts: AccountDraftTransport & { list(query: Record<string,string>, signal?:AbortSignal): Promise<{ drafts:DraftSummary[];nextCursor:string|null }>; fromPost?(input:Record<string,unknown>):Promise<unknown> }; files: AccountFileRetentionTransport };
@@ -16,7 +17,24 @@ export class AccountDraftClient {
  private checkedAt = new Map<string,number>();
  constructor(private services: Services, private scope: Extract<WorkspaceScope,{kind:'account'}>, private online:()=>boolean, private changed:()=>void) { services.lease.assertCurrent(); }
  private tx<T>(run: Parameters<WorkspaceDatabase['transaction']>[3]) { return this.services.db.transaction(this.scope,'readonly',this.services.lease,run) as Promise<T>; }
- private ensureOnline() { this.services.lease.assertCurrent(); if (!this.online()) throw new WorkspaceError('DRAFT_OFFLINE', 'This account draft has not been saved on this device. Reconnect to load it.',503); }
+ private ensureOnline(message = 'This account draft has not been saved on this device. Reconnect to load it.') { this.services.lease.assertCurrent(); if (!this.online()) throw new WorkspaceError('DRAFT_OFFLINE', message,503); }
+ /** Explicit review bypasses retained bodies and never admits source IDs, media
+  * or sync operations into this workspace. Every read uses the bound transport. */
+ async reviewList(context: string, cursor: string | null = null) {
+  this.ensureOnline(REVIEW_OFFLINE);
+  if (typeof context !== 'string' || !context) throw new WorkspaceError('INVALID_ACCOUNT_DRAFT', 'Choose a comment before reviewing earlier drafts.', 400);
+  const query = { surface: 'comment', context };
+  // Validate caller bounds before issuing even a read-only account request.
+  validateDraftSummaryPage(query, cursor, { drafts: [], nextCursor: null });
+  const page = await this.services.transport.drafts.list({ ...query, ...(cursor ? { cursor } : {}) }, AbortSignal.timeout(20_000));
+  this.ensureOnline(REVIEW_OFFLINE); return validateDraftSummaryPage(query, cursor, page);
+ }
+ async reviewRead(id: string) {
+  this.ensureOnline(REVIEW_OFFLINE);
+  if (!validDraftId(id)) throw new WorkspaceError('INVALID_ACCOUNT_DRAFT', 'Invalid draft reference.', 400);
+  const draft = await this.services.transport.drafts.read(id, AbortSignal.timeout(20_000));
+  this.ensureOnline(REVIEW_OFFLINE); return validateAccountDraft(draft, id);
+ }
  private refresh(key:string, task:()=>Promise<void>) {
   let run=this.refreshes.get(key);
   if (!run) { run=task().finally(()=>this.refreshes.delete(key));this.refreshes.set(key,run); }
