@@ -24,6 +24,17 @@ public class KeystoreDeviceStoreTest {
             assertThrows(Exception.class,()->new KeystoreDeviceStore(context).load(scope));
         } finally { file.delete(); }
     }
+    @Test public void folderCiphertextCannotBeReadAsAPairingRecord() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        DeviceScope scope=new DeviceScope("namespace-test-"+UUID.randomUUID(),"https://thingtime.test",false);
+        File folder=new File(context.getNoBackupFilesDir(),"folders/"+scope.key()+".bin"),device=new File(context.getNoBackupFilesDir(),"devices/"+scope.key()+".bin");
+        try {
+            new KeystoreDeviceStore(context,"folders").save(scope,new JSONObject().put("owner",scope.owner).put("origin",scope.origin).put("roots",new org.json.JSONArray()));
+            device.getParentFile().mkdirs();Files.copy(folder.toPath(),device.toPath());
+            assertThrows(Exception.class,()->new KeystoreDeviceStore(context).load(scope));
+            assertEquals(0,new KeystoreDeviceStore(context,"folders").load(scope).getJSONArray("roots").length());
+        } finally { folder.delete();device.delete(); }
+    }
     @Test public void ciphertextCannotMoveBetweenAccounts() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         DeviceScope first=new DeviceScope("test-"+UUID.randomUUID(),"https://thingtime.test",false),second=new DeviceScope("test-"+UUID.randomUUID(),"https://thingtime.test",false);

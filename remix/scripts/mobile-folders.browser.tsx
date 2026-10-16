@@ -10,7 +10,7 @@ let failNext = false;
 const cancelled = new Set<string>();
 window.thingtimeNativeBridge = {
 	version: '1.0.0',
-	platform: 'ios',
+	platform: new URLSearchParams(location.search).get('platform') === 'android' ? 'android' : 'ios',
 	isNativeWebView: true,
 	fileAccessVersion: '1.0.0',
 	postMessage(message) {
@@ -50,7 +50,7 @@ function Fixture() {
 				</Text>
 				<Text fontSize="12px">Synthetic native responses. No files are accessed or uploaded.</Text>
 				<Box marginTop={4} padding={4} border="1px solid #ddd" borderRadius="12px">
-					<Text fontWeight="bold">This iPhone is added</Text>
+					<Text fontWeight="bold">This device is added</Text>
 					<MobileFolderAccess ownerId="folder-ui-fixture" />
 				</Box>
 				<Button

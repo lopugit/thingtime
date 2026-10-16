@@ -63,7 +63,7 @@ function FolderAccess({ ownerId }: { ownerId: string }) {
 						Folder access
 					</Text>
 					<Text fontSize="12px" color="var(--tt-muted, #71717a)">
-						Choose folders this account can use on this iPhone or iPad. Selection alone does not start uploads.
+						Choose folders this account can use on this device. Selection alone does not start uploads.
 					</Text>
 				</Box>
 				<Button size="sm" minHeight="40px" variant="outline" isDisabled={busy} onClick={() => void run({ action: 'choose' })}>

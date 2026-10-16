@@ -3,6 +3,9 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="${1:-}"
+picker_test="${THINGTIME_FOLDER_PICKER_TEST:-0}"
+[[ "$picker_test" == 0 || "$picker_test" == 1 ]] || { echo 'THINGTIME_FOLDER_PICKER_TEST must be 0 or 1.' >&2; exit 1; }
+[[ "$picker_test" == 0 || -n "$fixture" ]] || { echo 'Picker acceptance requires a disposable local account fixture.' >&2; exit 1; }
 serial="${ANDROID_SERIAL:-}"
 if [[ -z "$serial" ]]; then
   serial="$(adb devices | awk 'NR>1 && $2=="device" { print $1 }')"
@@ -33,7 +36,12 @@ if [[ -n "$fixture" ]]; then
   adb -s "$serial" shell run-as com.thingtime.mobile.dev sh -c '"cat > files/device-test-fixture.json"' < "$fixture"
 fi
 result="$(mktemp)"
-adb -s "$serial" shell am instrument -w com.thingtime.mobile.dev.test/androidx.test.runner.AndroidJUnitRunner > "$result"
+test_args=()
+if [[ "$picker_test" == 1 ]]; then
+  test_args=(-e folderSelection true)
+  echo 'When the installed app is ready, choose Documents/ThingtimeSyncQA through its Folder access control.'
+fi
+adb -s "$serial" shell am instrument -w "${test_args[@]}" com.thingtime.mobile.dev.test/androidx.test.runner.AndroidJUnitRunner > "$result"
 cat "$result"
 if ! grep -q '^OK (' "$result"; then rm -f "$result"; exit 1; fi
 rm -f "$result"

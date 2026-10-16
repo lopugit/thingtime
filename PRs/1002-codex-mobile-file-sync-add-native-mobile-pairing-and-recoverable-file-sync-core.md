@@ -253,3 +253,37 @@ acceptance. Keep the full goal active until the evidence table is satisfied.
 - Web validation: 46 sync tests and 88 device tests passed, targeted lint and
   full Vercel web build passed. Raw TypeScript retains unrelated baseline
   failures; this is not a clean project typecheck.
+
+## Android folder access checkpoint — 2026-10-17
+
+- Added native Files tree selection and the shared mobile folder bridge contract.
+  Read-only provider grants stay in an atomic encrypted no-backup registry,
+  scoped to account/origin. Namespace-authenticated encryption prevents copying
+  folder records into device-pairing storage. A shared URI reference is released
+  only after its last saved owner reference is removed. No provider file writes
+  or deletions, broad storage permission, new API or history store.
+- Scans/read use tree-relative provider URIs, named cursor columns, cancellation
+  signals and bounded streamed hashing. Unknown-size, virtual/loading/missing
+  providers, unsafe paths, duplicate IDs/aliases, changed bytes and limits fail
+  closed. Content fingerprints protect against unchanged/absent timestamps.
+  Each 64 KiB bridge read currently rehashes the file; efficient large-file native
+  workers remain required and are not claimed by this foreground adapter.
+- Native selection intentionally survives the system picker's activity pause,
+  but authenticates again after returning. Navigation, destruction, cancellation
+  and request deadlines fence late results. Folder replies use the same owner,
+  origin and request correlation as iOS. Web controls now negotiate both platforms.
+- Verification: 16 JVM tests, 9 emulator tests across the full run and corrected
+  provider-test rerun, debug and minified unsigned release builds/lint. Installed
+  signed-in Things verifies the Android capability, folder controls and native
+  authenticated list response. Real ContentResolver/DocumentsProvider fixtures
+  verify descriptor bytes and partial/virtual-provider refusal. A test-fixture
+  metadata error was corrected before the provider tests passed.
+- System-picker click-through remains unverified: the running emulator window
+  was not available through the desktop control tool. The optional manual-picker
+  acceptance test is retained. Third-party providers, physical devices, native
+  writes/schedulers, Photos and remaining full-sync requirements stay open.
+- Web sync tests, targeted lint and complete web build pass. Raw TypeScript
+  matches the same 91 pre-existing diagnostics. Browser fixture checks at 390px
+  and 1280px retain folders after errors with no horizontal overflow. The installed
+  foldable screenshot still shows the previously recorded duplicate card painting
+  beneath Things filters; broader Things rendering is not claimed fixed here.

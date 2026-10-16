@@ -1,9 +1,8 @@
 # Thingtime Android
 
 Native Android shell for the existing Thingtime web UI. Requires Android 8.0
-(API 26) or newer and an updated Android System WebView. The first native
-capability is account-scoped device pairing; file/Photos access and background
-sync are separate work in [the acceptance ledger](../docs/mobile-file-sync.md).
+(API 26) or newer and an updated Android System WebView. Native capabilities include account-scoped device pairing and selected-folder
+access. Photos access and background sync remain separate work in [the acceptance ledger](../docs/mobile-file-sync.md).
 
 ## Build and run
 
@@ -61,3 +60,50 @@ foreground work; no continuous background presence or file permission is claimed
 Implementation references: [Android WebView message listener](https://developer.android.com/reference/androidx/webkit/WebViewCompat.WebMessageListener),
 [Android Keystore](https://developer.android.com/privacy-and-security/keystore),
 [AGP 8.9 compatibility](https://developer.android.com/build/releases/agp-8-9-0-release-notes).
+
+## Selected folders
+
+After pairing, **Folder access → Choose folder** opens Android's system Files
+picker (`ACTION_OPEN_DOCUMENT_TREE`). Only the returned read permission is
+persisted; no broad storage/media permission, new secret or account-specific
+environment setting is required. A fork uses the same configured HTTPS origin
+and normal sign-in described above. Android 11+ restricts selectable system
+locations; respect the picker rather than requesting all-files access.
+See [Android's Storage Access Framework contract](https://developer.android.com/training/data-storage/shared/documents-files).
+
+`fileAccessVersion` 1.0.0 uses the same choose/list/scan/read/remove protocol as
+iOS. Tree URIs stay in an atomic, Keystore-encrypted no-backup registry; web
+settings receive opaque IDs and names. There are at most 32 roots per account/
+origin, 128 total, and 60 KiB of encoded registry data. Removing access saves the
+new registry before releasing a URI permission; another account's reference
+keeps its grant. It never deletes provider files. Failed saves cannot publish
+new references or revoke another account's access.
+
+Scans are limited to 10,000 entries and 4 MiB metadata. Unknown-size, virtual,
+loading, missing, colliding and changed items fail without a successful empty
+inventory. Reads return at most 64 KiB and verify the entire file fingerprint
+because provider timestamps can be missing or unchanged. This currently rereads
+a file for each chunk: it is suitable for bounded foreground checks, not the
+final large-file/background transport. Native workers still need efficient
+verified streaming/snapshot publication, resumable work and transfer policies.
+Selecting a folder alone does not start uploads.
+
+JVM tests cover multipart bytes, changed content with identical metadata,
+empty files, path/collision failures and bounds. Emulator tests cover grant
+reference accounting, failed saves, encrypted namespace isolation, real
+ContentResolver/DocumentsProvider descriptors with synthetic data, and the
+installed app's authenticated list bridge. The provider fixture is isolated to
+tests and does not prove the system picker or third-party provider behavior.
+For manual picker acceptance, use a test-only `Documents/ThingtimeSyncQA` folder
+containing `original.bin` (8 MiB + 17 bytes, all byte value 13). The optional
+`DeviceLiveTest` instrumentation argument `folderSelection=true` waits for the
+operator to choose that folder, then checks its real fingerprint/read and grant
+removal. It needs the same private local fixture as ordinary live acceptance;
+never select personal folders for this test. This optional test is not enabled
+by the normal acceptance script and remains unverified.
+
+Run that optional operator-assisted check with
+`THINGTIME_FOLDER_PICKER_TEST=1 ANDROID_SERIAL=<test-device-id> android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`.
+The standard script leaves it disabled. Prepare the named synthetic folder
+before starting; when the installed app appears, use **Choose folder** to select
+it within five minutes. The script's final result includes the picker assertions.

@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Android now shares the mobile folder-access
+  controls with native read-only tree grants, encrypted scoped references and
+  verified provider scans/reads. Native/provider and installed bridge tests pass;
+  system-picker acceptance and persistent transfers remain pending.
+  [PR #1002 notes](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Added iOS Files folder selection, private native
   grants, bounded verified scans/reads and responsive access controls. Native
   tests and browser fixture checks cover source bytes, isolation and failures;

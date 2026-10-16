@@ -80,11 +80,11 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter verified; iOS folder grants/scans/reads implemented; native writes/workers and production sync UI pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter verified; iOS and Android folder grants/scans/reads implemented; native writes/workers and production sync UI pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
-| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Core direction/delete policy and iOS folder-access controls; editable sync Things and policy UI pending |
+| Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Core direction/delete policy and iOS/Android folder-access controls; editable sync Things and policy UI pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; native conflict handling, retention and UI pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
@@ -279,3 +279,32 @@ installed and launches on iOS Simulator. Signed-in system-picker click-through,
 third-party Files providers and physical-device behavior remain unverified.
 Android folder access, cloud-to-native publication, persistent workers, Photos,
 editable sync controls, retention/sharing and release remain on the full goal.
+
+## Android folder access checkpoint — 2026-10-17
+
+Android now implements `fileAccessVersion` 1.0.0 behind the shared paired-device
+folder controls. `ACTION_OPEN_DOCUMENT_TREE` supplies a read-only persisted tree
+grant; URI references remain in the existing Keystore-encrypted storage format
+under a distinct authenticated namespace. One bounded atomic registry maintains
+account/origin ownership and shared URI references. Failed persistence rolls
+back only a newly acquired permission; removing one reference cannot revoke
+another account's grant. No file deletion or broad storage permission is added.
+
+The provider adapter uses tree-relative document URIs, named cursor columns,
+cancellation signals and streaming descriptors. It refuses unknown-size,
+virtual, loading/incomplete, missing, colliding and oversized observations.
+Whole-file multipart fingerprints are part of source versions, so unchanged
+provider timestamps cannot authorize different bytes. Foreground bridge reads
+are bounded to 64 KiB but currently hash the entire file each time. Efficient
+native streaming/snapshots remain required for the final large-file worker.
+
+Verification includes 16 JVM tests (7 reader, 9 pairing), grant and storage
+emulator tests, two real ContentResolver/DocumentsProvider fixture tests, and
+the installed app's authenticated list bridge and folder controls. Browser
+fixture checks cover phone/desktop widths and retained state after errors.
+The actual system-picker flow, third-party providers, physical devices and
+background work remain unverified. The desktop control tool could not address
+the running emulator window; no system-picker success is inferred from mocks.
+The optional live picker test is retained for operator-assisted acceptance.
+Native writes, persistent workers, Photos, editable sync policy Things,
+conflict/retention/sharing UI and release remain on the original full goal.

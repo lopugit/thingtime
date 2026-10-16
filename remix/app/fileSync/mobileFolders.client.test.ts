@@ -9,7 +9,7 @@ const entry = { path: 'file', id: 'inode', version: '1', kind: 'file' as const, 
 const response = (extra = {}) => ({ type: 'mobile-files-result', payload: { ...expected, roots: [root], ...extra } });
 test('native folder capability is explicit and account/origin/request responses are fenced', () => {
 	assert.equal(supportsMobileFolders({ platform: 'ios', isNativeWebView: true } as any), false);
-	assert.equal(supportsMobileFolders({ platform: 'android', isNativeWebView: true, fileAccessVersion: '1.0.0' } as any), false);
+	assert.equal(supportsMobileFolders({ platform: 'android', isNativeWebView: true, fileAccessVersion: '1.0.0' } as any), true);
 	assert.equal(supportsMobileFolders({ platform: 'ios', isNativeWebView: true, fileAccessVersion: '1.0.0' } as any), true);
 	for (const key of ['requestId', 'ownerId', 'origin'])
 		assert.equal(parseMobileFolderResult(response({ [key]: 'different' }), expected, { action: 'list' }), null);

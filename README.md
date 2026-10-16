@@ -4587,8 +4587,8 @@ web settings receive opaque IDs and display names. Follow Apple's
 Use synthetic folders for acceptance. Unavailable providers, changed files,
 symlinks and oversized scans fail rather than yielding empty inventories. The
 current bounds are 32 grants, 10,000 entries / 4 MiB metadata per scan, and 64 KiB
-per native read. Android folder grants and persistent transfer workers remain
-pending. The UI fixture at `/scripts/mobile-folders.browser.html` tests controls
+per native read. Android implements the same folder protocol using the system Files picker;
+persistent transfer workers remain pending. The UI fixture at `/scripts/mobile-folders.browser.html` tests controls
 with synthetic native replies; it does not verify the iOS system picker.
 
 The Android shell lives in `android/`. It requires JDK 17, Android SDK 35 and
@@ -4597,7 +4597,11 @@ and install the resulting debug APK. A fork can select its HTTPS server with
 `-PthingtimeWebUrl=https://your-thingtime.example`; local debug builds use
 loopback HTTP plus `adb reverse`. The opt-in Android test script also requires
 `userId` in the private fixture. See [Android build and acceptance](android/README.md)
-for exact commands, emulator tests and security boundaries. Release signing
+for exact commands, emulator tests and security boundaries. Android folder
+access uses scoped read-only Storage Access Framework grants and encrypted
+native references without broad storage permissions or additional secrets;
+see [selected-folder setup and limits](android/README.md#selected-folders).
+Release signing
 and store distribution remain separate setup; never commit signing keys.
 
 ### Verifying file-sync content fingerprints locally

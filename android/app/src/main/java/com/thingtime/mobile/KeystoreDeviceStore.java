@@ -19,7 +19,12 @@ import java.util.Arrays;
 final class KeystoreDeviceStore implements PairingEngine.Store {
     private static final String ALIAS="thingtime.mobile.devices.v1";
     private final File directory;
-    KeystoreDeviceStore(Context context) { directory=new File(context.getNoBackupFilesDir(),"devices"); }
+    private final String namespace;
+    KeystoreDeviceStore(Context context) { this(context,"devices"); }
+    KeystoreDeviceStore(Context context,String namespace) {
+        if(!namespace.equals("devices") && !namespace.equals("folders")) throw new IllegalArgumentException("Invalid native store");
+        this.namespace=namespace; directory=new File(context.getNoBackupFilesDir(),namespace);
+    }
     private static synchronized SecretKey key() throws Exception {
         KeyStore store=KeyStore.getInstance("AndroidKeyStore"); store.load(null);
         if(store.containsAlias(ALIAS)) return (SecretKey)store.getKey(ALIAS,null);
@@ -29,7 +34,7 @@ final class KeystoreDeviceStore implements PairingEngine.Store {
         return generator.generateKey();
     }
     private AtomicFile file(DeviceScope scope) throws Exception { return new AtomicFile(new File(directory,scope.key()+".bin")); }
-    private byte[] aad(DeviceScope scope) throws Exception { return scope.key().getBytes(StandardCharsets.US_ASCII); }
+    private byte[] aad(DeviceScope scope) throws Exception { return ((namespace.equals("devices")?"":"folders\0")+scope.key()).getBytes(StandardCharsets.US_ASCII); }
     @Override public synchronized JSONObject load(DeviceScope scope) throws Exception {
         AtomicFile file=file(scope);
         if(!file.getBaseFile().exists() && !new File(file.getBaseFile()+".bak").exists()) return null;

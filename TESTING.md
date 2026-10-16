@@ -540,6 +540,21 @@ persisted; every check is client-side.
 
 ## Remote brightness and files
 
+- [ ] Android selected folders: use only a synthetic test folder with the system
+  picker. Verify cancel, activity pause/resume/recreation, account/origin change,
+  expired pending selection, persisted restart readback, Check folder and Remove
+  access without file deletion. A second account reference must retain its OS
+  grant; failed storage must never release an existing reference. Unknown size,
+  virtual items, loading/partial providers, missing folders and changed bytes
+  with an unchanged timestamp must refuse a complete scan/read. Run Android JVM
+  tests and `android/scripts/test-mobile-devices.sh` with a private local fixture;
+  the optional `folderSelection=true` test still requires real picker selection.
+- [ ] Android folder-control fixture: open
+  `/scripts/mobile-folders.browser.html?platform=android` at phone and desktop
+  widths; choose/check/remove and fail a request. Retain prior selections and
+  avoid overflow. Check the installed signed-in app's native list result too;
+  synthetic browser responses cannot prove provider permissions.
+
 - [ ] iOS selected-folder access: choose a synthetic Files folder, cancel the
   picker, relaunch and check the retained grant, then remove access without
   deleting its contents. Switch account/origin or background during selection,

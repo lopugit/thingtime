@@ -31,8 +31,12 @@ complete bounded scans and version-checked descriptor-relative reads.
 `fileSync/mobileFolders.client.ts` validates bridge replies and adapts chunked
 reads to the shared fingerprint/upload source contract. The paired-device card
 uses `MobileFolderAccess.tsx` to choose/check/remove access; it does not launch
-transfers. Bookmarks remain native. Android grants, destination writes and
-persistent schedulers remain pending.
+transfers. Bookmarks remain native. Android's equivalent adapters live in
+`android/app/src/main/java/com/thingtime/mobile/FolderBridge.java`, `FolderStore.java`,
+`FolderReader.java` and `SafFolderProvider.java`. The shared controls negotiate
+both native platforms. Android keeps read-only tree URIs in encrypted native
+storage and verifies content despite unreliable provider timestamps. Native
+destination writes and persistent schedulers remain pending.
 
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).

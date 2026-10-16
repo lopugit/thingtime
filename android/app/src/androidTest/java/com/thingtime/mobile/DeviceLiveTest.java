@@ -22,6 +22,49 @@ public class DeviceLiveTest {
         while(System.currentTimeMillis()<end) { if("true".equals(evaluate(web,js))) return; Thread.sleep(250); }
         fail("Installed WebView did not satisfy: "+js);
     }
+    private static JSONObject folderRequest(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
+        String id=java.util.UUID.randomUUID().toString();request.put("requestId",id).put("ownerId",scope.owner).put("origin",scope.origin);
+        evaluate(web,"window.__folderTestReply=null;window.__folderTestListener=e=>{if(e.detail?.type==='mobile-files-result'&&e.detail?.payload?.requestId==="+JSONObject.quote(id)+"){window.__folderTestReply=e.detail.payload;window.removeEventListener('thingtime:native-message',window.__folderTestListener)}};window.addEventListener('thingtime:native-message',window.__folderTestListener);window.thingtimeNativeBridge.postMessage("+new JSONObject().put("type","mobile-files").put("payload",request)+");");
+        awaitTrue(web,"window.__folderTestReply !== null");
+        JSONObject result=new JSONObject(new JSONTokener(evaluate(web,"JSON.stringify(window.__folderTestReply)")).nextValue().toString());
+        assertFalse(result.optString("error"),result.has("error"));return result;
+    }
+    private static void verifySelectedFolder(android.webkit.WebView web,Context context,DeviceScope scope) throws Exception {
+        awaitTrue(web,"window.thingtimeNativeBridge?.fileAccessVersion==='1.0.0' && document.body.innerText.includes('Folder access') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Choose folder'&&!b.disabled)");
+        assertNotNull(folderRequest(web,scope,new JSONObject().put("action","list")).getJSONArray("roots"));
+        if(!"true".equals(InstrumentationRegistry.getArguments().getString("folderSelection"))) return;
+        System.out.println("FOLDER_QA_READY: Choose folder and select Documents/ThingtimeSyncQA in the system picker.");
+        long deadline=System.currentTimeMillis()+300000;
+        while(System.currentTimeMillis()<deadline && !"true".equals(evaluate(web,"document.body.innerText.includes('ThingtimeSyncQA')"))) Thread.sleep(500);
+        assertEquals("true",evaluate(web,"document.body.innerText.includes('ThingtimeSyncQA')"));
+        FolderStore store=new FolderStore(context);JSONArray roots=store.list(scope);String id=null;
+        for(int i=0;i<roots.length();i++) if(roots.getJSONObject(i).getString("name").equals("ThingtimeSyncQA")) id=roots.getJSONObject(i).getString("id");
+        assertNotNull(id);final String rootId=id;
+        DeviceScope other=new DeviceScope("folder-isolation-"+java.util.UUID.randomUUID(),scope.origin,true);
+        assertEquals(0,store.list(other).length());assertThrows(Exception.class,()->store.grant(other,rootId));
+        android.net.Uri uri=store.grant(scope,id);
+        try {
+            assertEquals(uri,new FolderStore(context).grant(scope,id));
+            JSONObject scan=folderRequest(web,scope,new JSONObject().put("action","scan").put("rootId",id));assertTrue(scan.getBoolean("complete"));
+            JSONArray entries=scan.getJSONArray("entries");JSONObject file=null;
+            for(int i=0;i<entries.length();i++) if(entries.getJSONObject(i).getString("path").equals("original.bin")) file=entries.getJSONObject(i);
+            assertNotNull(file);assertEquals(8*1024*1024+17,file.getLong("size"));assertEquals(2,file.getJSONObject("fingerprint").getInt("partCount"));
+            java.security.MessageDigest part=java.security.MessageDigest.getInstance("SHA-256"), composite=java.security.MessageDigest.getInstance("SHA-256");
+            byte[] first=new byte[8*1024*1024],tail=new byte[17];java.util.Arrays.fill(first,(byte)13);java.util.Arrays.fill(tail,(byte)13);composite.update(part.digest(first));composite.update(part.digest(tail));
+            assertEquals(FolderReader.hex(composite.digest()),file.getJSONObject("fingerprint").getString("sha256"));
+            JSONObject read=folderRequest(web,scope,new JSONObject().put("action","read").put("rootId",id).put("path","original.bin").put("version",file.getString("version")).put("offset",8*1024*1024).put("length",65536));
+            assertArrayEquals(tail,java.util.Base64.getDecoder().decode(read.getJSONObject("chunk").getString("data")));
+            store.add(other,uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,"ThingtimeSyncQA");
+            folderRequest(web,scope,new JSONObject().put("action","remove").put("rootId",id));
+            assertThrows(Exception.class,()->store.grant(scope,rootId));
+            assertTrue(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isReadPermission()));
+            String second=store.list(other).getJSONObject(0).getString("id");store.remove(other,second);
+            assertFalse(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isReadPermission()));
+            System.out.println("FOLDER_QA_PASS: system picker, persisted scoped grants, real provider multipart fingerprint/read, isolation and shared-grant removal.");
+        } finally {
+            store.remove(scope,rootId);JSONArray otherRoots=store.list(other);for(int i=0;i<otherRoots.length();i++) store.remove(other,otherRoots.getJSONObject(i).getString("id"));
+        }
+    }
     private static void verifyInstalledWebBridge(Context context,CookieManager jar,DeviceScope scope,KeystoreDeviceStore storage) throws Exception {
         android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
         instrumentation.runOnMainSync(()-> {
@@ -39,6 +82,7 @@ public class DeviceLiveTest {
         try {
             awaitTrue(target[0],"window.thingtimeNativeBridge?.platform === 'android' && window.thingtimeNativeBridge?.devicePairingVersion === '1.0.0'");
             awaitTrue(target[0],"document.body.innerText.includes('This device is paired to your account')");
+            verifySelectedFolder(target[0],context,scope);
             long revision=storage.load(scope).getLong("revision");
             awaitTrue(target[0],"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Check connection' && !b.disabled)");
             assertEquals("true",evaluate(target[0],"(()=>{const b=Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Check connection'); b.click(); return true;})()"));

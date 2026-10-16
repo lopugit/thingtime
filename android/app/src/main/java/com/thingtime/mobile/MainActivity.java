@@ -30,6 +30,7 @@ public final class MainActivity extends Activity {
     private volatile boolean active;
     private volatile String currentOrigin="";
     private String runningRequest;
+    private FolderBridge folders;
     private static final String SCRIPT="""
         (() => {
           if (window !== window.top || !window.thingtimeDeviceTransport) return;
@@ -40,7 +41,7 @@ public final class MainActivity extends Activity {
           };
           window.thingtimeDeviceTransport.onmessage = event => { try { receive(JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.3.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0',
+            version:'1.3.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.0.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },
             offMessage:listener => listeners.delete(listener)
@@ -56,6 +57,7 @@ public final class MainActivity extends Activity {
         if(!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             unavailable("Update Android System WebView to connect this device."); return;
         }
+        folders=new FolderBridge(this,origin,()->active && origin.equals(currentOrigin));
         web=new WebView(this); android.widget.FrameLayout frame=new android.widget.FrameLayout(this); frame.addView(web,new android.widget.FrameLayout.LayoutParams(-1,-1)); setContentView(frame);
         if(Build.VERSION.SDK_INT>=30) {
             frame.setOnApplyWindowInsetsListener((view,insets)-> { android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.ime()); view.setPadding(bars.left,bars.top,bars.right,bars.bottom); return insets; });
@@ -67,7 +69,7 @@ public final class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         web.setWebViewClient(new WebViewClient() {
-            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) { cancel(); currentOrigin=canonical(url); }
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) { cancel(); if(folders!=null) folders.suspend(); currentOrigin=canonical(url); }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
                 if(!request.isForMainFrame()) return false;
                 if(origin.equals(canonical(request.getUrl().toString()))) return false;
@@ -79,8 +81,8 @@ public final class MainActivity extends Activity {
         });
         if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) WebViewCompat.addWebMessageListener(web,"thingtimeDeviceTransport",Collections.singleton(origin),(view,message,source,isMainFrame,reply)-> {
             if(!isMainFrame || !origin.equals(canonical(source.toString())) || !origin.equals(canonical(view.getUrl())) || !active || message.getType()!=WebMessageCompat.TYPE_STRING) return;
-            String data=message.getData(); if(data==null || data.length()>4096) return;
-            try { handle(new JSONObject(data),reply); } catch(Exception invalid) { /* Malformed messages have no effects. */ }
+            String data=message.getData(); if(data==null || data.length()>16384) return;
+            try { JSONObject body=new JSONObject(data); if(!"mobile-files".equals(body.optString("type")) && data.length()>4096) return; handle(body,reply); } catch(Exception invalid) { /* Malformed messages have no effects. */ }
         });
         if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) WebViewCompat.addDocumentStartJavaScript(web,SCRIPT,Collections.singleton(origin));
         web.loadUrl(origin);
@@ -89,6 +91,7 @@ public final class MainActivity extends Activity {
     private void unavailable(String message) { TextView text=new TextView(this); text.setText(message); text.setPadding(32,96,32,32); setContentView(text); }
     private void cancel() { generation.incrementAndGet(); runningRequest=null; }
     private void handle(JSONObject message,JavaScriptReplyProxy reply) throws Exception {
+        if("mobile-files".equals(message.optString("type"))) { folders.handle(message,reply);return; }
         if(!"mobile-device".equals(message.optString("type"))) return;
         JSONObject payload=message.getJSONObject("payload"); String id=payload.getString("requestId");
         if(!UUID.fromString(id).toString().equalsIgnoreCase(id)) return;
@@ -110,8 +113,9 @@ public final class MainActivity extends Activity {
             runOnUiThread(()-> { try { check.run(); if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) reply.postMessage(new JSONObject().put("type","mobile-device-result").put("payload",base).toString()); } catch(Exception ignored) { } finally { if(generation.get()==operation) runningRequest=null; } });
         });
     }
-    @Override protected void onResume() { super.onResume(); active=true; if(web!=null) web.onResume(); }
-    @Override protected void onPause() { active=false; cancel(); if(web!=null) web.onPause(); super.onPause(); }
-    @Override protected void onDestroy() { cancel(); if(web!=null) web.destroy(); super.onDestroy(); }
+    @Override protected void onResume() { super.onResume(); active=true; if(web!=null) web.onResume(); if(folders!=null) folders.resume(); }
+    @Override protected void onPause() { active=false; cancel(); if(folders!=null) folders.pause(); if(web!=null) web.onPause(); super.onPause(); }
+    @Override protected void onDestroy() { cancel(); if(folders!=null) folders.suspend(); if(web!=null) web.destroy(); super.onDestroy(); }
+    @Override protected void onActivityResult(int request,int result,Intent data) { super.onActivityResult(request,result,data); if(folders!=null) folders.activityResult(request,result,data); }
     @Override public void onBackPressed() { if(web!=null && web.canGoBack()) web.goBack(); else super.onBackPressed(); }
 }

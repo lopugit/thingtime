@@ -9,7 +9,7 @@ export type FolderRequest =
 	| { action: 'read'; rootId: string; path: string; version: string; offset: number; length: number };
 export type FolderResult = { roots: MobileFolder[]; entries?: SyncEntry[]; chunk?: { version: string; size: number; offset: number; data: string } };
 export const supportsMobileFolders = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
-	Boolean(bridge?.isNativeWebView && bridge.platform === 'ios' && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? ''));
+	Boolean(bridge?.isNativeWebView && (bridge.platform === 'ios' || bridge.platform === 'android') && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? ''));
 export function parseMobileFolderResult(
 	value: unknown,
 	expected: { requestId: string; ownerId: string; origin: string },
@@ -68,7 +68,7 @@ export function parseMobileFolderResult(
 }
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
-	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated iOS app.'));
+	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {

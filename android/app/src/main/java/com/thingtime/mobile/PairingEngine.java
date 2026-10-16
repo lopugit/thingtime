@@ -35,7 +35,7 @@ final class PairingEngine {
     private JSONObject requestBytes(DeviceScope scope, String path, String body, String credential, boolean auth) throws Exception {
         check.run(); JSONObject result = transport.request(scope, path, body, credential, auth); check.run(); return result;
     }
-    private void identity(DeviceScope scope) throws Exception {
+    void identity(DeviceScope scope) throws Exception {
         JSONObject me = request(scope,"/api/v1/auth/me",null,null,true).optJSONObject("user");
         if (me==null || !scope.owner.equals(me.optString("id")) || !"user".equals(me.optString("accountKind")) || me.optBoolean("temporary")) {
             throw new Failure("Your account changed. Reopen Things and try again.");
