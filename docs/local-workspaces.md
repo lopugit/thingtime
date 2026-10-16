@@ -73,7 +73,7 @@ change this pointer; logout/account changes revoke it.
 | Components and schemas | Local storage and public discovery adapter started. Bundled suite installation and the Web Standards editable component save/export now have offline browser evidence. The schema catalogue, schema authoring, copies and data forms now pass offline browser checks (checkpoint below). Component catalogue/detail and argument/version recovery now pass local offline browser checks (checkpoint below). Visited online account catalogue pages now retain owned definitions for device browsing; Component/Schema catalogue and Component detail cross-tab refresh pass local browser checks (checkpoint below). Anonymous bundled bookmarks/reactions now survive offline reload and cross-tab changes without becoming owned Things (checkpoint below). Cached owned account bookmarks/reactions now complete locally and use conditional independent sync, with offline, lost-response and conflict-review browser evidence (checkpoint below). Finish remaining Builder surfaces, unvisited account discovery and broader cache membership. Generic local Thing details now expose the standard discussion projection; comments, nested replies, search and owner rename pass a cold-offline browser regression. |
 | Actions and app suites | Anonymous data Actions now reuse the canonical interpreter with local schema-scoped CRUD, nested runs, expressions and packs; pure browser flows reuse the browser interpreter. Native no-login create/edit/run/error/history/export/import verified offline. Local page component/collection sources now load and refresh after controls, with cold offline reload evidence. Bundled suites now install atomically offline; browser Actions have closed local Things CRUD and data-Action request adapters. Finish remaining endpoint adapters, dedicated component surfaces and account execution/sync. The actual opaque-origin Web Platform runtime now runs after a cold offline reload, including worker programs and native form events, with the existing sandbox and network restrictions. External lookups and public/system searches remain explicit remote requirements. |
 | Timeline | Canonical anonymous revisions and authored draft admission now use transactional browser authority, the existing History UI and recorded native page previews. Owner notes now save/remove offline through the existing canonical queue and note contract. Version names now name/rename/clear through the shared mutation contract offline. Local variations now create, advance, checkout, edit and merge offline in History and the native Builder, including recorded-component conflict review. Ordinary current-content restore/undo/merge and deleted recovery now reuse the canonical account planner and atomic local writer; native offline restore/undo/merge/reload is verified. Historical version archive export now works offline through the shared account resolver, including compact ancestry, deleted before-images, names and notes. Page + related History now resolves stored local composition and arguments offline, with bounded membership, cursor resets and cold-reload browser coverage. The managed Timeline folder now appears in the local library and literal search, with native offline navigation and cold-rename coverage. Scoped device usage and browser protection controls are available in Settings. Protected-kind adapters and account synchronization remain required. Restored component detail/discussion/Action routing now uses scoped local records and local author projections, with offline regression coverage; IDs alone grant no local access. |
-| Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Finish linked galleries, media annotation/audio/video acceptance and account sync. Never treat a cached cloud attachment as locally authorized bytes. |
+| Attachments and media | Anonymous canonical ZIP import/export/copy/delete now stores metadata and bytes atomically with shared quota accounting; normal UI offline round-trip verified. Normal file-picker save, download, copy/move and native image preview now pass offline browser checks. Native composer file selection and draft/template copies now pass offline browser checks. Account upload and metadata queues now have local service/browser acceptance, including reviewed conflicts and folder dependencies. Finish the ordinary account picker/list/media/deletion integration, linked galleries, and remaining annotation/audio/video acceptance. Never treat a cached cloud attachment as locally authorized bytes. |
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Retained account posts now support offline bookmarks/reactions, Saved/permalink reload and cross-tab membership, with independent conditional sync and known-refusal eviction (checkpoint below). Linked Things, complete account post writes and broader cross-account/device acceptance remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Audit and implement local encrypted storage/unlock using the existing vault contract. No plaintext substitution or server-password bypass. |
@@ -1940,3 +1940,47 @@ API, asserts success and then confirms content returns 404. Its previous generic
 Thing DELETE could return 404 for protected attachments without cleaning bytes;
 previous fixture runs therefore did not prove completed-file cleanup. Browser
 closure now runs even when cleanup fails. Existing real accounts are untouched.
+
+
+## Durable account file details — 2026-10-16
+
+`accountFileMetadata.ts` now retains filename-preview, title, description and
+folder edits independently of byte upload. The existing local file writer commits
+the edit and queue intent together, including folder selection at initial save.
+Upload receipt identity remains immutable. Original file-save retries retain the
+initial folder choice for identity checking, so later moves cannot turn a replay
+into a second file or erase later details.
+
+After verified account binding, the metadata queue waits for the canonical upload
+receipt and a synchronized destination folder. It uses the existing conditional
+annotation/move APIs, reconciles lost replies before sending newer edits, adopts
+unrelated account changes, and requires review for concurrent edits to the same
+field. Claim tokens, 45-second attempts, three files per pass, per-request deadlines
+and bounded retry delays keep work scoped. New edits during an in-flight write
+survive its completion. The native file sync panel compares both versions and
+rechecks local revision and account timestamp before accepting a choice. Bytes,
+server-owned storage fields and publication remain outside metadata writes.
+
+The account facade now accepts local-file annotation and `moveLocalFile` without
+a network requirement. This still does **not** switch the ordinary account file
+picker/list/media surfaces: deletion/cancellation reconciliation, canonical ID
+aliases, media resolution, existing-account file retention and post binding remain
+required before those paths can be considered complete. Anonymous files retain
+their separate local writer and cannot construct the account queue.
+
+Local checks: 955 passing tests (241 workspace, 4 offline shell, 319 Things,
+295 attachment, 96 capability); the generic workspace command skips 27 opt-in
+browser scenarios. Eight new metadata tests cover reopen, folder dependency,
+ambiguous replies/newer edits, cross-tab claims, account conflicts and stale
+reviews, quota rollback, cancellation, scope/identity refusal and original save
+identity. The enabled real Vite/replica browser test saves details and a folder
+offline with zero mutations, reviews a conflict through native controls at
+1440/390/320px, drops a successful annotation reply, then verifies exact final
+metadata/placement/bytes and canonical attachment cleanup. The fixture resolves
+exact app-loaded Vite module URLs; bare imports after HMR create an unrelated,
+unbound singleton and are not valid runtime evidence. Screenshots and requests:
+`tmp/account-file-reconcile-ui/`. The client build verifies 248 offline assets
+(21,602,918 bytes); TypeScript retains 91 existing diagnostics with none in changed
+paths; lint has zero errors and one existing LocalThings constructor warning.
+These are local results. CI/deployed verification and the full acceptance matrix
+remain separate; no main merge or manual deployment is claimed.

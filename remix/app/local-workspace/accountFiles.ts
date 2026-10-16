@@ -1,3 +1,4 @@
+import { AccountFileMetadata, type FileMetadataTransport } from './accountFileMetadata';
 import { normalizePublicAttachment, multipartPartRange, attachmentCompleteRetryPhase } from '../components/Attachments/attachmentUiCore';
 import type { PublicAttachment, SignedUploadPart } from '../components/Attachments/attachmentTypes';
 import { transferChecksum } from '../utils/thingTransfer/archive';
@@ -49,6 +50,7 @@ const checksumBase64 = async (bytes: Uint8Array) => {
  * the verified account and data plane for every request, including signed PUTs. */
 export class AccountFileSync {
 	readonly things: LocalThings;
+	readonly metadata: AccountFileMetadata;
 	constructor(
 		private db: WorkspaceDatabase,
 		readonly scope: AccountScope,
@@ -57,6 +59,7 @@ export class AccountFileSync {
 		private uuid = () => crypto.randomUUID()
 	) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous files never synchronize', 403);
+		this.metadata = new AccountFileMetadata(db, scope, lease, now, uuid);
 		this.things = new LocalThings(
 			db,
 			scope,
@@ -65,16 +68,15 @@ export class AccountFileSync {
 			() => new Date(now()).toISOString(),
 			uuid,
 			undefined,
-			(tx, row) => this.enqueue(tx, row)
+			(tx, row, previous) => this.enqueue(tx, row, previous)
 		);
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) {
 		return this.db.transaction(this.scope, mode, this.lease, run);
 	}
-	private async enqueue(tx: WorkspaceTransaction, row: LocalAttachment) {
-		// Upload completion creates a root file. Refuse placement until the file
-		// adapter can also synchronize that relationship instead of dropping it.
-		if (row.folderId) throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Account file folder placement is not available in this adapter yet.');
+	private async enqueue(tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) {
+		await this.metadata.enqueue(tx, row, previous);
+		if (await tx.get<FileRecord>(COLLECTION, row.id)) return;
 		const purpose = row.localAttachment.purpose,
 			requestId = row.localAttachment.requestId;
 		if (!requestId || !['file', 'post', 'comment'].includes(purpose))
@@ -98,14 +100,15 @@ export class AccountFileSync {
 		await tx.put(COLLECTION, row.id, record);
 	}
 	async status() {
+		const metadata = new Map((await this.metadata.status()).map(row => [row.id, row]));
 		return this.tx('readonly', async (tx) =>
 			(await tx.list<FileRecord>(COLLECTION)).map(({ value }) => ({
 				id: value.id,
 				name: value.request.filename,
-				state: value.state,
+				state: value.state === 'synced' ? metadata.get(value.id)?.state || value.state : value.state,
 				phase: value.phase,
-				error: value.error,
-				retryAt: value.retryAt,
+				error: value.state === 'synced' ? metadata.get(value.id)?.error : value.error,
+				retryAt: value.state === 'synced' ? metadata.get(value.id)?.retryAt || 0 : value.retryAt,
 				remoteId: value.remote?.id
 			}))
 		);
@@ -114,6 +117,7 @@ export class AccountFileSync {
 		return this.tx('readonly', async (tx) => (await tx.get<FileRecord>(COLLECTION, id))?.remote?.id || null);
 	}
 	async retry(id: string) {
+		await this.metadata.retry(id);
 		return this.tx('readwrite', async (tx) => {
 			const row = await tx.get<FileRecord>(COLLECTION, id);
 			if (!row || row.state === 'synced' || (row.claim && row.claim.expiresAt > this.now())) return;
@@ -130,7 +134,7 @@ export class AccountFileSync {
 			return next;
 		});
 	}
-	async sync(transport: AccountFileTransport, signal = new AbortController().signal, maxFiles = 3) {
+	async sync(transport: AccountFileTransport & Partial<FileMetadataTransport>, signal = new AbortController().signal, maxFiles = 3, folderReady: (id: string) => Promise<boolean> = async () => false) {
 		let completed = 0;
 		for (let attempt = 0; attempt < Math.min(10, Math.max(0, maxFiles)); attempt++) {
 			this.lease.assertCurrent();
@@ -278,6 +282,9 @@ export class AccountFileSync {
 				off();
 				signal.removeEventListener('abort', abort);
 			}
+		}
+		if (transport.get && transport.annotate && transport.move) {
+			completed += (await this.metadata.sync(transport as AccountFileTransport & FileMetadataTransport, id => this.remoteId(id), folderReady, signal)).completed;
 		}
 		return { completed };
 	}

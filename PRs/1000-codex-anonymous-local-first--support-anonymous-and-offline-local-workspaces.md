@@ -1376,3 +1376,47 @@ API, asserts success and then confirms content returns 404. Its previous generic
 Thing DELETE could return 404 for protected attachments without cleaning bytes;
 previous fixture runs therefore did not prove completed-file cleanup. Browser
 closure now runs even when cleanup fails. Existing real accounts are untouched.
+
+
+## Durable account file details — 2026-10-16
+
+`accountFileMetadata.ts` now retains filename-preview, title, description and
+folder edits independently of byte upload. The existing local file writer commits
+the edit and queue intent together, including folder selection at initial save.
+Upload receipt identity remains immutable. Original file-save retries retain the
+initial folder choice for identity checking, so later moves cannot turn a replay
+into a second file or erase later details.
+
+After verified account binding, the metadata queue waits for the canonical upload
+receipt and a synchronized destination folder. It uses the existing conditional
+annotation/move APIs, reconciles lost replies before sending newer edits, adopts
+unrelated account changes, and requires review for concurrent edits to the same
+field. Claim tokens, 45-second attempts, three files per pass, per-request deadlines
+and bounded retry delays keep work scoped. New edits during an in-flight write
+survive its completion. The native file sync panel compares both versions and
+rechecks local revision and account timestamp before accepting a choice. Bytes,
+server-owned storage fields and publication remain outside metadata writes.
+
+The account facade now accepts local-file annotation and `moveLocalFile` without
+a network requirement. This still does **not** switch the ordinary account file
+picker/list/media surfaces: deletion/cancellation reconciliation, canonical ID
+aliases, media resolution, existing-account file retention and post binding remain
+required before those paths can be considered complete. Anonymous files retain
+their separate local writer and cannot construct the account queue.
+
+Local checks: 955 passing tests (241 workspace, 4 offline shell, 319 Things,
+295 attachment, 96 capability); the generic workspace command skips 27 opt-in
+browser scenarios. Eight new metadata tests cover reopen, folder dependency,
+ambiguous replies/newer edits, cross-tab claims, account conflicts and stale
+reviews, quota rollback, cancellation, scope/identity refusal and original save
+identity. The enabled real Vite/replica browser test saves details and a folder
+offline with zero mutations, reviews a conflict through native controls at
+1440/390/320px, drops a successful annotation reply, then verifies exact final
+metadata/placement/bytes and canonical attachment cleanup. The fixture resolves
+exact app-loaded Vite module URLs; bare imports after HMR create an unrelated,
+unbound singleton and are not valid runtime evidence. Screenshots and requests:
+`tmp/account-file-reconcile-ui/`. The client build verifies 248 offline assets
+(21,602,918 bytes); TypeScript retains 91 existing diagnostics with none in changed
+paths; lint has zero errors and one existing LocalThings constructor warning.
+These are local results. CI/deployed verification and the full acceptance matrix
+remain separate; no main merge or manual deployment is claimed.

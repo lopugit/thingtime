@@ -6,8 +6,8 @@ and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
 only for single-item moves and reports stale per-item status 409. Both manifests
 must carry these versions. `accountTransport.client.ts` negotiates them;
 `accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
-and canonical attachment cleanup. Durable local metadata/delete reconciliation
-and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+and canonical attachment cleanup. Durable metadata reconciliation now lives in `accountFileMetadata.ts`;
+delete reconciliation and ordinary account file UI wiring remain pending; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
 
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).
@@ -166,3 +166,15 @@ yet the ordinary account picker/list/media adapter. Run `test:local-workspace`
 and the opt-in `accountFiles.browser.test.ts` (README local workspace setup),
 plus the attachment suite. Preserve start identity and completion phase on lost
 responses; never restart uncertain completion as a fresh upload.
+
+
+## Account file metadata queue
+
+`accountFileMetadata.ts` retains independent annotation/placement intent inside
+the local file write transaction, negotiates the existing conditional APIs via
+`accountTransport.client.ts`, and uses upload receipts plus ordinary folder-sync
+state as dependencies. `AccountSyncStatus.tsx` provides comparison and reviewed
+choices. Run `accountFileMetadata.test.ts`, the local workspace suite and the
+file browser fixture. Preserve immutable pending operations on lost replies;
+newer device edits and unrelated account edits must survive reconciliation.
+The ordinary account picker/list/media/delete path is still pending.

@@ -24,6 +24,11 @@ test(
 			errors: string[] = [],
 			writes: any[] = [];
 		const folders: string[] = [];
+		const modulePaths = new Map<string,string>();
+		page.on('request', request => {
+			const path = new URL(request.url()).pathname;
+			if (['/app/local-workspace/runtime.client.ts','/app/local-workspace/accountApi.client.ts'].includes(path)) modulePaths.set(path,request.url());
+		});
 		let offline = false,
 			remoteId = '',
 			dropped = 0;
@@ -80,16 +85,30 @@ test(
 			const owner = (await registered.json()).user;
 			await page.goto(url('/things'));
 			await page.getByRole('heading', { name: 'Things', exact: true }).waitFor();
-			await page.evaluate(async () => {
-				const paths = ['/app/local-workspace/runtime.client.ts', '/app/local-workspace/accountApi.client.ts'];
-				const [runtime, api] = await Promise.all(paths.map((path) => import(path)));
-				if (!runtime.currentAccountWorkspace() || !api.accountApi) throw Error('Account adapter unavailable');
-			});
+			// Reuse the exact modules loaded by the real app. A bare import after
+			// Vite HMR would instantiate a second, unbound workspace singleton.
+			const loadedModules = ['/app/local-workspace/runtime.client.ts','/app/local-workspace/accountApi.client.ts'].map(path => modulePaths.get(path));
+			assert.ok(loadedModules.every(Boolean), 'The real app loaded both workspace modules');
+			await page.evaluate(paths => { (window as any).__fileFixtureModules = paths; }, loadedModules);
+			const waitForAccount = async () => {
+				for (let attempt = 0; attempt < 200; attempt++) {
+					const ready = await page.evaluate(async () => {
+						const paths = (window as any).__fileFixtureModules as string[];
+						const [runtime, api] = await Promise.all(paths.map(path => import(path)));
+						return !!runtime.currentAccountWorkspace() && !!api.accountApi;
+					});
+					if (ready) return;
+					await new Promise(resolve => setTimeout(resolve,100));
+				}
+				throw Error('Account workspace binding did not settle');
+			};
+			await waitForAccount();
 			// Imports can finish Vite dependency optimization; settle the actual app
 			// before deliberately disconnecting its development server.
 			await page.waitForLoadState('networkidle');
 			offline = true;
 			await context.setOffline(true);
+			await waitForAccount();
 			assert.equal(
 				await page.evaluate(async () => {
 					try {
@@ -105,7 +124,7 @@ test(
 				text = 'Private bytes saved before account upload.';
 			const localId = await page.evaluate(
 				async ({ requestId, text }) => {
-					const paths = ['/app/local-workspace/runtime.client.ts', '/app/local-workspace/accountApi.client.ts'],
+					const paths = (window as any).__fileFixtureModules as string[],
 						[runtime, api] = await Promise.all(paths.map((path) => import(path))),
 						scope = runtime.currentAccountWorkspace(),
 						facade = api.accountApi({ things: {}, attachments: {} }, { id: scope.ownerId }, scope.dataPlane);
@@ -143,7 +162,7 @@ test(
 				.filter({ hasText: 'Account upload needs attention.' })
 				.waitFor();
 			const blocked = await page.evaluate(async () => {
-				const paths = ['/app/local-workspace/runtime.client.ts', '/app/local-workspace/accountApi.client.ts'],
+				const paths = (window as any).__fileFixtureModules as string[],
 					[runtime, api] = await Promise.all(paths.map((path) => import(path)));
 				return api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).files.status();
 			});
@@ -168,7 +187,7 @@ test(
 			await page.getByRole('button', { name: 'Retry upload', exact: true }).click();
 			await page.getByRole('region', { name: 'Account file sync', exact: true }).waitFor({ state: 'hidden', timeout: 75_000 });
 			remoteId = await page.evaluate(async (localId) => {
-				const paths = ['/app/local-workspace/runtime.client.ts', '/app/local-workspace/accountApi.client.ts'],
+				const paths = (window as any).__fileFixtureModules as string[],
 					[runtime, api] = await Promise.all(paths.map((path) => import(path)));
 				return api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).files.remoteId(localId);
 			}, localId);
@@ -186,7 +205,7 @@ test(
 			};
 			const original = await readRemote();
 			const annotate = (patch: any) => page.evaluate(async (patch) => {
-				const paths = ['/app/local-workspace/runtime.client.ts', '/app/local-workspace/accountApi.client.ts'];
+				const paths = (window as any).__fileFixtureModules as string[];
 				const [runtime, api] = await Promise.all(paths.map(path => import(path)));
 				try { return { ok: true, ...await api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).transport.files.annotate(patch) }; }
 				catch (error: any) { return { ok: false, status: error.status }; }
@@ -208,7 +227,7 @@ test(
 			assert.equal(folder.status(), 200);
 			folders.push((await folder.json()).thing.id);
 			const move = (expectedUpdatedAt: string) => page.evaluate(async ({ id, folderId, expectedUpdatedAt }) => {
-				const paths = ['/app/local-workspace/runtime.client.ts', '/app/local-workspace/accountApi.client.ts'];
+				const paths = (window as any).__fileFixtureModules as string[];
 				const [runtime, api] = await Promise.all(paths.map(path => import(path)));
 				try { await api.accountWorkspaceWorker(runtime.currentAccountWorkspace()).transport.files.move(id, folderId, expectedUpdatedAt); return { ok: true }; }
 				catch (error: any) { return { ok: false, status: error.status }; }
@@ -219,6 +238,46 @@ test(
 			assert.equal((await readRemote()).folderId, folders[0]);
 			assert.equal((await move(beforeMove.updatedAt)).status, 409);
 			assert.equal((await readRemote()).crystal.title, beforeMove.crystal.title);
+			assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text);
+			// Metadata authoring completes locally while the account is unreachable.
+			offline = true; await context.setOffline(true);
+			const localFolder = await page.evaluate(async (id) => {
+				const paths = (window as any).__fileFixtureModules as string[];
+				const [runtime, api] = await Promise.all(paths.map(path => import(path))), scope = runtime.currentAccountWorkspace();
+				const facade = api.accountApi({ things: {}, attachments: {} }, { id: scope.ownerId }, scope.dataPlane);
+				await facade.attachments.annotate({ id, title: 'Offline authored title', description: 'Retained while disconnected' });
+				const folder = await facade.things.create({ thingtime: ['folder'], crystal: { name: 'Offline file folder' } });
+				await facade.attachments.moveLocalFile({ id, folderId: folder.id });
+				const read = await facade.attachments.readLocalFile({ id });
+				if (read.attachment.title !== 'Offline authored title') throw Error('Local details were not saved');
+				return folder.id;
+			}, localId);
+			folders.push(localFolder);
+			assert.deepEqual(writes.filter(row => row.offline && row.method), []);
+			offline = false; await context.setOffline(false);
+			await page.evaluate(() => window.dispatchEvent(new Event('thingtime:root-data-refresh')));
+			const fileRegion = page.getByRole('region', { name: 'Account file sync', exact: true });
+			await fileRegion.getByRole('status').filter({ hasText: 'File details need comparison.' }).waitFor();
+			await fileRegion.getByText('Review file sync', { exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Compare file details', exact: true }).click();
+			await fileRegion.getByRole('button', { name: 'Keep device file details', exact: true }).waitFor();
+			for (const width of [1440,390,320]) {
+				await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+				assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
+				if (artifacts) await page.screenshot({ path: resolve(artifacts, `file-metadata-conflict-${width}.png`) });
+			}
+			let lostMetadata = 0;
+			await context.route('**/api/v1/attachments/annotate', async (route: any) => {
+				if (!lostMetadata) { const response = await route.fetch(); if (response.status() === 200) { lostMetadata++; return route.abort('failed'); } return route.fulfill({ response }); }
+				return route.continue();
+			});
+			await fileRegion.getByRole('button', { name: 'Keep device file details', exact: true }).click();
+			await fileRegion.waitFor({ state: 'hidden', timeout: 75_000 });
+			const reconciled = await readRemote();
+			assert.equal(reconciled.crystal.title, 'Offline authored title');
+			assert.equal(reconciled.crystal.description, 'Retained while disconnected');
+			assert.equal(reconciled.folderId, localFolder);
+			assert.equal(lostMetadata, 1);
 			assert.equal(await (await context.request.get(url(`/api/v1/attachments/content?id=${remoteId}&download=1`))).text(), text);
 			assert.equal(dropped, 1);
 			assert.equal(writes.filter((row) => row.method === 'PUT').length, 1);
@@ -236,6 +295,10 @@ test(
 							conditionalAnnotation: true,
 							concurrentEditSingleWinner: true,
 							conditionalPlacement: true,
+							durableOfflineMetadata: true,
+							reviewedConflictResolution: true,
+							lostMetadataReceipt: true,
+							folderDependency: true,
 							offlineBytes: true,
 							permissionRefusalPreservesBytes: true,
 							privateUploadApprovedThroughAdminApi: true,

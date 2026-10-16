@@ -47,7 +47,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 				const record = targets.get(id);
 				if (record?.deleted) { await interactions.discard([id]); return false; }
 				return !record || record.remote;
-			}), files.sync(transport.files, controller.signal)]);
+			}), files.sync(transport.files, controller.signal, 3, async id => { const record = (await sync.exportSnapshot()).records.find(row => row.id === id); return !!record?.remote && !record.deleted; })]);
 			const completed = outcomes.reduce((sum, result) => sum + result.completed, 0);
 			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), fileStatus = await files.status(), status = [...contentStatus, ...interactionStatus, ...fileStatus];
 			if (JSON.stringify([contentStatus, interactionStatus, fileStatus]) !== before) announceLocalWorkspaceChange();
@@ -270,6 +270,16 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		};
 	return { ...online, auth: remote.auth, login: remote.login,
 		attachments: { ...online.attachments,
+			annotate: async (input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) => {
+				if (!input.id?.startsWith('local-file-')) return online.attachments.annotate(input);
+				const row = await worker().files.things.annotateFile(input); changed();
+				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
+			},
+			moveLocalFile: async ({ id, folderId }: { id: string; folderId: string | null }) => {
+				const current = worker();
+				if (!await current.files.remoteId(id) && !(await current.files.status()).some(row => row.id === id)) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);
+				const result = await current.files.things.move([id], folderId); changed(); return { ...result, savedLocally: true };
+			},
 			saveLocalFile: async (input: Parameters<AccountFileSync['things']['saveFile']>[0], options?: { signal?: AbortSignal }) => {
 				const row = await worker().files.things.saveFile(input, options?.signal); changed();
 				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };

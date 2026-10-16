@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-16 — **Codex (AI)**: Persist account file annotations and folder choices
+  locally with an independent conditional sync queue, folder dependencies and
+  native conflict comparison. Verified offline edits, lost replies and responsive
+  review in the real local app; corrected the Vite fixture to reuse app-loaded
+  modules. Normal account file picker/media/deletion integration remains pending.
+  See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-account-file-details--2026-10-16).
+
 - 2026-10-16 — **Codex (AI)**: Add conditional file annotation and single-item
   placement to the existing APIs and account transport. Real local replica tests
   verify concurrent/stale writes, private bytes and canonical fixture cleanup;

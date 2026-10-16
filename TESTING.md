@@ -2,6 +2,18 @@
 
 ## Local workspaces and account sync (in-progress rollout)
 
+- [ ] Account file details: save annotations and a folder selection offline,
+      reopen storage, reconnect, and wait for the file and folder dependencies.
+      Drop a successful annotation reply; recovery must retain newer local edits
+      and never upload the bytes again. Concurrent same-field changes require
+      comparison; unrelated account changes merge. Check stale review refusal,
+      Keep device/account choices, competing tabs, cancellation, quota rollback,
+      and original save retries after filing. Review at 1440/390/320px. Run
+      `accountFileMetadata.test.ts` and the real `accountFiles.browser.test.ts`.
+      The browser fixture must import the app's exact Vite module URLs after HMR,
+      never a second bare-import workspace singleton. Normal account picker,
+      listing/media and deletion/cancellation still have separate completion gates.
+
 - [ ] Conditional file metadata: run attachment, Things, capability and local
       workspace suites, then enable `accountFiles.browser.test.ts`. Concurrent
       annotations using one version must have one winner and one 409; stale

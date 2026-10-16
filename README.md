@@ -4599,7 +4599,10 @@ app/local-workspace/accountFiles.browser.test.ts` with
 `TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` to installed Playwright and
 its matching Chromium executable. Use the PM2-managed Vite dev origin: this
 adapter-focused test loads actual source modules and does not assert offline
-cold reload. The account file picker is not switched to this adapter yet.
+cold reload. It captures the exact workspace module URLs requested by the app;
+Vite HMR timestamps must be retained to avoid creating a second unbound runtime.
+The fixture also checks offline metadata/folder edits, reviewed conflicts, and
+lost annotation receipts. The account file picker is not switched to this adapter yet.
 
 Use only an explicitly disposable local Mongo replica. Register a disposable
 administrator through the normal API, add its username to ignored

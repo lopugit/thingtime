@@ -64,7 +64,7 @@ const validated = (input: ThingWrite, postAttachments?: { hasAny: boolean; hasVi
 export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
-		private onFileWrite?: (tx: WorkspaceTransaction, row: LocalAttachment) => Promise<void>) {}
+		private onFileWrite?: (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => Promise<void>) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -202,14 +202,14 @@ export class LocalThings {
 		if (!['file', 'post', 'comment'].includes(purpose) || (purpose !== 'file' && input.folderId)) fail('INVALID_ATTACHMENT', 'Invalid local file purpose or placement');
 		const id = `local-file-${input.requestId}`;
 		const row = createLocalAttachment(id, { id: 'bytes', targetId: id, path: 'files/000000', name: input.name, mime: input.contentType, bytes: bytes.byteLength, sha256 }, this.now(), purpose, 0, input.folderId ? { folderId: input.folderId } : {});
-		row.localAttachment.requestId = input.requestId;
+		row.localAttachment.requestId = input.requestId; row.localAttachment.initialFolderId = input.folderId || null;
 		if (purpose !== 'file') row.localAttachment.expiresAt = new Date(Date.parse(this.now()) + LOCAL_ATTACHMENT_DRAFT_MS).toISOString();
 		return this.transaction('readwrite', async tx => {
 			signal?.throwIfAborted();
 			await reapLocalAttachmentDrafts(tx, Date.parse(this.now()));
 			const previous = await tx.get<LocalThing>('things', id);
 			if (previous) {
-				if (!isLocalAttachment(previous) || previous.localAttachment.purpose !== purpose || previous.localAttachment.requestId !== input.requestId || previous.localAttachment.sha256 !== sha256 || previous.crystal.name !== row.crystal.name || previous.crystal.contentType !== row.crystal.contentType || previous.folderId !== row.folderId) fail('WRITE_CONFLICT', 'This file save request was already used for different content', 409);
+				if (!isLocalAttachment(previous) || previous.localAttachment.purpose !== purpose || previous.localAttachment.requestId !== input.requestId || previous.localAttachment.sha256 !== sha256 || previous.crystal.name !== row.crystal.name || previous.crystal.contentType !== row.crystal.contentType || (previous.localAttachment.initialFolderId === undefined ? previous.folderId || null : previous.localAttachment.initialFolderId) !== (row.folderId || null)) fail('WRITE_CONFLICT', 'This file save request was already used for different content', 409);
 				const stored = await tx.getBytes(id);
 				if (!stored || stored.length !== bytes.length || !stored.every((byte, index) => byte === bytes[index])) fail('MISSING_LOCAL_FILE', 'Local file bytes are missing or changed');
 				return previous as LocalAttachment;
@@ -224,7 +224,8 @@ export class LocalThings {
 	 * untouched; the file's immutable original name stays the download name. */
 	async annotateFile(input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) {
 		this.lease.assertCurrent();
-		if (this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+		if (this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+		if (Object.keys(input).some(key => !['id','title','description','filenamePreview'].includes(key))) fail('INVALID_ATTACHMENT', 'Unsupported file annotation fields');
 		// Same patch contract as the account route: undefined leaves a field
 		// alone, null or '' clears it, and a non-string is a caller error.
 		const field = (value: string | null | undefined, label: string) => {
@@ -242,7 +243,7 @@ export class LocalThings {
 			if (annotated.ok === false) return fail('INVALID_ATTACHMENT', annotated.error);
 			const row: LocalAttachment = { ...previous, crystal: { ...annotated.crystal },
 				updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString(), revision: previous.revision + 1 };
-			await tx.put('things', row.id, row); return row;
+			await tx.put('things', row.id, row); await this.onFileWrite?.(tx, row, previous); return row;
 		});
 	}
 	async readFile(id: string, signal?: AbortSignal) {
@@ -351,7 +352,11 @@ export class LocalThings {
 				const row = { ...previous, revision: previous.revision + 1, updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString() };
 				if (folderId) row.folderId = folderId; else delete row.folderId;
 				await this.placement(tx, row); await tx.put('things', id, row);
-				await this.onWrite?.(tx, row, previous, { folderId }); rows.push(row);
+				if (isLocalAttachment(row)) {
+					if (this.scope.kind === 'account' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+					await this.onFileWrite?.(tx, row, previous as LocalAttachment);
+				} else await this.onWrite?.(tx, row, previous, { folderId });
+				rows.push(row);
 			}
 			return { ok: true, moved: ids, things: rows };
 		});

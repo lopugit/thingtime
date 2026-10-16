@@ -63,11 +63,9 @@ test('account file bytes and immutable intent commit locally and remain account 
 		await assert.rejects(f.service.things.saveFile({ ...f.input, name: 'different.txt' }), /already used/);
 		const folder = await f.service.things.create({ thingtime: ['folder'], crystal: { name: 'Device folder' } });
 		const placedRequest = randomUUID();
-		await assert.rejects(f.service.things.saveFile({ ...f.input, requestId: placedRequest, folderId: folder.id }), /folder placement/);
-		await f.db.transaction(scope, 'readonly', lease, async (tx) => {
-			assert.equal(await tx.get('things', `local-file-${placedRequest}`), undefined);
-			assert.equal(await tx.getBytes(`local-file-${placedRequest}`), undefined);
-		});
+		const placed = await f.service.things.saveFile({ ...f.input, requestId: placedRequest, folderId: folder.id });
+		assert.equal(placed.folderId, folder.id);
+		assert.equal((await f.service.metadata.status()).find(row => row.id === placed.id)?.state, 'pending');
 		await assert.rejects(new LocalThings(f.db, scope, lease).saveFile({ ...f.input, requestId: randomUUID() }), /dedicated sync/);
 		assert.throws(() => new AccountFileSync(f.db, { kind: 'anonymous' } as any, lease), /never synchronize/);
 		for (const other of [

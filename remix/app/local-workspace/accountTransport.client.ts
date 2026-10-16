@@ -29,6 +29,7 @@ export const readBoundedJson = async (response: Response) => {
 export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountSyncTransport & {
 	interactions: InteractionTransport;
 	files: AccountFileTransport & {
+		get(id: string, signal: AbortSignal): Promise<unknown>;
 		annotate(input: { id: string; expectedUpdatedAt: string; filenamePreview?: string | null; title?: string | null; description?: string | null }, signal?: AbortSignal): Promise<{ attachment: PublicAttachment; updatedAt: string }>;
 		move(id: string, folderId: string | null, expectedUpdatedAt: string, signal?: AbortSignal): Promise<void>;
 	};
@@ -79,6 +80,7 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 	};
 	return {
 		files: {
+			get: async (id, signal) => (await request('GET', { id }, signal)).thing,
 			annotate: (input, signal) => request('POST', input, signal, 'attachments/annotate'),
 			move: async (id, folderId, expectedUpdatedAt, signal) => {
 				const result = await request('POST', { op: 'move', ids: [id], folderId, expectedUpdatedAt }, signal, 'things/bulk');

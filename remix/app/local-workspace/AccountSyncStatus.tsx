@@ -1,3 +1,4 @@
+import type { AccountFileMetadata } from './accountFileMetadata';
 import { useOfflineWorkspace } from '../hooks/useWorkspaceUser';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
@@ -199,6 +200,7 @@ function InteractionStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: strin
 
 function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; dataPlane: string; unconfirmed: boolean }) {
 	const [rows, setRows] = React.useState<Awaited<ReturnType<ReturnType<typeof accountWorkspaceWorker>['files']['status']>>>([]);
+	const [review, setReview] = React.useState<Awaited<ReturnType<AccountFileMetadata['inspect']>> | null>(null);
 	const [error, setError] = React.useState(''),
 		[busy, setBusy] = React.useState(false),
 		[online, setOnline] = React.useState(navigator.onLine);
@@ -224,14 +226,14 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 			for (const event of [LOCAL_WORKSPACE_CHANGED, 'online', 'offline']) window.removeEventListener(event, update);
 		};
 	}, [ownerId, dataPlane]);
-	if (!rows.length && !error) return null;
-	const retry = async (id: string) => {
+	if (!rows.length && !error && !review) return null;
+	const act = async (run: (current: ReturnType<typeof accountWorkspaceWorker>) => Promise<unknown>) => {
 		const current = service.current;
 		if (!current) return;
 		setBusy(true);
 		setError('');
 		try {
-			await current.files.retry(id);
+			await run(current);
 			if (mounted.current) {
 				setRows((await current.files.status()).filter((row) => row.state !== 'synced'));
 				announceLocalWorkspaceChange();
@@ -261,23 +263,41 @@ function FileSyncStatus({ ownerId, dataPlane, unconfirmed }: { ownerId: string; 
 				{rows.length} file{rows.length === 1 ? '' : 's'} saved on this device.{' '}
 				{unconfirmed || !online
 					? 'Waiting for verified account sync.'
+					: rows.some((row) => row.state === 'conflict')
+					? 'File details need comparison.'
 					: rows.some((row) => row.state === 'error')
 					? 'Account upload needs attention.'
-					: 'Uploading to your account.'}
+					: 'Syncing files and details to your account.'}
 			</Text>
 			<details>
 				<summary>Review file sync</summary>
 				{rows.slice(0, 20).map((row) => (
 					<Flex key={row.id} gap={3} align="center" flexWrap="wrap" py={2}>
 						<Text fontSize="sm" flex="1" minW={0} overflowWrap="anywhere">
-							{row.name}: {row.error || (row.state === 'syncing' ? 'Uploading' : 'Waiting to upload')}
+							{row.name}: {row.error || (row.state === 'syncing' ? 'Syncing' : 'Waiting to sync')}
 						</Text>
-						<Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void retry(row.id)}>
-							Retry upload
-						</Button>
+						{row.state === 'conflict' ? <Button size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async current => {
+							const next = await current.files.metadata.inspect(current.transport.files, row.id); if (mounted.current) setReview(next);
+						})}>Compare file details</Button> : <Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void act(current => current.files.retry(row.id))}>
+							{row.remoteId ? 'Retry file sync' : 'Retry upload'}
+						</Button>}
 					</Flex>
 				))}
 			</details>
+			{review && <Box mt={3}>
+				<Text fontWeight="bold">Compare file details</Text>
+				<Text fontSize="sm">Choose the details to keep. The file bytes stay unchanged.</Text>
+				<Flex gap={3} flexWrap="wrap" my={3}>
+					{[{ name: 'This device', value: review.local }, { name: 'Account', value: review.remote.metadata }].map(({ name, value }) => <Box key={name} flex="1" minW="min(260px, 100%)" maxW="100%">
+						<Text>{name}</Text><Box as="pre" maxH="240px" overflow="auto" whiteSpace="pre-wrap" overflowWrap="anywhere" fontSize="xs">{JSON.stringify(value, null, 2)}</Box>
+					</Box>)}
+				</Flex>
+				<Flex gap={3} flexWrap="wrap">{(['local', 'remote'] as const).map(keep => <Button key={keep} size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async current => {
+					await current.files.metadata.resolve(current.transport.files, { id: review.id, remoteId: review.remoteId, localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt, keep });
+					if (mounted.current) setReview(null);
+				})}>{keep === 'local' ? 'Keep device file details' : 'Keep account file details'}</Button>)}
+				<Button size="sm" variant="ghost" onClick={() => setReview(null)}>Cancel</Button></Flex>
+			</Box>}
 			{error && <Text role="alert">{error}</Text>}
 		</Box>
 	);
