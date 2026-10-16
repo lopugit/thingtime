@@ -10112,3 +10112,24 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] In transport fixtures, classify storage requests by parsed exact origin,
   never a URL prefix that would accept a lookalike host. CodeQL flagged the old
   test-only prefix check; production transport authorization is separate.
+
+
+### Complete cloud folder inventory (2026-10-17)
+
+- [ ] With a disposable local account, run `test:files`, `test:file-sync` and
+  `scripts/file-versions.integration.mts`. Read a private root containing nested
+  folders, a stable file and an ordinary note: return all folders and the exact
+  live file revision/fingerprint, exclude the note and trashed files, and allow
+  an explicitly complete empty subtree. Remove fixtures via normal APIs.
+- [ ] Concurrent metadata edits between breadth reads must not mix versions in
+  one snapshot. One query per breadth level must serve sibling folders; reject
+  missing/cyclic ancestors, foreign/shared/namespaced descendants, malformed
+  metadata, traversal and case/Unicode aliases without a partial result.
+- [ ] Entry, depth, byte and total time limits must fail the whole scan, close
+  cursors and preserve the worker's prior complete baseline. The total budget
+  must also cover transaction retries. Anonymous, duplicate/mixed selectors
+  and custom-storage requests must not disclose a tree.
+- [ ] Change owner, origin, root, device or data plane during capability checks,
+  HTTP or body streaming: cancel/refuse the observation. Abort and oversized or
+  malformed replies must never become an empty successful scan. A successful
+  inventory alone must not authorize a later write.

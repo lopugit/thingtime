@@ -80,7 +80,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; Android installed Things control verified; iOS click-through and physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter verified; iOS and Android folder grants/scans/reads implemented; native writes/workers and transfer-status UI pending; mobile connection editor implemented |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; native writes/workers and transfer-status UI pending; mobile connection editor implemented |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; native schedulers/adapters pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
@@ -382,3 +382,42 @@ complete draft reload, lost-response readback, offline retry after reload,
 stale draft review/replacement and removed-grant recovery passed. Desktop
 1280px and mobile 390px/320px show no horizontal overflow or out-of-bounds
 controls. Actual signed-in native picker/worker acceptance remains open.
+
+
+## Complete cloud folder inventory — 2026-10-17
+
+`api.files` 1.1.0 adds `GET /api/v1/files?rootId=<folder-id>` to the existing
+Files route. `api/utils/files/inventory.ts` reads one owned private folder tree
+in a Mongo snapshot transaction, using one indexed descendant query per breadth
+level. The inventory includes ordinary folders (including legacy folder Things)
+and live stable files with their exact revisions and immutable fingerprints.
+Non-filesystem Things and trashed files are excluded. This API is read-only and
+adds no collections, history store or write authority.
+
+The shared `cloudInventory.ts` parser checks explicit completeness, the root,
+all identities and parent relationships, paths, duplicate names and case/Unicode
+aliases. Inaccessible or malformed descendants, missing ancestors, cycles,
+custom data planes and storage errors refuse the entire observation. Scans are
+bounded to 10,000 descendants, 64 breadth levels, 8 MiB and a 20-second total
+server budget (including transaction retries). Larger trees need partitioning;
+a failed scan must retain the last complete baseline, never imply deletion.
+Folder revisions are observation stamps, not a folder mutation contract.
+
+`cloudInventory.client.ts` negotiates 1.1.0 and pins the expected actor, home
+storage, origin and complete sync scope through request and bounded body reads.
+Redirects, identity changes, aborts, timeouts and oversized replies fail without
+substituting a cached or empty inventory. Every eventual write still needs
+fresh source/destination authorization and conditional revision checks.
+
+Verification: focused parser/client/service/route tests cover nested and empty
+trees, snapshot consistency under a concurrent edit, privacy/namespace fences,
+legacy folders, collisions, limits and cancellation. The disposable loopback
+`file-versions.integration.mts` acceptance reads real Mongo-backed nested folders
+and exact stable-file fingerprints, excludes an ordinary note, refuses anonymous
+and mixed-selector requests and rejects colliding names without partial data.
+It removes its temporary folders/notes through the normal API; its two tiny,
+accounted file versions remain in private Trash as before. Native persistent
+workers, directory mutations, local writes and the full acceptance ledger remain
+unfinished; this inventory is not a claim that automatic sync is running.
+The 73 shared sync, 18 Files and 95 capability tests pass, as do targeted lint
+and the full web/Vercel build. TypeScript retains the existing 91 diagnostics.

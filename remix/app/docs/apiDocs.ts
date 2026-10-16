@@ -5986,17 +5986,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-    id: 'files', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'attachments', title: 'Commit and recover file versions',
-    endpoint: '/api/v1/files', summary: 'Read or conditionally commit an owned stable file Thing.',
-    detail: 'One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
+    id: 'files', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'attachments', title: 'Inventory folders and recover file versions',
+    endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
+    detail: 'Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user sessions only; scoped PAT, app, device and service credentials are rejected.' }, methods: ['GET', 'POST'],
     steps: [
+      'GET rootId alone returns a complete owned private folder inventory from one snapshot transaction, including live stable files, folders and immutable content fingerprints. Bounds are 10,000 descendants, 64 breadth levels, 8 MiB and 20 seconds. Overflow, invalid paths, ambiguous case/Unicode names, invalid ancestry or unavailable storage fail without returning a partial scan. Ordinary non-filesystem Things and trashed files are outside this inventory. Reauthorize each source/destination before mutation; the inventory grants no write permission.',
       'GET id returns the current file. GET id plus operationId returns the exact committed receipt or null; null is not evidence of file deletion.',
       'POST id and operationId (UUID v4), expectedRevision (null for create), name, folderId (or null), attachmentId, contentVersion and trashed. Obtain contentVersion from attachment-content fingerprint=1. Retain this entire payload for retries.',
       'A replay returns the original committed snapshot even after subsequent edits. Reusing an operation with different input, stale revisions, mismatched bytes, foreign/bound uploads or custom data planes fail without changing either file.',
       'To restore prior bytes, commit a retained attachment under a new operation ID and the current expectedRevision. Trash is a reversible metadata state; this endpoint never refunds or deletes retained bytes.'
     ],
-    requestExamples: [{ name: 'Read file', description: 'Read one owned current file.', method: 'GET', query: { id: '00000000-0000-4000-8000-000000000001' } }],
+    requestExamples: [{ name: 'Inventory folder', description: 'Read one complete private folder tree.', method: 'GET', query: { rootId: '00000000-0000-4000-8000-000000000002' } }, { name: 'Read file', description: 'Read one owned current file.', method: 'GET', query: { id: '00000000-0000-4000-8000-000000000001' } }],
     responseExamples: [{ status: 409, description: 'A stale write preserves both versions.', body: { ok: false, error: 'File changed; preserve both versions and reconcile' } }]
   }),
 	endpoint({

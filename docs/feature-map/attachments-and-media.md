@@ -20,6 +20,15 @@ write adapters, persistent workers and transfer-status integration are pending;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
 through the canonical attachment and Timeline paths described below.
 
+`api/utils/files/inventory.ts` adds complete private cloud folder scans through
+`GET /api/v1/files?rootId=...` (Files 1.1.0). Snapshot transactions and bounded
+breadth queries produce exact file/folder observations; any inaccessible,
+ambiguous or oversized tree fails without partial data. `cloudInventory.ts`
+validates the shared response and `cloudInventory.client.ts` pins account,
+origin and home storage while reading it. Run `test:files`, `test:file-sync`
+and `scripts/file-versions.integration.mts`. Folder observations do not yet
+provide directory mutation receipts or launch native workers.
+
 Stable file roots are protected `file` Things written by `api/utils/files/files.ts`
 through `/api/v1/files`. The shared `fileSync/cloudFile.ts` contract maps a file
 revision into a sync entry. Bound `file` attachments retain each byte version;
@@ -32,8 +41,7 @@ prepared upload/backup and remote Trash runs to the real file/attachment APIs.
 Pinned destinations persist in the existing sync journal; multipart retries reuse
 the operation ID, and exact receipts recover accepted writes without reading the
 source again. `test:file-sync` and `scripts/file-sync-cloud.integration.mts` cover
-this path. Platform inventory/selection, native workers and download publication
-remain separate work.
+this path. Native workers and download publication remain separate work.
 
 `iOS/Thingtime/Files/` now supplies account/origin-scoped native picker grants,
 complete bounded scans and version-checked descriptor-relative reads.

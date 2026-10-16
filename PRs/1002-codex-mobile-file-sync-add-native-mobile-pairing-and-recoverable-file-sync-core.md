@@ -347,3 +347,33 @@ because this repository's ESLint parser does not cover that extension. Raw
 TypeScript remains at the same 91 pre-existing diagnostics, with none added or
 removed. Structural Graphify refresh accompanies the checkpoint; semantic
 freshness is not claimed after the earlier extraction shrink-guard failure.
+
+
+## Cloud inventory checkpoint — 2026-10-17
+
+Files 1.1.0 exposes a complete owned private folder tree on the existing GET
+route. One Mongo snapshot covers ancestors and batched breadth reads, bounded
+to 10,000 entries, 64 breadth levels, 8 MiB and 20 seconds across retries.
+Files retain their canonical revision/fingerprint; folder stamps are observations.
+Invalid ancestry, private/namespace violations, ambiguous names, malformed file
+metadata and limits return no partial inventory. Notes and trashed files are
+outside the filesystem view. The shared client pins identity/home storage/origin,
+negotiates capabilities and bounds/cancels streamed response reads.
+
+Real loopback API + Mongo + local object-storage acceptance passed: nested/empty
+folders, exact retained file fingerprints, ordinary-note exclusion, anonymous
+and mixed-selector refusal, case-collision refusal, plus existing replacement,
+replay, retained-byte hashing and Trash/restore checks. Temporary fixture admin
+configuration was removed and the managed app restarted successfully. Synthetic
+folders/notes were deleted through the ordinary API; tiny accounted file versions
+remain private in Trash. No production storage or native background execution
+is claimed. Complete scans now supply the cloud observation prerequisite; native
+approval persistence, directory writes, transfer coordination and the rest of the
+full sync ledger are still pending.
+
+Validation for this checkpoint: 73 shared sync tests, 18 Files service/route tests
+and 95 API capability tests pass (186 total). Targeted lint and the full web build
+with Vercel output verification pass. Raw TypeScript still has the same 91
+pre-existing diagnostics, with no new normalized diagnostics. The preceding
+181da877 checkpoint's remote CodeQL check is now successful. A new scan must
+finish on the next pushed head before its CI can be described as clean.

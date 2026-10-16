@@ -4653,11 +4653,17 @@ node --import tsx scripts/file-versions.integration.mts /absolute/path/to/privat
 
 This exercises real Mongo transactions and retained attachment bytes, concurrent
 replacement, exact retries, Timeline, library/folder integration and Trash/restore.
+Files 1.1.0 also verifies complete private folder inventories through
+`GET /api/v1/files?rootId=<folder-id>`: nested folders, exact live-file fingerprints,
+ordinary-note exclusion, anonymous denial and collision refusal. Clients must
+negotiate 1.1.0 for this read and must never treat a failed scan as empty.
+Inventory reads require the existing home Mongo replica-set transaction setup;
+there are no additional credentials, collections or indexes.
 It leaves a tiny synthetic file and its two accounted versions in that account's
 private Trash, and signs out. No hard-delete shortcut is used. Remove temporary
 fixture admin configuration and restart afterwards. No new secrets or indexes
 are required. Production S3, native file workers, retention/purge, sharing and
-sync settings/UI remain separate acceptance work.
+native transfer-status UI remain separate acceptance work.
 
 ### Verifying cloud sync execution locally
 

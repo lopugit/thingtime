@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
 import { randomUUID, createHash } from 'node:crypto';
 import { parseTimelineEntry } from '../app/timeline/contract';
+import { parseCloudInventory } from '../app/fileSync/cloudInventory';
 import { cloudFileSyncEntry } from '../app/fileSync/cloudFile';
 const path = process.argv[2];
 if (!path || ((await stat(path)).mode & 0o077)) throw Error('Pass a private mode-0600 test fixture');
@@ -36,9 +37,10 @@ async function upload(bytes: Buffer) {
  const file = { id, version: receipt.version, bytes }; uploaded.push(file); return file;
 }
 let latest: any = null, signedIn = false, folderId: string | null = null;
+const inventoryFixtures: string[] = [];
 const id = randomUUID();
 try {
- const discovery = await ok('/.well-known/thingtime-capabilities.json'); assert.equal(discovery.features['api.files'].version, '1.0.0');
+ const discovery = await ok('/.well-known/thingtime-capabilities.json'); assert.equal(discovery.features['api.files'].version, '1.1.0');
  await ok('/api/v1/login', { username: fixture.username, password: fixture.password }); signedIn = true;
  assert.equal((await ok('/api/v1/auth/me')).user.id, fixture.userId);
  const a = await upload(Buffer.alloc(128, 11)), b = await upload(Buffer.alloc(257, 22));
@@ -60,6 +62,21 @@ try {
  const moved = await ok('/api/v1/things/bulk', { op: 'move', ids: [id], folderId }); assert.equal(moved.failed, 0);
  latest = (await ok(`/api/v1/files?id=${id}`)).file; assert.equal(latest.folderId, folderId); assert.notEqual(latest.revision, beforeMove);
  assert.equal((await call('/api/v1/files', { ...replacement, operationId: randomUUID(), expectedRevision: beforeMove })).response.status, 409);
+ const nested = (await ok('/api/v1/things', { thingtime: ['folder'], folderId, crystal: { name: 'Nested' } })).thing; inventoryFixtures.push(nested.id);
+ const note = (await ok('/api/v1/things', { thingtime: ['data'], folderId: nested.id, crystal: { name: 'Ordinary note' } })).thing; inventoryFixtures.push(note.id);
+ const observation = parseCloudInventory((await ok(`/api/v1/files?rootId=${folderId}`)).inventory, folderId!);
+ assert.equal(observation.nodes.length, 2); const observedFile = observation.nodes.find(n => n.kind === 'file'); assert.equal(observedFile?.kind, 'file');
+ if (observedFile?.kind === 'file') assert.deepEqual(observedFile.file, latest);
+ assert.deepEqual(parseCloudInventory((await ok(`/api/v1/files?rootId=${nested.id}`)).inventory, nested.id).nodes, []);
+ assert.equal((await call(`/api/v1/files?rootId=${folderId}`, undefined, false)).response.status, 401);
+ assert.equal((await call(`/api/v1/files?rootId=${folderId}&id=${id}`)).response.status, 400);
+ assert.equal((await call(`/api/v1/files?rootId=${id}`)).response.status, 404);
+ for (const name of ['Ambiguous', 'ambiguous']) { const child = (await ok('/api/v1/things', { thingtime: ['folder'], folderId, crystal: { name } })).thing; inventoryFixtures.push(child.id); }
+ const ambiguous = await call(`/api/v1/files?rootId=${folderId}`); assert.equal(ambiguous.response.status, 409); assert.equal(ambiguous.data.inventory, undefined);
+ while (inventoryFixtures.length) { const child = inventoryFixtures.at(-1)!; assert.equal((await call(`/api/v1/things?id=${child}`, undefined, true, 'DELETE')).response.status, 200); inventoryFixtures.pop(); }
+ assert.equal((await ok(`/api/v1/files?rootId=${folderId}`)).inventory.nodes.length, 1);
+ console.log('PASS: complete private cloud inventory; exact stable-file fingerprints; nested folders; ordinary notes excluded; anonymous and mixed-selector refusal; case collision fails without partial data; fixture cleanup.');
+
  assert.equal((await call(`/api/v1/things?id=${folderId}`, undefined, true, 'DELETE')).response.status, 200); folderId = null;
  latest = (await ok(`/api/v1/files?id=${id}`)).file; assert.equal(latest.folderId, null);
  const trash = { ...replacement, operationId: randomUUID(), expectedRevision: latest.revision, name: latest.name, trashed: true };
@@ -78,6 +95,7 @@ try {
  console.log('PASS: stable file identity; real replacement; concurrent writer refusal; exact replay/lookup; Timeline history; library listing; guarded folder moves and folder deletion; trash/restore; independent hashes of both retained versions; protected deletion and anonymous denial');
 } finally {
  try {
+  for (const child of inventoryFixtures.reverse()) await call(`/api/v1/things?id=${child}`, undefined, true, 'DELETE');
   if (folderId) await call(`/api/v1/things?id=${folderId}`, undefined, true, 'DELETE');
   if (latest) {
    const current = (await ok(`/api/v1/files?id=${id}`)).file;
