@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
 import { draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
 import { platformScriptHash } from './platform-runtime.mjs';
+import { validateOfflineManifest } from '../public/offline-shell.mjs';
 import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
@@ -387,3 +389,21 @@ for (const extension of ['html', 'js']) {
 const runtimeDigest = createHash('sha256').update(readFileSync('.vercel/output/static/platform/runtime.js')).digest('hex');
 if (!appScriptSources.includes(platformScriptHash(readFileSync('.vercel/output/static/platform/runtime.js', 'utf8')))) throw new Error('Application CSP must authorize the exact built offline Web Platform renderer.');
 if (!readFileSync('.vercel/output/static/platform/runtime.html', 'utf8').includes(`src="/platform/runtime.js?v=${runtimeDigest}"`)) throw new Error('Web Platform document must reference its exact runtime digest to bypass previously cached compiler code.');
+
+// Offline startup is the one isolated runtime surface whose only coverage is
+// opt-in browser tests, and every way it can break is silent: a dropped
+// build:offline step ships public/'s null stub, and a manifest that disagrees
+// with the shipped bytes makes prepareOfflineShell throw into the install
+// handler's own catch. Both leave a green build and no offline startup. Assert
+// here what the worker verifies at install time, where nobody is watching.
+for (const filename of ['offline-shell.html', 'offline-shell.mjs', 'offline-shell-manifest.mjs'])
+	if (!existsSync(join('.vercel/output/static', filename))) throw new Error(`Missing offline shell asset: ${filename}`);
+const { offlineShellManifest } = await import(pathToFileURL(resolve('.vercel/output/static/offline-shell-manifest.mjs')).href);
+if (!validateOfflineManifest(offlineShellManifest)) throw new Error('Deployed offline shell manifest is the unbuilt stub or exceeds its asset budget. Run npm run build:offline.');
+for (const asset of offlineShellManifest.assets) {
+	// validateOfflineManifest already constrained every path to the build-asset allowlist.
+	const file = join('.vercel/output/static', asset.path);
+	if (!existsSync(file)) throw new Error(`Offline shell manifest pledges a missing asset: ${asset.path}`);
+	const bytes = readFileSync(file);
+	if (bytes.length !== asset.bytes || createHash('sha256').update(bytes).digest('hex') !== asset.sha256) throw new Error(`Offline shell manifest is stale for ${asset.path}; the shell would never finish installing.`);
+}
