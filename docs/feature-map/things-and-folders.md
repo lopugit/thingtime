@@ -348,3 +348,12 @@ exposes Sync now only for publication-capable roots with deletes disabled.
 `foregroundSync.test.ts` covers mixed-direction recovery and pre-effect conflicts;
 Android's optional `THINGTIME_TWO_WAY_SYNC_TEST=1` checks actual mixed bytes and
 independent edits. Mac adapters and native workers remain in the mobile sync ledger.
+
+
+Apple native grants, scan/read and publication are now shared in
+`apple/FileSync/Sources/AppleFileSync`; iOS `MobileFolderBridge` imports that
+local package. `FileSyncOwnerScope` preserves the pairing/grant key and JSON.
+`FolderBookmark` owns the iOS/macOS bookmark differences. Common folder and
+publication tests live under the package; iOS retains its host bridge extensions.
+The shared `PublicationProcessAcceptance` fixture runs through iOS's test host
+and Mac's test-only child executable. Mac desktop dispatch remains pending.

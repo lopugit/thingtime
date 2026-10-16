@@ -789,3 +789,20 @@ acceptance; cloud fixture cleanup retained accounted versions in private Trash.
 Native fixture cleanup removes its active records/blobs; retained replacement
 bytes and staging are not claimed to be fully erased. No production deployment,
 iOS mixed-direction acceptance or full-goal completion is implied.
+
+
+## Shared Apple native receiver — 2026-10-17
+
+`apple/FileSync` now contains the single native folder grant/reader/publication
+implementation. iOS imports the local package and retains its bridge and storage
+identity. macOS uses security-scoped bookmarks and explicit private staging paths;
+same-filesystem conditional publication and retained conflicts remain required.
+The same real-filesystem tests and process fixture run on both platforms.
+
+Mac native tests passed 22/22. Three actual post-rename/pre-receipt process-exit
+scenarios passed on Mac and iOS: create, replacement and later local edit.
+The iOS focused suite passed 50 checks plus one scope-compatibility check; the
+Mac library release build passed. Full results are recorded
+in the [delivery ledger](../docs/mobile-file-sync.md#shared-apple-receiver-and-mac-filesystem-recovery--2026-10-17).
+No installed Mac transfer is claimed: desktop picker/consent/dispatch, Keychain,
+TCC/sandbox, cloud UI and signed delivery remain open, alongside the full goal.

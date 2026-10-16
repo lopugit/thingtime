@@ -4,28 +4,32 @@ import Security
 /// OS grants stay native and account/origin scoped. Editable sync settings must
 /// reference these opaque IDs, never store a bookmark or an absolute path.
 @MainActor
-final class MobileFolderStore {
-    struct WriteApproval: Codable, Equatable, Sendable {
-        let scope: MobileSyncStaging.Scope
-        let configurationRevision: String
-        let configurationHash: String
-        func validate(owner: MobileDevicePairing.Scope) throws {
+public final class MobileFolderStore {
+    public struct WriteApproval: Codable, Equatable, Sendable {
+        public init(scope: MobileSyncStaging.Scope, configurationRevision: String, configurationHash: String) { self.scope = scope; self.configurationRevision = configurationRevision; self.configurationHash = configurationHash }
+
+        public let scope: MobileSyncStaging.Scope
+        public let configurationRevision: String
+        public let configurationHash: String
+        public func validate(owner: FileSyncOwnerScope) throws {
             guard scope.origin == owner.origin.absoluteString, scope.ownerId == owner.ownerId, scope.dataPlane == "home",
                   !scope.rootId.isEmpty, scope.rootId.utf16.count <= 4096, !scope.deviceId.isEmpty, scope.deviceId.utf16.count <= 4096,
                   !configurationRevision.isEmpty, configurationRevision.utf8.count <= 128,
                   configurationHash.count == 64, configurationHash.unicodeScalars.allSatisfy({ (48...57).contains($0.value) || (97...102).contains($0.value) }) else { throw Failure.invalid }
         }
     }
-    struct Grant: Codable, Sendable {
-        let id: String
-        let scope: MobileDevicePairing.Scope
-        let name: String
-        let bookmark: Data
-        var writeApprovals: [WriteApproval]?
+    public struct Grant: Codable, Sendable {
+        public init(id: String, scope: FileSyncOwnerScope, name: String, bookmark: Data, writeApprovals: [WriteApproval]? = nil) { self.id = id; self.scope = scope; self.name = name; self.bookmark = bookmark; self.writeApprovals = writeApprovals }
+
+        public let id: String
+        public let scope: FileSyncOwnerScope
+        public let name: String
+        public let bookmark: Data
+        public var writeApprovals: [WriteApproval]?
     }
-    enum Failure: Error, LocalizedError {
+    public enum Failure: Error, LocalizedError {
         case unavailable, invalid, limit, changed, storage, approvalCancelled
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .approvalCancelled: return "Download approval cancelled. No folder write permission was granted."
             case .unavailable: return "This folder is unavailable. Check Files permissions or choose it again."
@@ -36,11 +40,11 @@ final class MobileFolderStore {
             }
         }
     }
-    private let loadData: (MobileDevicePairing.Scope) throws -> Data?
-    private let saveData: (MobileDevicePairing.Scope, Data) throws -> Void
-    init(load: @escaping (MobileDevicePairing.Scope) throws -> Data? = MobileFolderStore.loadKeychain,
-         save: @escaping (MobileDevicePairing.Scope, Data) throws -> Void = MobileFolderStore.saveKeychain) { loadData = load; saveData = save }
-    func list(_ scope: MobileDevicePairing.Scope) throws -> [Grant] {
+    private let loadData: @MainActor (FileSyncOwnerScope) throws -> Data?
+    private let saveData: @MainActor (FileSyncOwnerScope, Data) throws -> Void
+    public init(load: @escaping @MainActor (FileSyncOwnerScope) throws -> Data? = MobileFolderStore.loadKeychain,
+         save: @escaping @MainActor (FileSyncOwnerScope, Data) throws -> Void = MobileFolderStore.saveKeychain) { loadData = load; saveData = save }
+    public func list(_ scope: FileSyncOwnerScope) throws -> [Grant] {
         guard let data = try loadData(scope) else { return [] }
         guard data.count <= 1024 * 1024 else { throw Failure.storage }
         let rows = try JSONDecoder().decode([Grant].self, from: data)
@@ -52,21 +56,21 @@ final class MobileFolderStore {
         }
         return rows
     }
-    func grant(_ scope: MobileDevicePairing.Scope, id: String) throws -> Grant {
+    public func grant(_ scope: FileSyncOwnerScope, id: String) throws -> Grant {
         guard let grant = try list(scope).first(where: { $0.id == id }) else { throw Failure.unavailable }
         return grant
     }
-    func remove(_ scope: MobileDevicePairing.Scope, id: String) throws {
+    public func remove(_ scope: FileSyncOwnerScope, id: String) throws {
         let rows = try list(scope).filter { $0.id != id }; try persist(scope, rows)
     }
-    func isWriteApproved(_ scope: MobileDevicePairing.Scope, id: String, approval: WriteApproval) throws -> Bool {
+    public func isWriteApproved(_ scope: FileSyncOwnerScope, id: String, approval: WriteApproval) throws -> Bool {
         try approval.validate(owner: scope)
         return try grant(scope, id: id).writeApprovals?.contains(approval) == true
     }
     /// Call only after the native consent dialog and fresh owner verification.
     /// Re-selecting/removing a grant clears these bindings; editable Things alone
     /// cannot create native write authority.
-    func approveWrite(_ scope: MobileDevicePairing.Scope, grant original: Grant, approval: WriteApproval) throws {
+    public func approveWrite(_ scope: FileSyncOwnerScope, grant original: Grant, approval: WriteApproval) throws {
         try approval.validate(owner: scope)
         var rows = try list(scope)
         guard let index = rows.firstIndex(where: { $0.id == original.id }), rows[index].bookmark == original.bookmark else { throw Failure.changed }
@@ -75,23 +79,23 @@ final class MobileFolderStore {
         approvals.append(approval); rows[index].writeApprovals = approvals
         try persist(scope, rows)
     }
-    private func persist(_ scope: MobileDevicePairing.Scope, _ rows: [Grant]) throws {
+    private func persist(_ scope: FileSyncOwnerScope, _ rows: [Grant]) throws {
         let data = try JSONEncoder().encode(rows)
         guard data.count <= 1024 * 1024 else { throw Failure.limit }
         try saveData(scope, data)
     }
     /// Called only with a native picker result, never a URL supplied by JavaScript.
-    func add(_ scope: MobileDevicePairing.Scope, selected url: URL) throws -> Grant {
+    public func add(_ scope: FileSyncOwnerScope, selected url: URL) throws -> Grant {
         guard url.isFileURL else { throw Failure.invalid }
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
         let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard values.isDirectory == true, values.isSymbolicLink != true else { throw Failure.invalid }
-        let bookmark = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+        let bookmark = try FolderBookmark.create(url)
         guard bookmark.count <= 32 * 1024 else { throw Failure.limit }
         var rows = try list(scope)
         let existing = rows.firstIndex { row in
             var stale = false
-            return (try? URL(resolvingBookmarkData: row.bookmark, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale))?.standardizedFileURL == url.standardizedFileURL
+            return (try? FolderBookmark.resolve(row.bookmark, stale: &stale))?.standardizedFileURL == url.standardizedFileURL
         }
         guard existing != nil || rows.count < 32 else { throw Failure.limit }
         let name = url.lastPathComponent
@@ -100,17 +104,17 @@ final class MobileFolderStore {
         if let existing { rows[existing] = grant } else { rows.append(grant) }
         try persist(scope, rows); return grant
     }
-    private static func query(_ scope: MobileDevicePairing.Scope) -> [String: Any] {
+    private static func query(_ scope: FileSyncOwnerScope) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.thingtime.folder-grants.v1",
          kSecAttrAccount as String: scope.key, kSecAttrSynchronizable as String: false]
     }
-    static func loadKeychain(_ scope: MobileDevicePairing.Scope) throws -> Data? {
+    public static func loadKeychain(_ scope: FileSyncOwnerScope) throws -> Data? {
         var q = query(scope); q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?; let status = SecItemCopyMatching(q as CFDictionary, &item)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = item as? Data else { throw Failure.storage }; return data
     }
-    static func saveKeychain(_ scope: MobileDevicePairing.Scope, data: Data) throws {
+    public static func saveKeychain(_ scope: FileSyncOwnerScope, data: Data) throws {
         var q = query(scope); q[kSecValueData as String] = data; q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(q as CFDictionary, nil)
         if status == errSecDuplicateItem {

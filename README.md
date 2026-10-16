@@ -4955,3 +4955,12 @@ trash propagation and conflict-resolution controls remain in progress.
 The [Android two-way acceptance runbook](android/README.md#two-way-foreground-acceptance)
 uses the same disposable loopback account, normal upload approval and local
 attachment backend; no new configuration or credentials are required.
+
+
+### Shared Apple folder receiver
+
+The iOS native folder reader, grants and recoverable publication now live in
+[`apple/FileSync`](apple/FileSync/README.md), a local Swift package that also runs
+on macOS. That runbook documents native consent, platform bookmarks, isolated
+staging and real process-exit checks. The Mac app still needs its picker/bridge
+integration before it can expose these transfers; no new secret is required.

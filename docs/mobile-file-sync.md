@@ -82,7 +82,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; iOS mixed-direction acceptance, Mac publication, workers and full cross-device transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; iOS mixed-direction acceptance, Mac host integration, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
@@ -975,3 +975,39 @@ acceptance; cloud fixture cleanup retained accounted versions in private Trash.
 Native fixture cleanup removes its active records/blobs; retained replacement
 bytes and staging are not claimed to be fully erased. No production deployment,
 iOS mixed-direction acceptance or full-goal completion is implied.
+
+
+## Shared Apple receiver and Mac filesystem recovery — 2026-10-17
+
+The native reader, grant store and publication implementation have moved from
+the iOS target into `apple/FileSync`, a local Swift package used by iOS and
+executable on macOS 13+. There is one byte verifier, conditional publication
+algorithm and recovery record format. Existing iOS v1 storage paths, Keychain
+service/account keys and serialized owner/grant/operation shapes are preserved.
+`MobileDevicePairing.Scope` aliases the extracted owner scope. macOS bookmarks
+carry security scope; iOS retains its existing bookmark/data-protection behavior.
+Mac callers must supply an isolated staging path. Publication still requires a
+same-filesystem destination; native hosts retain responsibility for account and
+connection verification, current grant checks and explicit write consent.
+
+Mac tests passed 22/22 against real temporary files, including the existing
+folder and publication cases plus a persisted-scope compatibility regression.
+The shared process fixture also passed create, replacement and post-exit-edit
+recovery on macOS: each publishing child actually exited after rename and before
+its receipt; a new process recovered or preserved the conflict without a second
+swap. Originals and verified 8 MiB + 17-byte staged payloads were retained.
+The same three scenarios passed again in separate iOS simulator processes after
+the module move. The iOS focused suite passed 50 checks covering pairing, folder
+access, native bridge staging/publication and origin handling; the new scope
+compatibility check also passed in a separate simulator run (51 focused checks
+in total). The macOS library release build passed without warnings. Existing
+iOS widget/recording warnings remain outside this change; no TypeScript source
+changed and its prior 91-diagnostic baseline was not rerun.
+
+This is native core evidence, not an installed Mac transfer. The Mac app's
+picker/consent, pairing-bound dispatch, real Keychain/sandbox/TCC access, cloud
+transfer UI and signed acceptance remain required. No Mac helper, installed app,
+LaunchAgent or user folder was changed. No server/API/storage-model change or
+new credential is introduced. Background workers, Photos, peer transport,
+rename/delete/conflict/restore controls, retention/selective availability and the
+remaining full-goal acceptance are still open.

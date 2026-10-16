@@ -10435,3 +10435,19 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Files edits, settings reapproval, concurrent same-file edits and restart.
 - [ ] Add Mac receivers, recoverable native trash, explicit conflict resolution,
   native background workers, Photos, peer sync and large-folder acceptance.
+
+
+### Shared Apple receiver and macOS portability (2026-10-17)
+
+- [x] Run the same native folder/publication cases on macOS and iOS. Verify
+  bounded real bytes, grant isolation, symlink/version refusal, concurrent
+  receivers, replacement retention and failed-publication recovery.
+- [x] Preserve the pre-extraction owner JSON and Keychain account key; keep the
+  existing iOS bookmark format and v1 staging/grant records.
+- [x] Exercise actual process exits after rename and before receipt on both
+  platforms, followed by a fresh process: create, replacement and local edit
+  after exit. Preserve originals and refuse to overwrite that later edit.
+- [ ] Verify Mac installed picker/consent, account-bound desktop dispatch,
+  Keychain/sandbox/TCC behavior, real cloud two-way transfer and signed install.
+- [ ] Verify additional filesystems/providers, physical iOS, reboot and low
+  storage separately; process exit is not power-loss or background acceptance.

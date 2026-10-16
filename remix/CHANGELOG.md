@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Share the Apple native folder reader, grant store
+  and recoverable publication core between iOS and macOS builds. Preserve iOS
+  storage identity, add platform-specific bookmark handling and verify actual
+  process-exit recovery on both platforms. Mac host integration remains pending.
+  [PR #1002 details](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Enable approved two-way foreground folder sync
   through the shared runner and native adapters. Installed Android acceptance
   verifies mixed uploads/downloads, independent replacements, repeated convergence

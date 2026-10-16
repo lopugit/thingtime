@@ -1,3 +1,4 @@
+@testable import AppleFileSync
 import XCTest
 import WebKit
 import UIKit

@@ -1,14 +1,13 @@
+@testable import AppleFileSync
 import XCTest
 import CryptoKit
-import WebKit
-@testable import Thingtime
 
 @MainActor
 final class MobileSyncStagingTests: XCTestCase {
-    private func fixture(_ bytes: Data, folder: Bool = false) throws -> (URL, MobileDevicePairing.Scope, MobileSyncStaging.Request) {
+    func fixture(_ bytes: Data, folder: Bool = false) throws -> (URL, FileSyncOwnerScope, MobileSyncStaging.Request) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("staging-test-" + UUID().uuidString, isDirectory: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        let owner = try MobileDevicePairing.Scope(ownerId: "staging-test", url: URL(string: "https://thingtime.test")!)
+        let owner = try FileSyncOwnerScope(ownerId: "staging-test", url: URL(string: "https://thingtime.test")!)
         let scope = MobileSyncStaging.Scope(origin: owner.origin.absoluteString, ownerId: owner.ownerId, dataPlane: "home", rootId: "config", deviceId: "device")
         var digest = SHA256(); let partSize = 8 * 1024 * 1024
         for offset in stride(from: 0, to: bytes.count, by: partSize) { digest.update(data: Data(SHA256.hash(data: bytes.subdata(in: offset..<min(bytes.count, offset + partSize))))) }
@@ -20,12 +19,12 @@ final class MobileSyncStagingTests: XCTestCase {
             mutation: .init(kind: "copy", from: "remote", path: entry.path, source: entry, expectedTarget: nil), confirmed: false)
         return (root, owner, .init(scope: scope, rootId: UUID().uuidString.lowercased(), operation: op))
     }
-    private func publicationFixture(_ bytes: Data, prior: Data? = nil, folder: Bool = false) throws -> (URL, URL, MobileDevicePairing.Scope, MobileSyncStaging.Request, Data, MobileSyncStaging.Stage) {
+    private func publicationFixture(_ bytes: Data, prior: Data? = nil, folder: Bool = false) throws -> (URL, URL, FileSyncOwnerScope, MobileSyncStaging.Request, Data, MobileSyncStaging.Stage) {
         let (root, owner, original) = try fixture(bytes, folder: folder)
         let selected = root.appendingPathComponent("selected"), storage = root.appendingPathComponent("private")
         try FileManager.default.createDirectory(at: selected.appendingPathComponent("nested"), withIntermediateDirectories: true)
         if let prior { try prior.write(to: selected.appendingPathComponent(original.operation.mutation.path)) }
-        let bookmark = try selected.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+        let bookmark = try FolderBookmark.create(selected)
         let expected = try MobileFolderReader.scan(bookmark: bookmark).first { $0.path == original.operation.mutation.path }
         let request = MobileSyncStaging.Request(scope: original.scope, rootId: original.rootId, operation: .init(id: original.operation.id,
             mutation: .init(kind: "copy", from: "remote", path: original.operation.mutation.path, source: original.operation.mutation.source, expectedTarget: expected), confirmed: false))
@@ -149,8 +148,8 @@ final class MobileSyncStagingTests: XCTestCase {
     func testScopeOperationRangesAndChecksumsFailClosed() throws {
         let bytes = Data([1, 2, 3]), (root, owner, request) = try fixture(bytes), stage = MobileSyncStaging(directory: root)
         _ = try stage.begin(request, owner: owner)
-        XCTAssertThrowsError(try stage.begin(request, owner: MobileDevicePairing.Scope(ownerId: "other", url: owner.origin)))
-        XCTAssertThrowsError(try stage.begin(request, owner: MobileDevicePairing.Scope(ownerId: owner.ownerId, url: URL(string: "https://other.test")!)))
+        XCTAssertThrowsError(try stage.begin(request, owner: FileSyncOwnerScope(ownerId: "other", url: owner.origin)))
+        XCTAssertThrowsError(try stage.begin(request, owner: FileSyncOwnerScope(ownerId: owner.ownerId, url: URL(string: "https://other.test")!)))
         var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as! [String: Any]
         var operation = object["operation"] as! [String: Any], mutation = operation["mutation"] as! [String: Any], source = mutation["source"] as! [String: Any]
         source["version"] = "different"; mutation["source"] = source; operation["mutation"] = mutation; object["operation"] = operation
@@ -186,73 +185,6 @@ final class MobileSyncStagingTests: XCTestCase {
         XCTAssertThrowsError(try stage.append(request, owner: owner, offset: 0, bytes: Data([1])))
         XCTAssertEqual(try Data(contentsOf: outside), Data([9]))
     }
-    func testBridgeStagesRealBytesThroughAnAuthorizedNativeGrant() async throws {
-        let bytes = Data([1, 2, 3]), (cache, owner, initial) = try fixture(bytes)
-        let selected = FileManager.default.temporaryDirectory.appendingPathComponent("staging-root-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: selected, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: selected) }
-        var data: Data?
-        let store = MobileFolderStore(load: { _ in data }, save: { _, next in data = next })
-        let grant = try store.add(owner, selected: selected)
-        let transfer = MobileSyncStaging.Request(scope: initial.scope, rootId: grant.id, operation: initial.operation)
-        let bridge = MobileFolderBridge(store: store, staging: MobileSyncStaging(directory: cache))
-        let webView = WKWebView()
-        webView.configuration.userContentController.addUserScript(WKUserScript(source: "window.thingtimeNativeBridge = {};", injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        webView.configuration.userContentController.addUserScript(MobileFolderBridge.script)
-        webView.loadHTMLString("<html><body>Native staging fixture</body></html>", baseURL: owner.origin)
-        for _ in 0..<100 {
-            if let version = try? await webView.evaluateJavaScript("window.thingtimeNativeBridge?.fileStagingVersion"), version as? String == "1.0.0" { break }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
-        let version = try await webView.evaluateJavaScript("window.thingtimeNativeBridge.fileStagingVersion")
-        XCTAssertEqual(version as? String, "1.0.0")
-        let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(transfer))
-        var authorizations = 0
-        func call(_ action: String) async throws -> [String: Any] {
-            let complete = expectation(description: action)
-            var response: [String: Any]?
-            bridge.handle(["payload": ["requestId": UUID().uuidString, "ownerId": owner.ownerId, "rootId": grant.id,
-                "action": action, "transfer": encoded, "offset": 0, "data": bytes.base64EncodedString()]],
-                webView: webView, root: owner.origin, currentRoot: { owner.origin }, verifyOwner: { supplied, check in
-                    XCTAssertEqual(supplied, owner); try check(); authorizations += 1
-                }, reply: { type, payload in XCTAssertEqual(type, "mobile-files-result"); response = payload; complete.fulfill() })
-            await fulfillment(of: [complete], timeout: 5)
-            let result = try XCTUnwrap(response)
-            XCTAssertNil(result["error"])
-            return try XCTUnwrap(result["staging"] as? [String: Any])
-        }
-        let began = try await call("stage-begin"), appended = try await call("stage-append")
-        XCTAssertEqual(began["received"] as? Int, 0); XCTAssertEqual(appended["received"] as? Int, 3)
-        let done = try await call("stage-finish")
-        let stage = try XCTUnwrap(done["stage"] as? [String: Any])
-        XCTAssertEqual(stage["operationId"] as? String, transfer.operation.id)
-        XCTAssertTrue((stage["entry"] as? [String: Any])?["sha256"] is NSNull)
-        XCTAssertEqual(authorizations, 6)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: selected.path), [])
-        let approval = MobileFolderStore.WriteApproval(scope: transfer.scope, configurationRevision: "v1", configurationHash: String(repeating: "a", count: 64))
-        let encodedApproval = try JSONSerialization.jsonObject(with: JSONEncoder().encode(approval))
-        func publish() async throws -> [String: Any] {
-            let complete = expectation(description: "publication"), id = UUID().uuidString
-            var response: [String: Any]?
-            bridge.handle(["payload": ["requestId": id, "ownerId": owner.ownerId, "rootId": grant.id,
-                "action": "publish", "transfer": encoded, "stage": stage, "approval": encodedApproval]],
-                webView: webView, root: owner.origin, currentRoot: { owner.origin }, verifyOwner: { supplied, check in
-                    XCTAssertEqual(supplied, owner); try check()
-                }, reply: { _, payload in response = payload; complete.fulfill() })
-            await fulfillment(of: [complete], timeout: 5); return try XCTUnwrap(response)
-        }
-        let denied = try await publish(); XCTAssertNotNil(denied["error"])
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: selected.path), [])
-        // Synthetic consent only for this isolated test grant; production uses UIAlertController.
-        try store.approveWrite(owner, grant: grant, approval: approval)
-        try FileManager.default.createDirectory(at: selected.appendingPathComponent("nested"), withIntermediateDirectories: true)
-        let published = try await publish()
-        XCTAssertNil(published["error"])
-        XCTAssertEqual((published["publication"] as? [String: Any])?["status"] as? String, "complete")
-        XCTAssertEqual(try Data(contentsOf: selected.appendingPathComponent(transfer.operation.mutation.path)), bytes)
-        bridge.suspend()
-    }
-
     func testConcurrentReceiverInstancesDeduplicateTheSameChunk() async throws {
         let bytes = Data([1, 2, 3]), (root, owner, request) = try fixture(bytes)
         let first = MobileSyncStaging(directory: root), second = MobileSyncStaging(directory: root)

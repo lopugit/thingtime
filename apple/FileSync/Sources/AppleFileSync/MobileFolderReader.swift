@@ -4,26 +4,28 @@ import Darwin
 
 /// Descriptor-relative reads within a native picker grant. No shell, symlink
 /// traversal, arbitrary URL reads, overwrites or deletion authority.
-struct MobileFolderReader {
-    struct Fingerprint: Codable, Equatable, Sendable {
-        let algorithm: String
-        init(partSizeBytes: Int64, partCount: Int, sha256: String) {
+public struct MobileFolderReader {
+    public struct Fingerprint: Codable, Equatable, Sendable {
+        public let algorithm: String
+        public init(partSizeBytes: Int64, partCount: Int, sha256: String) {
             algorithm = "sha256-parts-v1"; self.partSizeBytes = partSizeBytes; self.partCount = partCount; self.sha256 = sha256
         }
-        let partSizeBytes: Int64
-        let partCount: Int
-        let sha256: String
+        public let partSizeBytes: Int64
+        public let partCount: Int
+        public let sha256: String
     }
-    struct Entry: Codable, Equatable, Sendable {
-        let path: String
-        let id: String
-        let version: String
-        let kind: String
-        let size: Int64
-        let sha256: String?
-        let fingerprint: Fingerprint?
+    public struct Entry: Codable, Equatable, Sendable {
+        public init(path: String, id: String, version: String, kind: String, size: Int64, sha256: String?, fingerprint: Fingerprint?) { self.path = path; self.id = id; self.version = version; self.kind = kind; self.size = size; self.sha256 = sha256; self.fingerprint = fingerprint }
+
+        public let path: String
+        public let id: String
+        public let version: String
+        public let kind: String
+        public let size: Int64
+        public let sha256: String?
+        public let fingerprint: Fingerprint?
         enum CodingKeys: String, CodingKey { case path, id, version, kind, size, sha256, fingerprint }
-        func encode(to encoder: Encoder) throws {
+        public func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
             try c.encode(path, forKey: .path); try c.encode(id, forKey: .id); try c.encode(version, forKey: .version)
             try c.encode(kind, forKey: .kind); try c.encode(size, forKey: .size)
@@ -31,10 +33,13 @@ struct MobileFolderReader {
             try c.encodeIfPresent(fingerprint, forKey: .fingerprint)
         }
     }
-    struct Chunk: Encodable, Sendable { let version: String; let size: Int64; let offset: Int64; let data: String }
-    typealias Failure = MobileFolderStore.Failure
-    static let maximumEntries = 10_000
-    static let maximumReadBytes = 65_536
+    public struct Chunk: Encodable, Sendable {
+        public init(version: String, size: Int64, offset: Int64, data: String) { self.version = version; self.size = size; self.offset = offset; self.data = data }
+        public let version: String; public let size: Int64; public let offset: Int64; public let data: String
+    }
+    public typealias Failure = MobileFolderStore.Failure
+    public static let maximumEntries = 10_000
+    public static let maximumReadBytes = 65_536
     static func components(_ path: String) throws -> [String] {
         guard !path.isEmpty, path.utf16.count <= 4096, !path.contains("\\"),
               !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) || $0.properties.generalCategory == .format }) else { throw Failure.invalid }
@@ -91,7 +96,7 @@ struct MobileFolderReader {
     private static func hex(_ hash: SHA256.Digest) -> String { hash.map { String(format: "%02x", $0) }.joined() }
     private static func access<T>(_ bookmark: Data, work: (Int32) throws -> T) throws -> T {
         var stale = false
-        let url = try URL(resolvingBookmarkData: bookmark, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale)
+        let url = try FolderBookmark.resolve(bookmark, stale: &stale)
         guard url.isFileURL, !stale else { throw Failure.unavailable }
         let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         var result: Result<T, Error>?, error: NSError?
@@ -105,8 +110,8 @@ struct MobileFolderReader {
         }
         if let error { throw error }; guard let result else { throw Failure.unavailable }; return try result.get()
     }
-    static func checkAccess(bookmark: Data) throws { try access(bookmark) { _ in try Task.checkCancellation() } }
-    static func scan(bookmark: Data) throws -> [Entry] {
+    public static func checkAccess(bookmark: Data) throws { try access(bookmark) { _ in try Task.checkCancellation() } }
+    public static func scan(bookmark: Data) throws -> [Entry] {
         try access(bookmark) { root in
             let initial = try stamp(info(root)); var entries: [Entry] = [], aliases = Set<String>(), byteBudget = 0
             func walk(_ parent: Int32, prefix: String) throws {
@@ -140,7 +145,7 @@ struct MobileFolderReader {
             guard try stamp(info(root)) == initial else { throw Failure.changed }; return entries
         }
     }
-    static func read(bookmark: Data, path: String, version: String, offset: Int64, length: Int) throws -> Chunk {
+    public static func read(bookmark: Data, path: String, version: String, offset: Int64, length: Int) throws -> Chunk {
         guard offset >= 0, length > 0, length <= maximumReadBytes else { throw Failure.invalid }
         return try access(bookmark) { root in
             let fd = try openPath(root, path: path); defer { close(fd) }

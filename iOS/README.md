@@ -267,3 +267,14 @@ completion. This is opt-in and never enables itself in ordinary test runs. See
 the root README for fixture preparation, replacement and cleanup. The native
 consent cancellation message is distinct from missing folder access; shared
 pairing requests serialize foreground checks with periodic status refresh.
+
+
+### Shared file-sync core
+
+`project.yml` links the local `../apple/FileSync` package. Regenerate with
+`xcodegen generate` after updating the checkout. Folder grants, reads and staged
+publication use this shared source; existing v1 storage, scope keys and bridge
+contracts are preserved. The test target includes the shared folder/publication
+cases plus iOS-only WebKit bridge cases. See the [package runbook](../apple/FileSync/README.md)
+for Mac filesystem tests and the existing `scripts/test-mobile-publication-process.sh`
+for iOS fresh-process recovery. This extraction does not enable Mac host sync.

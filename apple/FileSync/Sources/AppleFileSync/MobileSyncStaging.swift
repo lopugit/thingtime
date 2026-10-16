@@ -5,21 +5,29 @@ import Darwin
 /// App-private transfer state, not file history or permission to publish into a
 /// selected folder. Every bridge call separately reauthorizes the native grant.
 /// The immutable operation and receipt shapes match the shared sync executor.
-final class MobileSyncStaging: @unchecked Sendable {
-    typealias Entry = MobileFolderReader.Entry
-    typealias Failure = MobileFolderStore.Failure
-    struct Scope: Codable, Equatable, Sendable {
-        let origin: String; let ownerId: String; let dataPlane: String; let rootId: String; let deviceId: String
+public final class MobileSyncStaging: @unchecked Sendable {
+    public typealias Entry = MobileFolderReader.Entry
+    public typealias Failure = MobileFolderStore.Failure
+    public struct Scope: Codable, Equatable, Sendable {
+        public init(origin: String, ownerId: String, dataPlane: String, rootId: String, deviceId: String) { self.origin = origin; self.ownerId = ownerId; self.dataPlane = dataPlane; self.rootId = rootId; self.deviceId = deviceId }
+
+        public let origin: String; public let ownerId: String; public let dataPlane: String; public let rootId: String; public let deviceId: String
     }
-    struct Mutation: Codable, Equatable, Sendable {
-        let kind: String; let from: String; let path: String; let source: Entry; let expectedTarget: Entry?
+    public struct Mutation: Codable, Equatable, Sendable {
+        public init(kind: String, from: String, path: String, source: Entry, expectedTarget: Entry?) { self.kind = kind; self.from = from; self.path = path; self.source = source; self.expectedTarget = expectedTarget }
+
+        public let kind: String; public let from: String; public let path: String; public let source: Entry; public let expectedTarget: Entry?
     }
-    struct Operation: Codable, Equatable, Sendable {
-        let id: String; let mutation: Mutation; let confirmed: Bool
+    public struct Operation: Codable, Equatable, Sendable {
+        public init(id: String, mutation: Mutation, confirmed: Bool) { self.id = id; self.mutation = mutation; self.confirmed = confirmed }
+
+        public let id: String; public let mutation: Mutation; public let confirmed: Bool
     }
-    struct Request: Codable, Equatable, Sendable {
-        let scope: Scope; let rootId: String; let operation: Operation
-        func validate(owner: MobileDevicePairing.Scope) throws {
+    public struct Request: Codable, Equatable, Sendable {
+        public init(scope: Scope, rootId: String, operation: Operation) { self.scope = scope; self.rootId = rootId; self.operation = operation }
+
+        public let scope: Scope; public let rootId: String; public let operation: Operation
+        public func validate(owner: FileSyncOwnerScope) throws {
             guard scope.origin == owner.origin.absoluteString, scope.ownerId == owner.ownerId, scope.dataPlane == "home",
                   !scope.rootId.isEmpty, scope.rootId.utf16.count <= 4096, !scope.deviceId.isEmpty, scope.deviceId.utf16.count <= 4096,
                   UUID(uuidString: rootId) != nil, UUID(uuidString: operation.id) != nil, !operation.confirmed,
@@ -48,15 +56,24 @@ final class MobileSyncStaging: @unchecked Sendable {
             } else { throw Failure.invalid }
         }
     }
-    struct Stage: Codable, Equatable, Sendable {
-        let operationId: String; let scope: Scope; let token: String; let entry: Entry
+    public struct Stage: Codable, Equatable, Sendable {
+        public init(operationId: String, scope: Scope, token: String, entry: Entry) { self.operationId = operationId; self.scope = scope; self.token = token; self.entry = entry }
+
+        public let operationId: String; public let scope: Scope; public let token: String; public let entry: Entry
     }
-    struct Progress: Codable, Sendable { let received: Int64; let stage: Stage? }
-    struct Receipt: Codable, Equatable, Sendable {
-        let operationId: String; let scope: Scope; let entry: Entry
+    public struct Progress: Codable, Sendable {
+        public init(received: Int64, stage: Stage?) { self.received = received; self.stage = stage }
+        public let received: Int64; public let stage: Stage?
     }
-    struct Lookup: Codable, Sendable {
-        let status: String; let receipt: Receipt?
+    public struct Receipt: Codable, Equatable, Sendable {
+        public init(operationId: String, scope: Scope, entry: Entry) { self.operationId = operationId; self.scope = scope; self.entry = entry }
+
+        public let operationId: String; public let scope: Scope; public let entry: Entry
+    }
+    public struct Lookup: Codable, Sendable {
+        public init(status: String, receipt: Receipt?) { self.status = status; self.receipt = receipt }
+
+        public let status: String; public let receipt: Receipt?
     }
     private struct Publication: Codable {
         let bookmarkHash: String
@@ -76,11 +93,16 @@ final class MobileSyncStaging: @unchecked Sendable {
     private let afterBytesFlushed: (() throws -> Void)?
     private let beforePublication: (() throws -> Void)?
     private let afterPublication: (() throws -> Void)?
-    init(directory: URL? = nil, afterBytesFlushed: (() throws -> Void)? = nil, afterPublication: (() throws -> Void)? = nil, beforePublication: (() throws -> Void)? = nil) {
-        self.directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MobileSyncStaging-v1", isDirectory: true)
+    public init(directory: URL, afterBytesFlushed: (() throws -> Void)? = nil, afterPublication: (() throws -> Void)? = nil, beforePublication: (() throws -> Void)? = nil) {
+        self.directory = directory
         self.afterBytesFlushed = afterBytesFlushed; self.afterPublication = afterPublication; self.beforePublication = beforePublication
     }
+    #if os(iOS)
+    public convenience init() {
+        self.init(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MobileSyncStaging-v1", isDirectory: true))
+    }
+    #endif
     private static func digest(_ s: String) -> Bool { s.count == 64 && s.unicodeScalars.allSatisfy { (48...57).contains($0.value) || (97...102).contains($0.value) } }
     private static func hex(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
     private func key(_ request: Request) throws -> String {
@@ -91,8 +113,11 @@ final class MobileSyncStaging: @unchecked Sendable {
     }
     private func locked<T>(_ work: (Int32) throws -> T) throws -> T {
         try Task.checkCancellation()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700, .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        var storageAttributes: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
+        #if os(iOS)
+        storageAttributes[.protectionKey] = FileProtectionType.completeUntilFirstUserAuthentication
+        #endif
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: storageAttributes)
         var storageDirectory = directory, attributes = URLResourceValues()
         attributes.isExcludedFromBackup = true
         try storageDirectory.setResourceValues(attributes)
@@ -132,7 +157,7 @@ final class MobileSyncStaging: @unchecked Sendable {
         try FileHandle(fileDescriptor: file, closeOnDealloc: false).write(contentsOf: data)
         guard fsync(file) == 0, renameat(fd, name, fd, "record.json") == 0, fsync(fd) == 0 else { throw Failure.storage }
     }
-    private func withRecord<T>(_ request: Request, owner: MobileDevicePairing.Scope, create: Bool,
+    private func withRecord<T>(_ request: Request, owner: FileSyncOwnerScope, create: Bool,
                                work: (Int32, inout Record) throws -> T) throws -> T {
         try request.validate(owner: owner)
         return try locked { root in
@@ -177,7 +202,7 @@ final class MobileSyncStaging: @unchecked Sendable {
             return file
         } catch { close(file); throw error }
     }
-    func begin(_ request: Request, owner: MobileDevicePairing.Scope) throws -> Progress {
+    public func begin(_ request: Request, owner: FileSyncOwnerScope) throws -> Progress {
         try withRecord(request, owner: owner, create: true) { fd, row in
             let file = try payload(fd, row: row, create: row.received == 0 && row.stage == nil); defer { close(file) }
             if row.stage != nil { try verify(file, row: row) }
@@ -185,7 +210,7 @@ final class MobileSyncStaging: @unchecked Sendable {
             return Progress(received: row.received, stage: row.stage)
         }
     }
-    func append(_ request: Request, owner: MobileDevicePairing.Scope, offset: Int64, bytes: Data) throws -> Progress {
+    public func append(_ request: Request, owner: FileSyncOwnerScope, offset: Int64, bytes: Data) throws -> Progress {
         guard offset >= 0, !bytes.isEmpty, bytes.count <= MobileFolderReader.maximumReadBytes else { throw Failure.invalid }
         return try withRecord(request, owner: owner, create: false) { fd, row in
             guard request.operation.mutation.source.kind == "file", offset <= row.received,
@@ -242,7 +267,7 @@ final class MobileSyncStaging: @unchecked Sendable {
         Entry(path: source.path, id: "\(info.st_dev):\(info.st_ino)", version: MobileFolderReader.stamp(info), kind: source.kind,
               size: source.size, sha256: source.sha256, fingerprint: source.fingerprint)
     }
-    func finish(_ request: Request, owner: MobileDevicePairing.Scope) throws -> Progress {
+    public func finish(_ request: Request, owner: FileSyncOwnerScope) throws -> Progress {
         try withRecord(request, owner: owner, create: false) { fd, row in
             let file = try payload(fd, row: row); defer { close(file) }
             try verify(file, row: row)
@@ -264,7 +289,7 @@ final class MobileSyncStaging: @unchecked Sendable {
     private func destination<T>(_ request: Request, bookmark: Data, work: (Int32, Int32) throws -> T) throws -> T {
         let parts = try MobileFolderReader.components(request.operation.mutation.path)
         var stale = false
-        let url = try URL(resolvingBookmarkData: bookmark, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &stale)
+        let url = try FolderBookmark.resolve(bookmark, stale: &stale)
         guard url.isFileURL, !stale else { throw Failure.unavailable }
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
         let root = open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
@@ -387,7 +412,7 @@ final class MobileSyncStaging: @unchecked Sendable {
             return Lookup(status: "pending", receipt: nil)
         }
     }
-    func lookup(_ request: Request, owner: MobileDevicePairing.Scope, bookmark: Data) throws -> Lookup {
+    public func lookup(_ request: Request, owner: FileSyncOwnerScope, bookmark: Data) throws -> Lookup {
         try withRecord(request, owner: owner, create: true) { fd, row in
             guard let publication = row.publication else { return Lookup(status: "missing", receipt: nil) }
             guard publication.bookmarkHash == Self.hex(bookmark) else { throw Failure.changed }
@@ -400,7 +425,7 @@ final class MobileSyncStaging: @unchecked Sendable {
             }
         }
     }
-    func publish(_ request: Request, owner: MobileDevicePairing.Scope, bookmark: Data, stage: Stage) throws -> Receipt {
+    public func publish(_ request: Request, owner: FileSyncOwnerScope, bookmark: Data, stage: Stage) throws -> Receipt {
         try withRecord(request, owner: owner, create: false) { fd, row in
             guard row.stage == stage else { throw Failure.changed }
             if let publication = row.publication {

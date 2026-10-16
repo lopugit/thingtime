@@ -29,6 +29,10 @@ configFiles:
   Debug: config/Debug.xcconfig
   Release: config/Release.xcconfig
 
+packages:
+  AppleFileSync:
+    path: ../apple/FileSync
+
 targets:
   Thingtime:
     type: application
@@ -83,6 +87,7 @@ targets:
         com.apple.developer.associated-domains:
           - webcredentials:thingtime.com
     dependencies:
+      - package: AppleFileSync
       - target: ThingtimeWatch
         embed: true
         codeSign: true
@@ -163,6 +168,8 @@ targets:
     platform: iOS
     sources:
       - path: ThingtimeTests
+      - path: ../apple/FileSync/Tests/AppleFileSyncTests
+      - path: ../apple/FileSync/Tests/RecoverySupport
     dependencies:
       - target: Thingtime
     settings:

@@ -1,32 +1,14 @@
+@testable import AppleFileSync
 import XCTest
 import CryptoKit
-import WebKit
-@testable import Thingtime
 
 @MainActor
 final class MobileFolderTests: XCTestCase {
-    func testSuspendingBridgeReleasesOnlyTheMatchingPendingRequest() throws {
-        let bridge = MobileFolderBridge(), webView = WKWebView()
-        let root = URL(string: "https://thingtime.test")!, id = UUID().uuidString
-        var replies: [[String: Any]] = []
-        let verify: (MobileDevicePairing.Scope, @escaping () throws -> Void) async throws -> Void = { _, _ in XCTFail("Cancelled request reached authentication") }
-        func request(_ id: String, _ action: String) {
-            bridge.handle(["payload": ["requestId": id, "ownerId": "folder-test", "action": action]], webView: webView,
-                root: root, currentRoot: { root }, verifyOwner: verify, reply: { _, payload in replies.append(payload) })
-        }
-        request(id, "scan")
-        request(UUID().uuidString, "suspend"); XCTAssertTrue(replies.isEmpty)
-        request(id, "suspend"); XCTAssertEqual(replies.count, 1)
-        XCTAssertEqual(replies.first?["requestId"] as? String, id)
-        XCTAssertEqual(replies.first?["ownerId"] as? String, "folder-test")
-        XCTAssertNotNil(replies.first?["error"]); XCTAssertNil(replies.first?["roots"])
-        bridge.suspend(); XCTAssertEqual(replies.count, 1)
-    }
-    private func fixture() throws -> (URL, MobileDevicePairing.Scope, MobileFolderStore) {
+    private func fixture() throws -> (URL, FileSyncOwnerScope, MobileFolderStore) {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("folder-test-" + UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: root) }
-        let scope = try MobileDevicePairing.Scope(ownerId: "folder-test-" + UUID().uuidString, url: URL(string: "https://thingtime.test")!)
+        let scope = try FileSyncOwnerScope(ownerId: "folder-test-" + UUID().uuidString, url: URL(string: "https://thingtime.test")!)
         var data: Data?
         return (root, scope, MobileFolderStore(load: { _ in data }, save: { _, next in data = next }))
     }
@@ -93,7 +75,7 @@ final class MobileFolderTests: XCTestCase {
     func testGrantsReloadDeduplicateScopeAndRemoveWithoutDeletingFiles() throws {
         let (root, scope, store) = try fixture(); let a = try store.add(scope, selected: root), b = try store.add(scope, selected: root)
         XCTAssertEqual(a.id, b.id); XCTAssertEqual(try store.list(scope).count, 1)
-        let other = try MobileDevicePairing.Scope(ownerId: "other", url: scope.origin)
+        let other = try FileSyncOwnerScope(ownerId: "other", url: scope.origin)
         XCTAssertThrowsError(try store.list(other)) // Injected storage returns another account's row.
         try store.remove(scope, id: a.id); XCTAssertEqual(try store.list(scope).count, 0); XCTAssertTrue(FileManager.default.fileExists(atPath: root.path))
         XCTAssertThrowsError(try store.grant(scope, id: a.id))
@@ -102,9 +84,9 @@ final class MobileFolderTests: XCTestCase {
         let (root, scope, _) = try fixture(); let first = MobileFolderStore(), grant = try first.add(scope, selected: root)
         defer { try? first.remove(scope, id: grant.id) }
         let reopened = MobileFolderStore(); XCTAssertEqual(try reopened.grant(scope, id: grant.id).bookmark, grant.bookmark)
-        let otherOrigin = try MobileDevicePairing.Scope(ownerId: scope.ownerId, url: URL(string: "https://elsewhere.test")!)
+        let otherOrigin = try FileSyncOwnerScope(ownerId: scope.ownerId, url: URL(string: "https://elsewhere.test")!)
         XCTAssertTrue(try reopened.list(otherOrigin).isEmpty)
-        XCTAssertTrue(try reopened.list(MobileDevicePairing.Scope(ownerId: "other", url: scope.origin)).isEmpty)
+        XCTAssertTrue(try reopened.list(FileSyncOwnerScope(ownerId: "other", url: scope.origin)).isEmpty)
     }
     func testSaveFailureCannotPublishNewFolderAccess() throws {
         let (root, scope, _) = try fixture()

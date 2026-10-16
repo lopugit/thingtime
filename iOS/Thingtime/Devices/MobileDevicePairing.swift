@@ -1,3 +1,4 @@
+import AppleFileSync
 import CryptoKit
 import Foundation
 import Security
@@ -5,24 +6,7 @@ import Security
 /// Native-only pairing material. Neither keys nor device credentials cross the web bridge.
 @MainActor
 final class MobileDevicePairing {
-    struct Scope: Codable, Equatable, Sendable {
-        let ownerId: String
-        let origin: URL
-        init(ownerId: String, url: URL) throws {
-            guard !ownerId.isEmpty, ownerId.utf8.count <= 128,
-                  var c = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                  c.user == nil, c.password == nil, let host = c.host else { throw Failure.identity }
-            let loopback = ["localhost", "127.0.0.1", "::1"].contains(host.lowercased())
-            guard c.scheme == "https" || (c.scheme == "http" && loopback) else { throw Failure.destination }
-            c.host = host.lowercased(); c.path = ""; c.query = nil; c.fragment = nil
-            if (c.scheme == "https" && c.port == 443) || (c.scheme == "http" && c.port == 80) { c.port = nil }
-            guard let origin = c.url else { throw Failure.destination }
-            self.ownerId = ownerId; self.origin = origin
-        }
-        var key: String {
-            SHA256.hash(data: Data("\(origin.absoluteString)\u{0}\(ownerId)".utf8)).map { String(format: "%02x", $0) }.joined()
-        }
-    }
+    typealias Scope = FileSyncOwnerScope
     struct Record: Codable {
         let scope: Scope
         let privateKey: Data
