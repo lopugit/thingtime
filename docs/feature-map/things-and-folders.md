@@ -730,4 +730,19 @@ import facade and duplicate/fork path. Theme sender placement waits for the
 folder receipt; AccountThingSync completion wakes that sender. Tests:
 accountThemeImport.test.ts, accountApi.test.ts, accountThemeImport.browser.test.ts
 and themes/themeImport.api.test.ts. See the theme workspace guide for unfinished
-organization/History work.
+History and wider library integration work.
+
+
+Theme library projections and move/delete lifecycle use AccountThemeSync hooks
+inside the existing AccountThingSync/LocalThings transaction. The theme sender
+records acknowledged remote placement; folder deletion waits for those receipts
+without delaying local completion. Scoped theme tombstones suppress stale reads.
+Anonymous folder deletion drains contents by default, retaining bytes; recursive
+removal remains explicit. See accountThemeOrganization.test.ts,
+themeOrganization.test.ts and accountThemeOrganization.browser.test.ts.
+
+The Things library supplies authenticated identity separately from editable
+workspace identity for remote computer discovery. useDeviceStore pauses remote
+refresh/poll effects offline while retaining cached snapshots and resumes on
+connectivity changes. The theme organization browser regression checks no
+offline device reads or automatic refresh-error overlay.

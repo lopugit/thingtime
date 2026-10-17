@@ -12,6 +12,7 @@ import {
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../theme/savedTheme';
 import { copyBoundedJson } from '../utils/boundedJson';
 import { accountSyncDeadline, type SyncState } from './accountSync';
+import { aclFromVisibility } from '../schemas/registry';
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
 
 type Scope = Extract<WorkspaceScope, { kind: 'account' }>;
@@ -39,6 +40,7 @@ type State = {
 	deleted: boolean;
 	placementKnown?: boolean;
 	placementIntent?: boolean;
+	remoteFolderId?: string | null;
 	pending?: { command: ThemeWrite; revision: number };
 	claim?: { token: string; expiresAt: number };
 	retryAt: number;
@@ -145,7 +147,8 @@ export class AccountThemeSync {
 		const id = row?.id ?? previous!.id,
 			old = await tx.get<State>(collection, id);
 		if (previous && !old) return fail('Refresh this account theme before editing it.');
-		if (!previous && row?.folderId && this.scope.dataPlane !== 'home') return fail('Create filed theme copies in the home library.', 'THEME_PLACEMENT_SCOPE');
+		if (!previous && row?.folderId && this.scope.dataPlane !== 'home')
+			return fail('Create filed theme copies in the home library.', 'THEME_PLACEMENT_SCOPE');
 		if (!row && old?.baseVersion === null && !old.pending) {
 			await tx.delete(collection, id);
 			await this.bump(tx);
@@ -158,6 +161,7 @@ export class AccountThemeSync {
 			revision: (old?.revision ?? 0) + 1,
 			base: old?.base ?? null,
 			baseVersion: old?.baseVersion ?? null,
+			remoteFolderId: old?.remoteFolderId !== undefined ? old.remoteFolderId : old?.base?.folderId,
 			visibility: (input?.visibility as State['visibility']) ?? old?.visibility ?? 'private',
 			state: old?.state === 'conflict' || old?.state === 'error' ? old.state : 'pending',
 			deleted: !row,
@@ -210,11 +214,69 @@ export class AccountThemeSync {
 	async importIn(tx: WorkspaceTransaction, row: LocalThing) {
 		this.lease.assertCurrent();
 		validateTransferTheme(row);
-		if (row.folderId && this.scope.dataPlane !== 'home') return fail('Import filed themes into the home library; folders in another database cannot contain home themes.', 'THEME_PLACEMENT_SCOPE');
-		if (await tx.get(collection, row.id) || await tx.get('thing-sync', row.id)) return fail('An imported theme must have an independent identity.', 'THEME_IMPORT_IDENTITY');
+		if (row.folderId && this.scope.dataPlane !== 'home')
+			return fail('Import filed themes into the home library; folders in another database cannot contain home themes.', 'THEME_PLACEMENT_SCOPE');
+		if ((await tx.get(collection, row.id)) || (await tx.get('thing-sync', row.id)))
+			return fail('An imported theme must have an independent identity.', 'THEME_IMPORT_IDENTITY');
 		await this.mutated(tx, row, null, { visibility: 'private' });
 		const state = (await tx.get<State>(collection, row.id))!;
 		await tx.put(collection, row.id, { ...state, placementKnown: true, placementIntent: true });
+	}
+	/** Protected theme projections and mutations used by the normal library. */
+	async viewIn(tx: WorkspaceTransaction, id: string) {
+		this.lease.assertCurrent();
+		const row = await tx.get<LocalThing>('things', id),
+			state = await tx.get<State>(collection, id);
+		if (!row || !isTransferTheme(row) || !state || state.deleted || (this.scope.dataPlane !== 'home' && row.folderId)) return null;
+		return {
+			...row,
+			visibility: state.visibility,
+			acl: aclFromVisibility(state.visibility),
+			author: { id: this.scope.ownerId },
+			syncState: state.state,
+			localOnly: false,
+			localWorkspace: true
+		};
+	}
+	async isDeletedIn(tx: WorkspaceTransaction, id: string) {
+		return !!(await tx.get<State>(collection, id))?.deleted;
+	}
+	async moveIn(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing) {
+		this.lease.assertCurrent();
+		if (this.scope.dataPlane !== 'home') return fail('Move themes in the home library.', 'THEME_PLACEMENT_SCOPE');
+		validateTransferTheme(row);
+		if (row.id !== previous.id || stable(row.crystal) !== stable(previous.crystal)) return fail('Theme placement cannot replace its content.');
+		await this.mutated(tx, row, previous);
+		const state = (await tx.get<State>(collection, row.id))!;
+		await tx.put(collection, row.id, { ...state, placementKnown: true, placementIntent: true });
+	}
+	removeIn(tx: WorkspaceTransaction, id: string) {
+		return this.themes.removeIn(tx, id);
+	}
+	/** The device folder is already removed. Only the remote deletion waits for
+	 * children to settle, so its canonical drain cannot invalidate theme CAS. */
+	async prepareFolderDelete(tx: WorkspaceTransaction, id: string, destination: string | null) {
+		if (this.scope.dataPlane !== 'home') return true;
+		for (const { value: state } of await tx.list<State>(collection)) {
+			const remoteFolder = state.remoteFolderId !== undefined ? state.remoteFolderId : state.base?.folderId;
+			const pendingFolder = state.pending?.command.action === 'save' ? state.pending.command.folderId : undefined;
+			if (remoteFolder !== id && pendingFolder !== id) continue;
+			const local = await tx.get<LocalThing>('things', state.id);
+			if (local?.folderId === id) {
+				const moved = {
+					...local,
+					folderId: destination,
+					revision: local.revision + 1,
+					updatedAt: new Date(Math.max(this.now(), Date.parse(local.updatedAt) + 1)).toISOString()
+				};
+				await tx.put('things', local.id, moved);
+				await this.moveIn(tx, moved, local);
+			}
+			if (['conflict', 'error'].includes(state.state))
+				return fail('Review the theme synchronization conflict before retrying this folder deletion.', 'THEME_SYNC_BLOCKED');
+			return false;
+		}
+		return true;
 	}
 	remove(id: string) {
 		return this.themes.remove(id);
@@ -296,6 +358,7 @@ export class AccountThemeSync {
 			base: remote,
 			placementKnown: true,
 			baseVersion: remote.version,
+			remoteFolderId: remote.folderId,
 			visibility: remote.visibility,
 			state: 'synced',
 			deleted: false,
@@ -315,6 +378,7 @@ export class AccountThemeSync {
 				const dependents = new Set((await tx.list<LocalThing>('things')).flatMap(({ value }) => [value.folderId, value.targetId].filter(Boolean)));
 				for (const row of remote) {
 					const old = states.get(row.id);
+					if (old?.deleted) continue;
 					if (!old || old.state === 'synced') {
 						if (!old || old.baseVersion !== row.version || !old.placementKnown) await this.install(tx, row, old);
 					} else if (old.baseVersion === row.version && !old.placementKnown) {
@@ -327,7 +391,7 @@ export class AccountThemeSync {
 					}
 				}
 				for (const [id, state] of states)
-					if (!present.has(id) && state.state === 'synced') {
+					if (!present.has(id) && state.state === 'synced' && !state.deleted) {
 						if (dependents.has(id)) {
 							await tx.put(collection, id, {
 								...state,
@@ -370,14 +434,21 @@ export class AccountThemeSync {
 							// import/edit/export complete in the original device transaction.
 							// An uncached existing folder has no device create to wait for;
 							// the canonical server writer still validates its ownership.
-							const parent = await tx.get<{base?:{id?:string};deleted?:unknown}>('thing-sync', thing.folderId);
+							const parent = await tx.get<{ base?: { id?: string }; deleted?: unknown }>('thing-sync', thing.folderId);
 							if (parent && (!parent.base || parent.base.id !== thing.folderId || parent.deleted)) continue;
 						}
 						const common = { id: row.id, writeId: this.uuid(), expectedVersion: row.baseVersion };
 						const command = parseThemeWrite(
 							row.deleted
 								? { ...common, action: 'delete' }
-								: { ...common, action: 'save', name: thing?.crystal.name, theme: thing?.crystal.theme, visibility: row.visibility, ...(row.placementIntent ? {folderId:thing?.folderId || null} : {}) }
+								: {
+										...common,
+										action: 'save',
+										name: thing?.crystal.name,
+										theme: thing?.crystal.theme,
+										visibility: row.visibility,
+										...(row.placementIntent ? { folderId: thing?.folderId || null } : {})
+								  }
 						);
 						pending = { command, revision: row.revision };
 					}
@@ -407,13 +478,32 @@ export class AccountThemeSync {
 					const row = await tx.get<State>(collection, claimed.id);
 					if (row?.claim?.token !== claimed.claim!.token) return;
 					if (command.action === 'delete' && row.deleted && row.revision === claimed.pending!.revision) {
-						await tx.delete(collection, row.id);
+						// Keep a scoped tombstone so an older library/catalogue read cannot
+						// resurrect the confirmed deletion after its receipt arrives.
+						await tx.put(collection, row.id, {
+							...row,
+							state: 'synced',
+							base: null,
+							baseVersion: null,
+							remoteFolderId: null,
+							placementIntent: undefined,
+							pending: undefined,
+							claim: undefined,
+							error: undefined,
+							retryAt: 0
+						});
 						await this.bump(tx);
 						return;
 					}
 					await tx.put(collection, row.id, {
 						...row,
 						baseVersion: acknowledgment.resultVersion,
+						remoteFolderId:
+							command.action === 'save' && command.folderId !== undefined
+								? command.folderId
+								: row.remoteFolderId !== undefined
+								? row.remoteFolderId
+								: row.base?.folderId,
 						placementIntent: row.revision === claimed.pending!.revision ? undefined : row.placementIntent,
 						pending: undefined,
 						claim: undefined,

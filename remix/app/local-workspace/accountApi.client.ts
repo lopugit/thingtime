@@ -1,4 +1,5 @@
 import { AccountThemeSync } from './accountThemes';
+import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { accountThemeTransport } from './themeTransport.client';
 import { TimelineNameQueue } from '../timeline/nameQueue';
 import { AccountTimelineVersions } from './accountTimelineVersions';
@@ -102,7 +103,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
  });
  const themePump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(scope),async()=>{
   const before=JSON.stringify(await themes.status()),result=await themes.sync(themeTransport,controller.signal),rows=await themes.status();
-  if(JSON.stringify(rows)!==before)announceLocalWorkspaceChange();if(result.completed)themeSelectionPump.wake();
+  if(JSON.stringify(rows)!==before)announceLocalWorkspaceChange();if(result.completed){themeSelectionPump.wake();wake();}
   const pending=rows.filter(row=>['pending','syncing'].includes(row.state)),waits=pending.map(row=>row.retryAt-Date.now()).filter(wait=>wait>0);
   return pending.length?result.completed?0:waits.length?Math.min(...waits):BLOCKED_RETRY_MS:null;
  });
@@ -118,7 +119,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		running = true;
 		try {
 			lease.assertCurrent();
-			const before = JSON.stringify([await sync.status(), await interactions.status(), await files.status()]);
+			const before = JSON.stringify([await sync.status(), await interactions.status(), await files.status(), await themes.status()]);
 			const targets = new Map((await sync.exportSnapshot()).records.map(row => [row.id, row]));
 			const outcomes = await Promise.all([sync.sync(transport, controller.signal), interactions.sync(transport.interactions, controller.signal, async id => {
 				const record = targets.get(id);
@@ -127,8 +128,8 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 			}), files.sync(transport.files, controller.signal, 3, async id => { const record = (await sync.exportSnapshot()).records.find(row => row.id === id); return !!record?.remote && !record.deleted; })]);
 			const completed = outcomes.reduce((sum, result) => sum + result.completed, 0);
 			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), fileStatus = await files.status(), status = [...contentStatus, ...interactionStatus, ...fileStatus];
-			if (JSON.stringify([contentStatus, interactionStatus, fileStatus]) !== before) announceLocalWorkspaceChange();
-			if (completed) { draftPump.wake(); themePump.wake(); } // Uploaded originals/folders unblock dependent senders only.
+			if (JSON.stringify([contentStatus, interactionStatus, fileStatus, await themes.status()]) !== before) announceLocalWorkspaceChange();
+			themePump.wake(); if (completed) { draftPump.wake(); } // Uploaded originals/folders unblock dependent senders only.
 			const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
 			if (pending.length && !stopped) {
 				// A row whose retryAt has already passed is not schedulable work: the
@@ -343,7 +344,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			// Page membership belongs to the authorized server snapshot. Keep deleted
 			// IDs here; views hide tombstones and explicit conflict restoration can
 			// reveal them again without losing membership in the cached page.
-			const membership = Array.isArray(result.things) && result.things.every((thing: any) => accountThingCanCache(thing) && thing.author?.id === owner.id)
+			const membership = Array.isArray(result.things) && result.things.every((thing: any) => (accountThingCanCache(thing) || isTransferTheme(thing)) && thing.author?.id === owner.id)
 				? { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null } : null;
 			const retain = async (thing: any) => {
 				if (thing.author?.id !== owner.id) return thing;
@@ -365,6 +366,11 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 						result.localCacheError = 'This post and its complete files could not be refreshed on this device. Retry online before relying on it offline.';
 						return thing;
 					}
+				}
+				if (isTransferTheme(thing)) {
+					await worker().refreshThemes();
+					const local=await sync.view(thing.id);
+					return await sync.isDeleted(thing.id) ? null : local ? project(local) : thing;
 				}
 				if (!accountThingCanCache(thing)) return thing;
 				await sync.remember(thing, startedAt);
@@ -407,7 +413,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			if (!await sync.view(id)) {
 				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open these Things online once before deleting them offline.', 409);
 				const result = await refresh({ id });
-				if (!result.thing || !accountThingCanCache(result.thing) || result.thing.author?.id !== owner.id) { dedicated = true; continue; }
+				if (!result.thing || (!accountThingCanCache(result.thing) && !isTransferTheme(result.thing)) || result.thing.author?.id !== owner.id) { dedicated = true; continue; }
 			}
 			cached.push(id);
 		}
@@ -802,7 +808,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			}
 			if (!cached) {
 				const result = await refresh({ id: input.id });
-				if (!accountThingCanCache(result.thing) || result.thing.author?.id !== owner.id) return online.things.update(input);
+				if ((!accountThingCanCache(result.thing) && !isTransferTheme(result.thing)) || result.thing.author?.id !== owner.id) return online.things.update(input);
 				cached = await sync.view(input.id);
 			}
 			if (!cached) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Load this Thing before editing offline', 409);
@@ -883,7 +889,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 					return local ? [projectFile(local)] : [];
 				}).filter(matches);
 				if (!args.cursor) {
-					const pending = new Set([...(await sync.status()).filter(row => row.state !== 'synced').map(row => row.id), ...localFiles.keys()]);
+					const pending = new Set([...(await sync.status()).filter(row => row.state !== 'synced').map(row => row.id), ...localFiles.keys(), ...(await worker().themes.status()).filter(row=>row.state!=='synced').map(row=>row.id)]);
 					for (const row of (await sync.things.list(args)).things) if (pending.has(row.id) && !things.some(thing => thing.id === row.id)) {
 						const current = localFiles.has(row.id) ? projectFile(localFiles.get(row.id)) : project(await sync.view(row.id)); if (matches(current)) things.unshift(current);
 					}

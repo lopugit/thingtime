@@ -108,14 +108,17 @@ test('in-process transfer readers supply bytes without a remote fetch and remain
 });
 
 
-test('a folder containing standalone files still requires explicit recursive deletion', async () => {
+test('ordinary folder deletion preserves standalone file bytes and recursive deletion releases them', async () => {
  const { db, things } = fixture();
  try {
   const folder = await things.create({ thingtime: ['folder'], crystal: { name: 'Files' } });
   const input = await bundle(); const created = await things.import(input.manifest, folder.id, input.files);
-  await assert.rejects(things.remove([folder.id]), /has children/);
+  await things.remove([folder.id]);
+  assert.equal((await things.get(created.roots[0])).folderId,null);
   assert.deepEqual([...((await things.export(created.roots)).files.values())][0], bytes);
-  await things.remove([folder.id], true);
+  const replacement=await things.create({thingtime:['folder'],crystal:{name:'Delete files'}});
+  await things.move(created.roots,replacement.id);
+  await things.remove([replacement.id], true);
   assert.equal(await db.transaction(scope, 'readonly', lease, tx => tx.getBytes(created.roots[0])), undefined);
  } finally { await db.close(); }
 });

@@ -362,7 +362,8 @@ checks against existing personal data. Full feature coverage is tracked in
 - [ ] Missing/corrupt/oversized local bytes fail before metadata is committed;
       quota rollback/refund and identity changes never expose another scope.
       Component media/dependencies rebind to the copied bytes. A folder holding
-      standalone files requires explicit recursive deletion; target-bound files
+      standalone files drains them to its surviving parent without deleting bytes;
+      explicit recursive deletion removes descendants and their bytes. Target-bound files
       cascade with their target. Clear all disposable test data afterward.
 - [ ] A missing local Thing with a remaining account sync entry becomes a
       visible error; it cannot stall unrelated pending writes. Deletion with a
@@ -11686,3 +11687,23 @@ verification limits are in `docs/local-workspaces.md`.
 - [ ] Copy/fork a retained theme offline through the normal facade. Originals and selection stay unchanged; imported copies are private and queued independently. An invalid theme, quota failure or selected-plane/home folder conflict must roll back the entire import.
 - [ ] Hold the new folder receipt: local import/edit/export still complete; only the theme sender waits. Replay a lost create reply before a later edit without changing its frozen folder or content.
 - [ ] On the isolated API fixture, create/update tokens and home placement together, refuse missing/foreign folders without changing tokens or versions, and refuse placement changes under a custom selection. Exact receipts replay without reapplying old placement; run themeImport.api.test.ts.
+
+
+- [ ] Anonymous native library: import a theme inside a folder, apply it, go
+      offline and delete the folder normally. Its contents survive at the parent
+      and reload; delete the theme and verify active selection is cleared. No
+      account mutation may be attempted. Recursive deletion remains explicit.
+- [ ] Account native library: move a theme with ordinary content offline; reload
+      the destination at 1440/390/320px, reconnect and verify private conditional
+      writes. Delete the folder offline; children drain immediately and remote
+      folder deletion waits only for child receipts. Delete the theme through
+      the library and verify reload/reconnect do not resurrect it.
+- [ ] Lose a theme acknowledgement before deleting its folder. Replay the exact
+      command, then send the latest placement, then delete the remote folder.
+      Test a late catalogue child, changed remote version and explicit review.
+      A custom-plane folder must not drain a same-ID home theme folder.
+
+- [ ] While offline, the Things library preserves known device snapshots but
+      makes no remote device-list/poll request and shows no automatic computers
+      refresh error. Reconnect resumes discovery only for the authenticated
+      account; an offline workspace identity is never remote authorization.

@@ -1,5 +1,6 @@
 import { captureAccountThingChanges } from './accountTimeline';
 import type { AccountThemeSync } from './accountThemes';
+import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { isLocalAttachment } from './attachments';
 import { normalizePublicAttachment } from '../components/Attachments/attachmentUiCore';
 import { postThingReferences } from '../components/Feed/postThingReferences';
@@ -79,7 +80,7 @@ export class AccountThingSync {
 	readonly things: LocalThings;
 	constructor(private db: WorkspaceDatabase, readonly scope: AccountScope, private lease: WorkspaceLease,
 		private now = () => Date.now(), private uuid = () => crypto.randomUUID(),
-		private files?: AccountContentFiles, themes?: Pick<AccountThemeSync, 'scope' | 'importIn'>) {
+		private files?: AccountContentFiles, private themes?: Pick<AccountThemeSync, 'scope' | 'importIn' | 'moveIn' | 'removeIn' | 'viewIn' | 'isDeletedIn' | 'prepareFolderDelete'>) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous workspaces never sync', 403);
 		if (themes && workspaceScopeKey(themes.scope) !== workspaceScopeKey(scope)) throw new WorkspaceError('WORKSPACE_CHANGED', 'Theme imports belong to a different account workspace.', 409);
 		this.things = new LocalThings(db, scope, lease, [], () => new Date(now()).toISOString(), uuid,
@@ -90,7 +91,7 @@ export class AccountThingSync {
 					if (row?.post && (!refusal || row.at > refusal.at)) return true;
 				}
 				return false;
-			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id), themes ? (tx, row) => themes.importIn(tx,row) : undefined);
+			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id), themes ? { import:(tx,row)=>themes.importIn(tx,row), move:(tx,row,previous)=>themes.moveIn(tx,row,previous) } : undefined);
 	}
 	/** Recovery changes the latest device intent, never an already-sent request.
 	 * Its revision must exceed every earlier write so delayed replies cannot
@@ -188,7 +189,7 @@ export class AccountThingSync {
 				...(row.postAttachmentIds ? { postAttachmentIds: row.postAttachmentIds } : {}) }))
 		}));
 	}
-	async isDeleted(id: string) { return this.tx('readonly', async tx => !!(await tx.get<SyncRecord>(COLLECTION, id))?.deleted); }
+	async isDeleted(id: string) { return this.tx('readonly', async tx => !!(await tx.get<SyncRecord>(COLLECTION, id))?.deleted || !!await this.themes?.isDeletedIn(tx,id)); }
 	/** Match canonical deletion: drain folder children to their surviving parent;
 	 * cascade target-linked content. Content removal and intent commit together. */
 	async remove(ids: string[], expectedUpdatedAt?: string) {
@@ -213,6 +214,8 @@ export class AccountThingSync {
 				if (isLocalAttachment(row)) {
 					if (!row.targetId || !selected.has(row.targetId) || !this.files?.removeBound)
 						throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This file requires its owning editor.', 409);
+				} else if (isTransferTheme(row) && this.themes) {
+					if (!await this.themes.viewIn(tx,row.id)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE','Open this theme in its home library before deleting it.',409);
 				} else if (!await tx.get<SyncRecord>(COLLECTION, row.id) || isProtectedThingtime(row.thingtime))
 					throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
 			}
@@ -221,7 +224,7 @@ export class AccountThingSync {
 
 			for (const row of all) {
 				if (selected.has(row.id)) {
-					if (isLocalAttachment(row)) continue;
+					if (isLocalAttachment(row) || (isTransferTheme(row) && this.themes)) continue;
 					const state = await tx.get<SyncRecord>(COLLECTION, row.id);
 					if (!state || isProtectedThingtime(row.thingtime)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
 					await tx.delete('things', row.id);
@@ -230,16 +233,19 @@ export class AccountThingSync {
 						await tx.put(DELETED_CONTENT, row.id, row);
 						await tx.put(COLLECTION, row.id, { ...state, deleted: { id: row.id, revision: row.revision, updatedAt: row.updatedAt }, state: state.state === 'syncing' ? 'syncing' : 'pending', error: undefined, retryAt: 0 });
 					}
-				} else if (row.folderId && selected.has(row.folderId)) {
+				} else if (row.folderId && selected.has(row.folderId) && !(isTransferTheme(row) && this.scope.dataPlane !== 'home')) {
 					let folderId: string | null = row.folderId; const seen = new Set<string>();
 					while (folderId && selected.has(folderId)) {
 						if (seen.has(folderId)) throw new WorkspaceError('INVALID_FOLDER', 'The folder chain is cyclic.');
 						seen.add(folderId); folderId = byId.get(folderId)?.folderId || null;
 					}
 					const next = { ...row, folderId, revision: row.revision + 1, updatedAt: new Date(Math.max(this.now(), Date.parse(row.updatedAt) + 1)).toISOString() };
-					await tx.put('things', row.id, next); await this.enqueue(tx, next, row, { folderId });
+					await tx.put('things', row.id, next);
+					if (isTransferTheme(row) && this.themes) await this.themes.moveIn(tx,next,row);
+					else await this.enqueue(tx, next, row, { folderId });
 				}
 			}
+			for (const row of all) if (selected.has(row.id) && isTransferTheme(row) && this.themes) await this.themes.removeIn(tx,row.id);
 			return { ok: true, deleted: [...selected] };
 		}, () => new Date(this.now()).toISOString(), this.uuid));
 	}
@@ -247,7 +253,8 @@ export class AccountThingSync {
 		return this.tx('readonly', async tx => {
 			const thing = await tx.get<LocalThing>('things', id);
 			const sync = await tx.get<SyncRecord>(COLLECTION, id);
-			if (!thing || !sync || sync.deleted) return null;
+			if (!sync) return await this.themes?.viewIn(tx,id) ?? null;
+			if (!thing || sync.deleted) return null;
 			return { ...thing, ...sync.audience, author: { id: this.scope.ownerId }, syncState: sync.state, localOnly: false, localWorkspace: true };
 		});
 	}
@@ -258,7 +265,8 @@ export class AccountThingSync {
 			const rows = [], deleted = new Set<string>();
 			for (const id of ids) {
 				const thing = await tx.get<LocalThing>('things', id), sync = await tx.get<SyncRecord>(COLLECTION, id);
-				if (sync?.deleted) deleted.add(id);
+				if (sync?.deleted || await this.themes?.isDeletedIn(tx,id)) deleted.add(id);
+				if (!sync) { const theme=await this.themes?.viewIn(tx,id); if (theme) rows.push(theme); }
 				if (thing && sync && !sync.deleted) rows.push({ ...thing, ...sync.audience, author: { id: this.scope.ownerId }, syncState: sync.state, localOnly: false, localWorkspace: true });
 			}
 			return { rows, deleted };
@@ -338,6 +346,19 @@ export class AccountThingSync {
 					if (deleting && rows.some(other => other.id !== candidate.id && other.state !== 'synced' &&
 						[other.base?.folderId, other.base?.targetId, other.pending?.body.folderId, other.pending?.body.targetId].includes(candidate.id))) continue;
 					if (!deleting && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null, ...((content.thingtime.includes('post') || content.thingtime.includes('comment')) ? postThingReferences(content.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && (!other.base || other.pending?.method === 'delete')))) continue;
+					if (candidate.deleted && !candidate.pending && content.thingtime.includes('folder') && this.themes) {
+						try {
+							let destination=content.folderId || null; const seen=new Set<string>();
+							while (destination && (await tx.get<SyncRecord>(COLLECTION,destination))?.deleted) {
+								if (seen.has(destination) || seen.size>=200) throw new WorkspaceError('INVALID_FOLDER','The deleted folder chain is invalid.');
+								seen.add(destination); destination=(await tx.get<LocalThing>(DELETED_CONTENT,destination))?.folderId || null;
+							}
+							if (!await this.themes.prepareFolderDelete(tx,candidate.id,destination)) continue;
+						} catch (error) {
+							if (!(error instanceof WorkspaceError)) throw error;
+							await tx.put(COLLECTION,candidate.id,{...candidate,state:'error',claim:undefined,error:error.message}); continue;
+						}
+					}
 					// Resolve an uncertain parent write and active file claims first.
 					// The version-checked parent DELETE owns remote attachment cascade.
 					if (candidate.deleted && !candidate.pending && this.files?.prepareRemove) {

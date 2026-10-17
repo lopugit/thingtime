@@ -34,6 +34,7 @@ import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThing
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 import { FolderTree } from './FolderTree';
@@ -148,6 +149,7 @@ const ThingsPageContents = () => {
 
 const ThingsLibraryPage = () => {
   const user = useWorkspaceUser();
+  const authenticatedUser = useCurrentUser();
   const [importOpen, setImportOpen] = useState(false);
   const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
   const [importDestination, setImportDestination] = useState<string | null>(null);
@@ -183,7 +185,7 @@ const ThingsLibraryPage = () => {
 
   const archive = useAttachmentArchive();
 
-	const devicesEnabled = Boolean(user && !user.localOnly && user.accountKind === 'user' && !user.temporary);
+	const devicesEnabled = Boolean(authenticatedUser && authenticatedUser.id === user?.id && authenticatedUser.accountKind === 'user' && !authenticatedUser.temporary);
 	const deviceStore = useDeviceStore({
 		userId: user?.id,
 		selectedDeviceId: deviceParam,

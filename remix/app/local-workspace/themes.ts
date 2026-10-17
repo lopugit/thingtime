@@ -99,17 +99,20 @@ export class LocalThemes {
 		});
 	}
 	async remove(id: string) {
-		return this.transaction('readwrite', async (tx) => {
-			const previous = await this.read(tx, id);
-			if ((await tx.list<LocalThing>('things')).some((row) => row.value.targetId === id || row.value.folderId === id))
-				throw new WorkspaceError('HAS_CHILDREN', 'Remove the theme’s related local Things before deleting it.');
-			await tx.delete('things', id);
-			if ((await tx.get('settings', 'active-theme')) === id) {
-				await tx.delete('settings', 'active-theme');
-				await this.options.onActive?.(tx, null);
-			}
-			await this.options.onWrite?.(tx, null, previous);
-			return { ok: true };
-		});
+		return this.transaction('readwrite', (tx) => this.removeIn(tx, id));
+	}
+	/** Shared with atomic account library batches. */
+	async removeIn(tx: WorkspaceTransaction, id: string) {
+		this.lease.assertCurrent();
+		const previous = await this.read(tx, id);
+		if ((await tx.list<LocalThing>('things')).some((row) => row.value.targetId === id || row.value.folderId === id))
+			throw new WorkspaceError('HAS_CHILDREN', 'Remove the theme’s related local Things before deleting it.');
+		await tx.delete('things', id);
+		if ((await tx.get('settings', 'active-theme')) === id) {
+			await tx.delete('settings', 'active-theme');
+			await this.options.onActive?.(tx, null);
+		}
+		await this.options.onWrite?.(tx, null, previous);
+		return { ok: true };
 	}
 }

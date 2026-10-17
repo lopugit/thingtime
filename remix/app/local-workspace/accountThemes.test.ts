@@ -188,7 +188,8 @@ test('delete following an uncertain create replays creation then deletion withou
 		f.advance();
 		await f.sync.sync(s.transport);
 		assert.equal(s.rows.size, 0);
-		assert.equal((await f.sync.status()).length, 0);
+		assert.equal((await f.sync.status())[0].state, 'synced');
+		assert.equal((await f.sync.status())[0].deleted, true);
 		assert.deepEqual(
 			s.calls.map((x) => x.action),
 			['save', 'save', 'delete']

@@ -5089,3 +5089,15 @@ node --import tsx --test app/local-workspace/accountThemeImport.browser.test.ts
 Run from remix/. The native test needs the built offline shell and optional
 TT_SHARED_CHROME_PATH. Tests register disposable private accounts through normal
 APIs, and output actual imported/exported JSON, PNGs and verification summaries.
+
+
+The native theme organization fixture uses the same isolated loopback replica set
+and built offline shell as theme import. Run from remix/ with the shared browser
+runtime configured above; it creates only disposable private account content and
+also opens a separate anonymous browser context:
+
+```sh
+TT_ACCOUNT_THEME_ORGANIZATION_URL=http://127.0.0.1:<qa-port> \
+TT_ACCOUNT_THEME_ORGANIZATION_ARTIFACTS=/path/to/private-test-artifacts \
+node --import tsx --test app/local-workspace/accountThemeOrganization.browser.test.ts
+```

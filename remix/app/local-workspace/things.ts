@@ -72,7 +72,7 @@ export class LocalThings {
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
 		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>,
 		private captureAccountChanges?: ThingTransactionCapture, private onRecover?: LocalThingRecovery,
-		private onThemeImport?: (tx: WorkspaceTransaction, row: LocalThing) => Promise<void>) {}
+		private themeMutations?: { import(tx: WorkspaceTransaction, row: LocalThing): Promise<void>; move(tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing): Promise<void> }) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -336,12 +336,27 @@ export class LocalThings {
 			let changed = true;
 			while (changed) {
 				changed = false;
-				for (const { value: row } of all) if (!selected.has(row.id) && ((row.folderId && selected.has(row.folderId)) || (row.targetId && selected.has(row.targetId)))) {
+				for (const { value: row } of all) if (!selected.has(row.id) && ((recursive && row.folderId && selected.has(row.folderId)) || (row.targetId && selected.has(row.targetId)))) {
 					if (!recursive && !((isLocalAttachment(row) || isLocalActivity(row) || row.thingtime.includes('comment')) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
 					selected.add(row.id); changed = true;
 				}
 			}
 			for (const id of selected) { if (isLocalAttachment(all.find(row => row.id === id)!.value)) await tx.deleteBytes(id); await tx.delete('things', id); }
+			// Ordinary folder deletion preserves its contents, matching the canonical
+			// account writer. Explicit recursive deletion still removes descendants.
+			for (const {value:row} of all) if (!selected.has(row.id) && row.folderId && selected.has(row.folderId)) {
+				let folderId:string|null=row.folderId; const seen=new Set<string>();
+				while (folderId && selected.has(folderId)) {
+					if (seen.has(folderId)) fail('INVALID_FOLDER','The folder chain is cyclic.');
+					seen.add(folderId); folderId=all.find(item=>item.id===folderId)?.value.folderId || null;
+				}
+				const moved={...row,folderId,revision:row.revision+1,updatedAt:new Date(Math.max(Date.parse(this.now()),Date.parse(row.updatedAt)+1)).toISOString()};
+				await this.placement(tx,moved);await tx.put('things',row.id,moved);
+			}
+			if (this.scope.kind === 'anonymous') for (const key of ['active-theme','active-algorithm']) {
+				const id=await tx.get<string>('settings',key); if (id && selected.has(id)) await tx.delete('settings',key);
+			}
+
 			return { ok: true, deleted: [...selected] };
 		});
 	}
@@ -360,6 +375,9 @@ export class LocalThings {
 				if (isLocalAttachment(row)) {
 					if (this.scope.kind === 'account' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 					await this.onFileWrite?.(tx, row, previous as LocalAttachment);
+				} else if (isTransferTheme(row) && this.scope.kind === 'account') {
+					if (!this.themeMutations) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
+					await this.themeMutations!.move(tx, row, previous);
 				} else await this.onWrite?.(tx, row, previous, { folderId });
 				rows.push(row);
 			}
@@ -395,7 +413,7 @@ export class LocalThings {
 		if (importedAlgorithms.length && this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account algorithms require their dedicated sync adapter');
 		for (const algorithm of importedAlgorithms) { validateTransferAlgorithm(algorithm); if (manifest.files.some(file => file.targetId === algorithm.id) || manifest.things.some(row => row.targetId === algorithm.id || row.folderId === algorithm.id)) fail('INVALID_ALGORITHM', 'Algorithm transfers cannot contain child Things'); }
 		const importedThemes = manifest.things.filter(isTransferTheme);
-		if (importedThemes.length && this.scope.kind !== 'anonymous' && !this.onThemeImport) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
+		if (importedThemes.length && this.scope.kind !== 'anonymous' && !this.themeMutations) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account themes require their dedicated sync adapter');
 		for (const theme of importedThemes) {
 			validateTransferTheme(theme);
 			if (manifest.files.some(file => file.targetId === theme.id) || manifest.things.some(row => row.targetId === theme.id || row.folderId === theme.id)) fail('INVALID_THEME', 'Theme transfers cannot contain child Things');
@@ -445,7 +463,7 @@ export class LocalThings {
 				}
 				await tx.put('things', row.id, row);
 				if (isLocalAttachment(row)) await this.onFileWrite?.(tx, row);
-				else if (isTransferTheme(row) && this.scope.kind === 'account') await this.onThemeImport!(tx, row);
+				else if (isTransferTheme(row) && this.scope.kind === 'account') await this.themeMutations!.import(tx, row);
 				else await this.onWrite?.(tx, row, null, row);
 			}
 			for (const file of manifest.files) { signal?.throwIfAborted(); await tx.putBytes(fileMap.get(file.id)!, bytes.get(file.id)!); }

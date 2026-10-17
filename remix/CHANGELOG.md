@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Theme library moves/deletes now finish offline
+  through the dedicated theme adapter, with independent receipt-ordered folder
+  sync. Anonymous folder deletion preserves children; active selection clears on
+  deletion. Device discovery pauses offline and requires authenticated identity.
+  Verified locally with workspace, device and native browser checks; broader
+  rollout remains open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Account theme import and private copies now finish
   offline through the canonical importer, with independent conditional folder
   and theme synchronization. Native offline/reconnect and atomic placement API

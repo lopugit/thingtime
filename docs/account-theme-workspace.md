@@ -173,8 +173,7 @@ Omitting placement preserves the stored folder. Legacy placement requires migrat
 
 Themes stay home-pinned. A selected custom data plane may import an unfiled
 theme; a transfer joining it to a selected-plane folder must be imported in the
-home library. This preserves the existing managed-placement restriction. General
-offline theme moves and folder-deletion reconciliation, account-authored History,
+home library. This preserves the existing managed-placement restriction. Account-authored History,
 shared gallery retention and the wider feature matrix remain unfinished.
 
 Run accountThemeImport.test.ts and accountApi.test.ts for atomicity, private
@@ -201,3 +200,53 @@ It records no offline mutations or page errors and measures/screenshots
 1440/390/320px without horizontal overflow. An initial API attempt reached the
 stale 1.2.0 process and refused placement; the managed stack was refreshed and
 1.3.0 verified before the passing rerun. These are local results only.
+
+
+## Device library organization — 2026-10-17
+
+The normal library projects owned themes through the dedicated theme adapter.
+Mixed moves and deletes commit with ordinary Things in one device transaction;
+theme tokens, private audience and the independent sender stay authoritative.
+Generic protected content writes remain refused. Deletion clears active selection
+and retains a scoped receipt tombstone so delayed catalogue/library reads cannot
+resurrect a confirmed deletion.
+
+Ordinary folder deletion drains children to their surviving parent immediately.
+Only the remote folder sender waits for theme moves or deletes; uncertain commands
+replay unchanged before later placement. Late-retained children are drained through
+the same placement hook. Conflicts preserve local content and require review and
+folder retry. Custom-plane folders never drain same-ID home placement. The account
+worker wakes dependent senders and announces late local placement changes.
+
+Anonymous ordinary folder deletion now has the same preservation behavior, including
+standalone file bytes. Explicit recursive deletion still removes descendants;
+deleting an active theme/algorithm clears its local selection in that transaction.
+
+Run accountThemeOrganization.test.ts, themeOrganization.test.ts and the existing
+account delete/import/export/theme suites. accountThemeOrganization.browser.test.ts
+contains separate clean-account and anonymous native-browser flows. Account-authored
+History, broader theme/library title editing, home-partition integration, public
+and shared gallery retention, identity transitions and the full rollout matrix
+still require completion.
+
+Local validation: 525 workspace tests and four offline-shell checks pass; 62
+opt-in tests are skipped in that suite. Both organization browser tests ran
+explicitly and passed against the built client and isolated API fixture. Account
+mixed moves, cold reload, folder drain and deletion synchronize privately after
+reconnect; anonymous folder drain and applied-theme deletion make zero account
+writes. Screenshots and bounds at 1440/390/320px show no horizontal overflow.
+The account run records zero offline device reads or mutations and no page
+errors. Device suites pass 80 checks. The client build passes; full TypeScript
+retains the same 91 prior diagnostic signatures. Focused lint reports no errors
+and five existing warnings across the workspace/device files.
+
+The browser run exposed a remote computer-refresh warning in offline library
+browsing. ThingsPage now enables device discovery only for matching authenticated
+identity. useDeviceStore pauses remote refresh/event polling when offline, keeps
+cached snapshots and resumes on reconnect. It suppresses automatic disconnect
+errors without changing remote-action authorization. Broader device cache
+origin/plane isolation remains an audit item.
+
+These are local results. CI, deployed acceptance and the full rollout are not
+complete. Ignored JSON/screenshots are under
+`tmp/account-theme-organization-browser-reviewed/`.

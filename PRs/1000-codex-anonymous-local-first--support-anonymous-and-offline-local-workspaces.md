@@ -3287,3 +3287,33 @@ completed; the import-source graph refresh is separate. General managed theme
 moves/deletion, account-authored History, algorithms, the remaining matrix,
 latest-main reconciliation and current-head CI/deployed acceptance remain open.
 The PR stays draft and unmerged.
+
+
+## Theme library organization — 2026-10-17
+
+Normal mixed moves/deletes now include retained account themes through the existing
+dedicated theme adapter. Local folder deletion drains children immediately, while
+the remote folder queue waits for theme receipts, including lost-response replay.
+Scoped deletion tombstones suppress stale reads. Home placement cannot follow
+custom-plane folder collisions. Anonymous folder deletion now preserves contents
+and standalone bytes; explicit recursive deletion remains available, and deleting
+the active theme/algorithm clears its local selection.
+
+A native browser run also found an unwanted computer-refresh warning while
+offline. Device discovery now requires matching authenticated identity and pauses
+remote polling offline while preserving cached snapshots. The rerun checks zero
+offline device reads and no warning overlay.
+
+Validation: 525 workspace checks plus four shell checks; 62 opt-in skips. Both
+organization browser tests ran explicitly and passed against the built client
+and isolated real API using disposable private fixtures. Account mixed moves,
+folder drain, deletion, cold offline reload and independent reconnect sync pass;
+anonymous folder drain/deletion make zero account mutations. Responsive evidence
+covers 1440/390/320px; no page errors. Device suites: 80 passing. Client build
+passes; TypeScript matches the same 91 normalized prior errors. Focused lint has
+no errors and five pre-existing warnings. Evidence:
+`tmp/account-theme-organization-browser-reviewed/`.
+
+Account theme History, library title editing, home-partition integration, shared
+gallery retention, broader identity/cache boundaries and the full acceptance
+matrix remain unfinished. These are local results only; no merge or deployment.
