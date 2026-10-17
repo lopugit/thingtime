@@ -152,3 +152,22 @@ credentials and signed native offline integration are still outstanding.
 `passwords/vaultCrypto.test.ts` verifies server interoperability;
 `local-workspace/passwordVault.test.ts` and the opt-in browser fixture cover
 storage isolation, cancellation, conflicts and real offline editor/transfer use.
+
+
+### Local provider and environment vault
+
+Anonymous Settings → Security → Secure Vault reuses `SecureVault.tsx` through
+`DeviceProviderVault.tsx` and the shared `DeviceVaultGate`. `userVaultModel.ts`
+is the browser-safe canonical metadata/value validator; `userVaultCore.ts`
+retains server-only outbound-host restrictions. `local-workspace/providerVault.ts`
+encrypts metadata and values with the independent provider key domain and
+commits revisions/tombstones with quota and lease checks. Anonymous operations
+never create account commands. The account queue format is prepared but its
+transport and account UI remain unfinished; existing account Vault still uses
+its authenticated API and fresh selected-value reveal.
+
+`providerVault.test.ts` covers atomic group membership, replay, quota, lock and
+corruption. `providerVault.browser.test.ts` is the opt-in actual offline Settings
+fixture. `userVaultModel.test.ts` and `userVaultEnvironment.test.ts` cover shared
+validation and rejection of malformed replacement tokens (`api.lopu-vault`
+1.2.1). See [local provider setup and verification](../local-workspaces.md#anonymous-provider-vault).

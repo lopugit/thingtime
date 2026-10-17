@@ -837,13 +837,13 @@ export const SettingsContent = ({
 						{/* Every account gets the same write-only encrypted key/value store as
 		    the admin integration console, scoped to that account's private Things.
 		    Anchored: the drawer's Lopu → Secure Vault row deep-links #secure-vault. */}
-						{user && !user.temporary && (
+						{(
 							<Box id="secure-vault" width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
 								<SettingsSection
 									eyebrow="Secure Vault 🔐"
-									description="Encrypted passwords, keys, environments, and the AI provider connections Lopu can use for this account."
+									description="Encrypted keys, environments and AI provider connections, with a private device vault available without an account."
 								>
-									<SecureVault key={user.id} />
+									<SecureVault />
 								</SettingsSection>
 							</Box>
 						)}

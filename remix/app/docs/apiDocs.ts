@@ -4906,14 +4906,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// first catalog model), providerTemplates carry `models[]` (efforts, speeds,
 		// audioInput 'realtime' for direct-voice models), four more kinds
 		// (mistral, deepseek, groq, cohere) — compatible additions.
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		// 1.2.1: reject malformed supplied tokens instead of retaining an older value.
+		contractVersion: '1.2.1',
+		featureVersion: '1.2.1',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
 		summary: 'Manages the current user’s write-only secrets, environments, and AI provider connections.',
 		detail:
-			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only (providerTemplates list each kind’s endpoint and catalog models with their efforts, speeds and whether a model speaks the realtime direct-voice transport). Provider tokens and generic secret values are accepted on writes and never returned. A provider’s `model` is optional: a template kind without one runs on its first catalog model, a custom compatible host must name one. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
+			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only (providerTemplates list each kind’s endpoint and catalog models with their efforts, speeds and whether a model speaks the realtime direct-voice transport). Provider tokens and generic secret values are accepted on writes and never returned. An omitted or empty provider token retains the existing token on update; a non-string or oversized supplied token is rejected. A provider’s `model` is optional: a template kind without one runs on its first catalog model, a custom compatible host must name one. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403 on writes). POST bodies must be application/json (415 otherwise).' },
 		methods: ['GET', 'POST'],
 		steps: [

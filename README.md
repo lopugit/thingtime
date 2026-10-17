@@ -11,6 +11,12 @@ stay on that device and never sync on login. Account workspaces also use an encr
 edits complete locally and sync only after matching account/origin/plane confirmation.
 The broader local-first rollout remains in progress. See [device vault behavior and verification](docs/password-manager.md#anonymous-device-vault).
 
+Anonymous Settings → Security → Secure Vault also works offline. It has its own
+provider-vault passphrase and stores environment names, key values and provider
+connections encrypted on the device. It needs no server vault key; saving a
+connection never calls that provider. Account provider-vault synchronization is
+still being implemented. See [local provider vault setup and tests](docs/local-workspaces.md#anonymous-provider-vault).
+
 The account-private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
 Use a Mongo replica set for canonical storage transactions and configure the
 usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes

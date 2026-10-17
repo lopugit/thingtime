@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Secure Vault environments, secrets and provider
+  connections can be authored anonymously and offline through the existing
+  Settings forms and an encrypted device vault. Fix deletion notifications
+  leaking entry names and reject malformed replacement provider tokens.
+  Account provider sync remains unfinished. [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#anonymous-provider-and-environment-authoring--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Account passwords now save to encrypted device
   storage before independent, identity-bound sync, using a shared device-key
   lifecycle with backward-compatible envelopes. Offline unlock/export,

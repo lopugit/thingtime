@@ -3530,3 +3530,48 @@ branch browser coverage at 1440/390/320px. Anonymous and account History native
 checks also pass after integration. 1,287 automated checks pass; TypeScript keeps
 91 unchanged baseline diagnostics. See the [integration evidence and limits](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#upstream-integration-and-offline-settings-acceptance--2026-10-17).
 The wider completion matrix above is unchanged and remains the merge gate.
+
+
+## Anonymous provider vault
+
+Settings → Security → Secure Vault is available without login. Create its
+independent device passphrase (at least 12 characters), then use the normal
+forms to create environments, secrets and provider connections, move entries
+or delete them. Metadata and values are encrypted together. A selected value
+can be shown briefly after device unlock; blur, hiding the tab, page exit,
+locking, or 30 seconds clears the reveal. Reload requires unlocking again.
+A nonempty environment cannot be removed. Operation identities, revisions and
+atomic namespace checks preserve concurrent work; quota refusal leaves both
+content and intent unchanged. Save completion does not depend on a follow-up
+list refresh. Notifications use generic text without saved entry names.
+
+Anonymous records never enter a sync queue or become account content on login.
+Saving provider configuration does not execute a provider request or Action.
+The browser-safe shared validator checks authoring syntax; server-only host
+and allowlist restrictions still apply when a server uses a connection.
+`api.lopu-vault` 1.2.1 also rejects malformed supplied replacement tokens instead
+of treating them as a request to retain the old token. Existing account
+session, JSON, rate-limit, ownership and freshly verified reveal checks remain.
+
+Use HTTPS or loopback for WebCrypto. Build/load the production client once to
+install the normal offline shell; then disconnect. No server encryption key is
+needed for anonymous storage. Run the actual browser fixture from `remix/`:
+
+```sh
+TT_LOCAL_PROVIDER_VAULT_URL=http://127.0.0.1:<local-port> \
+TT_LOCAL_PROVIDER_VAULT_ARTIFACTS=<ignored-output-directory> \
+TT_SHARED_PLAYWRIGHT_PATH=<playwright-module> \
+TT_SHARED_CHROME_PATH=<chromium-executable> \
+node --import tsx --test app/local-workspace/providerVault.browser.test.ts
+```
+
+The fixture creates only synthetic anonymous device data in a clean context,
+checks initial `user: null`, then disconnects before authoring. It checks native
+Settings at 1440/390/320px, encrypted storage, reload/unlock, selected reveals,
+move/delete/nonempty-environment handling and zero account Vault requests or
+mutations. Default test runs skip this fixture unless its inputs are supplied.
+
+Account provider/environment local UI, ordered conditional account sync,
+explicit fresh-reveal retention of existing server values and the remaining
+full-feature matrix are still open. This anonymous authoring increment does
+not complete that matrix or establish provider execution/native integration.

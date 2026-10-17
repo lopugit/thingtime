@@ -1870,6 +1870,22 @@ is fixed, and cite the checklist you ran in the PR description.
       during a session, and confirm the header, the gear popover, messages
       and the voice deck never clip, overlap, or cause horizontal page
       scrolling.
+- [ ] In a clean anonymous browser, load the production offline shell, disconnect,
+      then open **Settings → Security → Secure Vault**. Create the independent
+      device passphrase, environment, key value and provider. Verify native
+      forms at 1440/390/320px; reload locks and the same passphrase restores
+      entries. Wrong passphrases, quota refusal and damaged saved rows preserve
+      ciphertext. There must be no account Vault/reveal requests or writes.
+- [ ] Anonymous selected-value reveal clears on blur, hiding, page exit, manual
+      Hide, vault lock and after 30 seconds. Move an entry out of an environment
+      before deleting it; a nonempty deletion must fail without changing either.
+      Race child creation against group deletion and verify one coherent result.
+      Inspect device storage after deletion too: notification history must not
+      contain vault names, values or passphrases outside the encrypted records.
+- [ ] Supply a malformed/non-string or over-32-KiB replacement provider token:
+      reject it before touching the saved account record. An omitted/empty token
+      remains the explicit retain-existing operation. Confirm both capability
+      manifests advertise `api.lopu-vault` 1.2.1 and keep account host restrictions.
 - [ ] Add a disposable provider in **Settings → Secure Vault**, grouped under a
       test environment. Refresh and verify only metadata returns to the
       browser—never plaintext, masked text, IV, tag, or ciphertext. Updating

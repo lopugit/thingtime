@@ -2879,3 +2879,51 @@ Provider/environment credential storage, broader native identity/plane transitio
 signed offline provider integration and the remaining full local-feature matrix
 are still open. This is local acceptance only; current-head CI/deployed verification
 and full-goal completion remain unproven. No main merge or deployment occurred.
+
+
+## Anonymous provider and environment authoring — 2026-10-17
+
+Settings → Security → Secure Vault now works anonymously through the normal
+forms and independent encrypted device key lifecycle. The shared browser-safe
+validator keeps canonical provider catalog/metadata/value rules; server-only
+private-host restrictions remain in `userVaultCore.ts`. Local names and values
+are encrypted together. Revision checks, immutable retry identities, quota and
+scope leases, and an atomic group-membership fence protect create/move/delete.
+Anonymous records have no account commands. Account encrypted intent is prepared
+in the adapter, but account UI/sync and explicit retention of freshly revealed
+server values remain unfinished. Existing account Vault authorization remains.
+
+The shared unlock gate serves provider and password domains without sharing
+keys. Brief selected-device reveal clears on expiry/blur/lifecycle/lock; account
+reveal still requires the existing fresh password/passkey proof. Local save
+completion updates metadata immediately, independently of refresh. A browser
+storage assertion caught entry names escaping through deletion notifications;
+the notification now uses generic text. Malformed supplied provider tokens are
+rejected before server record access (`api.lopu-vault` 1.2.1, both manifests).
+
+Local validation: 530 automated checks pass (460 workspace/offline shell, 70
+provider/manifest contracts); 49 opt-in skips excluded. The actual anonymous
+provider browser test passes in 44.89s with create/move/delete, nonempty group
+refusal, wrong passphrase, cold offline unlock at 1440/390/320px, exact selected
+values, blur and 30-second expiry. Storage has no plaintext credential/name or
+account intent, and network records zero protected Vault requests or mutations;
+there are no page errors. The shared-gate password browser regression passes in
+22.07s including its normal import/export and two-tab conflict checks. Evidence:
+`tmp/provider-vault-native/`, `tmp/provider-vault-password-regression/`,
+`tmp/provider-vault-{workspace,contract-tests,native,password-regression}.log`.
+Desktop/mobile screenshots were inspected; no horizontal overflow was measured.
+Existing floating assistant controls overlap part of the mobile right edge.
+
+The production client build verifies 247 assets (21,815,004 bytes); focused lint
+has no errors or warnings, and TypeScript retains exactly 91 baseline errors.
+The actual local Nitro manifest advertises Vault 1.2.1. Initial runs caught the
+notification-name leak and a local API 502 before feature execution; neither is
+counted as passing. The worktree's Nitro listener had stopped; one canonical
+managed restart restored it after startup compilation. One intended PM2 entry,
+zero restarts and disabled auto-restart were verified. No existing account data
+was modified, and no remote deployment or merge occurred.
+
+This checkpoint provides anonymous device authoring. Ordered conditional
+account provider sync, retained account offline authoring/reveal, native provider
+integration and all other unfinished items in the full local-feature matrix
+remain the merge gate. Current-head CI/deployed acceptance is still unproven.

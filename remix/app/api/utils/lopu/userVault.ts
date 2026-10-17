@@ -1,21 +1,19 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID } from 'node:crypto';
 
+import { normalizeUserVaultGroup, normalizeUserVaultSecret, normalizeUserVaultProvider, type PublicVaultGroup, type PublicVaultEntry } from './userVaultModel';
+
 import { getThingsCollection } from '../mongodb/collections';
 import { createThing, deletePost, isFail, updateThing } from '../things/things';
 import { ACL_OWNER } from '~/schemas/registry';
 import {
-	boundedVaultText,
 	LOPU_PROVIDER_TEMPLATES,
 	LOPU_USER_VAULT_SCHEMA_VERSION,
 	LOPU_USER_VAULT_SYSTEM_TYPE,
 	normalizeLopuProviderEndpoint,
-	normalizeLopuProviderKind,
 	safeVaultId,
-	safeVaultModelId,
 	type LopuProviderKind
 } from './userVaultCore';
 
-const VALUE_MAX_BYTES = 32 * 1024;
 const VAULT_AAD_PREFIX = 'thingtime-user-vault:v1:';
 
 type EncryptedValue = { cipherText: string; iv: string; tag: string };
@@ -37,20 +35,7 @@ type StoredVaultCrystal = {
 	updatedAt: string;
 };
 
-export type PublicVaultGroup = { id: string; name: string; createdAt: string; updatedAt: string };
-export type PublicVaultEntry = {
-	id: string;
-	kind: 'secret' | 'provider';
-	name: string;
-	groupId: string | null;
-	key?: string;
-	provider?: LopuProviderKind;
-	endpoint?: string;
-	model?: string;
-	hasValue: true;
-	createdAt: string;
-	updatedAt: string;
-};
+export type { PublicVaultGroup, PublicVaultEntry } from './userVaultModel';
 
 type StoredVaultDoc = { shareId: string; ownerId: string; crystal: StoredVaultCrystal };
 
@@ -174,8 +159,7 @@ const createVaultThing = async (ownerId: string, shareId: string, crystal: Store
 };
 
 export const createUserVaultGroup = async (ownerId: string, input: { name?: unknown }): Promise<PublicVaultGroup> => {
-	const name = boundedVaultText(input.name, 80);
-	if (!name) throw new Error('Environment name is required.');
+	const { name } = normalizeUserVaultGroup(input);
 	const now = new Date().toISOString();
 	const shareId = randomUUID();
 	await createVaultThing(ownerId, shareId, {
@@ -189,19 +173,11 @@ export const createUserVaultGroup = async (ownerId: string, input: { name?: unkn
 	return { id: shareId, name, createdAt: now, updatedAt: now };
 };
 
-const validSecretValue = (value: unknown): string | null => {
-	if (typeof value !== 'string' || !value || Buffer.byteLength(value, 'utf8') > VALUE_MAX_BYTES) return null;
-	return value;
-};
-
 export const saveUserVaultSecret = async (
 	ownerId: string,
 	input: { id?: unknown; name?: unknown; key?: unknown; value?: unknown; groupId?: unknown }
 ): Promise<PublicVaultEntry> => {
-	const name = boundedVaultText(input.name, 120);
-	const key = boundedVaultText(input.key, 120);
-	const value = validSecretValue(input.value);
-	if (!name || !key || !value) throw new Error('Secret name, key, and a non-empty bounded value are required.');
+	const { name, key, value } = normalizeUserVaultSecret(input);
 	const groupId = await assertGroup(ownerId, input.groupId);
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'secret')) throw new Error('Vault secret was not found.');
@@ -231,16 +207,7 @@ export const saveUserVaultProvider = async (
 	ownerId: string,
 	input: { id?: unknown; name?: unknown; provider?: unknown; endpoint?: unknown; model?: unknown; token?: unknown; groupId?: unknown }
 ): Promise<PublicVaultEntry> => {
-	const name = boundedVaultText(input.name, 120);
-	const provider = normalizeLopuProviderKind(input.provider);
-	const endpoint = normalizeLopuProviderEndpoint(input.endpoint);
-	const token = validSecretValue(input.token);
-	if (!name || !provider || !endpoint) throw new Error('Provider name, type, and HTTPS endpoint are required.');
-	// the model is optional (a template kind falls back to its first catalog
-	// model), but when given it must be a sane provider-native id
-	const modelGiven = typeof input.model === 'string' && input.model.trim() !== '';
-	const model = modelGiven ? safeVaultModelId(input.model) : null;
-	if (modelGiven && !model) throw new Error('Model id must be at most 200 characters of letters, digits, . _ : / @ or -.');
+	const { name, provider, endpoint, token, model } = normalizeUserVaultProvider(input, normalizeLopuProviderEndpoint);
 	const groupId = await assertGroup(ownerId, input.groupId);
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'provider')) throw new Error('AI provider was not found.');

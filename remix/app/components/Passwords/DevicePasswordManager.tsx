@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Button, Heading, Input, Text } from '@chakra-ui/react';
+import type { DeviceVaultSession } from '~/local-workspace/deviceVaultSession';
 import { LocalPasswordVault } from '~/local-workspace/passwordVault';
 import type { WorkspaceScope } from '~/local-workspace/storage';
 import { anonymousWorkspaceDatabase, anonymousWorkspaceLease, accountWorkspaceLease } from '~/local-workspace/runtime.client';
@@ -17,7 +18,8 @@ export function DevicePasswordManager({ children, scope }: { children: (vault: L
  }, [scope]);
  return vault ? <DeviceVaultGate vault={vault}>{children}</DeviceVaultGate> : <Box p={6}><Heading size="md">Passwords</Heading><Text mt={3}>Opening device vault…</Text></Box>;
 }
-function DeviceVaultGate({ vault, children }: { vault: LocalPasswordVault; children: (vault: LocalPasswordVault) => React.ReactNode }) {
+export function DeviceVaultGate<T extends DeviceVaultSession>({ vault, children, title = 'Passwords' }: { vault: T; children: (vault: T) => React.ReactNode; title?: string }) {
+ const fieldId = React.useId();
  const unlocked = React.useSyncExternalStore(vault.subscribe, vault.isUnlocked, () => false);
  const [configured, setConfigured] = React.useState<boolean | null>(null), [password, setPassword] = React.useState(''), [confirmation, setConfirmation] = React.useState('');
  const [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
@@ -32,13 +34,13 @@ function DeviceVaultGate({ vault, children }: { vault: LocalPasswordVault; child
  };
  if (unlocked) return <>{children(vault)}</>;
  return <Box as="form" onSubmit={submit} maxW="560px" mx="auto" p={{ base: 3, md: 6 }}>
-  <Heading size="lg">Passwords</Heading>
+  <Heading size="lg">{title}</Heading>
   <Text mt={3}>{configured === false ? 'Set up an encrypted vault for this device.' : 'Unlock the encrypted vault on this device.'}</Text>
   <Text mt={2} color="var(--tt-muted)">{vault.scope.kind === 'anonymous' ? 'Anonymous entries stay on this device and are never uploaded.' : 'Account entries save encrypted on this device first. Sync runs separately after your account is confirmed.'} Your vault locks after five minutes without use.</Text>
   {configured === false && <Text mt={3}>Choose a separate device passphrase of at least 12 characters. It is not your account password and cannot be reset. Keep it safe to recover device edits that have not synced. Saved entries are available offline.</Text>}
-  <Text as="label" htmlFor="device-vault-password" display="block" mt={4}>Device vault passphrase</Text>
-  <Input id="device-vault-password" type="password" autoComplete={configured ? 'current-password' : 'new-password'} maxLength={4096} value={password} onChange={event => setPassword(event.target.value)} isDisabled={busy} />
-  {configured === false && <><Text as="label" htmlFor="device-vault-confirmation" display="block" mt={3}>Confirm device vault passphrase</Text><Input id="device-vault-confirmation" type="password" autoComplete="new-password" maxLength={4096} value={confirmation} onChange={event => setConfirmation(event.target.value)} isDisabled={busy} /></>}
+  <Text as="label" htmlFor={`${fieldId}-password`} display="block" mt={4}>Device vault passphrase</Text>
+  <Input id={`${fieldId}-password`} type="password" autoComplete={configured ? 'current-password' : 'new-password'} maxLength={4096} value={password} onChange={event => setPassword(event.target.value)} isDisabled={busy} />
+  {configured === false && <><Text as="label" htmlFor={`${fieldId}-confirmation`} display="block" mt={3}>Confirm device vault passphrase</Text><Input id={`${fieldId}-confirmation`} type="password" autoComplete="new-password" maxLength={4096} value={confirmation} onChange={event => setConfirmation(event.target.value)} isDisabled={busy} /></>}
   {error && <Text role="alert" mt={3} color="red.600">{error}</Text>}
   <Button mt={4} type="submit" isLoading={busy} isDisabled={configured === null || !password || (!configured && !confirmation)}>{configured === false ? 'Create device vault' : 'Unlock device vault'}</Button>
  </Box>;
