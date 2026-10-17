@@ -3010,3 +3010,60 @@ account-provider sync or deployed acceptance.
 
 The workspace/offline-shell suite also passes; opt-in integration skips are not
 counted as acceptance. The explicit API/browser fixtures above were run separately.
+
+
+## Conditional account provider writes — 2026-10-17
+
+Account provider synchronization now has a closed `sync-write` request on the
+existing Vault POST (`api.lopu-vault` 1.4.0). Commands bind explicit create/null
+or an opaque full-Thing expected version, target ID and immutable write ID.
+The current full session, owner, same origin and selected data plane are
+rechecked before canonical mutations. Create/update/delete completion effects
+use the existing protected Timeline and share the content transaction; retrying
+an acknowledged write returns its original receipt even after ordinary target
+deletion. Missing expected updates never become creates. Generic Thing ACLs,
+quota, History, environment integrity and bounded deletion cleanup remain active.
+
+The encrypted device queue freezes requests before transmission and claims them
+across tabs in sequence order. Exact acknowledgments advance remote comparison
+tokens without replacing newer local edits. Locking/cancellation preserves
+uncertain work; anonymous vaults reject the sender. The direct transport
+negotiates 1.4.0 and retains owner/origin/plane fences without diagnostic logging.
+
+Account Settings integration, reviewed conflict resolution and explicitly
+selected fresh-value retention still require completion. Queue mocks and local
+API evidence are separate from native browser and deployed acceptance.
+
+Run the real API fixture only on the disposable loopback stack:
+
+```sh
+TT_PROVIDER_WRITES_API_URL=http://127.0.0.1:<fixture-port> \
+TT_SHARED_PLAYWRIGHT_PATH=<installed-playwright-module> \
+TT_PROVIDER_WRITES_API_ARTIFACTS=<artifact-directory> \
+node --import tsx --test app/local-workspace/providerWrites.api.test.ts
+```
+
+The fixture registers isolated accounts through the normal API and cleans up its
+Vault entries through that API. It does not inspect or mutate existing accounts.
+The endpoint needs the existing server Vault key documented in README; no new
+key or environment variable is introduced.
+
+Local verification: 55 API checks passed, including concurrent identical creates,
+competing updates, normal generic-edit conflicts, unchanged completion receipts
+after generic deletion, provider ciphertext retention, bounds, origin/owner/plane
+refusals and verified fixture cleanup. The queue/receipt/transport/admission tests
+pass (25 focused tests). Timeline 258; Things 304 + 18; Lopu 222 + 169;
+capabilities 101; workspace 479 plus offline shell 4 pass (52 opt-in skips).
+Counts overlap and must not be summed as independent coverage. Production client
+build passes with 248 verified assets. Full TypeScript remains at the same 91
+baseline diagnostics, with no added or resolved diagnostic signatures.
+
+The rebuilt anonymous native Settings fixture also passes actual offline emulation
+at 1440/390/320px: encrypted cold reload, wrong-passphrase refusal, create/move/
+delete and reveal masking, with zero account records/commands, protected requests,
+network mutations or page errors. All viewport widths avoid horizontal overflow;
+the inspected 320px screenshot still shows the previously noted floating assistant
+controls over the narrow right edge. This is anonymous acceptance, not account
+Settings sync or deployment acceptance. Lint has no new findings; three existing
+warnings in `things.ts` remain (one control-character regex and two mixed-operator
+warnings on the untouched fallback condition).

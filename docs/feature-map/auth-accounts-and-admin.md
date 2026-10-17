@@ -203,3 +203,15 @@ share environment validation and the owner Timeline-folder concurrency fence.
 delete bypass and verifies real API rollback and concurrent membership changes.
 Versions: `api.things` 1.34.1, `api.lopu-vault` 1.3.1. No account sync sender is
 enabled by this correction.
+
+
+`userVaultWrites.ts` now uses canonical create/update/delete utilities and protected
+Timeline effects for exact-write acknowledgments (`api.lopu-vault` 1.4.0).
+`routes/api/v1/lopu/vault/write.ts` admits only current full sessions with the
+expected owner, exact same origin and selected plane. `providerVault.ts` freezes
+an encrypted request before transmission; `providerTransport.client.ts` negotiates
+the write contract and independently fences each request. `providerSync.test.ts`,
+`userVaultWriteReceipt.test.ts`, the route tests and the opt-in
+`providerWrites.api.test.ts` cover these boundaries. Settings account integration,
+reviewed conflict resolution and fresh selected-value retention UI remain open.
+See [the write checkpoint](../local-workspaces.md#conditional-account-provider-writes--2026-10-17).

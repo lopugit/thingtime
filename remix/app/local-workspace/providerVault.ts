@@ -1,3 +1,4 @@
+import { parseUserVaultWrite, parseUserVaultWriteAcknowledgment, type UserVaultWrite } from '../api/utils/lopu/userVaultWriteContract';
 import { DeviceVaultSession, deviceVaultCollections } from './deviceVaultSession';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
 import { deviceVaultWriteDigest, openDeviceVaultValue, sealDeviceVaultValue } from '../passwords/vaultCrypto';
@@ -17,7 +18,7 @@ export type ProviderVaultMetadataTransport = {
  metadata(signal: AbortSignal): Promise<{ complete: true; groups: Array<PublicVaultGroup & { version: string }>; entries: Array<PublicVaultEntry & { version: string }> }>;
 };
 export type DeviceProviderRecord = { id: string; revision: number; remoteRevision: number; remoteVersion?: string; createdAt: string; updatedAt: string; encryptedValue?: VaultEnvelope; deleted?: true; writeId?: string; writeDigest?: string };
-export type DeviceProviderCommand = { id: string; recordId: string; localRevision: number; sequence: number; encryptedValue: VaultEnvelope; state: 'pending' | 'frozen' | 'refused' };
+export type DeviceProviderCommand = { id: string; recordId: string; localRevision: number; sequence: number; encryptedValue: VaultEnvelope; state: 'pending' | 'frozen' | 'refused'; claim?: string; claimUntil?: number; retryAt?: number; status?: number };
 export type DeviceProviderGroup = PublicVaultGroup & { revision: number };
 export type DeviceProviderEntry = PublicVaultEntry & { revision: number; valueAvailableOffline: boolean };
 const fail = (code: string, message: string, status = 409): never => { throw new WorkspaceError(code, message, status); };
@@ -256,8 +257,95 @@ export class LocalProviderVault extends DeviceVaultSession {
   });
   op.lease.assertCurrent();
  }
+ /** Freeze an encrypted request before its first transmission. Later local
+  * edits cannot change that request, and only its exact receipt advances the
+  * account comparison token. Global sequence order preserves group dependencies. */
+ async synchronize(transport: { write(command: UserVaultWrite, signal: AbortSignal): Promise<unknown> }, signal?: AbortSignal, now = Date.now) {
+  if (this.scope.kind !== 'account') return fail('ACCOUNT_REQUIRED', 'Anonymous vaults never synchronize.', 403);
+  const op = this.operation(signal, false), controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
+  const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  let completed = 0;
+  try {
+   for (let batch = 0; batch < 40; batch++) {
+    op.lease.assertCurrent(); combined.throwIfAborted();
+    const queued = await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.list<DeviceProviderCommand>(collections.commands));
+    const ordered = queued.sort((a,b) => a.value.sequence - b.value.sequence);
+    const seen = new Set<number>();
+    for (const { id: key, value } of ordered) {
+     if (!value || !safeVaultId(value.id) || !safeVaultId(value.recordId) || key !== `${value.recordId}:${value.id}` ||
+      !revision(value.localRevision) || value.localRevision < 1 || !revision(value.sequence) || value.sequence < 1 || seen.has(value.sequence) ||
+      !['pending','frozen','refused'].includes(value.state) || !value.encryptedValue ||
+      (value.claim !== undefined && (typeof value.claim !== 'string' || !value.claim)) ||
+      (value.claimUntil !== undefined && (!Number.isSafeInteger(value.claimUntil) || value.claimUntil < 0)) ||
+      (value.retryAt !== undefined && (!Number.isSafeInteger(value.retryAt) || value.retryAt < 0)))
+      return fail('VAULT_DAMAGED', 'The saved sync queue is invalid. Existing entries have been kept.', 422);
+     seen.add(value.sequence);
+    }
+    const first = ordered[0]; if (!first) break;
+    const saved = first.value, clock = now();
+    if (saved.state === 'refused' || (saved.claimUntil ?? 0) > clock || (saved.retryAt ?? 0) > clock) break;
+    const before = await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.get<DeviceProviderRecord>(collections.records, saved.recordId));
+    if (!before) return fail('VAULT_DAMAGED', 'A queued vault entry is missing. Existing work has been kept.', 422);
+    this.validateRow(saved.recordId, before);
+    if (before.revision < saved.localRevision || before.remoteRevision >= saved.localRevision)
+     return fail('VAULT_DAMAGED', 'The saved sync revision is invalid. Existing work has been kept.', 422);
+    let command: UserVaultWrite;
+    try {
+     const raw = JSON.parse(await openDeviceVaultValue(await this.context, op.key, `command:${saved.recordId}:${saved.id}`, saved.encryptedValue));
+     if (saved.state === 'pending') {
+      const local = input(raw);
+      if (local.id !== saved.recordId || local.writeId !== saved.id || local.revision + 1 !== saved.localRevision) throw Error();
+      const { revision: _revision, ...wire } = local;
+      command = parseUserVaultWrite({ ...wire, expectedVersion: before.remoteVersion ?? null });
+     } else command = parseUserVaultWrite(raw);
+     if (command.id !== saved.recordId || command.writeId !== saved.id) throw Error();
+    } catch { op.lease.assertCurrent(); return fail('VAULT_DAMAGED', 'The encrypted sync request is invalid. Existing work has been kept.', 422); }
+    const encryptedValue = saved.state === 'pending' ? await sealDeviceVaultValue(await this.context, op.key, `command:${saved.recordId}:${saved.id}`, JSON.stringify(command)) : saved.encryptedValue;
+    const claim = crypto.randomUUID(), frozen: DeviceProviderCommand = { ...saved, state: 'frozen', encryptedValue, claim, claimUntil: clock + 60_000 };
+    const claimed = await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+     const current = await tx.get<DeviceProviderCommand>(collections.commands, first.id), record = await tx.get<DeviceProviderRecord>(collections.records, saved.recordId);
+     if (JSON.stringify(current) !== JSON.stringify(saved) || JSON.stringify(record) !== JSON.stringify(before)) return false;
+     await tx.put(collections.commands, first.id, frozen); return true;
+    });
+    if (!claimed) break;
+    try {
+     const response = await transport.write(command, combined);
+     op.lease.assertCurrent(); combined.throwIfAborted();
+     const receipt = parseUserVaultWriteAcknowledgment(response);
+     if (receipt.id !== command.id || receipt.writeId !== command.writeId || receipt.action !== command.action || receipt.expectedVersion !== command.expectedVersion)
+      throw new WorkspaceError('VAULT_RESPONSE', 'The account returned a different save receipt.', 502);
+     const adopted = await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+      const current = await tx.get<DeviceProviderCommand>(collections.commands, first.id), record = await tx.get<DeviceProviderRecord>(collections.records, saved.recordId);
+      if (!current || current.claim !== claim) return false;
+      if (!record || record.revision < saved.localRevision || record.remoteRevision !== before.remoteRevision || record.remoteVersion !== before.remoteVersion)
+       return fail('VAULT_CONFLICT', 'The vault changed before the save receipt arrived. Existing work has been kept.');
+      await tx.put(collections.records, saved.recordId, { ...record, remoteRevision: saved.localRevision, remoteVersion: receipt.resultVersion ?? undefined });
+      await tx.delete(collections.commands, first.id); return true;
+     });
+     if (!adopted) break;
+     completed++;
+    } catch (error) {
+     op.lease.assertCurrent(); combined.throwIfAborted();
+     // Keep only a numeric disposition, never remote prose or credential data.
+     const status = Number((error as any)?.status), refused = [400,403,404,409,410,413,422].includes(status);
+     if ((error as any)?.code === 'WORKSPACE_CHANGED' || status === 401) throw error;
+     const delay = Math.min(86_400_000, Math.max(60_000, Number((error as any)?.retryAfterMs) || 0));
+     await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+      const current = await tx.get<DeviceProviderCommand>(collections.commands, first.id);
+      if (!current || current.claim !== claim) return;
+      const { claim: _claim, claimUntil: _until, ...rest } = current;
+      await tx.put(collections.commands, first.id, { ...rest, state: refused ? 'refused' : 'frozen', retryAt: now() + delay,
+       ...(Number.isInteger(status) && status >= 400 && status <= 599 ? { status } : {}) });
+     });
+     break;
+    }
+   }
+   return { completed };
+  } finally { off(); }
+ }
+
  async syncStatus() {
   this.check(); if (this.scope.kind === 'anonymous') return [];
-  return this.db.transaction(this.scope, 'readonly', this.lease, async tx => (await tx.list<DeviceProviderCommand>(collections.commands)).map(({value}) => ({ id: value.id, recordId: value.recordId, state: value.state, sequence: value.sequence })));
+  return this.db.transaction(this.scope, 'readonly', this.lease, async tx => (await tx.list<DeviceProviderCommand>(collections.commands)).map(({value}) => ({ id: value.id, recordId: value.recordId, state: value.state, sequence: value.sequence, status: value.status, retryAt: value.retryAt })).sort((a,b) => a.sequence - b.sequence));
  }
 }

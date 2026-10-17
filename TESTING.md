@@ -11592,3 +11592,24 @@ opt-in `providerMetadata.api.test.ts` through the documented loopback setup in
 
 Use `providerIntegrity.api.test.ts` with the loopback setup in
 [local workspaces](docs/local-workspaces.md#vault-environment-integrity-before-account-synchronization).
+
+
+## Conditional account Vault writes (2026-10-17)
+
+- [x] In a disposable loopback account, retry an identical create concurrently:
+  one content revision and one immutable completion effect, with equal receipts.
+- [x] Compete two updates against one version: exactly one succeeds. A normal
+  generic edit invalidates the old version; a missing expected update never creates.
+- [x] Delete the target through normal Things, then retry the original create:
+  return the retained receipt and keep the target absent. Verify delete retries too.
+- [x] Reject wrong owner/origin/plane, caller authority fields and oversized input.
+  Refused environment membership rolls back content and receipt; nonempty groups
+  remain intact. Provider metadata-only edits preserve the existing ciphertext.
+- [x] Queue tests cover lost response plus cold unlock, newer local edits, competing
+  tabs and expired claims, wrong receipts, locking, cancellation and corrupt state.
+  Anonymous storage must never invoke the sender or create account commands.
+- [ ] Finish normal account Settings, reviewed conflict resolution, selected fresh
+  value retention, native offline/reconnect and cross-plane browser acceptance.
+
+Use `providerWrites.api.test.ts` with the documented isolated fixture setup.
+Unit transports are not proof of server or deployed behavior.

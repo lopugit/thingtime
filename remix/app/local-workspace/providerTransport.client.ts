@@ -1,3 +1,4 @@
+import { parseUserVaultWrite, parseUserVaultWriteAcknowledgment, type UserVaultWrite } from '../api/utils/lopu/userVaultWriteContract';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
 import { EXPECTED_ACTOR_HEADER } from '../api/utils/auth/expectedActor';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
@@ -9,14 +10,14 @@ import type { ProviderVaultMetadataTransport } from './providerVault';
 
 /** Direct, same-origin vault requests: no diagnostics/history, origin fallback,
  * stored credential or inferred authority from the encrypted device copy. */
-export function accountProviderMetadataTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): ProviderVaultMetadataTransport {
- const request = async (body: Record<string, unknown>, signal: AbortSignal) => {
+export function accountProviderTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): ProviderVaultMetadataTransport & { write(command: UserVaultWrite, signal: AbortSignal): Promise<ReturnType<typeof parseUserVaultWriteAcknowledgment>> } {
+ const request = async (body: Record<string, unknown>, signal: AbortSignal, minimumVersion = '1.3.0') => {
   lease.assertCurrent(); const remote = accountRemoteWorkspaceLease(scope); remote.assertCurrent();
   const controller = new AbortController(), off = remote.onInvalidate(() => controller.abort());
   const combined = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(20_000)]);
   try {
    if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
-   await requireThingtimeCapability('api.lopu-vault', '1.3.0');
+   await requireThingtimeCapability('api.lopu-vault', minimumVersion);
    await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
    lease.assertCurrent(); remote.assertCurrent(); combined.throwIfAborted();
    const response = await fetch('/api/v1/lopu/vault', { method: 'POST', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: combined,
@@ -35,5 +36,9 @@ export function accountProviderMetadataTransport(scope: Extract<WorkspaceScope, 
    return result;
   } finally { off(); }
  };
- return { metadata: (signal) => request({ action: 'sync-metadata' }, signal) };
+ return { metadata: (signal) => request({ action: 'sync-metadata' }, signal),
+  write: async (command, signal) => parseUserVaultWriteAcknowledgment((await request({ action: 'sync-write', command: parseUserVaultWrite(command) }, signal, '1.4.0')).acknowledgment) };
 }
+
+// Existing metadata callers retain their public entry point.
+export const accountProviderMetadataTransport = accountProviderTransport;

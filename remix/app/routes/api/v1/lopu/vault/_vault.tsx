@@ -1,3 +1,4 @@
+import { vaultWriteResponse } from './write';
 import { vaultMetadataResponse } from './metadata';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
@@ -35,6 +36,8 @@ export const action = async ({ request }: { request: Request }) => {
 	const body = await readJsonBody(request, 40 * 1024);
 	try {
 		switch (body?.action) {
+			case 'sync-write':
+                return vaultWriteResponse(request, user.id, body);
 			case 'sync-metadata':
 				return vaultMetadataResponse(request, user.id, body);
 			case 'create-group':

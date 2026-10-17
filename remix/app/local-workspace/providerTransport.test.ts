@@ -33,3 +33,24 @@ test('provider metadata sync uses direct bounded credential requests with exact 
   await assert.rejects(transport.metadata(signal()), /cache limit/);
  } finally { Object.assign(globalThis, previous); rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(true, rootIdentity.read().generation); }
 });
+
+test('provider writes negotiate their own contract and send immutable commands only through a confirmed account', async () => {
+ const writeOrigin = 'https://provider-write-transport.example', writeScope = { ...scope, origin: writeOrigin };
+ const previous = { window: globalThis.window, fetch: globalThis.fetch }, calls: { url: string; init: RequestInit }[] = [];
+ const command = { action: 'create-group' as const, id: 'fixture-group', writeId: 'fixture-write', expectedVersion: null, name: 'Fixture' };
+ const acknowledgment = { action: command.action, id: command.id, writeId: command.writeId, expectedVersion: null, resultVersion: 'vault-state-v1:'+'a'.repeat(64) };
+ let capability = '1.3.1';
+ Object.assign(globalThis, { window: { location: { origin: writeOrigin }, dispatchEvent: () => true }, fetch: async (url: string, init: RequestInit) => {
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin: writeOrigin, features: { 'api.lopu-vault': { version: capability }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  calls.push({ url, init }); return Response.json({ ok: true, ownerId: scope.ownerId, acknowledgment });
+ } });
+ const bind = (confirmed = true) => { rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, writeScope, confirmed); return accountProviderMetadataTransport(writeScope, accountWorkspaceLease(writeScope)); };
+ try {
+  await assert.rejects(bind(false).write(command, signal()), /offline/); assert.equal(calls.length,0);
+  await assert.rejects(bind().write(command, signal())); assert.equal(calls.length,0,'older metadata-only servers receive no mutation');
+  capability = '1.4.0'; assert.deepEqual(await bind().write(command, signal()), acknowledgment);
+  assert.equal(calls[0].url,'/api/v1/lopu/vault'); assert.equal(calls[0].init.credentials,'same-origin'); assert.equal(calls[0].init.redirect,'error');
+  assert.deepEqual(JSON.parse(String(calls[0].init.body)), { action:'sync-write',command,expectedOwnerId:scope.ownerId });
+  assert.equal((calls[0].init.headers as Record<string,string>)['X-Thingtime-Expected-Data-Plane'],'home');
+ } finally { Object.assign(globalThis, previous); rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(true, rootIdentity.read().generation); }
+});

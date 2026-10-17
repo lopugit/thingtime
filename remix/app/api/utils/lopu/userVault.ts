@@ -41,7 +41,7 @@ export type { PublicVaultGroup, PublicVaultEntry } from './userVaultModel';
 
 type StoredVaultDoc = { shareId: string; ownerId: string; crystal: StoredVaultCrystal };
 
-const vaultSourceKey = (): Buffer | null => {
+export const userVaultSourceKey = (): Buffer | null => {
 	const source = (process.env.THINGTIME_USER_VAULT_KEY || process.env.THINGTIME_ADMIN_VAULT_KEY || '').trim();
 	if (!source) return null;
 	try {
@@ -53,12 +53,12 @@ const vaultSourceKey = (): Buffer | null => {
 	}
 };
 
-export const userVaultConfigured = () => vaultSourceKey() !== null;
+export const userVaultConfigured = () => userVaultSourceKey() !== null;
 
 const vaultAad = (ownerId: string, id: string) => Buffer.from(`${VAULT_AAD_PREFIX}${ownerId}:${id}`);
 
-const encryptValue = (ownerId: string, id: string, value: string): EncryptedValue => {
-	const key = vaultSourceKey();
+export const encryptUserVaultValue = (ownerId: string, id: string, value: string): EncryptedValue => {
+	const key = userVaultSourceKey();
 	if (!key) throw new Error('Secure Vault is unavailable. Configure THINGTIME_USER_VAULT_KEY or THINGTIME_ADMIN_VAULT_KEY.');
 	const iv = randomBytes(12);
 	const cipher = createCipheriv('aes-256-gcm', key, iv);
@@ -72,7 +72,7 @@ const encryptValue = (ownerId: string, id: string, value: string): EncryptedValu
 };
 
 const decryptValue = (doc: StoredVaultDoc): string => {
-	const key = vaultSourceKey();
+	const key = userVaultSourceKey();
 	const encrypted = doc.crystal.encryptedValue;
 	if (!key || !encrypted) throw new Error('Stored provider credential is unavailable.');
 	try {
@@ -212,7 +212,7 @@ export const saveUserVaultSecret = async (
 		name,
 		key,
 		groupId,
-		encryptedValue: encryptValue(ownerId, shareId, value),
+		encryptedValue: encryptUserVaultValue(ownerId, shareId, value),
 		createdAt: existing?.crystal.createdAt || now,
 		updatedAt: now
 	};
@@ -236,7 +236,7 @@ export const saveUserVaultProvider = async (
 	if (!existing && !token) throw new Error('A provider token is required when creating a connection.');
 	const shareId = existing?.shareId || randomUUID();
 	const now = new Date().toISOString();
-	const encryptedValue = token ? encryptValue(ownerId, shareId, token) : existing?.crystal.encryptedValue;
+	const encryptedValue = token ? encryptUserVaultValue(ownerId, shareId, token) : existing?.crystal.encryptedValue;
 	if (!encryptedValue) throw new Error('Provider token is required.');
 	const patch: StoredVaultCrystal = {
 		systemType: LOPU_USER_VAULT_SYSTEM_TYPE,

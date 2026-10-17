@@ -5131,11 +5131,12 @@ type RootDeleteResult = { state: 'blocked' | 'missing' } | { state: 'deleted'; d
 // before-image delete share one snapshot; target-attached creates also write
 // the root, so a concurrent attachment either becomes visible on transaction
 // retry or loses to the deletion and aborts cleanly.
-const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, actorId: string, capture = newThingMutationCapture(actorId)): Promise<RootDeleteResult> => {
+const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, actorId: string, capture = newThingMutationCapture(actorId), hooks: DeleteThingHooks = {}): Promise<RootDeleteResult> => {
 	const things = await getThingsCollection();
 	return withMongoTransaction(async (session) => {
 		const root = (await things.findOne(deleteFilter as any, { session })) as any as ThingDoc | null;
 		if (!root) return { state: 'missing' };
+		await hooks.beforeRootDelete?.(root, session);
 		if (isFolderThing(root) && await things.findOne({ ownerId: root.ownerId, folderId: root.shareId }, { session, projection: { _id: 1 } })) return { state: 'blocked' };
 		const child = await things.findOne({ ...await cascadeAttachmentFilter(cascadeLinkIdsOf(root)), _id: { $ne: (root as any)._id } } as any, {
 			session,
@@ -5148,6 +5149,7 @@ const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, ac
 		if (!deleted) return { state: 'missing' };
 		await applyDeletedStorageDeltas([deleted], session);
 		if (deleted.ownerId !== 'system' && storageSandboxState(deleted) !== 'sandbox') await recordThingMutation(things, deleted, null, capture, session);
+		await hooks.afterRootDelete?.(deleted, session);
 		return { state: 'deleted', doc: deleted };
 	});
 };
@@ -5206,6 +5208,12 @@ const clearSubspaceReportsFor = async (root: ThingDoc, deletedCommentIds: Readon
 };
 
 export type DeleteThingHooks = {
+ // Trusted API-utils hooks, never copied from request input. Validation runs
+ // before any cleanup; completion shares the final root deletion transaction.
+ beforeDelete?: (root: ThingDoc) => Promise<void>;
+ beforeRootDelete?: (root: ThingDoc, session: any) => Promise<void>;
+ afterRootDelete?: (root: ThingDoc, session: any) => Promise<void>;
+ timelineCapture?: ThingMutationCapture;
 	// External objects must become inaccessible before their protected source
 	// Things are removed and quota is refunded. A failure leaves the root and
 	// conservative charge intact for a safe retry.
@@ -5272,9 +5280,10 @@ export const deleteThing = async (
 		_id: (initial as any)._id,
 		...(isFolderThing(initial) || (hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null) ? { updatedAt: initial.updatedAt } : {})
 	};
-	const deleteCapture = newThingMutationCapture(viewer.id);
+	const deleteCapture = hooks.timelineCapture ?? newThingMutationCapture(viewer.id);
 
 	try {
+		await hooks.beforeDelete?.(initial);
 		if (hooks.beforeCascade) {
 			const prepared = await hooks.beforeCascade(initial);
 			if (prepared.ok === false) return prepared;
@@ -5338,7 +5347,7 @@ export const deleteThing = async (
 			if (rewalk) continue;
 
 			if (isFolderThing(anchoredRoot)) await drainFolderPlacement(anchoredDeleteFilter, deleteCapture);
-			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter, viewer.id, deleteCapture);
+			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter, viewer.id, deleteCapture, hooks);
 			if (rootResult.state === 'blocked') continue;
 			if (rootResult.state === 'deleted') {
 				await refundDeletedNamespaceDocs([rootResult.doc]);
@@ -5379,11 +5388,18 @@ export type UpdateThingInput = {
 // existing crystal; with replaceCrystal (PUT) the crystal is taken whole. Both
 // re-validate against the thing's schemas. v1 posts are upgraded to v2 shape
 // on write (their embedded comments/reactions residue stays until migration).
+/** Trusted callbacks extend a canonical update in its own content transaction.
+ * They cannot bypass authorization, validation, accounting or History. */
+export type ThingUpdateMutationHooks = {
+ capture?: ThingMutationCapture;
+ beforeWrite?: (before: ThingDoc, session: any) => Promise<void>;
+ afterWrite?: (session: any) => Promise<void>;
+};
 export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; attachmentIds?: readonly unknown[]; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
+  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; attachmentIds?: readonly unknown[]; mutation?: ThingUpdateMutationHooks; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
   const viewer = asViewer(viewerInput);
@@ -5706,14 +5722,16 @@ export const updateThing = async (
       ? { sizeBytes: doc.sizeBytes }
       : { sizeBytes: { $exists: false } }
     : {};
-  const timelineCapture = doc.ownerId !== 'system' && !storageScope?.sandbox ? options.timeline?.capture ?? newThingMutationCapture(viewer.id) : null;
+  if (options.mutation && storageScope?.sandbox) throw new Error('Composed updates require a persistent content transaction');
+  const timelineCapture = doc.ownerId !== 'system' && !storageScope?.sandbox ? options.timeline?.capture ?? options.mutation?.capture ?? newThingMutationCapture(viewer.id) : null;
   let writeResult;
   let afterCommit: (() => Promise<void>)[] = [];
   try {
-		if (options.attachmentIds !== undefined || wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture || (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction'))) {
+		if (options.mutation || options.attachmentIds !== undefined || wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture || (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction'))) {
 			await withMongoTransaction(async (session) => {
         // A retry owns a fresh effect list; aborted attempts cannot notify.
         afterCommit = [];
+        await options.mutation?.beforeWrite?.(doc, session);
         await options.timeline?.beforeCommit?.({ session, afterCommit: effect => afterCommit.push(effect) });
 				if (hasFolderChange) await lockFolderDestination(things, viewer.id, nextFolderId, session, isFolderThing(doc) ? doc.shareId : undefined);
 				if (accountDelta !== 0) await applyUserStorageDelta(doc.ownerId, accountDelta, session);
@@ -5745,6 +5763,7 @@ export const updateThing = async (
 					const entry = await recordThingMutation(things, doc, next, timelineCapture, session);
 					if (entry) set.timelineHeadId = entry.event.id;
 				}
+        await options.mutation?.afterWrite?.(session);
 			});
 		} else {
     writeResult = await things.updateOne(

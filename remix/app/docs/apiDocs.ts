@@ -4937,8 +4937,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// 1.2.1: reject malformed supplied tokens instead of retaining an older value.
 		// 1.3.0: optional complete, versioned device metadata snapshots; no decrypted values.
 		// 1.3.1: environment membership is validated inside the shared content transaction.
-		contractVersion: '1.3.1',
-		featureVersion: '1.3.1',
+        // 1.4.0: conditional device writes with retained canonical Timeline completion receipts.
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
@@ -4950,7 +4951,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'GET the provider templates, environments, and redacted entry metadata.',
             'POST sync-metadata with expectedOwnerId for a complete owner-scoped snapshot (at most 500 records and 32 MiB of source documents). Requires a current full session and exact same-origin request. Returns complete:true, groups and entries with opaque vault-state-v1 versions; never values or ciphertext. Oversized/inconsistent snapshots fail explicitly without returning partial data. Versions identify actual stored Thing state, including generic edits; they are not authorization grants.',
-			'POST create-group, save-secret, or save-provider to create write-only records.',
+			'POST sync-write with expectedOwnerId, an explicit X-Thingtime-Expected-Data-Plane header and a closed command (action, id, writeId, expectedVersion and action fields). Requires the current full session and same origin. expectedVersion:null means create only; updates and deletes require the actual stored vault-state-v1 version. Returns an acknowledgment identifying the original write and resultVersion (null after deletion). Exact retries return the retained completion even after later target edits or deletion; a changed payload or stale version returns 409. Anonymous device vaults never send these requests.',
+            'POST create-group, save-secret, or save-provider to create write-only records.',
 			'POST move-entry with id and groupId to move a secret or provider between owned environments; null or an empty string means Ungrouped. Only metadata changes; the encrypted value is preserved without decryption.',
 			'POST delete with an owner-scoped record id to remove it.'
 		],

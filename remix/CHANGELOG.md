@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add conditional account-provider writes and
+  encrypted device retry queues using canonical Thing mutations and retained
+  Timeline receipts. Local API verification covers retries after deletion,
+  concurrent writes and identity fences. Account Settings integration remains
+  unfinished. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-account-provider-writes--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Vault environment membership is now checked in
   shared content transactions, preventing generic edits/deletes from leaving
   orphaned entries that stop metadata sync. The disposable API regression passes;
