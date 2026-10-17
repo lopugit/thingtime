@@ -104,8 +104,11 @@ if [[ "$picker_test" == 1 ]]; then
   if [[ "$upload_test" == 1 ]]; then test_args+=(-e folderUpload true); fi
   echo 'When the installed app is ready, choose Documents/ThingtimeSyncQA through its Folder access control.'
 fi
-adb -s "$serial" shell am instrument -w "${test_args[@]}" com.thingtime.mobile.dev.test/androidx.test.runner.AndroidJUnitRunner > "$result"
-cat "$result"
+echo 'Wait for the live QA_READY or consent prompt before interacting with the app.'
+if ! adb -s "$serial" shell am instrument -w "${test_args[@]}" com.thingtime.mobile.dev.test/androidx.test.runner.AndroidJUnitRunner | tee "$result"; then
+  rm -f "$result"
+  exit 1
+fi
 if ! grep -q '^OK (' "$result"; then rm -f "$result"; exit 1; fi
 rm -f "$result"
 adb -s "$serial" shell am start -n com.thingtime.mobile.dev/com.thingtime.mobile.MainActivity

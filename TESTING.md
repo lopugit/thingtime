@@ -11013,13 +11013,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   pixels show stale search/toolbar layers. Keep physical-device visual acceptance
   open; do not infer a CSS sizing fix from the screenshot alone.
 
-- [ ] Installed Android two-way deletion: enable deletion with separate native
+- [x] Installed Android two-way deletion: enable deletion with separate native
   cancel/allow consent, remove a cloud child and its parent, suppress one real
   committed native reply, reload and resume the same IndexedDB operation IDs,
   verify repeated convergence, then restore parent before child with native
   confirmation and independently hash the original bytes.
 
-  Current evidence (2026-10-18): binary transfer, separate consent, committed
-  child retention and original unconfirmed journal operations verified. WebView
-  startup/reload timeouts prevent completing resume and tree restoration. Keep
-  this scenario unchecked until the installed run reaches its final assertion.
+  Installed API 35 emulator acceptance passed on 2026-10-18: 236.765 seconds,
+  one test, no failures. Verified the new document, original operation IDs,
+  resumed parent removal, repeat convergence, reviewed parent/child restore,
+  independent original-byte hashes and the restored 8.39 MB file in Android
+  Files. Earlier intermittent WebView timeouts and physical devices remain
+  separate coverage limits; a passing run does not explain those timeouts.
+
+- [x] The Android acceptance runner streams `OFFLINE_CREATE_QA_READY` before
+  folder selection and `OFFLINE_FILES_QA_READY` before manual Files inspection.
+  Do not interact during the preceding bridge checks. Confirm the terminal
+  retains the final JUnit result and exits unsuccessfully on a failed test or
+  adb transport, even when earlier progress lines report passed substeps.
+
+  The canonical runner passed on 2026-10-18: 61 instrumentation tests in
+  331.348 seconds, including the opt-in live planner recovery scenario; build,
+  JVM unit tests and Android lint passed. A focused shell check of the actual
+  runner block verifies success, JUnit failure and adb failure exit handling.

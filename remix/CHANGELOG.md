@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Verify installed Android planner deletion across
+  a lost reply and WebView reload, original operation replay, reviewed tree
+  restoration, exact bytes and Android Files visibility. Stream operator
+  readiness prompts from the acceptance runner so folder selection does not
+  race initial bridge checks. Earlier emulator timeouts and physical-device
+  coverage remain open. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Add installed Android planner deletion/recovery
   acceptance with a lost committed reply, WebView reload and durable operation
   identity checks. Document the local emulator graphics recovery workflow and

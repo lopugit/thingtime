@@ -5328,6 +5328,11 @@ fixture with `remix/scripts/mobile-sync-installed-fixture.mts`, then set
 This mode automates copy/delete/restore consent after real folder selection. It
 suppresses one actual committed deletion response, stops through the normal UI,
 reloads the WebView and verifies IndexedDB operation identities before resuming.
+The runner streams readiness and consent prompts while it is running. Wait for
+`OFFLINE_CREATE_QA_READY` before choosing a folder: the initial bridge checks
+must finish first. At `OFFLINE_FILES_QA_READY`, inspect the restored file in
+Android Files, return to Thingtime, then acknowledge the inspection with
+`adb -s <test-device-id> shell run-as com.thingtime.mobile.dev touch files/offline-files-confirmed`.
 Run concurrent-edit review and direct-native-recovery modes separately. Clean up
 the owned cloud fixture with its `cleanup` action afterward.
 

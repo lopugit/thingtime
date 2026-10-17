@@ -1809,3 +1809,36 @@ shell syntax and diff checks pass. The normal file-lint command uses the wrong
 parser for this `.mts` fixture, so that command is not reported clean. Temporary
 cloud fixtures were cleaned through canonical APIs; file versions remain in
 private Trash. No production code, deployment or installed Mac build changed.
+
+
+## Installed Android recovery verified and live prompts — 2026-10-18
+
+The complete planner deletion/reload/restore scenario now passes on the installed
+API 35 emulator. A focused run passed in 236.765 seconds; the canonical rebuilt
+and reinstalled runner then passed all 61 instrumentation tests in 331.348
+seconds, with the live deletion scenario enabled. Build, JVM unit tests and
+Android lint also passed.
+
+Both runs transferred 8,388,642 bytes over six ranges and 130 frames, cancelled
+then approved native deletion consent, removed the real cloud child and parent,
+and suppressed one committed native child-deletion response. A genuinely new
+WebView document recovered the original IndexedDB operation IDs, retried those
+operations, completed parent deletion and converged repeatedly. Reviewed native
+parent-before-child restoration reproduced independently hashed original bytes.
+Android Files visibly showed the restored nested/sample.bin (8.39 MB); removing
+the grant preserved the restored files. Disposable cloud fixtures were cleaned
+through the canonical API, retaining their file versions in private Trash.
+
+Manual test prompts previously appeared only in logcat or after the runner
+finished. The harness now sends instrumentation stream status and the runner
+tees that stream live. This makes the readiness point visible before folder
+selection and Files inspection. An early operator selection in a diagnostic run
+collided with initial bridge checks; waiting for the prompt avoids that test
+sequencing error. A focused shell check of the actual runner block verifies that
+JUnit failures and adb failures remain unsuccessful even after passed-substep
+messages. Earlier intermittent WebView timeouts remain unexplained; these prompt
+changes do not claim to fix them. Physical devices, background operation and
+sustained large-volume performance still need separate acceptance.
+
+This update changes acceptance tooling and evidence only. No production sync
+behavior, production deployment or installed Mac build changed.

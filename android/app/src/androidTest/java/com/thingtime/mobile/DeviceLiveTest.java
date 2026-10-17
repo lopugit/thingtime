@@ -12,6 +12,14 @@ import java.nio.file.Files;
 
 /** Opt-in, local-only test. Fixture is supplied to the debug app's private storage; never packaged. */
 public class DeviceLiveTest {
+    // System.out alone goes to logcat on device. Operator-assisted steps must
+    // also reach `am instrument -w` while the test is waiting for that action.
+    static void progress(String message) {
+        System.out.println(message);
+        android.os.Bundle status=new android.os.Bundle();
+        status.putString(android.app.Instrumentation.REPORT_KEY_STREAMRESULT,"\n"+message+"\n");
+        InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
+    }
     static String evaluate(android.webkit.WebView web,String js) throws Exception {
         java.util.concurrent.ArrayBlockingQueue<String> result=new java.util.concurrent.ArrayBlockingQueue<>(1);
         InstrumentationRegistry.getInstrumentation().runOnMainSync(()->web.evaluateJavascript(js,result::offer));
@@ -31,7 +39,7 @@ public class DeviceLiveTest {
         assertTrue("Things page content must be rendered",rows.length()>3);
         for(int i=1;i<rows.length();i++)assertTrue("Things page sections overlap: "+rows,rows.getJSONObject(i-1).getDouble("bottom")<=rows.getJSONObject(i).getDouble("top")+1);
         assertEquals("true",evaluate(web,"document.documentElement.scrollWidth<=window.innerWidth+1"));
-        System.out.println("THINGS_LAYOUT_QA_PASS: "+rows);
+        progress("THINGS_LAYOUT_QA_PASS: "+rows);
     }
     static JSONObject folderRequest(android.webkit.WebView web,DeviceScope scope,JSONObject request) throws Exception {
         JSONObject result=folderReply(web,scope,request);assertFalse(result.optString("error"),result.has("error"));return result;
@@ -47,8 +55,8 @@ public class DeviceLiveTest {
         FolderStore grants=new FolderStore(context);assertEquals("Use a disposable account without selected folders",0,grants.list(scope).length());
         boolean download="true".equals(InstrumentationRegistry.getArguments().getString("offlineDownload"));
         String expectedName=download?"Thingtime offline":"ThingtimeOfflineQA";
-        System.out.println("OFFLINE_CREATE_QA_NAME: "+expectedName);
-        System.out.println("OFFLINE_CREATE_QA_READY: Cancel one creation, then create "+expectedName+" through Choose folder > New offline folder and select it in Files.");
+        progress("OFFLINE_CREATE_QA_NAME: "+expectedName);
+        progress("OFFLINE_CREATE_QA_READY: Cancel one creation, then create "+expectedName+" through Choose folder > New offline folder and select it in Files.");
         long deadline=System.currentTimeMillis()+300000;String grantId=null;
         while(System.currentTimeMillis()<deadline) {
             JSONArray roots=grants.list(scope);
@@ -86,13 +94,13 @@ public class DeviceLiveTest {
             android.content.Intent browse=new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,OfflineDocumentsProvider.rootUri(context,root));
             context.startActivity(browse);
-            System.out.println("OFFLINE_FILES_QA_READY: Inspect "+expectedName+"/nested/"+(download?"sample.bin":"original.bin")+" in Android Files, return to Thingtime, then create files/offline-files-confirmed in the debug app.");
+            progress("OFFLINE_FILES_QA_READY: Inspect "+expectedName+"/nested/"+(download?"sample.bin":"original.bin")+" in Android Files, return to Thingtime, then create files/offline-files-confirmed in the debug app.");
             deadline=System.currentTimeMillis()+300000;while(!confirmed.exists() && System.currentTimeMillis()<deadline)Thread.sleep(500);
             assertTrue("Confirm the rendered Files inspection",confirmed.exists());Files.delete(confirmed.toPath());
             folderRequest(web,scope,new JSONObject().put("action","remove").put("rootId",grantId));
             assertEquals(0,grants.list(scope).length());
             try(ManagedFileStore store=fixture.store()){assertEquals(download?("true".equals(InstrumentationRegistry.getArguments().getString("twoWaySync"))?4:3):2,store.scan(scope,root).length());assertEquals(root,store.document(root).id);}
-            System.out.println("OFFLINE_FILES_QA_PASS: native creation, actual Files selection, scoped grant, nested provider bytes, bridge scan and non-destructive access removal.");
+            progress("OFFLINE_FILES_QA_PASS: native creation, actual Files selection, scoped grant, nested provider bytes, bridge scan and non-destructive access removal.");
         } finally {
             grants.remove(scope,grantId);Files.deleteIfExists(confirmed.toPath());
             java.util.List<String> blobs=new java.util.ArrayList<>();
@@ -135,7 +143,7 @@ public class DeviceLiveTest {
             });
             else {
                 evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='"+button+"'&&!b.disabled).click()");
-                System.out.println("OFFLINE_DOWNLOAD_CANCEL: Cancel the native Allow downloads dialog.");
+                progress("OFFLINE_DOWNLOAD_CANCEL: Cancel the native Allow downloads dialog.");
                 awaitTrue(web,"document.body.innerText.includes('Download approval cancelled')",300000);
             }
             try(ManagedFileStore store=new ManagedFileStore(context,()->{})){assertEquals(twoWay?1:0,store.scan(scope,root).length());}
@@ -144,7 +152,7 @@ public class DeviceLiveTest {
             });
             else {
                 evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled).click()");
-                System.out.println("OFFLINE_DOWNLOAD_ALLOW: Allow downloads in the native dialog.");
+                progress("OFFLINE_DOWNLOAD_ALLOW: Allow downloads in the native dialog.");
                 awaitDownload(web);
             }
             JSONArray expected=new JSONArray(cloud.getJSONArray("files").toString());
@@ -156,7 +164,7 @@ public class DeviceLiveTest {
             if(binary) {
                 long downloaded=0;for(int i=0;i<cloud.getJSONArray("files").length();i++)downloaded+=cloud.getJSONArray("files").getJSONObject(i).getLong("size");
                 assertEquals("true",evaluate(web,"window.__rangeQA.appends===0 && window.__rangeQA.ranges>0 && window.__rangeQA.frames>window.__rangeQA.ranges && window.__rangeQA.bytes==="+downloaded));
-                System.out.println("ANDROID_BINARY_RANGE_PASS: "+evaluate(web,"JSON.stringify(window.__rangeQA)"));
+                progress("ANDROID_BINARY_RANGE_PASS: "+evaluate(web,"JSON.stringify(window.__rangeQA)"));
             }
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='"+button+"'&&!b.disabled).click()");
             awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Stop transfer')");
@@ -173,7 +181,7 @@ public class DeviceLiveTest {
                 assertNotNull(entry);byte[] edited=new byte[513];java.util.Arrays.fill(edited,(byte)73);
                 JSONObject edit=fixture.request("from-device.bin",edited,true);edit.getJSONObject("operation").getJSONObject("mutation").put("expectedTarget",entry);fixture.publish(edit,edited);
                 File changed=new File(context.getFilesDir(),"two-way-cloud-updated.json");Files.deleteIfExists(changed.toPath());
-                System.out.println("TWO_WAY_EDIT_READY: Replace nested/sample.bin through the cloud fixture script, then copy its updated state into files/two-way-cloud-updated.json.");
+                progress("TWO_WAY_EDIT_READY: Replace nested/sample.bin through the cloud fixture script, then copy its updated state into files/two-way-cloud-updated.json.");
                 long until=System.currentTimeMillis()+300000;while(!changed.exists()&&System.currentTimeMillis()<until)Thread.sleep(500);
                 assertTrue("Supply updated cloud fixture",changed.exists());
                 JSONObject updated=new JSONObject(new String(Files.readAllBytes(changed.toPath()),StandardCharsets.UTF_8));Files.delete(changed.toPath());
@@ -192,15 +200,15 @@ public class DeviceLiveTest {
                 if("true".equals(InstrumentationRegistry.getArguments().getString("conflictReview")))
                     expected=verifyFileConflicts(web,context,scope,root,fixture,expected,cloud.getString("rootId"),edited);
                 verifySettingsReapproval(web,context,scope,connection,root,expected,cloud.getString("rootId"));
-                System.out.println("TWO_WAY_SYNC_PASS: mixed cloud/native creates and independent edits, stable uploaded identity, exact downloaded and uploaded hashes, repeated convergence.");
+                progress("TWO_WAY_SYNC_PASS: mixed cloud/native creates and independent edits, stable uploaded identity, exact downloaded and uploaded hashes, repeated convergence.");
             }
-            System.out.println("OFFLINE_DOWNLOAD_PASS: actual Download now, native Cancel/Allow, cloud nested bytes, independent hashes and unchanged repeated transfer.");
+            progress("OFFLINE_DOWNLOAD_PASS: actual Download now, native Cancel/Allow, cloud nested bytes, independent hashes and unchanged repeated transfer.");
         }catch(Exception|AssertionError failure) {
             // Keep the original failure visible if an unresponsive WebView also
             // prevents the cleanup requests below from completing.
-            System.out.println("OFFLINE_DOWNLOAD_FAILURE: "+failure);failure.printStackTrace(System.out);throw failure;
+            progress("OFFLINE_DOWNLOAD_FAILURE: "+failure);failure.printStackTrace(System.out);throw failure;
         }finally {
-            if(binary)System.out.println("ANDROID_BINARY_RANGE_DIAGNOSTICS: "+evaluate(web,"JSON.stringify(window.__rangeQA)"));
+            if(binary)progress("ANDROID_BINARY_RANGE_DIAGNOSTICS: "+evaluate(web,"JSON.stringify(window.__rangeQA)"));
             if(binary)evaluate(web,"if(typeof window.__rangeQAPost==='function'){window.thingtimeNativeBridge.postMessage=window.__rangeQAPost;window.thingtimeNativeBridge.postFileFrame=window.__rangeQAFrame;delete window.__rangeQAPost;delete window.__rangeQAFrame;}");
             if(twoWay) {
                 // Only the explicitly named synthetic local fixture belongs to this test.
@@ -224,7 +232,7 @@ public class DeviceLiveTest {
             assertNotNull(old);byte[] local=new byte[64+round];java.util.Arrays.fill(local,(byte)(91+round));
             JSONObject edit=fixture.request("hello.txt",local,true);edit.getJSONObject("operation").getJSONObject("mutation").put("expectedTarget",old);fixture.publish(edit,local);
             File changed=new File(context.getFilesDir(),"conflict-cloud-updated.json");Files.deleteIfExists(changed.toPath());
-            System.out.println("CONFLICT_CLOUD_EDIT_READY_"+round+": Run the cloud fixture conflict action and copy updated state into files/conflict-cloud-updated.json.");
+            progress("CONFLICT_CLOUD_EDIT_READY_"+round+": Run the cloud fixture conflict action and copy updated state into files/conflict-cloud-updated.json.");
             long until=System.currentTimeMillis()+300000;while(!changed.exists()&&System.currentTimeMillis()<until)Thread.sleep(500);
             assertTrue("Supply conflicting cloud bytes",changed.exists());JSONObject updated=new JSONObject(new String(Files.readAllBytes(changed.toPath()),StandardCharsets.UTF_8));Files.delete(changed.toPath());
             assertEquals(scope.owner,updated.getString("ownerId"));assertEquals(scope.origin,updated.getString("origin"));assertEquals(cloudRoot,updated.getString("rootId"));
@@ -236,7 +244,7 @@ public class DeviceLiveTest {
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Sync now'&&!b.disabled).click()");
             awaitTrue(web,"!!document.querySelector('[aria-label=\"Review sync conflicts\"]')");
             if(round==1) {
-                System.out.println("CONFLICT_REVIEW_CANCEL: Cancel review in the actual sync controls.");
+                progress("CONFLICT_REVIEW_CANCEL: Cancel review in the actual sync controls.");
                 awaitTrue(web,"document.body.innerText.includes('Conflict review cancelled')",300000);
                 assertEquals(cloudBefore,inventorySignature(webApi(web,"/api/v1/files?rootId="+cloudRoot,"GET",null).getJSONObject("inventory")));
                 JSONArray after=verifyCloudBytes(context,scope,root,localExpected);
@@ -244,7 +252,7 @@ public class DeviceLiveTest {
                 evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled).click()");
                 awaitTrue(web,"!!document.querySelector('[aria-label=\"Review sync conflicts\"]')");
             }
-            System.out.println("CONFLICT_REVIEW_"+(round==1?"CLOUD":"DEVICE")+": Choose Keep "+(round==1?"cloud":"device")+" version for hello.txt and Apply choices and sync.");
+            progress("CONFLICT_REVIEW_"+(round==1?"CLOUD":"DEVICE")+": Choose Keep "+(round==1?"cloud":"device")+" version for hello.txt and Apply choices and sync.");
             awaitDownload(web);
             expected=round==1?new JSONArray(cloudExpected.toString()).put(expectedFile("from-device.bin",uploadedBytes)):localExpected;
             JSONArray resolved=verifyCloudBytes(context,scope,root,expected);
@@ -256,7 +264,7 @@ public class DeviceLiveTest {
             evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Sync now'&&!b.disabled).click()");
             awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Stop transfer')");awaitDownload(web);
             assertSameEntries(resolved,verifyCloudBytes(context,scope,root,expected));
-            System.out.println("CONFLICT_REVIEW_PASS_"+round+": native and cloud hashes agree after explicit choice; repeated sync preserves native entries.");
+            progress("CONFLICT_REVIEW_PASS_"+round+": native and cloud hashes agree after explicit choice; repeated sync preserves native entries.");
         }
         return expected;
     }
@@ -273,20 +281,20 @@ public class DeviceLiveTest {
         evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Refresh'&&!b.disabled).click()");
         awaitTrue(web,"document.body.innerText.includes('Android two-way settings reapproval') && Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Sync now'&&!b.disabled)");
         evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Sync now'&&!b.disabled).click()");
-        System.out.println("TWO_WAY_REAPPROVAL_CANCEL: Changed settings must show fresh native consent. Cancel it.");
+        progress("TWO_WAY_REAPPROVAL_CANCEL: Changed settings must show fresh native consent. Cancel it.");
         awaitTrue(web,"document.body.innerText.includes('Download approval cancelled')",300000);
         JSONArray cancelled=verifyCloudBytes(context,scope,root,expected);
         assertEquals(before.length(),cancelled.length());
         for(int i=0;i<before.length();i++)assertEquals(SyncStaging.canonical(before.getJSONObject(i)),SyncStaging.canonical(cancelled.getJSONObject(i)));
         assertEquals(inventory,inventorySignature(webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory")));
         evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled).click()");
-        System.out.println("TWO_WAY_REAPPROVAL_ALLOW: Allow the revised connection in the native dialog.");
+        progress("TWO_WAY_REAPPROVAL_ALLOW: Allow the revised connection in the native dialog.");
         awaitDownload(web);
         JSONArray approved=verifyCloudBytes(context,scope,root,expected);
         assertEquals(before.length(),approved.length());
         for(int i=0;i<before.length();i++)assertEquals(SyncStaging.canonical(before.getJSONObject(i)),SyncStaging.canonical(approved.getJSONObject(i)));
         assertEquals(inventory,inventorySignature(webApi(web,"/api/v1/files?rootId="+remoteRoot,"GET",null).getJSONObject("inventory")));
-        System.out.println("TWO_WAY_REAPPROVAL_PASS: revised saved settings require fresh native consent; cancellation and approved convergence preserve cloud revisions, native identities and bytes.");
+        progress("TWO_WAY_REAPPROVAL_PASS: revised saved settings require fresh native consent; cancellation and approved convergence preserve cloud revisions, native identities and bytes.");
     }
     private static String inventorySignature(JSONObject inventory) throws Exception {
         JSONObject metadata=new JSONObject(inventory.toString());
@@ -343,7 +351,7 @@ public class DeviceLiveTest {
         assertFalse(denied.toString().contains("content://"));
         if("true".equals(InstrumentationRegistry.getArguments().getString("offlineSelection"))) {verifyOfflineFolder(web,context,scope);return;}
         if(!"true".equals(InstrumentationRegistry.getArguments().getString("folderSelection"))) return;
-        System.out.println("FOLDER_QA_READY: Choose folder and select Documents/ThingtimeSyncQA in the system picker.");
+        progress("FOLDER_QA_READY: Choose folder and select Documents/ThingtimeSyncQA in the system picker.");
         long deadline=System.currentTimeMillis()+300000;
         while(System.currentTimeMillis()<deadline && !"true".equals(evaluate(web,"document.body.innerText.includes('ThingtimeSyncQA')"))) Thread.sleep(500);
         assertEquals("true",evaluate(web,"document.body.innerText.includes('ThingtimeSyncQA')"));
@@ -373,7 +381,7 @@ public class DeviceLiveTest {
             assertTrue(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isReadPermission()));
             String second=store.list(other).getJSONObject(0).getString("id");store.remove(other,second);
             assertFalse(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isReadPermission()));
-            System.out.println("FOLDER_QA_PASS: system picker, persisted scoped grants, real provider multipart fingerprint/read, isolation and shared-grant removal.");
+            progress("FOLDER_QA_PASS: system picker, persisted scoped grants, real provider multipart fingerprint/read, isolation and shared-grant removal.");
         } finally {
             store.remove(scope,rootId);JSONArray otherRoots=store.list(other);for(int i=0;i<otherRoots.length();i++) store.remove(other,otherRoots.getJSONObject(i).getString("id"));
         }
@@ -385,12 +393,12 @@ public class DeviceLiveTest {
             .put("configurationRevision","1").put("configurationHash","a".repeat(64)),scope);
         JSONObject request=new JSONObject().put("action","write-approve").put("rootId",id).put("approval",approval.json());
         assertFalse(store.isWriteApproved(scope,id,approval));
-        System.out.println("WRITE_APPROVAL_QA_CANCEL: Cancel the native download approval dialog.");
+        progress("WRITE_APPROVAL_QA_CANCEL: Cancel the native download approval dialog.");
         JSONObject cancelled=folderReply(web,scope,new JSONObject(request.toString()));
         assertEquals("Download approval cancelled. No new folder write permission was granted.",cancelled.getString("error"));
         assertFalse(store.isWriteApproved(scope,id,approval));
         assertFalse(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isWritePermission()));
-        System.out.println("WRITE_APPROVAL_QA_ALLOW: Continue to Files, select the same ThingtimeSyncQA folder, then allow its access.");
+        progress("WRITE_APPROVAL_QA_ALLOW: Continue to Files, select the same ThingtimeSyncQA folder, then allow its access.");
         JSONObject accepted=folderRequest(web,scope,new JSONObject(request.toString()));
         assertTrue(approval.matches(new WriteApproval(accepted.getJSONObject("writeApproval"),scope)));
         assertFalse(accepted.toString().contains("content://"));assertTrue(new FolderStore(context).isWriteApproved(scope,id,approval));
@@ -398,7 +406,7 @@ public class DeviceLiveTest {
         folderRequest(web,scope,new JSONObject(request.toString()));
         WriteApproval revised=new WriteApproval(approval.json().put("configurationRevision","2"),scope);
         assertFalse(store.isWriteApproved(scope,id,revised));
-        System.out.println("WRITE_APPROVAL_QA_REVISION: Cancel the new approval dialog for changed configuration.");
+        progress("WRITE_APPROVAL_QA_REVISION: Cancel the new approval dialog for changed configuration.");
         JSONObject denied=folderReply(web,scope,new JSONObject(request.toString()).put("approval",revised.json()));
         assertTrue(denied.has("error"));assertFalse(store.isWriteApproved(scope,id,revised));assertTrue(store.isWriteApproved(scope,id,approval));
         // A real native re-selection invalidates the old configuration binding.
@@ -406,7 +414,7 @@ public class DeviceLiveTest {
         assertFalse(store.isWriteApproved(scope,id,approval));
         assertFalse(context.getContentResolver().getPersistedUriPermissions().stream().anyMatch(p->p.getUri().equals(uri)&&p.isWritePermission()));
         assertEquals("true",evaluate(web,"window.thingtimeNativeBridge.fileStagingVersion==='"+(androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER)?"1.1.0":"1.0.0")+"' && window.thingtimeNativeBridge.filePublicationVersion==='1.1.0'"));
-        System.out.println("WRITE_APPROVAL_QA_PASS: native cancellation, real OS write grant, encrypted reload, exact retry, configuration change, reselection invalidation; generic provider publication remains disabled.");
+        progress("WRITE_APPROVAL_QA_PASS: native cancellation, real OS write grant, encrypted reload, exact retry, configuration change, reselection invalidation; generic provider publication remains disabled.");
     }
     private static void inspectSelectedDirectoryDescriptor(Context context,android.net.Uri tree) throws Exception {
         JSONObject result=new JSONObject().put("directoryDescriptor",false).put("relativeRead",false);
@@ -424,7 +432,7 @@ public class DeviceLiveTest {
             result.put("failureType",unsupported.getClass().getSimpleName());
             if(unsupported instanceof android.system.ErrnoException)result.put("errno",((android.system.ErrnoException)unsupported).errno);
         }
-        System.out.println("DIRECTORY_DESCRIPTOR_RESULT: "+result);
+        progress("DIRECTORY_DESCRIPTOR_RESULT: "+result);
     }
     static JSONObject webApi(android.webkit.WebView web,String path,String method,JSONObject body) throws Exception {
         evaluate(web,"window.__syncQA=null;(async()=>{try{const r=await fetch("+JSONObject.quote(path)+",{method:"+JSONObject.quote(method)+",headers:{'Content-Type':'application/json'},"+(body==null?"":"body:"+JSONObject.quote(body.toString())+",")+"redirect:'error'});const value=await r.json();window.__syncQA=r.ok?{ok:true,value}:{ok:false,status:r.status};}catch(e){window.__syncQA={ok:false,error:String(e)}}})()");
@@ -449,8 +457,8 @@ public class DeviceLiveTest {
             long uploadDeadline=System.currentTimeMillis()+240000,nextDiagnostic=0;
             while(!"true".equals(evaluate(web,"("+card+")?.querySelector('[role=status]')?.textContent==='Last transfer finished.'"))) {
                 if(binary && System.currentTimeMillis()>=nextDiagnostic) {
-                    System.out.println("ANDROID_UPLOAD_PROGRESS: "+evaluate(web,"JSON.stringify(window.__uploadQA)"));
-                    System.out.println("ANDROID_UPLOAD_STATUS: "+evaluate(web,"("+card+")?.querySelector('[role=status]')?.textContent"));
+                    progress("ANDROID_UPLOAD_PROGRESS: "+evaluate(web,"JSON.stringify(window.__uploadQA)"));
+                    progress("ANDROID_UPLOAD_STATUS: "+evaluate(web,"("+card+")?.querySelector('[role=status]')?.textContent"));
                     nextDiagnostic=System.currentTimeMillis()+10000;
                 }
                 if(System.currentTimeMillis()>=uploadDeadline)fail("Installed upload did not finish within four minutes.");
@@ -467,9 +475,9 @@ public class DeviceLiveTest {
             assertEquals(hash,new JSONTokener(evaluate(web,"window.__syncHash")).nextValue());
             if(binary){
                 assertEquals("true",evaluate(web,"window.__uploadQA.ranges>0 && window.__uploadQA.frames>window.__uploadQA.ranges && window.__uploadQA.legacyBytes===0 && window.__uploadQA.bytes>=8388625"));
-                System.out.println("ANDROID_BINARY_UPLOAD_PASS: "+evaluate(web,"JSON.stringify(window.__uploadQA)"));
+                progress("ANDROID_BINARY_UPLOAD_PASS: "+evaluate(web,"JSON.stringify(window.__uploadQA)"));
             }
-            System.out.println("FOLDER_UPLOAD_PASS: installed Android WebView control, real SAF bytes, configured executor, cloud multipart publication, independent downloaded-byte SHA-256.");
+            progress("FOLDER_UPLOAD_PASS: installed Android WebView control, real SAF bytes, configured executor, cloud multipart publication, independent downloaded-byte SHA-256.");
         } finally {
             if(binary)evaluate(web,"window.thingtimeNativeBridge.postMessage=window.__uploadPost;window.removeEventListener('thingtime:native-message',window.__uploadFrames);delete window.__uploadPost;delete window.__uploadFrames;");
             if(remoteRoot!=null) {

@@ -2057,9 +2057,21 @@ acceptance remain open. No production promotion is implied by this checkpoint.
 separate deletion consent, cloud child/parent removal, a lost real native reply,
 WebView reload, original IndexedDB operation IDs, repeat convergence and reviewed
 parent-before-child restoration. It uses only synthetic local/cloud fixtures.
-The current run verifies binary transfer, consent and retention after a committed
-child deletion. Emulator WebView startup/reload timeouts prevent a full pass;
-resume and restored-tree acceptance remain pending. See the PR #1002 delivery
-ledger for the exact coverage and harness corrections. Host graphics removed
-observed stale paint layers, but intermittent timeouts remain; physical-device
-acceptance is still open.
+Installed API 35 emulator acceptance now passes the full scenario, including
+the new document, original operation IDs, resumed parent deletion, repeated
+convergence and reviewed tree restoration with independent original-byte hashes.
+Android Files visibly shows the restored 8.39 MB child. The completed run took
+236.765 seconds with one test and no failures. Earlier intermittent startup and
+reload timeouts remain unexplained; this pass does not establish physical-device
+or sustained large-volume coverage. See the PR #1002 delivery ledger.
+
+Operator prompts now use the instrumentation status stream as well as logcat,
+and the shell runner streams output while preserving JUnit and adb failures.
+Wait for `OFFLINE_CREATE_QA_READY` before selecting the test folder. Selecting
+early can race the harness's initial bridge requests and fail with a busy error.
+
+The subsequent canonical runner rebuilt and installed both APKs, passed build,
+JVM tests and lint, then passed all 61 instrumentation tests in 331.348 seconds
+with this live recovery scenario enabled. Its readiness prompts appeared while
+waiting, and the restored file was inspected in Android Files. A focused shell
+check confirms both JUnit and adb failures still produce unsuccessful exits.

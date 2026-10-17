@@ -47,7 +47,7 @@ final class SyncDeletionAcceptance {
         same(before,DeviceLiveTest.verifyCloudBytes(context,scope,root,expected));
         consent(context,"Allow downloads and recoverable deletions in Thingtime offline?","Allow sync and trash",()->sync(web,"Retry transfer"));
         same(before,DeviceLiveTest.verifyCloudBytes(context,scope,root,expected));
-        System.out.println("ANDROID_SYNC_DELETION_CONSENT_PASS");
+        DeviceLiveTest.progress("ANDROID_SYNC_DELETION_CONSENT_PASS");
 
         JSONArray nodes=DeviceLiveTest.webApi(web,"/api/v1/files?rootId="+cloud.getString("rootId"),"GET",null).getJSONObject("inventory").getJSONArray("nodes");
         JSONObject child=null,parent=null;
@@ -70,13 +70,13 @@ final class SyncDeletionAcceptance {
         assertEquals(operations.getJSONObject(0).getString("id"),lost.getJSONObject("receipt").getString("operationId"));
         JSONArray retained=request(web,scope,grant,"trash-list").getJSONObject("trashPage").getJSONArray("items");assertEquals(1,retained.length());
         try(ManagedFileStore store=fixture.store()){JSONArray entries=store.scan(scope,root);assertEquals(3,entries.length());for(int i=0;i<entries.length();i++)assertNotEquals("nested/sample.bin",entries.getJSONObject(i).getString("path"));}
-        System.out.println("ANDROID_SYNC_DELETION_LOST_REPLY_PASS");
+        DeviceLiveTest.progress("ANDROID_SYNC_DELETION_LOST_REPLY_PASS");
 
         DeviceLiveTest.evaluate(web,"window.__beforeDeletionReload=true");
         InstrumentationRegistry.getInstrumentation().runOnMainSync(()->web.loadUrl(scope.origin+"/things"));
         DeviceLiveTest.awaitTrue(web,"window.__beforeDeletionReload===undefined && window.thingtimeNativeBridge?.platform==='android' && document.body.innerText.includes('This device is paired to your account') && document.body.innerText.includes('Android cloud download acceptance')");
         same(operations,journal(web,configuration));
-        System.out.println("ANDROID_SYNC_DELETION_RELOAD_PASS");
+        DeviceLiveTest.progress("ANDROID_SYNC_DELETION_RELOAD_PASS");
         // The persisted interrupted progress exposes Retry transfer after reload;
         // it resumes the unfinished run using the original operation IDs.
         sync(web,"Retry transfer");
@@ -86,7 +86,7 @@ final class SyncDeletionAcceptance {
         JSONArray remaining;try(ManagedFileStore store=fixture.store()){remaining=store.scan(scope,root);assertEquals(2,remaining.length());}
         sync(web,"Sync now");try(ManagedFileStore store=fixture.store()){same(remaining,store.scan(scope,root));}
         assertEquals(2,request(web,scope,grant,"trash-list").getJSONObject("trashPage").getJSONArray("items").length());
-        System.out.println("ANDROID_SYNC_DELETION_RESUME_PASS");
+        DeviceLiveTest.progress("ANDROID_SYNC_DELETION_RESUME_PASS");
         JSONObject folderItem=null,fileItem=null;
         for(int i=0;i<retained.length();i++){JSONObject item=retained.getJSONObject(i);assertEquals(configuration,item.getJSONObject("request").getJSONObject("scope").getString("rootId"));if(item.getString("kind").equals("folder"))folderItem=item;else fileItem=item;}
         assertNotNull(folderItem);assertNotNull(fileItem);
@@ -100,6 +100,6 @@ final class SyncDeletionAcceptance {
         DeviceLiveTest.verifyCloudBytes(context,scope,root,expected);
         assertEquals(0,request(web,scope,grant,"trash-list").getJSONObject("trashPage").getJSONArray("items").length());
         DeviceLiveTest.verifyPageLayout(web);
-        System.out.println("ANDROID_SYNC_DELETION_PASS: real planner/native consent, cloud child-parent removal, lost committed reply, WebView/IndexedDB reload with original operation IDs, repeat convergence and reviewed byte-exact tree restoration.");
+        DeviceLiveTest.progress("ANDROID_SYNC_DELETION_PASS: real planner/native consent, cloud child-parent removal, lost committed reply, WebView/IndexedDB reload with original operation IDs, repeat convergence and reviewed byte-exact tree restoration.");
     }
 }
