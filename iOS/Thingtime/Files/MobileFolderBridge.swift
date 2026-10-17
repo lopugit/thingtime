@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
-    static let uploadVersion = "1.2.0"
+    static let uploadVersion = "1.3.0"
     static let accessVersion = "1.1.1"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.0.0"
@@ -32,6 +32,9 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var picker: UIDocumentPickerViewController?
     private var selection: CheckedContinuation<URL?, Error>?
     private var observer: NSObjectProtocol?
+    private var foregroundObserver: NSObjectProtocol?
+    private var foregroundWait: CheckedContinuation<Void, Error>?
+    private var background: NativeUploadBackgroundLease?
     init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash(), uploadParts: FileUploadPartStore = FileUploadPartStore()) {
         self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash; self.uploadParts = uploadParts
         super.init()
@@ -41,12 +44,31 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             Task { @MainActor in self?.networkKind = kind }
         }
         networkMonitor.start(queue: DispatchQueue(label: "com.thingtime.sync-network"))
+        foregroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.foregroundWait?.resume(); self?.foregroundWait = nil }
+        }
         observer = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in if self?.photoPermissionPending != true { self?.suspend() } }
+            Task { @MainActor in if self?.photoPermissionPending != true && self?.background?.canContinue != true { self?.suspend() } }
         }
     }
-    deinit { networkMonitor.cancel(); if let observer { NotificationCenter.default.removeObserver(observer) }; task?.cancel() }
+    private func awaitForeground() async throws {
+        try Task.checkCancellation()
+        if UIApplication.shared.applicationState == .active { return }
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                if Task.isCancelled { continuation.resume(throwing: CancellationError()) }
+                else if UIApplication.shared.applicationState == .active { continuation.resume() }
+                else { foregroundWait = continuation }
+            }
+        }, onCancel: { Task { @MainActor [weak self] in
+            self?.foregroundWait?.resume(throwing: CancellationError()); self?.foregroundWait = nil
+        } })
+        try Task.checkCancellation()
+    }
+    deinit { if let foregroundObserver { NotificationCenter.default.removeObserver(foregroundObserver) }; networkMonitor.cancel(); if let observer { NotificationCenter.default.removeObserver(observer) }; task?.cancel() }
     func suspend() {
+        background?.finish(success: false); background = nil
+        foregroundWait?.resume(throwing: CancellationError()); foregroundWait = nil
         sourceChoice?.resume(throwing: CancellationError()); sourceChoice = nil
         let photos = self.photos; Task.detached { photos.discard() }
         let cancelled = cancellationReply; cancellationReply = nil
@@ -196,11 +218,11 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         let check = { [weak self, weak webView] in
             try Task.checkCancellation()
             guard self?.generation == operation, let webView, currentRoot() == root,
-                  let current = webView.url, LopuVoiceContract.sameOrigin(current, root), UIApplication.shared.applicationState == .active else { throw CancellationError() }
+                  let current = webView.url, LopuVoiceContract.sameOrigin(current, root), (UIApplication.shared.applicationState == .active || self?.background?.canContinue == true) else { throw CancellationError() }
         }
         task = Task { [weak self, weak webView] in
             guard let self, let webView else { return }
-            defer { if self.generation == operation { self.task = nil; self.requestId = nil; self.cancellationReply = nil; self.transport?.close(); self.transport = nil } }
+            defer { if self.generation == operation { self.background?.finish(success: false); self.background = nil; self.task = nil; self.requestId = nil; self.cancellationReply = nil; self.transport?.close(); self.transport = nil } }
             do {
                 try check(); try await verifyOwner(scope, check); try check()
                 var result: [String: Any] = [:]
@@ -253,6 +275,13 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 let authorization = fileRequest.authorization
                                 try authorization.validate(owner: scope, rootId: rootId, photos: grant.sourceKind == "photos")
                                 try await transport.require([("api.things", [1,35,0])])
+                                self.background = await NativeUploadBackgroundCoordinator.shared.begin(size: request.source.size, expired: { [weak self] in
+                                    if self?.generation == operation { self?.suspend() }
+                                })
+                                try current()
+                                reply("mobile-files-started", base.merging(["rootId": rootId, "uploadId": fileRequest.uploadId,
+                                    "operationId": fileRequest.requestId, "version": request.source.version,
+                                    "size": request.source.size, "background": self.background?.canContinue == true]) { _, new in new })
                                 try await NativeFileUploadJob.run(fileRequest, check: current, authorize: {
                                     try current()
                                     try await verifyDevice(scope, authorization.scope.deviceId, current)
@@ -265,10 +294,18 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 }, upload: { part in
                                     try await self.uploadPart(part, scope: scope, rootId: rootId, grant: grant, transport: transport, current: current)
                                 }, progress: { received in
+                                    self.background?.progress(received)
                                     reply("mobile-files-progress", base.merging(["rootId": rootId, "uploadId": fileRequest.uploadId,
                                         "operationId": fileRequest.requestId, "version": request.source.version,
                                         "size": request.source.size, "received": received]) { _, new in new })
                                 })
+                                self.background?.finish(success: true); self.background = nil
+                                // The attachment is durable, but publication still belongs to
+                                // the shared Timeline runner. Hold its small reply until the
+                                // WebView is active and revalidate the owner before delivery.
+                                transport.close(); self.transport = nil
+                                try await self.awaitForeground()
+                                try check(); try await verifyOwner(scope, check); try check()
                                 result = ["rootId": rootId, "uploadedFile": ["uploadId": request.uploadId, "requestId": request.requestId,
                                     "version": request.source.version, "size": request.source.size,
                                     "fingerprint": try JSONSerialization.jsonObject(with: JSONEncoder().encode(request.source.fingerprint!))]]

@@ -1,3 +1,4 @@
+import { trackNativeUploadBackground } from './nativeUploadBackground';
 import { parseFileSyncConfiguration } from './configuration';
 import { validateSyncScope } from './reconcile';
 import {
@@ -18,7 +19,15 @@ import { sameSyncScope, sameSyncContent, type SyncScope } from './reconcile';
 import type { SyncConditions } from './configuredPlan';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import { planFileSync, validSyncEntry, type SyncEntry } from './reconcile';
-import { contentPartPlan, type FingerprintSource, type NativePartUpload, type NativeFileUpload, type ContentFingerprint, validContentFingerprint, equalContentFingerprints } from './contentFingerprint';
+import {
+	contentPartPlan,
+	type FingerprintSource,
+	type NativePartUpload,
+	type NativeFileUpload,
+	type ContentFingerprint,
+	validContentFingerprint,
+	equalContentFingerprints
+} from './contentFingerprint';
 
 export type MobileFolder = {
 	id: string;
@@ -91,29 +100,78 @@ export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined
 	bridge?.platform === 'ios' && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
 export const supportsNativeFileUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsNativePartUploads(bridge) && Number(bridge!.fileUploadVersion!.split('.')[1]) >= 2;
+export const supportsNativeBackgroundUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	supportsNativeFileUploads(bridge) && Number(bridge!.fileUploadVersion!.split('.')[1]) >= 3;
 function validFileUpload(upload: NativeFileUpload & { source: SyncEntry }) {
 	try {
 		const plan = contentPartPlan(upload.source.size);
 		const approval = upload.authorization;
 		validateSyncScope(approval.scope);
 		const configuration = parseFileSyncConfiguration(approval.configuration);
-		if (approval.id !== approval.scope.rootId || configuration.deviceId !== approval.scope.deviceId || configuration.paused ||
-			configuration.mode === 'download' || typeof approval.updatedAt !== 'string' || !Number.isFinite(Date.parse(approval.updatedAt))) return false;
-		return validPartUpload({ ...upload, partNumber: 1, offset: 0, length: Math.min(plan.partSizeBytes, upload.source.size) }) &&
-			validContentFingerprint(upload.source.fingerprint, upload.source.size);
-	} catch { return false; }
+		if (
+			approval.id !== approval.scope.rootId ||
+			configuration.deviceId !== approval.scope.deviceId ||
+			configuration.paused ||
+			configuration.mode === 'download' ||
+			typeof approval.updatedAt !== 'string' ||
+			!Number.isFinite(Date.parse(approval.updatedAt))
+		)
+			return false;
+		return (
+			validPartUpload({ ...upload, partNumber: 1, offset: 0, length: Math.min(plan.partSizeBytes, upload.source.size) }) &&
+			validContentFingerprint(upload.source.fingerprint, upload.source.size)
+		);
+	} catch {
+		return false;
+	}
 }
 /** Only strictly increasing canonical part boundaries can renew the inactivity
  * deadline. Foreign, duplicate and malformed progress cannot keep a job alive. */
-export function nativeFileUploadProgress(value: unknown, expected: { requestId: string; ownerId: string; origin: string },
-	request: Extract<FolderRequest, { action: 'upload-file' }>, previous: number): number | null {
-	const message = value as any, p = message?.payload, upload = request.upload;
+export function nativeFileUploadProgress(
+	value: unknown,
+	expected: { requestId: string; ownerId: string; origin: string },
+	request: Extract<FolderRequest, { action: 'upload-file' }>,
+	previous: number
+): number | null {
+	const message = value as any,
+		p = message?.payload,
+		upload = request.upload;
 	if (message?.type !== 'mobile-files-progress' || !p || Object.entries(expected).some(([key, value]) => p[key] !== value)) return null;
-	if (!validFileUpload(upload) || p.rootId !== request.rootId || p.uploadId !== upload.uploadId || p.operationId !== upload.requestId ||
-		p.version !== upload.source.version || p.size !== upload.source.size || !Number.isSafeInteger(p.received) ||
-		p.received <= previous || p.received > upload.source.size ||
-		(p.received !== upload.source.size && p.received % contentPartPlan(upload.source.size).partSizeBytes !== 0)) return null;
+	if (
+		!validFileUpload(upload) ||
+		p.rootId !== request.rootId ||
+		p.uploadId !== upload.uploadId ||
+		p.operationId !== upload.requestId ||
+		p.version !== upload.source.version ||
+		p.size !== upload.source.size ||
+		!Number.isSafeInteger(p.received) ||
+		p.received <= previous ||
+		p.received > upload.source.size ||
+		(p.received !== upload.source.size && p.received % contentPartPlan(upload.source.size).partSizeBytes !== 0)
+	)
+		return null;
 	return p.received;
+}
+export function nativeFileUploadStarted(
+	value: unknown,
+	expected: { requestId: string; ownerId: string; origin: string },
+	request: Extract<FolderRequest, { action: 'upload-file' }>
+): boolean | undefined {
+	const message = value as any,
+		p = message?.payload,
+		upload = request.upload;
+	if (message?.type !== 'mobile-files-started' || !p || Object.entries(expected).some(([key, value]) => p[key] !== value)) return undefined;
+	if (
+		!validFileUpload(upload) ||
+		p.rootId !== request.rootId ||
+		p.uploadId !== upload.uploadId ||
+		p.operationId !== upload.requestId ||
+		p.version !== upload.source.version ||
+		p.size !== upload.source.size ||
+		typeof p.background !== 'boolean'
+	)
+		return undefined;
+	return p.background;
 }
 function validPartUpload(upload: NativePartUpload & { source: SyncEntry }) {
 	try {
@@ -175,10 +233,19 @@ export function parseMobileFolderResult(
 		}))
 	};
 	if (request.action === 'upload-file') {
-		const file = payload.uploadedFile, upload = request.upload;
-		if (!validFileUpload(upload) || payload.rootId !== request.rootId || !file || file.uploadId !== upload.uploadId ||
-			file.requestId !== upload.requestId || file.version !== upload.source.version || file.size !== upload.source.size ||
-			!validContentFingerprint(file.fingerprint, upload.source.size) || !equalContentFingerprints(file.fingerprint, upload.source.fingerprint!))
+		const file = payload.uploadedFile,
+			upload = request.upload;
+		if (
+			!validFileUpload(upload) ||
+			payload.rootId !== request.rootId ||
+			!file ||
+			file.uploadId !== upload.uploadId ||
+			file.requestId !== upload.requestId ||
+			file.version !== upload.source.version ||
+			file.size !== upload.source.size ||
+			!validContentFingerprint(file.fingerprint, upload.source.size) ||
+			!equalContentFingerprints(file.fingerprint, upload.source.fingerprint!)
+		)
 			throw Error('Invalid native file upload receipt.');
 		result.uploadedFile = { fingerprint: structuredClone(file.fingerprint) };
 	}
@@ -447,7 +514,13 @@ export const supportsMobileTrashRecovery = (bridge: FolderCapabilities | undefin
 export const supportsNativeFileVersions = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobilePublication(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileVersionsVersion ?? '');
 
-export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal, onProgress?: (bytes: number, total: number) => void): Promise<FolderResult> {
+export function requestMobileFolders(
+	ownerId: string,
+	request: FolderRequest,
+	signal: AbortSignal,
+	onProgress?: (bytes: number, total: number) => void,
+	onBackground?: (allowed: boolean) => void
+): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
 	if (request.action === 'upload-file' && (!supportsNativeFileUploads(bridge) || !validFileUpload(request.upload)))
@@ -513,10 +586,14 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 	const input = structuredClone(request),
 		expected = { requestId: crypto.randomUUID(), ownerId, origin: window.location.origin };
 	return new Promise((resolve, reject) => {
-		let nextOffset = 0, uploadedBytes = 0;
+		let nextOffset = 0,
+			uploadedBytes = 0;
+		let background: boolean | undefined;
 		const received = input.action === 'read-range' ? new Uint8Array(input.length) : null;
 		const cleanup = () => {
 			clearTimeout(timer);
+			if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', visibility);
+			onBackground?.(false);
 			window.removeEventListener(nativeBridgeMessageEvent, listener);
 			signal.removeEventListener('abort', abort);
 		};
@@ -536,10 +613,21 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 			try {
 				const message = (event as CustomEvent).detail;
 				if (input.action === 'upload-file') {
+					const started = supportsNativeBackgroundUploads(bridge) ? nativeFileUploadStarted(message, expected, input) : undefined;
+					if (started !== undefined) {
+						if (background === undefined) {
+							background = started;
+							onBackground?.(started);
+							visibility();
+						}
+						return;
+					}
 					const next = nativeFileUploadProgress(message, expected, input, uploadedBytes);
 					if (next !== null) {
-						uploadedBytes = next; clearTimeout(timer); timer = setTimeout(expire, 900_000);
-						onProgress?.(next, input.upload.source.size); return;
+						uploadedBytes = next;
+						renewUploadDeadline();
+						onProgress?.(next, input.upload.source.size);
+						return;
 					}
 				}
 
@@ -581,7 +669,9 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 			}
 		};
 		const expire = () => {
-			cleanup(); stop(); reject(Error('Folder access timed out. Your saved selections are preserved.'));
+			cleanup();
+			stop();
+			reject(Error('Folder access timed out. Your saved selections are preserved.'));
 		};
 		let timer = setTimeout(
 			expire,
@@ -613,6 +703,14 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				? 300_000
 				: 30_000
 		);
+		const renewUploadDeadline = () => {
+			clearTimeout(timer);
+			if (!(background === true && typeof document !== 'undefined' && document.visibilityState === 'hidden')) timer = setTimeout(expire, 900_000);
+		};
+		const visibility = () => {
+			if (background === true) renewUploadDeadline();
+		};
+		if (input.action === 'upload-file' && typeof document !== 'undefined') document.addEventListener('visibilitychange', visibility);
 		window.addEventListener(nativeBridgeMessageEvent, listener);
 		signal.addEventListener('abort', abort, { once: true });
 		if (signal.aborted) {
@@ -676,16 +774,29 @@ export function mobileFolderSource(
 		if (result.chunk!.size !== entry.size) throw Error('Native source changed.');
 	};
 	return {
-		...(supportsNativeFileUploads(bridge) ? {
-			uploadFile: async (upload: NativeFileUpload, callerSignal?: AbortSignal, progress?: (bytes: number, total: number) => void) => {
-				const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
-				active.throwIfAborted();
-				const result = await request(ownerId, { action: 'upload-file', rootId, upload: { ...upload, source: entry } }, active, progress);
-				active.throwIfAborted();
-				if (!result.uploadedFile) throw Error('Native file upload receipt is missing.');
-				return result.uploadedFile;
-			}
-		} : {}),
+		...(supportsNativeFileUploads(bridge)
+			? {
+					uploadFile: async (upload: NativeFileUpload, callerSignal?: AbortSignal, progress?: (bytes: number, total: number) => void) => {
+						const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
+						active.throwIfAborted();
+						const background = trackNativeUploadBackground(signal);
+						try {
+							const result = await request(
+								ownerId,
+								{ action: 'upload-file', rootId, upload: { ...upload, source: entry } },
+								active,
+								progress,
+								background.set
+							);
+							active.throwIfAborted();
+							if (!result.uploadedFile) throw Error('Native file upload receipt is missing.');
+							return result.uploadedFile;
+						} finally {
+							background.dispose();
+						}
+					}
+			  }
+			: {}),
 		...(supportsNativePartUploads(bridge)
 			? {
 					uploadPart: async (upload: NativePartUpload, callerSignal?: AbortSignal) => {

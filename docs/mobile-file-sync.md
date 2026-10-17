@@ -87,7 +87,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
 | Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction simulator acceptance verified; iOS external Files edits, Mac installed transfers, workers and full cross-device transfer acceptance pending |
-| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; iOS durable upload-part cache and fresh-process capture recovery verified; actual interrupted PUT, native schedulers and reboot acceptance pending |
+| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; iOS durable upload-part cache and fresh-process capture recovery verified; iOS user-started continued-task lifecycle implemented with simulator refusal and physical-device acceptance pending; actual interrupted PUT, passive schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; iOS file-backed native multipart uploads are implemented and installed multipart photo acceptance verifies byte hashes without bulk WebView reads; background transfer, physical-device acceptance and sustained throughput remain pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Android 11+ MediaStore and iOS PhotoKit read-only sources use the shared backup-only connection. Installed API 35 and iOS 26.5 simulator acceptance verified original PNG bytes, new-photo discovery and cloud retention after device deletion. Mac 1.3.0 adds a native PhotoKit source adapter; real API acceptance uses synthetic photo resources. Shared Apple reader passes 57 tests; actual Mac installed PhotoKit acceptance, real limited-selection changes, Live Photo/video/EXIF formats, physical devices, large-library paging and background completion remain open |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
@@ -101,8 +101,10 @@ An unavailable folder or revoked permission must never be treated as an empty
 successful scan. User-customizable configuration should be editable Things,
 Components and Actions with bounded native file/OS adapters.
 
-iOS background uploads must use file-backed URLSession tasks and restore the
-session after relaunch; see [Apple background transfers](https://developer.apple.com/documentation/foundation/downloading-files-in-the-background).
+iOS user-started uploads use continued-processing tasks when accepted by iOS 26+.
+Relaunch-capable transfer remains separate work: background URLSession follows
+redirects unconditionally, so plaintext uploads cannot switch to that transport
+without revisiting destination protection. See [Apple background transfers](https://developer.apple.com/documentation/foundation/downloading-files-in-the-background).
 For photo backup evaluate [PhotoKit background asset uploads](https://developer.apple.com/documentation/photokit/uploading-asset-resources-in-the-background)
 against the app's minimum OS, with an explicit older-OS path. Android persistent
 work should use [WorkManager](https://developer.android.com/develop/background-work/background-tasks/persistent)
@@ -2320,3 +2322,52 @@ revoked authorization, changed reservation and wrong multipart digest. Targeted
 lint passes. Raw TypeScript still reports 91 diagnostics outside changed files;
 this is not a clean whole-project typecheck. Background execution and hardware
 lock/reboot/large-volume acceptance remain open.
+
+## iOS continued uploads — 2026-10-18
+
+Upload capability 1.3.0 requests `BGContinuedProcessingTask` on iOS 26+ for the
+current user-started whole-file job. One static identifier is registered once;
+submission uses the fail strategy. The native job retains its redirect-refusing
+file-backed transport, live owner/configuration/pairing/grant checks and bounded
+part cache. This does not persist cookies or create another history store.
+Older systems, refused submissions and launch timeouts retain foreground behavior.
+A timed-out request keeps its identifier slot until a late system launch is
+rejected, preventing that launch from acquiring another job's authorization.
+
+Only an exact, capability-negotiated native start acknowledgement allows the web
+runner to survive visibility changes. Its inactivity deadline pauses while the
+accepted job is hidden; navigation, account changes and explicit cancellation
+still abort. System progress reports verified part bytes and reserves one unit
+for attachment completion. System/user expiry cancels the job. Successful native
+completion waits for the app to become active, rechecks the owner, then hands
+back to the shared stored-fingerprint check and canonical Timeline publication.
+
+The simulator declined continued processing in the opt-in installed background
+acceptance; the subsequent diagnostic run reported `BGTaskSchedulerErrorDomain`
+code 1 (`unavailable`). That run failed its explicit background assertion and is not counted
+as background proof. Physical-iPhone acceptance remains required. This is not
+passive folder discovery, a new-file scheduler, background downloads, OS relaunch,
+force-quit/reboot recovery, whole-account snapshots or 100 GB–100 TB acceptance.
+
+Fork setup: regenerate the Xcode project from `iOS/project.yml`; preserve
+`UIBackgroundModes`'s `processing` entry and the static
+`$(PRODUCT_BUNDLE_IDENTIFIER).file-upload` permitted identifier. There are no new
+secrets or dashboard services. `THINGTIME_PHOTO_BACKGROUND_TEST=1` alongside the
+existing disposable photo acceptance explicitly requires real scheduler acceptance;
+use Simulator Home after its readiness marker, verify the attachment changes from
+pending to ready using the local fixture account while the app is backgrounded,
+then return to Thingtime and verify Timeline publication. Never infer background
+completion from an upload that was already finished before leaving the app.
+
+Verification: all 163 shared file-sync tests and 15 selected native lifecycle,
+whole-file, upload and session tests pass. Targeted lint and shell/diff checks
+pass. Raw TypeScript retains 91 diagnostics outside the changed files.
+Installed iOS 26.5 foreground fallback acceptance passes in 205.359 seconds:
+two whole-file requests, four parts, 18,897,576 bytes, no legacy bulk reads,
+matching original download hashes, new-photo discovery, unchanged retained cloud
+revision after local deletion and successful private-cache cleanup. The completion
+screen was inspected. Generated originals were moved to Recently Deleted and
+cloud/configuration/grant cleanup completed. Both jobs reported the scheduler
+unavailable; this is foreground fallback evidence only. The earlier opt-in
+background assertion failed, and its Xcode harness was terminated after stalling
+in result finalization; that run is not a successful acceptance result.

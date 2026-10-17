@@ -58,8 +58,11 @@ targets:
         NSSpeechRecognitionUsageDescription: Thingtime transcribes your speech so Lopu can respond or save private transcription pages.
         NSPhotoLibraryUsageDescription: Thingtime uses your photo library so you can choose photos and videos to share or back up original files with their embedded metadata.
         UILaunchScreen: {}
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(PRODUCT_BUNDLE_IDENTIFIER).file-upload
         UIBackgroundModes:
           - audio
+          - processing
         NSSupportsLiveActivities: true
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

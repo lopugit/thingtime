@@ -477,5 +477,17 @@ not native background scheduling or a separate version-history database.
 parts and verifies the multipart composite before attachment completion; the
 shared runner checks stored content and publishes the existing Timeline write.
 `NativeUploadAuthorization.swift` checks the reviewed private configuration,
-pairing and network/power conditions between parts. This remains foreground-only;
-it does not introduce a second history database or enable OS background work.
+pairing and network/power conditions between parts. Capability 1.3 adds the
+continued-processing lifecycle below; history remains in the shared Timeline.
+
+### iOS continued-upload lifecycle
+
+`NativeUploadBackground.swift` owns one registered iOS 26+ continued-processing
+slot and its progress/expiry lifecycle. `MobileFolderBridge.swift` permits the
+current upload while that lease is active and defers its result until foreground
+owner revalidation. `nativeUploadBackground.ts` tracks exact native authority on
+the runner's abort signal; `mobileFolders.client.ts` negotiates 1.3 acknowledgements
+and visibility-aware inactivity deadlines. `MobileSyncConnections.tsx` preserves
+only those acknowledged jobs on visibility changes; page exit still cancels.
+Timeline publication stays in the shared runner. Scheduler refusal falls back to
+foreground; actual background completion and relaunch acceptance remain open.

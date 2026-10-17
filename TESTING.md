@@ -11193,3 +11193,26 @@ protection values as strings, as specified by
       messages; they cannot extend the 15-minute inactivity deadline. Custom
       runtime mutation policies continue through the original per-part path.
 - [ ] Do not count foreground acceptance as background/reboot/force-quit proof.
+
+
+### iOS continued-upload lifecycle
+
+- [ ] Run `NativeUploadBackgroundTests`: single registration, serial jobs,
+  monotonic byte progress, final completion, expiry, cancellation and refused
+  submission. A timed-out request must not attach its late callback to a new job.
+- [ ] Run shared native-upload tests: reject acknowledgements from another
+  owner/origin/root/request/upload/source, from older hosts or with malformed
+  background flags. Duplicate acknowledgements cannot extend authority. Pause
+  only an accepted hidden job's timer; restore the timeout in foreground. Abort
+  removes authority and listeners; navigation must always abort.
+- [ ] Run the disposable installed photo acceptance on the updated host, checking
+  original download hashes, new-photo discovery, retained cloud versions and cache
+  cleanup when the OS refuses continued processing.
+- [ ] Add `THINGTIME_PHOTO_BACKGROUND_TEST=1` to require actual OS acceptance.
+  After its readiness marker, use Home, independently observe an initially
+  unfinished attachment become ready while the app remains backgrounded, return
+  to Thingtime and verify canonical publication. Refusal is a failed background
+  acceptance check, not a pass or evidence that the foreground fallback failed.
+- [ ] On physical iOS, cancel using system progress UI and test expiry, lock,
+  network/power changes, grant/device revocation, force quit and relaunch. Do not
+  infer these from simulator lifecycle mocks or foreground success.

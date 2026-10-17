@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add iOS 26+ continued-processing lifecycle for
+  user-started file uploads, exact native acknowledgement and foreground Timeline
+  handoff. Refused OS tasks retain foreground behavior. Simulator background
+  acceptance was declined; physical-device completion remains unverified. Setup
+  and checks: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: iOS upload 1.2 moves multipart orchestration
   and attachment completion into a native job with live configuration, pairing
   and network/power checks; the shared runner still verifies stored bytes and

@@ -2080,3 +2080,52 @@ revoked authorization, changed reservation and wrong multipart digest. Targeted
 lint passes. Raw TypeScript still reports 91 diagnostics outside changed files;
 this is not a clean whole-project typecheck. Background execution and hardware
 lock/reboot/large-volume acceptance remain open.
+
+## iOS continued uploads — 2026-10-18
+
+Upload capability 1.3.0 requests `BGContinuedProcessingTask` on iOS 26+ for the
+current user-started whole-file job. One static identifier is registered once;
+submission uses the fail strategy. The native job retains its redirect-refusing
+file-backed transport, live owner/configuration/pairing/grant checks and bounded
+part cache. This does not persist cookies or create another history store.
+Older systems, refused submissions and launch timeouts retain foreground behavior.
+A timed-out request keeps its identifier slot until a late system launch is
+rejected, preventing that launch from acquiring another job's authorization.
+
+Only an exact, capability-negotiated native start acknowledgement allows the web
+runner to survive visibility changes. Its inactivity deadline pauses while the
+accepted job is hidden; navigation, account changes and explicit cancellation
+still abort. System progress reports verified part bytes and reserves one unit
+for attachment completion. System/user expiry cancels the job. Successful native
+completion waits for the app to become active, rechecks the owner, then hands
+back to the shared stored-fingerprint check and canonical Timeline publication.
+
+The simulator declined continued processing in the opt-in installed background
+acceptance; the subsequent diagnostic run reported `BGTaskSchedulerErrorDomain`
+code 1 (`unavailable`). That run failed its explicit background assertion and is not counted
+as background proof. Physical-iPhone acceptance remains required. This is not
+passive folder discovery, a new-file scheduler, background downloads, OS relaunch,
+force-quit/reboot recovery, whole-account snapshots or 100 GB–100 TB acceptance.
+
+Fork setup: regenerate the Xcode project from `iOS/project.yml`; preserve
+`UIBackgroundModes`'s `processing` entry and the static
+`$(PRODUCT_BUNDLE_IDENTIFIER).file-upload` permitted identifier. There are no new
+secrets or dashboard services. `THINGTIME_PHOTO_BACKGROUND_TEST=1` alongside the
+existing disposable photo acceptance explicitly requires real scheduler acceptance;
+use Simulator Home after its readiness marker, verify the attachment changes from
+pending to ready using the local fixture account while the app is backgrounded,
+then return to Thingtime and verify Timeline publication. Never infer background
+completion from an upload that was already finished before leaving the app.
+
+Verification: all 163 shared file-sync tests and 15 selected native lifecycle,
+whole-file, upload and session tests pass. Targeted lint and shell/diff checks
+pass. Raw TypeScript retains 91 diagnostics outside the changed files.
+Installed iOS 26.5 foreground fallback acceptance passes in 205.359 seconds:
+two whole-file requests, four parts, 18,897,576 bytes, no legacy bulk reads,
+matching original download hashes, new-photo discovery, unchanged retained cloud
+revision after local deletion and successful private-cache cleanup. The completion
+screen was inspected. Generated originals were moved to Recently Deleted and
+cloud/configuration/grant cleanup completed. Both jobs reported the scheduler
+unavailable; this is foreground fallback evidence only. The earlier opt-in
+background assertion failed, and its Xcode harness was terminated after stalling
+in result finalization; that run is not a successful acceptance result.

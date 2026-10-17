@@ -66,7 +66,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         let prior = try store.list(scope).first { $0.sourceKind == "photos" }
         guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] else { throw XCTSkip("Preserve existing photo grant \(prior?.id ?? "unknown") unless its exact disposable-test ID is supplied") }
         web.configuration.userContentController.addUserScript(WKUserScript(source: """
-        window.__nativeUploadStats={files:0,parts:0,bytes:0,legacy:0};window.__photoScans=0;
+        window.__nativeUploadStarted=null;window.__nativeUploadStats={files:0,parts:0,bytes:0,legacy:0};window.__photoScans=0;
         const photoOriginalPost=window.thingtimeNativeBridge.postMessage;
         window.thingtimeNativeBridge.postMessage=function(m){
           if(m.type==='mobile-files'){
@@ -78,6 +78,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         };
         const received=new Map();
         window.addEventListener('thingtime:native-message',e=>{
+          if(e.detail?.type==='mobile-files-started')window.__nativeUploadStarted=e.detail.payload;
           if(e.detail?.type!=='mobile-files-progress')return;
           const p=e.detail.payload, prior=received.get(p.requestId)||0;
           if(p.received>prior){window.__nativeUploadStats.parts++;window.__nativeUploadStats.bytes+=p.received-prior;received.set(p.requestId,p.received);}
@@ -149,7 +150,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         }
         let retainedBefore = try retainedParts()
         let name = "iOS photo backup " + UUID().uuidString.prefix(8)
-        func startAndAwaitUpload() async throws {
+        func startAndAwaitUpload(background: Bool = false) async throws {
             for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
             guard UIApplication.shared.applicationState == .active else { throw CancellationError() }
             try await awaitTrue(web, "typeof window.__photoScans==='number'")
@@ -161,6 +162,21 @@ final class PhotoBackupInstalledTests: XCTestCase {
             _ = try await web.evaluateJavaScript("(" + card + ").scrollIntoView({block:'center'})")
             _ = try await web.evaluateJavaScript("Array.from((" + card + ").querySelectorAll('button')).find(b=>b.textContent.trim()==='Upload now'&&!b.disabled).click()")
             try await awaitTrue(web, "window.__photoScans>" + String(previous))
+            if background {
+                try await awaitTrue(web, "window.__nativeUploadStarted!==null")
+                let startedValue = try await web.evaluateJavaScript("window.__nativeUploadStarted")
+                let started = try XCTUnwrap(startedValue as? [String: Any])
+                guard started["background"] as? Bool == true else {
+                    throw NSError(domain: "PhotoBackupAcceptance", code: 3, userInfo: [NSLocalizedDescriptionKey: "iOS did not grant continued processing; background acceptance is unverified"])
+                }
+                print("IOS_BACKGROUND_UPLOAD_READY: upload=\(started["uploadId"] as? String ?? "missing"). Use Simulator Home, verify the pending attachment becomes ready from the host, then reopen Thingtime.")
+                for _ in 0..<400 where UIApplication.shared.applicationState != .background { try await Task.sleep(nanoseconds: 100_000_000) }
+                guard UIApplication.shared.applicationState == .background else { throw CancellationError() }
+                print("IOS_BACKGROUND_UPLOAD_ENTERED")
+                for _ in 0..<2400 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 250_000_000) }
+                guard UIApplication.shared.applicationState == .active else { throw CancellationError() }
+                print("IOS_BACKGROUND_UPLOAD_RETURNED")
+            }
             try await awaitTrue(web, "(" + card + ")?.querySelector('[role=status]')?.textContent === 'Last transfer finished.'")
         }
         var failure: Error?
@@ -174,7 +190,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let config: [String: Any] = ["configurationVersion": 1, "name": name, "deviceId": paired, "localRootId": grant.id, "sourceKind": "photos", "remoteFolderId": cloud!, "mode": "backup", "paused": false, "propagateDeletes": false, "network": "any", "chargingOnly": false, "excludedPaths": excluded]
             let saved = try await api("/api/v1/things", body: ["thingtime": ["file-sync"], "crystal": config])
             connection = try XCTUnwrap((saved["thing"] as? [String: Any])?["id"] as? String)
-            web.reload(); try await startAndAwaitUpload()
+            web.reload(); try await startAndAwaitUpload(background: env["THINGTIME_PHOTO_BACKGROUND_TEST"] == "1")
             let firstNodes = try await cloudNodes()
             let firstNode = try XCTUnwrap(firstNodes.first { $0["path"] as? String == first.path }), firstFile = try XCTUnwrap(firstNode["file"] as? [String: Any])
             try await verifyBytes(firstFile); print("IOS_PHOTO_FIRST_HASH_PASS")

@@ -1,3 +1,4 @@
+import { nativeUploadMayContinue } from '~/fileSync/nativeUploadBackground';
 import { assertPhotoSourcePolicy, photoAccessDescription } from '~/fileSync/photoSourcePolicy';
 import { NativeFileRecovery } from './NativeFileRecovery';
 import { TIMELINE_CHANGED_EVENT } from '~/timeline/clientEvents';
@@ -228,9 +229,11 @@ function Connections({
 			}
 		};
 		const hidden = () => {
-			if (document.visibilityState !== 'visible') controller.current?.abort();
+			const active = controller.current;
+			if (document.visibilityState !== 'visible' && active && !nativeUploadMayContinue(active.signal)) active.abort();
 		};
-		window.addEventListener('pagehide', hidden);
+		const leave = () => controller.current?.abort();
+		window.addEventListener('pagehide', leave);
 		document.addEventListener('visibilitychange', hidden);
 		window.addEventListener('storage', changed);
 		return () => {
@@ -238,7 +241,7 @@ function Connections({
 			controller.current?.abort();
 			controller.current = null;
 			window.removeEventListener('storage', changed);
-			window.removeEventListener('pagehide', hidden);
+			window.removeEventListener('pagehide', leave);
 			document.removeEventListener('visibilitychange', hidden);
 		};
 		// This component is keyed by the full account/storage/device identity.

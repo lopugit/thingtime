@@ -5434,6 +5434,11 @@ file through one native request. Existing hosts retain their per-part path. No
 new environment variables, credentials or services are required. Keep the
 existing Things/device/attachment capability endpoints enabled. The host rereads
 the reviewed private file-sync Thing and checks pairing, folder/photo access,
-Wi-Fi and charging policy before each part and completion. Transfers still need
-the foreground app; this is preparation for background scheduling. See
+Wi-Fi and charging policy before each part and completion. Upload capability
+1.3.0 requests iOS 26+ continued processing for the current user-started file;
+refusal retains foreground behavior. Preserve the `processing` background mode
+and `$(PRODUCT_BUNDLE_IDENTIFIER).file-upload` permitted identifier in
+`iOS/project.yml`, then regenerate with XcodeGen. No new secret is required.
+The simulator declined the background acceptance request; physical-iPhone proof
+and OS relaunch remain open. See
 [iOS upload-job details](iOS/README.md#native-multipart-jobs).
