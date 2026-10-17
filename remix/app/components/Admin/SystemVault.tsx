@@ -1,22 +1,23 @@
-import { SystemEnvironment } from './SystemEnvironment';
 import React from 'react';
-import { Box, Heading, Text } from '@chakra-ui/react';
+import { Box, Flex } from '@chakra-ui/react';
 import { PlatformCredentials } from './PlatformCredentials';
 import { IntegrationManager } from './IntegrationManager';
+import { SystemEnvironment } from './SystemEnvironment';
 
-export const SystemVault = ({ cacheIdentity }: { cacheIdentity: string }) => {
-	const [collapsed, setCollapsed] = React.useState(false);
+export const SystemVault = ({ cacheIdentity, category }: { cacheIdentity: string; category: 'ai-providers' | 'platform' }) => {
+	const [collapsed, setCollapsed] = React.useState(true);
 	return (
-		<Box id="secure-vault" mb={6} scrollMarginTop="100px">
-			<Heading size="md" mb={2}>
-				Thingtime Secure Vault
-			</Heading>
-			<Text fontSize="sm" color="var(--tt-muted, #777783)" mb={4}>
-				Shared credentials for the Thingtime platform. Existing CI and integration secrets are managed here. Your personal vault stays in Settings.
-			</Text>
-			<PlatformCredentials cacheIdentity={cacheIdentity} collapsed={collapsed} onToggleCollapsed={() => setCollapsed(!collapsed)} />
-			<IntegrationManager secretsOnly />
-			<SystemEnvironment />
-		</Box>
+		<Flex direction="column" gap={4} mb={4} minW={0}>
+			{category === 'ai-providers' ? (
+				<Box id="secure-vault" scrollMarginTop="100px">
+					<PlatformCredentials cacheIdentity={cacheIdentity} collapsed={collapsed} onToggleCollapsed={() => setCollapsed((value) => !value)} />
+				</Box>
+			) : (
+				<>
+					<IntegrationManager secretsOnly />
+					<SystemEnvironment />
+				</>
+			)}
+		</Flex>
 	);
 };

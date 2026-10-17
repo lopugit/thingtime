@@ -6,6 +6,7 @@ import {
   AI_WORKFLOW_BASE_MODELS,
   DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL,
   describeAiWorkflowModelChoice,
+  getAiWorkflowBaseModel,
   normalizePrConflictResolverModelWaterfall,
   parseAiWorkflowModelOptionId,
   PR_CONFLICT_RESOLVER_MODEL_WATERFALL_KEY,
@@ -72,6 +73,18 @@ test('composed option ids parse, canonicalize segment order, and reject invalid 
     'default:fast'
   ]) {
     assert.equal(parseAiWorkflowModelOptionId(invalid), null, `rejects ${String(invalid)}`);
+  }
+});
+
+test('Astra exposes only API-supported reasoning levels and preserves provider default', () => {
+  const astra = getAiWorkflowBaseModel('gpt-6-astra');
+  assert.deepEqual(astra?.efforts, ['low', 'medium', 'high', 'xhigh', 'max']);
+  for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+    assert.equal(parseAiWorkflowModelOptionId(`gpt-6-astra:${effort}`)?.effort, effort);
+  }
+  assert.equal(parseAiWorkflowModelOptionId('gpt-6-astra')?.effort, null);
+  for (const effort of ['none', 'minimal', 'ultra']) {
+    assert.equal(parseAiWorkflowModelOptionId(`gpt-6-astra:${effort}`), null);
   }
 });
 

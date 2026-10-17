@@ -100,3 +100,8 @@ refresh without replay. `LopuModelsEditor.tsx` owns per-provider allow-all and
 future auto-admission controls. Public model selectors consume the live catalogue;
 unknown model capabilities and pricing are conservative. See README automatic AI
 model catalogue sync and TESTING daily provider model availability.
+
+`settings/prConflictResolverModelWaterfallCore.ts` owns known reasoning tiers and
+native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
+that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
+reasoning and tool-result replay through the real SDK against an HTTP fixture.

@@ -5520,7 +5520,8 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 - [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
       the dashboard for admins; `/admin/users`, `/admin/apps`,
       `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
-      `/admin/external-integrations`, and `/admin/system` each open the exact
+      `/admin/external-integrations`, `/admin/ai-providers`, `/admin/lopu`,
+      `/admin/platform`, and `/admin/access` each open the exact
       matching tab, remain correct through refresh/back/forward, and an unknown
       admin section safely returns to `/admin`. The drawer's Account section
       shows the 🛠️ Admin item only for admins.
@@ -7871,6 +7872,8 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] GPT-6 Astra: choose provider-default, High and Max reasoning; only Low/Medium/High/Extra high/Max are offered, never None/Minimal/Ultra. On an authorized deployment, verify a plain reply and a harmless read-only tool round trip, keeping the selected model and effort. Native calls must use Responses with `store:false`; encrypted reasoning stays server-side and failed requests never retry with weaker reasoning. Reload to confirm saved model choices and terminal replies. Public catalogue 1.5.1 and reply 1.19.3 must agree in both manifests.
+
 - [ ] Action discovery: inspect an owned server/browser Action in Ask mode;
       no confirmation or run is created. Check enum choices, required fields,
       numeric bounds, reference hints and oversized JSON defaults. Candidate
@@ -9988,3 +9991,24 @@ model-selection suites cover the consuming surfaces. Live provider calls remain
 separate from deterministic discovery/lease tests.
 
 - Anthropic catalogue discovery: a dedicated ANTHROPIC_MODELS_API_KEY takes precedence over the legacy API key; neither reaches inference. A 401/403 shows a redacted credential hint and preserves prior availability. Raw provider bodies and credentials never enter sync reports.
+
+## Collapsible settings cards (2026-10-17)
+
+- [ ] At desktop and 390px, visit every personal Settings category in both the
+      full page and popup. Sections start collapsed with a title, description,
+      and available status. Expand/collapse using pointer, Enter, and Space;
+      controls stay reachable and an unsaved field survives closing/reopening.
+- [ ] Admin AI Providers, Lopu, Platform, and Access & limits contain the former
+      System controls in the matching category. Verify reload, Back, and legacy
+      `/admin/system#secure-vault` and `/admin/system#lopu-accounts` links.
+      Anonymous and non-admin visitors still see the access gate.
+- [ ] Deep-linked sections (`#secure-vault`, `#lopu-instructions`,
+      `#lopu-credits`, `#gift-invites`) open their enclosing cards automatically.
+      Unrelated sections remain collapsed. A card can still be closed afterward.
+- [ ] Expand long labels, hints, endpoint names, model descriptions and wide
+      controls at 390px and in the settings popup. Text must retain readable
+      width, controls wrap below it, and there is no horizontal page overflow.
+- [ ] Run `/scripts/settings-sections.browser.html` on local Vite: the regression
+      uses real card/row components with synthetic fields to check initial state,
+      draft preservation, nested deep links and narrow layout. It performs no
+      API writes and does not prove authenticated server mutation behavior.

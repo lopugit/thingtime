@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17: Split admin System settings into AI Providers, Lopu, Platform,
+  and Access & limits. Shared settings cards start collapsed, show descriptions
+  and status summaries, preserve drafts, and open for legacy deep links. Labels
+  and controls wrap without squeezing helper text into a narrow column. Details:
+  [PR #1008](../PRs/1008-codex-settings-cards-split-system-settings-into-focused-tabs-and-collapsible-cards.md). — **Codex (AI)**
+
+- 2026-10-17 — **Codex (AI)**: Fix Astra replies rejected by Chat Completions tool/reasoning compatibility. The shared model registry now routes GPT-6 Astra native tools through Responses, publishes its supported reasoning levels and pricing, and preserves provider-default or selected reasoning across tool hops. Both API manifests advertise reply 1.19.3 and catalogue 1.5.1.
+
 - 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
 
 - 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded
