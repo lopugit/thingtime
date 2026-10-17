@@ -46,6 +46,12 @@ test('theme transport rejects missing capability, offline authority, partial cat
 		await assert.rejects(bind().snapshot(signal()));
 		assert.equal(calls.length, 0);
 		capability = '1.0.1';
+		await assert.rejects(bind().selection(signal()));
+		assert.equal(calls.length, 0, '1.0.1 cannot authorize selection operations');
+		capability = '1.1.0';
+		await assert.rejects(bind().snapshot(signal()));
+		assert.equal(calls.length, 0, 'snapshots require the complete folder-placement contract');
+		capability = '1.2.0';
 		assert.deepEqual(await bind().snapshot(signal()), []);
 		assert.equal(calls[0].url, '/api/v1/themes/sync');
 		assert.equal(calls[0].init.credentials, 'same-origin');
@@ -73,20 +79,17 @@ test('theme transport rejects missing capability, offline authority, partial cat
 		assert.deepEqual(await bind().write(command, signal()), acknowledgment);
 		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'write', expectedOwnerId: 'owner', command });
 
-  const selection = {themeId: null, version: 'theme-selection-v1:' + 'a'.repeat(64)};
-  const priorCalls = calls.length;
-  await assert.rejects(bind().selection(signal()));
-  assert.equal(calls.length, priorCalls, '1.0.1 cannot authorize selection operations');
-  capability = '1.1.0';
-  response = Response.json({ok:true, ownerId:'owner', dataPlane:'home', storagePlane:'home', selection});
-  assert.deepEqual(await bind().selection(signal()), selection);
-  assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), {operation:'selection', expectedOwnerId:'owner'});
-  const selectionCommand = {themeId: null, expectedVersion: selection.version, writeId: 'select-1'};
-  const selectionReceipt = {...selectionCommand, result: selection};
-  response = Response.json({ok:true, ownerId:'owner', dataPlane:'home', storagePlane:'home', acknowledgment:selectionReceipt});
-  assert.deepEqual(await bind().select(selectionCommand, signal()), selectionReceipt);
-  assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), {operation:'select', expectedOwnerId:'owner', command:selectionCommand});
+		const selection = { themeId: null, version: 'theme-selection-v1:' + 'a'.repeat(64) };
+		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', selection });
+		assert.deepEqual(await bind().selection(signal()), selection);
+		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'selection', expectedOwnerId: 'owner' });
+		const selectionCommand = { themeId: null, expectedVersion: selection.version, writeId: 'select-1' };
+		const selectionReceipt = { ...selectionCommand, result: selection };
+		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', acknowledgment: selectionReceipt });
+		assert.deepEqual(await bind().select(selectionCommand, signal()), selectionReceipt);
+		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'select', expectedOwnerId: 'owner', command: selectionCommand });
 
+		capability = '1.2.0';
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', complete: false, themes: [] });
 		await assert.rejects(bind().snapshot(signal()), /incomplete/);
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', complete: true, themes: [] });

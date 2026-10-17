@@ -3842,7 +3842,7 @@ selection continue through independent account sync queues. Anonymous theme
 create/edit/import/delete uses the existing relational Timeline and approved
 `theme-content` snapshots. History names/filtering and version download use that
 projection; export never grants generic protected-content restore authority.
-Account-authored theme History and account theme transfers remain unfinished.
+Account-authored theme History and account theme import remain unfinished.
 
 `api.timeline` 1.21.0 adds approved theme-content version export. The native
 export control negotiates that version only for theme content; ordinary exports
@@ -3856,3 +3856,15 @@ Set `TT_ACCOUNT_THEME_CONFLICT_URL` and `TT_ACCOUNT_THEME_CONFLICT_ARTIFACTS` fo
 fixture, creates a disposable account and cleans only that account's themes
 through normal APIs. Neither test publishes content. The anonymous test returns
 a downloaded History JSON and 1440/390/320 screenshots with no mutation requests.
+
+## Account theme offline export — 2026-10-17
+
+The normal account Theme Studio download now uses owned retained theme content,
+including pending local edits, through the canonical transfer exporter. It also
+supports theme children in a retained folder and rejects cross-plane folder
+collisions. Complete catalogue snapshots negotiate `api.themes-sync` 1.2.0 for
+explicit folder placement; older caches require a compatible refresh before
+export instead of dropping that relationship. See
+[account theme export](account-theme-workspace.md#offline-portable-export--2026-10-17)
+for boundaries and regression entry points. Account import and authored History
+remain separate unfinished integrations; this does not close the full matrix.

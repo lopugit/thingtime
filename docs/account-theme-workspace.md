@@ -3,7 +3,7 @@
 Theme Studio now uses the device adapter for account saves, deletes and selected
 theme changes. Each commits locally; content and selection have independent
 background senders. This is one part of the incomplete
-[local workspace rollout](local-workspaces.md). Account transfer, protected local
+[local workspace rollout](local-workspaces.md). Account import, protected local
 History and the wider feature matrix remain integration gates.
 
 `local-workspace/accountThemes.ts` wraps the existing `LocalThemes` writer with
@@ -27,7 +27,8 @@ device content makes a fresh private copy rather than resurrecting its old ID.
 Unknown outcomes cannot be discarded through the conflict-review path. Related
 device Things prevent silently deleting their retained parent.
 
-`themeTransport.client.ts` negotiates `api.themes-sync` **1.0.1** and
+`themeTransport.client.ts` negotiates `api.themes-sync` **1.2.0** for catalogues,
+**1.0.1** for content writes, **1.1.0** for selection, and
 `api.mongodb-endpoint` 1.1.0, then uses bounded, same-origin, non-redirecting
 requests with the expected owner and selected data plane. Both confirmation and
 response identity are rechecked. Offline or anonymous content identity is never
@@ -122,8 +123,32 @@ node --import tsx --test app/local-workspace/accountThemes.browser.test.ts
 
 ## Remaining integration
 
-Complete account theme transfer and protected local History through the existing
+Complete account theme import and protected local History through the existing
 shared contracts. Expand native acceptance to editing, conflict comparison,
 private copies and identity transitions. Check public/shared gallery retention
 and selection, not just the owned catalogue. Reconcile latest main and verify
 current-head CI and a real deployment before the wider rollout can merge.
+
+## Offline portable export — 2026-10-17
+
+Theme Studio's existing Transfer → Export / Download uses the dedicated owned
+device theme snapshot through `accountExport.ts`. New themes and unsynchronized
+edits can download without remote authority, draft saving or a sync receipt.
+The canonical transfer collector, serializer and validator remain shared with
+normal imports. Portable content includes the name and tokens; account identity,
+visibility, active selection and queue metadata are excluded. Folder exports
+include retained owned theme children and preserve in-bundle placement.
+
+`api.themes-sync` 1.2.0 adds an explicit home `folderId` (or null) to snapshots.
+Older caches cannot silently assume root placement: they require a fresh compatible
+snapshot. Same-version metadata upgrades preserve pending token edits. A home
+theme cannot be attached to a same-ID folder in a selected custom database.
+Prepared downloads recheck theme deletion and workspace identity. Generic
+protected mutations and account import remain restricted to their dedicated paths.
+
+`accountThemeExport.test.ts` covers new/pending themes, folder membership,
+canonical round-trip with fresh IDs, old metadata, deletion and owner/origin/plane
+isolation. `accountApi.test.ts` exercises offline facade dispatch. The native
+`accountThemes.browser.test.ts` downloads and validates actual JSON at
+1440/390/320px before reconnecting; `themeSync.api.test.ts` checks folder placement
+through the normal API and its effect on conditional versions.

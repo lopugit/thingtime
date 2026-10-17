@@ -20,6 +20,7 @@ export type AccountThemeSnapshot = {
 	name: string;
 	theme: Record<string, unknown>;
 	visibility: 'private' | 'public';
+	folderId: string | null;
 	version: string;
 	createdAt: string;
 	updatedAt: string;
@@ -36,6 +37,7 @@ type State = {
 	visibility: 'private' | 'public';
 	state: SyncState;
 	deleted: boolean;
+	placementKnown?: boolean;
 	pending?: { command: ThemeWrite; revision: number };
 	claim?: { token: string; expiresAt: number };
 	retryAt: number;
@@ -69,6 +71,7 @@ export function parseAccountThemeSnapshot(input: unknown): AccountThemeSnapshot[
 			!validThemeVersion(row.version) ||
 			!normalized.ok ||
 			!['private', 'public'].includes(row.visibility) ||
+			(row.folderId !== null && (typeof row.folderId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(row.folderId))) ||
 			typeof row.createdAt !== 'string' ||
 			!Number.isFinite(Date.parse(row.createdAt)) ||
 			typeof row.updatedAt !== 'string' ||
@@ -82,6 +85,7 @@ export function parseAccountThemeSnapshot(input: unknown): AccountThemeSnapshot[
 			name: normalized.name,
 			theme: normalized.theme as unknown as Record<string, unknown>,
 			visibility: row.visibility,
+			folderId: row.folderId,
 			createdAt: row.createdAt,
 			updatedAt: row.updatedAt
 		};
@@ -95,7 +99,7 @@ export class AccountThemeSync {
 	readonly selection: AccountThemeSelection;
 	constructor(
 		private db: WorkspaceDatabase,
-		private scope: Scope,
+		readonly scope: Scope,
 		private lease: WorkspaceLease,
 		private now = () => Date.now(),
 		private uuid = () => crypto.randomUUID()
@@ -155,6 +159,7 @@ export class AccountThemeSync {
 			visibility: (input?.visibility as State['visibility']) ?? old?.visibility ?? 'private',
 			state: old?.state === 'conflict' || old?.state === 'error' ? old.state : 'pending',
 			deleted: !row,
+			placementKnown: old?.placementKnown ?? (!old?.base || old.base.folderId !== undefined),
 			pending: old?.pending,
 			claim: old?.claim,
 			attempts: old?.attempts ?? 0,
@@ -206,6 +211,49 @@ export class AccountThemeSync {
 	async status() {
 		return this.tx('readonly', async (tx) => (await tx.list<State>(collection)).map(({ value }) => value));
 	}
+	/** Only the dedicated owned state admits a portable theme. The generic
+	 * exporter may compose these rows with other retained content, but cannot
+	 * turn an arbitrary protected cache row into export authority. */
+	async exportSnapshot() {
+		return this.tx('readonly', async (tx) => {
+			const states = (await tx.list<State>(collection)).map((row) => row.value);
+			const things: LocalThing[] = [];
+			for (const state of states) {
+				if (state.deleted) continue;
+				const row = await tx.get<LocalThing>('things', state.id);
+				if (!row || !isTransferTheme(row)) return fail('Retained theme content is incomplete.', 'LOCAL_THEME_INCOMPLETE');
+				things.push({
+					id: row.id,
+					thingtime: ['theme'],
+					crystal: { name: row.crystal.name, theme: row.crystal.theme },
+					...(row.folderId ? { folderId: row.folderId } : {}),
+					createdAt: row.createdAt,
+					updatedAt: row.updatedAt,
+					revision: row.revision
+				});
+			}
+			return {
+				things,
+				records: states.map((state) => ({
+					id: state.id,
+					state: state.state,
+					remote: state.baseVersion !== null,
+					deleted: state.deleted,
+					complete: state.placementKnown === true || (!!state.base && state.base.folderId !== undefined)
+				}))
+			};
+		});
+	}
+	async assertExportReadable(ids: Iterable<string>) {
+		return this.tx('readonly', async (tx) => {
+			for (const id of ids) {
+				const state = await tx.get<State>(collection, id),
+					row = await tx.get<LocalThing>('things', id);
+				if (!state || state.deleted || !row || !isTransferTheme(row))
+					return fail('This theme is no longer available for export.', 'EXPORT_ACCESS_REFUSED');
+			}
+		});
+	}
 	async beginRead() {
 		return this.tx('readwrite', async (tx) => {
 			const old = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
@@ -222,6 +270,7 @@ export class AccountThemeSync {
 			id: remote.id,
 			thingtime: ['theme'],
 			crystal: { ...row?.crystal, name: remote.name, theme: remote.theme as any },
+			folderId: remote.folderId,
 			createdAt: row?.createdAt ?? remote.createdAt,
 			updatedAt: new Date(Math.max(Date.parse(remote.updatedAt), row ? Date.parse(row.updatedAt) + 1 : 0)).toISOString(),
 			revision: (row?.revision ?? 0) + 1
@@ -231,6 +280,7 @@ export class AccountThemeSync {
 			id: remote.id,
 			revision: (old?.revision ?? 0) + 1,
 			base: remote,
+			placementKnown: true,
 			baseVersion: remote.version,
 			visibility: remote.visibility,
 			state: 'synced',
@@ -252,7 +302,14 @@ export class AccountThemeSync {
 				for (const row of remote) {
 					const old = states.get(row.id);
 					if (!old || old.state === 'synced') {
-						if (!old || old.baseVersion !== row.version) await this.install(tx, row, old);
+						if (!old || old.baseVersion !== row.version || !old.placementKnown) await this.install(tx, row, old);
+					} else if (old.baseVersion === row.version && !old.placementKnown) {
+						// Upgrade retained metadata without replacing a pending device edit.
+						const local = await tx.get<LocalThing>('things', row.id);
+						if (local && isTransferTheme(local)) {
+							await tx.put('things', row.id, { ...local, folderId: row.folderId, revision: local.revision + 1 });
+							await tx.put(collection, row.id, { ...old, base: row, placementKnown: true });
+						}
 					}
 				}
 				for (const [id, state] of states)
@@ -447,9 +504,9 @@ export class AccountThemeSync {
 					await tx.put('things', copyId, copy);
 					await this.mutated(tx, copy, null, { visibility: 'private' });
 					if ((await tx.get('settings', 'active-theme')) === row.id) {
- await tx.put('settings', 'active-theme', copyId);
- await this.selection.setIn(tx, copyId);
- }
+						await tx.put('settings', 'active-theme', copyId);
+						await this.selection.setIn(tx, copyId);
+					}
 				}
 				if (keep === 'remote' || independent) {
 					if (remote) await this.install(tx, remote, row);
@@ -459,9 +516,9 @@ export class AccountThemeSync {
 						await tx.delete('things', row.id);
 						await tx.delete(collection, row.id);
 						if ((await tx.get('settings', 'active-theme')) === row.id) {
- await tx.delete('settings', 'active-theme');
- await this.selection.setIn(tx, null);
- }
+							await tx.delete('settings', 'active-theme');
+							await this.selection.setIn(tx, null);
+						}
 					}
 				} else {
 					if (!remote && !local) {

@@ -444,3 +444,10 @@ Account theme selection uses `themes/sync` operations `selection`/`select` under
 writer and transactional Timeline receipts. `themeSelectionContract.ts` is shared
 with the device queue. Run selection contract/API and themes/sync route tests;
 verify normal-writer conflicts, replay after deletion and all identity boundaries.
+
+Catalogue reads require `api.themes-sync` 1.2.0 for explicit home `folderId`/null.
+This additive projection supports complete offline theme export without exposing
+ownership or sharing metadata. Both manifests derive the version from `apiDocs.ts`;
+write and selection minima remain 1.0.1 and 1.1.0. Test incompatible cached
+contracts, missing placement, managed folder moves and pending-edit preservation
+with theme transport, sync API and account export tests.

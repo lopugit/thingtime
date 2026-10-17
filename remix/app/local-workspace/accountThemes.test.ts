@@ -15,6 +15,7 @@ const saved = (id: string = randomUUID(), n = 1): AccountThemeSnapshot => ({
 	name: 'Peach',
 	theme: (normalizeSavedTheme({ name: 'Peach', theme: { colors: { accent: '#bb8866' } } }) as any).theme,
 	visibility: 'private',
+	folderId: null,
 	version: version(n),
 	createdAt: '2026-10-17T00:00:00.000Z',
 	updatedAt: '2026-10-17T00:00:00.000Z'
@@ -129,7 +130,7 @@ test('complete snapshots are scoped, validated atomically and fenced against loc
 		await assert.rejects(f.sync.remember([remote, remote], await f.sync.beginRead()), /Invalid/);
 		const other = new AccountThemeSync(f.db, { ...scope, ownerId: 'other' }, f.lease);
 		assert.deepEqual((await other.list()).themes, []);
-		for (const bad of [null, {}, [{ ...remote, version: 'wrong' }], [{ ...remote, id: 'timeline-forged' }]])
+		for (const bad of [null, {}, [{ ...remote, version: 'wrong' }], [{ ...remote, id: 'timeline-forged' }], ...[undefined, '', '../folder', 4, {}].map(folderId => [{...remote, folderId}])])
 			assert.throws(() => parseAccountThemeSnapshot(bad));
 	} finally {
 		await f.db.close();

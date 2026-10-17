@@ -3221,3 +3221,37 @@ guard after incomplete semantic extraction; no partial graph was accepted.
 The full feature matrix, account theme imports/exports and authored History,
 latest-main reconciliation and current-head CI/deployment remain outstanding.
 The branch remains unmerged.
+
+### 2026-10-17 — Account theme portable export
+
+The existing Theme Studio Transfer download now composes dedicated owned theme
+snapshots with the canonical account exporter. New themes and pending edits
+export offline; folder closures preserve home placement and reject cross-plane
+collisions. The additive catalogue contract is api.themes-sync 1.2.0. Legacy
+placement metadata requires a compatible refresh without overwriting local edits.
+Prepared downloads refuse deletion and changed workspace identity; generic
+protected writes remain unchanged.
+
+Local validation: 139 focused checks pass; the server theme suite passes 26
+checks with three opt-in skips. The real theme sync API test was run explicitly
+and passed its private fixture, managed folder placement, version conflicts,
+home/custom-plane and cleanup checks. The native browser test downloaded valid
+JSON at 1440/390/320px while offline, with zero mutation requests or page errors,
+then verified independent content/selection synchronization and deletion. The
+canonical importer test remaps theme and folder IDs without losing tokens.
+Client build and focused lint pass. TypeScript has the same 91 baseline
+diagnostic signatures, not a clean check.
+
+Evidence: tmp/account-theme-export-browser-final/verification.json and actual
+theme-1440.json/theme-390.json/theme-320.json downloads;
+tmp/account-theme-export-api/verification.json. The first new API fixture used
+the wrong response envelope and failed cleanup; the corrected isolated fixture
+passed. A subsequent attempt encountered a stopped local Nitro process after a
+Node/V8 abort; the managed worktree stack was restored and the check rerun.
+
+PR metadata still reports head 14f1e765d6 despite the verified remote branch
+advancing; displayed checks cannot establish current-head CI. The reserved
+preview responds with No build found. Current semantic graph coverage remains
+unverified after the prior shrink-guard refusal. Account theme import, authored
+History, the wider feature matrix, latest-main integration and exact-head CI /
+deployed acceptance remain open. No merge or deployment is claimed.

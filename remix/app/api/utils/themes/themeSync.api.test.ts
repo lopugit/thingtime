@@ -17,6 +17,7 @@ test(
 			anonymous = await request.newContext({ baseURL: origin });
 		const headers = { Origin: origin, 'X-Thingtime-Expected-Data-Plane': 'home' },
 			ids = new Set<string>(),
+			folders = new Set<string>(),
 			evidence: { checks: string[]; complete?: boolean; fixtureEntriesCleaned?: boolean } = { checks: [] };
 		let ownerId = '';
 		const read = async (response: any, label: string, status = 200) => {
@@ -87,9 +88,29 @@ test(
 			assert.deepEqual(first, second);
 			const createdSnapshot = await snapshot();
 			assert.equal(createdSnapshot.length, 1);
+			assert.equal(createdSnapshot[0].folderId, null);
 			assert.equal(createdSnapshot[0].version, first.resultVersion, 'create receipt hashes the actual stored BSON preimage');
 			assert.deepEqual((await read(await write(create), 'lost-response create replay')).acknowledgment, first);
 			await read(await write({ ...create, name: 'Changed immutable payload' }), 'write ID cannot change payload', 409);
+			const folder = (
+				await read(
+					await context.post('/api/v1/things', {
+						headers,
+						data: { thingtime: ['folder'], crystal: { name: 'Theme export fixture' }, visibility: 'private' }
+					}),
+					'create private fixture folder'
+				)
+			).thing;
+			assert.ok(folder?.id);
+			folders.add(folder.id);
+			const moved = await read(
+				await context.post('/api/v1/things/bulk', { headers, data: { op: 'move', ids: [create.id], folderId: folder.id } }),
+				'move theme with canonical managed placement'
+			);
+			assert.equal(moved.succeeded, 1);
+			const placed = (await snapshot())[0];
+			assert.equal(placed.folderId, folder.id);
+			assert.notEqual(placed.version, first.resultVersion, 'normal folder placement invalidates the full theme snapshot');
 			const normal = await read(
 				await context.post('/api/v1/themes', {
 					headers,
@@ -153,6 +174,7 @@ test(
 				)
 			).acknowledgment;
 			const settled = (await snapshot())[0];
+			assert.equal(settled.folderId, folder.id, 'conditional token changes preserve home folder placement');
 			assert.equal(settled.version, customReceipt.resultVersion);
 			assert.equal(settled.name, customWrite.name);
 			const listed = await read(await context.get('/api/v1/themes'), 'normal theme list reads canonical synchronized content');
@@ -192,6 +214,13 @@ test(
 					const final = await context.get('/api/v1/themes');
 					assert.equal(final.status(), 200);
 					assert.deepEqual((await final.json()).themes, []);
+					for (const id of folders) {
+						const result = await read(
+							await context.post('/api/v1/things/bulk', { headers, data: { op: 'delete', ids: [id] } }),
+							'remove fixture folder'
+						);
+						assert.equal(result.succeeded, 1);
+					}
 					evidence.fixtureEntriesCleaned = true;
 				}
 				await mkdir(artifacts!, { recursive: true });

@@ -26,6 +26,7 @@ const project = (doc: any, legacy = false) => ({
 	...toPublicTheme(
 		legacy ? doc : { ...doc, name: doc.crystal?.name, theme: doc.crystal?.theme, visibility: doc.acl?.includes('tt:all') ? 'public' : 'private' }
 	),
+	folderId: legacy ? null : doc.folderId ?? null,
 	version: themeVersion(doc)
 });
 

@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { parseTransfer } from '../utils/thingTransfer/format';
 const base = process.env.TT_ACCOUNT_THEMES_URL,
 	artifacts = process.env.TT_ACCOUNT_THEMES_ARTIFACTS,
 	playwrightPath = process.env.TT_SHARED_PLAYWRIGHT_PATH;
 test(
-	'native theme studio saves and applies offline, reloads and synchronizes private content separately',
+	'native theme studio saves, applies and exports offline, reloads and synchronizes private content separately',
 	{ skip: !base || !artifacts || !playwrightPath, timeout: 180_000 },
 	async () => {
 		const origin = new URL(base!).origin;
@@ -69,7 +70,22 @@ test(
 				await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
 				assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), width);
 				await page.screenshot({ path: resolve(artifacts!, `themes-${width}.png`), animations: 'disabled', fullPage: true });
+				await page.getByTestId('thing-transfer-menu').last().click();
+				await page.getByRole('menuitem', { name: 'Export / Download…', exact: true }).click();
+				await page.getByLabel('Download format', { exact: true }).selectOption('json');
+				await page.screenshot({ path: resolve(artifacts!, `theme-download-${width}.png`), animations: 'disabled' });
+				const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download', exact: true }).click()]);
+				const path = resolve(artifacts!, `theme-${width}.json`);
+				await download.saveAs(path);
+				const exported = parseTransfer(await readFile(path, 'utf8'));
+				assert.equal(exported.things.length, 1);
+				assert.equal(exported.things[0].crystal.name, name);
+				assert.deepEqual(exported.things[0].thingtime, ['theme']);
+				assert.equal('acl' in exported.things[0], false);
+				assert.equal('ownerId' in exported.things[0], false);
+				await page.getByRole('dialog').waitFor({ state: 'hidden' });
 			}
+			checks.push('native offline JSON downloads validate at desktop and both phone widths');
 			assert.deepEqual(writes, []);
 			checks.push('no offline network mutations; 1440, 390 and 320px fit');
 			offline = false;

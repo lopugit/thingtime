@@ -714,3 +714,11 @@ that protected projection in History downloads for local and account authority
 Regressions: `local-workspace/themeHistory.test.ts` and the opt-in
 `anonymousThemeHistory.browser.test.ts`. Account-authored theme History remains
 a separate home-scope integration task.
+
+Owned account themes join the existing `accountExport.ts` collector through
+`AccountThemeSync.exportSnapshot`, never the generic protected writer. The
+`themes/sync` catalogue 1.2.0 supplies explicit home folder placement; selected
+custom-plane folder collisions refuse. `accountThemeExport.test.ts` covers
+canonical remapped round-trip, pending edits, deletion, old cache upgrades and
+scope refusal. `accountThemes.browser.test.ts` exercises the real offline
+Transfer download; `themeSync.api.test.ts` verifies normal managed placement.

@@ -29,6 +29,12 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal((await localThemes.list()).activeThemeId,savedTheme.id);
   assert.equal((await localThemes.getShared({id:savedTheme.id})).theme.name,'Offline account theme');
   assert.equal((await accountWorkspaceWorker(scope).themes.selection.status())?.state,'pending');
+  const themeDownload = await api.things.export({ids:[savedTheme.id]});
+  assert.equal(themeDownload.localWorkspace,true);
+  assert.deepEqual(themeDownload.plan.roots,[savedTheme.id]);
+  assert.equal(themeDownload.plan.things[0].crystal.name,'Offline account theme');
+  assert.equal(themeDownload.plan.things[0].crystal.theme.colors.accent,savedTheme.theme.colors.accent);
+  assert.equal(remoteCalls,0,'offline theme download uses the dedicated local snapshot');
   await localThemes.remove({id:savedTheme.id});
   assert.equal((await localThemes.list()).activeThemeId,null);
   assert.equal(remoteCalls,0,'theme save/apply/delete complete locally without account HTTP');

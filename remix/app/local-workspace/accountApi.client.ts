@@ -485,12 +485,12 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
 				const current = worker(), canRefresh = () => navigator.onLine !== false && canSyncAccountWorkspace(scope);
 				if (!input.key) {
-					const library = await current.files.library(), fileIds = new Set(library.things.map(row => row.id));
-					for (const id of input.ids) if (!fileIds.has(id) && !library.aliases.has(id) && !await current.sync.view(id) && !await current.sync.isDeleted(id)) {
+					const library = await current.files.library(), fileIds = new Set(library.things.map(row => row.id)), themeIds=new Set((await current.themes.status()).map(row=>row.id));
+					for (const id of input.ids) if (!themeIds.has(id) && !fileIds.has(id) && !library.aliases.has(id) && !await current.sync.view(id) && !await current.sync.isDeleted(id)) {
 						if (!canRefresh()) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'This Thing is not saved on this device. Open it online before downloading offline.', 409);
 						await refresh({ id }, options?.signal);
 						if (!await current.sync.view(id)) {
-							if ((await current.sync.status()).some(row => row.state !== 'synced') || input.ids.some(root => fileIds.has(root) || library.aliases.has(root))) throw new WorkspaceError('DEDICATED_EXPORT_REQUIRED', 'Download device edits separately from content requiring its dedicated online adapter.', 409);
+							if ((await current.sync.status()).some(row => row.state !== 'synced') || (await current.themes.status()).some(row => row.state !== 'synced') || input.ids.some(root => themeIds.has(root) || fileIds.has(root) || library.aliases.has(root))) throw new WorkspaceError('DEDICATED_EXPORT_REQUIRED', 'Download device edits separately from content requiring its dedicated online adapter.', 409);
 							return current.transport.export(input, options?.signal);
 						}
 					}
