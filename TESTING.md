@@ -11277,10 +11277,28 @@ suites and README-enabled `accountTimelineRecovery.browser.test.ts`.
   preserve pending work. Unrelated names can sync after a definitive refusal.
 - [x] Upgrade a v6 database without dropping pending notes. Export acknowledged
   cached names after reload; omit pending projections and retain clear tombstones.
-- [ ] Complete naming client/draft versions and removing notes before their add
-  acknowledgement, plus the broader History/local-feature acceptance matrix.
+- [ ] Complete naming client/draft versions and the broader History/local-feature
+  acceptance matrix. Pending-note removal has its separate checklist below.
 
 Run `test:timeline`, `test:local-workspace`, and README-enabled
 `accountTimelineNames.browser.test.ts`. An offline browser flag is checked at
 transport boundaries as well as the UI; a previously verified connection must
 not continue starting writes while disconnected.
+
+
+### Pending History note removal (2026-10-17)
+
+- [x] Queue add then remove, reopen storage and drain in acknowledgement order.
+  Lost replies replay the exact add; refused adds block only their removal.
+  Dismiss refuses uncertain work and removes never-sent dependent removal only
+  after a definitive add refusal. Retry targets the failed operation.
+- [x] Old page/exact-version replies and duplicate add acknowledgements cannot
+  restore removed cache entries. Reopen a v7 database: preserve names/notes and
+  persist the bounded v8 read revision fence.
+- [x] Server removal erases text, keeps a metered private identity, and refuses
+  delayed add/explanation retries. Local legacy boolean markers upgrade to the
+  same record. Corrupt markers/accounting and failed quota writes preserve data.
+- [x] Run the native fixture at 1440/390/320px, including pending removal before
+  first sync, cold reload, zero offline requests and private guest refusals.
+- [x] Run real replica add/remove races and delayed retries through
+  `test:timeline:notes` using README's guarded disposable database settings.

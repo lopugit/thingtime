@@ -162,7 +162,7 @@ export function useApi() {
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       note: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineNoteCommand, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.timeline', '1.17.0');
+        await requireThingtimeCapability('api.timeline', '1.19.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       // Remote transport only. The History name queue persists local edits and calls this after verified discovery.

@@ -3411,7 +3411,51 @@ baseline diagnostics; focused lint has zero errors and seven existing warnings.
 Client build verifies 247 offline assets. These are local results, not current
 CI or deployed acceptance.
 
-Remaining: naming client/draft versions, pending-note removal, broader branch
+Remaining: naming client/draft versions, broader branch
 controls, protected/attachment-bound recovery and the full local-feature matrix.
 This checkpoint preserves existing saved-version eligibility; it does not claim
 that every History feature or the full local-first goal is finished.
+
+
+## Pending History note removal — 2026-10-17
+
+A note can now be removed while its add is still queued. Removal finishes on the
+device immediately and survives reload; remote sync waits for the exact add
+acknowledgement before sending the independent remove command. Ambiguous adds
+keep their immutable retry identity. A definitive add refusal blocks only its
+own removal; Retry/Dismiss target the failed add, and dismissing that refusal
+also discards its never-sent dependent removal. Unrelated notes still progress.
+
+Account removal replaces the protected note's payload with a small, metered
+canonical `TimelineNoteRemoval` record under the same identity. The text and
+source references are removed. Retries cannot recreate that identity or rerun
+its explanation; a fresh note requires a fresh operation ID. Missing-note
+removal also records this identity, covering a delete that arrives before add.
+The marker has no event target, so existing indexed note reads and event caps
+exclude it. Quota/refund changes and replacement remain one transaction.
+Anonymous authority uses the same record in its existing removal marker store,
+with compatibility for old boolean markers. There is no new collection or index.
+
+The bounded account cache uses one persisted revision per scope (IndexedDB v8),
+so a page read started before removal or a duplicate add acknowledgement cannot
+restore a removed cached note. Existing v7 names and notes survive migration.
+Remote note commands negotiate `api.timeline` 1.19.0; no fallback bypasses that
+contract or account/origin/data-plane verification.
+
+This is a History increment. Client/draft version naming, broader branch controls,
+protected and attachment recovery, and the full local-feature matrix remain open.
+
+Local validation: 424 workspace/offline checks, 255 Timeline checks and 100
+capability checks pass (779; 46 opt-in skips excluded). The real replica HTTP
+fixture passes three simultaneous add/remove races, delayed replay refusal,
+privacy, slot limits and normal read projections. Lopu returns the expected
+unverified-account refusal; no successful AI execution is claimed. The enabled
+native fixture passes offline pending removal, cold reload at 1440/390/320px,
+actual reconnect acknowledgements, three concurrent delayed retries, accepted
+note removal and guest refusals, with zero offline write attempts or page errors.
+Screenshots were inspected at all three widths; evidence is retained under
+`tmp/pending-note-removal-native-ready/`. TypeScript retains the same 91 baseline
+diagnostics; focused lint has zero errors and seven existing warnings. Client
+build verifies 247 offline assets. These are local results, not CI or deployment
+acceptance. Earlier native attempts failed before fixture creation while the
+local Nitro runner restarted; those failures are not counted as passes.

@@ -2663,7 +2663,42 @@ baseline diagnostics; focused lint has zero errors and seven existing warnings.
 Client build verifies 247 offline assets. These are local results, not current
 CI or deployed acceptance.
 
-Remaining: naming client/draft versions, pending-note removal, broader branch
+Remaining: naming client/draft versions, broader branch
 controls, protected/attachment-bound recovery and the full local-feature matrix.
 This checkpoint preserves existing saved-version eligibility; it does not claim
 that every History feature or the full local-first goal is finished.
+
+
+## Pending History note removal — 2026-10-17
+
+Account notes can be removed before their first add acknowledgement; both
+commands finish locally and sync independently in dependency order. Refused
+adds retain review intent without blocking unrelated work. Scoped IndexedDB v8
+read revisions prevent stale read pages and duplicate add replies from restoring
+deleted cache entries. Existing v7 names/notes survive the additive migration.
+
+The shared canonical removal record replaces the protected account note under
+its existing identity, erasing text/source references and retaining metered
+private metadata. Late add/explanation retries return 409 instead of recreating
+content. Delete-before-add is fenced too. Existing anonymous removal markers
+upgrade to the identical record. No new collection/index or weaker auth path.
+Remote note writes negotiate `api.timeline` 1.19.0.
+
+Local validation: 424 workspace/offline checks, 255 Timeline checks and 100
+capability checks pass (779; 46 opt-in skips excluded). The real replica HTTP
+fixture passes three simultaneous add/remove races, delayed replay refusal,
+privacy, slot limits and normal read projections. Lopu returns the expected
+unverified-account refusal; no successful AI execution is claimed. The enabled
+native fixture passes offline pending removal, cold reload at 1440/390/320px,
+actual reconnect acknowledgements, three concurrent delayed retries, accepted
+note removal and guest refusals, with zero offline write attempts or page errors.
+Screenshots were inspected at all three widths; evidence is retained under
+`tmp/pending-note-removal-native-ready/`. TypeScript retains the same 91 baseline
+diagnostics; focused lint has zero errors and seven existing warnings. Client
+build verifies 247 offline assets. These are local results, not CI or deployment
+acceptance. Earlier native attempts failed before fixture creation while the
+local Nitro runner restarted; those failures are not counted as passes.
+
+Remaining: client/draft version naming, broader branch controls, protected and
+attachment recovery, and the full local-feature acceptance matrix. This remains
+a draft PR; no merge, deployment or public publishing was performed.

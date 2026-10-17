@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: History notes can be removed before their first
+  sync; durable private removal identities and scoped cache revisions stop late
+  retries and reads from restoring deleted notes (`api.timeline` 1.19.0).
+  Verified locally through real replica races and offline native desktop/phone
+  flows. Disposable integration database guards are configurable; full local
+  feature acceptance remains open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#pending-history-note-removal--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Saved account History version names queue durably offline; note controls complete after local saving and sync independently. Preserve exact retries, conflict review, accepted export metadata and offline transport gating. Native desktop/mobile checks and remaining scope are in the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#offline-account-history-names-and-notes--2026-10-17).
 
 

@@ -257,3 +257,53 @@ test('an exact version read accepts wrapped notes for that event and still accep
 	response = { entry, notes: [] }; await sync.entry('base'); assert.deepEqual(await cached(notes, 'base'), []);
 	await backend.close();
 });
+
+test('pending removal survives reopen and waits for its exact add acknowledgement',async()=>{
+ const factory=new IDBFactory(),backend=new IndexedDbTimelineBackend(factory),store=new TimelineNoteStore(scope,backend);
+ const command=add(),removal=remove(timelineNoteId(command.operationId));
+ await store.enqueue(command);await store.enqueue(removal);assert.equal(await store.ready(removal),false);
+ const view=historyNoteViews(scope.ownerId,[{event:{id:'base'}}],new Map(),await store.queued()).get('base')![0];
+ assert.equal(view.status,'removing');assert.equal(view.operationId,removal.operationId);
+ await backend.close();const reopened=new IndexedDbTimelineBackend(factory),notes=new TimelineNoteStore(scope,reopened),events=new TimelineLocalStore(scope,reopened);const sent:TimelineNoteCommand[]=[];
+ try{
+  const sync=new TimelineSync(events,{page:async()=>{throw new Error('unused');},push:async()=>{throw new Error('unused');},note:async input=>{sent.push(input);return input.command==='remove-note'?{ok:true,removed:true,noteId:input.noteId}:{ok:true,note:noteFor(input)};}},undefined,notes);
+  assert.equal(await sync.pushPending(),2);assert.deepEqual(sent,[command,removal]);assert.deepEqual(await notes.queued(),[]);assert.deepEqual(await cached(notes,'base'),[]);
+ }finally{await reopened.close();}
+});
+
+test('a lost add reply preserves its identity and later removal until an exact replay resolves',async()=>{
+ const factory=new IDBFactory(),backend=new IndexedDbTimelineBackend(factory),notes=new TimelineNoteStore(scope,backend),events=new TimelineLocalStore(scope,backend);
+ const command=add(),removal=remove(timelineNoteId(command.operationId));await notes.enqueue(command);const sent:TimelineNoteCommand[]=[];
+ let lost=true;
+ const transport={page:async()=>{throw new Error('unused');},push:async()=>{throw new Error('unused');},note:async(input:TimelineNoteCommand):Promise<any>=>{sent.push(input);if(lost){lost=false;throw new Error('Lost reply');}return input.command==='remove-note'?{ok:true,removed:true,noteId:input.noteId}:{ok:true,note:noteFor(input)};}};
+ await assert.rejects(new TimelineSync(events,transport,undefined,notes).pushPending(),/Lost reply/);await notes.enqueue(removal);await backend.close();
+ const reopened=new IndexedDbTimelineBackend(factory),retained=new TimelineNoteStore(scope,reopened);
+ try{assert.equal(await new TimelineSync(new TimelineLocalStore(scope,reopened),transport,undefined,retained).pushPending(),2);assert.deepEqual(sent,[command,command,removal]);assert.deepEqual(await retained.queued(),[]);}finally{await reopened.close();}
+});
+
+test('a refused add blocks its removal while unrelated notes proceed; review targets the refused add',async()=>{
+ const backend=new IndexedDbTimelineBackend(new IDBFactory()),notes=new TimelineNoteStore(scope,backend),events=new TimelineLocalStore(scope,backend);
+ const command=add(),removal=remove(timelineNoteId(command.operationId)),other=add('base',uuid(20));await notes.enqueue(command);await notes.enqueue(removal);await notes.enqueue(other);
+ const sent:string[]=[];
+ try{
+  const sync=new TimelineSync(events,{page:async()=>{throw new Error('unused');},push:async()=>{throw new Error('unused');},note:async input=>{sent.push(input.operationId);if(input.operationId===command.operationId)throw Object.assign(new Error('Full'),{status:413});return {ok:true,note:noteFor(input as Authored)};}},undefined,notes);
+  await assert.rejects(sync.pushPending(),TimelineNoteCommandRefusal);assert.deepEqual(sent,[command.operationId,other.operationId]);
+  const view=historyNoteViews(scope.ownerId,[{event:{id:'base'}}],await notes.forEvents(['base']),await notes.queued()).get('base')!.find(view=>view.note.id===timelineNoteId(command.operationId))!;
+  assert.equal(view.status,'removing');assert.equal(view.operationId,command.operationId);assert.equal(view.failure?.status,413);
+  await notes.dismissRejected(command.operationId);assert.deepEqual(await notes.queued(),[]);assert.deepEqual(await cached(notes,'base'),[timelineNoteId(other.operationId)]);
+ }finally{await backend.close();}
+});
+
+test('late add acknowledgements and older page or exact reads cannot resurrect a removed note across tabs',async()=>{
+ const factory=new IDBFactory(),a=new IndexedDbTimelineBackend(factory),b=new IndexedDbTimelineBackend(factory),notes=new TimelineNoteStore(scope,a),other=new TimelineNoteStore(scope,b),events=new TimelineLocalStore(scope,a);
+ const command=add(),note=noteFor(command),removal=remove(note.id),entry=entryFixture(eventFixture('base',{thingId:'page'}));await notes.enqueue(command);await notes.accept([note],{operationId:command.operationId});
+ try{
+  let completePage!:(value:any)=>void,completeEntry!:(value:any)=>void;
+  const sync=new TimelineSync(events,{push:async()=>{throw new Error('unused');},page:()=>new Promise(resolve=>{completePage=resolve;}),entry:()=>new Promise(resolve=>{completeEntry=resolve;})},undefined,notes);
+  const page=sync.page('page'),single=sync.entry('base');while(!completePage||!completeEntry)await new Promise(resolve=>setTimeout(resolve,0));
+  await other.enqueue(removal);await other.removed([note.id],removal.operationId);const revision=await other.revision();
+  completePage({entries:[entry],notes:[note],nextBefore:null,nextAfter:null});completeEntry({entry,notes:[note]});await Promise.all([page,single]);
+  await notes.accept([note],{operationId:command.operationId});assert.deepEqual(await cached(notes,'base'),[]);assert.equal(await notes.revision(),revision);
+  await a.close();const reopened=new IndexedDbTimelineBackend(factory);try{const retained=new TimelineNoteStore(scope,reopened);assert.equal(await retained.revision(),revision);assert.deepEqual(await cached(retained,'base'),[]);}finally{await reopened.close();}
+ }finally{await a.close();await b.close();}
+});

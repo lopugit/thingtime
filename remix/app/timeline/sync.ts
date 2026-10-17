@@ -130,6 +130,8 @@ export class TimelineSync {
 		for (const command of noteCommands) {
 			this.assertActive();
 			if (command.command !== 'remove-note' && (refused.has(command.eventId) || waiting.has(command.eventId))) continue;
+			if (!await this.noteStore!.ready(command)) continue;
+			this.assertActive();
 			if (!this.transport.note) throw new Error('This server does not support note synchronization. Your note is preserved.');
 			let response: TimelineNoteResult;
 			try { response = await this.transport.note(command, this.controller.signal); }
@@ -225,6 +227,8 @@ export class TimelineSync {
 		this.assertActive();
 		if (!this.transport.entry) throw new Error('Loading this version is unavailable.');
 		const readStartedAt=Date.now();
+		const noteRevision=this.noteStore?await this.noteStore.revision():undefined;
+		this.assertActive();
 		const response = await this.transport.entry(eventId, this.controller.signal); this.assertActive();
 		const wrapped = !!response && typeof response === 'object' && 'entry' in response;
 		const entry = parseTimelineEntry(wrapped ? response.entry : response);
@@ -232,7 +236,7 @@ export class TimelineSync {
 		const notes = this.pageNotes(wrapped ? response.notes : undefined, [eventId]);
 		const names = this.pageNames(wrapped ? response.names : undefined, [eventId]);
 		await this.store.accept([entry]);
-		if (notes) await this.noteStore?.accept(notes, { events: [eventId] });
+		if (notes) await this.noteStore?.accept(notes, { events: [eventId], readRevision:noteRevision });
 		if (names) { this.nameStore?.accept(names, { events: [eventId] }); await this.nameQueue?.accept(names,[eventId],readStartedAt); }
 		await this.applyNameEffects([entry]);
 		return entry;
@@ -251,6 +255,8 @@ export class TimelineSync {
 		if (cursor.before !== undefined && cursor.after !== undefined) throw new Error('Choose one Timeline paging direction');
 		for (const position of [cursor.before, cursor.after]) if (position !== undefined && (!Number.isSafeInteger(position) || position < 1)) throw new Error('Invalid Timeline cursor');
 		const readStartedAt=Date.now();
+		const noteRevision=this.noteStore?await this.noteStore.revision():undefined;
+		this.assertActive();
 		const response = await this.transport.page({ thingId, before: cursor.before ?? null, after: cursor.after ?? null, limit: TIMELINE_PAGE_SIZE, ...(cursor.related ? { related: true, ...(cursor.relatedRevision ? { relatedRevision: cursor.relatedRevision } : {}) } : {}) }, this.controller.signal);
 		this.assertActive();
 		const related = cursor.related ? parseRelatedTimelineScope(response.related, thingId!) : undefined;
@@ -280,7 +286,7 @@ export class TimelineSync {
 		const notes = this.pageNotes(response.notes, ids);
 		const names = this.pageNames(response.names, ids);
 		await this.store.accept(entries);
-		if (notes) await this.noteStore?.accept(notes, { events: ids });
+		if (notes) await this.noteStore?.accept(notes, { events: ids, readRevision:noteRevision });
 		if (names) { this.nameStore?.accept(names, { events: ids }); await this.nameQueue?.accept(names,ids,readStartedAt); }
 		await this.applyNameEffects(entries);
 		return { entries, nextBefore: response.nextBefore, nextAfter: response.nextAfter, ...(related ? { related } : {}), ...(response.reset ? { reset: true } : {}), ...(notes ? { notes } : {}), ...(names ? { names } : {}) };

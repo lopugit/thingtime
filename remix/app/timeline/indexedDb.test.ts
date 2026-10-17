@@ -109,7 +109,7 @@ test('a v3 database upgrades pending work to relations without reviving an alrea
  }); old.close();
  const backend = new IndexedDbTimelineBackend(factory, name); const store = new TimelineLocalStore(scope, backend);
  assert.deepEqual(await store.pending(), [event]); assert.equal(await store.draft(event.thingId, event.branchId), null);
- const db = await openDatabase(factory, name); assert.equal(db.version, 7); assert.equal((await rawRows(db, 'links')).length, 4);
+ const db = await openDatabase(factory, name); assert.equal(db.version, 8); assert.equal((await rawRows(db, 'links')).length, 4);
  assert.equal('parentIds' in (await rawRows(db, 'events'))[0].event, false);
  assert.equal(db.objectStoreNames.contains('notes') && db.objectStoreNames.contains('noteCommands'), true);
  db.close(); await backend.close();
@@ -134,7 +134,7 @@ test('a v5 database gains the note stores without re-running the relation migrat
  const backend = new IndexedDbTimelineBackend(factory, name);
  await new TimelineNoteStore(scope, backend).enqueue({ command: 'remove-note', operationId: '377abf25-b322-4ac0-9707-a59c36e7bcd5', noteId: 'note-477abf25-b322-4ac0-9707-a59c36e7bcd5' });
  assert.deepEqual((await backend.readBranchState(key)).pending, [command]);
- const db = await openDatabase(factory, name); assert.equal(db.version, 7);
+ const db = await openDatabase(factory, name); assert.equal(db.version, 8);
  assert.deepEqual((await rawRows(db, 'noteCommands')).map(row => row.command.operationId), ['377abf25-b322-4ac0-9707-a59c36e7bcd5']);
  assert.deepEqual([...db.transaction('notes').objectStore('notes').indexNames].sort(), ['event', 'scope']);
  db.close(); await backend.close();
@@ -201,5 +201,21 @@ test('a v6 database preserves pending notes while adding durable version name st
  const command={scope:key,command:{command:'add-note',operationId:'277abf25-b322-4ac0-9707-a59c36e7bcd5',eventId:'base',thingId:'page',text:'Keep this pending note'},queuedAt:1};
  await new Promise<void>((resolve,reject)=>{const tx=old.transaction('noteCommands','readwrite');tx.objectStore('noteCommands').put(command);tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});old.close();
  const backend=new IndexedDbTimelineBackend(factory,name);assert.deepEqual((await backend.readNoteState(key)).pending,[command]);assert.deepEqual(await backend.readNameState(key),{names:[],pending:[]});
- const db=await openDatabase(factory,name);assert.equal(db.version,7);assert.ok(db.objectStoreNames.contains('versionNames'));assert.ok(db.objectStoreNames.contains('versionNameCommands'));db.close();await backend.close();
+ const db=await openDatabase(factory,name);assert.equal(db.version,8);assert.ok(db.objectStoreNames.contains('versionNames'));assert.ok(db.objectStoreNames.contains('versionNameCommands'));db.close();await backend.close();
+});
+
+
+test('a v7 database preserves note/name commands and adds a durable note read fence',async()=>{
+ const {TimelineNoteStore}=await import('./noteStore');const factory=new IDBFactory(),name='note-fence-upgrade',key=timelineScopeKey(scope);
+ const old=await openDatabase(factory,name,7,db=>{
+  for(const [storeName,keyPath] of [['noteCommands','command.operationId'],['versionNameCommands','command.operationId']]){const store=db.createObjectStore(storeName,{keyPath:['scope',keyPath]});store.createIndex('scope','scope');}
+ });
+ const noteCommand={scope:key,command:{command:'add-note',operationId:'177abf25-b322-4ac0-9707-a59c36e7bcd5',eventId:'base',thingId:'page',text:'Keep me'},queuedAt:1};
+ const nameCommand={scope:key,command:{command:'name-version',operationId:'277abf25-b322-4ac0-9707-a59c36e7bcd5',eventId:'base',thingId:'page',name:'Retained',expectedRevision:0},queuedAt:1,parent:null,baseRevision:0,sent:null,failure:null};
+ await new Promise<void>((resolve,reject)=>{const tx=old.transaction(['noteCommands','versionNameCommands'],'readwrite');tx.objectStore('noteCommands').put(noteCommand);tx.objectStore('versionNameCommands').put(nameCommand);tx.oncomplete=()=>resolve();tx.onabort=()=>reject(tx.error);});old.close();
+ const backend=new IndexedDbTimelineBackend(factory,name),notes=new TimelineNoteStore(scope,backend);try{
+  assert.equal(await notes.revision(),0);assert.deepEqual((await backend.readNoteState(key)).pending,[noteCommand]);assert.deepEqual((await backend.readNameState(key)).pending,[nameCommand]);
+  await notes.enqueue({command:'remove-note',operationId:'377abf25-b322-4ac0-9707-a59c36e7bcd5',noteId:'note-'+noteCommand.command.operationId});assert.equal(await notes.revision(),1);
+  await backend.close();assert.equal(await new TimelineNoteStore(scope,backend).revision(),1);
+ }finally{await backend.close();}
 });

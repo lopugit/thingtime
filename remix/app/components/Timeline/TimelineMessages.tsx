@@ -89,9 +89,10 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 		const controller = new AbortController(); explaining.current = controller;
 		working.current = true; setThinking(true); setError(''); setNotice('');
 		try {
+			const readRevision=await connection.notes.revision();
 			const result = parseTimelineNoteResult(await api.v1.timeline.note(connection.scope, command, { signal: controller.signal }), connection.scope.ownerId, command);
 			if (!('note' in result)) throw new Error('Lopu did not return an explanation.');
-			await connection.notes.accept([result.note]);
+			await connection.notes.accept([result.note],{readRevision});
 			explainOperation.current = null;
 			if (alive.current) { setNotice('Lopu explained this change.'); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
 		} catch (failure: any) {
@@ -101,9 +102,9 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 		}
 		finally { working.current = false; if (explaining.current === controller) explaining.current = null; if (alive.current) setThinking(false); }
 	};
-	const operationFor = async (view: HistoryNoteView) => view.status === 'removing'
+	const operationFor = async (view: HistoryNoteView) => view.operationId ?? (view.status === 'removing'
 		? (await connection!.notes.queued()).find(row => row.command.command === 'remove-note' && row.command.noteId === view.note.id)?.command.operationId ?? null
-		: view.note.id.slice('note-'.length);
+		: view.note.id.slice('note-'.length));
 	const settle = async (view: HistoryNoteView, mode: 'retry' | 'dismiss') => {
 		if (!connection || working.current) return;
 		working.current = true; setActing(true); setError(''); setNotice('');
@@ -126,7 +127,7 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 	const explainCaption = !fullAccount ? 'Sign in with a full account to ask Lopu' : !connection?.verified || !online ? 'Reconnect to ask Lopu' : pendingEvent ? 'Sync this change first' : '';
 	const actions = (view: HistoryNoteView) => view.failure
 		? <Flex className="history-message-actions"><Button size="xs" variant="outline" isDisabled={busy || thinking} onClick={() => void settle(view, 'retry')}>Retry</Button><Button size="xs" variant="ghost" isDisabled={busy || thinking} onClick={() => void settle(view, 'dismiss')}>Dismiss</Button></Flex>
-		: view.status === 'accepted'
+		: view.status === 'accepted' || (view.status === 'pending' && view.note.author === 'owner')
 		? <Flex className="history-message-actions"><Button size="xs" variant="ghost" isDisabled={!connection || busy || thinking} onClick={() => void queue({ command: 'remove-note', operationId: crypto.randomUUID(), noteId: view.note.id })}>Remove</Button></Flex>
 		: null;
 	return <Box minW={0}>

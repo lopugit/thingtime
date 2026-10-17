@@ -12,7 +12,7 @@ type RecordSpecs<State> = readonly (readonly [keyof State & string, string, (row
 const stores = ['events', 'eventIndex', 'links'];
 const branchSpecs: RecordSpecs<BranchLocalState> = [['branches', 'branches', row => row.branch.id], ['heads', 'branchHeads', row => row.head.id], ['pending', 'branchCommands', row => row.command.operationId]];
 const nameSpecs: RecordSpecs<NameLocalState> = [['names', 'versionNames', row => row.eventId], ['pending', 'versionNameCommands', row => row.command.operationId]];
-const noteSpecs: RecordSpecs<NoteLocalState> = [['notes', 'notes', row => row.note.id], ['pending', 'noteCommands', row => row.command.operationId]];
+const noteSpecs: RecordSpecs<NoteLocalState> = [['notes', 'notes', row => row.note.id], ['pending', 'noteCommands', row => row.command.operationId], ['fences', 'noteFences', row => row.id]];
 const hydrate = (row: StoredRow, links: StoredLink[]): LocalTimelineRow => {
 	if (links.some(link => link.scope !== row.scope)) throw new Error('Timeline relationship scope changed');
 	return { ...row, event: joinTimelineEvent(row.event, links.map(item => item.link)) };
@@ -30,7 +30,7 @@ export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineB
 	constructor(private factory: IDBFactory, private name = 'thingtime-timeline-v1') {}
 	private open(): Promise<IDBDatabase> {
 		if (!this.database) this.database = new Promise<IDBDatabase>((resolve, reject) => {
-			const request = this.factory.open(this.name, 7);
+			const request = this.factory.open(this.name, 8);
 			let abandoned = false;
 			request.onupgradeneeded = change => {
 				const db = request.result;
@@ -43,7 +43,7 @@ export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineB
 				const links = db.objectStoreNames.contains('links') ? request.transaction!.objectStore('links') : db.createObjectStore('links', { keyPath: ['scope', 'link.id'] });
 				if (!links.indexNames.contains('event')) links.createIndex('event', ['scope', 'link.eventId']);
 				if (!links.indexNames.contains('target')) links.createIndex('target', ['scope', 'link.relation', 'link.targetId']);
-				for (const [storeName, key] of [['branches', 'branch.id'], ['branchHeads', 'head.id'], ['branchCommands', 'command.operationId'], ['notes', 'note.id'], ['noteCommands', 'command.operationId'], ['versionNames', 'eventId'], ['versionNameCommands', 'command.operationId']]) {
+				for (const [storeName, key] of [['branches', 'branch.id'], ['branchHeads', 'head.id'], ['branchCommands', 'command.operationId'], ['notes', 'note.id'], ['noteCommands', 'command.operationId'], ['noteFences', 'id'], ['versionNames', 'eventId'], ['versionNameCommands', 'command.operationId']]) {
 					if (!db.objectStoreNames.contains(storeName)) { const store = db.createObjectStore(storeName, { keyPath: ['scope', key] }); store.createIndex('scope', 'scope'); }
 				}
 				const notes = request.transaction!.objectStore('notes');
@@ -169,7 +169,7 @@ export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineB
 		return this.recordTransaction(branchSpecs, TIMELINE_BRANCH_CACHE_HEADS + TIMELINE_BRANCH_PENDING_LIMIT + 1, 'branch', scope, update);
 	}
 	private noteTransaction(scope: string, update?: (state: NoteLocalState) => NoteLocalState): Promise<NoteLocalState> {
-		return this.recordTransaction(noteSpecs, TIMELINE_NOTE_CACHE_LIMIT + TIMELINE_NOTE_PENDING_LIMIT + 1, 'note', scope, update);
+		return this.recordTransaction(noteSpecs, TIMELINE_NOTE_CACHE_LIMIT + TIMELINE_NOTE_PENDING_LIMIT + 2, 'note', scope, update);
 	}
 	readBranchState(scope: string): Promise<BranchLocalState> { return this.branchTransaction(scope); }
 	async changeBranchState(scope: string, update: (state: BranchLocalState) => BranchLocalState): Promise<void> { await this.branchTransaction(scope, update); }

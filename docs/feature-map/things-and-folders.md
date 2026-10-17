@@ -693,4 +693,10 @@ after local queueing, independently of remote sync. `accountTimelineExport.ts`
 uses accepted retained names only. Tests: `nameQueue.test.ts`,
 `accountTimelineExport.test.ts`, v6 migration in `indexedDb.test.ts`, and the
 README-enabled native `accountTimelineNames.browser.test.ts`. Client/draft
-naming and pending-note removal remain open; see the local workspace matrix.
+naming remains open; see the local workspace matrix. Pending-note removal uses
+`TimelineNoteStore.ready` to wait for its exact add acknowledgement. IndexedDB
+v8 adds one read revision fence per scope; old reads and duplicate add replies
+cannot recache removed notes. The shared `TimelineNoteRemoval` record replaces
+the removed protected note payload on the account and upgrades existing local
+`timeline-meta` removal markers. `api.timeline` 1.19.0 advertises durable removal;
+`test:timeline:notes` checks real transaction races and delayed replay refusal.

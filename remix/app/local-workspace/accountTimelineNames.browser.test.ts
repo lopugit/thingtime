@@ -21,6 +21,7 @@ test(
 			headers = { Origin: new URL(base!).origin };
 		const title = 'Offline names fixture',
 			note = 'A note saved while disconnected.',
+			pendingNote = 'Remove me before my first sync.',
 			finalName = 'Remember this version';
 		const errors: string[] = [],
 			offlineWrites: string[] = [],
@@ -104,7 +105,13 @@ test(
 			await history.getByRole('textbox', { name: 'Add a note to this change', exact: true }).fill(note);
 			await history.getByRole('button', { name: 'Save note', exact: true }).click();
 			await history.getByText('Saved on this device. This note will sync separately when your account is connected.', { exact: true }).waitFor();
-			await close();
+            await history.getByRole('textbox',{name:'Add a note to this change',exact:true}).fill(pendingNote);
+            await history.getByRole('button',{name:'Save note',exact:true}).click();
+            const pendingBubble=history.getByRole('tabpanel',{name:'Message',exact:true}).locator('.history-message').filter({hasText:pendingNote});
+            await pendingBubble.getByRole('button',{name:'Remove',exact:true}).click();
+            await pendingBubble.locator('.history-message-state').getByText('Removing…',{exact:true}).waitFor();
+            await history.getByText('Saved on this device. This removal will sync separately when your account is connected.',{exact:true}).waitFor();
+            await close();
 			for (const width of [1440, 390, 320]) {
 				await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
 				await page.reload();
@@ -127,6 +134,8 @@ test(
 					.locator('.history-message-text')
 					.getByText(note, { exact: true })
 					.waitFor();
+				await panel.getByRole('tabpanel',{name:'Message',exact:true}).locator('.history-message.removing').filter({hasText:pendingNote}).waitFor();
+				if(artifacts)await page.screenshot({path:resolve(artifacts,`account-history-pending-note-${width}.png`),animations:'disabled'});
 				await close(width);
 			}
 			assert.deepEqual(offlineWrites, []);
@@ -141,13 +150,17 @@ test(
 			let accepted: any = null;
 			for (let n = 0; n < 150; n++) {
 				const result = await remote();
-				if (result.names?.some((name: any) => name.name === finalName) && result.notes?.some((entry: any) => entry.text === note)) {
+				if (commands.some((command) => command.command === 'remove-note') && result.names?.some((name: any) => name.name === finalName) && result.notes?.some((entry: any) => entry.text === note) && !result.notes?.some((entry: any) => entry.text === pendingNote)) {
 					accepted = result;
 					break;
 				}
 				await new Promise((resolve) => setTimeout(resolve, 200));
 			}
 			assert.ok(accepted, 'queued names and note receive real account acknowledgements');
+            const pendingAdd=commands.find(command=>command.command==='add-note'&&command.text===pendingNote);assert.ok(pendingAdd);
+            const retries=await Promise.all(Array.from({length:3},()=>context.request.post(url('/api/v1/timeline?'+new URLSearchParams({ownerId,dataPlane})),{headers,data:pendingAdd})));
+            for(const retry of retries)assert.equal(retry.status(),409,await retry.text());
+            assert.ok(!(await remote()).notes.some((entry:any)=>entry.text===pendingNote),'Delayed concurrent adds cannot recreate removed text');
 			await open();
 			await history.getByRole('tab', { name: 'Versions', exact: true }).click();
 			await page.waitForFunction(() => !document.body.innerText.includes('Version name saved on this device · waiting to sync'));
@@ -204,6 +217,8 @@ test(
 							nativeNames: true,
 							nativeNotes: true,
 							queuedNoteRemoval: true,
+							pendingNoteRemoval:true,
+							delayedRetriesRefused:true,
 							coldOfflineReload: true,
 							canonicalAcknowledgements: true,
 							viewports: [1440, 390, 320],

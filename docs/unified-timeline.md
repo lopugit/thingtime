@@ -1091,3 +1091,17 @@ previews), so it stays available against a 1.17.0 server.
 Run `test:timeline`, `test:api-capabilities` and the opt-in
 `test:timeline:versions` (`scripts/timeline-versions.integration.mts`) on the
 guarded `timeline-rs` replica.
+
+
+### Durable note removal — api.timeline 1.19.0
+
+`TimelineNoteRemoval` is the shared local/account record for a removed note
+identity. The account retains a small metered private protected Thing while
+erasing note text and source references; ordinary note reads/counts exclude it
+through its empty target. Retrying an old add or explanation returns 409, and
+removing a not-yet-created identity also fences a delayed add. Fresh notes use
+fresh operation IDs. The browser queues dependent removals durably and keeps a
+single read revision per scope to reject stale cache replies. See
+[local coverage](local-workspaces.md#pending-history-note-removal--2026-10-17)
+and README's guarded `test:timeline:notes` setup. Existing auth, owner scope,
+quota, transaction and capability gates remain required.

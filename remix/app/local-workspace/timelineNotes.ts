@@ -1,4 +1,4 @@
-import { parseTimelineNote, parseTimelineNoteResult, sortTimelineNotes, timelineNoteId, TIMELINE_NOTES_PER_EVENT, type TimelineNote, type TimelineNoteCommand, type TimelineNoteResult } from '../timeline/notes';
+import { parseTimelineNote, parseTimelineNoteRemoval, parseTimelineNoteResult, sortTimelineNotes, timelineNoteId, TIMELINE_NOTES_PER_EVENT, type TimelineNote, type TimelineNoteCommand, type TimelineNoteResult } from '../timeline/notes';
 import type { TimelineEntry } from '../timeline/contract';
 import { WorkspaceError, type WorkspaceTransaction } from './storage';
 
@@ -38,12 +38,18 @@ export async function writeLocalTimelineNote(tx: WorkspaceTransaction, ownerId: 
   // from resurrecting removed text. It contains no note content and counts
   // toward the ordinary workspace quota in this same transaction.
   await tx.delete(NOTES, command.noteId);
-  await tx.put('timeline-meta', `removed-note:${command.noteId}`, true);
+  const key = `removed-note:${command.noteId}`, prior = await tx.get('timeline-meta', key);
+  if (prior !== undefined && prior !== true) { const removal = parseTimelineNoteRemoval(prior); if (removal.ownerId !== ownerId || removal.id !== command.noteId) refuse(409, 'Local History note removal identity is damaged.'); }
+  if (prior === undefined || prior === true) await tx.put('timeline-meta', key, parseTimelineNoteRemoval({formatVersion:1,id:command.noteId,ownerId,removedAt:now()}));
   return { ok: true, removed: true, noteId: command.noteId };
  }
  if (command.command !== 'add-note') return refuse(422, 'Unsupported local History note command.');
  const id = timelineNoteId(command.operationId);
- if (await tx.get('timeline-meta', `removed-note:${id}`)) refuse(409, 'This note was removed. Add a new note instead of retrying the old request.');
+ const removed = await tx.get('timeline-meta', `removed-note:${id}`);
+ if (removed !== undefined) {
+  if (removed !== true) { const removal = parseTimelineNoteRemoval(removed); if(removal.ownerId !== ownerId || removal.id !== id) refuse(409, 'Local History note removal identity is damaged.'); }
+  refuse(409, 'This note was removed. Add a new note instead of retrying the old request.');
+ }
  const prior = await tx.get<TimelineNote>(NOTES, id);
  if (prior) {
   try { return parseTimelineNoteResult({ ok: true, note: prior }, ownerId, command); }

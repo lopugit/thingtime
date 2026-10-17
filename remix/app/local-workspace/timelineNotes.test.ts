@@ -5,7 +5,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { WorkspaceDatabase } from './storage';
 import { LocalThings } from './things';
 import { LocalTimeline, LOCAL_TIMELINE_OWNER } from './timeline';
-import { parseTimelineNoteResult } from '../timeline/notes';
+import { parseTimelineNoteResult, parseTimelineNoteRemoval } from '../timeline/notes';
 const lease = { assertCurrent() {}, onInvalidate: () => () => {} }, scope = { kind: 'anonymous' } as const;
 const page = { thingId: null, before: null, after: null, limit: 40 };
 async function fixture(db: WorkspaceDatabase) {
@@ -131,4 +131,16 @@ test('page byte limits include multibyte notes and return notes only for the sel
   assert.equal(next.notes.length, 8);
   assert.ok(next.notes.every(note => note.eventId === initial.entries[1].event.id));
  } finally { await db.close(); }
+});
+
+test('legacy removal markers upgrade to the shared payload-free record without reusing removed identities',async()=>{
+ const db=new WorkspaceDatabase(new IDBFactory());try{
+  const {history,add}=await fixture(db),command=add(),id='note-'+command.operationId,key='removed-note:'+id;
+  await db.transaction(scope,'readwrite',lease,tx=>tx.put('timeline-meta',key,true));
+  await assert.rejects(history.note(command),/removed/);
+  await history.note({command:'remove-note',operationId:randomUUID(),noteId:id});
+  await db.transaction(scope,'readonly',lease,async tx=>{const record=parseTimelineNoteRemoval(await tx.get('timeline-meta',key));assert.equal(record.id,id);assert.equal(record.ownerId,LOCAL_TIMELINE_OWNER);assert.deepEqual(Object.keys(record).sort(),['formatVersion','id','ownerId','removedAt']);});
+  await db.transaction(scope,'readwrite',lease,tx=>tx.put('timeline-meta',key,false));
+  await assert.rejects(history.note(command),/Invalid Timeline note removal/);
+ }finally{await db.close();}
 });

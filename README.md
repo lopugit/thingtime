@@ -4821,3 +4821,24 @@ its own account through the normal API, creates a private Thing, queues names
 and notes offline, reconnects normally, and deletes that test Thing in cleanup.
 Normal signup limits apply. It never uses an existing account or service token.
 See [History naming coverage](docs/local-workspaces.md#offline-account-history-names-and-notes--2026-10-17).
+
+
+### Pending History note removal regression
+
+The same native names/notes fixture now removes a note before its first account
+acknowledgement, cold-reloads at desktop and phone widths, reconnects and retries
+the original add request. Run the real transaction fixture separately:
+
+```sh
+TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> \
+TIMELINE_TEST_MONGO_HOST=127.0.0.1:<disposable-mongo-port> \
+TIMELINE_TEST_REPLICA_SET=<disposable-replica-name> \
+npm --prefix remix run test:timeline:notes
+```
+
+The database guard defaults to `127.0.0.1:20337` / `timeline-rs`; explicit values
+must identify the disposable loopback fixture. The script validates the actual
+server database status before creating its own accounts. Do not point it at an
+existing account database. Normal permissions, signup limits and storage quotas
+apply. No tokens or account credentials are needed. `api.timeline` 1.19.0 is
+required for remote note writes with durable removal identities.
