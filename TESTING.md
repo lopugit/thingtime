@@ -1012,6 +1012,17 @@ persisted; every check is client-side.
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Model and settings popovers remain visible and clickable above the floating
+  Lopu window/mobile scrim. Repeat on `/lopu` and embedded chat at 390×844,
+  desktop, and a short viewport. Select a model after scrolling the list; toggle
+  a setting and reopen to confirm it sticks; test repeated trigger taps,
+  Escape, and outside taps without closing the chat. Scroll to the last setting.
+  Regression fixture: `/scripts/lopu-popovers.browser.html?surface=floating&autorun=1`
+  (`surface=page` or `surface=embedded` for the other real surfaces). Synthetic
+  HTTP/preferences only; assert hit testing, not just DOM presence. Chakra's
+  **positioner wrapper** must use the shared popup layer; content-only z-index
+  leaves a visible-in-DOM menu trapped beneath the window.
+
 - [ ] With a musing, AI completion, or chat request without a chat ID running, open a fresh Lopu chat on the page, floating window, and Messenger. It must show Send and accept a first message; Stop must not cancel unrelated tasks. An existing chat with a running reply or workflow must still prevent duplicate sends and stop its own task. Regression: `lopuRecoveryReload.test.mts`.
 
 
