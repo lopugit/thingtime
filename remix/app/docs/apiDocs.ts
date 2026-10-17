@@ -2959,6 +2959,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Responses set Cache-Control: no-store. Storage audit fields are never exposed by this endpoint.']
   }),
   endpoint({
+    id: 'ai-models-sync', group: 'lopu', title: 'Sync provider model catalogues',
+    endpoint: '/api/v1/ai/models/sync', contractVersion: '1.0.0', featureVersion: '1.0.0',
+    summary: 'Daily authenticated reconciliation of server provider model availability.',
+    detail: 'Requires the deployment CRON_SECRET bearer. Complete paginated provider lists atomically update protected ai-model Things. Preserves admin toggles and the last successful catalogue on any failure. Per-provider durable leases coalesce runs; model-not-found recovery and admin sync have a five-minute cooldown. New compatible chat models use provider-default options and are enabled only by admin policy; non-chat models remain excluded. Pricing remains explicitly unknown until published rates are added.',
+    auth: { mode: 'bearer', description: 'CRON_SECRET bearer only; user sessions are not accepted.' },
+    methods: ['GET'],
+    steps: ['Authenticate with the deployment cron bearer.', 'Reconcile each configured provider under a durable lease.'],
+    requestExamples: [],
+    responseExamples: [{ status: 200, description: 'Provider sync statuses; never credentials or provider error bodies.', body: { ok: true, report: [] } }]
+  }),
+  endpoint({
     id: 'ai-models',
     group: 'lopu',
     title: 'Lopu model catalog',
@@ -2970,17 +2981,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.4.0: `models[].pricing` — the list price per million tokens with an `estimated` flag
     // (verified-access design note §2, additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.4.1',
-    featureVersion: '1.4.1',
-    summary: 'Lists every AI model Lopu can chat with, its provider access state, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
+    summary: 'Only currently available supported models are returned. Lists every AI model Lopu can chat with, its provider access state, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
-      'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
+      'The available-only public projection of protected `ai-model` Things, including provider-discovered compatible chat models. ' +
       'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
       'listed). Each model carries its provider, the reasoning-effort tiers it offers, the speed lanes it sells (fast = ' +
       'Anthropic fast mode / OpenAI priority processing), a derived family, the admin `enabled` toggle, `verified` (the ' +
       'provider key’s probe verdict: true accepted, false rejected, null unknown), and `available` = enabled AND the provider ' +
       'key is configured on the server (CLAUDE_CODE_OAUTH_TOKEN or admin vault Claude OAuth; OPENAI_API_KEY) AND that key has not been ' +
-      'rejected. Claude checks the shared vault for an enabled OAuth token and reports verified: null until an actual ' +
+      'rejected, and the latest complete provider snapshot has not marked the model unavailable. Admin lists retain disabled/retired records. Claude checks the shared vault for an enabled OAuth token and reports verified: null until an actual ' +
       'reply checks model access and allowance. OpenAI uses a bounded GET /v1/models probe (OPENAI_BASE_URL honoured, ' +
       '5 s cap, no retries or redirects, cached for 10 minutes and 2 after failure). A rejected OpenAI key hides its models; ' +
       'unreachable or unexpected responses leave verified: null. `defaults` is the Thingtime.LopuChatDefaults singleton after availability is ' +
@@ -3078,10 +3089,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/ai/models',
     // 1.1.0: POST { probe: true } re-checks the provider keys (additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     summary: 'Enables or disables one catalog model, re-seeds the ai-model Things from the code catalog, or re-checks the provider keys.',
     detail:
+      'POST { sync: true } refreshes provider lists. POST { provider, allowAll?, autoAllowNewModels? } applies current-model toggles and future-discovery admission. Auto-allow defaults off; unsupported non-chat models remain hidden. GET also returns policies. ' +
       'The only writer of the `ai-model` kind besides the boot-time seed. POST { id, enabled } flips `crystal.enabled` on ' +
       'the genuine system-owned row (a disabled model stays listed but is never selectable and never becomes the default). ' +
       'POST { seed: true } re-runs the idempotent catalog seed: inserts rows for models newly added to the code catalog, ' +

@@ -1,3 +1,4 @@
+import type { AiModelPublic } from '~/api/utils/ai/modelsCore';
 import React from 'react';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
@@ -8,6 +9,7 @@ import type { LopuVaultProviderPublic } from '~/api/utils/lopu/vaultProviders';
 export const useSavedAiWaterfalls = (userId: string, active = true) => {
 	const cacheKey = `tt-ai-waterfalls-v1:${userId}`;
 	const [items, setItems] = React.useState<SavedAiWaterfall[]>(() => readLocalCache<SavedAiWaterfall[]>(cacheKey) ?? []);
+	const [models, setModels] = React.useState<AiModelPublic[]>(() => readLocalCache<AiModelPublic[]>('tt-ai-available-models') ?? []);
 	const [connections, setConnections] = React.useState<LopuVaultProviderPublic[]>([]);
 	const [error, setError] = React.useState('');
 	const [refresh, setRefresh] = React.useState(0);
@@ -48,7 +50,11 @@ export const useSavedAiWaterfalls = (userId: string, active = true) => {
 				const response = await fetch('/api/v1/ai/models', { signal: controller.signal, credentials: 'same-origin' });
 				const data = await response.json();
 				if (!response.ok) throw new Error('Endpoint list unavailable.');
-				if (!controller.signal.aborted) setConnections(data.vaultProviders ?? []);
+				if (!controller.signal.aborted) {
+          setConnections(data.vaultProviders ?? []);
+          setModels(data.models ?? []);
+          writeLocalCache('tt-ai-available-models', data.models ?? []);
+        }
 			} catch {
 				if (!controller.signal.aborted) setError('Endpoint list could not be refreshed. Reopen to retry.');
 			}
@@ -78,5 +84,5 @@ export const useSavedAiWaterfalls = (userId: string, active = true) => {
 		setError('');
 		return data.waterfall as SavedAiWaterfall;
 	};
-	return { items, save, error, endpoints: aiWaterfallEndpoints(connections) };
+	return { items, save, error, endpoints: aiWaterfallEndpoints(connections, models) };
 };

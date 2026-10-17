@@ -35,7 +35,7 @@ import { safeVaultId } from '../lopu/userVaultCore';
 import { getThingsCollection, getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import {
 	AI_MODEL_EFFORT_LABELS,
-	AI_WORKFLOW_BASE_MODELS,
+	getAiWorkflowBaseModel,
 	parseAiWorkflowModelOptionId,
 	type AiModelEffort,
 	type AiModelSpeed
@@ -134,7 +134,7 @@ export const EMPTY_LOPU_SETTINGS: LopuChatSettings = Object.freeze({ model: null
 
 const EFFORT_VALUES: readonly string[] = Object.keys(AI_MODEL_EFFORT_LABELS);
 const isEffort = (value: unknown): value is AiModelEffort => typeof value === 'string' && EFFORT_VALUES.includes(value);
-const baseModelOf = (id: string | null) => (id ? AI_WORKFLOW_BASE_MODELS.find((entry) => entry.id === id) ?? null : null);
+const baseModelOf = (id: string | null) => (id ? getAiWorkflowBaseModel(id) : null);
 const clampInt = (value: unknown, fallback: number, min: number, max: number): number => {
 	const num = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
 	if (!Number.isFinite(num)) return fallback;

@@ -81,7 +81,8 @@ test('recording processing, attachment cleanup, moderation sweep, peer sync, and
 		{
 			path: '/api/v1/notifications/email/weekly-summary',
 			schedule: '37 21 * * 0'
-		}
+		},
+		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' }
 	]);
 });
 

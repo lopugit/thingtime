@@ -273,7 +273,7 @@ test('listAiModels projects enabled/available/isDefault from the rows, the env, 
   assert.deepEqual(await service.resolveLopuChatDefaults(next.models), next.defaults);
 });
 
-test('a catalog outage degrades to the code catalog (everything enabled), logs, and retries on the next read', async () => {
+test('a catalog outage fails closed instead of resurrecting models and retries on the next read', async () => {
   const fake = createFakeThings();
   const logs: string[] = [];
   let outage = true;
@@ -289,12 +289,8 @@ test('a catalog outage degrades to the code catalog (everything enabled), logs, 
     log: (message: string) => logs.push(message)
   });
 
-  const degraded = await service.listAiModels();
-  assert.equal(degraded.models.length, AI_MODEL_CATALOG.length);
-  assert.ok(degraded.models.every((model) => model.enabled));
-  assert.equal(degraded.defaults.model, 'gpt-5.6-sol', 'hard default needs Anthropic, so the first OpenAI model stands in');
+  await assert.rejects(service.listAiModels(), /temporarily unavailable/);
   assert.ok(logs.some((line) => line.includes('catalog read unavailable')));
-  assert.ok(logs.some((line) => line.includes('chat defaults unavailable')));
   assert.equal(fake.docs.length, 0);
 
   outage = false;

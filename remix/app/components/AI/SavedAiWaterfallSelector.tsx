@@ -15,5 +15,5 @@ export const SavedAiWaterfallSelector = (props: Props) => {
 };
 const Connected = ({ userId, ...props }: Props & { userId: string }) => {
 	const library = useSavedAiWaterfalls(userId);
-	return <AiWaterfallSelector {...props} endpoints={props.endpoints ?? library.endpoints} library={library} />;
+	return <AiWaterfallSelector {...props} endpoints={props.endpoints ? props.endpoints.map((endpoint) => endpoint.id.startsWith('server:') ? { ...endpoint, models: endpoint.models.filter((model) => library.endpoints.find((item) => item.id === endpoint.id)?.models.some((item) => item.id === model.id)) } : endpoint) : library.endpoints} library={library} />;
 };

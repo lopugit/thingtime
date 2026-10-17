@@ -4543,3 +4543,43 @@ server exposes `thingtime_render_and_export`, returning desktop/mobile/card
 PNGs and JSON as inline resources without an account or HTTP access from the
 agent host. No private environment variables are needed. See the
 [fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
+
+
+### Automatic AI model catalogue sync
+
+Thingtime refreshes the server Anthropic and OpenAI model inventories daily at
+03:23 UTC (`/api/v1/ai/models/sync` in the root `vercel.json`). Set a random
+`CRON_SECRET=<random-secret>` in the deployment environment; Vercel sends it as
+`Authorization: Bearer <random-secret>`. Outside Vercel, schedule that authenticated
+GET once daily. A missing secret refuses the job. MongoDB must support transactions
+(replica set / Atlas), as with other home control-plane mutations.
+
+Discovery uses the same configured credentials as inference: OpenAI's
+`OPENAI_API_KEY` (and optional `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`,
+`OPENAI_BASE_URL`), and Claude OAuth from the admin credential vault or
+`CLAUDE_CODE_OAUTH_TOKEN_THINGTIME` / `CLAUDE_CODE_OAUTH_TOKEN`. Claude discovery
+calls the provider's paginated `/v1/models` with OAuth; it never switches to an
+Anthropic API key. Credentials must permit listing models. A denied scope,
+timeout, malformed/empty list or incomplete pagination preserves the previous
+inventory and reports failure; it is not treated as a provider-wide retirement.
+Personal Secure Vault endpoints have their own configuration and do not alter
+the shared catalogue.
+
+Admin → Lopu models → **Sync available models** runs a manual refresh. Provider
+model-not-available errors also request a refresh, without replaying the failed
+turn or silently changing its model. A shared five-minute cooldown and two-minute
+lease prevent concurrent requests from hammering providers. Inspect the per-provider
+sync report/status to distinguish success, failure and skipped/cooling-down jobs.
+
+**Allow all current models** changes the existing compatible model toggles for that
+provider. **Auto-allow new models** defaults off and controls newly discovered
+compatible chat models; it preserves individual disable choices on subsequent
+syncs. Unsupported model types remain recorded but are not offered for chat.
+New model versions use conservative provider-default reasoning/standard speed;
+pricing and context limits remain unknown until explicitly supported. Unknown
+pricing remains `priced: false` in usage accounting; it is never presented as a
+provider price of zero. Admins should consider this before enabling auto-allow.
+
+A complete provider snapshot atomically marks absent models unavailable, retaining
+their records and admin choices. The public catalogue and shared model selectors
+only offer enabled, available models. Admin retains all compatible rows for audit.

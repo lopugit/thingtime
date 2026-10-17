@@ -501,9 +501,12 @@ const writeChatsCache = (userId: string | null, chats: LopuChatSummary[]) => {
 
 export const loadLopuModels = async (): Promise<void> => {
 	if (!client || state.modelsLoading) return;
+  const generation = accountGeneration;
 	setState({ modelsLoading: true });
 	try {
 		const response = await client.models();
+    if (generation !== accountGeneration) return;
+    if (response?.ok === false || !Array.isArray(response?.models)) throw new Error('Model catalogue unavailable');
 		const models: AiModelPublic[] = Array.isArray(response?.models) ? response.models : [];
 		const defaults: LopuChatDefaults | null = response?.defaults && typeof response.defaults === 'object' ? response.defaults : null;
 		const providers: LopuProvidersInfo | null = response?.providers && typeof response.providers === 'object' ? response.providers : null;
@@ -515,7 +518,7 @@ export const loadLopuModels = async (): Promise<void> => {
 		persistSettings(state.userId, settings);
 		setState({ models, defaults, providers, vaultProviders, vault, modelsLoaded: true, modelsLoading: false, settings });
 	} catch {
-		setState({ modelsLoading: false, modelsLoaded: true });
+		if (generation === accountGeneration) setState({ modelsLoading: false, modelsLoaded: true });
 	}
 };
 
@@ -1167,6 +1170,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 				break;
 			}
 			case 'error': {
+        if (foreground()) void loadLopuModels();
 				if (!event.retryable) notice(event.message || 'Lopu hit a snag', { status: 'error', description: event.retryable ? 'You can try again.' : undefined });
 				break;
 			}
