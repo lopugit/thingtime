@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Add installed Android planner deletion/recovery
+  acceptance with a lost committed reply, WebView reload and durable operation
+  identity checks. Document the local emulator graphics recovery workflow and
+  keep physical-device and whole-account backup coverage explicit.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Add Android offline-folder recoverable deletion
   and reviewed restoration using the existing catalog and shared recovery UI.
   Atomic receipts survive lost replies without overwriting later edits; separate

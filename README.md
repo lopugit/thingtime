@@ -5319,3 +5319,21 @@ path. Rechoosing the same saved Android grant invalidates old consent but permit
 newly reviewed recovery; removing it and selecting a new grant does not transfer
 recovery authority. Physical devices, background deletion, independent backup
 copies, large-volume export and shipping physical media remain separate work.
+
+For installed planner-driven Android deletion acceptance, prepare a fresh cloud
+fixture with `remix/scripts/mobile-sync-installed-fixture.mts`, then set
+`THINGTIME_OFFLINE_DOWNLOAD_STATE=/path/to/private-cloud-state.json`,
+`THINGTIME_TWO_WAY_SYNC_TEST=1` and `THINGTIME_DELETE_SYNC_TEST=1` when running
+`android/scripts/test-mobile-devices.sh /path/to/private-local-fixture.json`.
+This mode automates copy/delete/restore consent after real folder selection. It
+suppresses one actual committed deletion response, stops through the normal UI,
+reloads the WebView and verifies IndexedDB operation identities before resuming.
+Run concurrent-edit review and direct-native-recovery modes separately. Clean up
+the owned cloud fixture with its `cleanup` action afterward.
+
+If an Android emulator shows stale WebView layers and evaluation timeouts with
+software graphics, stop that test emulator and cold-start the same AVD with
+`emulator -avd <test-avd> -no-snapshot -gpu host`. Preserve its `ANDROID_AVD_HOME`
+and app data, then restore the local port forwarding. This removed the observed stale
+paint layers on the local API 35 test AVD, but intermittent WebView timeouts
+remained. It is not physical-device coverage or a reason to disable checks.

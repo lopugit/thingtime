@@ -50,13 +50,15 @@ The executor cannot supply these guarantees for a blind-overwrite adapter.
 Trash operations for explicitly pinned destinations. It also creates ordinary cloud folders before their child uploads, retaining
 preallocated parent IDs and exact canonical Timeline creation receipts. Its prepared metadata is
 retained with the existing journal run. The mobile connection controls start explicit foreground upload/backup, approved
-downloads and two-way runs, as described below. Native delete propagation remains
-disabled until native recovery, fresh remote absence checks and parent revision handling are connected.
+downloads and two-way runs, as described below. Native deletion propagation is connected through explicit native consent,
+fresh cloud absence checks and recoverable Trash on Mac/iOS and Android
+Thingtime offline folders. Installed Android planner-driven deletion acceptance
+is tracked separately from direct native recovery below.
 
 The current scan bound is 10,000 combined paths, and directories must appear
 alongside descendants. Large-root partitioning is still needed. Folder removal
-must account for revision changes caused by its own completed child removals;
-the current executor safely refuses a stale parent revision. Native persistent workers remain pending.
+uses retained child/sibling receipts to advance only the pinned direct parent
+revision; unrelated changes still refuse removal. Native persistent workers remain pending.
 
 ## Native iOS pairing
 
@@ -89,7 +91,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; mobile upload ranges, iOS streaming and sustained throughput remain pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
-| Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; file conflict review now offers guarded version choices; Android review acceptance verified; iOS/Mac review acceptance, folder conflicts, restore browsing and retention policy remain pending |
+| Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; file conflict review now offers guarded version choices; Android file-conflict review and native recovery acceptance verified; shared native recovery browsing and reviewed restore implemented on Mac/iOS/Android offline folders; broader installed conflict review, folder conflicts, recovery after grant replacement and retention policy remain pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
 
@@ -2047,3 +2049,17 @@ grant. Native records remain local recovery material, not canonical Timeline or
 independent device-loss backup. Automatic purge, arbitrary external providers,
 background execution, restored-tree automation and full large-volume backup/export
 acceptance remain open. No production promotion is implied by this checkpoint.
+
+
+### Android planner-driven deletion acceptance — 2026-10-18
+
+`THINGTIME_DELETE_SYNC_TEST=1` adds an opt-in installed two-way scenario for
+separate deletion consent, cloud child/parent removal, a lost real native reply,
+WebView reload, original IndexedDB operation IDs, repeat convergence and reviewed
+parent-before-child restoration. It uses only synthetic local/cloud fixtures.
+The current run verifies binary transfer, consent and retention after a committed
+child deletion. Emulator WebView startup/reload timeouts prevent a full pass;
+resume and restored-tree acceptance remain pending. See the PR #1002 delivery
+ledger for the exact coverage and harness corrections. Host graphics removed
+observed stale paint layers, but intermittent timeouts remain; physical-device
+acceptance is still open.

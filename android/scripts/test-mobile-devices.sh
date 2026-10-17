@@ -7,7 +7,11 @@ picker_test="${THINGTIME_FOLDER_PICKER_TEST:-0}"
 offline_test="${THINGTIME_OFFLINE_FILES_TEST:-0}"
 download_state="${THINGTIME_OFFLINE_DOWNLOAD_STATE:-}"
 two_way="${THINGTIME_TWO_WAY_SYNC_TEST:-0}"
+sync_deletion="${THINGTIME_DELETE_SYNC_TEST:-0}"
+[[ "$sync_deletion" == 0 || "$sync_deletion" == 1 ]] || { echo 'THINGTIME_DELETE_SYNC_TEST must be 0 or 1.' >&2; exit 1; }
+[[ "$sync_deletion" == 0 || "$two_way" == 1 ]] || { echo 'Deletion acceptance requires two-way acceptance.' >&2; exit 1; }
 conflict_review="${THINGTIME_CONFLICT_SYNC_TEST:-0}"
+[[ "$sync_deletion" == 0 || "$conflict_review" == 0 ]] || { echo 'Run deletion and concurrent edit review acceptance separately.' >&2; exit 1; }
 file_history="${THINGTIME_FILE_HISTORY_TEST:-0}"
 file_export="${THINGTIME_FILE_EXPORT_TEST:-0}"
 native_trash="${THINGTIME_NATIVE_TRASH_TEST:-0}"
@@ -78,6 +82,7 @@ PYDATA
 fi
 result="$(mktemp)"
 test_args=()
+if [[ "$sync_deletion" == 1 ]]; then test_args+=(-e syncDeletion true); fi
 if [[ "$native_trash" == 1 ]]; then test_args+=(-e nativeTrash true); fi
 if [[ "$file_export" == 1 ]]; then test_args+=(-e fileExport true); fi
 if [[ "$file_history" == 1 ]]; then test_args+=(-e fileHistory true); fi

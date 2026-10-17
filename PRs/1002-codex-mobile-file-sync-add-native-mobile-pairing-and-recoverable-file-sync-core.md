@@ -1766,3 +1766,46 @@ started. After rebooting without clearing data, installed authenticated acceptan
 passed native delete cancel/allow, shared recovery review, restore cancel/allow,
 exact replay, original bytes, Android Files visibility and non-destructive grant
 removal (one test, 452.983 seconds). No real user files were used.
+
+
+## Installed Android planner deletion acceptance — 2026-10-18
+
+Add an opt-in installed acceptance mode for the real shared two-way planner,
+cloud APIs, selected offline folder, native consent, SQLite and IndexedDB. The
+fixture removes a cloud child and its empty parent, suppresses one actual
+committed native reply, stops through the production control and reloads the
+WebView. It compares saved operation identities before retrying, checks repeat
+convergence and restores the retained parent before its child with separate
+native confirmation and independent byte hashes. No success receipt is invented.
+
+The test runner rejects mixing deletion and concurrent-edit scenarios. Fixture
+cleanup tolerates folders already removed by the scenario. WebView reload
+cleanup only restores instrumentation wrappers when they still exist. The
+harness waits for a genuinely new document before reading persisted IndexedDB.
+It allows 30 seconds for a WebView evaluation while retaining bounded stage
+timeouts, and reports the original failure before attempting cleanup. External
+cleanup also recovers owner-verified named connections for the exact fixture
+root if the WebView cannot finish its cleanup.
+
+Two software-graphics attempts timed out in WebView evaluation (startup and
+initial transfer, before download bytes). A data-preserving cold start with host
+graphics removed the observed stale layers and reached full binary transfer.
+Initial harness failures found an object-only serializer used on arrays and a
+reload race; both were corrected without changing production sync behavior.
+Physical-device rendering and sustained large-volume performance remain open.
+
+Validation remains partial. The installed run reached full binary transfer
+(8,388,642 bytes over six ranges and 130 frames), deletion-consent cancellation
+without file changes, approved baseline convergence, real cloud child/parent
+removal and one committed native child deletion whose reply was deliberately
+suppressed. SQLite retained the child; IndexedDB still held both original
+unconfirmed operations. A subsequent run hit WebView timeouts around reload and
+cleanup; the final diagnostic retry failed the paired-page startup assertion
+before folder selection. Reload/resume, parent deletion and full restored-tree
+acceptance are **not passed**. The checklist stays unchecked.
+
+The updated test APK compiles, fixture TypeScript lint with its explicit parser,
+shell syntax and diff checks pass. The normal file-lint command uses the wrong
+parser for this `.mts` fixture, so that command is not reported clean. Temporary
+cloud fixtures were cleaned through canonical APIs; file versions remain in
+private Trash. No production code, deployment or installed Mac build changed.

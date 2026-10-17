@@ -56,7 +56,7 @@ final class NativeTrashAcceptance {
             System.out.println("NATIVE_TRASH_QA_PASS: real identity, distinct delete consent, cancellation, atomic removal, shared recovery UI, separate restore consent, exact replay and original bytes.");
         } finally{ui.shutdownNow();}
     }
-    private static void click(WebView web,String label) throws Exception {
+    static void click(WebView web,String label) throws Exception {
         DeviceLiveTest.awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==="+JSONObject.quote(label)+"&&!b.disabled)");
         DeviceLiveTest.evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==="+JSONObject.quote(label)+"&&!b.disabled).click()");
     }
@@ -67,7 +67,7 @@ final class NativeTrashAcceptance {
         if(node==null)return null;if(node.getText()!=null && node.getText().toString().equalsIgnoreCase(text))return node;
         for(int i=0;i<node.getChildCount();i++){AccessibilityNodeInfo found=find(node.getChild(i),text);if(found!=null)return found;}return null;
     }
-    private static void dialog(Context context,String title,String button,String image) {
+    static void dialog(Context context,String title,String button,String image) {
         try {
             long until=System.currentTimeMillis()+60000;
             while(System.currentTimeMillis()<until) {

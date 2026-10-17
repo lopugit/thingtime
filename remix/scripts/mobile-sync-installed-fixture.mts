@@ -78,9 +78,23 @@ if (action === 'prepare' || action === 'replace' || action === 'conflict') {
         if (!current.trashed) await api('/api/v1/files', { id: current.id, operationId: randomUUID(), expectedRevision: current.revision, name: current.name,
             folderId: current.folderId, attachmentId: current.content.attachmentId, contentVersion: current.content.version, trashed: true });
     }
-    if (state.configurationId) await api('/api/v1/things?id=' + state.configurationId, undefined, 'DELETE');
-    await api('/api/v1/things?id=' + state.nestedId, undefined, 'DELETE');
-    await api('/api/v1/things?id=' + state.rootId, undefined, 'DELETE');
+    // An installed WebView can fail before its own cleanup. Recover only this
+    // fixture's named connections, checking ownership and the exact remote root.
+    const connections = new Set<string>();
+    let cursor: string | undefined;
+    const seen = new Set<string>();
+    do {
+        const page = await api('/api/v1/things?thingtime=file-sync&limit=50' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''));
+        for (const thing of page.things) if (thing.crystal?.remoteFolderId === state.rootId && thing.crystal?.name === 'Android cloud download acceptance') {
+            assert.equal(thing.author.id, fixture.userId); connections.add(thing.id);
+        }
+        cursor = page.nextCursor ?? undefined;
+        if (cursor) { assert.ok(!seen.has(cursor)); seen.add(cursor); }
+    } while (cursor);
+    if (state.configurationId) connections.add(state.configurationId);
+    for (const id of connections) await api('/api/v1/things?id=' + id, undefined, 'DELETE', true);
+    await api('/api/v1/things?id=' + state.nestedId, undefined, 'DELETE', true);
+    await api('/api/v1/things?id=' + state.rootId, undefined, 'DELETE', true);
     state.cleaned = true; await save();
     console.log('Fixture folders/configuration removed; accounted file versions retained in private Trash.');
 }

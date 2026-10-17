@@ -11012,3 +11012,14 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   recovery card. Measured Things section bounds do not overlap, but captured
   pixels show stale search/toolbar layers. Keep physical-device visual acceptance
   open; do not infer a CSS sizing fix from the screenshot alone.
+
+- [ ] Installed Android two-way deletion: enable deletion with separate native
+  cancel/allow consent, remove a cloud child and its parent, suppress one real
+  committed native reply, reload and resume the same IndexedDB operation IDs,
+  verify repeated convergence, then restore parent before child with native
+  confirmation and independently hash the original bytes.
+
+  Current evidence (2026-10-18): binary transfer, separate consent, committed
+  child retention and original unconfirmed journal operations verified. WebView
+  startup/reload timeouts prevent completing resume and tree restoration. Keep
+  this scenario unchecked until the installed run reaches its final assertion.
