@@ -152,6 +152,7 @@
     "test:mail:transport": "node --import tsx app/api/utils/mail/transport.integration.mts",
     "test:mail:integration": "node --import tsx scripts/mail.integration.mts",
     "test:mail:connector": "node --import tsx scripts/mail-connector.integration.mts",
+    "test:mail:relay": "node --import tsx scripts/mail-relay.integration.mts",
     "test:mail:storage": "node --env-file=.env.local --import tsx scripts/mail-storage.integration.mts"
   },
   "dependencies": {

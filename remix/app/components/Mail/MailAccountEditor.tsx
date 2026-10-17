@@ -1,4 +1,5 @@
 import React from 'react';
+import { hasNativeMailSync } from '~/mail/native';
 import { Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Text } from '@chakra-ui/react';
 import { RainbowButton, SettingsSection } from '~/components/Settings/SettingsSection';
 import type { MailAccount, MailProtocol, MailServer } from '~/mail/model';
@@ -14,7 +15,7 @@ export const newMailAccount = (): MailAccount => ({
 	address: '',
 	revision: 0,
 	servers: { imap: defaultServer('imap', '') },
-	sync: { cloud: false, local: true }
+	sync: { cloud: false, local: true, transport: hasNativeMailSync() ? 'native' : 'relay' }
 });
 export function MailAccountEditor({
 	account,
@@ -27,11 +28,14 @@ export function MailAccountEditor({
 	onSave: (account: MailAccount) => Promise<unknown>;
 	onCancel: () => void;
 }) {
+	const [expanded, setExpanded] = React.useState(true);
 	const [draft, setDraft] = React.useState<MailAccount>(() => structuredClone(account));
 	const field = (protocol: MailProtocol, name: keyof MailServer, value: string | number) =>
 		setDraft((current) => ({ ...current, servers: { ...current.servers, [protocol]: { ...current.servers[protocol], [name]: value } } }));
 	return (
 		<SettingsSection
+			open={expanded}
+			onToggle={setExpanded}
 			eyebrow={account.revision ? 'Edit email account' : 'Connect an email account'}
 			description="Use your provider’s mail server settings and app password. Mail sync never deletes or moves messages on your server."
 		>
@@ -156,15 +160,38 @@ export function MailAccountEditor({
 						Through Thingtime’s cloud
 					</Checkbox>
 					<Text fontSize="xs" color="var(--tt-muted)">
-						Your app password and synced mail are encrypted in your Thingtime account.
+						Your app password and synced mail are encrypted in your Thingtime account. Works in browsers and native apps without a local connector.
 					</Text>
 					<Checkbox isChecked={draft.sync.local} onChange={(event) => setDraft({ ...draft, sync: { ...draft.sync, local: event.target.checked } })}>
-						Locally on this device
+						Keep a copy on this device
 					</Checkbox>
 					<Text fontSize="xs" color="var(--tt-muted)">
-						Your browser keeps an encrypted offline copy. Sync uses a paired local connector because browsers cannot connect directly to POP3 or IMAP.
-						Local-only passwords stay on this device.
+						Your device keeps an encrypted offline copy. Choose how it connects below.
 					</Text>
+					{draft.sync.local && (
+						<FormControl>
+							<FormLabel>Device sync connection</FormLabel>
+							<Select
+								value={draft.sync.transport || 'connector'}
+								onChange={(event) =>
+									setDraft({ ...draft, sync: { ...draft.sync, transport: event.target.value as NonNullable<MailAccount['sync']['transport']> } })
+								}
+							>
+								{(hasNativeMailSync() || draft.sync.transport === 'native') && (
+									<option value="native">Directly from this app{hasNativeMailSync() ? '' : ' — unavailable in this app'}</option>
+								)}
+								<option value="relay">Thingtime API relay — no installation</option>
+								<option value="connector">Paired local connector</option>
+							</Select>
+							<Text fontSize="xs" color="var(--tt-muted)" mt={2}>
+								{draft.sync.transport === 'relay'
+									? 'Your app password and mail pass through this Thingtime server for each sync. The relay does not save them; your encrypted copy stays on this device. Cloud sync, if also enabled, saves a separate encrypted cloud copy.'
+									: draft.sync.transport === 'native'
+									? 'The Thingtime app connects directly to your mail server. No pairing or separate tool is needed. Credentials and mail stay on this device unless you also enable cloud sync.'
+									: 'Connect directly from your computer using a paired connector. Device sync does not send credentials or mail through Thingtime’s servers.'}
+							</Text>
+						</FormControl>
+					)}
 				</Flex>
 				<Flex gap={2} wrap="wrap">
 					<RainbowButton type="submit" isDisabled={busy}>
