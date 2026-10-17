@@ -39,6 +39,7 @@ test('every catalog model carries a price and the table has no stray ids', () =>
   // a row priced from its sibling says so
   assert.equal(getAiModelPricing('gpt-5.6-sol')!.estimated, true);
   assert.equal(getAiModelPricing('gpt-4o')!.estimated, false);
+  assert.deepEqual(getAiModelPricing('gpt-6-astra'), { inputPerM: 10, outputPerM: 50, cacheReadPerM: 1, cacheWritePerM: 12.5, estimated: false });
   // the test entry (design note §2)
   assert.equal(AI_MODEL_PRICING[LOPU_TEST_MODEL_ID].inputPerM, 1000);
   assert.equal(AI_MODEL_PRICING[LOPU_TEST_MODEL_ID].outputPerM, 2000);
