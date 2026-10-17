@@ -52,6 +52,9 @@ const directives = ({ dev = false } = {}) => ({
 	'media-src': ["'self'", 'data:', 'blob:', 'https:'],
 	'connect-src': [
 		"'self'",
+		// Opt-in incoming mail uses a token-paired loopback adapter. Keep this
+		// fixed origin; never permit arbitrary localhost ports or network hosts.
+		'http://127.0.0.1:17879',
 		'https://cdn.jsdelivr.net',
 		// Direct-to-S3 attachment uploads: the composer PUTs signed multipart
 		// parts straight at the private bucket (attachments/privateS3), so the

@@ -106,6 +106,10 @@ native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
 that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
 reasoning and tool-result replay through the real SDK against an HTTP fixture.
 
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
 ## iOS release automation
 
 `api/utils/releases/iosRelease.ts` uses the existing admin integration secret,

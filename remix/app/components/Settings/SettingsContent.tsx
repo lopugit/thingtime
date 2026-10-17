@@ -1,3 +1,4 @@
+import { EmailSettings } from '~/components/Mail/EmailSettings';
 import { LopuPromptSettings } from './LopuPromptSettings';
 import { InvitePanel } from '~/components/Invites/InvitePanel';
 import { SavedAiWaterfallsSettings } from './SavedAiWaterfallsSettings';
@@ -546,6 +547,7 @@ export const SettingsContent = ({
 				))}
 			</Flex>
 			<Box as="section" aria-label={`${SETTINGS_TABS.find((item) => item.id === tab)?.label} settings`} minW={0}>
+				{tab === 'email' && <EmailSettings />}
 				{tab === 'account' && (
 					<Flex direction="column" gap={4} minW={0}>
 						{/* 1 · account — the switcher lists every signed-in account and hosts

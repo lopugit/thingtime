@@ -185,6 +185,8 @@ export const router = createBrowserRouter([
       { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
       // third-party app connections — no guard: both pages render their own
       // signed-out quiet state (the /settings, /apps idiom)
+      { path: 'mail', lazy: lazyRoute(() => import('./routes/mail')) },
+      { path: 'email', lazy: lazyRoute(() => import('./routes/mail')) },
       { path: 'passwords', lazy: lazyRoute(() => import('./routes/passwords')) },
       { path: 'connections', lazy: lazyRoute(() => import('./routes/connections')) },
       { path: 'connections/feed', lazy: lazyRoute(() => import('./routes/connections-feed')) },

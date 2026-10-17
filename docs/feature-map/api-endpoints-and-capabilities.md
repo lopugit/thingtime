@@ -387,6 +387,11 @@ so decrypted fields never enter shared client history/cache. The reusable
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
 ## iOS TestFlight delivery
 
 `api.integration-ios-release` 1.0.0 registers the production-only
