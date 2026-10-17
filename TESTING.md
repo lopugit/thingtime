@@ -7646,14 +7646,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
-Automated first: `pnpm --dir remix run verify:connections` (94 real-API
+Automated first: `pnpm --dir remix run verify:connections` (real-API
 checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
 - [ ] `/connections` renders the provider catalog signed-out with a quiet
       sign-in card; signed in, connecting the Demo provider adds it under
-      "Your connections" with Feed + Unlink working, and reconnecting the
+      its service card with Feed + Disconnect working, and reconnecting the
       same handle reports "Already connected".
-- [ ] Connecting the same external identity from a SECOND Thingtime account
+- [ ] Connecting the same PUBLIC source from a SECOND Thingtime account
       converges on the same external account (many-to-many): both accounts
       read the same posts through their own links, and each earns its own
       acl grant even when the other account's sync fired first (the shared
@@ -7669,7 +7669,7 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       stops matching; verdicts stay stable across reads (cached) and editing
       the prompt re-classifies.
 - [ ] SSO connect: unconfigured providers show "Needs setup" (disabled);
-      configured ones show "Sign in with <name>" and redirect to the
+      configured ones show "Add account" and open a new tab at the
       provider's own login; the callback lands on /connections with the
       "Account linked" toast (or the oauthError toast on decline/forged
       state); the fields-based POST /api/v1/connections always refuses SSO
@@ -7705,6 +7705,71 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       membership rows + rewrites the acl + unsets `sourceIds`, a legacy
       `tt:extacct/` post stays visible to its linked member both BEFORE and
       AFTER the run, and a second run is a no-op.
+
+- [ ] Run `node remix/scripts/verify-service-accounts.mjs http://127.0.0.1:<api-port>`
+      against a disposable local replica set. It registers two synthetic users,
+      checks private vault projections, stale-owner refusal, API registration,
+      concurrent reconnect/disconnect, and removes its test links/credentials.
+- [ ] ChatGPT: validate signature, issuer, audience, expiry and nonce; never
+      use the hosted identity token for inference. Facebook account linking
+      requests public profile only; posts access is a separate card/grant.
+- [ ] Count regression: retain more than 50 connections and more than 500
+      AI vault entries without rejecting new accounts or hiding old ones.
+      Remove one and verify every other account remains independently usable.
+- [ ] Password/session vault migration gate: run the envelope tests for wrong
+      passwords, exact Unicode/long passwords, owner/record/purpose swaps,
+      tampered metadata, expiry boundaries, and key rewrapping. These are
+      cryptographic primitive tests only. Before enabling the migration, also
+      exercise real login/2FA/passkeys, password change/reset, session
+      revocation, background actions, interrupted migration, and legacy reads
+      against the agreed recovery policy; failed unlock must never replace
+      the only key capable of decrypting saved credentials.
+- [ ] Multi-account OAuth: add two Google identities under the same service;
+      reconnect one without duplicating it or replacing the other. Connect
+      the same provider identity from another Thingtime user and verify the
+      two credentials remain independent. Legacy shared grants must request
+      reconnect and preserve the reconnecting owner's existing link ID.
+- [ ] Callback fencing: forged/expired/replayed state, another Thingtime
+      account/session, changed redirect env, and declined consent must fail
+      without exchanging/writing a grant twice or echoing provider errors.
+      A JSON form POST with `text/plain` must be rejected (CSRF regression).
+- [ ] Origin capability regression: both OAuth and manual credential forms
+      refuse servers without `expectedOwnerId` support before sending a grant
+      or credential. Sign out or switch account while capability negotiation
+      is pending; the abandoned form must not submit afterward.
+- [ ] Concurrent rotating refresh: one exchange at a time per saved grant;
+      reconnect/disconnect during refresh must win over the older response.
+      Token ciphertext must reject another owner/id or modified ciphertext.
+- [ ] Owner-scoped cache regression: switch Thingtime accounts and sign out
+      while account/feed/vault reads are pending. Never display or cache the
+      previous user's identities, feed posts, forms, or saved AI accounts.
+- [ ] Check the service cards at desktop and 390px widths: title hierarchy,
+      account-name wrapping, permission disclosures, inline forms and buttons
+      stay inside their cards. Popup blocking gives an actionable message;
+      returning focus refreshes the original tab without discarding old state.
+- [ ] Google reuse API: exercise a permitted read, missing-scope denial,
+      wrong-provider operation, another owner's link, and arbitrary-URL input.
+      Result, error, logs, and client caches must not contain credentials.
+- [ ] Saved-result pagination and preservation: follow `data.nextPageToken`
+      for Drive, Gmail, Calendar and Contacts using the same connection and
+      operation, ending when the token is absent. Preserve long opaque cursors
+      containing query delimiters without changing the fixed URL. Reject
+      non-string cursors, pagination on a profile/document operation, wrong
+      owners and missing scopes before provider access. Verify large text,
+      more than 100 records/properties, deep objects and ordinary key/value
+      fields survive unchanged while credential fields/known tokens redact.
+      Refuse cross-origin redirects before fetching the next hop, release
+      abandoned response bodies and propagate cancellation. Both manifests
+      must advertise `api.connections-request` 1.1.0; distinguish mocked
+      provider coverage from real additional-scope consent and list acceptance.
+- [ ] Provider transport regression: an HTTP 200 with HTML, empty, or truncated
+      JSON must fail rather than report a successful empty result. Non-JSON
+      401/403 responses still request reconnect; valid empty JSON stays valid.
+      Never include the rejected response body in the error.
+- [ ] Add separate OpenAI API and Claude Code OAuth connections from their cards, reload,
+      and find the same entries in Secure Vault and Lopu's provider picker.
+      No duplicate credential store; cancelled forms erase typed secrets.
+      Subscription sign-in availability must remain explicit.
 
 ## Commander emoji paste recovery
 
@@ -9881,6 +9946,34 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   canonical public projection, a cold local branch cache, queued push retention,
   delayed-reply revision protection and cancellation after an identity change.
   No visual Builder behavior is introduced by this increment.
+
+
+### Account vault encryption and recovery
+
+- Register on a disposable local stack; save two independently named provider
+  credentials. Normal list/account/profile responses must contain neither
+  tokens nor password/session/recovery wrappers.
+- Reveal one credential with fresh password verification, then reset that
+  account's password via its one-use reset link. Both saved credentials must
+  remain usable with the new password; the previous password, old session and
+  reset-link replay must fail. Delete one account and verify the other still
+  works. Log out and confirm the old session immediately fails.
+- Verify a legacy owner-private entry upgrades on read without changing its
+  value; a concurrent edit/reconnect/disconnect must win over a stale migration.
+  Corrupted user key material must fail without generating a replacement key.
+- Test passkey/OTP/account-switch sessions against existing credentials; each
+  live session gets its own grant. Revoked/expired/foreign/scoped sessions must
+  never fall back to server recovery. Background actions remain possible after
+  browser logout under their existing owner/capability authorization.
+- Passwords are exact UTF-8 input, limited to 4096 bytes before account creation
+  or reset-token consumption. A password that only matches bcrypt's first
+  72 bytes must not unlock an existing password wrapper.
+- Run `npm --prefix remix run test:connections`, `test:sensitive-reveal`,
+  `test:collections`; on a disposable loopback stack run
+  `node remix/scripts/verify-vault-recovery.mjs http://localhost:<web-port>`.
+- Real provider acceptance additionally requires callback → encrypted save →
+  authenticated provider API request for each connected account; mocked grants
+  and a success toast do not establish this. Keep provider approval gaps explicit.
 
 ## No-login draft preview and agent export
 

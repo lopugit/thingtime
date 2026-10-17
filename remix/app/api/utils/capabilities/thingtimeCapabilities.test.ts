@@ -5,6 +5,26 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
+test('service-account clients negotiate owner-fenced writes and scoped credential reuse on both manifests', () => {
+  const api = createApiCapabilitiesManifest(), origin = thingtimeCapabilityManifest('https://accounts.test');
+  for (const [feature, required, previous] of [
+    ['api.connections-providers', '1.1.0', '1.0.0'],
+    ['api.connections', '1.1.0', '1.0.0'],
+    ['api.connections-oauth-begin', '1.1.0', '1.0.0'],
+    ['api.connections-oauth-callback', '1.1.0', '1.0.0'],
+    ['api.connections-feed', '1.1.0', '1.0.0'],
+    ['api.connections-filters', '1.1.0', '1.0.0'],
+    ['api.lopu-vault', '1.3.0', '1.2.0'],
+    ['api.connections-request', '1.1.0', '1.0.0'],
+  ]) {
+    assert.equal(api.features[feature], required);
+    assert.equal(origin.features[feature]?.version, required);
+    assert.equal(capabilitySatisfies(previous, required), false);
+    assert.equal(capabilitySatisfies(undefined, required), false);
+    assert.equal(capabilitySatisfies('2.0.0', required), false);
+  }
+});
+
 test('archive import clients reject missing, pre-archive and breaking contracts on both manifests', () => {
   for (const version of ['1.9.1', '1.9.2', '1.10.0']) assert.equal(capabilitySatisfies(version, '1.9.1'), true);
   for (const version of ['', '1.8.0', '1.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.9.1'), false);
