@@ -1,8 +1,9 @@
+import type { LocalMutationCapture } from './timeline';
 import type { LocalThing } from './things';
 import type { WorkspaceTransaction } from './storage';
 
 export type ThingChanges = Map<string, { before: LocalThing | null; after: LocalThing | null }>;
-export type ThingTransactionCapture = <T>(tx: WorkspaceTransaction, run: (tx: WorkspaceTransaction) => Promise<T>) => Promise<T>;
+export type ThingTransactionCapture = <T>(tx: WorkspaceTransaction, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>) => Promise<T>;
 
 /** Capture before-images before the first write, then record the final batch in
  * the SAME transaction. Imports can resolve dependencies written later in it. */

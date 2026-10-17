@@ -1,3 +1,5 @@
+import { AccountTimelineVersions } from './accountTimelineVersions';
+import type { VersionRequest } from '../timeline/publishedVersion';
 import { exportAccountTimelineVersion } from './accountTimelineExport';
 import { AccountTimeline, AccountTimelineStore, accountTimelineScope } from './accountTimeline';
 import { IndexedDbTimelineBackend } from '../timeline/indexedDb';
@@ -48,6 +50,12 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const controller = new AbortController();
 	const fileRetentionErrors = new Map<string, string>();
  let historyBackend: IndexedDbTimelineBackend | null = null;
+ const historyStore = () => {
+  lease.assertCurrent();
+  historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);
+  return new AccountTimelineStore(accountTimelineScope(scope), historyBackend, new AccountTimeline(db, scope, lease));
+ };
+ const historyVersion = (request: VersionRequest, signal?: AbortSignal) => new AccountTimelineVersions(db,scope,lease,sync.things,historyStore()).request(request,signal);
  const historyExport = (eventId: string, signal?: AbortSignal) => {
   lease.assertCurrent();
   historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);
@@ -119,7 +127,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
 	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
-	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, fileRetentionErrors, transport, db, lease, wake, stop };
+	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
@@ -481,6 +489,22 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
   requested.ownerId === scope.ownerId && requested.dataPlane === scope.dataPlane && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
  return { ...online, auth: remote.auth, login: remote.login,
   timeline: { ...online.timeline,
+   canChangeLocally: (requested: {apiOrigin?:string;ownerId:string;dataPlane:string}) => {
+    try { facadeLease.assertCurrent();return localHistoryScope(requested); } catch { return false; }
+   },
+   version: async (requested: {apiOrigin?:string;ownerId:string;dataPlane:string}, request: VersionRequest, options?:{signal?:AbortSignal}) => {
+    facadeLease.assertCurrent();
+    if(!localHistoryScope(requested))return online.timeline.version(requested,request,options);
+    const result=await withExportDeadline(async signal=>{
+     try{return await worker().historyVersion(request,signal);}
+     catch(error){
+      facadeLease.assertCurrent();signal.throwIfAborted();
+      if(!(error instanceof WorkspaceError)||error.code!=='ACCOUNT_HISTORY_REMOTE_REQUIRED'||navigator.onLine===false||!canSyncAccountWorkspace(scope))throw error;
+      return online.timeline.version(requested,request,{signal});
+     }
+    },options?.signal);
+    facadeLease.assertCurrent();if(request.command==='apply-version')changed();return result;
+   },
    canExportLocally: (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) => {
     try { facadeLease.assertCurrent(); return localHistoryScope(requested); } catch { return false; }
    },

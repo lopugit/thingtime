@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Restore and undo retained ordinary account Things
+  offline through native History using shared comparison and atomic writers.
+  Preserve conflict review, independent component copies, retry identity and
+  genuine server receipts. Native cold-reload/restore/undo/reconnect checks pass
+  at desktop/390/320px. Deleted-account recovery and broader rollout gates remain
+  open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-17 — **Codex (AI)**: Export retained account History through the normal
   button while offline, including unacknowledged device versions with null
   receipts and explicit partial note/name context. Shared archive validation,

@@ -663,3 +663,13 @@ and archive validation; server receipts remain mandatory on network reads.
 `accountTimelineExport.test.ts`, `accountApi.test.ts` and the enabled native
 `accountTimeline.browser.test.ts` cover offline downloads and identity fences.
 See [remaining History controls](../local-workspaces.md#offline-account-history-export--2026-10-17).
+
+
+Account restore/undo uses `local-workspace/accountTimelineVersions.ts` with the
+shared `LocalTimelineVersions` authority seam and `timeline/versionPlan.ts`.
+`LocalThings.versionTransaction` requires an account capture+sync adapter before
+admitting account mutations. Accepted comparison bases retain their real receipts;
+new device results remain drafts. `TimelineVersionActions` skips upload dependency
+only for the matching local account capability. Regressions:
+`accountTimelineVersions.test.ts`, `accountApi.test.ts`, and opt-in
+`accountTimelineRestore.browser.test.ts`. See [remaining recovery/History gates](../local-workspaces.md#offline-account-history-restore-and-undo--2026-10-17).

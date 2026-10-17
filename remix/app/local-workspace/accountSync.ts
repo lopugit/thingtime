@@ -88,7 +88,7 @@ export class AccountThingSync {
 					if (row?.post && (!refusal || row.at > refusal.at)) return true;
 				}
 				return false;
-			}, (tx, run) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid));
+			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures));
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) { return this.db.transaction(this.scope, mode, this.lease, run); }
 	private checked(input: AccountThing): AccountThing {

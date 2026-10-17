@@ -11215,3 +11215,26 @@ Use the README loopback variables for `accountTimeline.browser.test.ts` and
 Run `accountTimelineExport.test.ts`, `accountApi.test.ts`, shared Timeline tests
 and the README-enabled `accountTimeline.browser.test.ts`. Default browser skips
 are not native acceptance evidence.
+
+
+### Offline account History restore and undo (2026-10-17)
+
+- [x] From a retained ordinary account Thing, restore an earlier device version
+  through the normal History comparison after a cold offline reload. Content,
+  sync intent and a canonical client/draft event must commit together.
+- [x] Undo a device edit without a prior upload. Keep later independent properties;
+  require explicit choices for overlap. Inspect desktop/390/320px review and reload
+  the restored content before reconnecting. No offline write request is allowed.
+- [x] Reconnect through verified identity discovery; exact events receive real
+  receipts independently of content sync. Guest Thing/History access stays denied.
+- [x] Restore a cached server basis and recorded component copies in focused
+  fixtures. Refuse stale heads/components and wrong scopes; injected History
+  failure must roll back content and sync intent. Concurrent retries commit once.
+- [x] Retry a committed restore after another edit or deletion; return its saved
+  result without changing current content. Retired/aborted calls must fail.
+- [ ] Complete deleted-account reconciliation/recovery, editor-specific pending
+  draft sources, full native component/branch merges, notes/names and broader
+  account/origin/data-plane transitions before declaring the full suite complete.
+
+Run `accountTimelineVersions.test.ts`, `accountApi.test.ts`, existing shared
+version/Timeline suites and README-enabled `accountTimelineRestore.browser.test.ts`.

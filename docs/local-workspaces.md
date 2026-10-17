@@ -3290,3 +3290,47 @@ Remaining gates include account-offline restore/undo, branches, notes and names,
 protected History adapters and the broader local-first acceptance matrix. This
 checkpoint establishes local evidence only; current-head CI/deployed acceptance
 and the main merge gate remain open.
+
+
+## Offline account History restore and undo — 2026-10-17
+
+Ordinary retained account Things now use the same `LocalTimelineVersions` planner,
+component comparison and atomic writer as anonymous History. A scoped authority
+adapter supplies account records and the normal `AccountThingSync` writer. The
+normal Restore/Undo controls no longer wait for a Timeline upload before a local
+comparison or commit. Account results remain client/draft events with null
+receipts until verified sync; network/anonymous authority contracts are unchanged.
+
+The comparison retains only its bounded canonical source/basis/component closure.
+Accepted cache entries keep their actual receipts in the existing account
+partition. A previously unedited account Thing needs an exact retained revision
+matching current content; missing history is never invented from live values.
+Restore validates ordinary content, creates independent recorded component copies
+when selected, and commits content, sync intent and History together. Undo uses
+shared three-way comparison, preserving independent later edits and requiring
+choices for overlaps. Stale heads/components, retired scopes and cancellation
+still refuse. A committed retry returns the original result even after a later
+deletion; it never restores that deleted Thing a second time.
+
+Local verification: 411 workspace/offline checks and 239 Timeline checks pass
+(650 total, excluding 44 opt-in skips). The enabled production-client browser
+fixture `accountTimelineRestore.browser.test.ts` passes with no account session
+borrowed: it creates one disposable private loopback account, makes two offline
+native edits, cold reloads, restores and undoes through normal History controls,
+and reloads again. Review fits at 1440/390/320px, offline writes/browser errors
+are zero, and reconnect uploads four exact canonical device events with real
+receipts. Guest reads remain 404/401. Evidence: `tmp/account-history-restore-native-final/`.
+
+Focused regressions cover accepted server bases, independent component copies,
+quota-failure rollback across content/queue/history, simultaneous retries,
+operation identity reuse, stale previews, overlapping undo, retired writers,
+no-network facade calls and retry after later deletion. The final build has 247
+verified offline assets (21,734,476 bytes). TypeScript retains 91 baseline errors,
+none in changed files; lint has no errors and three existing constructor warnings.
+
+Remaining: deleted-account recovery through reconciliation, other editor-specific
+pending draft sources and protected History adapters, complete account-offline
+branch/note/name controls, full component/merge and native identity-transition
+acceptance, plus the broader local-first matrix. Existing remote recovery remains
+available only with verified authority. CI/deployed acceptance is unverified; this
+checkpoint does not close the main merge gate.

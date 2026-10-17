@@ -390,3 +390,32 @@ test('native bulk deletion queues retained recordings and cancels device files o
   if(oldNavigator)Object.defineProperty(globalThis,'navigator',oldNavigator);else Reflect.deleteProperty(globalThis,'navigator');
  }
 });
+
+test('normal account History facade restores offline without sync, and retires before another account can apply',async()=>{
+ const saved={window:globalThis.window,indexedDB:globalThis.indexedDB,fetch:globalThis.fetch,navigator:Object.getOwnPropertyDescriptor(globalThis,'navigator')};
+ const target=new EventTarget(),scope={kind:'account',origin:'https://thingtime.example',ownerId:'restore-owner',dataPlane:'home'} as const;
+ Object.assign(globalThis,{window:{location:{origin:scope.origin},addEventListener:target.addEventListener.bind(target),removeEventListener:target.removeEventListener.bind(target),dispatchEvent:target.dispatchEvent.bind(target)},indexedDB:new IDBFactory(),fetch:async()=>{throw new Error('Unexpected network');}});
+ Object.defineProperty(globalThis,'navigator',{configurable:true,value:{onLine:false}});
+ let remoteCalls=0;const remote=async()=>{remoteCalls++;throw new Error('Unexpected remote version');};
+ try{
+  bindLocalWorkspace(false,rootIdentity.read().generation,scope,false);rootIdentity.confirm(rootIdentity.read().generation);
+  const api:any=accountApi({timeline:{version:remote},things:{}},{id:scope.ownerId},scope.dataPlane);
+  const thing=await api.things.create({thingtime:['data'],crystal:{name:'Original'}}),worker=accountWorkspaceWorker(scope);
+  const history=new AccountTimeline(worker.db,scope,worker.lease),[source]=await history.rows({thingId:thing.id});
+  await api.things.update({id:thing.id,crystal:{name:'Changed'}});
+  const timelineScope={apiOrigin:scope.origin,ownerId:scope.ownerId,dataPlane:scope.dataPlane};
+  assert.equal(api.timeline.canChangeLocally(timelineScope),true);
+  const request={command:'preview-version',eventId:source.event.id,mode:'restore',componentMode:'recorded',choices:{},componentChoices:{}};
+  const {preview}=await api.timeline.version(timelineScope,request);
+  const command={...request,command:'apply-version',operationId:crypto.randomUUID(),expectedHeadId:preview.expectedHeadId,expectedComponents:preview.components.fingerprint};
+  const result=await api.timeline.version(timelineScope,command);
+  assert.equal(result.savedLocally,true);assert.equal(result.entry.receipt,null);assert.equal(result.entry.event.source,'client');
+  assert.equal((await api.things.get({id:thing.id})).thing.crystal.name,'Original');assert.equal(remoteCalls,0);
+  const foreign={...timelineScope,ownerId:'other'};assert.equal(api.timeline.canChangeLocally(foreign),false);await assert.rejects(api.timeline.version(foreign,command),/offline/);
+  rootIdentity.changed();bindLocalWorkspace(true,rootIdentity.read().generation);assert.equal(api.timeline.canChangeLocally(timelineScope),false);
+  await assert.rejects(api.timeline.version(timelineScope,command),/workspace changed/i);assert.equal(remoteCalls,0);
+ }finally{
+  rootIdentity.changed();await workspaceDatabase().close();Object.assign(globalThis,{window:saved.window,indexedDB:saved.indexedDB,fetch:saved.fetch});
+  if(saved.navigator)Object.defineProperty(globalThis,'navigator',saved.navigator);else Reflect.deleteProperty(globalThis,'navigator');
+ }
+});

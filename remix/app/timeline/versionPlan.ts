@@ -10,13 +10,15 @@ import { thingContentSnapshot } from './thingContent.ts';
 import type { ComponentDefinitionVersion } from './componentDefinitions.ts';
 import type { createPublishedComponentTools } from './publishedComponentTools.ts';
 
-type Dependencies = {
+export type VersionSource = Pick<TimelineEntry, 'event'>;
+type Dependencies<Entry extends VersionSource> = {
 	reject(status: number, message: string): never;
+	canUndoDraft?: (event: TimelineEvent) => boolean;
 	find(id: string, owner: string): Promise<any>;
-	entries(owner: string, ids: string[]): Promise<TimelineEntry[]>;
+	entries(owner: string, ids: string[]): Promise<Entry[]>;
 	nodes(owner: string, ids: string[]): Promise<TimelineGraphNode[]>;
-	snapshot(owner: string, entry: TimelineEntry, side: 'before' | 'after'): Promise<TimelineSnapshot | null>;
-	deleted(owner: string, id: string): Promise<{ entry: TimelineEntry; thingtime: string[] } | null>;
+	snapshot(owner: string, entry: Entry, side: 'before' | 'after'): Promise<TimelineSnapshot | null>;
+	deleted(owner: string, id: string): Promise<{ entry: Entry; thingtime: string[] } | null>;
 	folderExists(owner: string, id: string): Promise<boolean>;
 	recorded(owner: string, sources: { event: TimelineEvent; content: any }[]): Promise<ComponentDefinitionVersion[]>;
 	live(
@@ -29,7 +31,7 @@ type Dependencies = {
 };
 /** Canonical read-only restore/undo/current-content merge planning. Adapters
  * retain authority, transactional mutation, replay and storage-specific readers. */
-export async function prepareVersionChange(ownerId: string, request: VersionRequest, deps: Dependencies) {
+export async function prepareVersionChange<Entry extends VersionSource = TimelineEntry>(ownerId: string, request: VersionRequest, deps: Dependencies<Entry>) {
 	const { reject } = deps;
 	const { restorableContent, loadVersionGraph, versionMergeBase, versionContentSources, createVersionContentReader } =
 		createVersionGraphTools(reject);
@@ -58,7 +60,7 @@ export async function prepareVersionChange(ownerId: string, request: VersionRequ
 	// Undo reverts exactly one saved edit: base is that edit's after-state and
 	// incoming its before-state, merged against the live current content.
 	const undo = request.mode === 'undo';
-	if (undo && (source.event.operation !== 'update' || source.event.mode !== 'revision' || !source.event.before || !source.event.after))
+	if (undo && (source.event.operation !== 'update' || (source.event.mode !== 'revision' && !deps.canUndoDraft?.(source.event)) || !source.event.before || !source.event.after))
 		reject(422, 'Only a saved edit can be undone on its own.');
 	if (!source.event.after && (source.event.operation !== 'delete' || request.mode !== 'restore' || !request.recover))
 		reject(422, 'Choose Restore to recover the content before this deletion.');
@@ -75,7 +77,7 @@ export async function prepareVersionChange(ownerId: string, request: VersionRequ
 			: new Map<string, TimelineGraphNode>();
 	const baseNode = request.mode === 'merge' ? versionMergeBase(graph, headId, source.event.id) : null;
 	const base = baseNode ? (await read([baseNode.id]))[0] : null;
-	const resolved = (entry: TimelineEntry) => deps.snapshot(ownerId, entry, 'after');
+	const resolved = (entry: Entry) => deps.snapshot(ownerId, entry, 'after');
 	const contentFor = createVersionContentReader(graph, read, resolved);
 	const currentSnapshot = thingContentSnapshot(doc)!;
 	const current = restorableContent(currentSnapshot);
@@ -148,7 +150,7 @@ export async function prepareVersionChange(ownerId: string, request: VersionRequ
 		reject(409, 'Update this client to review components before applying this version.');
 	if (request.mode === 'restore' && Object.keys(request.componentChoices ?? {}).length)
 		reject(400, 'Restores do not accept component merge choices.');
-	let components: ReturnType<Dependencies['compare']> | undefined;
+	let components: ReturnType<Dependencies<Entry>['compare']> | undefined;
 	if (request.componentMode) {
 		const recorded = isPage
 			? await deps.recorded(

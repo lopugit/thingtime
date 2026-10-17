@@ -4784,3 +4784,15 @@ and screenshots at 1440/390/320px. No additional environment variables, services
 or credentials are needed. These are version archives, not portable Thing import
 bundles; device exports explicitly mark note/name context as partial. See
 [offline History export](docs/local-workspaces.md#offline-account-history-export--2026-10-17).
+
+
+### Account offline History restore regression
+
+Use the same disposable loopback replica and production-client shell as the
+History capture/export checks. Enable `accountTimelineRestore.browser.test.ts`
+with `TT_LOCAL_ACCOUNT_RESTORE_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_ACCOUNT_RESTORE_ARTIFACTS=/path/to/ignored-evidence`, plus the shared
+Playwright/Chrome paths above. No new secret or service is required. The fixture
+creates a private account and Thing, restores/undoes offline through native
+controls, verifies exact receipts after reconnect and removes its test Thing.
+Normal signup limits apply. See [coverage and remaining recovery work](docs/local-workspaces.md#offline-account-history-restore-and-undo--2026-10-17).

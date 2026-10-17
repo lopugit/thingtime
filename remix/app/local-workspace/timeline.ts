@@ -119,7 +119,7 @@ export async function appendLocalTimeline(tx: WorkspaceTransaction, input: Timel
 /** Track successful ordinary content writes inside their own transaction.
  * Protected families need their dedicated snapshot adapters; never copy vault,
  * attachment bookkeeping or Action outcomes through the generic projection. */
-export type LocalMutationCapture = Pick<TimelineEvent, 'id' | 'operationId' | 'source' | 'clientId' | 'label' | 'operation' | 'parentIds'>;
+export type LocalMutationCapture = Pick<TimelineEvent, 'id' | 'operationId' | 'label' | 'operation' | 'parentIds'> & Partial<Pick<TimelineEvent, 'source' | 'clientId'>>;
 export type ThingHistoryWriter = {
  ownerId: string; clientId: string; branchId: string; mode: 'draft' | 'revision';
  read(id: string): Promise<{ event: TimelineEvent } | null>;

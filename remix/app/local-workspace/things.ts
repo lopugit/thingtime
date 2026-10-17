@@ -75,7 +75,7 @@ export class LocalThings {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
 			if (mode !== 'readwrite') return run(tx);
-			if (this.scope.kind !== 'anonymous') return this.captureAccountChanges ? this.captureAccountChanges(tx, run) : run(tx);
+			if (this.scope.kind !== 'anonymous') return this.captureAccountChanges ? this.captureAccountChanges(tx, run, captures) : run(tx);
 			return captureThingChanges(tx, run, (tx, changes) => recordLocalThingChanges(tx, changes, this.now, this.uuid, captures));
 		});
 	}
@@ -121,7 +121,7 @@ export class LocalThings {
 		create(input: ThingWrite, id: string, capture: LocalMutationCapture): Promise<LocalThing>;
 		update(input: ThingWrite & { id: string }, capture: LocalMutationCapture): Promise<LocalThing>;
 	}) => Promise<T>, signal?: AbortSignal): Promise<T> {
-		if (this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account versions require their sync adapter');
+		if (this.scope.kind !== 'anonymous' && (!this.captureAccountChanges || !this.onWrite)) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account versions require their sync adapter');
 		const captures = new Map<string, LocalMutationCapture>();
 		return this.transaction('readwrite', tx => run({ tx,
 			create: async (input, id, capture) => { captures.set(id, capture); return this.createIn(tx, input, id); },

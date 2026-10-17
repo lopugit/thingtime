@@ -2,7 +2,7 @@ import { parseTimelineEntry, parseTimelineEvent, timelineEventText, timelineScop
 import { splitTimelineEvent, joinTimelineEvent, parseTimelineEventRecord, timelineLinkId, type TimelineEventRecord, type TimelineLink } from '../timeline/records';
 import { TimelineLocalStore, timelineLocalRow, timelineLocalIndex, validateTimelineIndex, validateTimelineRow, orderPendingTimelineRows,
  type LocalTimelineRow, type TimelineLocalBackend, type TimelineLocalIndex, type TimelineLocalSelection } from '../timeline/localStore';
-import { recordLocalThingChanges } from './timeline';
+import { recordLocalThingChanges, type LocalMutationCapture } from './timeline';
 import { captureThingChanges } from './thingChanges';
 import type { LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
@@ -19,7 +19,7 @@ function reserved<T extends {receipt:unknown;status:unknown;bytes:number;accesse
  const {receipt,status,bytes,accessedAt}=row;
  return {...row,reserve:' '.repeat(Math.max(0,2048-new TextEncoder().encode(JSON.stringify({receipt,status,bytes,accessedAt})).length))};
 }
-async function readRow(tx:WorkspaceTransaction,scope:TimelineScope,id:string):Promise<LocalTimelineRow|null>{
+export async function readAccountTimelineRow(tx:WorkspaceTransaction,scope:TimelineScope,id:string):Promise<LocalTimelineRow|null>{
  const stored=await tx.get<Stored>(EVENTS,id);if(!stored)return null;
  const event=parseTimelineEventRecord(stored.event),key=timelineScopeKey(scope);
  const ids=[timelineLinkId(id,'thing',0),timelineLinkId(id,'branch',0),timelineLinkId(id,'operation',0),
@@ -43,10 +43,10 @@ async function append(tx:WorkspaceTransaction,scope:TimelineScope,input:Timeline
  const event=parseTimelineEvent(input);
  if(event.ownerId!==scope.ownerId||event.actorId!==scope.ownerId||event.source!=='client'||event.mode!=='draft'||!event.clientId)
   failure('Device History cannot claim server mutation authority.');
- const previous=await readRow(tx,scope,event.id);
+ const previous=await readAccountTimelineRow(tx,scope,event.id);
  if(previous){if(timelineEventText(previous.event)!==timelineEventText(event))failure('History event identity was reused.');return;}
  for(const [id,thingId] of [...event.parentIds.map(id=>[id,event.thingId]),...event.dependencies.map(ref=>[ref.eventId,ref.thingId])]){
-  const ancestor=await readRow(tx,scope,id);if(!ancestor||ancestor.event.thingId!==thingId)failure('Account History dependencies are missing.');
+  const ancestor=await readAccountTimelineRow(tx,scope,id);if(!ancestor||ancestor.event.thingId!==thingId)failure('Account History dependencies are missing.');
  }
  await putRow(tx,timelineLocalRow(timelineScopeKey(scope),event,null,Date.parse(event.occurredAt)));
 }
@@ -54,14 +54,14 @@ async function append(tx:WorkspaceTransaction,scope:TimelineScope,input:Timeline
 /** Content, canonical event/link records and the local head commit together.
  * These are authored private drafts until the normal server supplies receipts;
  * they never fabricate server revisions, ownership or acceptance ordering. */
-export async function captureAccountThingChanges<T>(tx:WorkspaceTransaction,scope:AccountScope,run:(tx:WorkspaceTransaction)=>Promise<T>,now:()=>string,uuid:()=>string):Promise<T>{
+export async function captureAccountThingChanges<T>(tx:WorkspaceTransaction,scope:AccountScope,run:(tx:WorkspaceTransaction)=>Promise<T>,now:()=>string,uuid:()=>string,captures?:Map<string, LocalMutationCapture>):Promise<T>{
  return captureThingChanges(tx,run,async(tx,changes)=>{
   if(!changes.size)return;
   let clientId=await tx.get<string>(META,'client');
   if(!clientId){clientId=`workspace-${uuid()}`;await tx.put(META,'client',clientId);}
   const timeline=accountTimelineScope(scope);
-  await recordLocalThingChanges(tx,changes,now,uuid,undefined,{ownerId:scope.ownerId,clientId,branchId:`device-${clientId}`,mode:'draft',
-   read:id=>readRow(tx,timeline,id),append:event=>append(tx,timeline,event)});
+  await recordLocalThingChanges(tx,changes,now,uuid,captures,{ownerId:scope.ownerId,clientId,branchId:`device-${clientId}`,mode:'draft',
+   read:id=>readAccountTimelineRow(tx,timeline,id),append:event=>append(tx,timeline,event)});
  },async(tx,id)=>{
   const row=await tx.get<LocalThing>('things',id);if(!row)return null;
   const state=await tx.get<{audience:{acl:string[]}}>('thing-sync',id);
@@ -84,21 +84,33 @@ export class AccountTimeline {
    for(const {id,value} of await tx.list<Header>(INDEX)){
     validateTimelineIndex(value,timelineScopeKey(this.timelineScope));
     if((selection?.thingId&&value.thingId!==selection.thingId)||(selection?.thingIds&&!selection.thingIds.includes(value.thingId))||(selection?.status&&value.status!==selection.status))continue;
-    const row=await readRow(tx,this.timelineScope,id);if(!row)failure('Account History payload is missing.');result.push(row!);
+    const row=await readAccountTimelineRow(tx,this.timelineScope,id);if(!row)failure('Account History payload is missing.');result.push(row!);
    }
    return result;
   });
  }
  async entries(ids:string[]):Promise<LocalTimelineRow[]>{
   if(ids.length>128||new Set(ids).size!==ids.length)failure('Invalid History dependency batch.');
-  return this.tx('readonly',async tx=>{const rows:LocalTimelineRow[]=[];for(const id of ids){const row=await readRow(tx,this.timelineScope,id);if(row)rows.push(row);}return rows;});
+  return this.tx('readonly',async tx=>{const rows:LocalTimelineRow[]=[];for(const id of ids){const row=await readAccountTimelineRow(tx,this.timelineScope,id);if(row)rows.push(row);}return rows;});
  }
+ async retain(inputs: TimelineEntry[]): Promise<void> {
+  const entries=inputs.map(parseTimelineEntry);
+  if(entries.length>2048||entries.some(({event})=>event.ownerId!==this.scope.ownerId))failure('Invalid retained account History scope.');
+  await this.tx('readwrite',async tx=>{
+   for(const {event,receipt} of entries){
+    const previous=await readAccountTimelineRow(tx,this.timelineScope,event.id);
+    if(previous && (timelineEventText(previous.event)!==timelineEventText(event) || (previous.receipt && JSON.stringify(previous.receipt)!==JSON.stringify(receipt))))failure('Retained History identity changed.');
+    if(!previous || !previous.receipt)await putRow(tx,timelineLocalRow(timelineScopeKey(this.timelineScope),event,receipt,previous?.accessedAt??Date.now()));
+   }
+  });
+ }
+
  async accept(inputs:TimelineEntry[]):Promise<void>{
   const entries=inputs.map(parseTimelineEntry);
   if(entries.some(({event})=>event.ownerId!==this.scope.ownerId))failure('History receipt belongs to another account.');
   await this.tx('readwrite',async tx=>{
    for(const {event,receipt} of entries){
-    const local=await readRow(tx,this.timelineScope,event.id);if(!local)continue;
+    const local=await readAccountTimelineRow(tx,this.timelineScope,event.id);if(!local)continue;
     if(timelineEventText(local.event)!==timelineEventText(event))failure('Account acknowledged different History content.');
     if(local.receipt&&JSON.stringify(local.receipt)!==JSON.stringify(receipt))failure('History receipt identity changed.');
     if(!local.receipt)await putRow(tx,timelineLocalRow(timelineScopeKey(this.timelineScope),event,receipt,local.accessedAt));

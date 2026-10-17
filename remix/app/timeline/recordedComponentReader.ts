@@ -1,7 +1,7 @@
 import { COMPONENT_BINDING_PREFIX, MAX_COMPONENT_BINDINGS, readComponentBinding } from './componentBindings.ts';
 import { TIMELINE_EVENT_MAX_BYTES, type TimelineDependency, type TimelineEntry } from './contract.ts';
 /** Preflight all payload sizes before reading immutable component captures. */
-export async function readRecordedComponents({
+export async function readRecordedComponents<Entry extends Pick<TimelineEntry, 'event'> = TimelineEntry>({
 	ownerId,
 	wanted,
 	readSizes,
@@ -12,7 +12,7 @@ export async function readRecordedComponents({
 	ownerId: string;
 	wanted: TimelineDependency[];
 	readSizes: (ids: string[]) => Promise<{ timelineEntryBytes: number }[]>;
-	readEntries: (ids: string[]) => Promise<TimelineEntry[]>;
+	readEntries: (ids: string[]) => Promise<Entry[]>;
 	error: (status: number, message: string) => Error;
 	maxBytes?: number;
 }) {

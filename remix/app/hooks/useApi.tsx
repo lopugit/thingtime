@@ -125,6 +125,7 @@ export function useApi() {
       }, [asyncFetcher])
     },
     timeline: {
+      canChangeLocally: (_scope: {ownerId: string; dataPlane: string}) => false,
       canExportLocally: (_scope: {ownerId: string; dataPlane: string}) => false,
       recoverOutcome: useCallback(async (scope: { ownerId: string; dataPlane: string }, recovery: ActionOutcomeRecovery, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', '1.16.0');
