@@ -181,17 +181,7 @@ export class LocalProviderVault extends DeviceVaultSession {
  private result(row: DeviceProviderRecord, value: Content) {
   const metadata = this.metadata(row, value); return value.kind === 'group' ? { ok: true as const, group: metadata as DeviceProviderGroup } : { ok: true as const, entry: metadata as DeviceProviderEntry };
  }
- /** A complete metadata snapshot never requests credential values. Prepare every
-  * encrypted replacement before one atomic adoption; pending local work wins. */
- async reconcileMetadata(transport: ProviderVaultMetadataTransport, signal?: AbortSignal) {
-  if (this.scope.kind !== 'account') return fail('ACCOUNT_REQUIRED', 'Anonymous vaults never synchronize.', 403);
-  const op = this.operation(signal, false), controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
-  const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
-  try {
-   const baseline = await this.rows(op), expected = stamp(baseline);
-   const dependencies = new Map<string, string>();
-   for (const row of baseline.filter(item => !item.deleted)) { const content = await this.decode(row, op); if (content.kind !== 'group' && content.groupId) dependencies.set(row.id, content.groupId); }
-   const snapshot = await transport.metadata(combined); op.lease.assertCurrent(); combined.throwIfAborted();
+ private async prepareMetadata(snapshot: Awaited<ReturnType<ProviderVaultMetadataTransport['metadata']>>, baseline: DeviceProviderRecord[], op: ReturnType<LocalProviderVault['operation']>, retainUnchanged = true) {
    if (!snapshot || snapshot.complete !== true || !Array.isArray(snapshot.groups) || !Array.isArray(snapshot.entries) || snapshot.groups.length + snapshot.entries.length > MAX_ENTRIES)
     return fail('VAULT_RESPONSE', 'The account returned an incomplete or oversized vault snapshot.', 502);
    if (snapshot.groups.some(row => !row || typeof row !== 'object' || Array.isArray(row) || 'kind' in row) ||
@@ -215,11 +205,25 @@ export class LocalProviderVault extends DeviceVaultSession {
      if (content.kind !== 'group' && (!('hasValue' in raw) || raw.hasValue !== true || (content.groupId && !groups.has(content.groupId)))) throw Error();
     } catch { return fail('VAULT_RESPONSE', 'The account returned invalid vault metadata.', 502); }
     const before = baseline.find(row => row.id === raw.id);
-    if (before?.remoteVersion === raw.version && !before.deleted) { prepared.push(before); continue; }
+    if (retainUnchanged && before?.remoteVersion === raw.version && !before.deleted) { prepared.push(before); continue; }
     const record: DeviceProviderRecord = { id: raw.id, revision: (before?.revision ?? 0) + 1, remoteRevision: before?.remoteRevision ?? 0, remoteVersion: raw.version,
      createdAt: raw.createdAt, updatedAt: raw.updatedAt, encryptedValue: await sealDeviceVaultValue(await this.context, op.key, raw.id, JSON.stringify(content)) };
     this.validateRow(record.id, record); prepared.push(record);
    }
+   return { prepared, seen };
+ }
+ /** A complete metadata snapshot never requests credential values. Prepare every
+  * encrypted replacement before one atomic adoption; pending local work wins. */
+ async reconcileMetadata(transport: ProviderVaultMetadataTransport, signal?: AbortSignal) {
+  if (this.scope.kind !== 'account') return fail('ACCOUNT_REQUIRED', 'Anonymous vaults never synchronize.', 403);
+  const op = this.operation(signal, false), controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
+  const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  try {
+   const baseline = await this.rows(op), expected = stamp(baseline);
+   const dependencies = new Map<string, string>();
+   for (const row of baseline.filter(item => !item.deleted)) { const content = await this.decode(row, op); if (content.kind !== 'group' && content.groupId) dependencies.set(row.id, content.groupId); }
+   const snapshot = await transport.metadata(combined); op.lease.assertCurrent(); combined.throwIfAborted();
+   const { prepared, seen } = await this.prepareMetadata(snapshot, baseline, op);
    await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
     if (stamp((await tx.list<DeviceProviderRecord>(collections.records)).map(row => row.value)) !== expected) return fail('VAULT_CONFLICT', 'The vault changed while metadata was loading. Local edits have been kept.');
     const pending = new Set((await tx.list<DeviceProviderCommand>(collections.commands)).map(row => row.value.recordId));
@@ -341,6 +345,116 @@ export class LocalProviderVault extends DeviceVaultSession {
     }
    }
    return { completed };
+  } finally { off(); }
+ }
+
+ /** Review is bound to the encrypted local snapshot, including queued intent.
+  * No values are disclosed. Historical moves count as dependencies too. */
+ private async refusedState(recordId: string, op: ReturnType<LocalProviderVault['operation']>) {
+  if (this.scope.kind !== 'account') return fail('ACCOUNT_REQUIRED', 'Anonymous vaults never synchronize.', 403);
+  if (!safeVaultId(recordId)) return fail('VAULT_INPUT', 'Select a valid vault conflict.', 400);
+  const baseline = await this.rows(op);
+  const queue = (await this.db.transaction(this.scope, 'readonly', op.lease, tx => tx.list<DeviceProviderCommand>(collections.commands))).sort((a,b) => a.value.sequence - b.value.sequence);
+  const first = queue[0];
+  if (!first || first.value.recordId !== recordId || first.value.state !== 'refused') return fail('VAULT_CONFLICT', 'This conflict changed. Review the first waiting change again.');
+  const content = new Map<string, Content>();
+  for (const row of baseline) if (!row.deleted) content.set(row.id, await this.decode(row, op));
+  const affected = new Set([recordId]), sequences = new Set<number>();
+  for (const { id: key, value: saved } of queue) {
+   if (!safeVaultId(saved.id) || !safeVaultId(saved.recordId) || key !== `${saved.recordId}:${saved.id}` || !revision(saved.sequence) || saved.sequence < 1 || sequences.has(saved.sequence) || !revision(saved.localRevision) || saved.localRevision < 1 || !['pending','frozen','refused'].includes(saved.state))
+    return fail('VAULT_DAMAGED', 'The saved sync queue is invalid. Existing work has been kept.', 422);
+   sequences.add(saved.sequence);
+   const row = baseline.find(row => row.id === saved.recordId);
+   if (!row || row.revision < saved.localRevision || row.remoteRevision >= saved.localRevision) return fail('VAULT_DAMAGED', 'A queued vault revision is invalid. Existing work has been kept.', 422);
+   try {
+    const raw = JSON.parse(await openDeviceVaultValue(await this.context, op.key, `command:${saved.recordId}:${saved.id}`, saved.encryptedValue));
+    const command = saved.state === 'pending' ? input(raw) : parseUserVaultWrite(raw);
+    if (command.id !== saved.recordId || command.writeId !== saved.id || (saved.state === 'pending' && raw.revision + 1 !== saved.localRevision)) throw Error();
+    if ('groupId' in command && command.groupId === recordId) affected.add(saved.recordId);
+   } catch { op.lease.assertCurrent(); return fail('VAULT_DAMAGED', 'The encrypted sync request is invalid. Existing work has been kept.', 422); }
+  }
+  for (const [id, value] of content) if (value.kind !== 'group' && value.groupId === recordId) affected.add(id);
+  // Never cancel/rewrite a request whose outcome is still uncertain, including
+  // an expired in-flight claim. It must obtain its original receipt first.
+  if (queue.some(({ value }) => affected.has(value.recordId) && (value.state === 'frozen' || value.claim !== undefined || value.claimUntil !== undefined)))
+   return fail('VAULT_UNCERTAIN', 'A related save is still awaiting its original receipt. Retry sync before resolving this conflict.');
+  const state = JSON.stringify({ baseline: [...baseline].sort((a,b) => a.id.localeCompare(b.id)), queue });
+  const reviewId = await deviceVaultWriteDigest(op.key, recordId, state); op.lease.assertCurrent();
+  const items = baseline.filter(row => affected.has(row.id)).map(row => ({ id: row.id, revision: row.revision, name: content.get(row.id)?.name ?? 'Deleted device entry', deleted: !!row.deleted }));
+  const canCopy = !!content.get(recordId) && [...affected].every(id => !content.has(id) || !remoteOnly(content.get(id)!));
+  return { baseline, queue, content, affected, state, review: { recordId, reviewId, items, canCopy } };
+ }
+ async reviewRefused(recordId: string, signal?: AbortSignal) {
+  return (await this.refusedState(recordId, this.operation(signal))).review;
+ }
+ /** Resolve the exact reviewed set in one local transaction. Account versions
+  * stay metadata-only; copying requires values already retained on this device.
+  * New independent creates follow earlier pending work in dependency order. */
+ async resolveRefused(recordId: string, reviewId: string, choice: 'account' | 'copy', transport: ProviderVaultMetadataTransport, signal?: AbortSignal) {
+  if (!['account','copy'].includes(choice) || typeof reviewId !== 'string' || !reviewId || reviewId.length > 256) return fail('VAULT_INPUT', 'Choose a valid reviewed resolution.', 400);
+  const op = this.operation(signal), before = await this.refusedState(recordId, op);
+  if (before.review.reviewId !== reviewId) return fail('VAULT_CONFLICT', 'Device changes arrived after this review. Review them again.');
+  if (choice === 'copy' && !before.review.canCopy) return fail('VAULT_VALUE_REMOTE', 'Retain the selected values before making an independent copy. Existing work has been kept.');
+  const controller = new AbortController(), off = op.lease.onInvalidate(() => controller.abort());
+  const combined = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  try {
+   const snapshot = await transport.metadata(combined); op.lease.assertCurrent(); combined.throwIfAborted();
+   const { prepared } = await this.prepareMetadata(snapshot, before.baseline, op, false);
+   const remote = new Map(prepared.map(row => [row.id, row])), adopted = new Map(before.baseline.map(row => [row.id, row]));
+   const time = new Date().toISOString(), copies = new Map<string,string>();
+   if (choice === 'copy') for (const id of before.affected) if (before.content.has(id)) copies.set(id, crypto.randomUUID());
+   for (const id of before.affected) {
+    const old = adopted.get(id)!;
+    // A resolution always changes the local revision, even when the server's
+    // comparison token has not changed, so open editors must refresh.
+    const account = remote.get(id);
+    adopted.set(id, account ? { ...account, revision: old.revision + 1, writeId: undefined, writeDigest: undefined } :
+     { id, revision: old.revision + 1, remoteRevision: old.remoteRevision, createdAt: old.createdAt, updatedAt: time, deleted: true });
+   }
+   // Account entries can have moved to another environment. Adopt a missing
+   // dependency from the same complete validated snapshot; never erase a local
+   // pending group or replace its identity to satisfy a reference.
+   for (const id of before.affected) {
+    const row = adopted.get(id)!; if (row.deleted) continue;
+    const value = await this.decode(row, op);
+    if (value.kind === 'group' || !value.groupId) continue;
+    const group = adopted.get(value.groupId);
+    if (!group || group.deleted) {
+     if (before.queue.some(item => item.value.recordId === value.groupId && !before.affected.has(value.groupId))) return fail('VAULT_CONFLICT', 'The account environment has pending device changes. Review it first.');
+     const replacement = remote.get(value.groupId);
+     if (!replacement) return fail('VAULT_RESPONSE', 'The account environment is missing.', 502);
+     adopted.set(value.groupId, replacement);
+    }
+   }
+   const queuedCopies: Array<{ key: string; command: Omit<DeviceProviderCommand, 'sequence'> }> = [];
+   const orderedCopies = [...copies].sort(([a],[b]) => Number(before.content.get(b)?.kind === 'group') - Number(before.content.get(a)?.kind === 'group'));
+   for (const [sourceId, id] of orderedCopies) {
+    const source = before.content.get(sourceId)!;
+    if (remoteOnly(source)) return fail('VAULT_VALUE_REMOTE', 'A selected value is not retained on this device.');
+    const value = source.kind === 'group' ? source : { ...source, groupId: source.groupId ? copies.get(source.groupId) ?? source.groupId : null };
+    const { kind: _kind, ...fields } = value;
+    const command = input({ ...fields, action: value.kind === 'group' ? 'create-group' : value.kind === 'secret' ? 'save-secret' : 'save-provider', id, revision: 0, writeId: crypto.randomUUID() });
+    const owner = await this.context, writeDigest = await deviceVaultWriteDigest(op.key, id, JSON.stringify(command));
+    adopted.set(id, { id, revision: 1, remoteRevision: 0, createdAt: time, updatedAt: time, writeId: command.writeId, writeDigest, encryptedValue: await sealDeviceVaultValue(owner, op.key, id, JSON.stringify(value)) });
+    queuedCopies.push({ key: `${id}:${command.writeId}`, command: { id: command.writeId, recordId: id, localRevision: 1, state: 'pending', encryptedValue: await sealDeviceVaultValue(owner, op.key, `command:${id}:${command.writeId}`, JSON.stringify(command)) } });
+   }
+   const active = [...adopted.values()].filter(row => !row.deleted);
+   if (active.length > MAX_ENTRIES) return fail('VAULT_LIMIT', 'The resolution exceeds this device entry limit. Existing work has been kept.', 413);
+   const contents = new Map<string,Content>();
+   for (const row of active) { this.validateRow(row.id, row); contents.set(row.id, await this.decode(row, op)); }
+   for (const value of contents.values()) if (value.kind !== 'group' && value.groupId && contents.get(value.groupId)?.kind !== 'group') return fail('VAULT_GROUP', 'This resolution would leave an entry without its environment. Existing work has been kept.');
+   await this.db.transaction(this.scope, 'readwrite', op.lease, async tx => {
+    const baseline = (await tx.list<DeviceProviderRecord>(collections.records)).map(row => row.value).sort((a,b) => a.id.localeCompare(b.id));
+    const queue = (await tx.list<DeviceProviderCommand>(collections.commands)).sort((a,b) => a.value.sequence - b.value.sequence);
+    if (JSON.stringify({ baseline, queue }) !== before.state) return fail('VAULT_CONFLICT', 'The vault changed during resolution. Review it again.');
+    let sequence = (await tx.get<number>(collections.keys, 'sequence')) ?? 0;
+    if (!revision(sequence) || !revision(sequence + queuedCopies.length) || queue.some(item => item.value.sequence > sequence)) return fail('VAULT_LIMIT', 'The device sync sequence limit was reached.', 413);
+    for (const item of queue) if (before.affected.has(item.value.recordId)) await tx.delete(collections.commands, item.id);
+    for (const [id,row] of adopted) await tx.put(collections.records, id, row);
+    for (const item of queuedCopies) await tx.put(collections.commands, item.key, { ...item.command, sequence: ++sequence });
+    await tx.put(collections.keys, 'sequence', sequence);
+   });
+   op.lease.assertCurrent(); return { copiedIds: Object.fromEntries(copies) };
   } finally { off(); }
  }
 

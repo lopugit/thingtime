@@ -330,7 +330,7 @@ test('System vault and deployment reveal contracts are registered and negotiated
   assert.ok(apiV1RouteKeys.includes('v1/admin/system/environment'));
   assert.equal(manifest.features['api.admin-system-environment'].version, '1.0.0');
   assert.equal(manifest.features['api.admin-ci-credentials'].version, '3.0.0');
-  assert.equal(manifest.features['api.vault-reveal'].version, '1.2.0');
+  assert.equal(manifest.features['api.vault-reveal'].version, '1.3.0');
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);
   assert.equal(capabilitySatisfies('1.1.1', '1.1.0'), true);
   assert.equal(capabilitySatisfies('2.0.0', '1.1.0'), false);

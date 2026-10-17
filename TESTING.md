@@ -11613,3 +11613,31 @@ Use `providerIntegrity.api.test.ts` with the loopback setup in
 
 Use `providerWrites.api.test.ts` with the documented isolated fixture setup.
 Unit transports are not proof of server or deployed behavior.
+
+
+## Account provider device workspace (2026-10-17)
+
+- [ ] In a disposable account, open Security → Secure Vault, set a separate device
+  passphrase, and confirm account metadata arrives without credential values.
+  Verify one selected value with the current password/passkey and explicitly
+  keep it offline. A wrong owner/plane, changed session/role or changed metadata
+  version must refuse retention without replacing device edits.
+- [ ] Go offline, save an environment and credential, then cold reload at
+  1440/390/320px. Unlock the same account partition with `user:null`; retained
+  values and local edits remain usable, with no account mutation requests.
+- [ ] Make a conflicting fixture account change, reconnect, and review every
+  affected entry. Independent copies remap environment references; account
+  originals remain unchanged. Account-version selection discards only the
+  reviewed commands. Newer edits, competing tabs, uncertain requests and quota
+  failures must leave the entire encrypted working set intact.
+- [ ] Repeat anonymous Settings acceptance: no account commands, protected
+  requests or uploads. Check reveal masking, lock, cold reload and narrow
+  controls. Separately exercise account/origin/plane switches during pending
+  sync, fresh verification and retention; this is broader than one happy path.
+
+Regression: resolving a refused environment alone can orphan queued children.
+Review includes historical moves, uses an authenticated local snapshot token,
+commits all reviewed records/commands atomically and never rewrites a frozen
+request. `providerReview.test.ts`, `providerReview.api.test.ts` and
+`accountProviders.browser.test.ts` cover this boundary; fixture commands and
+verification limits are in `docs/local-workspaces.md`.

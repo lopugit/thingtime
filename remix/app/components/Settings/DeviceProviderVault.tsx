@@ -2,18 +2,19 @@ import React from 'react';
 import { Box, Button, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Text, Textarea } from '@chakra-ui/react';
 import { DeviceVaultGate } from '~/components/Passwords/DevicePasswordManager';
 import { LocalProviderVault } from '~/local-workspace/providerVault';
-import { anonymousWorkspaceDatabase, anonymousWorkspaceLease } from '~/local-workspace/runtime.client';
+import type { WorkspaceScope } from '~/local-workspace/storage';
+import { anonymousWorkspaceDatabase, anonymousWorkspaceLease, accountWorkspaceLease } from '~/local-workspace/runtime.client';
 
-/** Same forms, independent local key; anonymous storage has no sync transport. */
-export function DeviceProviderVault({ children }: { children: (vault: LocalProviderVault) => React.ReactNode }) {
+/** Shared forms and local key lifetime; only account workspaces receive a sync worker. */
+export function DeviceProviderVault({ children, scope }: { children: (vault: LocalProviderVault) => React.ReactNode; scope?: Extract<WorkspaceScope, { kind: 'account' }> }) {
  const [vault, setVault] = React.useState<LocalProviderVault | null>(null);
  React.useEffect(() => {
-  const current = new LocalProviderVault(anonymousWorkspaceDatabase(), { kind: 'anonymous' }, anonymousWorkspaceLease(), window.location.origin);
+  const current = new LocalProviderVault(anonymousWorkspaceDatabase(), scope ?? { kind: 'anonymous' }, scope ? accountWorkspaceLease(scope) : anonymousWorkspaceLease(), window.location.origin);
   setVault(current);
   const touch = () => current.touch(), hide = () => current.lock();
   window.addEventListener('pointerdown', touch); window.addEventListener('keydown', touch); window.addEventListener('pagehide', hide);
   return () => { window.removeEventListener('pointerdown', touch); window.removeEventListener('keydown', touch); window.removeEventListener('pagehide', hide); current.dispose(); };
- }, []);
+ }, [scope]);
  return vault ? <DeviceVaultGate vault={vault} title="Provider vault">{children}</DeviceVaultGate> : <Text>Opening device vault…</Text>;
 }
 

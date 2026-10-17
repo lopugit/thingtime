@@ -3067,3 +3067,81 @@ controls over the narrow right edge. This is anonymous acceptance, not account
 Settings sync or deployment acceptance. Lint has no new findings; three existing
 warnings in `things.ts` remain (one control-character regex and two mixed-operator
 warnings on the untouched fallback condition).
+
+
+## Account provider Settings workspace — 2026-10-17
+
+Security → Secure Vault now uses encrypted device storage for anonymous and
+account workspaces. An offline account retains its original owner/origin/plane
+partition even though root data has `user:null`. Local saves finish independently
+of the metadata and write workers; only a currently confirmed matching account
+can synchronize. Anonymous work has no sender. The independent device passphrase
+is not an account credential or a network authorization grant.
+
+Account metadata remains value-free. The existing fresh password/passkey reveal
+can explicitly retain one selected value, matching its exact remote version.
+`api.vault-reveal` 1.3.0 adds optional `expectedOwnerId` with `includeVersion:true`
+and `X-Thingtime-Expected-Data-Plane` for this workflow. It checks account and
+plane before verification, decryption and disclosure and identifies both in the
+scoped response; passkey tickets include the selected plane. The device commit
+is cancelled when account confirmation, selection, local revision or lock state
+changes. Ordinary transient reveal and its rate limits remain available.
+
+A refused queue exposes a review of all dependent entries, including historical
+environment moves. The review token authenticates the complete encrypted local
+snapshot. Choosing account versions or independent device copies commits the
+reviewed set atomically. Copies get fresh identities, remapped groups and ordered
+create commands. Remote-only values cannot be copied without first retaining or
+replacing them; deleted records are not recreated. Frozen requests remain intact
+until their original outcome is established. No choice force-overwrites the
+account original.
+
+Run disposable API and browser fixtures from `remix/`:
+
+```sh
+TT_PROVIDER_WRITES_API_URL=http://127.0.0.1:<fixture-port> \
+TT_SHARED_PLAYWRIGHT_PATH=<installed-playwright-module> \
+TT_PROVIDER_WRITES_API_ARTIFACTS=<artifact-directory> \
+node --import tsx --test app/local-workspace/providerReview.api.test.ts
+
+TT_ACCOUNT_PROVIDERS_URL=http://127.0.0.1:<fixture-port> \
+TT_SHARED_PLAYWRIGHT_PATH=<installed-playwright-module> \
+TT_SHARED_CHROME_PATH=<installed-test-browser> \
+TT_ACCOUNT_PROVIDERS_ARTIFACTS=<artifact-directory> \
+node --import tsx --test app/local-workspace/accountProviders.browser.test.ts
+```
+
+The API fixture confirms a real conditional refusal, independent environment/
+child copies, private canonical Things and account-version adoption. The browser
+fixture exercises native Settings, explicit fresh retention, actual offline
+network emulation, cold reload at 1440/390/320px and reviewed conflict copies.
+Only disposable loopback accounts are used; fixture Vault entries are cleaned
+through the ordinary API. Account creation itself has no deletion API.
+
+These fixtures are local evidence, not proof of all account/origin/plane races,
+History/native integration, CI or deployed delivery. The full feature matrix
+above remains incomplete, including account themes/algorithms, mail, media,
+protected History and native startup/update acceptance. No main merge yet.
+
+Local verification for this increment: workspace 491 passing / 54 opt-in skips
+and four offline-shell checks; sensitive reveal 25, capabilities 101 and Settings
+39 passing. The focused provider adapter suites pass 41 tests. The integrated
+API fixture passes 19 checks with cleanup verified. Its first attempt received
+503 during fixture registration while the app was rebuilding; the healthy
+runtime retry and browser fixtures passed without a server restart.
+
+Native account Settings acceptance passes in a clean browser, with mobile fresh
+retention, actual offline saves/cold reload at 1440/390/320px, review of dependent
+environments and unchanged account originals. The 320px review is visible and
+its action center is unobscured after ordinary scrolling. Anonymous acceptance
+also passes with no account records/commands, protected requests, network writes
+or page errors. Both runs have no horizontal overflow. Full-section captures
+still include the existing floating shell controls; their broader placement is
+not fixed by this increment. All disposable account Vault entries are cleaned.
+
+Client build verifies 248 assets / 21,884,151 bytes. Focused lint has no findings;
+full TypeScript retains the same 91 baseline diagnostics. Capability tests caught
+and corrected one old expected reveal version. These are local results only;
+current-head CI/deployment and the broader identity/native matrix remain open.
+Artifacts: `tmp/provider-settings-verified/`, `tmp/provider-settings-anonymous/`,
+`tmp/provider-review-integrated-retry/` and `tmp/provider-settings-*.log`.

@@ -162,9 +162,9 @@ is the browser-safe canonical metadata/value validator; `userVaultCore.ts`
 retains server-only outbound-host restrictions. `local-workspace/providerVault.ts`
 encrypts metadata and values with the independent provider key domain and
 commits revisions/tombstones with quota and lease checks. Anonymous operations
-never create account commands. The account queue format is prepared but its
-transport and account UI remain unfinished; existing account Vault still uses
-its authenticated API and fresh selected-value reveal.
+never create account commands. The account variant now uses the same encrypted device forms with independent
+sync and reviewed conflicts through `AccountProviderWorkspace.tsx`. Account
+values arrive only through explicit fresh selected-value retention.
 
 `providerVault.test.ts` covers atomic group membership, replay, quota, lock and
 corruption. `providerVault.browser.test.ts` is the opt-in actual offline Settings
@@ -180,8 +180,8 @@ record's version after fresh proof (`api.vault-reveal` 1.2.0). The device adapte
 retains explicit remote-only metadata and exact-version selected values through
 `providerTransport.client.ts`. `providerMetadata.api.test.ts` is an opt-in
 loopback API fixture; `test:lopu`, `test:sensitive-reveal`, `test:api-capabilities`
-and `test:local-workspace` include the corresponding unit contracts. Account
-Settings integration and conditional write synchronization remain unfinished.
+and `test:local-workspace` include the corresponding unit contracts. Account Settings and conditional synchronization are described in the latest
+provider workspace checkpoint below.
 
 ## Incoming mail
 
@@ -212,6 +212,15 @@ expected owner, exact same origin and selected plane. `providerVault.ts` freezes
 an encrypted request before transmission; `providerTransport.client.ts` negotiates
 the write contract and independently fences each request. `providerSync.test.ts`,
 `userVaultWriteReceipt.test.ts`, the route tests and the opt-in
-`providerWrites.api.test.ts` cover these boundaries. Settings account integration,
-reviewed conflict resolution and fresh selected-value retention UI remain open.
+`providerWrites.api.test.ts` cover these boundaries. Account Settings now binds the retained account scope even when offline root
+identity has `user:null`. `AccountProviderWorkspace.tsx` owns independent pull/
+push workers and exact-snapshot review; `VaultReveal.tsx` offers explicit retention
+after scoped fresh proof (`api.vault-reveal` 1.3.0).
 See [the write checkpoint](../local-workspaces.md#conditional-account-provider-writes--2026-10-17).
+
+Provider conflict review and account Settings acceptance: `providerReview.test.ts`
+checks atomic dependent copies/discards, quota, stale reviews, cross-tab winners
+and unknown outcomes. `providerReview.api.test.ts` and
+`accountProviders.browser.test.ts` are opt-in loopback fixtures with normal API
+registration and entry cleanup. They do not grant broader native, multi-account
+race, CI or deployed acceptance.

@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Account provider Settings now saves in the
+  encrypted device workspace independently of account sync, with atomic
+  environment conflict review and explicit fresh selected-value retention.
+  Scoped reveal 1.3.0 binds retention to the current account and data plane.
+  This is a local-first rollout increment; the full matrix remains open. See
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Add conditional account-provider writes and
   encrypted device retry queues using canonical Thing mutations and retained
   Timeline receipts. Local API verification covers retries after deletion,

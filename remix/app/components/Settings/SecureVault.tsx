@@ -7,14 +7,15 @@ import { VaultReveal } from './VaultReveal';
 import { DeviceProviderVault, DeviceProviderReveal } from './DeviceProviderVault';
 import type { LocalProviderVault } from '~/local-workspace/providerVault';
 import { LOPU_PROVIDER_TEMPLATES } from '~/api/utils/lopu/userVaultModel';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { AccountProviderWorkspace } from './AccountProviderWorkspace';
 import { useLocation } from 'react-router';
-import { isAnonymousWorkspace, subscribeWorkspaceIdentity, workspaceIdentityKey, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
+import { isAnonymousWorkspace, currentAccountWorkspace, subscribeWorkspaceIdentity, workspaceIdentityKey, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 
 type Group = { id: string; name: string; revision?: number };
 type Entry = {
 	id: string;
 	revision?: number;
+	valueAvailableOffline?: boolean;
 	kind: 'secret' | 'provider';
 	name: string;
 	groupId: string | null;
@@ -52,11 +53,13 @@ const postVault = async (body: Record<string, unknown>, signal: AbortSignal) => 
 	return result;
 };
 export const SecureVault = () => {
- const user = useCurrentUser(), location = useLocation();
+ const location = useLocation();
  const identity = React.useSyncExternalStore(subscribeWorkspaceIdentity, workspaceIdentityKey, () => '');
- const key = `${identity}:${user?.id ?? ''}:${location.key}`;
+ const accountScope = React.useMemo(() => identity ? currentAccountWorkspace() : null, [identity]);
+ const key = `${identity}:${location.key}`;
  return isAnonymousWorkspace() ? <DeviceProviderVault key={key}>{vault => <SecureVaultScope localVault={vault} />}</DeviceProviderVault>
-  : user && !user.temporary ? <SecureVaultScope key={key} /> : <Text>Reconnect your account to open its provider vault.</Text>;
+  : accountScope ? <DeviceProviderVault key={key} scope={accountScope}>{vault => <AccountProviderWorkspace vault={vault} scope={accountScope}><SecureVaultScope localVault={vault} /></AccountProviderWorkspace>}</DeviceProviderVault>
+  : <Text>Your workspace is not available yet. Refresh to reopen its provider vault.</Text>;
 };
 export const SecureVaultScope = ({ localVault }: { localVault?: LocalProviderVault }) => {
 	const lopu = useLopu();
@@ -172,7 +175,7 @@ export const SecureVaultScope = ({ localVault }: { localVault?: LocalProviderVau
 			<Flex alignItems="center" gap={2} flexWrap="wrap">
 				<Badge colorScheme={vault.vaultConfigured ? 'green' : 'orange'}>{vault.vaultConfigured ? 'Encryption ready' : 'Encryption not configured'}</Badge>
 				<Text fontSize="xs" color="var(--tt-muted, #777783)">
-					{localVault ? 'Encrypted on this device. Anonymous entries are never uploaded. Unlock this vault to briefly show a selected value.' : 'Values and AI tokens stay encrypted and hidden. Verify your password or passkey to briefly show one.'}
+					{localVault ? localVault.scope.kind === 'anonymous' ? 'Encrypted on this device. Anonymous entries are never uploaded. Unlock this vault to briefly show a selected value.' : 'Encrypted on this device. Account sync runs separately. Only values saved here or explicitly retained after verification are available offline.' : 'Values and AI tokens stay encrypted and hidden. Verify your password or passkey to briefly show one.'}
 				</Text>
 			</Flex>
 
@@ -256,7 +259,8 @@ export const SecureVaultScope = ({ localVault }: { localVault?: LocalProviderVau
          <Button size="sm" isLoading={busy} onClick={() => run({ action: 'move-entry', id: entry.id, groupId: editingEnvironment.groupId }, 'Environment updated', () => setEditingEnvironment(null))}>Save environment</Button>
          <Button size="sm" variant="ghost" isDisabled={busy} onClick={() => setEditingEnvironment(null)}>Cancel</Button>
         </Flex> : <Button size="sm" variant="outline" isDisabled={busy} aria-label={`Change environment for ${entry.name}`} onClick={() => setEditingEnvironment({ id: entry.id, groupId: entry.groupId || '' })}>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'} · Change</Button>}
-							{localVault ? <DeviceProviderReveal key={`${entry.id}:${entry.revision}`} vault={localVault} id={entry.id} label={entry.name} /> : <VaultReveal vault="personal" id={entry.id} label={entry.name} />}
+							{localVault && entry.valueAvailableOffline !== false ? <DeviceProviderReveal key={`${entry.id}:${entry.revision}`} vault={localVault} id={entry.id} label={entry.name} /> : <VaultReveal key={`${entry.id}:${entry.revision}`} vault="personal" id={entry.id} label={entry.name} deviceVault={localVault} deviceRevision={entry.revision} />}
+        {localVault?.scope.kind === 'account' && entry.valueAvailableOffline === false && <Text fontSize="xs">Value available from account after verification</Text>}
 							<Button size="xs" variant="ghost" isDisabled={busy} onClick={() => deleteEntry(entry)}>Delete</Button>
 						</Flex>
 					))}

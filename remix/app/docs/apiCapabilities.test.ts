@@ -139,9 +139,9 @@ test('poll votes publish the shared-identity correction', () => {
 });
 
 test('verified vault reveal is explicit on both manifests with compatible client requirements', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.vault-reveal'], '1.2.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.vault-reveal'], '1.3.0');
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	assert.equal(manifest.features['api.vault-reveal'].version, '1.2.0');
+	assert.equal(manifest.features['api.vault-reveal'].version, '1.3.0');
 	assert.ok(manifest.operations.some(operation => operation.feature === 'api.vault-reveal' && operation.path === '/api/v1/vault/reveal' && operation.methods.includes('POST')));
 	assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
 	assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
