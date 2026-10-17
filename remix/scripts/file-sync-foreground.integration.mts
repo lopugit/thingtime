@@ -1,8 +1,12 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { authCookie } from '../app/api/utils/auth/authCookie';
+import { prepareCloudFolderBackup, resumeCloudFolderBackup } from '../app/api/utils/backups/cloudFolderBackup';
 import { createCloudDownloadSource } from '../app/fileSync/cloudDownloadSource';
 // Opt-in real cloud/API acceptance. Native grants/conditions are explicit test
 // adapters; browser and native UI acceptance is tracked separately.
 import assert from 'node:assert/strict';
-import { readFile, stat, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, stat, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BACKUP_FORMAT, type BackupItem } from '../app/backups/manifest';
@@ -358,6 +362,34 @@ try {
 				selectedFile(),
 				backupAccess
 			);
+			const emptyId = randomUUID();
+			await api('/api/v1/files', { kind: 'folder', id: emptyId, operationId: randomUUID(), name: 'Empty backup folder', folderId: rootId });
+			const treeId = randomUUID(),
+				tree = await openLocalBackupStore(join(vaultRoot, 'tree'));
+			const backupRuntime = {
+				scope: backupAccess.scope,
+				currentScope: () => backupAccess.scope,
+				fetch: sessionFetch,
+				requireCapability: runtime.requireCapability
+			};
+			await prepareCloudFolderBackup(tree, treeId, rootId!, backupRuntime);
+			const sessionConfig = join(vaultRoot, 'session.json');
+			await writeFile(
+				sessionConfig,
+				JSON.stringify({ origin: base.origin, ownerId: fixture.userId, token: await authCookie.parse('tt_auth=' + cookies.get('tt_auth')) }),
+				{ mode: 0o600 }
+			);
+			const cliId = randomUUID();
+			const cli = async (args: string[]) => {
+				try {
+					return await promisify(execFile)(process.execPath, ['--import', 'tsx', 'scripts/backup-cloud.mts', ...args], { maxBuffer: 1024 * 1024 });
+				} catch {
+					throw Error('Cloud backup CLI failed; session configuration and API bodies are withheld');
+				}
+			};
+			const created = await cli(['create', sessionConfig, join(vaultRoot, 'cli'), cliId, rootId!]);
+			assert.equal(JSON.parse(created.stdout.trim().split('\n').at(-1)!).verified, true);
+
 			const cloud = createCloudDownloadSource(runtime, scope, pinned);
 			let sourceReads = 0,
 				lostRange = true;
@@ -397,6 +429,21 @@ try {
 				trashed: true
 			});
 			await assert.rejects(cloud.read(0, pinned.content.size), /changed|unavailable/);
+			// The entire file tree was frozen before Trash, but these bytes were not
+			// captured yet: resume must fetch the retained version, not current state.
+			const treeResult = await resumeCloudFolderBackup(tree, treeId, backupRuntime);
+			assert.equal(treeResult.seal.items, 3);
+			const treeFile = await openBackupItem(tree, treeId, pinned.id, backupAccess),
+				treeHash = createHash('sha256');
+			for await (const chunk of treeFile.ranges) treeHash.update(chunk);
+			assert.equal(treeHash.digest('hex'), createHash('sha256').update(liveBytesBeforeCapture).digest('hex'));
+			assert.equal((await openBackupItem(tree, treeId, emptyId, backupAccess)).item.content, null);
+			const resumed = await cli(['resume', sessionConfig, join(vaultRoot, 'cli'), cliId]);
+			assert.equal(JSON.parse(resumed.stdout.trim().split('\n').at(-1)!).copiedBytes, '0');
+			console.log(
+				'PASS: real complete selected-folder capture, empty folder retention, exact retained bytes first downloaded after live Trash, authenticated CLI create and zero-reupload resume. Whole-account enumeration remains out of scope.'
+			);
+
 			const recovered = await openLocalBackupStore(join(vaultRoot, 'capture'));
 			await captureBackup(
 				recovered,

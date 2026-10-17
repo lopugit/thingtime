@@ -5110,8 +5110,9 @@ and verifies exact offset recovery. Older Mac and current mobile hosts keep the
 The [portable backup format](docs/portable-backups.md) provides independent chunk
 storage, interruption recovery and offline verification/copy/restore for a
 supplied frozen inventory. Account-wide snapshot creation, scheduled cloud jobs
-and the product backup UI are still in development. No new secret, environment
-variable, bucket permission or public HTTP endpoint is added by this increment.
+and the product backup UI are still in development. The explicit cloud-folder
+worker below uses existing authenticated APIs; it adds no server configuration,
+bucket permission or public endpoint.
 
 Use a private directory owned by your OS user for each vault. The destination's
 parent must already exist. The current local adapter requires POSIX permissions,
@@ -5138,3 +5139,38 @@ account described in the existing sync acceptance runbook. It moves its generate
 cloud file to private Trash and removes its own temporary local vaults. Offline
 CLI access comes from possession of the private vault; online product adapters
 must continue to enforce the current account, origin and device permissions.
+
+### Capture a selected cloud folder
+
+`backup:cloud` is an explicit worker/operator tool, not the native backup UI.
+It freezes the existing complete Files inventory for one private folder (up to
+10,000 entries / 8 MiB of inventory), including empty folders. Ordinary Things,
+other folders, historical versions and account settings are **not** part of this
+selection. Oversized/incomplete trees fail; a capture interval is recorded rather
+than claiming an account-wide point in time. See [coverage and recovery](docs/portable-backups.md#cloud-folder-capture).
+
+Supply a mode-0600 JSON file owned by your OS user containing an explicitly
+obtained full account session JWT; scoped PAT/app tokens cannot use this API.
+The tool does not discover browser/native credentials or sign in for you. This
+file is sensitive: keep it outside the repo, never commit/share it, and remove it
+when finished. A later native flow must use its existing consent/session bridge.
+Only placeholder values are shown:
+
+```json
+{"origin":"https://your-thingtime.example","ownerId":"YOUR_ACCOUNT_ID","token":"YOUR_SESSION_JWT"}
+```
+
+```sh
+# Choose one UUID and keep it to resume this exact frozen snapshot.
+corepack pnpm --dir remix run backup:cloud create /private/session.json /private/vault SNAPSHOT_UUID FOLDER_ID
+corepack pnpm --dir remix run backup:cloud resume /private/session.json /private/vault SNAPSHOT_UUID
+```
+
+Use HTTPS (HTTP is accepted only for loopback development). The worker pins
+owner/origin/home storage and rechecks the session before capture and final
+sealing. Credentials never enter the vault. Resume reads the saved inventory and
+exact retained attachment versions even after live edits/Trash; unavailable bytes
+or revoked access stop completion. A failure before the metadata plan finishes
+requires a new snapshot UUID; a new live inventory cannot replace a partial plan.
+Offline verify/copy/restore use the commands above. This local vault is still
+unencrypted and does not provision a cloud replica or physical-media service.

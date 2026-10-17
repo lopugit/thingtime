@@ -104,3 +104,42 @@ and verification checkpoints; server Timeline lifecycle integration; native
 consent/UI and reviewed multi-item restore; remote resumable export transport,
 encryption/key recovery and physical-media preparation; source-object loss and
 large-dataset throughput acceptance. No complete whole-backup release is claimed.
+
+## Cloud folder capture
+
+`api/utils/backups/cloudFolderBackup.ts` connects the engine to the existing
+Files inventory and attachment-content APIs. `scripts/backup-cloud.mts` provides
+explicit `create` and `resume` commands; [README setup](../README.md#capture-a-selected-cloud-folder)
+uses a private caller-supplied full-session configuration, HTTPS/loopback only.
+The session file is never stored inside snapshot metadata; no credential
+inspection or discovery is performed. No additional server endpoint or secret
+is needed. Scoped PATs/app tokens remain refused by the existing account gate.
+
+Preparation compares the selected root's metadata revision with the complete
+server inventory, then freezes file identities, revisions, exact byte versions
+and empty-folder metadata into the existing immutable plan. `file-content`
+snapshots are canonical; `backup-file-folder` describes only filesystem name and
+placement, not the folder's ordinary Thing properties or a server Timeline event.
+The header records a capture interval and explicit filesystem-only coverage.
+Ordinary Things, historical versions, other folders and account settings are
+excluded visibly. The existing inventory ceiling (10,000 nodes / 8 MiB) refuses
+larger trees rather than producing a partial success. Whole-account enumeration
+and a durable server-authoritative point-in-time boundary remain required.
+
+Resume never re-enumerates live state or swaps in a new file revision. It reads
+only missing 8 MiB chunks via authorized exact-version 2 MiB attachment ranges,
+validates framing/ETag and verifies the complete fingerprint before sealing.
+An edit or Trash does not invalidate still-authorized retained bytes. If retention
+or access is unavailable, the backup remains incomplete. The session is checked
+again immediately before publishing the completion marker, including when all
+bytes were already captured. Interrupted metadata preparation cannot be safely
+recreated from a changed live tree; start a new UUID if no complete plan exists.
+
+Validation includes source/account changes, incomplete inventory, revoked final
+publication, cancellation, empty folders and CLI create/resume against the real
+local API. The 17,825,809-byte fixture freezes its tree, then first downloads its
+retained bytes after live Trash, verifies an independent hash, and repeats a CLI
+resume with zero new captured bytes. The earlier independent-copy/source-loss
+checks still run. These are worker/storage checks, not native product or 100 TB
+throughput acceptance. No scheduled backup, remote vault, account-wide snapshot,
+server Timeline lifecycle or new native permission flow is claimed here.

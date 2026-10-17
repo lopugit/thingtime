@@ -345,3 +345,11 @@ HTTP route or a new database. Providers must supply access/quota and source
 boundary guarantees. Run `test:backups`, the `backup:vault` offline CLI and the
 foreground API fixture's `--portable-backup` mode. [Format, limits and unfinished
 product integration](../portable-backups.md).
+
+`api/utils/backups/cloudFolderBackup.ts` now freezes an explicitly selected Files
+inventory into that vault and resumes exact retained attachment ranges after live
+edits/Trash. `backup:cloud` runs the worker with a private caller-supplied session
+configuration; `test:backups` and the foreground fixture's `--portable-backup
+--large-download` exercise API/CLI acceptance. Existing 10,000-node/8 MiB inventory
+bounds remain explicit. See the [cloud capture coverage](../portable-backups.md#cloud-folder-capture);
+this does not enumerate all account Things or add server Timeline backup events.

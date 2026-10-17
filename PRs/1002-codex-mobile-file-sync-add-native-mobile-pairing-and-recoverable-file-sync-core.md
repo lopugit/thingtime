@@ -1495,3 +1495,26 @@ scheduling, server Timeline lifecycle, native product UI and encrypted media
 remain unfinished. The engine is for long-running native/workers, not one
 serverless request. Verification restarts after interruption; retained chunks
 survive. The new [format/runbook](../docs/portable-backups.md) records these limits.
+
+## Cloud folder backup worker — 2026-10-17
+
+The portable engine now has an authenticated real cloud source and explicit
+`backup:cloud create/resume` entry point. It freezes the complete selected Files
+tree, including empty folders, and captures exact retained versions after live
+edits/Trash without re-enumerating on resume. Session/account/origin checks and
+full byte verification precede the completion marker; credentials stay out of
+snapshot data. Scope is clearly one filesystem tree, with the existing inventory
+bounds, not all account Things or an account-wide point-in-time promise.
+
+Eleven backup tests, targeted lint, focused CLI TypeScript and real API/CLI acceptance
+pass. The 17,825,809-byte fixture first captures saved bytes after live Trash,
+compares their full hash and repeats CLI resume with zero new captured bytes.
+The full TypeScript check matches the 91 existing normalized diagnostics. An
+initial real-API run exposed `/auth/me`'s `{ user }` envelope; the worker and its
+regression fixture now follow that actual contract.
+
+Whole-account inventory, protected cloud jobs/quotas, independent cloud replicas,
+scheduling/retention, Timeline backup lifecycle, native consent/UI, multi-item
+restore and physical-media preparation remain unfinished. Session configuration
+is an explicit worker setup, not a completed user login or native backup flow.
+See [setup and recovery](../docs/portable-backups.md#cloud-folder-capture).
