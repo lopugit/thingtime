@@ -20,9 +20,10 @@ export function GmailWorkspace({ ownerId, mail }: { ownerId: string; mail: Mail 
 	const epoch = React.useRef(0),
 		controller = React.useRef(new AbortController());
 	React.useEffect(() => {
+		const generation = epoch;
 		controller.current = new AbortController();
 		return () => {
-			epoch.current++;
+			generation.current++;
 			controller.current.abort();
 		};
 	}, []);
