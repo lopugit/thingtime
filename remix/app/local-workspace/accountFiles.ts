@@ -119,6 +119,13 @@ export class AccountFileSync {
 	/** Both writers participate in the importer's existing transaction. Only
 	 * confirmed upload receipts can rewrite a device file to an account ID. */
 	readonly contentHooks = {
+		removeBound: (tx: WorkspaceTransaction, id: string, targetId: string) => this.removeBoundInTransaction(tx, id, targetId),
+		prepareRemove: async (tx: WorkspaceTransaction, targetId: string) => {
+			// A restored file needs explicit review before deleting its parent.
+			if ((await tx.list<LocalThing>('things')).some(({value}) => isLocalAttachment(value) && value.targetId === targetId))
+				throw new WorkspaceError('BOUND_FILE_KEPT', 'A file was kept on this device. Review it before retrying parent deletion.', 409);
+			return !(await tx.list<FileRecord>(COLLECTION)).some(({value}) => value.deleteRequested && !value.cancelled && value.deletingLocal?.targetId === targetId);
+		},
 		mutate: (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => this.enqueue(tx, row, previous),
 		prepare: async (tx: WorkspaceTransaction, row: LocalThing): Promise<(LocalThing & { attachmentIds?: string[] }) | null> => {
 			this.lease.assertCurrent();
@@ -457,18 +464,20 @@ export class AccountFileSync {
 	 * write may still mention the file, so the upload/deletion worker settles
 	 * that write before deleting the account object and releasing recovery bytes. */
 	async removeBound(id: string, targetId: string) {
-		await this.tx('readwrite', async tx => {
-			const record = await tx.get<FileRecord>(COLLECTION, id);
-			if (!record || !['post','comment'].includes(record.request.purpose)) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching post file.', 404);
-			if (record.cancelled) return;
-			if (record.deleteRequested) { if (record.deletingLocal?.targetId !== targetId) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409); return; }
-			const local = await tx.get<LocalAttachment>('things', id), parent = await tx.get<LocalThing>('things', targetId);
-			if (!local || local.targetId !== targetId || local.localAttachment.draftId || !parent?.thingtime.includes('post')) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409);
-			if (record.started === false && !record.remote && !record.claim) return this.finishCancellation(tx, record);
-			await tx.delete('things', id);
-			await this.putRecord(tx, { ...record, deleteRequested: true, deletingLocal: local, state: record.claim ? record.state : 'pending', error: undefined, retryAt: 0 });
-		});
+		await this.tx('readwrite', tx => this.removeBoundInTransaction(tx, id, targetId));
 	}
+	private async removeBoundInTransaction(tx: WorkspaceTransaction, id: string, targetId: string) {
+		const record = await tx.get<FileRecord>(COLLECTION, id);
+		if (!record || !['post','comment'].includes(record.request.purpose)) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching post file.', 404);
+		if (record.cancelled) return;
+		if (record.deleteRequested) { if (record.deletingLocal?.targetId !== targetId) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409); return; }
+		const local = await tx.get<LocalAttachment>('things', id), parent = await tx.get<LocalThing>('things', targetId);
+		if (!local || local.targetId !== targetId || local.localAttachment.draftId || !parent?.thingtime.includes('post')) throw new WorkspaceError('BOUND_UPLOAD', 'Select the file in its owning editor.', 409);
+		if (record.started === false && !record.remote && !record.claim) return this.finishCancellation(tx, record);
+		await tx.delete('things', id);
+		await this.putRecord(tx, { ...record, deleteRequested: true, deletingLocal: local, state: record.claim ? record.state : 'pending', error: undefined, retryAt: 0 });
+	}
+
 	async inspectDeletion(transport: FileMetadataTransport, id: string, signal = new AbortController().signal) {
 		const row = await this.tx('readonly', tx => tx.get<FileRecord>(COLLECTION, id));
 		if (!row?.deleteRequested || row.state !== 'conflict' || !row.remote || !row.deletingLocal)

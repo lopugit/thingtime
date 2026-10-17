@@ -1,3 +1,4 @@
+import { isLocalAttachment } from './attachments';
 import { normalizePublicAttachment } from '../components/Attachments/attachmentUiCore';
 import { postThingReferences } from '../components/Feed/postThingReferences';
 import { accountReadRefusals, ACCOUNT_READ_COLLECTIONS } from './accountReadRevocation';
@@ -32,6 +33,13 @@ export type AccountSyncTransport = {
 	get(id: string, signal: AbortSignal): Promise<AccountThing>;
 	write(operation: Readonly<FrozenWrite>, signal: AbortSignal): Promise<AccountThing>;
 	remove?(operation: Readonly<FrozenDelete>, signal: AbortSignal): Promise<void>;
+};
+type AccountContentFiles = {
+	mutate: LocalFileMutation;
+	prepare(tx: WorkspaceTransaction, row: LocalThing): Promise<(LocalThing & { attachmentIds?: string[] }) | null>;
+	restore?: <T extends LocalThing>(tx: WorkspaceTransaction, row: T) => Promise<T>;
+	removeBound?(tx: WorkspaceTransaction, id: string, targetId: string): Promise<void>;
+	prepareRemove?(tx: WorkspaceTransaction, targetId: string): Promise<boolean>;
 };
 const COLLECTION = 'thing-sync';
 const DELETED_CONTENT = 'thing-deletions';
@@ -68,7 +76,7 @@ export class AccountThingSync {
 	readonly things: LocalThings;
 	constructor(private db: WorkspaceDatabase, readonly scope: AccountScope, private lease: WorkspaceLease,
 		private now = () => Date.now(), private uuid = () => crypto.randomUUID(),
-		private files?: { mutate: LocalFileMutation; prepare: (tx: WorkspaceTransaction, row: LocalThing) => Promise<(LocalThing & { attachmentIds?: string[] }) | null>; restore?: <T extends LocalThing>(tx: WorkspaceTransaction, row: T) => Promise<T> }) {
+		private files?: AccountContentFiles) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous workspaces never sync', 403);
 		this.things = new LocalThings(db, scope, lease, [], () => new Date(now()).toISOString(), uuid,
 			(tx, row, previous, input) => this.enqueue(tx, row, previous, input as AccountThingWrite), files?.mutate, async (tx, id) => {
@@ -174,8 +182,21 @@ export class AccountThingSync {
 				changed = false;
 				for (const row of all) if (row.targetId && selected.has(row.targetId) && !selected.has(row.id)) { selected.add(row.id); changed = true; }
 			}
+			// Validate the entire content cascade before changing any file intent.
+			// Files stay behind their dedicated upload/deletion replay fences.
+			for (const row of all) if (selected.has(row.id)) {
+				if (isLocalAttachment(row)) {
+					if (!row.targetId || !selected.has(row.targetId) || !this.files?.removeBound)
+						throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This file requires its owning editor.', 409);
+				} else if (!await tx.get<SyncRecord>(COLLECTION, row.id) || isProtectedThingtime(row.thingtime))
+					throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
+			}
+			for (const row of all) if (selected.has(row.id) && isLocalAttachment(row))
+				await this.files!.removeBound!(tx, row.id, row.targetId!);
+
 			for (const row of all) {
 				if (selected.has(row.id)) {
+					if (isLocalAttachment(row)) continue;
 					const state = await tx.get<SyncRecord>(COLLECTION, row.id);
 					if (!state || isProtectedThingtime(row.thingtime)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
 					await tx.delete('things', row.id);
@@ -290,6 +311,15 @@ export class AccountThingSync {
 					if (candidate.deleted && rows.some(other => other.id !== candidate.id && other.state !== 'synced' &&
 						[other.base?.folderId, other.base?.targetId, other.pending?.body.folderId, other.pending?.body.targetId].includes(candidate.id))) continue;
 					if (!candidate.deleted && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null, ...((content.thingtime.includes('post') || content.thingtime.includes('comment')) ? postThingReferences(content.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
+					// Resolve an uncertain parent write first; then settle bound
+					// file cleanup before starting the parent's remote deletion.
+					if (candidate.deleted && !candidate.pending && this.files?.prepareRemove) {
+						try { if (!await this.files.prepareRemove(tx, candidate.id)) continue; }
+						catch (error) {
+							if (!(error instanceof WorkspaceError)) throw error;
+							await tx.put(COLLECTION, candidate.id, { ...candidate, state: 'error', claim: undefined, error: error.message }); continue;
+						}
+					}
 					let prepared = content;
 					if (!candidate.deleted && !candidate.pending && this.files) {
 						try {

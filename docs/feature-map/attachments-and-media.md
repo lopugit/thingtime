@@ -362,3 +362,12 @@ and keyed remote plans through the existing in-process `assertCurrent` hook.
 Run file-retention/export, account read-refusal and workspace suites, plus
 `accountFileRetention.browser.test.ts` with the existing cold production-client
 fixture. See the [lifetime checkpoint](../local-workspaces.md#retained-file-access-and-remote-export-lifetimes--2026-10-17).
+
+
+`AccountThingSync.remove` now delegates selected post/comment file children to
+`AccountFileSync.contentHooks.removeBound` in its own transaction. Generic protected
+children still refuse and roll back; dedicated upload/deletion records retain
+recovery bytes and immutable operations. `prepareRemove` holds remote parent
+deletion until file cleanup completes, after any uncertain parent write settles.
+Tests: `accountBoundMedia.test.ts` and enabled `offlinePostTemplate.browser.test.ts`;
+see the [deletion checkpoint](../local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17).

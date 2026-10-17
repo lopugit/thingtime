@@ -161,3 +161,40 @@ test('bound deletion can be reviewed and restored at the exact device quota with
   assert.equal((await f.files.readFile(a.id)).row.targetId,post.id);assert.deepEqual((await f.files.readFile(a.id)).bytes,f.bytes);
  }finally{await f.db.close();}
 });
+
+
+test('deleting an unsent parent cancels its media and nested comments atomically without uploading',async()=>{
+ const f=fixture();try{
+  const file=await f.select(),post=await f.sync.things.savePost({thingtime:['post'],crystal:{type:'text',text:'Delete'},attachmentIds:[file.id]});
+  const replyFile=await f.select('comment'),reply=await f.sync.things.savePost({thingtime:['post','comment'],targetId:post.id,crystal:{type:'text',text:'Reply'},attachmentIds:[replyFile.id]});
+  await assert.rejects(f.sync.remove([file.id]),/owning editor/);
+  const removed=await f.sync.remove([post.id]);assert.deepEqual(new Set(removed.deleted),new Set([post.id,file.id,reply.id,replyFile.id]));
+  for(const id of [post.id,reply.id])assert.equal(await f.sync.view(id),null);
+  for(const id of [file.id,replyFile.id]){await assert.rejects(f.files.readFile(id));await f.db.transaction(f.scope,'readonly',f.lease,async tx=>assert.equal(await tx.getBytes(id),undefined));}
+  await f.files.sync(f.upload);await f.sync.sync(f.content);assert.deepEqual(f.uploads,[]);assert.deepEqual(f.writes,[]);
+ }finally{await f.db.close();}
+});
+
+test('parent deletion rolls back all file cleanup when another child needs a dedicated adapter',async()=>{
+ const f=fixture();try{
+  const file=await f.select(),post=await f.sync.things.savePost({thingtime:['post'],crystal:{type:'text',text:'Keep'},attachmentIds:[file.id]});
+  await f.db.transaction(f.scope,'readwrite',f.lease,tx=>tx.put('things','protected',{id:'protected',thingtime:['action-run'],targetId:post.id}));
+  await assert.rejects(f.sync.remove([post.id]),/dedicated deletion/);
+  assert.ok(await f.sync.view(post.id));assert.deepEqual((await f.files.readFile(file.id)).bytes,f.bytes);
+ }finally{await f.db.close();}
+});
+
+test('parent deletion settles uncertain writes and file cleanup before its immutable remote delete',async()=>{
+ const f=fixture();try{
+  const file=await f.select(),post=await f.sync.things.savePost({thingtime:['post'],crystal:{type:'text',text:'Delete later'},attachmentIds:[file.id]});await f.files.sync(f.upload);
+  await f.sync.sync({...f.content,write:async op=>{await f.content.write(op,new AbortController().signal);throw Error('Lost parent');},get:async()=>{throw Error('Offline');}});
+  const frozen=structuredClone(f.writes[0]),order:string[]=[],deletes:any[]=[];
+  await f.sync.remove([post.id]);assert.equal(await f.sync.view(post.id),null);await assert.rejects(f.files.readFile(file.id));
+  const upload=removalTransport(f,async()=>{order.push('file');return {deleted:true,deferred:false};});
+  const content={...f.content,remove:async(op:any)=>{deletes.push(op);order.push('post');if(deletes.length===1)throw Error('Lost deletion');f.remote.delete(post.id);}};
+  await f.files.sync(upload);assert.deepEqual(order,[]);
+  f.tick();await f.sync.sync(content);assert.deepEqual(f.writes[1],frozen);assert.deepEqual(order,[]);
+  await f.files.sync(upload);assert.deepEqual(order,['file']);await f.sync.sync(content);assert.equal(deletes.length,1);
+  f.tick();await f.sync.sync(content);assert.deepEqual(deletes[1],deletes[0]);assert.deepEqual(order,['file','post','post']);assert.equal(f.remote.has(post.id),false);
+ }finally{await f.db.close();}
+});

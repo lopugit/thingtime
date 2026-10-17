@@ -4722,3 +4722,18 @@ Only its newly registered user receives upload scope. It deletes its created
 content and closes its contexts; never supply an existing user or production URL.
 Owned bound retention needs content 1.15.0, existing-ID deletion needs delete 1.7.0;
 older servers fail explicitly while device edits remain saved.
+
+
+### Offline post template and deletion regression
+
+Using the isolated local stack and disposable upload-admin fixture above, run
+`node --import tsx --test app/drafts/offlinePostTemplate.browser.test.ts` from
+`remix/`. Set `TT_LOCAL_POST_TEMPLATE_URL=http://127.0.0.1:<client-port>`,
+`TT_LOCAL_POST_TEMPLATE_ARTIFACTS=/path/to/ignored-evidence`, the shared
+`TT_SHARED_PLAYWRIGHT_PATH`/optional `TT_SHARED_CHROME_PATH`, and
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json` for the
+account case. Without that fixture only the anonymous case runs. Never use
+production accounts or commit credentials. Both cases verify cold offline copying,
+independent media after source deletion, and responsive native previews; account
+verification includes private sync and deletion after reconnect. See
+[coverage and boundaries](docs/local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17).

@@ -11107,3 +11107,29 @@ Run `app/local-workspace/components.browser.test.ts` with
 - [ ] Keep rich/media/pending-submission reconciliation and origin/data-plane
   transitions as separate acceptance gates; refusing those payloads here is not
   complete recovery support for their original editors.
+
+
+### Offline post templates and parent media cleanup (2026-10-17)
+
+- [x] In clean anonymous and disposable account browsers, install the offline
+  shell, disconnect, create a post with an image, cold reload, and use Post options
+  → Save as template. Create an independent working copy through the normal picker;
+  its context must match this workspace and its file ID must differ from the source.
+- [x] Delete the source offline. Its local files disappear; template and copied
+  post bytes remain exact after reload at 1440/390/320px, without horizontal overflow.
+- [x] For the disposable account only, reconnect with normal upload approval.
+  Post/template originals sync independently, remain private, and deny guest reads.
+  Delete the synced post offline, reconnect, and verify parent/file removal while
+  the reusable template retains exact bytes. No offline mutation requests occur.
+- [x] Anonymous template/post creation never requests account drafts. Duplicate
+  template clicks coalesce; uncertain retries reuse their copy identity; stale
+  workspace/unmounted callbacks cannot start another request or show a late result.
+- [x] Service regressions: unsent nested comment/file deletion makes no upload;
+  a protected child rolls back the cascade; uncertain parent writes settle before
+  file cleanup and remote parent deletion; lost deletion replies reuse identity.
+- [ ] Complete broader retained/shared-parent deletion, full-quota cascade,
+  restored-file conflict UI, and native account/origin/data-plane race acceptance
+  before closing the full local-first matrix. This checkpoint is not that closure.
+
+Run `test:local-workspace`, `test:drafts`, `test:feed` and separately enable
+`app/drafts/offlinePostTemplate.browser.test.ts` as documented in README.

@@ -68,6 +68,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Restore Save as template for owned offline account
+  posts with scoped retry/retirement guards. Delete bound post/comment media through
+  the existing local file cleanup transaction and settle uncertain writes before
+  remote parent deletion. Two clean-browser cases verify independent template bytes,
+  offline deletion, private reconnect and 1440/390/320px rendering; 521 focused
+  checks pass. Full local-first acceptance remains open. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Scope rich composer recovery to the current workspace,
   keep template copies independent, and prepare canonical draft identities before
   editing. Added native account/anonymous offline and pending-operation checks.

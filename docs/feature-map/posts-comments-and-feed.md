@@ -183,3 +183,10 @@ choose another database's context; reusable templates create independent scoped
 copies. Shared draft identity is available before editing, with unchanged SHA-256
 keys. See [draft scope acceptance](../local-workspaces.md#rich-composer-workspace-scope--2026-10-17)
 for native fixtures and the remaining legacy rich/media and identity-transition gates.
+
+
+The native post template menu supports owned offline account posts through the
+same scoped draft adapter. Parent deletion includes bound media through the
+existing file cleanup service; reusable templates and their independent bytes
+survive. See [offline template acceptance](../local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17)
+for cold browser, private reconnect and uncertain-operation coverage.

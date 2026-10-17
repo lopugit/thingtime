@@ -204,3 +204,14 @@ Old unscoped working drafts remain preserved for the unfinished explicit legacy
 recovery flow. Run richWorkspace.browser, accountDraftSync.browser and
 remotePlainComment.browser plus the workspace/draft/feed suites.
 [Setup, scope and evidence](../local-workspaces.md#rich-composer-workspace-scope--2026-10-17).
+
+
+## Offline native post template menu
+
+`PostThingMenu` uses verified workspace content identity for owned offline posts.
+`drafts/postTemplateSession.ts` captures its lease, coalesces duplicate clicks and
+preserves retry IDs; unmounts and identity changes retire callbacks. The normal
+`from-post`/`instantiate` services still own validation and independent byte copies.
+Run `offlinePostTemplate.browser.test.ts` with the documented loopback fixture to
+verify anonymous and account copying, source deletion, private reconnect and
+preserved templates. See the [checkpoint](../local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17).

@@ -3096,3 +3096,44 @@ diagnostics and no changed-file diagnostics; focused lint has one existing
 `no-useless-constructor` warning in LocalDrafts. These are local results. Native
 origin/data-plane transitions, rich/media legacy reconciliation and the complete
 local-first acceptance matrix remain open; no main merge or manual deployment.
+
+
+## Offline post templates and bound-parent deletion — 2026-10-17
+
+The normal Post menu offers Save as template for an owned offline account post,
+as it already does for anonymous device posts. It calls the canonical draft
+adapter with a captured workspace lease. Duplicate clicks share one operation;
+an uncertain retry keeps the copy ID. Account/origin/data-plane generation changes
+and unmounts retire callbacks and suppress late notifications. Visible account
+post copying online retains the existing authorized server path.
+
+Deleting a post/comment now passes its bound files through the existing file
+cleanup service in the same local transaction. Unsent bytes are cancelled locally;
+started uploads and uncertain parent writes keep their durable replay identities.
+Account parent deletion waits for bound-file cleanup, while unrelated content can
+continue syncing. A protected child rolls back the entire cascade. Restoring a
+file during deletion requires review before the parent can be deleted remotely.
+No account route, authentication, upload admission or same-origin rule changed.
+
+`offlinePostTemplate.browser.test.ts` proves both clean-browser paths against the
+production client: cold offline post creation, native template save, source
+removal, independent scoped working copy, exact image bytes and reload. The account
+case then verifies private post/template sync, guest refusal, offline deletion of
+the synced post and preservation of template bytes. Anonymous execution makes no
+account-draft request. Both record zero offline writes and 1440/390/320px bounds
+and screenshots. Evidence: `tmp/offline-template-verified/account/verification.json`
+and `tmp/offline-template-verified/anonymous/verification.json`.
+
+Enable with loopback `TT_LOCAL_POST_TEMPLATE_URL`, optional
+`TT_LOCAL_POST_TEMPLATE_ARTIFACTS`, shared Playwright/Chrome paths, and the existing
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE` for the account case. Only the disposable account
+created by the test receives upload approval; ordinary accounts are not modified.
+See README for the isolated fixture setup. Unit coverage includes duplicate and
+late callbacks, unsent nested deletion, protected-child rollback, and uncertain
+parent/file deletion ordering. Workspace/offline-shell (392), drafts (50), and
+feed (79) suites pass: 521 checks, with 49 default opt-in skips excluded; both new
+native cases were enabled separately. The client build verifies 247 assets
+(21,718,135 bytes). Focused lint is clean; raw TypeScript retains 91 baseline
+diagnostics and none in changed files. These are local results. Full legacy
+rich/media recovery, broader identity-transition and lifecycle acceptance, the
+remaining matrix, current-head CI and deployed verification are still open.
