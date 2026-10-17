@@ -4200,7 +4200,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
-  'mail-account', 'mail-folder', 'mail-message', 'mail-inbox',
+  'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',
   'password-manager-entry',
   'draft',
   TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_NOTE_KIND, TIMELINE_VERSION_NAME_KIND,
@@ -4404,7 +4404,7 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
-  ...['mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].map(id => ({
+  ...['mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation'].map(id => ({
     id, version: 1, kind: 'crystal' as const, collection: null, title: id.replace('mail-', 'Mail '),
     summary: 'Private encrypted mail record.', detail: 'Owned mail records use the same versioned model in the cloud, browser and local connector. Credentials and message content are encrypted. Proxy inboxes contain folder references only. Generic Thing reads, writes and sharing cannot access these records.',
     createdVia: '/api/v1/mail', fields: [], example: {}

@@ -675,3 +675,13 @@ test('range programs require the additive owned-boundary contract', () => {
   assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.passwords'].version, '1.0.0');
   assert.equal(typeof routeModules['v1/passwords'], 'function');
  });
+
+test('Gmail OAuth and its one-use callback are advertised on both manifests and registered', () => {
+	const legacy = createApiCapabilitiesManifest().features;
+	const manifest = thingtimeCapabilityManifest('https://thingtime.test').features;
+	assert.equal(legacy['api.mail'], '1.2.0');
+	assert.equal(manifest['api.mail'].version, '1.2.0');
+	assert.equal(legacy['api.mail-google-callback'], '1.0.0');
+	assert.equal(manifest['api.mail-google-callback'].version, '1.0.0');
+	assert.equal(typeof routeModules['v1/mail/google/callback'], 'function');
+});

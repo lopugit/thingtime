@@ -37,7 +37,11 @@ export function MailAccountEditor({
 			open={expanded}
 			onToggle={setExpanded}
 			eyebrow={account.revision ? 'Edit email account' : 'Connect an email account'}
-			description="Use your provider’s mail server settings and app password. Mail sync never deletes or moves messages on your server."
+			description={
+				draft.provider === 'gmail'
+					? 'Connected with Google. Thingtime has Gmail read and write access; no app password is needed.'
+					: 'Use your provider’s mail server settings and app password. Mail sync never deletes or moves messages on your server.'
+			}
 		>
 			<Flex
 				as="form"
@@ -62,113 +66,119 @@ export function MailAccountEditor({
 					<Input
 						type="email"
 						autoComplete="email"
+						isReadOnly={draft.provider === 'gmail'}
 						value={draft.address}
 						maxLength={320}
 						onChange={(event) => setDraft({ ...draft, address: event.target.value })}
 					/>
 				</FormControl>
-				{(['imap', 'pop3'] as const).map((protocol) => {
-					const server = draft.servers[protocol];
-					return (
-						<Flex key={protocol} direction="column" gap={3} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" p={4}>
-							<Checkbox
-								isChecked={!!server}
-								onChange={(event) =>
-									setDraft({
-										...draft,
-										servers: { ...draft.servers, [protocol]: event.target.checked ? defaultServer(protocol, draft.address) : undefined }
-									})
-								}
-							>
-								{protocol.toUpperCase()}
-							</Checkbox>
-							{server && (
-								<>
-									<Text fontSize="xs" color="var(--tt-muted)">
-										{protocol === 'imap'
-											? 'Read folders and inboxes from your account.'
-											: 'Read the account’s single POP3 inbox. Messages stay on the server.'}
-									</Text>
-									<FormControl isRequired>
-										<FormLabel>Server hostname</FormLabel>
-										<Input
-											value={server.host}
-											autoCapitalize="none"
-											placeholder={protocol === 'imap' ? 'imap.example.com' : 'pop.example.com'}
-											onChange={(event) => field(protocol, 'host', event.target.value)}
-										/>
-									</FormControl>
-									<Flex gap={3} wrap="wrap">
-										<FormControl flex="1" minW="160px">
-											<FormLabel>Connection security</FormLabel>
-											<Select
-												value={server.security}
-												onChange={(event) => {
-													const security = event.target.value as MailServer['security'];
-													setDraft({
-														...draft,
-														servers: {
-															...draft.servers,
-															[protocol]: {
-																...server,
-																security,
-																port: protocol === 'imap' ? (security === 'tls' ? 993 : 143) : security === 'tls' ? 995 : 110
+				{draft.provider !== 'gmail' &&
+					(['imap', 'pop3'] as const).map((protocol) => {
+						const server = draft.servers[protocol];
+						return (
+							<Flex key={protocol} direction="column" gap={3} border="1px solid var(--tt-border, #ececef)" borderRadius="12px" p={4}>
+								<Checkbox
+									isChecked={!!server}
+									onChange={(event) =>
+										setDraft({
+											...draft,
+											servers: { ...draft.servers, [protocol]: event.target.checked ? defaultServer(protocol, draft.address) : undefined }
+										})
+									}
+								>
+									{protocol.toUpperCase()}
+								</Checkbox>
+								{server && (
+									<>
+										<Text fontSize="xs" color="var(--tt-muted)">
+											{protocol === 'imap'
+												? 'Read folders and inboxes from your account.'
+												: 'Read the account’s single POP3 inbox. Messages stay on the server.'}
+										</Text>
+										<FormControl isRequired>
+											<FormLabel>Server hostname</FormLabel>
+											<Input
+												value={server.host}
+												autoCapitalize="none"
+												placeholder={protocol === 'imap' ? 'imap.example.com' : 'pop.example.com'}
+												onChange={(event) => field(protocol, 'host', event.target.value)}
+											/>
+										</FormControl>
+										<Flex gap={3} wrap="wrap">
+											<FormControl flex="1" minW="160px">
+												<FormLabel>Connection security</FormLabel>
+												<Select
+													value={server.security}
+													onChange={(event) => {
+														const security = event.target.value as MailServer['security'];
+														setDraft({
+															...draft,
+															servers: {
+																...draft.servers,
+																[protocol]: {
+																	...server,
+																	security,
+																	port: protocol === 'imap' ? (security === 'tls' ? 993 : 143) : security === 'tls' ? 995 : 110
+																}
 															}
-														}
-													});
+														});
+													}}
+												>
+													<option value="tls">TLS</option>
+													<option value="starttls">STARTTLS (required)</option>
+												</Select>
+											</FormControl>
+											<FormControl width="100px">
+												<FormLabel>Port</FormLabel>
+												<Input value={server.port} isReadOnly />
+											</FormControl>
+										</Flex>
+										<FormControl isRequired>
+											<FormLabel>Username</FormLabel>
+											<Input
+												value={server.username}
+												autoComplete="off"
+												autoCapitalize="none"
+												onChange={(event) => field(protocol, 'username', event.target.value)}
+											/>
+										</FormControl>
+										<FormControl>
+											<FormLabel>App password</FormLabel>
+											<Input
+												type="password"
+												autoComplete="new-password"
+												value={server.password || ''}
+												placeholder={account.revision ? 'Leave blank to keep saved password' : 'Your provider’s app password'}
+												onChange={(event) => {
+													const value = event.target.value;
+													setDraft({ ...draft, servers: { ...draft.servers, [protocol]: { ...server, password: value || undefined } } });
 												}}
-											>
-												<option value="tls">TLS</option>
-												<option value="starttls">STARTTLS (required)</option>
-											</Select>
+											/>
 										</FormControl>
-										<FormControl width="100px">
-											<FormLabel>Port</FormLabel>
-											<Input value={server.port} isReadOnly />
-										</FormControl>
-									</Flex>
-									<FormControl isRequired>
-										<FormLabel>Username</FormLabel>
-										<Input
-											value={server.username}
-											autoComplete="off"
-											autoCapitalize="none"
-											onChange={(event) => field(protocol, 'username', event.target.value)}
-										/>
-									</FormControl>
-									<FormControl>
-										<FormLabel>App password</FormLabel>
-										<Input
-											type="password"
-											autoComplete="new-password"
-											value={server.password || ''}
-											placeholder={account.revision ? 'Leave blank to keep saved password' : 'Your provider’s app password'}
-											onChange={(event) => {
-												const value = event.target.value;
-												setDraft({ ...draft, servers: { ...draft.servers, [protocol]: { ...server, password: value || undefined } } });
-											}}
-										/>
-									</FormControl>
-								</>
-							)}
-						</Flex>
-					);
-				})}
+									</>
+								)}
+							</Flex>
+						);
+					})}
 				<Flex direction="column" gap={3}>
 					<Text fontWeight="600">Where should this account sync?</Text>
 					<Checkbox isChecked={draft.sync.cloud} onChange={(event) => setDraft({ ...draft, sync: { ...draft.sync, cloud: event.target.checked } })}>
 						Through Thingtime’s cloud
 					</Checkbox>
 					<Text fontSize="xs" color="var(--tt-muted)">
-						Your app password and synced mail are encrypted in your Thingtime account. Works in browsers and native apps without a local connector.
+						{draft.provider === 'gmail'
+							? 'Store synced messages encrypted in your Thingtime account. Your Google authorization remains encrypted on Thingtime even when cloud message storage is off.'
+							: 'Your app password and synced mail are encrypted in your Thingtime account. Works in browsers and native apps without a local connector.'}
 					</Text>
 					<Checkbox isChecked={draft.sync.local} onChange={(event) => setDraft({ ...draft, sync: { ...draft.sync, local: event.target.checked } })}>
 						Keep a copy on this device
 					</Checkbox>
 					<Text fontSize="xs" color="var(--tt-muted)">
-						Your device keeps an encrypted offline copy. Choose how it connects below.
+						{draft.provider === 'gmail'
+							? 'Your device keeps an encrypted offline copy. Gmail sync uses Thingtime’s API and your saved Google authorization.'
+							: 'Your device keeps an encrypted offline copy. Choose how it connects below.'}
 					</Text>
-					{draft.sync.local && (
+					{draft.sync.local && draft.provider !== 'gmail' && (
 						<FormControl>
 							<FormLabel>Device sync connection</FormLabel>
 							<Select
