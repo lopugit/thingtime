@@ -19,7 +19,7 @@ export const LOPU_LOCKED_LINE = 'An admin needs to verify your account before Lo
 export const LOPU_LOCKED_BYO_LINE = 'Until then you can still chat with Lopu on one of your own providers from Secure Vault — pick it in the model chip.';
 export const LOPU_TEMPORARY_TITLE = 'Create an account to chat with Lopu';
 export const LOPU_TEMPORARY_LINE = 'Conversations are saved to your account, so Lopu needs a real one first.';
-export const LOPU_ADMIN_ACCOUNTS_PATH = '/settings#lopu-accounts';
+export const LOPU_ADMIN_ACCOUNTS_PATH = '/admin/lopu#lopu-accounts';
 export const LOPU_MANAGE_PROVIDERS_PATH = '/settings#secure-vault';
 
 export type LopuLockedStateProps = {

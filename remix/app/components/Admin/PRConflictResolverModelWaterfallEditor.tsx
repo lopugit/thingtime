@@ -1,3 +1,4 @@
+import { SettingsSection } from '~/components/Settings/SettingsSection';
 import React from 'react';
 import { Button, Flex, Text } from '@chakra-ui/react';
 import { SavedAiWaterfallSelector } from '~/components/AI/SavedAiWaterfallSelector';
@@ -82,9 +83,11 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 		}
 	};
 	return (
-		<Flex direction="column" gap={3}>
-			<Text fontWeight="600">AI workflow model order</Text>
-			<Text fontSize="sm">Shared defaults for AI-backed features. Each runtime uses compatible entries; features can save their own waterfall.</Text>
+		<SettingsSection
+			eyebrow="AI workflow model order"
+			description="Shared model defaults for AI-backed features. Each runtime uses compatible entries."
+			summary={`${waterfall.length} models · ${dirty ? 'Unsaved changes' : 'Saved'}`}
+		>
 			<Text fontSize="sm" overflowWrap="anywhere">
 				{waterfall.map((id) => [parseAiWorkflowModelOptionId(id)?.label || id, ...id.split(':').slice(1)].join(' · ')).join(' → ')}
 			</Text>
@@ -122,6 +125,6 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 					);
 				}}
 			/>
-		</Flex>
+		</SettingsSection>
 	);
 };
