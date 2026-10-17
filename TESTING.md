@@ -10873,7 +10873,9 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Account/endpoint changes during negotiation still refuse; a compatible manifest
   never skips native pairing verification. Renderer errors hide native paths and
   IPC details. Run the Electron folder host and shared desktop-folder tests.
-- [ ] Verify the server compatibility message in the rebuilt signed Mac app.
+- Installed-app check: open Things in the rebuilt signed Mac app, verify the
+  server compatibility message under Folders on this Mac, and leave the existing
+  pairing, selected endpoint and folder grants unchanged.
 - [x] Export 17 MiB through the production preload/host, real Electron session
   cookies and native Save panel; verify all saved bytes, canonical multipart
   fingerprint, nine bounded ranges and removal of the request's partial file.
