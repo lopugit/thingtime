@@ -16,8 +16,8 @@ at a time. POST requires a full, live user session and `expectedOwnerId`:
 temporary accounts and internal Action identities are not vault sessions.
 `catalog` returns names, usernames, exact HTTPS domains and public passkey
 identifiers for native selection; passwords, TOTP seeds and signing keys are
-excluded. Responses are private/no-store. The catalog and optional native bridge
-prepare for the separately delivered system provider.
+excluded. Responses are private/no-store. The native picker checks the same
+account again before filling and requires device-owner verification.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped
@@ -54,9 +54,9 @@ screen-capture permission/picker is controlled by the browser/OS. On devices
 without screen capture, upload a screenshot instead.
 
 A `FIDO:` passkey QR is a live cross-device ceremony, not a transferable signing
-key. Importing its image does not register a passkey. Native passkey creation
-is a separate signed-provider release. A passkey reference can record the
-location of a key held elsewhere.
+key. Importing its image does not register a passkey. Choose Thingtime in the
+native system provider picker when the service requests a new passkey. A
+passkey reference can also record the location of a key held elsewhere.
 
 Import/export supports 1Password 1PUX v3 and CSV, Chrome CSV and Apple Passwords
 CSV. Imports preview titles before saving. Files are parsed locally, bounded to
@@ -73,11 +73,26 @@ All export files contain unencrypted secrets; the UI requires acknowledgement.
 
 ## Native Password AutoFill
 
-Native iOS/macOS password, passkey and OTP providers are prepared separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996). Their release requires
-Apple provisioning and signed-device validation. This web release includes the
-private catalog API and optional bridge negotiation, but does not change native
-packaging or make Thingtime selectable in OS AutoFill settings by itself.
+`apple/Passwords` contains the shared Swift library. `apple/PasswordProvider`
+contains the AuthenticationServices extension used by iOS and the macOS
+Thingtime Passwords companion embedded in Electron. The containing app needs
+Apple's AutoFill entitlement and the same Keychain group as its extension.
+Only the selected first-party HttpOnly session cookie is stored in the device's
+unlocked-only, non-synchronizing data-protection Keychain. Every session operation
+requires the configured shared access group; the macOS legacy Keychain is never
+used. No vault passwords or signing keys are persistently cached on the device.
+Logout/account or endpoint changes clear
+the link; expired/revoked sessions fail at the server.
+
+Open Passwords in the native app, choose **Connect Password AutoFill**, then
+enable **Thingtime** in OS Settings → General → AutoFill & Passwords. System
+configuration and biometric/device passcode prompts require the user. Password
+and passkey providers require iOS 17/macOS 14; native OTP AutoFill requires
+iOS 18/macOS 15. The provider uses exact HTTPS host matches for passwords/TOTP
+and the OS-supplied relying party and allowed credential IDs for passkeys.
+ES256 passkeys use random credential IDs, none attestation, a zero signature
+counter for synchronized credentials and user verification. Encrypted storage
+is acknowledged and read back before a new registration completes.
 
 ## Validation and setup
 
@@ -86,5 +101,10 @@ See the [README setup](../README.md#password-manager-setup) and
 `npm --prefix remix run test:passwords` covers crypto envelopes, session races,
 formats, TOTP and HTTP boundaries. `node remix/scripts/verify-password-manager.mjs
 http://localhost:<web-port>` exercises a disposable replica through HTTP only.
+`swift test --package-path apple/Passwords` verifies real passkey signatures,
+TOTP test vectors and session/domain validation. Builds alone do not establish
+that signed OS registration or a third-party login ceremony works. iOS provider
+ceremonies require a physical device; the simulator is a compile/UI check.
+Record actual OS/device results separately in the delivery PR.
 
 Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Closing the editor aborts its pending scan; a stream returned by a late browser picker is immediately stopped.

@@ -9929,12 +9929,30 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Check a configured desktop endpoint against a signed native app. Ordinary
   unconfigured web servers must not forward passwords to production; desktop
   forwarding is restricted to its loopback UI and selected HTTPS endpoint.
+- [ ] Build both XcodeGen targets and the shared Swift tests. Verify signatures,
+  provisioning profiles, Keychain groups and AutoFill entitlements in the
+  installed app and embedded extension. Confirm Thingtime appears in OS settings.
+- [ ] With disposable credentials, connect AutoFill, fill an exact website login
+  and OTP, create a new passkey, sign out, then sign in with that saved passkey.
+  Test another account at the same site, cancel biometric prompts, wrong RP,
+  excluded/allowed credential IDs, offline/unavailable storage, revoked session,
+  account/endpoint switches and disconnect. Never complete registration before
+  encrypted storage acknowledgement. Record actual OS/device and service results.
 - [ ] Managed worktrees sharing a repository basename must have distinct PM2
   names/ports; starting this checkout must not remove another checkout's stack.
 
+- Password-provider package verification must reject missing AutoFill entitlements,
+  mismatched host/extension Keychain groups or teams, and expired profiles.
 - Vercel functions retain image binaries for their target CPU/OS and stay below
   the function size limit even when local dependencies include other platforms.
 
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
+
+- Native Password AutoFill: while connecting, focus the app to trigger background sync; the connection must finish. Switching accounts/logout cancels it, settles the request, and queues identity removal after any outstanding catalog update.
+- Native Keychain: session save/read/delete must use the data-protection store,
+  the same explicit access group and no synchronization. Missing or unexpanded
+  group configuration must fail closed. On a signed macOS build, connect in the
+  host, read from its extension, disconnect, and confirm the extension cannot
+  read the removed session; no legacy Keychain access prompt should appear.
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.
