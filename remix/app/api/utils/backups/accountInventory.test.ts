@@ -209,14 +209,16 @@ for (const mode of ['no-timestamp', 'invalid-timestamp', 'not-snapshot', 'transa
 }
 
 test('unsupported managed family refuses before fetching its private payload and cannot restart under the same ID', async () => {
-	const f = fixture(1);
-	f.source[0].thingtime = ['timeline-event'];
-	await assert.rejects(f.run(), /dedicated adapter/);
-	assert.equal(f.state.queries, 1);
-	assert.equal(f.projections[0].crystal, undefined);
-	assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
-	await assert.rejects(f.run(), /already started/);
-	assert.equal(f.state.ended, 1);
+	for (const kind of ['timeline-event', 'ai-connection', 'chat-message']) {
+		const f = fixture(1);
+		f.source[0].thingtime = [kind];
+		await assert.rejects(f.run(), /dedicated adapter/);
+		assert.equal(f.state.queries, 1);
+		assert.equal(f.projections[0].crystal, undefined);
+		assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+		await assert.rejects(f.run(), /already started/);
+		assert.equal(f.state.ended, 1);
+	}
 });
 
 for (const mode of ['revoked', 'cancelled', 'scope', 'boundary', 'missing', 'duplicate', 'oversized', 'expired'] as const) {

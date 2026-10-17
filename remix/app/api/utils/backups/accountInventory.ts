@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { getHomeThingsCollection, withHomeMongoSnapshot, THINGS_OWNER_IDENTITY_INDEX } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
-import { isProtectedThingtime } from '../../../schemas/registry';
+import { isProtectedThingtime, MESSENGER_THINGTIME } from '../../../schemas/registry';
 import { thingContentSnapshot } from '../timeline/recordMutation';
 import { CLOUD_FILE_ADAPTER, parseCloudFile } from '../../../fileSync/cloudFile';
 import { timelineScopeKey } from '../../../timeline/contract';
@@ -42,7 +42,7 @@ function family(doc: Census): Family {
 	)
 		throw Error('Invalid account inventory kind');
 	if (doc.thingtime.length === 1 && doc.thingtime[0] === 'file') return 'file';
-	if (isProtectedThingtime(doc.thingtime))
+	if (isProtectedThingtime(doc.thingtime) || doc.thingtime.some((kind) => (MESSENGER_THINGTIME as readonly string[]).includes(kind)))
 		throw Error('Account snapshot needs a dedicated adapter for a managed Thing; no complete inventory was published');
 	return 'content';
 }
