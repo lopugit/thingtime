@@ -4,7 +4,13 @@ https://thingtime.com
 
 ### Password manager setup
 
-The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
+Anonymous `/passwords` uses an encrypted device vault with a separate passphrase;
+it needs no server secret or database. Use HTTPS or loopback for WebCrypto, and
+load the production offline shell once before testing offline reload. Entries
+stay on that device and never sync on login. Account offline vault sync remains
+in progress. See [device vault behavior and verification](docs/password-manager.md#anonymous-device-vault).
+
+The account-private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
 Use a Mongo replica set for canonical storage transactions and configure the
 usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes
 encoded as base64url>` in ignored local env files and your deployment secret

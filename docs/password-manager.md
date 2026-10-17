@@ -1,13 +1,49 @@
 # Password manager
 
-`/passwords` is an account-private credential library. Each account can own many
-independent entries for the same service. Entries use the protected
+`/passwords` provides an account-private credential library and, when anonymous,
+an independently encrypted device library. Each library can hold many independent
+entries for the same service. Entries use the protected
 `password-manager-entry` Thing schema and the reusable Thing `mods.layout=fields`
 editor, with ordered fields, masked secrets and extensible custom fields. The
 ordinary Thing tree is unchanged; controlled field mods do not persist values
 through global Thing state, local caches, editor history or request diagnostics.
 
-## Storage and access
+## Anonymous device vault
+
+Open `/passwords`, or Settings → Security → Device passwords, without signing in.
+Choose a separate passphrase of at least 12 characters. The normal field editor,
+local TOTP/QR helpers and acknowledged CSV/1PUX importer/exporter work through the
+device adapter. This vault does not require server secrets, a database, an account
+or a network connection after the offline shell has been installed. WebCrypto
+requires a secure context (HTTPS or loopback).
+
+The existing version-2 AES-256-GCM value envelope and version-1 scrypt password
+wrapper are shared between browser and server. Browser/server interoperability is
+tested. Device authenticated data binds the browser origin and complete workspace
+scope, plus key, record and purpose. Titles, categories, field definitions and
+values are encrypted together; only record IDs, revisions, timestamps and retry
+metadata remain visible in device storage. Retry identities are keyed HMACs.
+Values are limited to 64 KiB, passphrases to 4,096 UTF-8 bytes, listing/export to
+50 entries per page and storage to the shared workspace quota. One password KDF
+runs at a time per JavaScript realm.
+
+The unwrapped key stays in tab memory. Manual lock, page teardown, workspace
+invalidation or five minutes without use clear it and unmount the editor. Each
+tab unlocks independently. Transaction guards reject writes after cancellation
+or lock; revisions preserve stale editor input instead of overwriting another
+tab's saved entry. Missing keys or damaged ciphertext fail visibly and retain the
+encrypted records. There is no passphrase reset or server recovery for this vault;
+normal explicit exports contain plaintext and still require acknowledgement.
+
+Anonymous entries never create account sync commands or become account content
+on login. They are excluded from ordinary Things, Timeline, transfer exports and
+request diagnostics. Anonymous native AutoFill is not enabled. The account
+adapter has encrypted command primitives for subsequent work, but the account
+UI still uses its live-session API: account offline unlock/sync/conflict recovery,
+Settings provider/environment credentials and the native bridge remain separate
+unfinished acceptance items.
+
+## Account storage and access
 
 `api.passwords` 1.0.0 uses the home data plane. GET returns 50 metadata records
 at a time. POST requires a full, live user session and `expectedOwnerId`:
@@ -36,7 +72,7 @@ payload. Password entries use canonical accounted Thing transactions. Revision
 checks prevent stale writes; stable write IDs make retries idempotent; minimal
 value-free deletion tombstones prevent delayed resurrection. General Thing
 read/write/search/export and Timeline do not expose these protected records.
-There is no password history or offline decrypted vault cache in this release.
+Neither library persists decrypted vault content or password history.
 Draft edits stay in component memory, are masked when the tab loses focus, and
 clear on account change, navigation, page teardown or Hide values.
 
@@ -88,3 +124,14 @@ formats, TOTP and HTTP boundaries. `node remix/scripts/verify-password-manager.m
 http://localhost:<web-port>` exercises a disposable replica through HTTP only.
 
 Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Closing the editor aborts its pending scan; a stream returned by a late browser picker is immediately stopped.
+
+Anonymous validation: `npm --prefix remix run test:local-workspace` includes the
+storage, scope, concurrency, idle-lock and cancellation tests. Build the client,
+serve its production output on loopback, then enable the actual offline browser
+fixture with `TT_LOCAL_PASSWORDS_URL=http://127.0.0.1:<port>` and
+`TT_LOCAL_PASSWORDS_ARTIFACTS=<local-output-directory>` when running
+`app/local-workspace/passwordVault.browser.test.ts` with the workspace test
+runner. The fixture uses synthetic credentials and a clean browser context;
+its downloaded CSV is plaintext test data and must remain untracked. It checks
+1440/390/320px layout, independent tab unlock, stale edits, normal transfer,
+zero account records/commands and zero password API or mutation requests.

@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Anonymous encrypted device passwords reuse the
+  canonical vault envelopes and normal editor/transfer UI, with independent
+  passphrase unlock, idle locking and transactional conflict/cancellation guards.
+  Local offline desktop/phone, two-tab and transfer checks pass; account Vault
+  sync remains unfinished. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#encrypted-anonymous-password-manager--2026-10-17).
+
+
 - 2026-10-17 — **Codex (AI)**: Integrate current main into the local-first
   feature branch; preserve Settings cards and upstream AI/Lopu changes. Verify
   offline storage/card access and anonymous/account History at desktop and phone

@@ -128,3 +128,16 @@ model catalogue sync and TESTING daily provider model availability.
 native Responses requirements (including GPT-6 Astra); `lopu/chat.ts` consumes
 that transport policy. `chat.streaming.test.mts` exercises Astra default/High/Max
 reasoning and tool-result replay through the real SDK against an HTTP fixture.
+
+### Anonymous device passwords
+
+`components/Passwords/DevicePasswordManager.tsx` gates the existing password UI
+with an independent local passphrase. `local-workspace/passwordVault.ts` owns
+scoped encrypted storage, transactional revisions, leases and idle locking;
+`passwords/vaultCrypto.ts` implements WebCrypto with the shared
+`passwords/vaultEnvelopeContract.ts` used by server `vaultEnvelope.ts`.
+No anonymous network/session adapter or native AutoFill grant is available.
+Account offline UI/sync and Settings provider credentials are still outstanding.
+`passwords/vaultCrypto.test.ts` verifies server interoperability;
+`local-workspace/passwordVault.test.ts` and the opt-in browser fixture cover
+storage isolation, cancellation, conflicts and real offline editor/transfer use.

@@ -2792,3 +2792,43 @@ current-head CI and deployed acceptance remain unverified. The full coverage
 matrix remains open, including protected/media recovery, broader branch controls,
 shared/managed/linked transfer, identity transitions and local encrypted Vault.
 This integration updates only the feature branch, not remote `main`.
+
+
+## Encrypted anonymous password manager — 2026-10-17
+
+Anonymous `/passwords` and Settings → Security → Device passwords now expose the
+normal editable credential UI behind a separate device passphrase. The local
+adapter reuses the exact server envelope/KDF contract, shared scope/lease/quota
+storage, normal entry validator and CSV/1PUX transfer. Titles and field metadata
+are encrypted with values; retries use keyed digests. Manual/idle/teardown locks,
+independent tab unlock, transactional cancellation, revision conflicts and damaged
+key refusal preserve encrypted content. No server authentication or authorization
+changed. Anonymous writes never queue account sync. Account encrypted intent
+primitives are preparatory only; no account offline UI or sync worker is enabled.
+
+Local evidence:
+
+- 471 automated checks pass: password suite 39; workspace/offline shell 432.
+  The 47 opt-in skips are excluded; focused crypto/storage tests are subsets.
+- The enabled clean-browser fixture passes in 26.96s using actual offline mode:
+  setup, normal field editing, wrong phrase, lock/reload/unlock at 1440/390/320px,
+  two-tab stale-edit preservation, normal acknowledged CSV download/delete/import.
+  It detects no plaintext synthetic credentials in serialized/decoded storage,
+  no account records/commands, no password API or mutation traffic and no page
+  errors. Screenshots show masked fields and no horizontal overflow; the existing
+  global floating controls can overlay right-edge controls until scrolled.
+- Client build verifies 247 offline assets (21,782,506 bytes). TypeScript retains
+  exactly 91 baseline diagnostics; focused lint has no errors and two existing
+  PasswordManager effect-cleanup ref warnings.
+
+Artifacts: `tmp/local-passwords-native-accepted/`,
+`tmp/local-passwords-workspace-final.log`, `tmp/local-passwords-suite.log`,
+`tmp/local-passwords-typecheck-checked.log`, `tmp/local-passwords-build-checked.log`.
+Earlier fixture selector attempts remain in local logs and are excluded from
+acceptance. The fixture uses disposable synthetic secrets only; plaintext CSV
+artifacts remain untracked. No existing account data was changed.
+
+Account vault caching/unlock/sync/conflict recovery, Settings provider/environment
+credentials, native credential integration and the rest of the local-feature
+matrix remain open. Current-head CI and deployed verification remain unproven.
+This checkpoint is not the full goal's completion or permission to merge.

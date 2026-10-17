@@ -11413,3 +11413,32 @@ writes, and a cancellation status can precede the subscribed History projection;
 wait for row removal before asserting absence. These checks do not imply all
 Settings categories, authenticated admin mutations or the full local matrix are
 complete. Evidence is linked in the PR #1000 integration note.
+
+
+### Anonymous encrypted device passwords (2026-10-17)
+
+- [x] In a clean anonymous production-client context, open Settings → Security →
+  Device passwords, install the offline shell and disconnect. Create a separate
+  passphrase, save through the normal field editor, lock, reject a wrong phrase,
+  unlock and cold reload. Verify masked values at 1440/390/320px with no horizontal
+  overflow. Global floating controls may overlay edge controls; scroll to access.
+- [x] Inspect serialized workspace records, decoded native-tree bytes and local
+  storage using synthetic credentials: neither phrase, title nor field value
+  may persist unencrypted. No account records, anonymous sync commands, Timeline
+  copies, password API requests, mutation requests or browser errors appear.
+- [x] Unlock two tabs separately. Save in one and attempt a stale edit in the
+  other: the conflict retains unsaved input, and reopening reads the saved value.
+  Export through the normal acknowledgement/download, delete and re-import via
+  the normal CSV preview. Preserve the exact synthetic password.
+- [x] Automated crypto/storage checks: browser/server envelope and password-key
+  interoperability; wrong key, origin, account and plane; malformed formats and
+  tampering; exact retry/conflict; quota rollback; cancellation/lock during
+  encryption and transactions; missing-key damage; idle timeout and paging.
+- [ ] Account offline vault UI/sync/conflict recovery, provider/environment
+  credentials and signed native AutoFill remain outside this checkpoint.
+
+Regression: removing a login gate must not store plaintext credentials in the
+ordinary local Thing tree or grant anonymous access to a live account vault.
+Local evidence: `tmp/local-passwords-native-accepted/verification.json` and its
+screenshots; 39 password + 432 workspace/offline-shell tests pass. The 47 opt-in
+skips are excluded. This is not CI or deployed acceptance.

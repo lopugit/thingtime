@@ -790,6 +790,10 @@ export const SettingsContent = ({
 				)}
 				{tab === 'security' && (
 					<Flex direction="column" gap={4} minW={0}>
+            {workspaceUser?.localOnly && <SettingsSection eyebrow="Device passwords" description="Encrypted passwords and authenticator entries on this device, available offline.">
+              <Button as="a" href="/passwords">Open device password manager</Button>
+              <Text fontSize="sm">Unlock with a separate device passphrase. Anonymous entries are never uploaded.</Text>
+            </SettingsSection>}
 						{/* security (auth only) — email 2FA + the reset flow's home */}
 						{user && !user.temporary && (
 							<SettingsSection

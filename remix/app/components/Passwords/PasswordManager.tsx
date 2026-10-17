@@ -1,6 +1,9 @@
 import React from 'react';
 import { Box, Button, Checkbox, Flex, Heading, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { Link, useLocation } from 'react-router';
+import { DevicePasswordManager } from './DevicePasswordManager';
+import type { LocalPasswordVault } from '~/local-workspace/passwordVault';
+import { isAnonymousWorkspace, workspaceIdentityKey, subscribeWorkspaceIdentity, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { Thingtime } from '~/components/Thingtime/Thingtime';
@@ -16,9 +19,10 @@ const changed = () => window.dispatchEvent(new Event('thingtime:passwords-change
 const card = { border: '1px solid var(--tt-border, #e6e6eb)', borderRadius: '12px', p: 4, background: 'var(--tt-card, #fff)' };
 export function PasswordManager() {
   const user = useCurrentUser(), location = useLocation();
-  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{user && !user.temporary ? <PasswordManagerScope key={`${user.id}:${location.key}`} ownerId={user.id} /> : <Box p={6}><Heading size="md">Passwords</Heading><Text mt={3}>Sign in to unlock your password manager.</Text><Button as={Link} to="/login" mt={3}>Sign in</Button></Box>}</Box>;
+  const identity = React.useSyncExternalStore(subscribeWorkspaceIdentity, workspaceIdentityKey, () => '');
+  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{isAnonymousWorkspace() ? <DevicePasswordManager key={`${identity}:${location.key}`}>{vault => <PasswordManagerScope ownerId="local-workspace" localVault={vault} />}</DevicePasswordManager> : user && !user.temporary ? <PasswordManagerScope key={`${user.id}:${location.key}`} ownerId={user.id} /> : <Box p={6}><Heading size="md">Passwords</Heading><Text mt={3}>Sign in to unlock your password manager.</Text><Button as={Link} to="/login" mt={3}>Sign in</Button></Box>}</Box>;
 }
-function PasswordManagerScope({ ownerId }: { ownerId: string }) {
+export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string; localVault?: LocalPasswordVault }) {
   const lopu = useLopu();
   const [records, setRecords] = React.useState<PasswordMetadata[]>([]), [cursor, setCursor] = React.useState<string | null>(null);
   const [configured, setConfigured] = React.useState<boolean | null>(null), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
@@ -28,7 +32,8 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const [format, setFormat] = React.useState<PasswordFormat>('1pux'), [acknowledged, setAcknowledged] = React.useState(false), [progress, setProgress] = React.useState('');
   const [deleteConfirm, setDeleteConfirm] = React.useState(false);
   const [nativeAvailable, setNativeAvailable] = React.useState(false), [nativeMessage, setNativeMessage] = React.useState('');
-  React.useEffect(() => { const check = () => setNativeAvailable(hasNativePasswordProvider()); check(); window.addEventListener('thingtime:native-bridge-ready', check); return () => window.removeEventListener('thingtime:native-bridge-ready', check); }, []);
+  React.useEffect(() => { const check = () => setNativeAvailable(!localVault && hasNativePasswordProvider()); check(); window.addEventListener('thingtime:native-bridge-ready', check); return () => window.removeEventListener('thingtime:native-bridge-ready', check); }, [localVault]);
+  const refreshSequence = React.useRef(0);
   const generation = React.useRef(0), active = React.useRef(true), controllers = React.useRef(new Set<AbortController>());
   const retry = React.useRef<{ payload: string; writeId: string } | null>(null), importPending = React.useRef<{ id: string; writeId: string; entry: PasswordEntry }[]>([]);
   const clear = React.useCallback(() => {
@@ -47,7 +52,8 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
     const controller = new AbortController(), version = generation.current; controllers.current.add(controller);
     try { let result;
       for (let attempt = 0; ; attempt++) {
-        try { result = await passwordRequest(ownerId, body, controller.signal, next); break; }
+        try { result = localVault ? await localVault.request(body, next, controller.signal) : await passwordRequest(ownerId, body, controller.signal, next);
+          if (localVault && (body?.operation === 'save' || body?.operation === 'delete')) announceLocalWorkspaceChange(); break; }
         catch (error: any) {
           if (error?.status !== 429 || attempt >= 3 || controller.signal.aborted) throw error;
           setProgress(`Rate limit reached. Continuing in ${error.retryAfter} seconds…`);
@@ -59,12 +65,13 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
         }
       } if (!active.current || version !== generation.current) throw new DOMException('Cancelled', 'AbortError'); return result; }
     finally { controllers.current.delete(controller); }
-  }, [ownerId]);
+  }, [ownerId, localVault]);
   const refresh = React.useCallback(async (next?: string) => {
-    const result = await request(undefined, next); setRecords(prev => next ? [...prev.filter(item => !result.entries.some((entry: PasswordMetadata) => entry.id === item.id)), ...result.entries] : result.entries); setCursor(result.nextCursor); setConfigured(result.configured);
+    const sequence = ++refreshSequence.current;
+    const result = await request(undefined, next); if (sequence !== refreshSequence.current) return; setRecords(prev => next ? [...prev.filter(item => !result.entries.some((entry: PasswordMetadata) => entry.id === item.id)), ...result.entries] : result.entries); setCursor(result.nextCursor); setConfigured(result.configured);
   }, [request]);
   const showError = React.useCallback((reason: any) => { if (reason?.name === 'AbortError' || !active.current) return; if (reason?.status === 401 || (reason?.status === 409 && /account/.test(reason.message))) { clear(); setRecords([]); } setError(reason instanceof Error ? reason.message : 'Please try again.'); }, [clear]);
-  React.useEffect(() => { refresh().catch(showError); const check = () => refresh().catch(showError); window.addEventListener('focus', check); return () => window.removeEventListener('focus', check); }, [refresh, showError]);
+  React.useEffect(() => { refresh().catch(showError); const check = () => refresh().catch(showError); window.addEventListener('focus', check); if (localVault) window.addEventListener(LOCAL_WORKSPACE_CHANGED, check); return () => { window.removeEventListener('focus', check); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, check); }; }, [refresh, showError, localVault]);
   const run = async (work: () => Promise<void>) => { if (busy) return; const version = generation.current; setBusy(true); setError(''); try { await work(); } catch (reason) { if (version === generation.current) showError(reason); } finally { if (active.current && version === generation.current) setBusy(false); } };
   const updateEntry = (entry: PasswordEntry) => setDraft(prev => prev ? { ...prev, entry } : prev);
   const addTotp = (value: string) => setDraft(prev => prev ? { ...prev, entry: { ...prev.entry, fields: [...prev.entry.fields, { id: crypto.randomUUID(), label: 'Verification code', type: 'totp', value }] } } : prev);
@@ -96,7 +103,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   });
   const visible = records.filter(record => record.title.toLowerCase().includes(search.toLowerCase())).sort((a, b) => sort === 'updated' ? b.updatedAt.localeCompare(a.updatedAt) : a.title.localeCompare(b.title));
   return <Box width="100%" maxWidth="1100px" mx="auto" px={{ base: 3, md: 6 }} py={6}>
-    <Flex gap={3} alignItems="center" justifyContent="space-between" flexWrap="wrap"><Box><Heading size="lg">Passwords</Heading><Text mt={1} color="var(--tt-muted)">Unlocked with your Thingtime session</Text></Box><Flex gap={2} flexWrap="wrap"><Button onClick={() => { clear(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); }} isDisabled={busy || configured === false}>Add password</Button><Button variant="outline" onClick={() => { clear(); setTransfer('import'); }}>Import</Button><Button variant="outline" onClick={() => { clear(); setTransfer('export'); }}>Export</Button><Button variant="ghost" onClick={clear}>Hide values</Button></Flex></Flex>
+    <Flex gap={3} alignItems="center" justifyContent="space-between" flexWrap="wrap"><Box><Heading size="lg">Passwords</Heading><Text mt={1} color="var(--tt-muted)">{localVault ? 'Encrypted on this device · never uploaded' : 'Unlocked with your Thingtime session'}</Text></Box><Flex gap={2} flexWrap="wrap"><Button onClick={() => { clear(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); }} isDisabled={busy || configured === false}>Add password</Button><Button variant="outline" onClick={() => { clear(); setTransfer('import'); }}>Import</Button><Button variant="outline" onClick={() => { clear(); setTransfer('export'); }}>Export</Button><Button variant="ghost" onClick={clear}>Hide values</Button>{localVault && <Button variant="outline" onClick={() => localVault.lock()}>Lock vault</Button>}</Flex></Flex>
     {configured === false && <Text mt={4}>Password encryption needs deployment configuration before you can save entries.</Text>}
     {nativeAvailable && <Box mt={4}><Text fontSize="sm">Use the native Thingtime app to fill passwords, verification codes, and create or use passkeys in other apps and websites.</Text><Flex gap={2} mt={2} flexWrap="wrap"><Button size="sm" onClick={() => run(async () => { const result = await nativePasswordProvider('connect', ownerId); setNativeMessage(result.message); })}>Connect Password AutoFill</Button><Button size="sm" variant="ghost" onClick={() => run(async () => { const result = await nativePasswordProvider('disconnect', ownerId); setNativeMessage(result.message); })}>Disconnect AutoFill</Button></Flex>{nativeMessage && <Text role="status" mt={2} fontSize="sm">{nativeMessage}</Text>}</Box>}
     {error && <Text role="alert" color="red.600" mt={4}>{error}</Text>}
