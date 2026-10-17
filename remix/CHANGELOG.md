@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: Preserve complete saved-account API results and
+  support opaque Google pagination cursors. Separate credential redaction from
+  bounded log summaries, retain ordinary key/value data, and reject cross-origin
+  redirects for complete responses. Publish `api.connections-request` 1.1.0
+  with cancellation and regression coverage.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
 - 2026-10-18 — **Codex (AI)**: Integrate the OAuth account library with the
   released 1PUX importer and encrypted attachments. Revalidate shared vault
   recovery, local callback persistence and real Google profile reuse; retain

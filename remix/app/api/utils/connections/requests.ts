@@ -1,23 +1,29 @@
 import { resolveConnectionCredential } from './connections';
 import { authedJson } from './providers';
 import { fail } from './shared';
-import { redactSensitiveValue } from '../admin/integrationCore';
+
+// API payloads may contain ordinary key/value fields and continuation tokens.
+// The broader, bounded log redactor is deliberately not used for these data.
+const CREDENTIAL_FIELD = /^(?:authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|password|passwd|(?:access|refresh|id)[-_]?token|token|client[-_]?secret|secret|api[-_]?key|private[-_]?key|credentials?)$/i;
 
 // A fixed operation registry, not a credential-bearing arbitrary URL proxy.
-const operations: Record<string, { provider: string; scope: string; url: (id: string) => string; needsId?: boolean }> = {
+const operations: Record<string, { provider: string; scope: string; url: (id: string) => string; needsId?: boolean; paginated?: boolean }> = {
   'drive.list-files': {
     provider: 'google-drive',
     scope: 'https://www.googleapis.com/auth/drive.metadata.readonly',
-    url: () => 'https://www.googleapis.com/drive/v3/files?pageSize=20&fields=files(id,name,mimeType,modifiedTime)'
+    paginated: true,
+    url: () => 'https://www.googleapis.com/drive/v3/files?pageSize=20&fields=nextPageToken,incompleteSearch,files(id,name,mimeType,modifiedTime)'
   },
   'gmail.list-messages': {
     provider: 'google-gmail',
     scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    paginated: true,
     url: () => 'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20'
   },
   'calendar.list-calendars': {
     provider: 'google-calendar',
     scope: 'https://www.googleapis.com/auth/calendar.readonly',
+    paginated: true,
     url: () => 'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=20'
   },
   'docs.get-document': {
@@ -35,6 +41,7 @@ const operations: Record<string, { provider: string; scope: string; url: (id: st
   'contacts.list-contacts': {
     provider: 'google-contacts',
     scope: 'https://www.googleapis.com/auth/contacts.readonly',
+    paginated: true,
     url: () => 'https://people.googleapis.com/v1/people/me/connections?personFields=names,emailAddresses&pageSize=20'
   }
 };
@@ -47,14 +54,18 @@ export const connectionOperations = (providerId: string, oauth: boolean) => [
 
 export const runConnectionRequest = async (
   user: { id: string; username: string },
-  input: { connectionId?: unknown; operation?: unknown; resourceId?: unknown }
+  input: { connectionId?: unknown; operation?: unknown; resourceId?: unknown; pageToken?: unknown },
+  signal?: AbortSignal
 ) => {
   if (typeof input.connectionId !== 'string' || !/^ext-link-[a-f0-9]{48}$/.test(input.connectionId)) return fail(400, 'Choose a saved connection.');
   const operation = typeof input.operation === 'string' ? input.operation : '';
   const op = Object.prototype.hasOwnProperty.call(operations, operation) ? operations[operation] : null;
   if (operation !== 'account.profile' && !op) return fail(400, 'Choose a supported connection operation.');
   const resourceId = typeof input.resourceId === 'string' ? input.resourceId : '';
-  if (op?.needsId && !/^[A-Za-z0-9_-]{1,200}$/.test(resourceId)) return fail(400, 'A valid document or spreadsheet ID is required.');
+  if (op?.needsId && !/^[A-Za-z0-9_-]+$/.test(resourceId)) return fail(400, 'A valid document or spreadsheet ID is required.');
+  const pageToken = input.pageToken;
+  if (pageToken != null && typeof pageToken !== 'string') return fail(400, 'A page token must be a string returned by this provider.');
+  if (pageToken && !op?.paginated) return fail(400, 'This operation does not support pagination.');
   const saved = await resolveConnectionCredential(user, input.connectionId);
   if (saved.ok === false) return saved;
   const { provider, tokens } = saved;
@@ -68,12 +79,18 @@ export const runConnectionRequest = async (
   } else {
     if (!op || op.provider !== provider.id) return fail(400, 'This operation does not belong to the selected connection.');
     if (!tokens.scopes?.includes(op.scope)) return fail(403, 'Reconnect this service and grant the required permission.');
-    const result = await authedJson(op.url(resourceId), { token: tokens.accessToken });
+    const url = new URL(op.url(resourceId));
+    if (typeof pageToken === 'string' && pageToken) url.searchParams.set('pageToken', pageToken);
+    const result = await authedJson(url.href, { token: tokens.accessToken, completeResponse: true, signal });
     if (result.ok === false) return result;
     data = result.data;
   }
-  let encoded = JSON.stringify(redactSensitiveValue(data));
-  if (!encoded || Buffer.byteLength(encoded) > 128 * 1024) return fail(502, 'The provider result exceeds the connection response limit.');
+  // Log summaries intentionally truncate. API results must retain every
+  // record, property and string. A continuation token is provider data,
+  // not an authentication credential; known credentials are still scrubbed
+  // below even if a provider echoes one under an unexpected field name.
+  let encoded = JSON.stringify(data, (key, value) => CREDENTIAL_FIELD.test(key) ? '[redacted]' : value);
+  if (encoded === undefined) return fail(502, 'The provider returned an invalid result.');
   for (const secret of [tokens.accessToken, tokens.refreshToken, tokens.idToken].filter(Boolean) as string[]) {
     encoded = encoded.split(JSON.stringify(secret).slice(1, -1)).join('[redacted]');
   }

@@ -13947,13 +13947,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-request', featureVersion: '1.0.0', group: 'connections', title: 'Use a saved service account',
+    id: 'connections-request', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'connections', title: 'Use a saved service account',
     endpoint: '/api/v1/connections/request', summary: 'Runs a fixed read-only operation with an owned saved authorization.',
-    detail: 'Credentials are decrypted and refreshed on the server after checking the link owner. The browser and Actions pass connectionId, never an access token. No arbitrary URL, method or header is accepted. Responses are bounded and private/no-store. Supported operations: account.profile for OAuth providers; drive.list-files, gmail.list-messages, calendar.list-calendars, docs.get-document, sheets.get-spreadsheet, contacts.list-contacts for the corresponding Google service. Docs and Sheets require resourceId. The service-specific grant must include the required scope. Disconnecting removes future access from Thingtime; it does not revoke the provider app globally.',
+    detail: 'Credentials are decrypted and refreshed on the server after checking the link owner. The browser and Actions pass connectionId, never an access token. No arbitrary URL, method or header is accepted. Responses are private/no-store; API data is not truncated into log summaries. Supported operations: account.profile for OAuth providers; drive.list-files, gmail.list-messages, calendar.list-calendars, docs.get-document, sheets.get-spreadsheet, contacts.list-contacts for the corresponding Google service. List operations return one provider page: pass data.nextPageToken unchanged as pageToken with the same connectionId and operation until it is absent. Batch sizes control processing, not the total number of records. Clients using pagination negotiate api.connections-request >=1.1.0 within major version 1. Docs and Sheets require resourceId and do not accept pageToken. The service-specific grant must include the required scope. Credential fields and known saved tokens are redacted; ordinary key/value fields and pagination tokens remain intact. Cancellation reaches the provider transport; provider timeouts and deployment constraints still apply. Disconnecting removes future access from Thingtime; it does not revoke the provider app globally.',
     auth: { mode: 'session', description: 'An authenticated first-party user. Foreign connections return 404; service accounts and scoped tokens are refused.' },
     methods: ['POST'],
-    steps: ['Choose a connection ID from GET /api/v1/connections.', 'POST its connectionId and a supported operation.', 'Reconnect if the grant expired or a required permission was declined.'],
-    requestExamples: [{ name: 'Verify an account', description: 'Read the profile with the saved grant.', method: 'POST', body: { connectionId: 'ext-link-<owned-id>', operation: 'account.profile' } }],
+    steps: ['Choose a connection ID from GET /api/v1/connections.', 'POST its connectionId and a supported operation.', 'For lists, repeat with pageToken from data.nextPageToken until it is absent. Treat it as opaque and keep the connection and operation unchanged.', 'Reconnect if the grant expired or a required permission was declined.'],
+    requestExamples: [
+      { name: 'Verify an account', description: 'Read the profile with the saved grant.', method: 'POST', body: { connectionId: 'ext-link-<owned-id>', operation: 'account.profile' } },
+      { name: 'Next Drive page', description: 'Use the continuation token from the previous response.', method: 'POST', body: { connectionId: 'ext-link-<owned-id>', operation: 'drive.list-files', pageToken: '<previous-data.nextPageToken>' } }
+    ],
     responseExamples: [{ status: 200, description: 'A redacted result, never credentials.', body: { ok: true, provider: 'google', operation: 'account.profile', data: { displayName: 'Example', handle: 'account@example.com' } } }]
   }),
   endpoint({

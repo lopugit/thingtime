@@ -3138,6 +3138,23 @@ the owner, provider, and granted scopes; arbitrary URLs and caller-supplied
 auth headers are not accepted. Token refresh uses a database lease plus a
 compare-and-set, so rotating grants cannot be exchanged concurrently.
 
+For list operations, keep requesting pages with the same connection and
+operation, passing `data.nextPageToken` unchanged as `pageToken`; stop when the
+provider omits it. Negotiate `api.connections-request` **1.1.0** (compatible
+major 1) at the selected origin before using pagination. Page sizes are
+processing batches, not a total-record limit. Results preserve complete text,
+arrays and object fields while redacting authentication material; they do not
+use the truncated logging representation. The fixed provider endpoint cannot
+redirect to another origin, and request cancellation reaches its transport.
+The deployment's memory/response constraints and provider timeout still apply
+to each response; document reads are a single provider response. Provider
+cursor behavior follows the official [Drive](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list),
+[Gmail](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/list),
+[Calendar](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList/list)
+and [People](https://developers.google.com/people/api/rest/v1/people.connections/list)
+contracts. A rejected or expired cursor requires restarting the listing; it
+does not imply the saved authorization was removed.
+
 Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
 redirect URI in each provider app's settings (Meta and TikTok require https —
 a tunnel origin works for local dev). Official-API honesty notes: Meta removed

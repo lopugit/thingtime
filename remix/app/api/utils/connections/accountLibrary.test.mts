@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { mock, test, beforeEach } from 'node:test';
 import { randomBytes } from 'node:crypto';
+import dns from 'node:dns/promises';
+import { syncBuiltinESMExports } from 'node:module';
 process.env.THINGTIME_USER_VAULT_KEY = randomBytes(32).toString('base64url');
 let docs: any[] = [];
 const valueAt = (doc: any, key: string) => key.split('.').reduce((obj, key) => obj?.[key], doc);
@@ -165,6 +167,90 @@ test('reuse rejects arbitrary operations, wrong services and credentials belongi
     const result = await runConnectionRequest(actor, { connectionId: linked.connection.id, operation });
     assert.equal(result.ok, false);
   }
+});
+
+test('saved Google list operations preserve and follow opaque continuation tokens without changing the target', async (t) => {
+  const originalLookup = dns.lookup;
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+  syncBuiltinESMExports();
+  t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
+  const cursor = 'next&access_token=untrusted+/=?' + 'x'.repeat(5000);
+  const cases = [
+    ['google-drive', 'drive.list-files', 'https://www.googleapis.com/auth/drive.metadata.readonly', 'www.googleapis.com', '/drive/v3/files'],
+    ['google-gmail', 'gmail.list-messages', 'https://www.googleapis.com/auth/gmail.readonly', 'gmail.googleapis.com', '/gmail/v1/users/me/messages'],
+    ['google-calendar', 'calendar.list-calendars', 'https://www.googleapis.com/auth/calendar.readonly', 'www.googleapis.com', '/calendar/v3/users/me/calendarList'],
+    ['google-contacts', 'contacts.list-contacts', 'https://www.googleapis.com/auth/contacts.readonly', 'people.googleapis.com', '/v1/people/me/connections']
+  ];
+  const calls: URL[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: string) => {
+    const target = new URL(url);
+    calls.push(target);
+    return Response.json(target.searchParams.has('pageToken') ? { items: ['last'] } : { items: ['first'], nextPageToken: cursor });
+  });
+  for (const [providerId, operation, scope, host, path] of cases) {
+    const linked = await upsertAccountAndLink(user, connectionProviderById(providerId)!, account(providerId), { ...tokens, scopes: [scope] });
+    assert.ok(linked.ok);
+    const first = await runConnectionRequest(user, { connectionId: linked.connection.id, operation });
+    assert.ok(first.ok);
+    assert.equal(first.data.nextPageToken, cursor);
+    if (providerId === 'google-drive') assert.match(calls.at(-1)!.searchParams.get('fields')!, /nextPageToken/);
+    const last = await runConnectionRequest(user, { connectionId: linked.connection.id, operation, pageToken: first.data.nextPageToken });
+    assert.ok(last.ok);
+    assert.deepEqual(last.data, { items: ['last'] });
+    const target = calls.at(-1)!;
+    assert.equal(target.hostname, host);
+    assert.equal(target.pathname, path);
+    assert.equal(target.searchParams.get('pageToken'), cursor);
+    assert.equal(target.searchParams.has('access_token'), false);
+  }
+  assert.equal(calls.length, cases.length * 2);
+});
+
+test('saved document results retain large nested content while redacting authentication material', async (t) => {
+  const originalLookup = dns.lookup;
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+  syncBuiltinESMExports();
+  t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
+  const content = 'long document content 🌈'.repeat(180_000);
+  const items = Array.from({ length: 130 }, (_, index) => ({ index, text: 'paragraph'.repeat(350) }));
+  const properties = Object.fromEntries(Array.from({ length: 130 }, (_, index) => [`field${index}`, index]));
+  const nested = Array.from({ length: 30 }).reduce((child) => ({ child }), { key: 'color', value: 'blue' });
+  const payload = { content, items, properties, nested, access_token: 'do-not-expose', auth: { password: 'do-not-expose' }, echo: tokens.accessToken };
+  t.mock.method(globalThis, 'fetch', async () => Response.json(payload));
+  const linked = await upsertAccountAndLink(user, connectionProviderById('google-docs')!, account(), {
+    ...tokens, scopes: ['https://www.googleapis.com/auth/documents.readonly']
+  });
+  assert.ok(linked.ok);
+  const result = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'docs.get-document', resourceId: 'document-id' });
+  assert.ok(result.ok);
+  assert.equal(result.data.content, content);
+  assert.deepEqual(result.data.items, items);
+  assert.deepEqual(result.data.properties, properties);
+  assert.equal(result.data.access_token, '[redacted]');
+  assert.deepEqual(result.data.nested, nested);
+  assert.equal(result.data.auth.password, '[redacted]');
+  assert.equal(result.data.echo, '[redacted]');
+});
+
+test('pagination refuses malformed cursors, missing scopes, foreign owners and non-list operations before provider access', async (t) => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new Error('must not fetch'); });
+  const linked = await upsertAccountAndLink(user, connectionProviderById('google-drive')!, account(), tokens);
+  assert.ok(linked.ok);
+  for (const pageToken of [123, [], {}, false]) {
+    const result = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'drive.list-files', pageToken });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.status, 400);
+  }
+  const missingScope = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'drive.list-files', pageToken: 'next' });
+  assert.equal(missingScope.ok, false);
+  if (!missingScope.ok) assert.equal(missingScope.status, 403);
+  const foreign = await runConnectionRequest(other, { connectionId: linked.connection.id, operation: 'drive.list-files', pageToken: 'next' });
+  assert.equal(foreign.ok, false);
+  if (!foreign.ok) assert.equal(foreign.status, 404);
+  const profile = await runConnectionRequest(user, { connectionId: linked.connection.id, operation: 'account.profile', pageToken: 'next' });
+  assert.equal(profile.ok, false);
+  if (!profile.ok) assert.equal(profile.status, 400);
+  assert.equal(fetch.mock.callCount(), 0);
 });
 
 test('a refresh lease prevents concurrent exchanges of a rotating token and reconnect wins', async () => {

@@ -15,6 +15,12 @@ grants. Facebook basic identity and posts are separate grants. ChatGPT hosted
 identity supports an approved OpenAI client and verified ID tokens only.
 OpenAI API and Claude Code OAuth credentials reuse the existing Secure Vault.
 
+Saved Google list operations support opaque continuation tokens across all
+pages. API results preserve complete strings, arrays, objects and ordinary
+key/value fields while redacting credential material. Logging summaries retain
+their separate bounded representation. Both capability manifests advertise
+`api.connections-request` 1.1.0 for this additive contract.
+
 ## Current security boundary
 
 OAuth tokens use owner/record-bound AES-256-GCM with per-user data keys.
@@ -136,6 +142,39 @@ remained readable on a second reveal after migration.
   and 18 recovery checks passed. README documents durable QA storage and the
   readiness gate. This was an environment failure, not a feed-code change.
 - Hosted Web CI on `f429c97e7` passed its API suite, full unit job and build.
+
+### October 18 complete-result and pagination checkpoint
+
+- Reproduced three failures before the fix: missing/redacted continuation
+  tokens, truncated/oversized document results, and ignored malformed cursors.
+  Drive, Gmail, Calendar and Contacts now forward `pageToken` without changing
+  their fixed target or other query parameters. Drive requests include
+  `nextPageToken` in their field projection. There is no total-record limit;
+  consumers request successive provider pages.
+- Removed the result-size gate, request-body cursor cap and document-ID length
+  cap. Complete responses are available only to fixed registered operations;
+  their transport refuses cross-origin redirects before another fetch, keeps
+  the existing private-network guard and timeout, and combines request
+  cancellation with that timeout. Provider/deployment constraints still apply
+  to each page or single document response; this is not infinite memory.
+- Credential-specific field matching and exact saved-token scrubbing replace
+  the bounded logging redactor for API payloads. Tests preserve >3 MB text,
+  130-element arrays/objects, 30-level nesting, key/value fields and opaque
+  query-delimiter cursors while checking credential redaction and ownership.
+- Validation: 146 connection tests, 96 capability tests and 24 live local
+  account-library checks pass. The Nitro production server build passes.
+  Changed-file lint has no errors (four existing fixture warnings; `.mts`
+  uses the TypeScript parser and Node/ES2021 globals explicitly). A fresh
+  local login reused the real saved Google grant and returned HTTP 200 with
+  only profile display-name/handle fields and private/no-store headers.
+- Positive Google list pagination is tested with controlled provider responses,
+  not new live Drive/Gmail/Contacts/Calendar grants. Real additional-scope
+  consent and multiple-distinct-account acceptance remain separate gates.
+- The previous head `ad89a736e` passed hosted build/unit/API and CodeQL jobs;
+  this implementation revision requires its own hosted checks. No hosted
+  preview deployment exists for the branch. Local web remains on port 18280;
+  Tailscale/Funnel is unverified because the installed CLI wrapper points to a
+  missing Tailscale application binary. No new public exposure was configured.
 
 ### Remaining provider and delivery gates
 

@@ -96,6 +96,17 @@ check(
 );
 const docs = await request('connections/request-docs');
 check(docs.response.ok && docs.data.docs.endpoint === '/api/v1/connections/request', 'new route and docs registry agree');
+const cursorRejected = await request('connections/request', a.cookie, { connectionId: id, operation: 'account.profile', pageToken: 'opaque'.repeat(1_000) });
+check(
+  cursorRejected.response.status === 400 && cursorRejected.data.error === 'This operation does not support pagination.',
+  'large cursors reach operation validation without a Thingtime size cap'
+);
+check(cursorRejected.response.headers.get('cache-control').includes('no-store'), 'cursor refusals remain private and non-cacheable');
+const malformedCursor = await request('connections/request', a.cookie, { connectionId: id, operation: 'drive.list-files', pageToken: {} });
+check(
+  malformedCursor.response.status === 400 && malformedCursor.data.error === 'A page token must be a string returned by this provider.',
+  'the route forwards and refuses malformed cursors before using credentials'
+);
 await request('connections/unlink', a.cookie, { id });
 for (const entry of [first.data.entry, second.data.entry]) await request('lopu/vault', a.cookie, { action: 'delete', id: entry.id });
 vault = await request('lopu/vault', a.cookie);

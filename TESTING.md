@@ -7750,6 +7750,18 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 - [ ] Google reuse API: exercise a permitted read, missing-scope denial,
       wrong-provider operation, another owner's link, and arbitrary-URL input.
       Result, error, logs, and client caches must not contain credentials.
+- [ ] Saved-result pagination and preservation: follow `data.nextPageToken`
+      for Drive, Gmail, Calendar and Contacts using the same connection and
+      operation, ending when the token is absent. Preserve long opaque cursors
+      containing query delimiters without changing the fixed URL. Reject
+      non-string cursors, pagination on a profile/document operation, wrong
+      owners and missing scopes before provider access. Verify large text,
+      more than 100 records/properties, deep objects and ordinary key/value
+      fields survive unchanged while credential fields/known tokens redact.
+      Refuse cross-origin redirects before fetching the next hop, release
+      abandoned response bodies and propagate cancellation. Both manifests
+      must advertise `api.connections-request` 1.1.0; distinguish mocked
+      provider coverage from real additional-scope consent and list acceptance.
 - [ ] Provider transport regression: an HTTP 200 with HTML, empty, or truncated
       JSON must fail rather than report a successful empty result. Non-JSON
       401/403 responses still request reconnect; valid empty JSON stays valid.

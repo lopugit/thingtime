@@ -15,7 +15,7 @@ test('service-account clients negotiate owner-fenced writes and scoped credentia
     ['api.connections-feed', '1.1.0', '1.0.0'],
     ['api.connections-filters', '1.1.0', '1.0.0'],
     ['api.lopu-vault', '1.3.0', '1.2.0'],
-    ['api.connections-request', '1.0.0', ''],
+    ['api.connections-request', '1.1.0', '1.0.0'],
   ]) {
     assert.equal(api.features[feature], required);
     assert.equal(origin.features[feature]?.version, required);
