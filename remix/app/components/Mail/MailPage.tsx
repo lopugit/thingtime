@@ -1,4 +1,5 @@
 import React from 'react';
+import { GmailWorkspace, GmailMessageActions } from './GmailActions';
 import { Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -68,6 +69,7 @@ function MailScope({ ownerId }: { ownerId: string }) {
 					</Button>
 				}
 			/>
+			<GmailWorkspace ownerId={ownerId} mail={mail} />
 			<Flex gap={4} direction={{ base: 'column', md: 'row' }} align="start" minW={0}>
 				<Flex as="nav" aria-label="Mail inboxes" direction="column" gap={2} width={{ base: '100%', md: '240px' }} flexShrink={0} minW={0}>
 					<Button onClick={() => select('all')} variant={selection === 'all' ? 'solid' : 'ghost'} justifyContent="start">
@@ -279,6 +281,14 @@ function MailScope({ ownerId }: { ownerId: string }) {
 									{state.accounts.find((account) => account.id === message.accountId)?.name} ·{' '}
 									{state.folders.find((folder) => folder.id === message.folderId)?.name}
 								</Text>
+								{state.accounts.find((account) => account.id === message.accountId)?.provider === 'gmail' && (
+									<GmailMessageActions
+										key={message.id}
+										mail={mail}
+										message={message}
+										account={state.accounts.find((account) => account.id === message.accountId)!}
+									/>
+								)}
 								{message.truncated && (
 									<Text fontSize="sm" mt={3}>
 										This is a partial message. Open the original with your email provider to read everything.

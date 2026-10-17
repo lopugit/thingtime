@@ -22,29 +22,56 @@ const cookie = login.headers
 	.map((v) => v.split(';')[0])
 	.join('; ');
 const { createMailHandler } = await import('../app/routes/api/v1/mail/_mail');
-const { syncMailAccount } = await import('../app/api/utils/mail/store');
+const { syncMailAccount, googleMailAction } = await import('../app/api/utils/mail/store');
+const { createGoogleMailOAuth } = await import('../app/api/utils/mail/googleOAuth');
+const { createGoogleMailCallback } = await import('../app/routes/api/v1/mail/google/callback/_callback');
+const googleMailOAuth = createGoogleMailOAuth({
+	googleMailConfig: async () => ({ clientId: 'fixture-client', clientSecret: 'fixture-secret', redirectUri: base + '/api/v1/mail/google/callback' }),
+	exchangeGoogleMail: async () => ({
+		address: 'gmail-fixture@example.test',
+		grant: { subject: 'fixture-subject', refreshToken: 'fixture-private-refresh', clientId: 'fixture-client' }
+	})
+});
+const googleCallback = createGoogleMailCallback(googleMailOAuth.callback);
 const { folderFor, parseMailMessage } = await import('../app/api/utils/mail/provider');
 let gate: Promise<void> | null = null,
 	started: (() => void) | null = null;
+let actionCalls = 0;
+const { MailActionError } = await import('../app/mail/model');
 const handler = createMailHandler({
-	syncMailAccount: (owner, id, request, signal) =>
-		syncMailAccount(owner, id, request, signal, async (account) => {
-			started?.();
-			if (gate) await gate;
-			const folder = folderFor(account.id, 'imap', 'INBOX');
-			const message = await parseMailMessage(
-				Buffer.from('From: sender@example.test\r\nSubject: Atomic fixture\r\n\r\nSynthetic content'),
-				folder,
-				'7:1'
-			);
-			return { folders: [folder], messages: [message], nextCursor: null };
-		})
+	googleMailAction: (owner, input, signal) =>
+		googleMailAction(owner, input, signal, async (_account, mutation) => {
+			actionCalls++;
+			if (mutation.action === 'send') throw new MailActionError(409, 'Synthetic uncertain send', 'uncertain');
+			return { remoteId: 'message123', labelIds: ['INBOX'], unread: false };
+		}),
+	googleMailOAuth,
+	syncMailAccount: (owner, id, request, signal, _fetch, deviceOnly) =>
+		syncMailAccount(
+			owner,
+			id,
+			request,
+			signal,
+			async (account) => {
+				started?.();
+				if (gate) await gate;
+				if (account.provider === 'gmail') assert.equal(account.googleGrant?.refreshToken, 'fixture-private-refresh');
+				const folder = folderFor(account.id, request.protocol, 'INBOX');
+				const message = await parseMailMessage(
+					Buffer.from('From: sender@example.test\r\nSubject: Atomic fixture\r\n\r\nSynthetic content'),
+					folder,
+					request.protocol === 'gmail' ? 'message123' : '7:1'
+				);
+				return { folders: [folder], messages: [message], nextCursor: null };
+			},
+			deviceOnly
+		)
 });
 const server = createServer(async (req, res) => {
 	try {
 		const chunks = [];
 		for await (const chunk of req) chunks.push(chunk);
-		const response = await handler({
+		const response = await (req.url?.startsWith('/api/v1/mail/google/callback') ? googleCallback : handler)({
 			request: new Request(base + req.url, {
 				method: req.method,
 				headers: req.headers as any,
@@ -102,6 +129,84 @@ try {
 		false
 	);
 	assert.equal((await call({ operation: 'delete', kind: 'mail-inbox', id: proxy.id, revision: 1 })).status, 200);
+	gate = null;
+	started = null;
+	const begin = await call({ operation: 'google-begin' });
+	assert.equal(begin.status, 200, JSON.stringify(begin.data));
+	const consent = new URL(begin.data.authorizeUrl);
+	const cbUrl = new URL(url);
+	cbUrl.pathname = '/api/v1/mail/google/callback';
+	cbUrl.search = new URLSearchParams({ state: consent.searchParams.get('state')!, code: 'synthetic-code' }).toString();
+	assert.equal((await fetch(cbUrl)).status, 200);
+	const pending = await call({ operation: 'google-status', flowId: begin.data.flowId });
+	assert.equal(pending.data.address, 'gmail-fixture@example.test');
+	assert.equal(JSON.stringify(pending.data).includes('fixture-private-refresh'), false);
+	const finish = { operation: 'google-finish', flowId: begin.data.flowId, address: pending.data.address };
+	assert.equal((await call(finish)).status, 200);
+	assert.equal((await call(finish)).status, 200);
+	const gmail = (await call(undefined, 'mail-account')).data.records.find((a: any) => a.id === begin.data.flowId);
+	assert.equal(gmail.provider, 'gmail');
+	assert.equal(gmail.sync.cloud, false);
+	assert.equal(gmail.googleGrant, undefined);
+	const deviceBatch = await call({ operation: 'google-relay', id: gmail.id, protocol: 'gmail' });
+	assert.equal(deviceBatch.status, 200, JSON.stringify(deviceBatch.data));
+	assert.equal(deviceBatch.data.messages.length, 1);
+	assert.equal(
+		(await call(undefined, 'mail-message')).data.records.some((m: any) => m.accountId === gmail.id),
+		false
+	);
+	assert.equal(
+		(await call({ operation: 'save-account', account: { ...gmail, sync: { ...gmail.sync, cloud: true } }, writeId: randomUUID() })).status,
+		200
+	);
+	assert.equal((await call({ operation: 'sync', id: gmail.id, protocol: 'gmail' })).status, 200);
+	assert.equal((await call(undefined, 'mail-message')).data.records.filter((m: any) => m.accountId === gmail.id).length, 1);
+	const readAction = {
+		operation: 'google-action',
+		id: gmail.id,
+		revision: 2,
+		writeId: randomUUID(),
+		mutation: { action: 'read', remoteId: 'message123' }
+	};
+	assert.equal((await call(readAction)).status, 200);
+	assert.equal((await call(readAction)).status, 200);
+	assert.equal(actionCalls, 1);
+	assert.equal((await call({ ...readAction, mutation: { ...readAction.mutation, action: 'unread' } })).status, 409);
+	const cachedGmail = (await call(undefined, 'mail-message')).data.records.find((m: any) => m.accountId === gmail.id);
+	assert.equal(cachedGmail.unread, false);
+	const uncertain = {
+		...readAction,
+		writeId: randomUUID(),
+		mutation: {
+			action: 'send',
+			draftId: 'draft123',
+			messageId: 'message123',
+			compose: { to: 'synthetic@example.test', cc: '', bcc: '', subject: 'Fixture only', text: 'Never sent' }
+		}
+	};
+	assert.equal((await call(uncertain)).status, 409);
+	assert.equal((await call(uncertain)).status, 409);
+	assert.equal(actionCalls, 2, 'uncertain send is never replayed');
+	gate = new Promise((resolve) => (release = resolve));
+	const gmailReached = new Promise<void>((resolve) => (started = resolve));
+	const staleGmailSync = call({ operation: 'sync', id: gmail.id, protocol: 'gmail' });
+	await gmailReached;
+	assert.equal((await call({ ...readAction, writeId: randomUUID() })).status, 200);
+	release();
+	assert.equal((await staleGmailSync).status, 409, 'a sync started before a Gmail action cannot overwrite its cache result');
+	gate = null;
+	started = null;
+	console.log('PASS: completed action retry once, changed-payload refusal, uncertain send no replay, controlled Gmail action/sync race');
+	if (process.env.KEEP_GMAIL_FIXTURE === '1') {
+		console.log('PASS: retained synthetic Gmail fixture for local UI validation');
+		server.close();
+		process.exit(0);
+	}
+	assert.equal((await call({ operation: 'delete', kind: 'mail-account', id: gmail.id, revision: 2 })).status, 200);
+	assert.equal((await call({ operation: 'google-relay', id: gmail.id, protocol: 'gmail' })).status, 404);
+	console.log(
+		'PASS: real session-bound OAuth flow, encrypted grant, redacted projections, idempotent finish, device-only no-persistence, cloud edit preserves grant, removal fences relay'
+	);
 	console.log(
 		'PASS: real HTTP session, encrypted folder/message persistence, repeated-sync convergence, proxy ownership, controlled sync/delete race'
 	);

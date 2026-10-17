@@ -120,6 +120,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "mail-folder": [],
   "mail-message": [],
   "mail-inbox": [],
+  "mail-operation": [],
   "rate-limit": ["key", "expiresAt", "requests", "count", "schemaVersion"],
   "deployment-peer": ["origin", "signingPublicKey", "firstSeenAt", "lastSeenAt", "expiresAt", "syncCursor", "schemaVersion"],
   "admin-integration-secret": ["id", "label", "cipherText", "iv", "tag", "createdAt", "updatedAt", "schemaVersion"],

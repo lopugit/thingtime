@@ -1,3 +1,4 @@
+import type { LocalGmailDraft } from './googleModel';
 import { emptyMailState, type MailAccount, type MailState } from './model';
 export type LocalMail = {
 	version: 1;
@@ -7,6 +8,7 @@ export type LocalMail = {
 	localAccountIds: string[];
 	localInboxIds: string[];
 	connectorToken: string;
+	composeDrafts: LocalGmailDraft[];
 	cursors: Record<string, string | null>;
 };
 export const emptyLocalMail = (): LocalMail => ({
@@ -17,6 +19,7 @@ export const emptyLocalMail = (): LocalMail => ({
 	localAccountIds: [],
 	localInboxIds: [],
 	connectorToken: '',
+	composeDrafts: [],
 	cursors: {}
 });
 // Each account, folder, message and view is a separate encrypted IndexedDB row.
@@ -77,6 +80,7 @@ function rowsFor(value: LocalMail): Map<string, string> {
 			JSON.stringify({ folder, cloudCursor: value.cursors[`${folder.id}:cloud`], localCursor: value.cursors[`${folder.id}:local`] })
 		);
 	for (const message of value.state.messages) rows.set(`message:${message.id}`, JSON.stringify(message));
+	for (const draft of value.composeDrafts || []) rows.set(`compose:${draft.id}`, JSON.stringify(draft));
 	return rows;
 }
 export async function readMailLocal(ownerId: string): Promise<LocalMail> {
@@ -97,7 +101,7 @@ export async function readMailLocal(ownerId: string): Promise<LocalMail> {
 				await key(db, ownerId),
 				legacy.bytes
 			);
-			return { ...JSON.parse(new TextDecoder().decode(bytes)), storageRevision: 0 };
+			return { composeDrafts: [], ...JSON.parse(new TextDecoder().decode(bytes)), storageRevision: 0 };
 		}
 		const value = emptyLocalMail();
 		value.storageRevision = head?.revision || 0;
@@ -122,6 +126,7 @@ export async function readMailLocal(ownerId: string): Promise<LocalMail> {
 					if (row.cloudCursor !== undefined) value.cursors[`${row.folder.id}:cloud`] = row.cloudCursor;
 					if (row.localCursor !== undefined) value.cursors[`${row.folder.id}:local`] = row.localCursor;
 				} else if (record.key.startsWith('message:')) value.state.messages.push(row);
+				else if (record.key.startsWith('compose:')) value.composeDrafts.push(row);
 			})
 		);
 		remember(owner, plain);
