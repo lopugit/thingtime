@@ -10868,6 +10868,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Mac History Save As and bundled static assets — 2026-10-17
 
+- [x] Regression: a selected server without compatible `api.devices-node-identity`
+  must explain that the server version does not support folder sync before native dispatch.
+  Account/endpoint changes during negotiation still refuse; a compatible manifest
+  never skips native pairing verification. Renderer errors hide native paths and
+  IPC details. Run the Electron folder host and shared desktop-folder tests.
+- [ ] Verify the server compatibility message in the rebuilt signed Mac app.
 - [x] Export 17 MiB through the production preload/host, real Electron session
   cookies and native Save panel; verify all saved bytes, canonical multipart
   fingerprint, nine bounded ranges and removal of the request's partial file.

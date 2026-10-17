@@ -22,7 +22,7 @@ app.whenReady().then(async () => {
             assert.equal(req.url, '/.well-known/thingtime-capabilities.json');
             assert.equal(req.headers.cookie, undefined); assert.equal(req.headers.authorization, undefined); publicRequests++;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ schemaVersion: 1, origin: apiOrigin, features: { 'api.files': { version: '1.4.0' }, unrelated: { private: 'excluded' } } }));
+            res.end(JSON.stringify({ schemaVersion: 1, origin: apiOrigin, features: { 'api.devices-node-identity': { version: '1.0.0' }, 'api.files': { version: '1.4.0' }, unrelated: { private: 'excluded' } } }));
         } catch (error) { res.statusCode = 500; res.end(); console.error(error); }
     });
     apiOrigin = await listen(upstream);
@@ -64,8 +64,8 @@ app.whenReady().then(async () => {
     const input = (action = 'list') => ({ action, requestId: randomUUID(), ownerId: 'owner', deviceId: 'device', ...(action !== 'context' ? { origin: apiOrigin } : {}) });
     const request = value => window.webContents.executeJavaScript(`window.folderFixture.request(${JSON.stringify(value)})`);
     const context = await request(input('context'));
-    assert.equal(context.origin, apiOrigin); assert.deepEqual(context.apiCapabilities.features, { 'api.files': { version: '1.4.0' } });
-    assert.equal(authRequests, 2); assert.equal(publicRequests, 1); assert.equal(nativeRequests, 1);
+    assert.equal(context.origin, apiOrigin); assert.deepEqual(context.apiCapabilities.features, { 'api.devices-node-identity': { version: '1.0.0' }, 'api.files': { version: '1.4.0' } });
+    assert.equal(authRequests, 3); assert.equal(publicRequests, 1); assert.equal(nativeRequests, 1);
     await request(input()); assert.equal(nativeRequests, 2);
     account = 'other'; await assert.rejects(request(input())); assert.equal(nativeRequests, 2); account = 'owner';
     proxyHeader = false; await assert.rejects(request(input())); assert.equal(nativeRequests, 2); proxyHeader = true;

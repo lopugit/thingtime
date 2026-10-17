@@ -1585,3 +1585,15 @@ the bundled proxy against the real local API. Full TypeScript diagnostics remain
 at the same 91 baseline entries. The actual Save panel was verified separately
 with the unchanged production export host. Authenticated signed History
 export/restore remains an explicit acceptance item.
+
+## Installed Mac server compatibility — 2026-10-17
+
+The installed helper targets production, whose public manifest omits the new
+node-identity and Files contracts (attachment-content is 1.12.0). The PR preview
+advertises identity 1.0.0, Files 1.3.0 and content 1.14.0. The folder-context
+refusal therefore does not establish a pairing or consent failure. The desktop
+host now checks identity capability before native dispatch and reports a server
+version requirement; account/endpoint checks still run before dispatch and native
+identity verification remains mandatory. Renderer errors hide arbitrary native
+paths/IPC details. Production promotion and installed authenticated transfer
+acceptance remain pending; existing pairing, consent and endpoint are unchanged.

@@ -12,7 +12,7 @@ function fixture() {
     const event = { sender, senderFrame: frame }, calls = [];
     let account = 'owner', run = async (_method, request) => ({ ...request, roots: [] });
     const host = new DesktopFolderSync({ context: () => context, requestNative: async (method, request) => { calls.push(request); return run(method, request); },
-        capabilities: async () => ({ schemaVersion: 1, origin: context.apiOrigin, features: {} }),
+        capabilities: async () => ({ schemaVersion: 1, origin: context.apiOrigin, features: { 'api.devices-node-identity': { version: '1.0.0' } } }),
         verifyAccount: async expected => { if (expected.ownerId !== account) throw Error('Account mismatch'); } });
     const input = (changes = {}) => ({ requestId: randomUUID(), ownerId: 'owner', deviceId: 'device', origin: context.apiOrigin, action: 'list', ...changes });
     return { host, context, frame, event, calls, input, account: value => { account = value; }, run: value => { run = value; } };
@@ -33,6 +33,32 @@ test('context derives its origin from the host, and replies must retain the full
     for (const changes of [{ ownerId: 'other' }, { deviceId: 'other' }, { requestId: randomUUID() }, { origin: 'https://other.test' }]) {
         f.run(async (_method, request) => ({ ...request, ...changes }));
         await assert.rejects(f.host.request(f.event, f.input()));
+    }
+});
+test('unsupported server is explained before native access while compatible servers still verify pairing', async () => {
+    const f = fixture();
+    for (const version of [undefined, '2.0.0', '1.bad.0', '1.01.0']) {
+        f.host.capabilities = async () => ({ features: { 'api.devices-node-identity': { version } } });
+        await assert.rejects(f.host.request(f.event, f.input({ action: 'context' })),
+            { message: 'The selected server does not support this version of folder sync.' });
+    }
+    assert.equal(f.calls.length, 0);
+    f.host.capabilities = async () => ({ features: { 'api.devices-node-identity': { version: '1.1.0' } } });
+    f.run(async () => { throw Error('Native pairing denied'); });
+    await assert.rejects(f.host.request(f.event, f.input({ action: 'context' })), /Native pairing denied/);
+    assert.equal(f.calls.length, 1);
+});
+test('account and endpoint changes during capability negotiation stop before native access', async () => {
+    for (const change of ['account', 'endpoint', 'cancel']) {
+        const f = fixture();
+        f.host.capabilities = async () => {
+            if (change === 'account') f.account('other');
+            if (change === 'endpoint') f.context.apiOrigin = 'https://other.test';
+            if (change === 'cancel') f.host.invalidate();
+            return { features: { 'api.devices-node-identity': { version: '1.0.0' } } };
+        };
+        await assert.rejects(f.host.request(f.event, f.input({ action: 'context' })));
+        assert.equal(f.calls.length, 0);
     }
 });
 test('active account and endpoint are checked again before returning any native data', async () => {

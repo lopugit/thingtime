@@ -1879,3 +1879,17 @@ the bundled proxy against the real local API. Full TypeScript diagnostics remain
 at the same 91 baseline entries. The actual Save panel was verified separately
 with the unchanged production export host. Authenticated signed History
 export/restore remains an explicit acceptance item.
+
+## Installed Mac server compatibility — 2026-10-17
+
+The installed helper uses `https://thingtime.com/`. Its public manifest currently
+omits `api.devices-node-identity` and `api.files` and advertises attachment-content
+1.12.0. PR #1002's preview advertises identity 1.0.0, Files 1.3.0 and content 1.14.0.
+This explains the installed folder-context refusal before any local file access;
+it is not evidence of broken pairing or lost folder consent. The desktop host now
+checks the public identity capability before native dispatch and displays clear
+server-version guidance. Account checks run again after negotiation; native
+identity verification remains required on compatible servers. Renderer rejection
+handling recognizes only the fixed compatibility message and hides other native
+transport details. Production promotion and authenticated installed sync acceptance
+remain pending; no pairing, consent or selected endpoint was changed.

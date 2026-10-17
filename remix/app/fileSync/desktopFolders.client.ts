@@ -83,7 +83,16 @@ export async function createDesktopFolderHost(input: {
 					combined.throwIfAborted();
 					check();
 					dispatched = true;
-					return invoke({ ...expected, ...payload });
+					return invoke({ ...expected, ...payload }).catch((error: unknown) => {
+						// Electron wraps rejected IPC messages and discards custom error
+						// fields. Only recognize this fixed host compatibility message;
+						// never display arbitrary native errors, paths or transport details.
+						const unsupported = 'The selected server does not support this version of folder sync.';
+						if (error instanceof Error && (error.message === unsupported ||
+							error.message === `Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${unsupported}`))
+							throw Error(unsupported);
+						throw Error('Folder access could not be verified. Check the connection, pairing and selected account.');
+					});
 				});
 			queues.set(
 				input.bridge,

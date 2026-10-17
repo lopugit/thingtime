@@ -4,6 +4,19 @@ import { createDesktopFolderHost } from './desktopFolders.client';
 import { mobileFolderSource } from './mobileFolders.client';
 const origin = 'https://sync.test';
 const rootId = '00000000-0000-4000-8000-000000000001';
+test('desktop folder failures show fixed compatibility guidance and hide arbitrary native details', async () => {
+	const unsupported = 'The selected server does not support this version of folder sync.';
+	for (const message of [unsupported,
+		`Error invoking remote method 'thingtime-desktop:folder-sync': Error: ${unsupported}`,
+		'/private/user/folder: native transport failure', `secret prefix ${unsupported}`, '']) {
+		await assert.rejects(createDesktopFolderHost({
+			ownerId: 'owner', deviceId: 'device', signal: new AbortController().signal,
+			rendererOrigin: () => 'http://127.0.0.1:12001', assertCurrent: () => {},
+			bridge: { folderSyncRequest: async () => { throw Error(message); } }
+		}), { message: message === unsupported || message.startsWith("Error invoking remote method '")
+			? unsupported : 'Folder access could not be verified. Check the connection, pairing and selected account.' });
+	}
+});
 function fixture() {
 	const lifetime = new AbortController(),
 		calls: any[] = [],

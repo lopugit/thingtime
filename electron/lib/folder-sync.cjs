@@ -51,7 +51,7 @@ async function readCapabilities(context, signal) {
             !manifest.features || typeof manifest.features !== 'object' || Array.isArray(manifest.features)) throw unavailable();
         // Only sync requirements are exposed. Never return arbitrary upstream data.
         const features = {};
-        for (const key of ['api.files', 'api.attachment-uploads', 'api.attachment-upload-parts',
+        for (const key of ['api.devices-node-identity', 'api.files', 'api.attachment-uploads', 'api.attachment-upload-parts',
             'api.attachment-upload-complete', 'api.attachment-content', 'api.actions-run', 'api.mongodb-endpoint']) {
             const version = manifest.features[key]?.version;
             if (typeof version === 'string' && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version) && version.length <= 32) features[key] = { version };
@@ -114,12 +114,20 @@ class DesktopFolderSync {
         };
         try {
             await verify();
+            let apiCapabilities;
+            if (state.input.action === 'context') {
+                apiCapabilities = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
+                await verify();
+                if (!/^1\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(apiCapabilities?.features?.['api.devices-node-identity']?.version ?? '')) {
+                    throw new Error('The selected server does not support this version of folder sync.');
+                }
+            }
             state.dispatched = true;
             const value = await this.requestNative('folder-sync.request', { ...state.input, origin: context.apiOrigin }, { signal: state.abort.signal });
             if (!value || typeof value !== 'object') throw unavailable();
             if (state.input.action === 'context') {
                 this.assertCurrent(state);
-                value.apiCapabilities = await this.capabilities(context, AbortSignal.any([state.abort.signal, AbortSignal.timeout(20_000)]));
+                value.apiCapabilities = apiCapabilities;
             }
             await verify();
             if (!value || typeof value !== 'object' || value.requestId !== input.requestId || value.ownerId !== input.ownerId ||
