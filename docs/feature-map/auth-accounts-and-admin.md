@@ -109,3 +109,11 @@ reasoning and tool-result replay through the real SDK against an HTTP fixture.
 ## Incoming mail
 
 See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## iOS release automation
+
+`api/utils/releases/iosRelease.ts` uses the existing admin integration secret,
+claim and audit stores. `iosReleaseCore.ts` validates the fixed release policy and
+Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
+immutable repository/owner, main workflow, event and source checks; it grants no
+admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).

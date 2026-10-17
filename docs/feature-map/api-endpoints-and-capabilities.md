@@ -391,3 +391,12 @@ Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 ## Incoming mail
 
 See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## iOS TestFlight delivery
+
+`api.integration-ios-release` 1.0.0 registers the production-only
+`POST /api/v1/integrations/ios-release` in both manifests and the Nitro import map.
+The native release script negotiates the origin manifest before requesting a
+single-use GitHub OIDC credential delivery or explicitly enabled create-only
+migration. No origin fallback is allowed. Run `test:ios-release`, capability and
+API fallback tests; see [the release runbook](../ios-automatic-testflight.md).

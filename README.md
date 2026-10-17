@@ -4676,3 +4676,13 @@ race. The connector integration can run with `--serve` for synthetic browser QA;
 never use its published fixture token for real mail. The production connector
 requires your own random token. Browser offline checks cover cached reading and
 search in an already loaded app; offline cold-launch of the whole app is separate.
+
+### Automatic iOS TestFlight publishing
+
+Native changes merged to `main` can publish tested, signed TestFlight builds with
+matching phone/Watch/widget versions. The existing GitHub credentials remain the
+initial source; an explicit one-time migration can move them into the encrypted
+admin Secure Vault, after which short-lived GitHub OIDC identities fetch only the
+Apple release bundle. See [setup, fork configuration, migration and release
+verification](docs/ios-automatic-testflight.md). No additional Vercel environment
+variables or permanent GitHub-to-vault password are required.
