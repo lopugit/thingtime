@@ -1,4 +1,6 @@
 import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
+import { SyncConflictReview } from './SyncConflictReview';
+import type { SyncConflict, SyncConflictChoice } from '~/fileSync/conflictResolution';
 import { Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Stack, Text, Textarea } from '@chakra-ui/react';
 import type { FolderHost } from '~/fileSync/desktopFolders.client';
 import { getNativeBridge } from '~/utils/nativeBridge';
@@ -118,6 +120,12 @@ function Connections({
 	});
 	const [transfers, setTransfers] = useState<Record<string, ForegroundSyncProgress & { message?: string }>>({});
 	const [activeTransfer, setActiveTransfer] = useState<string | null>(null);
+	const [fileReview, setFileReview] = useState<{
+		id: string;
+		conflicts: SyncConflict[];
+		apply(choices: SyncConflictChoice[]): void;
+		cancel(): void;
+	} | null>(null);
 	const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
 	const [connectionCursor, setConnectionCursor] = useState<string | null>(null),
 		[folderCursor, setFolderCursor] = useState<string | null>(null);
@@ -305,7 +313,24 @@ function Connections({
 									fetch: runtimeFetch,
 									requireCapability
 								},
-								progress: publish
+								progress: publish,
+								reviewConflicts: (conflicts) =>
+									new Promise<SyncConflictChoice[]>((resolve, reject) => {
+										const finish = (choices?: SyncConflictChoice[]) => {
+											active.signal.removeEventListener('abort', abort);
+											if (mounted.current) setFileReview(null);
+											if (active.signal.aborted) reject(active.signal.reason);
+											else if (choices) resolve(choices);
+											else reject(Error('Conflict review cancelled. Both folders were preserved.'));
+										};
+										const abort = () => finish();
+										active.signal.addEventListener('abort', abort, { once: true });
+										if (active.signal.aborted) {
+											abort();
+											return;
+										}
+										setFileReview({ id: saved.id, conflicts, apply: (choices) => finish(choices), cancel: () => finish() });
+									})
 							},
 							active.signal
 						);
@@ -476,7 +501,9 @@ function Connections({
 							{progress && (
 								<Text role="status" fontSize="12px" marginTop={1} overflowWrap="anywhere">
 									{running
-										? progress.stage === 'scanning'
+										? progress.stage === 'reviewing'
+											? 'Waiting for your conflict choices.'
+											: progress.stage === 'scanning'
 											? 'Checking both folders…'
 											: progress.stage === 'verifying'
 											? 'Verifying completed work…'
@@ -499,6 +526,14 @@ function Connections({
 							<Button size="sm" minHeight="40px" isDisabled={!allowed || busy || !!draft || !ready} onClick={() => transfer(saved)}>
 								{progress && progress.stage !== 'complete' ? 'Retry transfer' : twoWay ? 'Sync now' : downloading ? 'Download now' : 'Upload now'}
 							</Button>
+						)}
+						{fileReview?.id === saved.id && (
+							<SyncConflictReview
+								conflicts={fileReview.conflicts}
+								mode={saved.configuration.mode}
+								onApply={fileReview.apply}
+								onCancel={fileReview.cancel}
+							/>
 						)}
 					</Flex>
 				);

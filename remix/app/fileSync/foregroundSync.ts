@@ -1,4 +1,5 @@
 import type { LocalSyncTarget } from './localSyncTarget';
+import { resolveFileSyncConflicts, type SyncConflict, type SyncConflictChoice } from './conflictResolution';
 import { parseFileSyncConfiguration } from './configuration';
 import { planConfiguredFileSync, readOwnedFileSyncConfiguration, type SavedFileSyncConfiguration, type SyncConditions } from './configuredPlan';
 import { createSyncRun, executeSyncRun, type SyncRun } from './execute';
@@ -12,7 +13,7 @@ import type { openSyncJournal } from './journal.client';
 import { sameSyncScope, type SyncEntry, type SyncScope, type SyncBaseline } from './reconcile';
 
 export type ForegroundSyncProgress = {
-	stage: 'checking' | 'scanning' | 'transferring' | 'verifying' | 'complete';
+	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete';
 	confirmed: number;
 	total: number;
 	path?: string;
@@ -37,6 +38,7 @@ export async function runForegroundCloudSync(
 		journal: Awaited<ReturnType<typeof openSyncJournal>>;
 		runtime: CloudTransportRuntime;
 		progress(value: ForegroundSyncProgress): void;
+		reviewConflicts?(conflicts: SyncConflict[]): Promise<SyncConflictChoice[]>;
 	},
 	signal: AbortSignal
 ) {
@@ -177,12 +179,12 @@ export async function runForegroundCloudSync(
 			);
 	} else {
 		input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
-		const observed = await scan();
+		let observed = await scan();
 		// A completed run may have lost its checkpoint write. Fresh agreement can
 		// advance that baseline; divergent content retains the last common evidence.
 		baseline = advanceSyncBaseline(baseline, observed.local, observed.remote);
 		const conditions = await authorize();
-		const planned = planConfiguredFileSync({
+		let planned = planConfiguredFileSync({
 			saved: reviewed,
 			approval: approved,
 			...observed,
@@ -193,10 +195,30 @@ export async function runForegroundCloudSync(
 		});
 		if (planned.status !== 'ready') throw Error('Transfer conditions changed. Try again.');
 		const conflicts = planned.plan.decisions.filter((d) => d.kind === 'conflict');
-		if (conflicts.length)
+		if (conflicts.length && !input.reviewConflicts)
 			throw Error(
 				`${conflicts.length} sync conflict${conflicts.length === 1 ? '' : 's'} need review. Both copies were preserved. First: ${conflicts[0].path}`
 			);
+		if (conflicts.length) {
+			const reviewedConflicts = structuredClone(conflicts);
+			input.progress({ stage: 'reviewing', confirmed: 0, total: conflicts.length });
+			const choices = structuredClone(await input.reviewConflicts!(structuredClone(reviewedConflicts)));
+			check();
+			await authorize();
+			input.progress({ stage: 'scanning', confirmed: 0, total: 0 });
+			observed = await scan();
+			planned = planConfiguredFileSync({
+				saved: reviewed,
+				approval: approved,
+				...observed,
+				baseline,
+				localRootId: configuration.localRootId,
+				remoteFolderId: configuration.remoteFolderId,
+				conditions: await authorize()
+			});
+			if (planned.status !== 'ready') throw Error('Transfer conditions changed. Try again.');
+			planned = { status: 'ready', plan: resolveFileSyncConflicts(planned.plan, reviewedConflicts, choices, configuration.mode) };
+		}
 		run = {
 			...prepareCloudInventoryRun(createSyncRun(planned.plan), observed.inventory),
 			configuration,

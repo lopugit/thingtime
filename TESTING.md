@@ -10615,3 +10615,22 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   replay compares every frame; interrupted reads, short frames and loss after
   fsync leave only the old durable offset, and resume truncates extra tails.
 - [ ] Verify binary-capable physical devices and an older WebView chunk fallback.
+
+### Sync conflict review — 2026-10-17
+
+- [x] Open a conflicting connection, choose versions across pages, and verify
+  Apply stays disabled until every conflict has a valid choice. One-way modes
+  cannot reverse direction; folder/type/excluded conflicts cannot become deletes.
+- [x] Change either version, identity, content, settings or account while review
+  is pending; applying must refuse before writes. Cancellation preserves both
+  copies, and Stop transfer removes the pending review and releases the root lock.
+- [x] Lose an accepted chosen replacement response, reopen the journal and retry:
+  retain the same operation/choice without another upload or prompt. Real cloud
+  acceptance independently hashes both retained versions and checks stable IDs.
+- [x] Check long filenames, pagination and muted grey preservation reassurance
+  at 390px and 1280px without overflow; missing-copy conflicts refer to existing
+  data rather than claiming both versions exist.
+- [x] Installed Android two-way conflicts: Cancel, keep cloud, keep device,
+  independently verify both sides' hashes and repeat convergence after each.
+- [ ] Verify installed iOS/Mac review and physical devices; folder conflict
+  resolution, keep-both rename, retained-version browsing and restore controls.

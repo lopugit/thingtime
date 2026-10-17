@@ -315,3 +315,55 @@ test('native authorization cooldown does not spend the upcoming HTTP request dea
 	assert.equal(f.creates(), 1);
 	assert.ok(result.operations.every((operation) => operation.confirmed));
 });
+
+test('conflict review rechecks files, settings, identity and cancellation before recording any effects', async () => {
+	for (const change of ['local', 'remote', 'configuration', 'scope', 'abort', 'cancel']) {
+		const f = await fixture(), base = f.input(), signal = new AbortController();
+		let revision = 'r1', localVersion = 'v1', currentScope = scope;
+		const fp = (value: string) => ({ algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: value.repeat(64) });
+		const input = { ...base,
+			currentScope: () => currentScope,
+			scanLocal: async () => [{ path: 'same.bin', id: 'local', version: localVersion, kind: 'file' as const, size: 1, sha256: null, fingerprint: fp('a') }],
+			inventory: async () => ({ ...await base.inventory(), nodes: [{ kind: 'file' as const, path: 'same.bin', file: {
+				id: '11111111-1111-4111-8111-111111111111', revision, folderId: 'cloud-root', name: 'same.bin', trashed: false,
+				content: { attachmentId: 'attachment', version: 'b'.repeat(64), size: 1, fingerprint: fp('b') }
+			} }] }),
+			reviewConflicts: async (conflicts: any[]) => {
+				assert.equal(conflicts.length, 1); assert.equal(await f.journal().read(scope), null);
+				if (change === 'local') localVersion = 'v2';
+				if (change === 'remote') revision = 'r2';
+				if (change === 'configuration') f.change();
+				if (change === 'scope') currentScope = { ...scope, ownerId: 'other' };
+				if (change === 'abort') signal.abort();
+				if (change === 'cancel') throw Error('Review cancelled');
+				// The UI's copy cannot alter the exact snapshot retained by the runner.
+				conflicts[0].local.version = localVersion;
+				return [{ path: 'same.bin', from: 'local' as const }];
+			}
+		};
+		await assert.rejects(runForegroundCloudSync(saved, scope, input, signal.signal), /changed|cancelled|abort/i);
+		assert.equal(await f.journal().read(scope), null); assert.equal(f.creates(), 0); f.journal().close();
+	}
+});
+
+test('accepted conflict choices enter the existing durable run and retry never asks for a new choice', async () => {
+	const f = await fixture(), base = f.input();
+	const fp = (value: string) => ({ algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: value.repeat(64) });
+	let reviews = 0;
+	const persist = base.journal.persist;
+	const input = { ...base,
+		scanLocal: async () => [{ path: 'same.bin', id: 'local', version: 'v1', kind: 'file' as const, size: 1, sha256: null, fingerprint: fp('a') }],
+		inventory: async () => ({ ...await base.inventory(), nodes: [{ kind: 'file' as const, path: 'same.bin', file: {
+			id: '11111111-1111-4111-8111-111111111111', revision: 'r1', folderId: 'cloud-root', name: 'same.bin', trashed: false,
+			content: { attachmentId: 'attachment', version: 'b'.repeat(64), size: 1, fingerprint: fp('b') }
+		} }] }),
+		reviewConflicts: async () => { reviews++; return [{ path: 'same.bin', from: 'local' as const }]; },
+		journal: { ...base.journal, persist: async (run: any) => { await persist(run); throw Error('Stopped after durable journal'); } }
+	};
+	await assert.rejects(runForegroundCloudSync(saved, scope, input, new AbortController().signal), /durable journal/);
+	const before = await f.journal().read(scope);
+	assert.equal(before!.operations.length, 1);
+	assert.equal((before!.operations[0].mutation as any).expectedTarget.version, 'r1');
+	await assert.rejects(runForegroundCloudSync(saved, scope, input, new AbortController().signal), /durable journal/);
+	assert.equal(reviews, 1); assert.deepEqual(await f.journal().read(scope), before); f.journal().close();
+});

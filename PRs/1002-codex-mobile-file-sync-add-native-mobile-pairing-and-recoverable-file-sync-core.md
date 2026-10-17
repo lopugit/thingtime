@@ -1113,3 +1113,52 @@ still fails after 15 seconds, and foreground cancellation remains immediate
 between frames (at most 100 ms while waiting). No timeout or identity check is
 removed. The first run also caught an outdated test capability assertion,
 which now follows actual WebView binary support.
+
+## File conflict review and guarded choices — 2026-10-17
+
+Foreground sync now pauses at an explicit paginated conflict review. File choices
+copy the selected device/cloud version through the existing conditional writer;
+one-way connections retain their configured direction. A surviving file can be
+restored to an absent counterpart, but the review cannot authorize deletion,
+replace folders or bypass excluded descendants. Those conflicts remain visible
+for repair in the source folders. Existing native approval and cloud retained
+versions remain in force; restoration browsing and keep-both renaming are separate
+remaining work.
+
+Before applying choices, the runner reauthorizes the current account, device,
+settings and conditions, rescans both folders and requires every reviewed conflict
+to retain its exact identities, versions, content and reason. A changed or missing
+conflict refuses the entire selection before journal writes or effects. Accepted
+choices become ordinary immutable copy operations in the existing durable run;
+retry uses those same operations without asking for a different choice. No new
+schema, permission, storage collection or parallel history is introduced.
+
+All 116 shared checks pass, including stale-review races and durable choice
+recovery. The real local API test verifies cancellation/stale review without
+writes, an accepted choice with lost commit/reopen, no duplicate prompt/upload,
+stable file identity, exact hashes of both retained versions and repeat convergence.
+Its native adapter is synthetic. Browser checks exercise the production connection
+control with synthetic APIs: 22-conflict pagination, incomplete-choice gating,
+stale cloud revision refusal, Cancel review and Stop transfer. Measured 390px and
+1280px layouts have no horizontal overflow; the long filename wraps on the phone.
+Targeted TS/TSX ESLint passes; the existing ESLint parser does not support the
+`.mts` integration script (it fails on its pre-existing typed fetch declaration).
+Full TypeScript retains exactly the prior 91 diagnostics.
+
+Installed Android 15 / API 35 acceptance passed cancellation with unchanged cloud
+inventory and native entries, then separate cloud-winner and device-winner rounds
+through the real review controls. Both rounds independently hash native and cloud
+bytes and repeat sync without changing native entries. Settings reapproval,
+initial/replacement downloads and Android Files inspection also pass. The runner
+reports `OK (50 tests)` (48 executed, two opt-in restart cases skipped); 29 JVM
+checks, debug build and lint pass. The complete sequence transferred 12 binary
+ranges, 260 frames and 16,777,314 bytes with zero legacy appends. Edits are synthetic
+fixture setup in a real selected native folder, not external Files editor coverage.
+Fixture cleanup succeeded; accounted cloud versions remain in private Trash.
+Signed Mac, iOS and physical-device review acceptance remain pending.
+
+The review includes muted grey reassurance that ignoring the conflict preserves
+existing data in its current folders. It deliberately does not promise retrieval
+by a content ID before retained-version browsing exists. When one copy is missing,
+it refers to existing data rather than claiming two copies exist. The final copy
+was checked in the browser at 390px and 1280px, with no horizontal overflow.

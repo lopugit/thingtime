@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add paginated file conflict review to shared sync
+  controls. Explicit version choices recheck both folders and settings before
+  entering the existing recoverable transfer journal; stale reviews preserve both
+  copies. Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-17 — **Codex (AI)**: Android staging 1.1 negotiates bounded binary
   WebView download frames with one durable checkpoint per range, retaining
   identity, native-grant, replay and cancellation checks. Older WebViews keep

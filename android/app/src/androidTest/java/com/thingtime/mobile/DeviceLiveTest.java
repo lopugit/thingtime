@@ -161,6 +161,8 @@ public class DeviceLiveTest {
                 JSONArray repeated=verifyCloudBytes(context,scope,root,expected);assertEquals(replacedEntries.length(),repeated.length());
                 for(int i=0;i<repeated.length();i++)assertEquals(SyncStaging.canonical(replacedEntries.getJSONObject(i)),SyncStaging.canonical(repeated.getJSONObject(i)));
                 assertEquals(uploaded.getString("revision"),verifyUploadedBytes(web,cloud.getString("rootId"),edited).getString("revision"));
+                if("true".equals(InstrumentationRegistry.getArguments().getString("conflictReview")))
+                    expected=verifyFileConflicts(web,context,scope,root,fixture,expected,cloud.getString("rootId"),edited);
                 verifySettingsReapproval(web,context,scope,connection,root,expected,cloud.getString("rootId"));
                 System.out.println("TWO_WAY_SYNC_PASS: mixed cloud/native creates and independent edits, stable uploaded identity, exact downloaded and uploaded hashes, repeated convergence.");
             }
@@ -178,6 +180,53 @@ public class DeviceLiveTest {
             }
             if(connection!=null)webApi(web,"/api/v1/things?id="+connection,"DELETE",null);
         }
+    }
+    private static void assertSameEntries(JSONArray before,JSONArray after) throws Exception {
+        assertEquals(before.length(),after.length());
+        for(int i=0;i<before.length();i++)assertEquals(SyncStaging.canonical(before.getJSONObject(i)),SyncStaging.canonical(after.getJSONObject(i)));
+    }
+    private static JSONArray verifyFileConflicts(android.webkit.WebView web,Context context,DeviceScope scope,String root,ManagedFileStoreTest fixture,JSONArray expected,String cloudRoot,byte[] uploadedBytes) throws Exception {
+        for(int round=1;round<=2;round++) {
+            JSONArray initial=verifyCloudBytes(context,scope,root,expected);JSONObject old=null;
+            for(int i=0;i<initial.length();i++)if(initial.getJSONObject(i).getString("path").equals("hello.txt"))old=initial.getJSONObject(i);
+            assertNotNull(old);byte[] local=new byte[64+round];java.util.Arrays.fill(local,(byte)(91+round));
+            JSONObject edit=fixture.request("hello.txt",local,true);edit.getJSONObject("operation").getJSONObject("mutation").put("expectedTarget",old);fixture.publish(edit,local);
+            File changed=new File(context.getFilesDir(),"conflict-cloud-updated.json");Files.deleteIfExists(changed.toPath());
+            System.out.println("CONFLICT_CLOUD_EDIT_READY_"+round+": Run the cloud fixture conflict action and copy updated state into files/conflict-cloud-updated.json.");
+            long until=System.currentTimeMillis()+300000;while(!changed.exists()&&System.currentTimeMillis()<until)Thread.sleep(500);
+            assertTrue("Supply conflicting cloud bytes",changed.exists());JSONObject updated=new JSONObject(new String(Files.readAllBytes(changed.toPath()),StandardCharsets.UTF_8));Files.delete(changed.toPath());
+            assertEquals(scope.owner,updated.getString("ownerId"));assertEquals(scope.origin,updated.getString("origin"));assertEquals(cloudRoot,updated.getString("rootId"));
+            JSONArray cloudExpected=updated.getJSONArray("files"), localExpected=new JSONArray();
+            for(int i=0;i<cloudExpected.length();i++)localExpected.put(cloudExpected.getJSONObject(i).getString("path").equals("hello.txt")?expectedFile("hello.txt",local):cloudExpected.getJSONObject(i));
+            localExpected.put(expectedFile("from-device.bin",uploadedBytes));
+            JSONArray before=verifyCloudBytes(context,scope,root,localExpected);
+            String cloudBefore=inventorySignature(webApi(web,"/api/v1/files?rootId="+cloudRoot,"GET",null).getJSONObject("inventory"));
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Sync now'&&!b.disabled).click()");
+            awaitTrue(web,"!!document.querySelector('[aria-label=\"Review sync conflicts\"]')");
+            if(round==1) {
+                System.out.println("CONFLICT_REVIEW_CANCEL: Cancel review in the actual sync controls.");
+                awaitTrue(web,"document.body.innerText.includes('Conflict review cancelled')",300000);
+                assertEquals(cloudBefore,inventorySignature(webApi(web,"/api/v1/files?rootId="+cloudRoot,"GET",null).getJSONObject("inventory")));
+                JSONArray after=verifyCloudBytes(context,scope,root,localExpected);
+                assertSameEntries(before,after);
+                evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Retry transfer'&&!b.disabled).click()");
+                awaitTrue(web,"!!document.querySelector('[aria-label=\"Review sync conflicts\"]')");
+            }
+            System.out.println("CONFLICT_REVIEW_"+(round==1?"CLOUD":"DEVICE")+": Choose Keep "+(round==1?"cloud":"device")+" version for hello.txt and Apply choices and sync.");
+            awaitDownload(web);
+            expected=round==1?new JSONArray(cloudExpected.toString()).put(expectedFile("from-device.bin",uploadedBytes)):localExpected;
+            JSONArray resolved=verifyCloudBytes(context,scope,root,expected);
+            JSONObject current=null;JSONArray nodes=webApi(web,"/api/v1/files?rootId="+cloudRoot,"GET",null).getJSONObject("inventory").getJSONArray("nodes");
+            for(int i=0;i<nodes.length();i++)if(nodes.getJSONObject(i).getString("path").equals("hello.txt"))current=nodes.getJSONObject(i).getJSONObject("file");
+            assertNotNull(current);JSONObject expectedHello=null;for(int i=0;i<expected.length();i++)if(expected.getJSONObject(i).getString("path").equals("hello.txt"))expectedHello=expected.getJSONObject(i);
+            evaluate(web,"window.__conflictHash=null;fetch('/api/v1/attachments/content?id='+encodeURIComponent("+JSONObject.quote(current.getJSONObject("content").getString("attachmentId"))+")+ '&cache=bytes',{credentials:'same-origin'}).then(r=>{if(!r.ok)throw Error('read failed');return r.arrayBuffer()}).then(b=>crypto.subtle.digest('SHA-256',b)).then(b=>window.__conflictHash=Array.from(new Uint8Array(b),n=>n.toString(16).padStart(2,'0')).join(''))");
+            awaitTrue(web,"window.__conflictHash!==null");assertEquals(expectedHello.getString("sha256"),new JSONTokener(evaluate(web,"window.__conflictHash")).nextValue());
+            evaluate(web,"Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Sync now'&&!b.disabled).click()");
+            awaitTrue(web,"Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Stop transfer')");awaitDownload(web);
+            assertSameEntries(resolved,verifyCloudBytes(context,scope,root,expected));
+            System.out.println("CONFLICT_REVIEW_PASS_"+round+": native and cloud hashes agree after explicit choice; repeated sync preserves native entries.");
+        }
+        return expected;
     }
     private static void verifySettingsReapproval(android.webkit.WebView web,Context context,DeviceScope scope,String connection,String root,JSONArray expected,String remoteRoot) throws Exception {
         JSONArray before=verifyCloudBytes(context,scope,root,expected);

@@ -372,3 +372,10 @@ Android staging 1.1 uses `FolderRangeSource` and `mobileRangeFrames.ts` for
 nonce-bound, native-pulled binary WebView frames. `SyncStaging.appendRange`
 retains the lock and checkpoints once per bounded range; older WebViews fall
 back to staging 1.0. See the dated [sync ledger](../mobile-file-sync.md).
+
+`fileSync/conflictResolution.ts` binds explicit file choices to reviewed stamps
+and configured direction. `foregroundSync.ts` reauthorizes/rescans before the
+existing durable run is created. `Devices/SyncConflictReview.tsx` supplies the
+paginated review in `MobileSyncConnections`; cancellation/visibility changes
+release the waiting review. `conflictResolution.test.ts`, `foregroundSync.test.ts`
+and `file-sync-foreground.integration.mts` cover stale choices and receipt recovery.

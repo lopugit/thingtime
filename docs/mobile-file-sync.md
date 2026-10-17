@@ -84,12 +84,12 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction acceptance, Mac installed transfers, workers and full cross-device transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction simulator acceptance verified; iOS external Files edits, Mac installed transfers, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
-| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
+| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; mobile upload ranges, iOS streaming and sustained throughput remain pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
-| Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; restore/conflict UI and retention policy remain pending |
+| Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; file conflict review now offers guarded version choices; Android review acceptance verified; iOS/Mac review acceptance, folder conflicts, restore browsing and retention policy remain pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
 | Release and app acceptance | PR checks, reachable preview, built API smoke, browser desktop/mobile, signed Mac install, iOS simulator/device, Android emulator/device | Foundation checks only; app delivery pending |
 
@@ -1361,3 +1361,52 @@ still fails after 15 seconds, and foreground cancellation remains immediate
 between frames (at most 100 ms while waiting). No timeout or identity check is
 removed. The first run also caught an outdated test capability assertion,
 which now follows actual WebView binary support.
+
+## File conflict review and guarded choices — 2026-10-17
+
+Foreground sync now pauses at an explicit paginated conflict review. File choices
+copy the selected device/cloud version through the existing conditional writer;
+one-way connections retain their configured direction. A surviving file can be
+restored to an absent counterpart, but the review cannot authorize deletion,
+replace folders or bypass excluded descendants. Those conflicts remain visible
+for repair in the source folders. Existing native approval and cloud retained
+versions remain in force; restoration browsing and keep-both renaming are separate
+remaining work.
+
+Before applying choices, the runner reauthorizes the current account, device,
+settings and conditions, rescans both folders and requires every reviewed conflict
+to retain its exact identities, versions, content and reason. A changed or missing
+conflict refuses the entire selection before journal writes or effects. Accepted
+choices become ordinary immutable copy operations in the existing durable run;
+retry uses those same operations without asking for a different choice. No new
+schema, permission, storage collection or parallel history is introduced.
+
+All 116 shared checks pass, including stale-review races and durable choice
+recovery. The real local API test verifies cancellation/stale review without
+writes, an accepted choice with lost commit/reopen, no duplicate prompt/upload,
+stable file identity, exact hashes of both retained versions and repeat convergence.
+Its native adapter is synthetic. Browser checks exercise the production connection
+control with synthetic APIs: 22-conflict pagination, incomplete-choice gating,
+stale cloud revision refusal, Cancel review and Stop transfer. Measured 390px and
+1280px layouts have no horizontal overflow; the long filename wraps on the phone.
+Targeted TS/TSX ESLint passes; the existing ESLint parser does not support the
+`.mts` integration script (it fails on its pre-existing typed fetch declaration).
+Full TypeScript retains exactly the prior 91 diagnostics.
+
+Installed Android 15 / API 35 acceptance passed cancellation with unchanged cloud
+inventory and native entries, then separate cloud-winner and device-winner rounds
+through the real review controls. Both rounds independently hash native and cloud
+bytes and repeat sync without changing native entries. Settings reapproval,
+initial/replacement downloads and Android Files inspection also pass. The runner
+reports `OK (50 tests)` (48 executed, two opt-in restart cases skipped); 29 JVM
+checks, debug build and lint pass. The complete sequence transferred 12 binary
+ranges, 260 frames and 16,777,314 bytes with zero legacy appends. Edits are synthetic
+fixture setup in a real selected native folder, not external Files editor coverage.
+Fixture cleanup succeeded; accounted cloud versions remain in private Trash.
+Signed Mac, iOS and physical-device review acceptance remain pending.
+
+The review includes muted grey reassurance that ignoring the conflict preserves
+existing data in its current folders. It deliberately does not promise retrieval
+by a content ID before retained-version browsing exists. When one copy is missing,
+it refers to existing data rather than claiming two copies exist. The final copy
+was checked in the browser at 390px and 1280px, with no horizontal overflow.

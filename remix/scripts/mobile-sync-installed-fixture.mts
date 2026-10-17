@@ -8,7 +8,7 @@ import { cloudFileSyncEntry } from '../app/fileSync/cloudFile';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
 const [fixturePath, statePath, action] = process.argv.slice(2);
-assert.ok(fixturePath && statePath && ['prepare', 'replace', 'inspect', 'cleanup'].includes(action));
+assert.ok(fixturePath && statePath && ['prepare', 'replace', 'conflict', 'inspect', 'cleanup'].includes(action));
 assert.equal((await stat(fixturePath)).mode & 0o077, 0);
 const fixture = JSON.parse(await readFile(fixturePath, 'utf8')), base = new URL(fixture.base);
 assert.equal(base.protocol, 'http:'); assert.ok(['localhost', '127.0.0.1'].includes(base.hostname)); assert.equal(base.origin, fixture.base);
@@ -52,10 +52,11 @@ const scope = { origin: base.origin, ownerId: fixture.userId, dataPlane: 'home',
 const runtime = { currentScope: () => scope, origin: () => base.origin, fetch: sessionFetch, requireCapability: async (feature: string, version: string) => {
     const manifest = await api('/.well-known/thingtime-capabilities.json'); assert.ok(capabilitySatisfies(manifest.features[feature]?.version, version));
 } };
-if (action === 'prepare' || action === 'replace') {
-    const paths = action === 'prepare' ? ['hello.txt', 'nested/sample.bin'] : ['nested/sample.bin'];
+if (action === 'prepare' || action === 'replace' || action === 'conflict') {
+    if (action === 'conflict') state.conflictGeneration = (state.conflictGeneration ?? 0) + 1;
+    const paths = action === 'prepare' ? ['hello.txt', 'nested/sample.bin'] : action === 'conflict' ? ['hello.txt'] : ['nested/sample.bin'];
     for (const path of paths) {
-        const bytes = path === 'hello.txt' ? new TextEncoder().encode('Hello from cloud\n') : new Uint8Array(8 * 1024 * 1024 + (action === 'replace' ? 31 : 17)).fill(action === 'replace' ? 59 : 37);
+        const bytes = action === 'conflict' ? new Uint8Array(32 + state.conflictGeneration).fill(83 + state.conflictGeneration) : path === 'hello.txt' ? new TextEncoder().encode('Hello from cloud\n') : new Uint8Array(8 * 1024 * 1024 + (action === 'replace' ? 31 : 17)).fill(action === 'replace' ? 59 : 37);
         const source = { size: bytes.length, check: () => {}, read: async (offset: number, length: number) => bytes.slice(offset, offset + length) };
         const old = state.files.find((f: any) => f.path === path), before = old ? (await api('/api/v1/files?id=' + old.id, undefined, 'GET', true))?.file ?? null : null;
         const operation = { id: before ? randomUUID() : old?.id ?? randomUUID(), confirmed: false, mutation: { kind: 'copy' as const, from: 'local' as const, path,

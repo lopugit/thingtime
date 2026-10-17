@@ -169,6 +169,37 @@ try {
 	console.log(
 		'PASS: user-started configured upload; lost accepted commit and journal reopen; no byte reupload on retry; failed completion checkpoint; local edit recovered using immutable prior receipt; stable replacement and independent byte hash; repeat scan performs no upload.'
 	);
+	// A fresh device baseline sees divergent copies and must obtain a specific
+	// version choice. Use the real file API for replacement and retained bytes.
+	const retained = structuredClone(file), retainedBytes = bytes.slice();
+	const reviewFactory = new IDBFactory();
+	journal.close(); journal = await openSyncJournal(reviewFactory);
+	bytes = new Uint8Array([41, 42, 43, 44, 45, 46]); version = 'conflicting-local';
+	const beforeReview = puts;
+	await assert.rejects(runForegroundCloudSync(saved, scope, { ...input(), reviewConflicts: async () => { throw Error('Review cancelled'); } }, new AbortController().signal), /Review cancelled/);
+	assert.equal(await journal.read(scope), null); assert.equal(puts, beforeReview);
+	await assert.rejects(runForegroundCloudSync(saved, scope, { ...input(), reviewConflicts: async conflicts => {
+		assert.equal(conflicts[0].path, 'sample.bin'); version = 'changed-during-review';
+		return [{ path: 'sample.bin', from: 'local' }];
+	} }, new AbortController().signal), /changed during review/);
+	assert.equal(await journal.read(scope), null); assert.equal(puts, beforeReview);
+	let reviews = 0; lost = true;
+	const chosenInput = () => ({ ...input(), reviewConflicts: async () => { reviews++; return [{ path: 'sample.bin', from: 'local' as const }]; } });
+	await assert.rejects(runForegroundCloudSync(saved, scope, chosenInput(), new AbortController().signal), /Lost accepted commit/);
+	const chosen = (await journal.read(scope))!, afterChosen = puts;
+	journal.close(); journal = await openSyncJournal(reviewFactory);
+	const resumed = await runForegroundCloudSync(saved, scope, chosenInput(), new AbortController().signal);
+	assert.equal(resumed.id, chosen.id); assert.equal(reviews, 1); assert.equal(puts, afterChosen);
+	file = (await api('/api/v1/files?id=' + retained.id)).file;
+	assert.equal(file.id, retained.id); assert.notEqual(file.revision, retained.revision);
+	for (const [content, expected] of [[retained.content, retainedBytes], [file.content, bytes]] as const) {
+		const response = await sessionFetch(new URL('/api/v1/attachments/content?id=' + content.attachmentId + '&cache=bytes', base));
+		assert.equal(response.status, 200);
+		assert.equal(createHash('sha256').update(new Uint8Array(await response.arrayBuffer())).digest('hex'), createHash('sha256').update(expected).digest('hex'));
+	}
+	const repeat = await runForegroundCloudSync(saved, scope, chosenInput(), new AbortController().signal);
+	assert.equal(repeat.operations.length, 0); assert.equal(reviews, 1); assert.equal(puts, afterChosen);
+	console.log('PASS: conflict cancellation and stale review write nothing; chosen replacement survives lost commit/reopen without another choice or upload; stable identity, both retained byte hashes and repeat convergence. Native permissions are fixture adapters.');
 } finally {
 	try {
 		if (rootId) {

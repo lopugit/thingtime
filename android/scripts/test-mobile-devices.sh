@@ -7,6 +7,9 @@ picker_test="${THINGTIME_FOLDER_PICKER_TEST:-0}"
 offline_test="${THINGTIME_OFFLINE_FILES_TEST:-0}"
 download_state="${THINGTIME_OFFLINE_DOWNLOAD_STATE:-}"
 two_way="${THINGTIME_TWO_WAY_SYNC_TEST:-0}"
+conflict_review="${THINGTIME_CONFLICT_SYNC_TEST:-0}"
+[[ "$conflict_review" == 0 || "$conflict_review" == 1 ]] || { echo 'THINGTIME_CONFLICT_SYNC_TEST must be 0 or 1.' >&2; exit 1; }
+[[ "$conflict_review" == 0 || "$two_way" == 1 ]] || { echo 'Conflict acceptance requires two-way acceptance.' >&2; exit 1; }
 [[ "$two_way" == 0 || "$two_way" == 1 ]] || { echo 'THINGTIME_TWO_WAY_SYNC_TEST must be 0 or 1.' >&2; exit 1; }
 [[ "$two_way" == 0 || -n "$download_state" ]] || { echo 'Two-way acceptance requires THINGTIME_OFFLINE_DOWNLOAD_STATE.' >&2; exit 1; }
 if [[ -n "$download_state" ]]; then offline_test=1; fi
@@ -69,6 +72,7 @@ test_args=()
 if [[ "$offline_test" == 1 ]]; then
   test_args+=(-e offlineSelection true)
   if [[ "$two_way" == 1 ]]; then test_args+=(-e twoWaySync true); fi
+  if [[ "$conflict_review" == 1 ]]; then test_args+=(-e conflictReview true); fi
   if [[ -n "$download_state" ]]; then test_args+=(-e offlineDownload true); fi
   if [[ -n "$download_state" ]]; then
     echo 'Create Thingtime offline through the native New offline folder flow. Inspect it in Android Files when prompted.'

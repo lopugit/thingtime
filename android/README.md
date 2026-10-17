@@ -433,3 +433,17 @@ The full two-way sequence, including settings reapproval, passed on the Android
 opt-in process cases (`OK (48 tests)`), 26 JVM checks, debug build and lint.
 This confirms foreground behavior with synthetic fixtures; physical devices,
 throughput, background work and interrupted two-way restart remain open.
+
+### Installed conflict review acceptance
+
+Set `THINGTIME_CONFLICT_SYNC_TEST=1` alongside `THINGTIME_TWO_WAY_SYNC_TEST=1`
+and the existing offline-download state. The test uses the real shared controls
+and native selected folder. At each process-scoped `CONFLICT_CLOUD_EDIT_READY_N`
+prompt, run the existing fixture script with action `conflict`, then copy that
+same state to `files/conflict-cloud-updated.json` in the debug app. This replaces
+only the synthetic `hello.txt` through the normal upload/file APIs. Follow
+`CONFLICT_REVIEW_CANCEL`, `CONFLICT_REVIEW_CLOUD` and `CONFLICT_REVIEW_DEVICE` in
+the app, choosing the requested version and Apply choices and sync. The runner
+checks full native/cloud hashes and repeated convergence before continuing the
+saved-settings consent and Android Files checks. Keep all fixture state private;
+use the existing cleanup action afterward.

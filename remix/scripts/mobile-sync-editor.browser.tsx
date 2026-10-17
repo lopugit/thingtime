@@ -8,10 +8,11 @@ import { DesktopFolderAccess } from '../app/components/Devices/DesktopFolderAcce
 import { MobileFolderAccess } from '../app/components/Devices/MobileFolderAccess';
 import { nativeBridgeMessageEvent } from '../app/utils/nativeBridge';
 const desktop = new URLSearchParams(location.search).get('platform') === 'desktop';
+const conflictQA = new URLSearchParams(location.search).has('conflicts');
 const canonicalOrigin = 'https://desktop-sync.invalid';
 const ownerId = 'sync-ui-fixture',
 	deviceId = 'sync-ui-device',
-	databaseKey = 'tt:fixture:sync-editor-database';
+	databaseKey = 'tt:fixture:sync-editor-database' + (conflictQA ? ':conflicts' : '');
 let rows: any[] = JSON.parse(localStorage.getItem(databaseKey) || 'null') ?? [
 	{ id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } }
 ];
@@ -19,7 +20,16 @@ let transferFolders: any[] = JSON.parse(localStorage.getItem('tt:fixture:sync-tr
 let holdNextScan = false;
 let loseTransferReply = false,
 	network = 'wifi';
-const localEntries = [{ path: 'Upload sample', id: 'native-sample-folder', version: 'native-v1', kind: 'folder', size: 0, sha256: null }];
+const localEntries = conflictQA ? Array.from({ length: 22 }, (_, i) => ({ path: `Report-${String(i + 1).padStart(2, '0')}${i === 0 ? '-a-long-filename-for-review-on-a-small-phone-screen' : ''}.txt`,
+	id: `native-${i}`, version: 'local-1', kind: 'file', size: 3, sha256: null,
+	fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'a'.repeat(64) } }))
+	: [{ path: 'Upload sample', id: 'native-sample-folder', version: 'native-v1', kind: 'folder', size: 0, sha256: null }];
+let conflictRevision = 'cloud-1';
+if (conflictQA && !rows.some(row => row.thingtime.includes('file-sync'))) rows.push({
+	id: 'conflict-connection', updatedAt: '2026-10-17T00:00:00.000Z', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'],
+	crystal: { configurationVersion: 1, name: 'Conflicting documents', deviceId, localRootId: '11111111-1111-4111-8111-111111111111', remoteFolderId: 'cloud-documents',
+		mode: 'backup', paused: false, propagateDeletes: false, network: 'any', chargingOnly: false, excludedPaths: [] }
+});
 let roots = [{ id: '11111111-1111-4111-8111-111111111111', name: 'Project documents' }],
 	loseReply = false,
 	unavailable = false;
@@ -65,7 +75,10 @@ window.fetch = async function (this: unknown, input, init) {
 					complete: true,
 					rootId: url.searchParams.get('rootId'),
 					rootRevision: 'fixture-root-v1',
-					nodes: transferFolders.map((row) => ({ kind: 'folder', path: row.name, id: row.id, folderId: row.folderId, revision: row.revision }))
+					nodes: conflictQA ? localEntries.map((entry, i) => ({ kind: 'file', path: entry.path, file: {
+						id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`, revision: conflictRevision, name: entry.path, folderId: 'cloud-documents', trashed: false,
+						content: { attachmentId: `attachment-${i}`, version: 'b'.repeat(64), size: 4, fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } }
+					} })) : transferFolders.map((row) => ({ kind: 'folder', path: row.name, id: row.id, folderId: row.folderId, revision: row.revision }))
 				}
 			});
 		const folder = transferFolders.find((row) => row.id === url.searchParams.get('folderId'));
@@ -188,6 +201,7 @@ function Fixture() {
 				</Text>
 				<Text fontSize="12px">Synthetic API and native grants. No files are accessed or uploaded.</Text>
 				<Flex gap={2} wrap="wrap" marginY={3}>
+					{conflictQA && <Button size="sm" onClick={() => { conflictRevision += '-edited'; }}>Change conflicted cloud file</Button>}
 					<Button
 						size="sm"
 						onClick={() => {
