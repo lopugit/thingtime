@@ -182,3 +182,15 @@ retains explicit remote-only metadata and exact-version selected values through
 loopback API fixture; `test:lopu`, `test:sensitive-reveal`, `test:api-capabilities`
 and `test:local-workspace` include the corresponding unit contracts. Account
 Settings integration and conditional write synchronization remain unfinished.
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## iOS release automation
+
+`api/utils/releases/iosRelease.ts` uses the existing admin integration secret,
+claim and audit stores. `iosReleaseCore.ts` validates the fixed release policy and
+Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
+immutable repository/owner, main workflow, event and source checks; it grants no
+admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).

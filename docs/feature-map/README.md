@@ -36,3 +36,8 @@ Maps point at the canonical sources instead of repeating them:
 - "Registration" lists every place a new piece must be wired, in order.
 - "Tests" lists the `npm --prefix remix run <script>` entry points and the
   `TESTING.md` section to extend.
+
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.

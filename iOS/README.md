@@ -106,6 +106,13 @@ the root README. Do not put the `.p8` provider key in this Xcode project.
 
 Set `DEVELOPMENT_TEAM` in Xcode, CI, or `config/Base.xcconfig` for local signing. Do not commit personal signing credentials or secrets.
 
+## Automatic TestFlight releases
+
+Native pushes to `main` use the GitHub workflow, allocate a fresh build number,
+verify the embedded widget and signed App Groups, then wait for internal tester
+availability. See [automatic publishing and admin vault migration](../docs/ios-automatic-testflight.md)
+for setup, credential rotation, forks and first-release acceptance.
+
 ## TestFlight Upload
 
 The TestFlight lane expects App Store Connect and signing values from the

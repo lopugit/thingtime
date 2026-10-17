@@ -262,3 +262,11 @@ test('Claude discovery finds a runtime reference in an emitted chunk and rejects
 	await f.json(join(f.step, '.vc-config.json'), { runtime: 'nodejs22.x', handler: '../../../../../__server.func/index.js' });
 	await assert.rejects(claudeRuntimeFunctions(f.options.functionsRoot));
 });
+
+test('mail connector is the only HTTP loopback destination in the application CSP', async () => {
+  const { prodCsp, devCsp } = await import('./csp.mjs');
+  for (const policy of [prodCsp, devCsp]) {
+    assert.deepEqual(cspSources(policy, 'connect-src').filter((source) => source.startsWith('http:')), ['http://127.0.0.1:17879']);
+    assert(!cspSources(policy, 'script-src').includes('http://127.0.0.1:17879'));
+  }
+});

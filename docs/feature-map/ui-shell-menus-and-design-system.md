@@ -186,6 +186,10 @@ Things, Timeline, navigation and local-workspace suites. See the
 [History checkpoint](../local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)
 for cached-account versus authoritative anonymous coverage and remaining sync work.
 
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
 ## Settings sections
 
 `SettingsSection.tsx` is the shared, initially collapsed disclosure card for
