@@ -9966,3 +9966,5 @@ Automated regressions: `modelSync.test.ts`, `models.test.ts`,
 `models.route.test.ts`, `vercel-config.test.mjs`; existing Lopu streaming and
 model-selection suites cover the consuming surfaces. Live provider calls remain
 separate from deterministic discovery/lease tests.
+
+- Anthropic catalogue discovery: a dedicated ANTHROPIC_MODELS_API_KEY takes precedence over the legacy API key; neither reaches inference. A 401/403 shows a redacted credential hint and preserves prior availability. Raw provider bodies and credentials never enter sync reports.
