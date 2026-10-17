@@ -2,7 +2,8 @@ import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
-import { Binary, ObjectId, type ClientSession } from 'mongodb';
+import { Binary, ObjectId, BSON, type ClientSession } from 'mongodb';
+import type { ThemeSelection } from '../themes/themeSelectionContract';
 
 import {
 	ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
@@ -638,7 +639,7 @@ export const insertUser = async (
 // exceed realistic burst width
 const SECURE_CAS_ATTEMPTS = 20;
 type SecureMutateResult = 'mutated' | 'missing' | 'contended';
-const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void | Promise<void>, strict = false, session?: ClientSession): Promise<SecureMutateResult> => {
+const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload, stored: any) => void | Promise<void>, strict = false, session?: ClientSession): Promise<SecureMutateResult> => {
 	const things = await getThingsCollection();
 	const base = { shareId: String(userId), thingtime: 'user' } as any;
 	for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
@@ -647,7 +648,7 @@ const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayl
 		const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
 		const secure = strict ? strictVaultPayload((thing as any).secure) : unpackSecure((thing as any).secure);
 		if (!secure.meta) secure.meta = {};
-		await mutate(secure);
+		await mutate(secure, thing);
 		// guard on the exact version we read — a missing field guards on its absence
 		const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
 		const res = await things.updateOne(
@@ -1237,17 +1238,46 @@ export const removeUserDeploymentLink = async (
   return removed;
 };
 
-// Set (or clear, with null) the user's active theme shareId in meta.
-export const setUserActiveTheme = async (userId: string, themeShareId: string | null) => {
-	const result = await mutateUserThingSecure(userId, (s) => {
-		s.meta!.activeThemeId = themeShareId;
-	});
-	if (result === 'mutated') return;
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return;
-	await (
-		await getUsersCollection()
-	).updateOne({ _id: new ObjectId(userId) }, { $set: { 'meta.activeThemeId': themeShareId, updatedAt: new Date() } });
+export class ActiveThemeConflictError extends Error {
+ constructor() { super('The account theme selection changed. Keep your device choice for review.'); }
+}
+const themeSelectionId = (value: unknown): string | null => {
+ if (value === null || value === undefined) return null;
+ if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)) throw new Error('Saved theme selection is invalid.');
+ return value;
+};
+const themeSelectionVersion = (ownerId: string, stored: any) => {
+ if (BSON.calculateObjectSize(stored) > 1024 * 1024) throw new Error('Theme selection state exceeds the read limit.');
+ return 'theme-selection-v1:' + createHash('sha256').update(ownerId).update('\0').update(BSON.serialize(stored)).digest('hex');
+};
+/** Private projection. The opaque comparison includes the actual secure CAS
+ * preimage, but never discloses any secure fields or infers session authority. */
+export const readUserThemeSelection = async (userId: string, session?: ClientSession): Promise<ThemeSelection> => {
+ const things=await getThingsCollection();
+ const thing=await things.findOne({shareId:String(userId),thingtime:'user'} as any,{projection:{secure:1,secureVersion:1},...(session?{session}:{})});
+ if(thing)return {themeId:themeSelectionId(strictVaultPayload((thing as any).secure).meta?.activeThemeId),version:themeSelectionVersion(userId,thing)};
+ if(!ObjectId.isValid(userId))throw new ActiveThemeConflictError();
+ const legacy=await (await getUsersCollection()).findOne({_id:new ObjectId(userId)},{...(session?{session}:{})});
+ if(!legacy)throw new ActiveThemeConflictError();
+ return {themeId:themeSelectionId(legacy.meta?.activeThemeId),version:themeSelectionVersion(userId,legacy)};
+};
+
+// Normal and conditional selection changes share the same secure CAS writer.
+export const setUserActiveTheme = async (userId: string, themeShareId: string | null, options: {session?: ClientSession;expectedVersion?: string} = {}) => {
+ const result = await mutateUserThingSecure(userId, (s, stored) => {
+  if(options.expectedVersion !== undefined && themeSelectionVersion(userId,stored)!==options.expectedVersion)throw new ActiveThemeConflictError();
+  s.meta!.activeThemeId = themeShareId;
+ }, options.expectedVersion !== undefined, options.session);
+ if(result==='mutated')return;
+ if(result==='contended')throw new SecureWriteContendedError(userId);
+ if(!ObjectId.isValid(userId)){if(options.expectedVersion!==undefined)throw new ActiveThemeConflictError();return;}
+ const users=await getUsersCollection(),session=options.session;
+ if(options.expectedVersion!==undefined){
+  const before=await users.findOne({_id:new ObjectId(userId)},{...(session?{session}:{})});
+  if(!before||themeSelectionVersion(userId,before)!==options.expectedVersion)throw new ActiveThemeConflictError();
+  const result=await users.updateOne({_id:before._id,$expr:{$eq:['$$ROOT',{$literal:before}]}} as any,{$set:{'meta.activeThemeId':themeShareId,updatedAt:new Date()}},{...(session?{session}:{})});
+  if(result.matchedCount!==1)throw new ActiveThemeConflictError();
+ }else await users.updateOne({_id:new ObjectId(userId)},{$set:{'meta.activeThemeId':themeShareId,updatedAt:new Date()}},{...(session?{session}:{})});
 };
 
 // Clear the user's active theme pointer ONLY if it still points at the given

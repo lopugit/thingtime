@@ -127,3 +127,30 @@ test('theme sync repeats session admission before mutation and response disclosu
 	assert.equal(f.reads(), 1);
 	assert.ok(!(await response.text()).includes('themes'));
 });
+
+
+test('selection reads and writes retain admission and disclosure boundaries', async () => {
+ const selection = {themeId:null,version:'theme-selection-v1:'+'a'.repeat(64)};
+ const command = {themeId:null,expectedVersion:selection.version,writeId:'selection-1'};
+ for (const operation of ['selection','select']) {
+  const payload = {operation,expectedOwnerId:'owner',...(operation==='select'?{command}:{})};
+  for (const expiration of [1,2,3,99]) {
+   let resolved=0,calls=0;
+   const f=fixture({resolveTokenUser:async()=>++resolved>=expiration?null:account,
+    readUserThemeSelection:async owner=>{assert.equal(owner,'owner');calls++;return selection;},
+    synchronizeThemeSelection:async(owner,plane,raw,admit)=>{assert.equal(owner,'owner');assert.equal(plane,'home');assert.deepEqual(raw,command);await admit();calls++;return {...command,result:selection};}
+   });
+   const response=await f.run({request:request(payload)});
+   const success=expiration>(operation==='select'?3:2);
+   assert.equal(response.status,success?200:401);
+   assert.equal(calls,expiration===1 || (operation==='select'&&expiration===2)?0:1);
+   const result=await response.json();
+   if(success) assert.deepEqual(operation==='select'?result.acknowledgment.result:result.selection,selection);
+   else assert.ok(!JSON.stringify(result).includes('theme-selection-v1'));
+  }
+  for(const headers of [{Origin:'https://foreign.example'},{'X-Thingtime-Expected-Data-Plane':'custom-'+ 'a'.repeat(64)}]) {
+   const f=fixture({readUserThemeSelection:async()=>assert.fail('Unauthorized read'),synchronizeThemeSelection:async()=>assert.fail('Unauthorized write')});
+   assert.ok([403,409].includes((await f.run({request:request(payload,headers)})).status));
+  }
+ }
+});

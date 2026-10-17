@@ -1,3 +1,4 @@
+import { AccountThemeSelection } from './themeSelection';
 import { LocalThemes, type LocalThemeInput } from './themes';
 import type { LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
@@ -91,6 +92,7 @@ export function parseAccountThemeSnapshot(input: unknown): AccountThemeSnapshot[
  * account-only adapter adds scoped retry metadata, never a second content store. */
 export class AccountThemeSync {
 	readonly themes: LocalThemes;
+	readonly selection: AccountThemeSelection;
 	constructor(
 		private db: WorkspaceDatabase,
 		private scope: Scope,
@@ -99,12 +101,16 @@ export class AccountThemeSync {
 		private uuid = () => crypto.randomUUID()
 	) {
 		if (scope.kind !== 'account') throw new WorkspaceError('ACCOUNT_REQUIRED', 'Anonymous themes never synchronize.', 403);
+		this.selection = new AccountThemeSelection(db, scope, lease, now, uuid);
 		this.themes = new LocalThemes(db, lease, {
 			scope,
 			now,
 			uuid,
 			onWrite: (tx, row, previous, input) => this.mutated(tx, row, previous, input),
-			onActive: (tx) => this.bump(tx)
+			onActive: async (tx, id) => {
+				await this.selection.setIn(tx, id);
+				await this.bump(tx);
+			}
 		});
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, signal?: AbortSignal) {
@@ -345,7 +351,12 @@ export class AccountThemeSync {
 					const row = await tx.get<State>(collection, claimed.id);
 					if (row?.claim?.token !== claimed.claim!.token) return;
 					const status = Number((error as any)?.status),
-						state: SyncState = status === 409 ? 'conflict' : [400, 401, 403, 404, 410, 413, 422].includes(status) ? 'error' : 'pending';
+						state: SyncState =
+							status === 409 && !['WORKSPACE_CHANGED', 'ACCOUNT_UNCONFIRMED'].includes((error as any)?.code)
+								? 'conflict'
+								: [400, 401, 403, 404, 410, 413, 422].includes(status)
+								? 'error'
+								: 'pending';
 					await tx.put(collection, row.id, {
 						...row,
 						claim: undefined,
@@ -435,7 +446,10 @@ export class AccountThemeSync {
 					};
 					await tx.put('things', copyId, copy);
 					await this.mutated(tx, copy, null, { visibility: 'private' });
-					if ((await tx.get('settings', 'active-theme')) === row.id) await tx.put('settings', 'active-theme', copyId);
+					if ((await tx.get('settings', 'active-theme')) === row.id) {
+ await tx.put('settings', 'active-theme', copyId);
+ await this.selection.setIn(tx, copyId);
+ }
 				}
 				if (keep === 'remote' || independent) {
 					if (remote) await this.install(tx, remote, row);
@@ -444,7 +458,10 @@ export class AccountThemeSync {
 							return fail('Keep related device Things before removing this theme.');
 						await tx.delete('things', row.id);
 						await tx.delete(collection, row.id);
-						if ((await tx.get('settings', 'active-theme')) === row.id) await tx.delete('settings', 'active-theme');
+						if ((await tx.get('settings', 'active-theme')) === row.id) {
+ await tx.delete('settings', 'active-theme');
+ await this.selection.setIn(tx, null);
+ }
 					}
 				} else {
 					if (!remote && !local) {

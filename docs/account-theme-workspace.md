@@ -1,9 +1,10 @@
 # Account theme device workspace
 
-The device adapter is implemented; normal Theme Studio wiring and active-theme
-selection synchronization remain pending. This is one part of the incomplete
-[local workspace rollout](local-workspaces.md), not a claim that account themes
-already work offline through every application screen.
+Theme Studio now uses the device adapter for account saves, deletes and selected
+theme changes. Each commits locally; content and selection have independent
+background senders. This is one part of the incomplete
+[local workspace rollout](local-workspaces.md). Account transfer, protected local
+History and the wider feature matrix remain integration gates.
 
 `local-workspace/accountThemes.ts` wraps the existing `LocalThemes` writer with
 an account/origin/data-plane scope. Theme content stays in the same local Things
@@ -75,13 +76,54 @@ It does not accept a production URL. Artifact output includes a validated
 `theme.transfer.json` and value-free verification summary. This test uses the
 actual HTTP API with an IndexedDB fixture; it is not native browser UI acceptance.
 
+## Active selection and native UI — 2026-10-17
+
+`api.themes-sync` 1.1.0 adds `selection` and `select`. The normal secure account
+writer uses an opaque version of the actual stored preimage. Selection changes
+and immutable Timeline receipts commit together. Retrying a receipt never
+reapplies an old choice after another normal writer or theme deletion.
+The route retains full-session, owner, selected-plane, same-origin and rate
+admission before mutation and response disclosure. Clients negotiate 1.1.0
+before selection operations; catalogue writes retain the 1.0.1 minimum.
+
+The account workspace worker retains the catalogue and pointer independently.
+Local applying does not wait for theme creation on the server. A new selection
+waits for its theme's remote identity only in the background; an uncertain
+previous command replays before a later desired choice. Content conflicts offer
+exact review, keep-device/account choices and an independent private copy.
+Selection has separate review and retry. Copying an active theme also queues
+its remapped selection. Unknown results cannot be discarded through review.
+
+Theme Studio keys state to workspace identity, refreshes on scoped cross-tab
+changes, preserves usable lists on errors and defaults new saves to private.
+It only offers a public share link after synchronization. ThemeHost picks up
+retained selected content through the same local facade rather than requiring
+an online public-theme read. Existing customizations remain intact.
+
+Local verification for this increment: full local workspace suite 506 passing
+with 57 opt-in skips, plus four shell checks; server/capability subset 68 passing
+with three opt-in skips. The real selection API fixture passed explicitly.
+There were 38 focused device/facade/auth/route
+checks passed; TypeScript retained the same 91 prior diagnostic signatures.
+The native browser fixture passed offline save/apply/cold reload, independent
+private content/selection synchronization, native deletion, no offline mutation
+requests, no page errors, and 1440/390/320px screenshots and width measurements.
+The earlier real selection API fixture also covered concurrent retries, changed
+normal selections, immutable write IDs, selected-theme deletion and stale writes.
+These are local results, not CI or deployment acceptance.
+
+Run the browser fixture against the built isolated app with
+`TT_ACCOUNT_THEMES_URL`, `TT_ACCOUNT_THEMES_ARTIFACTS`,
+`TT_SHARED_PLAYWRIGHT_PATH`, and optional `TT_SHARED_CHROME_PATH`:
+
+```sh
+node --import tsx --test app/local-workspace/accountThemes.browser.test.ts
+```
+
 ## Remaining integration
 
-Bind the adapter and its independent sender to the existing account workspace
-worker; retain local list state during catalogue refresh and show errors/retries.
-Wire the normal Theme Studio to those methods and scoped cross-tab invalidation.
-Complete active-theme selection synchronization, conflict controls, account
-transfer integration and protected local History through the existing shared
-contracts. Verify actual offline create/edit/apply/delete/cold reload, narrow
-layouts, identity transitions and reconnect through the native browser UI.
-Current-head CI, deployed verification and the wider rollout remain separate gates.
+Complete account theme transfer and protected local History through the existing
+shared contracts. Expand native acceptance to editing, conflict comparison,
+private copies and identity transitions. Check public/shared gallery retention
+and selection, not just the owned catalogue. Reconcile latest main and verify
+current-head CI and a real deployment before the wider rollout can merge.

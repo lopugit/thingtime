@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type ClientSession } from 'mongodb';
 
 import type { TtTheme } from '../../../theme/tokens';
 import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../../../theme/savedTheme';
@@ -82,7 +82,7 @@ const themeThingToDoc = (thing: any): any => ({
   updatedAt: thing.updatedAt
 });
 
-const findThemeThing = async (filter: Record<string, unknown>) => (await getThingsCollection()).findOne({ thingtime: 'theme', ...filter } as any);
+const findThemeThing = async (filter: Record<string, unknown>, session?: ClientSession) => (await getThingsCollection()).findOne({ thingtime: 'theme', ...filter } as any, { ...(session ? { session } : {}) });
 
 type SaveThemeInput = {
   id?: unknown;
@@ -341,25 +341,25 @@ export const listPublicThemes = async (limit: number = MAX_GALLERY_THEMES): Prom
 
 // Public shared read — only returns public themes; 'not found' for private
 // ones so their existence isn't revealed.
-export const getSharedTheme = async (shareId: string): Promise<PublicTheme | null> => {
+export const getSharedTheme = async (shareId: string, session?: ClientSession): Promise<PublicTheme | null> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return null;
   // acl containment IS the public gate at the DB level (array match on
   // 'tt:all'), mirroring the legacy visibility:'public' filter — a private
   // theme thing (acl ['tt:user']) can never match this query.
-  const thing = await findThemeThing({ shareId: shareId.trim(), acl: ACL_ALL });
+  const thing = await findThemeThing({ shareId: shareId.trim(), acl: ACL_ALL }, session);
   if (thing) return toPublicTheme(themeThingToDoc(thing));
   const themes = await getThemesCollection();
-  const doc = await themes.findOne({ shareId: shareId.trim(), visibility: 'public' });
+  const doc = await themes.findOne({ shareId: shareId.trim(), visibility: 'public' }, { ...(session ? { session } : {}) });
   return doc ? toPublicTheme(doc) : null;
 };
 
 // Owner read — a user can always fetch their own theme by id (any visibility).
-export const getOwnedTheme = async (ownerId: string, shareId: string): Promise<PublicTheme | null> => {
+export const getOwnedTheme = async (ownerId: string, shareId: string, session?: ClientSession): Promise<PublicTheme | null> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return null;
-  const thing = await findThemeThing({ shareId: shareId.trim(), ownerId });
+  const thing = await findThemeThing({ shareId: shareId.trim(), ownerId }, session);
   if (thing) return toPublicTheme(themeThingToDoc(thing));
   const themes = await getThemesCollection();
-  const doc = await themes.findOne({ shareId: shareId.trim(), ownerId });
+  const doc = await themes.findOne({ shareId: shareId.trim(), ownerId }, { ...(session ? { session } : {}) });
   return doc ? toPublicTheme(doc) : null;
 };
 

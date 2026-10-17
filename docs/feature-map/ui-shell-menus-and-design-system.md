@@ -207,3 +207,10 @@ with keyboard and pointer, checks cold offline reload, and compares unchanged
 authored records plus refreshed byte accounting while native editor-tree
 preferences initialize. See `storage.browser.test.ts` and the PR #1000 upstream
 integration note for 1440/390/320px coverage.
+
+Account Theme Studio now uses the same local theme writer with independent
+content/selection queues in `accountApi.client.ts`. `AccountThemeSyncStatus`
+provides retries and exact conflict comparisons. ThemeStudio keys its state by
+workspace identity; ThemeHost uses retained content before network refresh.
+See [account theme coverage](../account-theme-workspace.md) for native browser
+fixtures, unresolved transfer/History integration and verification boundaries.

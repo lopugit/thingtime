@@ -3823,3 +3823,13 @@ This is the server prerequisite. Account theme queues, active-selection sync,
 conflict UI, account algorithm sync and protected local History remain unfinished;
 the ordinary account theme UI is not yet an offline implementation. No merge or
 deployed verification is claimed by these local checks.
+
+### Account theme UI checkpoint — 2026-10-17
+
+Theme Studio account saves, deletion and active selection now commit on-device
+through the existing theme writer, with independent background sync workers.
+Private content and selection replay use the existing same-origin/owner/plane
+admission. Native offline save/apply/cold reload and reconnect passed locally
+at 1440/390/320px. Account transfer, protected theme History, broader gallery
+retention, conflict/identity browser acceptance and final deployment gates remain
+open. See [account theme workspace](account-theme-workspace.md).

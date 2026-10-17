@@ -1,3 +1,10 @@
+import {
+	parseThemeSelection,
+	parseThemeSelectionWrite,
+	parseThemeSelectionAcknowledgment,
+	type ThemeSelectionWrite
+} from '../api/utils/themes/themeSelectionContract';
+import type { ThemeSelectionTransport } from './themeSelection';
 import { parseThemeWrite, parseThemeWriteAcknowledgment, type ThemeWrite } from '../api/utils/themes/themeSyncContract';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
 import { EXPECTED_ACTOR_HEADER } from '../api/utils/auth/expectedActor';
@@ -10,8 +17,15 @@ import { parseAccountThemeSnapshot, type AccountThemeTransport } from './account
 
 /** Cached account theme content never authorizes a request. Every operation
  * negotiates the selected same origin and rechecks the current remote lease. */
-export function accountThemeTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>, lease: WorkspaceLease): AccountThemeTransport {
-	const request = async (operation: 'snapshot' | 'write', command: ThemeWrite | undefined, signal: AbortSignal) => {
+export function accountThemeTransport(
+	scope: Extract<WorkspaceScope, { kind: 'account' }>,
+	lease: WorkspaceLease
+): AccountThemeTransport & ThemeSelectionTransport {
+	const request = async (
+		operation: 'snapshot' | 'write' | 'selection' | 'select',
+		command: ThemeWrite | ThemeSelectionWrite | undefined,
+		signal: AbortSignal
+	) => {
 		lease.assertCurrent();
 		const remote = accountRemoteWorkspaceLease(scope);
 		remote.assertCurrent();
@@ -20,7 +34,7 @@ export function accountThemeTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		const combined = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(20_000)]);
 		try {
 			if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed.', 409);
-			await requireThingtimeCapability('api.themes-sync', '1.0.1');
+			await requireThingtimeCapability('api.themes-sync', operation === 'selection' || operation === 'select' ? '1.1.0' : '1.0.1');
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();
 			remote.assertCurrent();
@@ -32,7 +46,11 @@ export function accountThemeTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 				redirect: 'error',
 				signal: combined,
 				headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane },
-				body: JSON.stringify({ operation, expectedOwnerId: scope.ownerId, ...(command ? { command: parseThemeWrite(command) } : {}) })
+				body: JSON.stringify({
+					operation,
+					expectedOwnerId: scope.ownerId,
+					...(command ? { command: operation === 'select' ? parseThemeSelectionWrite(command) : parseThemeWrite(command) } : {})
+				})
 			});
 			let result: any = null;
 			try {
@@ -66,6 +84,8 @@ export function accountThemeTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		}
 	};
 	return {
+		selection: async (signal) => parseThemeSelection((await request('selection', undefined, signal)).selection),
+		select: async (command, signal) => parseThemeSelectionAcknowledgment((await request('select', command, signal)).acknowledgment),
 		snapshot: async (signal) => {
 			const result = await request('snapshot', undefined, signal);
 			if (result.complete !== true)

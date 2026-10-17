@@ -1,7 +1,9 @@
 import React from 'react';
 
 import { useThingtime } from '../Thingtime/useThingtime';
-import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { useApi } from '../../hooks/useApi';
+import { rootIdentity } from '../../utils/rootIdentity';
+import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey, subscribeWorkspaceIdentity } from '../../local-workspace/runtime.client';
 import { useTtTheme } from '../../hooks/useTtTheme';
 import { buildCustomCss } from '../../theme/customise';
 import {
@@ -33,7 +35,8 @@ const googleFontsHref = (families: string[]) =>
 export const ThemeHost = () => {
 	const { theme, preset, hasOverrides, appliedThemeShareId, applyThemeDoc, custom } = useTtTheme();
 	const { loading } = useThingtime();
-	const user = useCurrentUser();
+	const api = useApi(), apiRef = React.useRef(api); apiRef.current = api;
+ const identity = React.useSyncExternalStore(subscribeWorkspaceIdentity, workspaceIdentityKey, () => '');
 
 	// Per-option custom CSS (the customise popovers) — scoped to each option's
 	// registered selector and injected as one stylesheet. Personal only; never
@@ -54,39 +57,28 @@ export const ThemeHost = () => {
 		if (styleEl.textContent !== customCss) styleEl.textContent = customCss;
 	}, [customCss]);
 
-	// Cross-device pickup: when the user has an active saved theme and this
-	// device's theme settings are still pristine defaults, apply it once.
-	// One attempt per app load per user — otherwise a stale user.activeThemeId
-	// (before root-data revalidation) would fight a just-picked preset.
-	const syncAttemptedForRef = React.useRef<string | null>(null);
-	const pristine = preset === 'Thingtime' && !hasOverrides && !appliedThemeShareId;
-	const activeThemeId = user?.activeThemeId;
-	const userId = user?.id;
-	React.useEffect(() => {
-		if (loading || !userId || syncAttemptedForRef.current === userId) return;
-		syncAttemptedForRef.current = userId;
-		if (!activeThemeId || !pristine) return;
-		let cancelled = false;
-		(async () => {
-			try {
-				const response = await fetch(
-					`/api/v1/themes/shared?id=${encodeURIComponent(activeThemeId)}`,
-					{ credentials: 'include' },
-				);
-				if (!response.ok) return;
-				const data = await response.json();
-				if (!cancelled && data?.theme?.theme) {
-					applyThemeDoc(data.theme.theme, { shareId: data.theme.id });
-				}
-			} catch (error) {
-				// best-effort — defaults stay
-			}
-		})();
-		return () => {
-			cancelled = true;
-		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [loading, userId, activeThemeId, pristine]);
+ // Use retained device content first. A failed remote refresh must not erase
+ // local customizations or make offline boot depend on the public theme route.
+ const pristine = preset === 'Thingtime' && !hasOverrides && !appliedThemeShareId;
+ const attempted = React.useRef<string | null>(null);
+ React.useEffect(() => {
+  if (loading || !identity || attempted.current === identity) return;
+  if (!pristine) { attempted.current = identity; return; }
+  let cancelled = false, request = 0;
+  const generation = rootIdentity.read().generation;
+  const pickUp = async () => {
+   const turn = ++request;
+   try {
+    const result = await apiRef.current.v1.themes.list();
+    if (cancelled || turn !== request || generation !== rootIdentity.read().generation) return;
+    const saved = result?.themes?.find((entry: any) => entry.id === result.activeThemeId);
+    if (saved?.theme) { attempted.current = identity; applyThemeDoc(saved.theme, {shareId: saved.id}); }
+   } catch { /* Keep the existing look; a later workspace refresh can retry. */ }
+  };
+  void pickUp(); window.addEventListener(LOCAL_WORKSPACE_CHANGED, pickUp);
+  return () => { cancelled = true; request++; window.removeEventListener(LOCAL_WORKSPACE_CHANGED, pickUp); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ }, [loading, identity, pristine]);
 
 	const vars = React.useMemo(() => themeToCssVars(theme), [theme]);
 	const snapshotTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);

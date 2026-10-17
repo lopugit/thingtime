@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17: Account Theme Studio saves and selection now finish on-device with
+  independent remote sync, exact conflict review and private copies. Local native
+  offline/reconnect checks passed at desktop/390/320px; wider rollout remains
+  incomplete. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
 - 2026-10-17: Add conditional home-plane theme sync prerequisites, durable retry receipts, transactional theme quota and selected-theme deletion cleanup. Extend provider account-switch acceptance. Local API checks only; full local-first rollout remains gated by [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
 - 2026-10-17 — **Codex (AI)**: Account provider Settings now saves in the

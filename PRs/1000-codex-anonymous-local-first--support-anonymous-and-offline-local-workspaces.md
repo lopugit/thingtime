@@ -3181,3 +3181,18 @@ the ordinary account theme UI is not yet an offline implementation. No merge or
 deployed verification is claimed by these local checks.
 
 Live API assertions recorded: 36. Evidence: `tmp/theme-sync-api/verification.json`, `tmp/theme-sync-quota/quota-verification.json`.
+
+### 2026-10-17 — Native account themes and independent selection
+
+Added a conditional selected-theme contract to the existing theme-sync route
+and canonical secure writer, with transactional immutable Timeline receipts.
+Wired device saves/deletes/apply into normal Theme Studio and separate worker
+loops; exact conflict controls preserve copies privately. The native browser
+fixture passed offline save/apply/cold reload, private content and selection
+convergence, deletion, and desktop/390/320px layout. No offline mutation requests
+or page errors. Focused tests: 38 passing; TypeScript: unchanged 91 signatures.
+
+Remaining: protected theme History/account transfer and expanded browser
+conflict/identity acceptance; latest-main reconciliation and current-head CI /
+deployed verification. The earlier semantic graph run completed but failed its
+historical source-hash check; do not use it as current semantic evidence.

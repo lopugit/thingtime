@@ -1,3 +1,5 @@
+import { AccountThemeSync } from './accountThemes';
+import { accountThemeTransport } from './themeTransport.client';
 import { TimelineNameQueue } from '../timeline/nameQueue';
 import { AccountTimelineVersions } from './accountTimelineVersions';
 import type { VersionRequest } from '../timeline/publishedVersion';
@@ -48,6 +50,8 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
 	const drafts = new AccountDraftSync(db, scope, lease, files.draftHooks), catalog = new AccountDraftCatalog(db, scope, lease);
 	const discussions = new AccountDiscussionCache(db, scope, lease);
+ const themes = new AccountThemeSync(db,scope,lease), themeTransport = accountThemeTransport(scope,lease);
+ const themeErrors = {catalog: '', selection: ''};
 	const controller = new AbortController();
 	const fileRetentionErrors = new Map<string, string>();
  let historyBackend: IndexedDbTimelineBackend | null = null;
@@ -76,9 +80,35 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 		const waits = pending.map(row => row.retryAt - Date.now()).filter(wait => wait > 0);
 		return result.completed ? 0 : waits.length ? Math.min(...waits) : BLOCKED_RETRY_MS;
 	});
+ let themeRead:Promise<void>|null=null,selectionRead:Promise<void>|null=null,themeReadAt=0,selectionReadAt=0;
+ const refreshThemes=(force=false):Promise<void>=>{
+  if(stopped||navigator.onLine===false||!canSyncAccountWorkspace(scope))return Promise.resolve();
+  if(themeRead)return themeRead;if(!force&&Date.now()-themeReadAt<30_000)return Promise.resolve();themeReadAt=Date.now();
+  themeRead=themes.refresh(themeTransport,controller.signal).then(changed=>{lease.assertCurrent();const error=themeErrors.catalog;themeErrors.catalog='';if(changed||error)announceLocalWorkspaceChange();}).catch(()=>{lease.assertCurrent();const error='Account themes could not be refreshed. Device saves are still available.';if(themeErrors.catalog!==error){themeErrors.catalog=error;announceLocalWorkspaceChange();}}).finally(()=>{themeRead=null;});return themeRead;
+ };
+ const refreshThemeSelection=(force=false):Promise<void>=>{
+  if(stopped||navigator.onLine===false||!canSyncAccountWorkspace(scope))return Promise.resolve();
+  if(selectionRead)return selectionRead;if(!force&&Date.now()-selectionReadAt<30_000)return Promise.resolve();selectionReadAt=Date.now();
+  selectionRead=themes.selection.refresh(themeTransport,controller.signal).then(changed=>{lease.assertCurrent();const error=themeErrors.selection;themeErrors.selection='';if(changed||error)announceLocalWorkspaceChange();}).catch(()=>{lease.assertCurrent();const error='Account theme selection could not be refreshed. This device keeps its choice.';if(themeErrors.selection!==error){themeErrors.selection=error;announceLocalWorkspaceChange();}}).finally(()=>{selectionRead=null;});return selectionRead;
+ };
+ const themeSelectionPump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(scope),async()=>{
+  const before=JSON.stringify(await themes.selection.status());
+  let result;
+  try { result=await themes.selection.sync(themeTransport,async id=>!!(await themes.status()).find(row=>row.id===id)?.baseVersion,controller.signal); }
+  catch { lease.assertCurrent(); return BLOCKED_RETRY_MS; }
+  const row=await themes.selection.status();
+  if(JSON.stringify(row)!==before)announceLocalWorkspaceChange();
+  return row&&['pending','syncing'].includes(row.state)?result.completed?0:Math.max(1000,row.retryAt>Date.now()?row.retryAt-Date.now():BLOCKED_RETRY_MS):null;
+ });
+ const themePump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(scope),async()=>{
+  const before=JSON.stringify(await themes.status()),result=await themes.sync(themeTransport,controller.signal),rows=await themes.status();
+  if(JSON.stringify(rows)!==before)announceLocalWorkspaceChange();if(result.completed)themeSelectionPump.wake();
+  const pending=rows.filter(row=>['pending','syncing'].includes(row.state)),waits=pending.map(row=>row.retryAt-Date.now()).filter(wait=>wait>0);
+  return pending.length?result.completed?0:waits.length?Math.min(...waits):BLOCKED_RETRY_MS:null;
+ });
 	const wake = () => {
 		if (stopped || navigator.onLine === false || !canSyncAccountWorkspace(scope)) return;
-		draftPump.wake();
+		draftPump.wake();themePump.wake();themeSelectionPump.wake();void refreshThemes().catch(()=>{});void refreshThemeSelection().catch(()=>{});
 		if (running) { wakeRequested = true; return; }
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => { timer = null; void drain(); }, 0);
@@ -123,12 +153,12 @@ function createWorker(scope: AccountScope, dispose: () => void) {
 	const unbind = subscribeWorkspaceBinding(wake);
 	const stop = () => {
 		if (stopped) return;
-		stopped = true; controller.abort(); void historyBackend?.close().catch(() => {}); draftPump.stop(); if (timer) clearTimeout(timer);
+		stopped = true; controller.abort(); void historyBackend?.close().catch(() => {}); draftPump.stop(); themePump.stop(); themeSelectionPump.stop(); if (timer) clearTimeout(timer);
 		window.removeEventListener('online', wake); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', wake); window.addEventListener('focus', wake);
 	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
-	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop };
+	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop, themes, themeTransport, themeErrors, refreshThemes, refreshThemeSelection };
 }
 export const accountWorkspaceWorker = (scope: AccountScope) => {
 	const key = `${workspaceScopeKey(scope)}:${rootIdentity.read().generation}`;
@@ -489,6 +519,13 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) =>
   requested.ownerId === scope.ownerId && requested.dataPlane === scope.dataPlane && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
  return { ...online, auth: remote.auth, login: remote.login,
+  themes: {...online.themes,
+   list: async()=>{const service=worker();void service.refreshThemes().catch(()=>{});void service.refreshThemeSelection().catch(()=>{});return {...await service.themes.list(),syncError:service.themeErrors.catalog};},
+   save: async(input:Parameters<AccountThemeSync['save']>[0])=>{const result=await worker().themes.save(input);changed();return result;},
+   remove: async({id}:{id:string})=>{const result=await worker().themes.remove(id);changed();return result;},
+   setActive: async({themeId}:{themeId:string|null})=>{const result=await worker().themes.setActive(themeId);changed();return result;},
+   getShared: async(args:{id:string})=>{const local=(await worker().themes.list()).themes.find(row=>row.id===args.id);return local?{ok:true,theme:local}:online.themes.getShared(args);}
+  },
   timeline: { ...online.timeline,
    canChangeLocally: (requested: {apiOrigin?:string;ownerId:string;dataPlane:string}) => {
     try { facadeLease.assertCurrent();return localHistoryScope(requested); } catch { return false; }

@@ -438,3 +438,9 @@ transactional quota and active-pointer cleanup. Client account theme sync remain
 pending in the [local workspace matrix](../local-workspaces.md).
 
 `api.themes` and `api.themes-delete` 1.1.1 preserve the request shape while fixing concurrent quota admission and transactional active-pointer cleanup.
+
+Account theme selection uses `themes/sync` operations `selection`/`select` under
+`api.themes-sync` 1.1.0. `themes/themeSelection.ts` reuses the secure account CAS
+writer and transactional Timeline receipts. `themeSelectionContract.ts` is shared
+with the device queue. Run selection contract/API and themes/sync route tests;
+verify normal-writer conflicts, replay after deletion and all identity boundaries.

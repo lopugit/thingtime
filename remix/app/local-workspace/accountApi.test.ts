@@ -23,6 +23,16 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal((await api.things.get({ id: page.id } as any) as any).thing.crystal.name, 'Offline page');
   assert.equal((await api.things.get({ id: page.id, key: undefined } as any) as any).thing.id, page.id);
   assert.equal(remoteCalls, 0);
+  const localThemes = (api as any).themes;
+  const savedTheme = (await localThemes.save({name:'Offline account theme',theme:{},visibility:'private'})).theme;
+  await localThemes.setActive({themeId:savedTheme.id});
+  assert.equal((await localThemes.list()).activeThemeId,savedTheme.id);
+  assert.equal((await localThemes.getShared({id:savedTheme.id})).theme.name,'Offline account theme');
+  assert.equal((await accountWorkspaceWorker(scope).themes.selection.status())?.state,'pending');
+  await localThemes.remove({id:savedTheme.id});
+  assert.equal((await localThemes.list()).activeThemeId,null);
+  assert.equal(remoteCalls,0,'theme save/apply/delete complete locally without account HTTP');
+
   await assert.rejects(api.things.update({ id: page.id, attachmentIds: ['attachment'], crystal: {} } as any), /online adapter/);
   await api.things.create({ thingtime: ['data'], crystal: {}, attachmentIds: ['attachment'] } as any); assert.equal(remoteCalls, 1, 'unsupported creates retain the complete existing remote adapter');
   bindLocalWorkspace(false, rootIdentity.read().generation, scope, false);

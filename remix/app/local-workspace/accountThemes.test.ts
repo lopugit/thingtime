@@ -307,6 +307,7 @@ test('reviewed copies keep the account original and remap a deleted source to an
 			choice = await f.sync.resolve(review, 'copy', s.transport);
 		assert.ok(choice.copyId);
 		assert.equal((await f.sync.list()).activeThemeId, choice.copyId);
+ assert.equal((await f.sync.selection.status())?.desired, choice.copyId);
 		await f.sync.sync(s.transport);
 		assert.equal(s.rows.get(remote.id)?.name, 'Account original');
 		assert.equal(s.rows.get(choice.copyId!)?.visibility, 'private');

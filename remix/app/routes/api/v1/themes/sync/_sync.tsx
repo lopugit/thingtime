@@ -7,6 +7,7 @@ import { mongoDataPlane } from '~/api/utils/mongodb/dataPlane';
 import { EXPECTED_DATA_PLANE_HEADER, isDataPlane } from '~/utils/dataPlane';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { themeSyncSnapshot, synchronizeThemeWrite, ThemeSyncError } from '~/api/utils/themes/themeSync';
+import { readUserThemeSelection, synchronizeThemeSelection } from '~/api/utils/themes/themeSelection';
 import { THEME_SYNC_MAX_BYTES } from '~/api/utils/themes/themeSyncContract';
 
 const headers = {
@@ -18,7 +19,16 @@ const privateResponse = (response: Response) => {
 	for (const [key, value] of Object.entries(headers)) response.headers.set(key, value);
 	return response;
 };
-const defaults = { getAuthToken, resolveTokenUser, mongoDataPlane, enforceRateLimit, themeSyncSnapshot, synchronizeThemeWrite };
+const defaults = {
+	getAuthToken,
+	resolveTokenUser,
+	mongoDataPlane,
+	enforceRateLimit,
+	themeSyncSnapshot,
+	synchronizeThemeWrite,
+	readUserThemeSelection,
+	synchronizeThemeSelection
+};
 class Changed extends Error {
 	constructor(readonly status: number, readonly code?: string) {
 		super('Theme account confirmation changed.');
@@ -43,13 +53,16 @@ export function createThemeSyncResponse(overrides: Partial<typeof defaults> = {}
 				!body ||
 				typeof body !== 'object' ||
 				Array.isArray(body) ||
-				!['snapshot', 'write'].includes(body.operation) ||
+				!['snapshot', 'write', 'selection', 'select'].includes(body.operation) ||
 				typeof body.expectedOwnerId !== 'string' ||
 				!body.expectedOwnerId ||
 				Object.keys(body).some(
-					(key) => !(body.operation === 'write' ? ['operation', 'expectedOwnerId', 'command'] : ['operation', 'expectedOwnerId']).includes(key)
+					(key) =>
+						!(['write', 'select'].includes(body.operation) ? ['operation', 'expectedOwnerId', 'command'] : ['operation', 'expectedOwnerId']).includes(
+							key
+						)
 				) ||
-				(body.operation === 'write' && !body.command)
+				(['write', 'select'].includes(body.operation) && !body.command)
 			)
 				return deny(400, 'Invalid theme synchronization request.');
 			const ownerId = body.expectedOwnerId;
@@ -68,6 +81,10 @@ export function createThemeSyncResponse(overrides: Partial<typeof defaults> = {}
 			const result =
 				body.operation === 'snapshot'
 					? { complete: true, themes: await deps.themeSyncSnapshot(ownerId) }
+					: body.operation === 'selection'
+					? { selection: await deps.readUserThemeSelection(ownerId) }
+					: body.operation === 'select'
+					? { acknowledgment: await deps.synchronizeThemeSelection(ownerId, expectedPlane, body.command, admit) }
 					: { acknowledgment: await deps.synchronizeThemeWrite(ownerId, expectedPlane, body.command, admit) };
 			await admit();
 			return json({ ok: true, ownerId, dataPlane: expectedPlane, storagePlane: 'home', ...result }, { headers });

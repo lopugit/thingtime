@@ -11661,3 +11661,12 @@ verification limits are in `docs/local-workspaces.md`.
   no old value may display or persist; returning to the original account still
   requires fresh proof. `providerIdentity.browser.test.ts` covers these three
   cross-tab races; origin/plane transitions remain separate acceptance work.
+
+### Account theme device save and independent selection
+
+- [ ] Offline account Theme Studio: save privately, apply, edit, delete and cold-reload; each local operation finishes without a remote request. Check 1440/390/320px and no horizontal overflow.
+- [ ] Reconnect: theme content and selection synchronize independently; pending themes are not advertised as public links.
+- [ ] Concurrent theme changes require fresh exact review; copying an active theme selects the independent private copy locally and queues its new selection.
+- [ ] Replay a lost create acknowledgment before a later edit; its version must equal the actual persisted BSON postimage (including stored field order).
+- [ ] Replay a lost selection acknowledgment after another normal selection/deletion; it must not restore the old pointer. Change account/origin/plane during reads and reviews; no stale data or choice crosses the boundary.
+- [ ] Run accountThemes.browser.test.ts, accountThemes.api.test.ts and themeSelection.api.test.ts against disposable loopback fixtures; retain screenshots and cleanup evidence.
