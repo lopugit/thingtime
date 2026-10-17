@@ -72,6 +72,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   released 1PUX importer and encrypted attachments. Revalidate shared vault
   recovery, local callback persistence and real Google profile reuse; retain
   explicit second-account, Meta and hosted OpenAI acceptance gates.
+  Document persistent private QA database storage and the dev-worker readiness
+  gate after rebuilding a disposable replica with missing data files.
   [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
 
 - 2026-10-16 — **Codex (AI)**: Reject malformed successful provider JSON instead

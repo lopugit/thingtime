@@ -3075,6 +3075,16 @@ Local disposable-database acceptance:
 registration, two saved accounts, password recovery, old-session revocation,
 reset replay, independent removal and logout. `verify-service-accounts.mjs`
 covers owner isolation, stale forms, concurrency and route registration.
+Keep a replica set used across QA sessions in a persistent private directory
+outside OS temporary folders (for example `$HOME/.local/share/thingtime/qa-mongo`).
+Create it with directory permissions `0700`, bind MongoDB to loopback, and use
+only that disposable URI in the local ignored env. Start the worktree through
+`npm run web-pms` and wait for `/api/v1/health/nitro` to return `ok:true` before
+running HTTP checks; the initial development-worker build can take longer than
+the PM2 startup command. If the disposable database loses files, preserve a
+stopped copy, create a fresh replica set, and recreate fixtures through the
+normal API. Reconnect real test OAuth accounts afterward. Do not apply this
+replacement procedure to a production database.
 
 Google Cloud setup:
 

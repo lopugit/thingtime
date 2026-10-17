@@ -128,6 +128,14 @@ remained readable on a second reveal after migration.
   saved credential was rejected. No credential was reset and no app secret was
   committed. The hosted OpenAI client remains dependent on partner approval;
   the open-source local enrollment flow is a separate integration.
+- The broader feed verifier exposed missing WiredTiger files in the old
+  disposable database under the OS temporary directory. A stopped copy was
+  preserved; QA now uses a separate persistent private directory and fixtures
+  created through the API. After the new replica and development worker became
+  ready, all 103 existing feed/ACL/disconnect checks, 21 account-library checks
+  and 18 recovery checks passed. README documents durable QA storage and the
+  readiness gate. This was an environment failure, not a feed-code change.
+- Hosted Web CI on `f429c97e7` passed its API suite, full unit job and build.
 
 ### Remaining provider and delivery gates
 
