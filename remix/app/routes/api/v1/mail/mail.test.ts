@@ -5,6 +5,7 @@ const owner = { id: 'owner_one', temporary: false } as any;
 const defaults = {
 	getCurrentUser: async () => owner,
 	getAuthToken: async () => 'session',
+	googleMailOAuth: { authorize: async () => 'session', operate: async () => ({}), callback: async () => {} } as any,
 	ownerVaultConfigured: () => true,
 	enforceRateLimit: async () => ({ allowed: true } as any),
 	listMail: async () => ({ records: [], nextCursor: null }),
@@ -131,4 +132,29 @@ test('relay enforces owner, origin, rate and revoked session; provider failures 
 	const failure = await failed({ request: request(body) });
 	assert.equal(failure.status, 503);
 	assert.equal((await failure.text()).includes('fixture-private'), false);
+});
+
+test('Gmail device relay selects stored grant without cloud message writes and retains route fences', async () => {
+	let device = false;
+	const handler = createMailHandler({
+		...defaults,
+		syncMailAccount: async (_owner, _id, _sync, _signal, _fetch, deviceOnly) => {
+			device = deviceOnly === true;
+			return { folders: [], messages: [], nextCursor: null };
+		}
+	});
+	assert.equal((await handler({ request: request({ operation: 'google-relay', id: 'gmail_account', protocol: 'gmail' }) })).status, 200);
+	assert.equal(device, true);
+	assert.equal((await handler({ request: request({ operation: 'google-relay' }, { Origin: 'https://evil.test' }) })).status, 403);
+});
+
+test('Google callback response never reflects provider error, code, state or identity', async () => {
+	const { createGoogleMailCallback } = await import('./google/callback/_callback');
+	const response = await createGoogleMailCallback(async () => {
+		throw new Error('private-provider-secret');
+	})({ request: new Request('https://thingtime.test/api/v1/mail/google/callback?code=private-code&state=private-state') });
+	assert.equal(response.status, 400);
+	assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+	assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer');
+	assert.equal((await response.text()).includes('private-'), false);
 });

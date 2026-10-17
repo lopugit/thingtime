@@ -1,4 +1,5 @@
 import React from 'react';
+import { GoogleMailConnect } from './GoogleMailConnect';
 import { hasNativeMailSync } from '~/mail/native';
 import { Button, Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
@@ -42,6 +43,7 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 						Refresh accounts
 					</Button>
 				</Flex>
+				<GoogleMailConnect ownerId={ownerId} onConnected={mail.refresh} />
 				{!mail.data.state.accounts.length && <Text fontSize="sm">Your connected accounts will appear here.</Text>}
 				{mail.data.state.accounts.map((account) => (
 					<Flex key={account.id} direction="column" gap={2} py={3} borderBottom="1px solid var(--tt-border, #ececef)">
@@ -52,7 +54,8 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 							{account.address}
 						</Text>
 						<Text fontSize="xs" color="var(--tt-muted)">
-							{Object.keys(account.servers).join(' + ').toUpperCase()} · {account.sync.cloud ? 'Cloud' : ''}
+							{account.provider === 'gmail' ? 'Gmail · Google authorization' : Object.keys(account.servers).join(' + ').toUpperCase()} ·{' '}
+							{account.sync.cloud ? 'Cloud' : ''}
 							{account.sync.cloud && account.sync.local ? ' + ' : ''}
 							{account.sync.local
 								? account.sync.transport === 'relay'
@@ -67,7 +70,11 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 							<Button size="sm" isDisabled={mail.busy} onClick={() => setDraft(account)}>
 								Edit
 							</Button>
-							<Button size="sm" isDisabled={mail.busy} onClick={() => mail.sync(account.id)}>
+							<Button
+								size="sm"
+								isDisabled={mail.busy}
+								onClick={() => (account.provider === 'gmail' ? mail.discover(account.id) : mail.sync(account.id))}
+							>
 								Sync folders
 							</Button>
 							<Button size="sm" isDisabled={mail.busy} onClick={() => setRemove(account.id)}>
@@ -138,7 +145,8 @@ function EmailSettingsScope({ ownerId }: { ownerId: string }) {
 			</SettingsSection>
 			<Text fontSize="xs" color="var(--tt-muted)">
 				Offline reading keeps up to 2,000 recently synced messages on this browser. Sync runs when you press Sync; receiving new mail requires a
-				network connection. Large messages are marked as partial. Email sending is not part of this inbox feature.
+				network connection. Large messages are marked as partial. Gmail accounts connected with Google also support drafts, sending and mailbox
+				actions.
 			</Text>
 			{mail.busy && (
 				<Text role="status" fontSize="sm">
