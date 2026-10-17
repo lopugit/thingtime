@@ -1,12 +1,12 @@
-import { AI_WORKFLOW_BASE_MODELS } from '../settings/prConflictResolverModelWaterfallCore';
+import type { AiModelPublic } from './modelsCore';
 import type { LopuVaultProviderPublic } from '../lopu/vaultProviders';
 import type { AiWaterfallEndpoint } from './waterfallConfig';
 
-export const aiWaterfallEndpoints = (connections: readonly LopuVaultProviderPublic[] = []): AiWaterfallEndpoint[] => [
+export const aiWaterfallEndpoints = (connections: readonly LopuVaultProviderPublic[] = [], models: readonly AiModelPublic[] = []): AiWaterfallEndpoint[] => [
 	...(['anthropic', 'openai'] as const).map((provider) => ({
 		id: `server:${provider}`,
 		label: provider === 'anthropic' ? 'Thingtime · Anthropic API' : 'Thingtime · OpenAI API',
-		models: AI_WORKFLOW_BASE_MODELS.filter((model) => model.provider === provider),
+		models: models.filter((model) => model.available && model.provider === provider),
 		hint: 'Uses the endpoint key configured on Thingtime. Missing keys fall through to the next entry.'
 	})),
 	...connections.map((connection) => ({

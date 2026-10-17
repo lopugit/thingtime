@@ -534,6 +534,7 @@ export type UseLopuSettings = ReturnType<typeof useLopuSettings>;
 
 // Public projection of an `ai-model` thing (design note §1.1).
 export interface LopuCatalogModel {
+  providerAvailable?: boolean | null;
 	id: string;
 	label: string;
 	provider: string;
@@ -563,6 +564,7 @@ export interface LopuCatalogDefaults {
 }
 
 export interface LopuCatalog {
+  policies?: Record<string, { autoAllowNewModels: boolean; lastSyncedAt?: string | null; status?: string | null }>;
 	models: LopuCatalogModel[];
 	defaults: LopuCatalogDefaults;
 	providers: Record<string, LopuCatalogProvider>;
@@ -604,6 +606,7 @@ export const normalizeLopuCatalogModel = (raw: unknown): LopuCatalogModel | null
 		speeds: stringList(source.speeds),
 		family: typeof source.family === 'string' ? source.family : null,
 		enabled,
+    providerAvailable: typeof source.providerAvailable === 'boolean' ? source.providerAvailable : null,
 		available: typeof source.available === 'boolean' ? source.available : enabled,
 		verified: source.verified === true ? true : source.verified === false ? false : null,
 		isDefault: source.isDefault === true
@@ -637,7 +640,11 @@ export const normalizeLopuCatalog = (raw: unknown): LopuCatalog => {
 			effort: idOrNull(defaults.effort),
 			speed: normalizeLopuSpeed(defaults.speed)
 		},
-		providers
+		providers,
+    ...(source.policies && typeof source.policies === 'object' ? { policies: Object.fromEntries(['anthropic', 'openai'].map((id) => {
+      const policy = (source.policies as any)[id];
+      return [id, { autoAllowNewModels: policy?.autoAllowNewModels === true, lastSyncedAt: typeof policy?.lastSyncedAt === 'string' ? policy.lastSyncedAt : null, status: typeof policy?.status === 'string' ? policy.status : null }];
+    })) } : {})
 	};
 };
 
@@ -721,19 +728,20 @@ export const readLopuCatalogCache = (): LopuCatalog | null => {
 
 // Last-known catalog first (never a spinner over a known list), a background
 // refetch while `active`, and the fresh copy cached for the next mount.
-export const useLopuModelCatalog = (active = true) => {
+export const useLopuModelCatalog = (active = true, admin = false) => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 
-	const [catalog, setCatalog] = React.useState<LopuCatalog | null>(readLopuCatalogCache);
+	const cacheKey = admin ? 'tt-lopu-admin-catalog' : LOPU_CATALOG_CACHE_KEY;
+  const [catalog, setCatalog] = React.useState<LopuCatalog | null>(() => admin ? readLocalCache<LopuCatalog>(cacheKey) : readLopuCatalogCache());
 	const [loading, setLoading] = React.useState(false);
 	const [failed, setFailed] = React.useState(false);
 
 	const refresh = React.useCallback(async () => {
 		setLoading(true);
 		try {
-			const resp = await apiRef.current.v1.ai.models();
+			const resp = await (admin ? apiRef.current.v1.admin.aiModels() : apiRef.current.v1.ai.models());
 			if (!resp?.ok) {
 				setFailed(true);
 				return null;
@@ -741,7 +749,7 @@ export const useLopuModelCatalog = (active = true) => {
 			const next = normalizeLopuCatalog(resp);
 			setCatalog(next);
 			setFailed(false);
-			writeLocalCache(LOPU_CATALOG_CACHE_KEY, next);
+			writeLocalCache(cacheKey, next);
 			return next;
 		} catch {
 			setFailed(true);
@@ -749,7 +757,7 @@ export const useLopuModelCatalog = (active = true) => {
 		} finally {
 			setLoading(false);
 		}
-	}, []);
+	}, [admin, cacheKey]);
 
 	React.useEffect(() => {
 		if (!active) {

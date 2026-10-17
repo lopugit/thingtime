@@ -1,3 +1,4 @@
+import { isModelUnavailableError } from './modelDiscovery';
 import { claudeOAuthPrompt } from './claudeOAuthPrompt';
 import Anthropic from '@anthropic-ai/sdk';
 import { spawn } from 'node:child_process';
@@ -159,8 +160,13 @@ export async function* runClaudeOAuth(request: TextRequest, token: string, signa
 		const code = await closed;
 		signal?.throwIfAborted();
 		if (timedOut) throw new Error('Claude reached the time limit before finishing the reply.');
-        if (code !== 0 || !result || result.is_error)
-			throw new Error('Claude OAuth could not complete this request. Check the credential and Claude Code allowance.');
+        if (code !== 0 || !result || result.is_error) {
+            const diagnostic = [result?.result, ...(Array.isArray(result?.errors) ? result.errors : [])].filter((value) => typeof value === 'string').join(' ').slice(0, 4000);
+            if (isModelUnavailableError({ status: 404, message: diagnostic })) {
+                throw Object.assign(new Error('The selected Claude model is unavailable. Refresh the model list and choose a current model.'), { code: 'model_not_available', status: 404 });
+            }
+            throw new Error('Claude OAuth could not complete this request. Check the credential and Claude Code allowance.');
+        }
 		const usage = result.usage || {};
 		yield {
 			usage: {

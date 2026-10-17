@@ -1,3 +1,5 @@
+import { syncAiProviderModels, readAiModelProviderPolicies, setAiModelProviderPolicy } from '~/api/utils/ai/modelSync';
+import { isAiModelProviderId } from '~/api/utils/ai/modelsCore';
 import { json, readJsonBody } from '~/api/http';
 
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
@@ -23,6 +25,9 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 const MAX_BODY_BYTES = 16 * 1024;
 
 type HandlerDependencies = {
+  syncModels?: typeof syncAiProviderModels;
+  readPolicies?: typeof readAiModelProviderPolicies;
+  setPolicy?: typeof setAiModelProviderPolicy;
   requireAdmin: typeof requireAdmin;
   enforceRateLimit: typeof enforceRateLimit;
   listAiModels: typeof listAiModels;
@@ -31,11 +36,12 @@ type HandlerDependencies = {
 };
 
 export const createAdminAiModelsHandlers = (dependencies: HandlerDependencies) => {
+  const read = async (viewer: any, options = {}) => ({ ...await dependencies.listAiModels(viewer, options), policies: dependencies.readPolicies ? await dependencies.readPolicies() : {} });
   const loader = async ({ request }: { request: Request }) =>
     withAdminPrivateResponse(async () => {
       const gate = await dependencies.requireAdmin(request);
       if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status });
-      return json(await dependencies.listAiModels(gate.user));
+      return json(await read(gate.user));
     });
 
   const action = async ({ request }: { request: Request }) =>
@@ -55,17 +61,29 @@ export const createAdminAiModelsHandlers = (dependencies: HandlerDependencies) =
 
       const body: any = await readJsonBody(request, MAX_BODY_BYTES);
 
+      if (body?.provider !== undefined) {
+        if (!isAiModelProviderId(body.provider) || (typeof body.allowAll !== 'boolean' && typeof body.autoAllowNewModels !== 'boolean') ||
+          (body.allowAll !== undefined && typeof body.allowAll !== 'boolean') || (body.autoAllowNewModels !== undefined && typeof body.autoAllowNewModels !== 'boolean'))
+          return json({ ok: false, error: 'Choose a provider and boolean allowAll / autoAllowNewModels values.' }, { status: 400 });
+        await dependencies.ensureAiModelCatalog();
+        await (dependencies.setPolicy ?? setAiModelProviderPolicy)(body.provider, { allowAll: body.allowAll, autoAllowNewModels: body.autoAllowNewModels });
+        return json(await read(gate.user));
+      }
+      if (body?.sync === true) {
+        const report = await (dependencies.syncModels ?? syncAiProviderModels)('admin');
+        return json({ ...await read(gate.user), ok: report.every((row) => row.status !== 'failed'), report });
+      }
       const reprobe = body?.probe === true;
 
       if (body?.seed === true) {
         const report = await dependencies.ensureAiModelCatalog({ force: true });
-        const list = await dependencies.listAiModels(gate.user, { reprobe });
-        return json({ ok: true, seeded: report.total, report, models: list.models, defaults: list.defaults, providers: list.providers });
+        const list = await read(gate.user, { reprobe });
+        return json({ ok: true, seeded: report.total, report, models: list.models, defaults: list.defaults, providers: list.providers, policies: list.policies });
       }
 
       if (reprobe) {
-        const list = await dependencies.listAiModels(gate.user, { reprobe: true });
-        return json({ ok: true, probed: true, providers: list.providers, models: list.models, defaults: list.defaults });
+        const list = await read(gate.user, { reprobe: true });
+        return json({ ok: true, probed: true, providers: list.providers, models: list.models, defaults: list.defaults, policies: list.policies });
       }
 
       const id = typeof body?.id === 'string' ? body.id.trim() : '';
@@ -90,7 +108,7 @@ export const createAdminAiModelsHandlers = (dependencies: HandlerDependencies) =
   return { loader, action };
 };
 
-const handlers = createAdminAiModelsHandlers({ requireAdmin, enforceRateLimit, listAiModels, setAiModelEnabled, ensureAiModelCatalog });
+const handlers = createAdminAiModelsHandlers({ requireAdmin, enforceRateLimit, listAiModels, setAiModelEnabled, ensureAiModelCatalog, readPolicies: readAiModelProviderPolicies });
 
 export const loader = handlers.loader;
 export const action = handlers.action;
