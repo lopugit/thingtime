@@ -81,6 +81,13 @@ browser acceptance also checks reload and repeated search through the renderer.
 
 ## Tests
 
+- `scripts/lopu-popovers.browser.html` mounts the real floating host, full page,
+  or embedded chat with synthetic HTTP/preferences. It checks popup hit testing,
+  model/list selection and scrolling, setting persistence, repeat taps, Escape
+  and outside dismissal. Lopu popovers set `rootProps.zIndex` on Chakra’s
+  positioner, using `DRAWER_POPUP_Z`; child content alone cannot escape a lower
+  stacking context.
+
 - `scripts/lopu-dictation.browser.html` exercises the real Lopu voice surface
   with synthetic speech/HTTP: live composer revisions, stop/resume, edits,
   mode switches, stale callbacks, recognition failure and rejected-send recovery.
