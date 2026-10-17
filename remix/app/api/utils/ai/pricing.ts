@@ -94,6 +94,7 @@ export const AI_MODEL_PRICING: Readonly<Record<string, AiModelPrice>> = Object.f
   // the 5.6 trio and 5.5 / 5.4 / 5.3 are priced from their closest sibling
   // (estimated); the GPT-5 / 5.1 / 5.2 / 4.1 / 4o / o-series rows are the
   // published list prices
+  'gpt-6-astra': { ...openai(10, 50, 1), cacheWritePerM: 12.5 },
   'gpt-5.6-sol': openai(2.5, 15, 0.25, true),
   'gpt-5.6-terra': openai(2.5, 15, 0.25, true),
   'gpt-5.6-luna': openai(1.25, 10, 0.125, true),

@@ -41,8 +41,8 @@ reveals, existing AI credentials and all unrelated secrets retain their boundari
 
 ## Required rollout
 
-The PR targets develop under repository policy. It has not changed main, migrated
-real Apple secrets, or published a TestFlight build. After explicit main approval,
+The user approved PR #1006 for main on 2026-10-17. The PR was retargeted to main
+and reconciled with the newer settings/model changes. Production rollout is pending:
 deploy the endpoint/workflow, create the non-secret release policy in Admin System,
 run the one-time migration, select vault mode, and verify a signed upload and
 internal tester availability. Confirm widget placement on an actual iPhone.
