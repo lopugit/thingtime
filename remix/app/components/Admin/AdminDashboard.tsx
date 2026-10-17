@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router';
+import { Link as RouterLink, useNavigate, useParams, useLocation } from 'react-router';
 import {
   Box,
   Button,
@@ -953,11 +953,13 @@ export const AdminDashboard = () => {
   const user = useCurrentUser();
   const navigate = useNavigate();
   const { section } = useParams();
-  const selectedTabIndex = adminTabIndex(section);
+	const { hash } = useLocation();
+	const selectedTabIndex = adminTabIndex(section, hash);
 
   React.useEffect(() => {
     if (selectedTabIndex === null) navigate('/admin', { replace: true });
-  }, [navigate, selectedTabIndex]);
+		else if (section === 'system') navigate(`${adminTabPath(selectedTabIndex)}${hash}`, { replace: true });
+	}, [navigate, selectedTabIndex, section, hash]);
 
   // Same whole-page gate idiom as the MongoDB workbench (Raw.tsx): a card,
   // never a redirect, so the URL is shareable between admins.
@@ -1033,8 +1035,17 @@ export const AdminDashboard = () => {
             </React.Suspense>
           </TabPanel>
           <TabPanel px={0}>
-            <SystemVault key={user.id} cacheIdentity={user.id} />
-            <AdminPanel />
+						<SystemVault key={user.id} cacheIdentity={user.id} category="ai-providers" />
+						<AdminPanel category="ai-providers" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<AdminPanel category="lopu" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<SystemVault key={user.id} cacheIdentity={user.id} category="platform" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<AdminPanel category="access" />
           </TabPanel>
         </TabPanels>
       </Tabs>

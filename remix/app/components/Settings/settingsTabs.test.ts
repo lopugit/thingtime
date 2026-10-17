@@ -12,6 +12,9 @@ test('existing section bookmarks select the section’s category', () => {
 	assert.equal(resolveSettingsTab(null, '#ai-waterfalls'), 'ai-waterfalls');
 	assert.equal(resolveSettingsTab(null, '#secure-vault'), 'security');
 	assert.equal(resolveSettingsTab(null, '#lopu'), 'lopu');
+	assert.equal(resolveSettingsTab(null, '#lopu-instructions'), 'lopu');
+	assert.equal(resolveSettingsTab(null, '#lopu-accounts'), 'admin');
+	assert.equal(resolveSettingsTab(null, '#lopu-base-prompt'), 'admin');
 	assert.equal(resolveSettingsTab(null, '#lopu-credits'), 'account');
 	assert.equal(resolveSettingsTab('things', '#lopu'), 'things');
 });

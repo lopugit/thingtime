@@ -1,3 +1,4 @@
+import { SettingsSection } from './SettingsSection';
 import React from 'react';
 import { Box, Button, Flex, Input, Select, Switch, Text } from '@chakra-ui/react';
 import { DesktopNodeControls } from '~/components/Nav/Drawer/DesktopNodeControls';
@@ -227,10 +228,11 @@ export function DesktopSettings() {
 	return (
 		<>
 			{desktopInfo && (
-				<Flex flexDirection="column" rowGap={3}>
-					<Text fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
-						Thingtime desktop
-					</Text>
+				<SettingsSection
+					eyebrow="Thingtime desktop"
+					description="API connections, menu bar icon, local node, and app updates."
+					summary={desktopSettings?.selectedEndpoint.label}
+				>
 					<Flex flexDirection="column" rowGap={2}>
 						<Text fontSize="sm">API endpoint</Text>
 						<Select
@@ -385,7 +387,7 @@ export function DesktopSettings() {
 						</Flex>
 						<ElectronUpdateManager />
 					</Flex>
-				</Flex>
+				</SettingsSection>
 			)}
 		</>
 	);
