@@ -61,4 +61,19 @@ class FolderStream {
         return this.response;
     }
 }
-module.exports = { FolderStream, MAX_RANGE_BYTES };
+function stageRangeMetadata(input) {
+    if (input?.action !== 'stage-range') return input;
+    if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength <= 0 || input.bytes.byteLength > MAX_RANGE_BYTES ||
+        !Number.isSafeInteger(input.offset) || input.offset < 0) throw invalid();
+    return { ...input, bytes: undefined, length: input.bytes.byteLength };
+}
+function encodeStageInput(request, bytes) {
+    if (request.method !== 'folder-sync.request' || request.parameters.action !== 'stage-range' ||
+        !(bytes instanceof Uint8Array) || bytes.byteLength <= 0 || bytes.byteLength > MAX_RANGE_BYTES ||
+        request.parameters.length !== bytes.byteLength) throw invalid();
+    const metadata = Buffer.from(JSON.stringify(request));
+    if (metadata.length > 131_072) throw invalid();
+    const header = Buffer.alloc(4); header.writeUInt32BE(metadata.length);
+    return Buffer.concat([header, metadata, bytes]);
+}
+module.exports = { FolderStream, MAX_RANGE_BYTES, stageRangeMetadata, encodeStageInput };

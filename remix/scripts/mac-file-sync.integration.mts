@@ -42,13 +42,14 @@ let nativeExit: Promise<void> | undefined,
 	nativeCalls = 0,
 	verifyCalls = 0,
 	lastVerifyCalls = 0;
-const counts = { puts: 0, publishes: 0, reads: 0, streams: 0, streamedBytes: 0 };
+const counts = { puts: 0, publishes: 0, reads: 0, streams: 0, streamedBytes: 0, stageRanges: 0, stagedBytes: 0 };
 let cooldownCount = 0,
 	cooldownSeconds = 0,
 	priorCooldownCount = 0,
 	priorCooldownSeconds = 0;
 let loseCloud = false,
-	losePublication = false;
+	losePublication = false,
+    loseStage = false;
 const sessionFetch: typeof fetch = async (url, init = {}) => {
 	const target = new URL(String(url), base),
 		headers = new Headers(init.headers);
@@ -167,11 +168,16 @@ async function send(payload: any) {
 				reject(error);
 			}
 		};
-		native!.stdin.write(JSON.stringify(payload) + '\n');
+		const metadata = { ...payload };
+        let bytes: Uint8Array | undefined;
+        if (payload.action === 'stage-range') { bytes = payload.bytes; metadata.length = bytes!.byteLength; delete metadata.bytes; }
+        const encoded = Buffer.from(JSON.stringify(metadata)), header = Buffer.alloc(4);
+        header.writeUInt32BE(encoded.length);
+        native!.stdin.write(Buffer.concat([header, encoded, ...(bytes ? [bytes] : [])]));
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.2.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.1.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -234,10 +240,15 @@ try {
 		if (input.action === 'read') counts.reads++;
         if (input.action === 'read-range') { counts.streams++; counts.streamedBytes += input.length; }
 		if (input.action === 'publish') counts.publishes++;
+        if (input.action === 'stage-range') { counts.stageRanges++; counts.stagedBytes += input.bytes.length; }
 		const payload = await send({ ...expected, deviceId, ...input });
 		assert.equal(payload.deviceId, deviceId);
 		const result = parseMobileFolderResult({ type: 'mobile-files-result', payload }, expected, input);
 		assert.ok(result);
+        if (input.action === 'stage-range' && loseStage) {
+            loseStage = false;
+            throw Error('Lost accepted native stage');
+        }
 		if (input.action === 'publish' && losePublication) {
 			losePublication = false;
 			throw Error('Lost accepted native publication');
@@ -329,7 +340,7 @@ try {
 		assert.ok(retained?.operations.every((operation) => operation.confirmed));
 	};
 	const localBytes = new Uint8Array(process.argv.includes('--large-upload') ? 8 * 1024 * 1024 + 17 : 65_537).fill(17),
-		remoteBytes = new Uint8Array(65_539).fill(29);
+		remoteBytes = new Uint8Array(process.argv.includes('--large-download') ? 2 * 1024 * 1024 + 17 : 65_539).fill(29);
 	await writeFile(path.join(directory, 'selected/local.bin'), localBytes);
 	await seed('remote.bin', remoteBytes);
 	primeCooldown = forcePreflightCooldown;
@@ -362,7 +373,13 @@ try {
 	const original = (await journal.read(scope))!,
 		originalIds = original.operations.map((op) => op.id);
 	const afterCloud = counts.puts;
+    loseStage = true;
+    await assert.rejects(run(), /Lost accepted native stage/);
+    const firstStagedBytes = counts.stagedBytes;
+    assert.equal(firstStagedBytes, Math.min(2 * 1024 * 1024, remoteBytes.length));
+    await stopNative(); journal.close(); journal = await openSyncJournal(factory); await startNative();
 	await assert.rejects(run(), /Lost accepted native publication/);
+    assert.equal(counts.stagedBytes, remoteBytes.length, 'Restart must resume after the accepted range without replay');
 	assert.equal(counts.puts, afterCloud);
 	await stopNative();
 	journal.close();
@@ -431,6 +448,7 @@ try {
 				'live-native-identity',
 				'real-Mac-upload-download',
 				'lost-cloud-reply',
+                'lost-native-stage-reply',
 				'lost-native-publication-reply',
 				'native-process-restart',
 				'original-IDs',

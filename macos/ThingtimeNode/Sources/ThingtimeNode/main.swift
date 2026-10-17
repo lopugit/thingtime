@@ -68,6 +68,19 @@ private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
         }
     }
 
+    func stage(_ data: Data, source: ThingtimeNodeByteSource, withReply reply: @escaping (Data) -> Void) {
+        guard let request = try? NodeWireCodec.decodeRequest(data), request.method == "folder-sync.request",
+              case .object(let fields) = request.parameters, fields["action"] == .string("stage-range") else {
+            reply(Self.encoded(.failure(id: "", code: "invalid_request", message: "Invalid staging stream.")))
+            return
+        }
+        let reader = StagingStreamReader(source)
+        Task {
+            let response = await controller.handleLocalFolderSync(request, receive: { try reader.read($0) })
+            reply(Self.encoded(response))
+        }
+    }
+
     private static func encoded(_ response: NodeResponse) -> Data {
         (try? NodeWireCodec.encodeResponse(response))
             ?? Data(#"{"error":{"code":"encoding_error","message":"The node response could not be encoded."},"id":"","ok":false}"#.utf8)
@@ -84,13 +97,43 @@ private final class StreamAcknowledgement: @unchecked Sendable {
         guard !completed else { return }; completed = true; accepted = value; semaphore.signal()
     }
     func wait() throws {
-        let deadline = Date().addingTimeInterval(15)
+        let deadline = DispatchTime.now() + 15
         while semaphore.wait(timeout: .now() + 0.1) != .success {
             try Task.checkCancellation()
-            guard Date() < deadline else { throw CancellationError() }
+            guard DispatchTime.now() < deadline else { throw CancellationError() }
         }
         lock.lock(); let value = accepted; lock.unlock()
         guard value else { throw CancellationError() }; try Task.checkCancellation()
+    }
+}
+
+private final class StagingStreamReader: @unchecked Sendable {
+    private let source: ThingtimeNodeByteSource
+    private var offset: Int64 = 0 // Called serially by the single staging worker.
+    init(_ source: ThingtimeNodeByteSource) { self.source = source }
+    func read(_ length: Int) throws -> Data {
+        let value = StreamDataReply()
+        source.read(offset, length: length) { value.finish($0) }
+        let data = try value.wait()
+        guard data.count == length else { throw CancellationError() }
+        offset += Int64(data.count); return data
+    }
+}
+private final class StreamDataReply: @unchecked Sendable {
+    private let lock = NSLock(), semaphore = DispatchSemaphore(value: 0)
+    private var data: Data?
+    func finish(_ value: Data) {
+        lock.lock(); defer { lock.unlock() }
+        guard data == nil else { return }; data = value; semaphore.signal()
+    }
+    func wait() throws -> Data {
+        let deadline = DispatchTime.now() + 15
+        while semaphore.wait(timeout: .now() + 0.1) != .success {
+            try Task.checkCancellation()
+            guard DispatchTime.now() < deadline else { throw CancellationError() }
+        }
+        try Task.checkCancellation()
+        lock.lock(); defer { lock.unlock() }; return data ?? Data()
     }
 }
 

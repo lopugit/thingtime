@@ -14,6 +14,7 @@ export type FolderRequest =
 	| { action: 'remove' | 'scan'; rootId: string }
 	| { action: 'read' | 'read-range'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
 	| { action: 'stage-begin' | 'stage-finish'; rootId: string; transfer: MobileStageRequest }
+	| { action: 'stage-range'; rootId: string; transfer: MobileStageRequest; offset: number; bytes: Uint8Array<ArrayBuffer> }
 	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string }
 	| { action: 'write-approve'; rootId: string; approval: MobileWriteApproval }
 	| { action: 'publication-lookup'; rootId: string; transfer: MobileStageRequest }
@@ -101,7 +102,7 @@ export function parseMobileFolderResult(
 				throw Error('Invalid native publication receipt.');
 			result.publication = { status: 'complete', receipt: structuredClone(receipt) };
 		} else result.publication = { status: publication.status };
-	} else if (request.action === 'stage-begin' || request.action === 'stage-append' || request.action === 'stage-finish') {
+	} else if (request.action === 'stage-begin' || request.action === 'stage-append' || request.action === 'stage-range' || request.action === 'stage-finish') {
 		const state = payload.staging,
 			m = request.transfer.operation.mutation;
 		if (
@@ -111,7 +112,9 @@ export function parseMobileFolderResult(
 			!Number.isSafeInteger(state?.received) ||
 			state.received < 0 ||
 			state.received > m.source.size ||
-			(request.action === 'stage-append' && state.received < request.offset + atob(request.data).length)
+			(request.action === 'stage-append' && state.received < request.offset + atob(request.data).length) ||
+            (request.action === 'stage-range' && (!(request.bytes instanceof Uint8Array) || request.bytes.length <= 0 ||
+                request.bytes.length > 32 * 1024 * 1024 || state.received !== request.offset + request.bytes.length))
 		)
 			throw Error('Invalid native staging progress.');
 		if (state.stage !== undefined && state.stage !== null) {
@@ -186,7 +189,7 @@ export function supportsMobileFolderPublication(folder: MobileFolder | undefined
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
-	if (request.action === 'read-range') return Promise.reject(Error('Native range streaming requires the desktop host.'));
+	if (request.action === 'read-range' || request.action === 'stage-range') return Promise.reject(Error('Native range streaming requires the desktop host.'));
 	if (request.action === 'conditions' && !supportsMobileSyncConditions(bridge))
 		return Promise.reject(Error('Update the mobile app to run folder transfers.'));
 	if (request.action.startsWith('stage-') && !supportsMobileStaging(bridge))

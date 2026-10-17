@@ -41,7 +41,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.2.0", "fileStagingVersion": "1.0.0", "filePublicationVersion": "1.1.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.2.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
@@ -203,6 +203,34 @@ final class MacFolderSyncTests: XCTestCase {
         pending.cancel(); release.signal()
         await rejects { try await pending.value }
         _ = try await service.handle(request("list"))
+    }
+
+    func testStagingRangeSurvivesLateIdentityRefusalWithoutPublishing() async throws {
+        var checks = 0, failAt = Int.max
+        let service = try service(verify: { _, _ in checks += 1; if checks == failAt { throw MobileFolderStore.Failure.unavailable } })
+        let id = try await root(service), bytes = Data(repeating: 71, count: 2 * 1024 * 1024 + 17)
+        let scope = MobileSyncStaging.Scope(origin: origin.absoluteString, ownerId: "owner", dataPlane: "home", rootId: "connection", deviceId: "device")
+        let source = MobileFolderReader.Entry(path: "sample.bin", id: "cloud", version: "v1", kind: "file", size: Int64(bytes.count), sha256: nil,
+            fingerprint: .init(partSizeBytes: 8_388_608, partCount: 1, sha256: SHA256.hash(data: Data(SHA256.hash(data: bytes))).map { String(format: "%02x", $0) }.joined()))
+        let transfer = MobileSyncStaging.Request(scope: scope, rootId: id, operation: .init(id: UUID().uuidString.lowercased(), mutation: .init(kind: "copy", from: "remote", path: source.path, source: source, expectedTarget: nil), confirmed: false))
+        let fields: [String: JSONValue] = ["rootId": .string(id), "transfer": try .from(transfer)]
+        _ = try await service.handle(request("stage-begin", fields))
+        final class Cursor: @unchecked Sendable { var offset = 0; var calls = 0 }
+        let cursor = Cursor()
+        checks = 0; failAt = 2
+        let input = request("stage-range", fields.merging(["offset": .number(0), "length": .number(Double(bytes.count))]) { _, next in next })
+        await rejects { try await service.handle(input, receive: { count in
+            let data = bytes.subdata(in: cursor.offset..<cursor.offset + count)
+            cursor.offset += count; cursor.calls += 1; return data
+        }) }
+        XCTAssertEqual(checks, 2); XCTAssertEqual(cursor.calls, 33)
+        failAt = Int.max
+        let resumed = try await service.handle(request("stage-begin", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(try XCTUnwrap(resumed["staging"]).decode(MobileSyncStaging.Progress.self).received, Int64(bytes.count))
+        _ = try await service.handle(request("stage-finish", fields))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent("selected/sample.bin").path))
+        await rejects { try await service.handle(input) }
+        await rejects { try await service.handle(self.request("list"), receive: { _ in Data() }) }
     }
 
 }

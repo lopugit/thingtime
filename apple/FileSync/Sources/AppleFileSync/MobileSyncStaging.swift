@@ -212,27 +212,52 @@ public final class MobileSyncStaging: @unchecked Sendable {
     }
     public func append(_ request: Request, owner: FileSyncOwnerScope, offset: Int64, bytes: Data) throws -> Progress {
         guard offset >= 0, !bytes.isEmpty, bytes.count <= MobileFolderReader.maximumReadBytes else { throw Failure.invalid }
+        var supplied = false
+        return try appendStream(request, owner: owner, offset: offset, length: bytes.count) { wanted in
+            guard !supplied, wanted == bytes.count else { throw Failure.invalid }; supplied = true; return bytes
+        }
+    }
+    /// One durable checkpoint per bounded range. An interrupted uncheckpointed
+    /// tail is truncated by payload() on resume; replay compares existing bytes.
+    public func appendStream(_ request: Request, owner: FileSyncOwnerScope, offset: Int64, length: Int,
+                             read: (Int) throws -> Data) throws -> Progress {
+        guard offset >= 0, length > 0, length <= MobileFolderReader.maximumStreamBytes else { throw Failure.invalid }
         return try withRecord(request, owner: owner, create: false) { fd, row in
             guard request.operation.mutation.source.kind == "file", offset <= row.received,
-                  offset <= request.operation.mutation.source.size - Int64(bytes.count) else { throw Failure.invalid }
+                  Int64(length) <= request.operation.mutation.source.size,
+                  offset <= request.operation.mutation.source.size - Int64(length) else { throw Failure.invalid }
+            let replay = offset < row.received || row.stage != nil
+            if replay { guard offset + Int64(length) <= row.received else { throw Failure.changed } }
             let file = try payload(fd, row: row); defer { close(file) }
-            if offset < row.received || row.stage != nil {
-                guard offset + Int64(bytes.count) <= row.received else { throw Failure.changed }
-                var existing = Data(count: bytes.count)
-                let count = existing.withUnsafeMutableBytes { pread(file, $0.baseAddress!, bytes.count, off_t(offset)) }
-                guard count == bytes.count, existing == bytes else { throw Failure.changed }
-                return Progress(received: row.received, stage: row.stage)
-            }
-            var written = 0
-            while written < bytes.count {
+            var consumed = 0
+            while consumed < length {
                 try Task.checkCancellation()
-                let n = bytes.withUnsafeBytes { pwrite(file, $0.baseAddress!.advanced(by: written), bytes.count - written, off_t(offset) + off_t(written)) }
-                guard n > 0 else { throw Failure.storage }; written += n
+                let wanted = min(MobileFolderReader.maximumReadBytes, length - consumed)
+                let bytes = try read(wanted)
+                try Task.checkCancellation()
+                guard bytes.count == wanted else { throw Failure.changed }
+                let position = offset + Int64(consumed)
+                if replay {
+                    var existing = Data(count: wanted)
+                    let count = existing.withUnsafeMutableBytes { pread(file, $0.baseAddress!, wanted, off_t(position)) }
+                    guard count == wanted, existing == bytes else { throw Failure.changed }
+                } else {
+                    var written = 0
+                    while written < bytes.count {
+                        try Task.checkCancellation()
+                        let n = bytes.withUnsafeBytes { pwrite(file, $0.baseAddress!.advanced(by: written), bytes.count - written, off_t(position) + off_t(written)) }
+                        guard n > 0 else { throw Failure.storage }; written += n
+                    }
+                }
+                consumed += wanted
             }
-            guard fsync(file) == 0 else { throw Failure.storage }
-            try afterBytesFlushed?()
-            row.received += Int64(bytes.count); try save(row, fd)
-            return Progress(received: row.received, stage: nil)
+            try Task.checkCancellation()
+            if !replay {
+                guard fsync(file) == 0 else { throw Failure.storage }
+                try afterBytesFlushed?()
+                row.received += Int64(length); try save(row, fd)
+            }
+            return Progress(received: row.received, stage: row.stage)
         }
     }
     private func verify(_ file: Int32, row: Record) throws {

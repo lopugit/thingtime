@@ -10,7 +10,7 @@ verified private staging, atomic destination checks and durable native receipts.
 Keychain approvals bind the account, origin, device, connection, selected grant
 and reviewed settings. `mobileSyncTarget.client.ts` connects stage/publish/lookup
 to the shared runner. iOS Download now is available with deletion propagation
-disabled; Android/Mac publication and background workers remain pending.
+disabled; Per-platform publication acceptance and background workers are tracked in the sync ledger.
 Publication uses same-volume exclusive rename or swap with no-follow/beneath
 resolution, retains displaced inodes in the existing transfer record, and
 recovers durable receipts without touching later edits. This is not an inode-CAS
@@ -34,8 +34,7 @@ real API storage/revision and editor lost-response recovery checks.
 `components/Devices/MobileSyncConnections.tsx` connects selected roots to those
 Things through shared `configurationEditor.ts` save/recovery logic. Drafts are
 local, scoped and verified before writes; fixed IDs and revision guards survive
-reloads. A saved connection is not native execution approval. Android/Mac native file
-write adapters and persistent workers remain pending. `foregroundSync.ts` now
+reloads. A saved connection is not native execution approval. Native write acceptance and persistent workers remain tracked in the sync ledger. `foregroundSync.ts` now
 connects explicit mobile upload/backup and approved iOS download controls to complete scans, live native
 policy signals, journal retries and durable common-baseline checkpoints;
 see [mobile sync acceptance](../mobile-file-sync.md). File writes must continue
@@ -230,4 +229,13 @@ Tests: `folder-stream.test.cjs`, `folder-sync.test.cjs`, isolated Electron
 `test/fixtures/folder-sync-host.cjs`, `FolderStreamXPCTests`, `MacFolderSyncTests`,
 `MobileFolderTests`, and `mobileFolders.client.test.ts`. Real API acceptance is
 `mac-file-sync.integration.mts --large-upload`. Installed Mac acceptance,
-download/mobile streaming and sustained large-folder throughput remain open.
+mobile streaming and sustained large-folder throughput remain open.
+
+Mac staging 1.1 negotiates `stage-range` in `stageMobileCopy`. Binary bytes cross
+Electron IPC and a length-prefixed helper pipe; `NodeFolderStreamInput` serves
+sequential 64 KiB XPC pulls to `MobileSyncStaging.appendStream`. A range flushes
+before its checkpoint, and unfinished tails/replayed ranges retain the existing
+recovery semantics. `append` uses the same primitive for older/mobile bridges.
+Tests extend `mobileStaging.test.ts`, `folder-stream.test.cjs`, native staging and
+XPC tests; `mac-file-sync.integration.mts --large-upload --large-download` verifies
+real transfers and a native restart after a lost accepted staging reply.

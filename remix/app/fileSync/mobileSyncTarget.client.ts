@@ -47,7 +47,7 @@ export async function approveMobileSyncTarget(
 		},
 		stage: (operation, current, source) => {
 			const input = transfer(operation, current);
-			return stageMobileCopy(input.scope, rootId, input.operation, source, signal, request);
+			return stageMobileCopy(input.scope, rootId, input.operation, source, signal, request, bridge);
 		},
 		publish: async (operation, current, stage) => {
 			const result = await request(scope.ownerId, { action: 'publish', rootId, transfer: transfer(operation, current), stage, approval }, signal);

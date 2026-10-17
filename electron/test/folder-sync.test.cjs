@@ -112,3 +112,15 @@ test('streamed bytes require final browser-account verification and exact range 
     f.run(async (_method, request) => ({ ...result(request), path: 'other' }));
     await assert.rejects(f.host.request(f.event, input));
 });
+
+test('staging accepts binary ranges only from the current main-frame account', async () => {
+    const f = fixture(), bytes = new Uint8Array(2 * 1024 * 1024 + 17).fill(3),
+        input = f.input({ action: 'stage-range', rootId: 'root', offset: 0, bytes });
+    f.run(async (_method, request) => ({ requestId: request.requestId, ownerId: request.ownerId, deviceId: request.deviceId,
+        origin: request.origin, rootId: request.rootId, roots: [], staging: { received: request.bytes.length } }));
+    assert.equal((await f.host.request(f.event, input)).staging.received, bytes.length);
+    for (const patch of [{ bytes: [] }, { bytes: new Uint8Array(0) }, { offset: -1 }, { other: 'x'.repeat(131072) }])
+        await assert.rejects(f.host.request(f.event, { ...input, ...patch }));
+    const before = f.calls.length; f.account('other');
+    await assert.rejects(f.host.request(f.event, input)); assert.equal(f.calls.length, before);
+});

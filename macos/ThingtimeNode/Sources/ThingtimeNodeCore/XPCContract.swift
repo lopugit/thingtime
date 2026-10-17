@@ -3,6 +3,7 @@ import Foundation
 @objc public protocol ThingtimeNodeXPCProtocol {
     func request(_ data: Data, withReply reply: @escaping (Data) -> Void)
     func stream(_ data: Data, sink: ThingtimeNodeByteSink, withReply reply: @escaping (Data) -> Void)
+    func stage(_ data: Data, source: ThingtimeNodeByteSource, withReply reply: @escaping (Data) -> Void)
 }
 
 @objc public protocol ThingtimeNodeByteSink {
@@ -11,11 +12,17 @@ import Foundation
     func receive(_ data: Data, withReply reply: @escaping (Bool) -> Void)
 }
 
+@objc public protocol ThingtimeNodeByteSource {
+    func read(_ offset: Int64, length: Int, withReply reply: @escaping (Data) -> Void)
+}
+
 public enum ThingtimeNodeXPC {
     public static func interface() -> NSXPCInterface {
         let interface = NSXPCInterface(with: ThingtimeNodeXPCProtocol.self)
         interface.setInterface(NSXPCInterface(with: ThingtimeNodeByteSink.self),
             for: #selector(ThingtimeNodeXPCProtocol.stream(_:sink:withReply:)), argumentIndex: 1, ofReply: false)
+        interface.setInterface(NSXPCInterface(with: ThingtimeNodeByteSource.self),
+            for: #selector(ThingtimeNodeXPCProtocol.stage(_:source:withReply:)), argumentIndex: 1, ofReply: false)
         return interface
     }
     public static let machServiceName = "com.thingtime.desktop.node.xpc"

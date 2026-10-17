@@ -53,3 +53,19 @@ test('real child pipe streams without stdout accumulation, and cancellation term
         onStdout: () => { throw Error('Bad frame'); }, timeoutMs: 5000
     }), /invalid stream/);
 });
+
+test('staging uses bounded binary input after a length-prefixed metadata frame', async () => {
+    const { stageRangeMetadata, encodeStageInput } = require('../lib/folder-stream.cjs');
+    const bytes = new Uint8Array(2 * 1024 * 1024 + 17).fill(97);
+    const input = { action: 'stage-range', offset: 0, bytes, requestId: 'range' };
+    const p = stageRangeMetadata(input), r = { id: 'wire', method: 'folder-sync.request', parameters: p };
+    assert.equal(p.length, bytes.length); assert.equal(p.bytes, undefined);
+    const encoded = encodeStageInput(r, bytes), size = encoded.readUInt32BE(0);
+    assert.deepEqual(JSON.parse(encoded.subarray(4, 4 + size)), JSON.parse(JSON.stringify(r)));
+    assert.deepEqual(encoded.subarray(4 + size), Buffer.from(bytes));
+    for (const patch of [{ bytes: [] }, { bytes: new Uint8Array(0) }, { bytes: new Uint8Array(32 * 1024 * 1024 + 1) }, { offset: -1 }])
+        assert.throws(() => stageRangeMetadata({ ...input, ...patch }));
+    assert.throws(() => encodeStageInput(r, bytes.subarray(1)));
+    const result = await runProcess(process.execPath, ['-e', `let n = 0; process.stdin.on('data', b => n += b.length); process.stdin.on('end', () => process.stdout.write(String(n)));`], { input: encoded });
+    assert.equal(result.status, 0); assert.equal(Number(result.stdout), encoded.length);
+});

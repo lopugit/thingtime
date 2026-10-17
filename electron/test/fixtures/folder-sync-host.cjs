@@ -47,6 +47,11 @@ app.whenReady().then(async () => {
             if (request.action === 'suspend') { hold?.({ ...request, roots: [] }); return {}; }
             nativeRequests++;
             if (request.action === 'choose') return await new Promise(resolve => { hold = resolve; });
+            if (request.action === 'stage-range') {
+                assert.ok(request.bytes instanceof Uint8Array); assert.ok(request.bytes.every(byte => byte === 61));
+                const { bytes, ...metadata } = request;
+                return { ...metadata, roots: [], staging: { received: request.offset + bytes.length } };
+            }
             if (request.action === 'read-range') {
                 if (request.path === 'revoked') account = 'other';
                 return { ...request, roots: [], chunk: { bytes: Buffer.alloc(request.length, 47), version: request.version,
@@ -73,6 +78,11 @@ app.whenReady().then(async () => {
         return value.chunk.bytes instanceof Uint8Array && value.chunk.bytes.length === ${stream.length} && value.chunk.bytes.every(byte => byte === 47);
     })()`), true);
     await assert.rejects(request({ ...stream, requestId: randomUUID(), path: 'revoked' })); account = 'owner';
+    const staging = { ...input('stage-range'), rootId: randomUUID(), offset: 0 };
+    assert.equal(await window.webContents.executeJavaScript(`(async () => {
+        const value = await window.folderFixture.request({ ...${JSON.stringify(staging)}, bytes: new Uint8Array(2 * 1024 * 1024 + 17).fill(61) });
+        return value.staging.received;
+    })()`), 2 * 1024 * 1024 + 17);
     const active = request(input('choose')); const failed = assert.rejects(active);
     while (!hold) await new Promise(resolve => setTimeout(resolve, 10));
     const changed = (_event, cookie) => { if (cookie.name === 'fixture_session') host.invalidate(); };
@@ -81,7 +91,7 @@ app.whenReady().then(async () => {
     await window.webContents.session.cookies.remove(origin, 'fixture_session');
     await failed; window.webContents.session.cookies.removeListener('changed', changed);
     assert.equal(host.active, null);
-    console.log(JSON.stringify({ ok: true, checks: ['real-session-cookie-auth', 'anonymous-server-capabilities', 'account-switch', 'proxy-destination', 'subframe-denial', 'cookie-change-cancellation', 'binary-range-IPC', 'stream-account-revocation'], nativeDispatch: 'fixture-only' }));
+    console.log(JSON.stringify({ ok: true, checks: ['real-session-cookie-auth', 'anonymous-server-capabilities', 'account-switch', 'proxy-destination', 'subframe-denial', 'cookie-change-cancellation', 'binary-range-IPC', 'stream-account-revocation', 'binary-stage-IPC'], nativeDispatch: 'fixture-only' }));
 }).catch(error => { process.exitCode = 1; console.error(error); }).finally(async () => {
     clearTimeout(timer); ipcMain.removeHandler('fixture:folder-sync'); host?.invalidate(); window?.destroy();
     await Promise.all([server, upstream].filter(Boolean).map(value => new Promise(resolve => value.close(resolve))));

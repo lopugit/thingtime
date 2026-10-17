@@ -39,10 +39,10 @@ async function fixture() {
 	const expected = { requestId: 'request', ownerId: scope.ownerId, origin: scope.origin };
 	const request = async (_owner: string, input: FolderRequest): Promise<FolderResult> => {
 		assert.ok(input.action.startsWith('stage-'));
-		if (input.action === 'stage-append') {
+		if (input.action === 'stage-append' || input.action === 'stage-range') {
 			assert.equal(input.offset, received);
-			const data = Uint8Array.from(atob(input.data), (c) => c.charCodeAt(0));
-			assert.ok(data.length <= 65_536);
+			const data = input.action === 'stage-range' ? input.bytes : Uint8Array.from(atob(input.data), (c) => c.charCodeAt(0));
+			assert.ok(data.length <= (input.action === 'stage-range' ? 2 * 1024 * 1024 : 65_536));
 			destination.set(data, received);
 			received += data.length;
 			writes++;
@@ -136,4 +136,21 @@ test('native staging rejects false proofs, unnegotiated capabilities, invalid of
 		/source changed/
 	);
 	assert.equal(called, false);
+});
+
+test('Mac staging 1.1 resumes after an accepted binary range without replaying its bytes', async () => {
+    const f = await fixture(), signal = new AbortController().signal;
+    const bridge = { platform: 'macos' as const, fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0' };
+    await assert.rejects(stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge), /lost acknowledged/);
+    assert.equal(f.received(), 2 * 1024 * 1024); assert.equal(f.count(), 1);
+    f.ranges.length = 0;
+    const stage = await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge);
+    assert.deepEqual(f.ranges, [[2 * 1024 * 1024, 3]]); assert.equal(f.count(), 2);
+    assert.equal(stage.operationId, f.operation.id);
+    assert.deepEqual(await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge), stage);
+    assert.equal(f.count(), 2);
+    const input: FolderRequest = { action: 'stage-range', rootId, transfer: { scope, rootId, operation: f.operation }, offset: 0, bytes: f.bytes };
+    for (const received of [0, f.bytes.length - 1, f.bytes.length + 1]) {
+        assert.throws(() => parseMobileFolderResult({ type: 'mobile-files-result', payload: { ...f.expected, rootId, roots: [], staging: { received } } }, f.expected, input));
+    }
 });

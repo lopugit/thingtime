@@ -20,6 +20,7 @@ actor Cooldowns {
     }
     func snapshot() -> JSONValue { .object(["count": .number(Double(count)), "seconds": .number(Double(seconds))]) }
 }
+final class StreamCursor: @unchecked Sendable { var offset: Int64 = 0 }
 final class StreamWriter: @unchecked Sendable {
     private var offset = 0
     func receive(_ data: Data) throws {
@@ -63,16 +64,26 @@ final class StreamWriter: @unchecked Sendable {
             staging: MobileSyncStaging(directory: config.directory.appendingPathComponent("staging")),
             verify: { owner, device in identityChecks += 1; try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
             choose: { selected }, approve: { _ in true }, conditions: { .init(network: "wifi", charging: true) })
-        while let line = readLine() {
+        while let input = try NodeFolderStreamInput.header(.standardInput) {
             let response: JSONValue
             do {
-                guard line.utf8.count <= 131_072 else { throw MobileFolderStore.Failure.limit }
-                let request = try JSONDecoder().decode(JSONValue.self, from: Data(line.utf8))
+                guard input.count <= 131_072 else { throw MobileFolderStore.Failure.limit }
+                let request = try JSONDecoder().decode(JSONValue.self, from: input)
                 let stream: (@Sendable (Data) throws -> Void)?
                 if case .object(let fields) = request, fields["action"] == .string("read-range") {
                     let writer = StreamWriter(); stream = { try writer.receive($0) }
                 } else { stream = nil }
-                response = .object(["ok": .bool(true), "result": try await service.handle(request, stream: stream), "identityChecks": .number(Double(identityChecks)), "cooldowns": await cooldowns.snapshot()])
+                let receive: (@Sendable (Int) throws -> Data)?
+                if case .object(let fields) = request, fields["action"] == .string("stage-range"),
+                   case .number(let length) = fields["length"], length > 0, length <= 32 * 1024 * 1024, length.rounded() == length {
+                    let source = try NodeFolderStreamInput(handle: .standardInput, length: Int(length))
+                    let cursor = StreamCursor()
+                    receive = { count in
+                        let bytes = try source.next(offset: cursor.offset, length: count)
+                        cursor.offset += Int64(bytes.count); return bytes
+                    }
+                } else { receive = nil }
+                response = .object(["ok": .bool(true), "result": try await service.handle(request, stream: stream, receive: receive), "identityChecks": .number(Double(identityChecks)), "cooldowns": await cooldowns.snapshot()])
             } catch {
                 response = .object(["ok": .bool(false), "error": .string(String(describing: error)), "identityChecks": .number(Double(identityChecks)), "cooldowns": await cooldowns.snapshot()])
             }

@@ -44,7 +44,7 @@ public final class MacFolderSync {
 
     public func suspend() { active?.task.cancel(); cancelDialog() }
 
-    public func handle(_ payload: JSONValue, stream: (@Sendable (Data) throws -> Void)? = nil) async throws -> JSONValue {
+    public func handle(_ payload: JSONValue, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil) async throws -> JSONValue {
         let encoded = try JSONEncoder().encode(payload)
         guard encoded.count <= 131_072 else { throw MobileFolderStore.Failure.limit }
         let r = try JSONDecoder().decode(Request.self, from: encoded)
@@ -56,9 +56,9 @@ public final class MacFolderSync {
             return .object([:])
         }
         guard active == nil else { throw ThingtimeNodeError.invalidRequest("Another folder request is running.") }
-        guard ["context", "conditions", "list", "choose", "remove", "scan", "read", "read-range", "stage-begin", "stage-append", "stage-finish", "write-approve", "publication-lookup", "publish"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
-        guard (r.action == "read-range") == (stream != nil) else { throw MobileFolderStore.Failure.invalid }
-        let task = Task { try await self.execute(r, owner: owner, stream: stream) }
+        guard ["context", "conditions", "list", "choose", "remove", "scan", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "publication-lookup", "publish"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
+        guard (r.action == "read-range") == (stream != nil), (r.action == "stage-range") == (receive != nil) else { throw MobileFolderStore.Failure.invalid }
+        let task = Task { try await self.execute(r, owner: owner, stream: stream, receive: receive) }
         active = (r.requestId, r.ownerId, r.deviceId, task)
         let timeout = Task {
             try await Task.sleep(for: .seconds(270))
@@ -82,11 +82,11 @@ public final class MacFolderSync {
     }
     private func value<T: Encodable>(_ input: T) throws -> JSONValue { try JSONValue.from(input) }
 
-    private func execute(_ r: Request, owner: FileSyncOwnerScope, stream: (@Sendable (Data) throws -> Void)?) async throws -> JSONValue {
+    private func execute(_ r: Request, owner: FileSyncOwnerScope, stream: (@Sendable (Data) throws -> Void)?, receive: (@Sendable (Int) throws -> Data)?) async throws -> JSONValue {
         try await authorized(r)
         var result: [String: JSONValue] = ["requestId": .string(r.requestId), "ownerId": .string(r.ownerId), "deviceId": .string(r.deviceId), "origin": .string(r.origin)]
         if r.action == "context" {
-            result["capabilities"] = .object(["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.0.0"), "filePublicationVersion": .string("1.1.0")])
+            result["capabilities"] = .object(["fileAccessVersion": .string(Self.version), "fileStagingVersion": .string("1.1.0"), "filePublicationVersion": .string("1.1.0")])
         } else if r.action == "conditions" {
             result["conditions"] = try value(conditions())
         } else if r.action == "choose" {
@@ -147,13 +147,16 @@ public final class MacFolderSync {
                         }
                         result["publication"] = try value(receipt)
                     } else {
-                        let action = r.action, offset = r.offset, encoded = r.data
+                        let action = r.action, offset = r.offset, encoded = r.data, length = r.length
                         let progress = try await worker {
                             try MobileFolderReader.checkAccess(bookmark: grant.bookmark)
                             let progress: MobileSyncStaging.Progress
                             switch action {
                             case "stage-begin": progress = try staging.begin(transfer, owner: owner)
                             case "stage-finish": progress = try staging.finish(transfer, owner: owner)
+                            case "stage-range":
+                                guard let offset, let length, let receive else { throw MobileFolderStore.Failure.invalid }
+                                progress = try staging.appendStream(transfer, owner: owner, offset: offset, length: length, read: receive)
                             case "stage-append":
                                 guard let offset, offset >= 0, let encoded, encoded.utf8.count <= 87_384,
                                       let bytes = Data(base64Encoded: encoded), !bytes.isEmpty, bytes.count <= 65_536 else { throw MobileFolderStore.Failure.invalid }

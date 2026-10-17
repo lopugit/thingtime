@@ -6,7 +6,7 @@ const fsPromises = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { FolderStream } = require('./folder-stream.cjs');
+const { FolderStream, stageRangeMetadata, encodeStageInput } = require('./folder-stream.cjs');
 
 const NODE_LABEL = 'com.thingtime.desktop.node';
 const NODE_BUNDLE_ID = 'com.thingtime.desktop.node';
@@ -959,11 +959,12 @@ class ThingtimeNodeIntegration {
 	async request(method, parameters = {}, suppliedCommandId, options = {}) {
 		const paths = this.paths();
 		await this.verify(paths);
-		const request = nodeRequest(method, parameters, suppliedCommandId);
-		const encoded = `${boundedJson(request, 'node request')}\n`;
+		const staging = method === 'folder-sync.request' && parameters.action === 'stage-range';
+		const request = nodeRequest(method, staging ? stageRangeMetadata(parameters) : parameters, suppliedCommandId);
+		const encoded = staging ? encodeStageInput(request, parameters.bytes) : `${boundedJson(request, 'node request')}\n`;
 		const stream = method === 'folder-sync.request' && parameters.action === 'read-range' ? new FolderStream(request) : null;
 		options.signal?.throwIfAborted();
-		const response = await this.runner(paths.bridgeExecutable, [], {
+		const response = await this.runner(paths.bridgeExecutable, staging ? ['--folder-stage-stream'] : [], {
 			env: this.bridgeEnvironment(),
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,

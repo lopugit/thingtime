@@ -196,4 +196,45 @@ final class MobileSyncStagingTests: XCTestCase {
         XCTAssertNotNil(try second.finish(request, owner: owner).stage)
     }
 
+    func testStreamCheckpointReplayAndInterruptedTailRecovery() throws {
+        let bytes = Data(repeating: 79, count: 2 * 1024 * 1024 + 17)
+        let (root, owner, request) = try fixture(bytes), staging = MobileSyncStaging(directory: root)
+        _ = try staging.begin(request, owner: owner)
+        var frames = 0
+        XCTAssertThrowsError(try staging.appendStream(request, owner: owner, offset: 0, length: bytes.count) { wanted in
+            frames += 1
+            if frames == 2 { throw CancellationError() }
+            return Data(bytes.prefix(wanted))
+        })
+        XCTAssertEqual(try MobileSyncStaging(directory: root).begin(request, owner: owner).received, 0)
+        var offset = 0
+        let complete = try staging.appendStream(request, owner: owner, offset: 0, length: bytes.count) { wanted in
+            defer { offset += wanted }; return bytes.subdata(in: offset..<offset + wanted)
+        }
+        XCTAssertEqual(complete.received, Int64(bytes.count)); XCTAssertNil(complete.stage)
+        offset = 0
+        let replay = try MobileSyncStaging(directory: root).appendStream(request, owner: owner, offset: 0, length: bytes.count) { wanted in
+            defer { offset += wanted }; return bytes.subdata(in: offset..<offset + wanted)
+        }
+        XCTAssertEqual(replay.received, complete.received)
+        XCTAssertThrowsError(try staging.appendStream(request, owner: owner, offset: 0, length: bytes.count) { Data(repeating: 80, count: $0) })
+        XCTAssertNotNil(try staging.finish(request, owner: owner).stage)
+    }
+    func testStreamFlushCrashTruncationAndInvalidFramesCannotAdvanceCheckpoint() throws {
+        let bytes = Data(repeating: 83, count: 131_073)
+        let (root, owner, request) = try fixture(bytes)
+        let staging = MobileSyncStaging(directory: root, afterBytesFlushed: { throw CancellationError() })
+        _ = try staging.begin(request, owner: owner)
+        XCTAssertThrowsError(try staging.appendStream(request, owner: owner, offset: 0, length: bytes.count) { Data(repeating: 83, count: $0) })
+        let restarted = MobileSyncStaging(directory: root)
+        XCTAssertEqual(try restarted.begin(request, owner: owner).received, 0)
+        for change in [-1, 1] {
+            XCTAssertThrowsError(try restarted.appendStream(request, owner: owner, offset: 0, length: bytes.count) { Data(count: $0 + change) })
+            XCTAssertEqual(try restarted.begin(request, owner: owner).received, 0)
+        }
+        for length in [0, -1, MobileFolderReader.maximumStreamBytes + 1] {
+            XCTAssertThrowsError(try restarted.appendStream(request, owner: owner, offset: 0, length: length) { _ in XCTFail(); return Data() })
+        }
+    }
+
 }

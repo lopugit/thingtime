@@ -972,3 +972,41 @@ seeding, scans and other checks; they are not a sustained-throughput benchmark.
 The fixture uses synthetic picker/consent/conditions and private credential
 storage, not installed XPC/Keychain/TCC. Download staging, mobile streaming,
 background execution, Photos, peers and the remaining delivery ledger stay open.
+
+## Mac download range staging — 2026-10-17
+
+Mac file staging 1.1 adds `stage-range` to the shared download target. The runner
+passes one 2 MiB cloud range as binary Electron IPC; the signed helper receives
+bounded metadata followed by raw stdin bytes, and the native staging worker pulls
+64 KiB XPC frames sequentially. Metadata is capped at 128 KiB, individual ranges
+at 32 MiB, and source callbacks have a cancellable 15-second monotonic timeout.
+The existing signed-parent/peer checks and before/after live device and browser
+account checks remain. No identity cache, new network permission or endpoint.
+
+`MobileSyncStaging.appendStream` holds the existing record lock for one range,
+validates its immutable operation, writes bounded frames, flushes payload bytes,
+then saves the received offset. Old 64 KiB append calls use that same primitive.
+A partial or flush-before-checkpoint failure leaves only an uncheckpointed private
+tail, truncated on resume. A replay must match retained bytes. Late authorization
+refusal may leave durable private progress but cannot publish into the selected
+folder. Final content hashing, destination-version checks and native publication
+approval remain unchanged; the journal and Timeline formats are unchanged.
+
+All 107 shared tests, 134 Electron tests, 25 AppleFileSync tests and 14 Mac/XPC
+tests pass. Tests cover partial/oversized input, sequential pull offsets, aborted
+ranges, flush-before-checkpoint recovery, byte-matching replay, two live checks
+for a 33-frame range and late identity refusal. Real anonymous XPC verifies the
+pull protocol; isolated real Electron verifies binary staging IPC with synthetic
+native dispatch. Native release and production web/Vercel builds and targeted
+lint pass. TypeScript is byte-identical to the existing 91 diagnostics.
+
+Real API acceptance with `--large-upload --large-download` passed both directions,
+independent replacements, lost cloud/staging/publication replies, native restart,
+original operation IDs, no byte-range replay, full hashes, retained versions and
+revocation. Three staged ranges totaled 2,097,432 bytes; three upload-source
+ranges totaled 8,388,882 bytes, with five PUTs and two publications. The run made
+150 native calls / 301 verifier invocations and honored one 44-second cooldown.
+These totals include setup/recovery and are not a throughput benchmark. The
+fixture uses synthetic picker/consent/conditions and private credential storage;
+signed installed XPC/Keychain/TCC, mobile streaming, persistent workers, Photos,
+peers and the rest of the requested product remain open.

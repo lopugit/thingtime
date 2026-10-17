@@ -190,9 +190,14 @@ private enum ThingtimeNodeBridge {
             rejectUntrustedParent()
         }
 
-        let input = FileHandle.standardInput.readDataToEndOfFile()
+        let staging = CommandLine.arguments == [CommandLine.arguments[0], "--folder-stage-stream"]
+        let input: Data
         let request: NodeRequest
         do {
+            if staging {
+                guard let header = try NodeFolderStreamInput.header(.standardInput) else { throw ThingtimeNodeError.invalidRequest("Missing stream header.") }
+                input = header
+            } else { input = FileHandle.standardInput.readDataToEndOfFile() }
             request = try NodeWireCodec.decodeRequest(input)
         } catch let error as ThingtimeNodeError {
             write(.failure(id: "", code: error.code, message: error.localizedDescription))
@@ -225,11 +230,23 @@ private enum ThingtimeNodeBridge {
         if request.method == "folder-sync.request", case .object(let fields) = request.parameters,
            fields["action"] == .string("read-range") { streaming = true } else { streaming = false }
         let sink = ByteSink()
-        if streaming { service.stream(input, sink: sink) { data in reply.finish(data) } }
+        var stageSource: NodeFolderStreamInput?
+        if staging {
+            guard request.method == "folder-sync.request", case .object(let fields) = request.parameters,
+                  fields["action"] == .string("stage-range"), case .number(let length) = fields["length"],
+                  length.rounded() == length, length > 0, length <= 32 * 1024 * 1024,
+                  let source = try? NodeFolderStreamInput(handle: .standardInput, length: Int(length)) else {
+                connection.invalidate(); write(.failure(id: request.id, code: "invalid_request", message: "Invalid staging stream.")); return
+            }
+            stageSource = source
+            service.stage(input, source: source) { data in reply.finish(data) }
+        } else if streaming { service.stream(input, sink: sink) { data in reply.finish(data) } }
         else { service.request(input) { data in reply.finish(data) } }
 
-        let response = reply.wait(seconds: ThingtimeNodeXPCRequestPolicy.bridgeResponseTimeoutSeconds(for: request.method))
-            ?? encoded(.failure(id: request.id, code: "node_timeout", message: "Thingtime Node did not respond in time."))
+        let response = withExtendedLifetime(stageSource) {
+            reply.wait(seconds: ThingtimeNodeXPCRequestPolicy.bridgeResponseTimeoutSeconds(for: request.method))
+                ?? encoded(.failure(id: request.id, code: "node_timeout", message: "Thingtime Node did not respond in time."))
+        }
         connection.invalidate()
         if streaming {
             sink.finish(response)

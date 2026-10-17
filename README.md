@@ -5018,6 +5018,8 @@ cd remix
 corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json
 # Exercise an upload crossing the canonical 8 MiB multipart boundary:
 corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --large-upload
+# Exercise both streams and restart after a lost staging acknowledgement:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --large-upload --large-download
 # Also force a real native cooldown immediately before an upload HTTP request:
 corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --cooldown-before-upload
 ```
@@ -5063,7 +5065,19 @@ framing/range bounds and returns a binary buffer only after final native and
 browser-account verification. Cancellation, changed source/path, incomplete
 output or late authorization refusal discards the range. The 1 MiB ordinary XPC
 message cap is unchanged. Older Mac and current mobile bridges retain chunked
-reads; downloads still use chunked staging. No direct native network upload or
+reads. Mac staging 1.1 now uses the corresponding bounded download stream. No direct native network upload or
 new device credential scope is added. The `--large-upload` option tests the real
 native/cloud path with an 8 MiB-plus file; installed signing/TCC acceptance and
 sustained throughput remain separate checks.
+
+Mac file staging 1.1 carries each downloaded range as binary Electron IPC and
+length-prefixed binary helper input, then pulls at most 64 KiB per XPC callback.
+The shared runner buffers 2 MiB cloud ranges; the native protocol caps ranges at
+32 MiB and metadata at 128 KiB. Native storage flushes the complete range before
+saving its offset. Incomplete tails are discarded on resume, while accepted
+ranges survive process restart and lost acknowledgements without replay.
+The existing staged-content verification and explicit publication approval stay
+separate. `--large-download` uses a 2 MiB-plus download and the acceptance script
+now always loses one accepted staging reply, restarts its private native fixture,
+and verifies exact offset recovery. Older Mac and current mobile hosts keep the
+64 KiB append path. No new credentials, network authority or environment setup.
