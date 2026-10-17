@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17: Files API 1.3 retains alternate uploaded versions in Timeline without
+  publishing them over the live file. Exact replay, concurrent publication and
+  restore pass real storage acceptance. Conflict capture UI and whole backups
+  remain unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#alternate-version-retention--2026-10-17).
+
+
 - 2026-10-17 — **Codex (AI)**: Verified iOS History save/cancel and restore with
   independently checked retained bytes after sharing native range transport.
   Installed acceptance now observes real replies across WebView reloads; isolated

@@ -43,12 +43,16 @@ export const createFilesHandlers = (
 					const result = await deps.folders.read(user.id, url.searchParams.get('folderId'), url.searchParams.get('operationId') ?? undefined);
 					return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
 				}
+				if (!mutation && (url.searchParams.getAll('id').length !== 1 || url.searchParams.getAll('operationId').length > 1 ||
+					url.searchParams.getAll('kind').length > 1 || [...url.searchParams.keys()].some(key => !['id', 'operationId', 'kind'].includes(key)) ||
+					(url.searchParams.has('kind') && (url.searchParams.get('kind') !== 'retained-version' || !url.searchParams.has('operationId')))))
+					return json({ ok: false, error: 'Use id with an optional operationId; retained-version requires both' }, { status: 400 });
 				const body = mutation ? await readJsonBody(request, 8192) : undefined;
 				const result = mutation
 					? body?.kind === 'folder'
 						? await deps.folders.create(user.id, body)
 						: await deps.service.commit(user.id, body)
-					: await deps.service.read(user.id, url.searchParams.get('id'), url.searchParams.get('operationId') ?? undefined);
+					: await deps.service.read(user.id, url.searchParams.get('id'), url.searchParams.get('operationId') ?? undefined, url.searchParams.get('kind') === 'retained-version');
 				return result.ok === false ? json({ ok: false, error: result.error }, { status: result.status }) : json(result);
 			});
 	return { loader: handle(false), action: handle(true) };

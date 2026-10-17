@@ -91,6 +91,12 @@ test('retained file revisions keep their historical name and appear in file sear
 		assert.equal(invalid.title, 'Thing'); assert.equal(invalid.kind, '');
 	}
 	assert.equal(historyCard({ ...original, event: { ...original.event, thingId: 'foreign-file' } }).kind, '');
+	const retainedId = 'file-retain-' + 'c'.repeat(64);
+	const retention = historyCard(row(retainedId, 3, { thingId: file.id, mode: 'effect', operation: 'effect',
+		label: 'Saved conflicting file version', before: original.event.after,
+		after: { adapter: 'file-content', version: 1, value: { ...file, revision: retainedId } } }));
+	assert.equal(retention.title, file.name); assert.equal(retention.kind, 'file');
+	assert.equal(filterHistoryCards([retention], readHistoryFilters(new URLSearchParams('kind=file&q=holiday'))).length, 1);
 	const removed = historyCard(row('removed', 2, { thingId: file.id, operation: 'delete', before: original.event.after, after: null }));
 	assert.equal(removed.title, file.name); assert.equal(removed.kind, 'file');
 });

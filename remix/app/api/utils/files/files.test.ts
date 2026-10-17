@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createCloudFileService } from './files';
+import { isPublishedTimelineEvent } from '../timeline/publishedHead';
 import { attachmentContentVersion } from '../attachments/contentFingerprint';
 import { thingStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION } from '../storage/storageCore';
 import { COLLECTION_SCHEMA_VERSIONS, isProtectedThingtime } from '../../../schemas/registry';
@@ -88,4 +89,65 @@ test('an attached or app-sandbox file root is not adopted by the home file write
   assert.equal((await f.service.read('owner', create.id)).ok, false);
   assert.equal((await f.service.commit('owner', { ...create, operationId: randomUUID(), expectedRevision: first.file.revision })).ok, false);
  }
+});
+
+test('retention captures both versions without publishing, then restores through the ordinary writer', async () => {
+ const f = fixture(), create = input(f.upload('att1'));
+ const first: any = await f.service.commit('owner', create); assert.ok(first.ok);
+ const before = structuredClone(f.docs().get(create.id));
+ const keep = { ...create, kind: 'retained-version', operationId: randomUUID(), expectedRevision: first.file.revision,
+  attachmentId: 'att2', contentVersion: f.upload('att2') };
+ const retained: any = await f.service.commit('owner', keep); assert.ok(retained.ok); assert.equal(retained.retained, true);
+ const current: any = await f.service.read('owner', create.id); assert.deepEqual(current.file, first.file);
+ assert.deepEqual(f.docs().get(create.id).updatedAt, before.updatedAt);
+ assert.equal(f.docs().get('att1').targetId, create.id); assert.equal(f.docs().get('att2').targetId, create.id);
+ const event = f.events().get(retained.file.revision); assert.equal(event.mode, 'effect'); assert.equal(event.operation, 'effect');
+ assert.equal(isPublishedTimelineEvent({ event } as any), false);
+ assert.equal(event.source, 'api'); assert.deepEqual(event.parentIds, [first.file.revision]);
+ assert.deepEqual(event.before.value.content, first.file.content); assert.deepEqual(event.after.value.content, retained.file.content);
+ assert.equal((await f.service.read('owner', create.id, keep.operationId) as any).receipt, null);
+ assert.deepEqual((await f.service.read('owner', create.id, keep.operationId, true) as any).receipt.file, retained.file);
+ const charged = f.charged(), fingerprints = f.fingerprints();
+ const replay: any = await f.service.commit('owner', keep); assert.ok(replay.replayed); assert.equal(f.charged(), charged); assert.equal(f.fingerprints(), fingerprints);
+ assert.equal((await f.service.commit('owner', { ...keep, name: 'different.bin' })).ok, false);
+ assert.equal((await f.service.read('other', create.id, keep.operationId, true)).ok, false);
+ const restored: any = await f.service.commit('owner', { ...create, operationId: randomUUID(), expectedRevision: first.file.revision,
+  attachmentId: retained.file.content.attachmentId, contentVersion: retained.file.content.version });
+ assert.ok(restored.ok); assert.deepEqual(restored.file.content, retained.file.content);
+ assert.deepEqual((await f.service.commit('owner', keep) as any).file, retained.file);
+});
+
+test('retention refuses missing, stale, renamed, moved or trashed roots and rolls back failed history', async () => {
+ for (const patch of [{ expectedRevision: null }, { expectedRevision: 'stale' }, { name: 'renamed.bin' }, { folderId: 'moved' }, { trashed: true }]) {
+  const f = fixture(), create = input(f.upload('att1')), first: any = await f.service.commit('owner', create);
+  const keep = { ...create, kind: 'retained-version', operationId: randomUUID(), expectedRevision: first.file.revision,
+   attachmentId: 'att2', contentVersion: f.upload('att2'), ...patch };
+  const before = structuredClone(f.docs().get(create.id)), charged = f.charged();
+  assert.equal((await f.service.commit('owner', keep)).ok, false);
+  assert.deepEqual(f.docs().get(create.id), before); assert.equal(f.docs().get('att2').targetId, undefined); assert.equal(f.charged(), charged);
+ }
+ const f = fixture(), create = input(f.upload('att1')), first: any = await f.service.commit('owner', create);
+ const keep = { ...create, kind: 'retained-version', operationId: randomUUID(), expectedRevision: first.file.revision, attachmentId: 'att2', contentVersion: f.upload('att2') };
+ const before = structuredClone(f.docs().get(create.id)), charged = f.charged();
+ f.failAppend(); assert.equal((await f.service.commit('owner', keep)).ok, false);
+ assert.deepEqual(f.docs().get(create.id), before); assert.equal(f.docs().get('att2').targetId, undefined); assert.equal(f.charged(), charged);
+ f.docs().get(create.id).crystal.trashed = true;
+ assert.equal((await f.service.commit('owner', keep)).ok, false);
+ f.docs().delete(create.id); assert.equal((await f.service.commit('owner', keep)).ok, false);
+});
+
+test('retention uses the same attachment authorization and rejects forged effect receipts', async () => {
+ for (const patch of [{ ownerId: 'other' }, { targetId: 'other-file' }, { moderation: { status: 'blocked' } }, { attachmentExpiresAt: new Date() },
+  { attachmentLinked: true }, { appId: 'app' }, { storageAccountingVersion: -1 }, { attachmentPurpose: 'post' }, { attachmentState: 'deleting' }]) {
+  const f = fixture(), create = input(f.upload('att1')), first: any = await f.service.commit('owner', create);
+  assert.equal((await f.service.commit('owner', { ...create, kind: 'retained-version', operationId: randomUUID(), expectedRevision: first.file.revision,
+   attachmentId: 'att2', contentVersion: f.upload('att2', patch) })).ok, false);
+  assert.deepEqual((await f.service.read('owner', create.id) as any).file, first.file);
+ }
+ const f = fixture(), create = input(f.upload('att1')), first: any = await f.service.commit('owner', create);
+ const keep = { ...create, kind: 'retained-version', operationId: randomUUID(), expectedRevision: first.file.revision, attachmentId: 'att2', contentVersion: f.upload('att2') };
+ const retained: any = await f.service.commit('owner', keep); assert.ok(retained.ok);
+ f.events().get(retained.file.revision).source = 'client';
+ assert.equal((await f.service.commit('owner', keep)).ok, false);
+ assert.equal((await f.service.read('owner', create.id, keep.operationId, true)).ok, false);
 });

@@ -10,6 +10,8 @@ export type CloudFileCommit = {
 	id: string; operationId: string; expectedRevision: string | null; name: string; folderId: string | null;
 	attachmentId: string; contentVersion: string; trashed: boolean;
 };
+export type CloudFileRetention = CloudFileCommit & { kind: 'retained-version'; expectedRevision: string; trashed: false };
+export const CLOUD_FILE_RETENTION_REQUIREMENTS = { 'api.files': '1.3.0' } as const;
 const object = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const identifier = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(v);
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(v);
@@ -22,6 +24,14 @@ export function parseCloudFileCommit(value: unknown): CloudFileCommit {
 		!hex(value.contentVersion) || typeof value.trashed !== 'boolean' || (value.expectedRevision === null && value.trashed)) throw Error('Invalid file commit');
 	return { id: value.id, operationId: value.operationId, expectedRevision: value.expectedRevision, name: value.name,
 		folderId: value.folderId, attachmentId: value.attachmentId, contentVersion: value.contentVersion, trashed: value.trashed };
+}
+/** Retain alternate bytes without publishing them as the live file. */
+export function parseCloudFileRetention(value: unknown): CloudFileRetention {
+	if (!object(value) || value.kind !== 'retained-version') throw Error('Invalid file retention');
+	const { kind, ...fields } = value;
+	const command = parseCloudFileCommit(fields);
+	if (command.expectedRevision === null || command.trashed) throw Error('Retention needs a current live file');
+	return { ...command, kind, expectedRevision: command.expectedRevision, trashed: false };
 }
 export function parseCloudFile(value: unknown): CloudFile {
 	if (!object(value) || !identifier(value.id) || !identifier(value.revision) || !validFileName(value.name) ||

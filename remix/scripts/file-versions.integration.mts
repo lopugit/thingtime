@@ -37,11 +37,11 @@ async function upload(bytes: Buffer) {
  const receipt = await ok(`/api/v1/attachments/content?id=${id}&fingerprint=1`);
  const file = { id, version: receipt.version, bytes }; uploaded.push(file); return file;
 }
-let latest: any = null, signedIn = false, folderId: string | null = null;
+let latest: any = null, signedIn = false, folderId: string | null = null, extraRetention = 0;
 const inventoryFixtures: string[] = [];
 const id = randomUUID();
 try {
- const discovery = await ok('/.well-known/thingtime-capabilities.json'); assert.equal(discovery.features['api.files'].version, '1.2.0');
+ const discovery = await ok('/.well-known/thingtime-capabilities.json'); assert.equal(discovery.features['api.files'].version, '1.3.0');
  await ok('/api/v1/login', { username: fixture.username, password: fixture.password }); signedIn = true;
  assert.equal((await ok('/api/v1/auth/me')).user.id, fixture.userId);
  const a = await upload(Buffer.alloc(128, 11)), b = await upload(Buffer.alloc(257, 22));
@@ -57,6 +57,26 @@ try {
  const raced = await Promise.all(attempts.map(body => call('/api/v1/files', body)));
  assert.equal(raced.filter(r => r.response.status === 200).length, 1); assert.equal(raced.filter(r => r.response.status === 409).length, 1);
  latest = (await ok(`/api/v1/files?id=${id}`)).file;
+ const alternate = await upload(Buffer.alloc(389, 33));
+ const keep = { id, operationId: randomUUID(), kind: 'retained-version', expectedRevision: latest.revision,
+  name: latest.name, folderId: latest.folderId, attachmentId: alternate.id, contentVersion: alternate.version, trashed: false };
+ const liveBeforeRetention = structuredClone(latest);
+ const retention = await ok('/api/v1/files', keep); assert.equal(retention.retained, true); assert.equal(retention.replayed, false);
+ assert.deepEqual((await ok(`/api/v1/files?id=${id}`)).file, liveBeforeRetention);
+ assert.equal((await ok(`/api/v1/files?id=${id}&operationId=${keep.operationId}`)).receipt, null);
+ assert.deepEqual((await ok(`/api/v1/files?id=${id}&operationId=${keep.operationId}&kind=retained-version`)).receipt.file, retention.file);
+ assert.equal((await call('/api/v1/files', { ...keep, name: 'different.bin' })).response.status, 409);
+ assert.equal((await call(`/api/v1/files?id=${id}&operationId=${keep.operationId}&kind=retained-version`, undefined, false)).response.status, 401);
+ assert.equal((await call('/api/v1/attachments/delete', { id: alternate.id, targetId: id })).response.status, 409);
+ const concurrentKeep = { ...keep, operationId: randomUUID() };
+ const concurrentPublish = { ...replacement, operationId: randomUUID(), expectedRevision: latest.revision, name: 'retention-race.bin' };
+ const [held, published] = await Promise.all([call('/api/v1/files', concurrentKeep), call('/api/v1/files', concurrentPublish)]);
+ assert.equal(published.response.status, 200); assert.ok([200, 409].includes(held.response.status));
+ latest = published.data.file;
+ assert.deepEqual((await ok(`/api/v1/files?id=${id}`)).file, latest);
+ if (held.response.status === 200) { extraRetention = 1; assert.equal(held.data.retained, true); }
+ else assert.equal((await ok(`/api/v1/files?id=${id}&operationId=${concurrentKeep.operationId}&kind=retained-version`)).receipt, null);
+ console.log('PASS: concurrent retention/publication serializes without replacing the winning live file or returning a false retained receipt.');
  const library = await ok('/api/v1/things?thingtime=file'); assert.ok(library.things.some((file: any) => file.id === id));
  const folder = await ok('/api/v1/things', { thingtime: ['folder'], crystal: { name: 'File version acceptance' }, visibility: 'private' }); folderId = folder.thing.id;
  const beforeMove = latest.revision;
@@ -89,6 +109,14 @@ try {
  const restoreRetry = await ok('/api/v1/files', JSON.parse(JSON.stringify(restore)));
  assert.equal(restoreRetry.replayed, true); assert.deepEqual(await checkFileRestoreReceipt(restoreRetry.file, restore, initial.file, fixture.userId), latest);
  assert.equal(fileContentId(latest), fileContentId(initial.file)); assert.notEqual(fileContentId(latest), fileContentId(next.file));
+ const replayRetention = await ok('/api/v1/files', JSON.parse(JSON.stringify(keep)));
+ assert.equal(replayRetention.replayed, true); assert.deepEqual(replayRetention.file, retention.file);
+ assert.deepEqual((await ok(`/api/v1/files?id=${id}`)).file, latest);
+ const restoreAlternate = fileRestoreCommand(latest, retention.file, randomUUID());
+ latest = await checkFileRestoreReceipt((await ok('/api/v1/files', restoreAlternate)).file, restoreAlternate, retention.file, fixture.userId);
+ assert.equal(fileContentId(latest), fileContentId(retention.file));
+ assert.equal(latest.name, restoreAlternate.name); assert.equal(latest.folderId, restoreAlternate.folderId);
+ console.log('PASS: retained alternate upload leaves live file unchanged; separate exact receipt survives later edits; ordinary restore publishes retained bytes.');
  for (const file of uploaded) {
   const response = await fetch(base.origin+`/api/v1/attachments/content?id=${file.id}&cache=bytes`, { headers: { Cookie: [...cookies].map(([k,v])=>`${k}=${v}`).join('; ') }, redirect: 'error', signal: AbortSignal.timeout(30_000) });
   assert.equal(response.status, 200); assert.equal(hash(new Uint8Array(await response.arrayBuffer())), hash(file.bytes));
@@ -97,7 +125,10 @@ try {
  assert.equal((await call(`/api/v1/things?id=${id}`, undefined, true, 'DELETE')).response.status, 404);
  assert.equal((await call(`/api/v1/files?id=${id}`, undefined, false)).response.status, 401);
  const history = await ok(`/api/v1/timeline?ownerId=${encodeURIComponent(fixture.userId)}&dataPlane=home&thingId=${id}`);
- const entries = history.entries.map(parseTimelineEntry); assert.equal(entries.length, 7); assert.equal(entries.filter((e: any) => e.event.after.adapter === 'file-content').length, 5);
+ const entries = history.entries.map(parseTimelineEntry); assert.equal(entries.length, 10 + extraRetention); assert.equal(entries.filter((e: any) => e.event.after.adapter === 'file-content').length, 8 + extraRetention);
+ const retentionEvent = entries.find((entry: any) => entry.event.id === retention.file.revision)?.event;
+ assert.ok(retentionEvent); assert.equal(retentionEvent.mode, 'effect'); assert.deepEqual(timelineFileVersion(retentionEvent, 'after'), retention.file);
+ assert.deepEqual(timelineFileVersion(retentionEvent, 'before'), liveBeforeRetention);
  const retained = entries.map((entry: any) => timelineFileVersion(entry.event, 'after')).filter(Boolean);
  assert.ok(retained.some((file: any) => fileContentId(file) === fileContentId(initial.file)));
  assert.ok(retained.some((file: any) => fileContentId(file) === fileContentId(next.file)));

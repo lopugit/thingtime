@@ -1420,3 +1420,26 @@ worktree's 14900/14901/14902 trio; no unrelated daemon was stopped.
 
 The new whole-backup scope above remains unimplemented. Per-file History and
 small acceptance fixtures do not establish a complete snapshot or 100 TB export.
+
+## Alternate-version retention — 2026-10-17
+
+The files API now retains an alternate verified upload without publishing it as
+the live file (`kind=retained-version`, `api.files` 1.3.0). The existing attachment
+binding/accounting transaction appends an owner-private Timeline effect containing
+both versions. A bounded root token fences concurrent publication while leaving
+visible bytes, revision, placement and modification time unchanged. Retention
+cannot advance the Published branch head. Immutable receipts use a separate
+identity and exact request hash; replay after later edits remains safe.
+
+Real local HTTP/object-storage acceptance passed no-live-change retention,
+concurrent retention/publication, exact replay after later edits, guarded restore,
+all retained byte hashes, anonymous denial and protected attachment deletion.
+History's shared file projection includes server retention effects and refuses
+ordinary/forged effects. This is an API foundation: the conflict popup still needs
+explicit native capture and durable retry wiring. It does not promise source-loss
+recovery for uncaptured device files or independent whole-data backups.
+
+Validation: 29 files API tests, 239 Timeline tests and 129 shared file-sync checks
+pass; targeted ESLint passes. Full TypeScript exactly matches the preceding
+91 normalized baseline diagnostics. No native source or layout changed in this
+increment; installed conflict-capture acceptance remains outstanding.

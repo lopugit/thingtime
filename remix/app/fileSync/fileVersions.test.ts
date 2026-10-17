@@ -101,3 +101,14 @@ test('restore completion must match reviewed placement and exact retained bytes'
 	await assert.rejects(() => checkFileRestoreReceipt(receipt, command, version, 'other-owner'));
 	await assert.rejects(() => checkFileRestoreReceipt(receipt, { ...command, operationId: crypto.randomUUID() }, version, 'user-1'));
 });
+
+test('server retention effects expose both file versions without accepting ordinary effect payloads', () => {
+ const id = 'file-retain-' + 'd'.repeat(64);
+ const retained = { ...version, revision: id };
+ const effect = { ...event, id, mode: 'effect' as const, operation: 'effect' as const,
+  before: event.after, after: { ...event.after!, value: retained } };
+ assert.deepEqual(timelineFileVersion(effect, 'after'), retained);
+ assert.deepEqual(timelineFileVersion(effect, 'before'), version);
+ for (const change of [{ source: 'client' }, { id: 'ordinary-effect' }, { operation: 'update' }, { branchId: 'variation' }])
+  assert.equal(timelineFileVersion({ ...effect, ...change } as typeof effect, 'after'), null);
+});

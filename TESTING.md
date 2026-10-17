@@ -10756,3 +10756,25 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   at document start; a WebView/dev reload must not erase the acceptance counter.
   Explicitly cancel in Files, save both byte versions without overwriting, cancel
   restore, then restore and independently read both retained cloud attachments.
+
+### Retaining an alternate file version without publishing — 2026-10-17
+
+- [x] `POST /api/v1/files` with `kind=retained-version` stores an owned ready
+  upload in the existing file's Timeline. The live bytes, revision, filename,
+  folder and modification date stay unchanged; the Published head does not advance.
+- [x] Exact retained-operation replay/lookup survives later file edits without a
+  second upload/binding charge. A normal commit lookup cannot mistake retention
+  for publication. Mixed/duplicate/unknown selectors fail closed.
+- [x] Stale, renamed, moved, trashed or missing roots and foreign/blocked/expiring
+  uploads fail without binding bytes. Timeline failure rolls the binding and
+  accounting back. Client-authored effects cannot impersonate retained receipts.
+- [x] Real API/object-storage acceptance (`file-versions.integration.mts`) races
+  retention against publication, verifies the live winner, replays after later
+  edits, restores the alternate version and independently hashes all retained
+  bytes. Anonymous reads and direct deletion of retained attachments are refused.
+- [x] Retention effects appear under Timeline's Files filter with their recorded
+  filename; ordinary or malformed effects cannot offer file-version actions.
+- [ ] Wire explicit conflict capture to native source reads/uploads and durable
+  client retry state; verify Ignore after capture, reload and source-file loss on
+  installed Mac/iOS/Android. This API alone does not preserve an uncaptured device
+  file, implement content-ID search or provide independent whole-data backups.

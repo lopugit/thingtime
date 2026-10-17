@@ -57,8 +57,8 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 
 test('file capability registers the real read and commit route', () => {
 	const manifest = thingtimeCapabilityManifest('https://example.test');
-	assert.equal(manifest.features['api.files'].version, '1.2.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.2.0');
+	assert.equal(manifest.features['api.files'].version, '1.3.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.3.0');
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/files' && op.methods.includes('GET') && op.methods.includes('POST')));
 });
 
@@ -138,4 +138,22 @@ test('folder reads/creates use the same private account and request guards', asy
 	assert.equal(response.status, 200);
 	assert.match(response.headers.get('cache-control')!, /private.*no-store/);
 	assert.equal(calls, 2);
+});
+
+test('retained receipt selectors are explicit and cannot silently fall back to publication', async () => {
+ let calls = 0;
+ const handlers = createFilesHandlers({ getUser: async () => ({ id: 'owner', accountKind: 'user' } as any),
+  limit: async () => ({ allowed: true } as any), inventory: {} as any, folders: {} as any,
+  service: { read: async (owner: string, id: string, operationId: string, retained: boolean) => {
+   assert.deepEqual([owner, id, operationId, retained], ['owner', 'file', 'op', true]); calls++; return { ok: true, receipt: null };
+  }, commit: async (_owner: string, body: any) => { assert.equal(body.kind, 'retained-version'); calls++; return { ok: true, retained: true }; } } as any });
+ const request = (query: string) => new Request('https://example.test/api/v1/files?' + query);
+ const response = await handlers.loader({ request: request('id=file&operationId=op&kind=retained-version') });
+ assert.equal(response.status, 200); assert.match(response.headers.get('cache-control')!, /private.*no-store/);
+ for (const query of ['id=file&kind=retained-version', 'id=file&operationId=op&kind=unknown', 'id=file&id=other', 'id=file&operationId=op&operationId=other',
+  'id=file&operationId=op&kind=retained-version&kind=retained-version', 'id=file&unknown=x'])
+  assert.equal((await handlers.loader({ request: request(query) })).status, 400);
+ const posted = await handlers.action({ request: new Request('https://example.test/api/v1/files', { method: 'POST',
+  headers: { Origin: 'https://example.test', 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'retained-version' }) }) });
+ assert.equal(posted.status, 200); assert.equal(calls, 2);
 });

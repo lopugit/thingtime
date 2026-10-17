@@ -7,7 +7,7 @@ export function timelineFileVersion(event: TimelineEvent, side: 'before' | 'afte
 	const snapshot = event[side];
 	if (
 		event.source !== 'api' ||
-		event.mode !== 'revision' ||
+		(event.mode !== 'revision' && !(event.mode === 'effect' && event.operation === 'effect' && /^file-retain-[a-f0-9]{64}$/.test(event.id))) ||
 		event.branchId !== 'main' ||
 		snapshot?.adapter !== CLOUD_FILE_ADAPTER ||
 		snapshot.version !== 1

@@ -6006,7 +6006,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
-    id: 'files', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'attachments', title: 'Inventory folders and recover file versions',
+    id: 'files', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'attachments', title: 'Inventory folders and recover file versions',
     endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
     detail: 'Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
     auth: { mode: 'session-or-bearer', description: 'Full owning user sessions only; scoped PAT, app, device and service credentials are rejected.' }, methods: ['GET', 'POST'],
@@ -6016,6 +6016,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET id returns the current file. GET id plus operationId returns the exact committed receipt or null; null is not evidence of file deletion.',
       'POST id and operationId (UUID v4), expectedRevision (null for create), name, folderId (or null), attachmentId, contentVersion and trashed. Obtain contentVersion from attachment-content fingerprint=1. Retain this entire payload for retries.',
       'A replay returns the original committed snapshot even after subsequent edits. Reusing an operation with different input, stale revisions, mismatched bytes, foreign/bound uploads or custom data planes fail without changing either file.',
+      'POST kind=retained-version with the same commit fields, a non-null expectedRevision and trashed=false retains alternate bytes without changing the live file. Name and folder must still match the reviewed live file. An owner-private Timeline effect stores both versions; it never advances the Published head. GET id, operationId and kind=retained-version retrieves this separate immutable receipt. Replay the exact original payload after an uncertain response. This retains uploaded bytes; it does not capture device files automatically or create an independent disaster-recovery backup.',
       'To restore prior bytes, commit a retained attachment under a new operation ID and the current expectedRevision. Trash is a reversible metadata state; this endpoint never refunds or deletes retained bytes.'
     ],
     requestExamples: [{ name: 'Inventory folder', description: 'Read one complete private folder tree.', method: 'GET', query: { rootId: '00000000-0000-4000-8000-000000000002' } }, { name: 'Read file', description: 'Read one owned current file.', method: 'GET', query: { id: '00000000-0000-4000-8000-000000000001' } }],

@@ -1707,3 +1707,30 @@ job contract plus owner-scoped API, followed by independently retained bytes,
 Timeline UI and resumable native export. Validate source-loss recovery before
 calling this a backup. Existing file history and the iOS transfer checkpoint do
 not complete any whole-backup acceptance item above.
+
+## Retained alternate file versions — 2026-10-17
+
+`api.files` 1.3.0 adds `kind=retained-version` to the existing file write contract.
+It requires the exact reviewed live revision/name/folder, an owned ready upload,
+`trashed=false` and a durable operation ID. The ordinary attachment admission,
+quota, object-version, ownership and moderation checks apply. A transaction binds
+alternate bytes to the existing file and appends a canonical Timeline **effect**
+with both snapshots. The live file and Published branch head remain unchanged.
+A bounded root token serializes retention with live publication/deletion without
+advancing the visible modification date. No new history collection is introduced.
+
+Read the immutable receipt using `id`, `operationId` and
+`kind=retained-version`; retry the exact original payload after an uncertain reply.
+Normal commit and retention receipts have separate identities. An accepted replay
+survives later edits and does not repeat byte verification or accounting. The
+existing History file cards expose content IDs, download and reviewed restore for
+these server-authored retention effects. Restore still creates an ordinary new
+live revision using the current placement and expected revision.
+
+Real local HTTP/object-storage acceptance verifies no live change, concurrent
+retention/publication, retained replay after later edits, restore and independent
+hashes of every retained attachment. Unit checks cover privacy, stale placement,
+rollback and forged receipt refusal. The conflict-review UI does **not yet call**
+this operation; durable native capture/retry and content-ID lookup remain required.
+No independent backup or source-loss recovery of an uncaptured device file is
+claimed. Whole-data snapshots remain the scope defined above.

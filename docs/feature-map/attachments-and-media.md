@@ -315,3 +315,13 @@ return verified bounded bytes through the existing `FolderBridge` grant and
 owner checks. `MainActivity` advertises 1.4 only with WebView ArrayBuffer support.
 Tests extend mobile folder/frame tests, `FolderRangeSinkTest`, `FolderReaderTest`,
 `ManagedFileStoreTest`, and `DeviceLiveTest`'s opt-in real SAF upload acceptance.
+
+`api.files` 1.3.0 accepts `kind=retained-version` via the existing files route and
+`api/utils/files/files.ts`. This binds a verified alternate upload and records a
+canonical Timeline effect without advancing the live file or Published head.
+Receipt lookup requires the same kind, file and operation. `fileVersions.ts`
+recognizes only server retention effects with the reserved receipt identity;
+existing History download/restore cards and Files filtering apply. The real
+`file-versions.integration.mts` check covers concurrent publication, exact replay,
+restore and byte readback. Conflict UI/native capture and independent backups
+remain unfinished; see `docs/mobile-file-sync.md`.
