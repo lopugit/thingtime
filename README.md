@@ -5174,3 +5174,36 @@ or revoked access stop completion. A failure before the metadata plan finishes
 requires a new snapshot UUID; a new live inventory cannot replace a partial plan.
 Offline verify/copy/restore use the commands above. This local vault is still
 unencrypted and does not provision a cloud replica or physical-media service.
+
+### Restore a saved folder tree
+
+The offline vault CLI can restore the complete selected filesystem tree into a
+**new private local recovery directory**. Its `files/` subdirectory contains the
+original root's contents; `state/`, `staging/` and `locks/` retain recovery state.
+It does not restore into an existing user folder or overwrite existing files.
+First inspect the dry-run paths/byte total and copy its `review` hash:
+
+```sh
+corepack pnpm --dir remix run backup:vault plan-tree /private/vault SNAPSHOT_UUID /private/recovery
+corepack pnpm --dir remix run backup:vault restore-tree /private/vault SNAPSHOT_UUID /private/recovery REVIEW_HASH
+# After interruption, resume the same snapshot, directory and reviewed plan.
+corepack pnpm --dir remix run backup:vault resume-tree /private/vault SNAPSHOT_UUID /private/recovery REVIEW_HASH
+```
+
+The destination's parent must already exist. Review binds the snapshot metadata
+and canonical destination; changed scope, paths or destination require review
+again. Empty folders are preserved. Each 8 MiB range is synced/read back before
+its receipt; resumed ranges and complete files are verified locally without
+fetching their source chunks again. Files publish individually after complete
+fingerprint verification, so `files/` can be partial until the command succeeds.
+Existing user edits, extra files, symlinks and corrupted accepted ranges stop
+completion rather than being replaced. Staging uses hard links after publication,
+so it does not keep a second full copy of restored bytes.
+
+Use a private **single-host local POSIX disk**, not a shared/network filesystem.
+The process guard recovers after an exited worker; it conservatively refuses a
+still-live or reused PID. It never removes another worker's lock candidate.
+A destination interrupted before its initial identity record was saved needs a
+new directory; no existing directory is silently adopted. Keep recovery state
+until the operation succeeds. Native/account restore UI, generic Thing restore,
+permissions/timestamps restoration and encrypted media remain separate work.

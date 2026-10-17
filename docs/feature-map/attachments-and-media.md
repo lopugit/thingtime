@@ -353,3 +353,11 @@ configuration; `test:backups` and the foreground fixture's `--portable-backup
 --large-download` exercise API/CLI acceptance. Existing 10,000-node/8 MiB inventory
 bounds remain explicit. See the [cloud capture coverage](../portable-backups.md#cloud-folder-capture);
 this does not enumerate all account Things or add server Timeline backup events.
+
+`backups/treeRestorePlan.ts` preflights selected filesystem trees; the shared
+`openSealedBackup` lazy reader avoids per-file inventory rescans.
+`backups/localTreeRestore.ts` restores reviewed trees into an exclusively created
+private local recovery directory, with durable range checkpoints and exclusive
+file publication. `backup:vault plan-tree/restore-tree/resume-tree` and
+`test:backups` cover real process-exit recovery, output preservation and local
+process exclusion. See [restore boundaries](../portable-backups.md#reviewed-tree-restore).

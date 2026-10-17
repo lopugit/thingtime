@@ -364,42 +364,90 @@ export async function copySealedBackup(source: BackupObjectStore, destination: B
 	return { seal, copiedBytes: copiedBytes.toString(), reusedBytes: reusedBytes.toString() };
 }
 
-/** Return verified ranges for a selected item. The consumer must write into
- * private staging and publish only after the iterator finishes successfully.
- * Metadata placement is not a filesystem path or permission grant. */
-export async function openBackupItem(store: BackupObjectStore, id: string, thingId: string, access: BackupAccess) {
-	await verifySealedManifest(store, id, access);
+/** Stream one sealed inventory after verifying its complete metadata once. Each
+ * lazy range read remains scope-bound and verifies the retained chunk. This
+ * avoids rescanning the whole manifest for every file in a tree restore. */
+export async function openSealedBackup(store: BackupObjectStore, id: string, access: BackupAccess) {
+	const seal = await verifySealedManifest(store, id, access);
 	const { root, header, plan } = await openPlan(store, id, access);
-	let selected: BackupItem | undefined;
-	for await (const item of planItems(store, header, plan, access)) if (item.thingId === thingId) selected = item;
-	if (!selected) throw Error('Backup item not found');
-	const item = selected;
-	async function* ranges() {
-		if (!item.content) return;
-		let offset = 0,
-			ordinal = 0;
-		const fingerprint = new FileFingerprint(item);
-		while (offset < item.content.size) {
+	const { manifestHash: _manifest, chunks: _chunks, ...sealedPlan } = seal;
+	if (backupJson(plan) !== backupJson(sealedPlan)) throw Error('Backup plan changed after verification');
+	async function* entries() {
+		for await (const item of planItems(store, header, plan, access)) {
 			await check(access, header);
-			const { page, offset: next } = validateRanges(
-				await readJson(store, `${root}/ranges/${item.ordinal}/${ordinal}.json`, BACKUP_METADATA_BYTES),
-				id,
-				item,
-				ordinal,
-				offset
-			);
-			for (const range of page.ranges) {
+			async function* ranges() {
+				if (!item.content) return;
+				let offset = 0,
+					ordinal = 0;
+				while (offset < item.content.size) {
+					await check(access, header);
+					const { page, offset: next } = validateRanges(
+						await readJson(store, `${root}/ranges/${item.ordinal}/${ordinal}.json`, BACKUP_METADATA_BYTES),
+						id,
+						item,
+						ordinal,
+						offset
+					);
+					for (const raw of page.ranges) {
+						const range = Object.freeze({ ...raw });
+						await check(access, header);
+						yield {
+							...range,
+							read: async () => {
+								await check(access, header);
+								const bytes = await retainedChunk(store, range);
+								await check(access, header);
+								return bytes;
+							}
+						};
+					}
+					offset = next;
+					ordinal++;
+				}
 				await check(access, header);
-				const bytes = await retainedChunk(store, range);
-				await check(access, header);
-				fingerprint.update(bytes);
-				yield bytes;
 			}
-			offset = next;
-			ordinal++;
+			yield { item: parseBackupItem(item), ranges: ranges() };
 		}
-		fingerprint.verify();
 		await check(access, header);
 	}
-	return { item, ranges: ranges() };
+	return { header: parseBackupHeader(header), seal: parseBackupSeal(seal), entries: entries() };
+}
+
+/** Verify a staged/restored stream against the same canonical fingerprint used
+ * for backup sealing, including source parts larger than one memory chunk. */
+export async function verifyBackupItemBytes(input: BackupItem, bytes: AsyncIterable<Uint8Array>) {
+	const item = parseBackupItem(input);
+	if (!item.content) throw Error('Backup item has no file content');
+	const fingerprint = new FileFingerprint(item);
+	let size = 0;
+	for await (const chunk of bytes) {
+		if (!(chunk instanceof Uint8Array) || chunk.length > BACKUP_CHUNK_BYTES || size + chunk.length > item.content.size)
+			throw Error('Restored file exceeds its verified byte bounds');
+		size += chunk.length;
+		if (chunk.length) fingerprint.update(chunk);
+	}
+	if (size !== item.content.size) throw Error('Restored file is incomplete');
+	fingerprint.verify();
+}
+
+/** Selected-file compatibility path. Consumers publish only after the iterator
+ * completes; archived placement never directly grants filesystem authority. */
+export async function openBackupItem(store: BackupObjectStore, id: string, thingId: string, access: BackupAccess) {
+	const backup = await openSealedBackup(store, id, access);
+	let selected: { item: BackupItem; ranges: AsyncIterable<BackupRange & { read(): Promise<Uint8Array> }> } | undefined;
+	for await (const entry of backup.entries) if (entry.item.thingId === thingId) selected = entry;
+	if (!selected) throw Error('Backup item not found');
+	const { item, ranges: saved } = selected;
+	async function* ranges() {
+		if (!item.content) return;
+		const fingerprint = new FileFingerprint(item);
+		for await (const range of saved) {
+			const bytes = await range.read();
+			fingerprint.update(bytes);
+			yield bytes;
+		}
+		fingerprint.verify();
+		await check(access, backup.header);
+	}
+	return { item: parseBackupItem(item), ranges: ranges() };
 }

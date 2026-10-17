@@ -438,6 +438,29 @@ try {
 			for await (const chunk of treeFile.ranges) treeHash.update(chunk);
 			assert.equal(treeHash.digest('hex'), createHash('sha256').update(liveBytesBeforeCapture).digest('hex'));
 			assert.equal((await openBackupItem(tree, treeId, emptyId, backupAccess)).item.content, null);
+			const restoredTree = join(vaultRoot, 'restored-tree');
+			const offline = async (args: string[]) =>
+				JSON.parse(
+					(await promisify(execFile)(process.execPath, ['--import', 'tsx', 'scripts/backup-vault.mts', ...args], { maxBuffer: 1024 * 1024 })).stdout
+				);
+			const treeReview = await offline(['plan-tree', join(vaultRoot, 'tree'), treeId, restoredTree]);
+			assert.equal(treeReview.entries.length, 3);
+			const treeRestored = await offline(['restore-tree', join(vaultRoot, 'tree'), treeId, restoredTree, treeReview.review]);
+			assert.equal(treeRestored.files, 1);
+			assert.equal(
+				createHash('sha256')
+					.update(await readFile(join(treeRestored.directory, pinned.name)))
+					.digest('hex'),
+				createHash('sha256').update(liveBytesBeforeCapture).digest('hex')
+			);
+			assert.equal((await stat(join(treeRestored.directory, 'Empty backup folder'))).isDirectory(), true);
+			const repeatedTree = await offline(['resume-tree', join(vaultRoot, 'tree'), treeId, restoredTree, treeReview.review]);
+			assert.equal(repeatedTree.reusedFiles, 1);
+			assert.equal(repeatedTree.restoredFiles, 0);
+			console.log(
+				'PASS: reviewed offline whole selected-tree restore from real cloud capture; exact file hash, empty folder, repeated resume reuses verified output.'
+			);
+
 			const resumed = await cli(['resume', sessionConfig, join(vaultRoot, 'cli'), cliId]);
 			assert.equal(JSON.parse(resumed.stdout.trim().split('\n').at(-1)!).copiedBytes, '0');
 			console.log(

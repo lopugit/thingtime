@@ -10844,3 +10844,24 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Complete account-wide/paged snapshot inventory, native consent/UI, scheduled
   independent cloud copies and Timeline backup lifecycle; selected-filesystem
   coverage and command-line acceptance do not establish these outcomes.
+
+### Reviewed portable tree restore — 2026-10-17
+
+- [x] Dry-run the whole saved tree with `backup:vault plan-tree`; no destination
+  is created. Changed review/destination and existing recovery roots must refuse.
+- [x] Preserve nested files and empty folders. Exit a real child process after
+  its first durable range, then resume through the CLI. Accepted ranges and
+  completed files require zero source-chunk reads; compare full output hashes.
+- [x] Repeat restore without changing file inode/mtime. Reuse manifest scans
+  across files rather than performing a whole-inventory scan per file.
+- [x] Refuse concurrent workers, symlinks, unexpected output, unsafe names,
+  missing/cyclic parents and case aliases. Cancellation releases only its own
+  candidate. Corrupt accepted staging and later user edits remain untouched.
+- [x] A file edited after publication or an empty folder removed during the run
+  must prevent the overall completion marker; resume can recreate a missing
+  empty folder without rewriting already verified files.
+- [x] Run the real foreground API fixture with `--portable-backup --large-download`:
+  restore captured bytes after live Trash, preserve its empty folder, hash-check
+  the 17,825,809-byte output and repeat CLI resume without rewriting it.
+- [ ] Native restore review/consent, account-wide/generic Thing restoration,
+  cross-device/shared-filesystem destinations and large-data throughput remain.

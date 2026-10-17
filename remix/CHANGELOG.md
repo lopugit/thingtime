@@ -68,6 +68,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add reviewed full selected-tree restore to portable
+  backups, with empty-folder preservation, durable range recovery and protection
+  for existing/user-edited output. Process-exit and real API/CLI restore pass;
+  native/account-wide restoration remains unfinished. [PR #1002 evidence](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#reviewed-backup-tree-restore--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Connect selected cloud-folder capture/resume to the
   portable backup vault, preserving empty folders and exact retained bytes after
   live Trash. Real API/CLI and 17 MiB acceptance pass; whole-account snapshots and

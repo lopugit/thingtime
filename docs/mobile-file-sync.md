@@ -1812,3 +1812,29 @@ scheduling/retention, Timeline backup lifecycle, native consent/UI, multi-item
 restore and physical-media preparation remain unfinished. Session configuration
 is an explicit worker setup, not a completed user login or native backup flow.
 See [setup and recovery](portable-backups.md#cloud-folder-capture).
+
+## Reviewed backup tree restore — 2026-10-17
+
+The portable vault now restores a reviewed selected filesystem tree, including
+empty folders, into a fresh private recovery container. Its CLI exposes
+`plan-tree`, `restore-tree` and `resume-tree`; the review binds snapshot metadata
+and the destination. Bounded lazy manifest/range iteration avoids rescanning the
+entire backup for each file. Durable 8 MiB staging receipts survive process exit;
+resume validates saved ranges and completed output without rereading source
+chunks. Exclusive file publication preserves user edits and existing paths.
+Completion checks require every planned folder/file and unchanged verified bytes.
+
+Seventeen backup tests, targeted lint and focused CLI TypeScript pass. Real
+API/CLI acceptance restores the 17,825,809-byte retained file and empty folder
+after live Trash, verifies full output hashes and repeats resume without a
+rewrite. A real child process exits after a synced range and the next process
+recovers its dead candidate. The full TypeScript check remains at the same 91
+normalized baseline diagnostics. The first new test run exposed only a fixture's
+wrong empty-directory cleanup call; the corrected test passes.
+
+This uses an explicit private single-host POSIX recovery directory with per-file
+publication; a partial tree can exist before overall success. It is not a
+cross-host/shared-filesystem lock, native restore UI, whole-account snapshot,
+generic Thing restore, permission/timestamp restore or demonstrated 100 TB
+transfer. All broader sync/Photos/background/peer and cloud backup requirements
+remain active. [Restore contract and setup](portable-backups.md#reviewed-tree-restore).

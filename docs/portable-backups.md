@@ -101,7 +101,7 @@ Still required for the requested product: server-authoritative complete account
 and selected-device inventory; relational protected manifest/job Things and quota;
 independently managed cloud copies; bounded worker leases, scheduling, retention
 and verification checkpoints; server Timeline lifecycle integration; native
-consent/UI and reviewed multi-item restore; remote resumable export transport,
+consent/UI and reviewed account-level restore; remote resumable export transport,
 encryption/key recovery and physical-media preparation; source-object loss and
 large-dataset throughput acceptance. No complete whole-backup release is claimed.
 
@@ -143,3 +143,53 @@ resume with zero new captured bytes. The earlier independent-copy/source-loss
 checks still run. These are worker/storage checks, not native product or 100 TB
 throughput acceptance. No scheduled backup, remote vault, account-wide snapshot,
 server Timeline lifecycle or new native permission flow is claimed here.
+
+## Reviewed tree restore
+
+`treeRestorePlan.ts` consumes `openSealedBackup` from the shared portable engine,
+validating the entire sealed metadata before target writes. The lazy entry/range
+reader makes a constant number of manifest passes, avoiding one full metadata
+scan for each restored file. `verifyBackupItemBytes` reuses the same streaming
+canonical fingerprint verifier as backup sealing; source parts may exceed the
+8 MiB memory chunk. The single-file restore API remains compatible.
+
+Plans accept the current cloud filesystem adapters only, with a maximum of
+10,001 items including the root and 32 MiB of retained item metadata. They reject
+unsupported types, missing parents, cycles (including the root), unsafe names,
+case/Unicode aliases and excessive depth. The external parent of a selected root
+is descriptive; the restored root's contents go under the selected recovery
+container's `files/`. The review hash binds all metadata, the sealed manifest and
+the canonical chosen destination. This does not import arbitrary Thing metadata,
+restore ownership/ACLs, grant filesystem access or append a server Timeline event.
+
+`localTreeRestore.ts` exclusively creates the private recovery container and
+keeps its identity in the existing durable immutable storage adapter. Resume
+requires the same scope, seal, review, destination path and inode. It scans for
+unexpected output before writing. Range data is written into private staging,
+fsynced and read back before its durable receipt. Resume validates accepted
+staged ranges locally and requests only missing chunks. After full-file
+fingerprint verification, exclusive hard-link publication preserves any existing
+output. The staging link supplies a recoverable identity without duplicating
+file bytes. Completed files are locally verified on every resume; changed files
+are preserved and refused, never silently reset to the backup.
+
+Per-file publication is atomic; the whole tree is not one atomic directory swap.
+Only after checking every expected file/folder and rechecking verified file
+identities/timestamps does the worker write its overall completion marker.
+Local process exclusion uses one unique candidate per invocation before scanning
+for other live PIDs. Dead candidates are ignored rather than raced for deletion;
+PID reuse blocks conservatively. It is restricted to a private single-host local
+POSIX disk. It is not an adversarial-directory, network-filesystem or cross-host
+lock. Candidate count is bounded at 1,024; accumulated crash candidates require
+operator review rather than automatic deletion of somebody else's state.
+
+`backup:vault plan-tree`, `restore-tree` and `resume-tree` expose this workflow;
+see [commands and destination layout](../README.md#restore-a-saved-folder-tree).
+Tests cover a real child-process exit after a synced range, dead-process recovery,
+source-chunk removal after a durable checkpoint, zero source reads for completed
+files, concurrent refusal, caller cancellation, output edits, disappeared empty
+folders, corruption, symlinks, alias/cycle refusal and unchanged output on repeat.
+Real API/CLI acceptance restores a 17,825,809-byte captured file and an empty
+folder after live Trash, verifies the full output hash, then reuses the output.
+These checks establish selected-tree worker recovery, not native restore UI,
+whole-account snapshots, generic Things restoration or 100 TB throughput.
