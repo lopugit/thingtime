@@ -36,3 +36,23 @@ test('stale device writers cannot erase another tab’s changes', async () => {
 	assert.equal((await readMailLocal('race_owner')).connectorToken, saved.connectorToken);
 	await clearMailLocal('race_owner');
 });
+
+test('Gmail compose drafts retain all fields and operation identity in encrypted owner-scoped rows', async () => {
+	const value = emptyLocalMail();
+	value.composeDrafts.push({
+		id: 'draft_one',
+		accountId: 'gmail_one',
+		localRevision: 1,
+		to: 'reader@example.test',
+		cc: '',
+		bcc: 'private@example.test',
+		subject: 'Saved 🌈',
+		text: 'Private draft body',
+		sendWriteId: 'attempt_one'
+	});
+	const saved = await writeMailLocal('compose_owner', value);
+	assert.deepEqual((await readMailLocal('compose_owner')).composeDrafts, saved.composeDrafts);
+	assert.deepEqual((await readMailLocal('different_compose_owner')).composeDrafts, []);
+	await assert.rejects(writeMailLocal('compose_owner', value), /another tab/);
+	await clearMailLocal('compose_owner');
+});

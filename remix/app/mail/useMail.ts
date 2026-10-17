@@ -1,4 +1,5 @@
 import React from 'react';
+import type { LocalGmailDraft } from './googleModel';
 import { nativeMailRequest } from './native';
 import { mailRequest, localMailRequest, relayMailRequest } from './client';
 import { emptyLocalMail, readMailLocal, writeMailLocal, type LocalMail } from './localStore';
@@ -199,7 +200,7 @@ export function useMail(ownerId: string) {
 				if (account.sync.local && !server.password) throw new Error('Enter an app password to enable local sync.');
 				credentials[protocol] = { ...server };
 			}
-			const remote = account.sync.cloud || (previous && !local.localAccountIds.includes(account.id));
+			const remote = account.provider === 'gmail' || account.sync.cloud || (previous && !local.localAccountIds.includes(account.id));
 			if (remote) {
 				const submitted = account.sync.cloud ? structuredClone(account) : publicMailAccount(account);
 				if (local.localAccountIds.includes(account.id)) submitted.revision = 0;
@@ -233,7 +234,10 @@ export function useMail(ownerId: string) {
 			// definitions can be shared across the owner's devices through the API.
 			const localOnly =
 				local.localInboxIds.includes(inbox.id) ||
-				inbox.folderIds.some((id) => local.localAccountIds.includes(local.state.folders.find((folder) => folder.id === id)!.accountId));
+				inbox.folderIds.some((id) => {
+					const accountId = local.state.folders.find((folder) => folder.id === id)!.accountId;
+					return local.localAccountIds.includes(accountId) || !local.state.accounts.find((account) => account.id === accountId)?.sync.cloud;
+				});
 			const previous = local.state.inboxes.find((value) => value.id === inbox.id);
 			if (previous && previous.revision !== inbox.revision) throw new Error('This inbox changed elsewhere. Reopen the editor.');
 			if (localOnly && previous && !local.localInboxIds.includes(inbox.id))
@@ -265,6 +269,7 @@ export function useMail(ownerId: string) {
 			await persist({
 				...local,
 				credentials,
+				composeDrafts: account ? local.composeDrafts.filter((draft) => draft.accountId !== id) : local.composeDrafts,
 				localAccountIds: local.localAccountIds.filter((value) => value !== id),
 				localInboxIds: local.localInboxIds.filter((value) => value !== id),
 				state: {
@@ -280,7 +285,14 @@ export function useMail(ownerId: string) {
 	async function syncOne(account: MailAccount, protocol: MailProtocol, request: Record<string, unknown>, target: 'cloud' | 'local') {
 		const local = current.current;
 		const batch: MailBatch =
-			target === 'cloud'
+			account.provider === 'gmail'
+				? await mailRequest(
+						ownerId,
+						{ operation: target === 'cloud' ? 'sync' : 'google-relay', id: account.id, protocol, ...request },
+						{},
+						controller.current.signal
+				  )
+				: target === 'cloud'
 				? await mailRequest(ownerId, { operation: 'sync', id: account.id, protocol, ...request }, {}, controller.current.signal)
 				: account.sync.transport === 'native'
 				? await nativeMailRequest(localSyncAccount(account, local.credentials[account.id] || {}), { protocol, ...request }, controller.current.signal)
@@ -324,8 +336,8 @@ export function useMail(ownerId: string) {
 					continue;
 				for (const target of ['cloud', 'local'] as const) {
 					if (!account.sync[target]) continue;
-					for (const protocol of ['imap', 'pop3'] as const) {
-						if (!account.servers[protocol]) continue;
+					for (const protocol of (account.provider === 'gmail' ? ['gmail'] : ['imap', 'pop3']) as MailProtocol[]) {
+						if (protocol !== 'gmail' && !account.servers[protocol]) continue;
 						try {
 							const discovered = await syncOne(account, protocol, { discover: true }, target);
 							const folders = discovered.folders.filter((folder) =>
@@ -349,8 +361,58 @@ export function useMail(ownerId: string) {
 			if (failures.length) throw new Error(failures.join('\n'));
 			return true;
 		});
+	const gmailAttempt = React.useRef<{ payload: string; writeId: string } | null>(null);
+	const googleAction = (accountId: string, mutation: Record<string, unknown>) =>
+		run(async () => {
+			const account = current.current.state.accounts.find((item) => item.id === accountId);
+			if (!account || account.provider !== 'gmail') throw new Error('Choose a connected Gmail account.');
+			const payload = JSON.stringify({ id: accountId, mutation });
+			if (gmailAttempt.current?.payload !== payload) gmailAttempt.current = { payload, writeId: crypto.randomUUID() };
+			const result = await mailRequest(
+				ownerId,
+				{ operation: 'google-action', id: accountId, revision: account.revision, mutation, writeId: gmailAttempt.current.writeId },
+				{},
+				controller.current.signal
+			);
+			gmailAttempt.current = null;
+			if (result.remoteId && Array.isArray(result.labelIds)) {
+				const next = current.current;
+				const allowed = new Set(
+					next.state.folders.filter((folder) => folder.accountId === accountId && result.labelIds.includes(folder.path)).map((folder) => folder.id)
+				);
+				await persist({
+					...next,
+					state: {
+						...next.state,
+						messages: next.state.messages
+							.filter((message) => message.accountId !== accountId || message.remoteId !== result.remoteId || allowed.has(message.folderId))
+							.map((message) =>
+								message.accountId === accountId && message.remoteId === result.remoteId ? { ...message, unread: result.unread } : message
+							)
+					}
+				});
+			}
+			return result;
+		});
+	const saveCompose = async (draft: LocalGmailDraft, remove = false) => {
+		const next = await readMailLocal(ownerId);
+		const previous = next.composeDrafts.find((item) => item.id === draft.id);
+		if ((previous?.localRevision || 0) !== draft.localRevision) throw new Error('This draft changed in another tab. Reopen it before editing.');
+		if (!previous && next.composeDrafts.length >= 30) throw new Error('Keep at most 30 device drafts. Send or close an existing draft first.');
+		const saved = { ...draft, localRevision: draft.localRevision + 1 };
+		await persist({ ...next, composeDrafts: [...next.composeDrafts.filter((item) => item.id !== draft.id), ...(remove ? [] : [saved])] });
+		return saved;
+	};
 	return {
 		data,
+		googleAction,
+		saveCompose,
+		discover: (id: string) =>
+			run(async () => {
+				const account = current.current.state.accounts.find((account) => account.id === id);
+				if (!account || account.provider !== 'gmail' || (!account.sync.cloud && !account.sync.local)) return;
+				return syncOne(account, 'gmail', { discover: true }, account.sync.cloud ? 'cloud' : 'local');
+			}),
 		ready,
 		busy,
 		error,

@@ -9908,6 +9908,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- Password archive regression: in React StrictMode, open an imported entry and
+  verify related source documents/icons populate after effects replay. Export,
+  reimport, and verify the remapped source entry still owns byte-identical files;
+  edited values, removed fields, category changes, and password history survive.
+  Original metadata and raw source members stay intact independently of edits.
+
 - [ ] On desktop and 390px, add two entries for one website, edit/reorder custom
   fields, mask/reveal, close/reopen and delete one without changing the other.
   The heading clears the fixed navigation and device safe area.
@@ -10059,8 +10065,42 @@ separate from deterministic discovery/lease tests.
 - Check the connection selector and explanatory text at desktop and narrow mobile
   sizes; credentials are masked and the buttons remain reachable.
 
-- Password archive regression: in React StrictMode, open an imported entry and
-  verify related source documents/icons populate after effects replay. Export,
-  reimport, and verify the remapped source entry still owns byte-identical files;
-  edited values, removed fields, category changes, and password history survive.
-  Original metadata and raw source members stay intact independently of edits.
+
+## Gmail Google authorization
+
+- [ ] In Email settings, start Google consent without an app password. On web,
+  desktop and iOS, confirm Google opens outside embedded WebViews, then return
+  and confirm the exact selected Gmail address. The Thingtime account stays the
+  same; cancel/denial never adds an account.
+- [ ] Exercise duplicate callback/finish, wrong session/origin, account switch,
+  logout, expiry and cancellation during token exchange. Only the initiating
+  live full session can finish. An uncertain finish retry creates one account.
+- [ ] Confirm plaintext Google tokens never appear in account responses, device
+  storage, provider errors or callback HTML. Removing an account erases its saved
+  grant; disabling cloud message storage preserves authorization explicitly.
+- [ ] With device-only Gmail, sync folders/messages, reload and read offline,
+  then create a device proxy inbox. No cloud message/folder documents are written.
+  With cloud enabled, verify encrypted accounted persistence and sync/delete CAS.
+- [ ] Sync a real Google account, verify token refresh, revoked consent, denied
+  scope, labels, paging and large partial messages. Synthetic transport tests
+  alone do not establish consent-screen configuration or production verification.
+- [ ] At desktop and 390px, verify Google controls, confirmation address, errors,
+  storage disclosure and Gmail editor without password/server fields; no clipping
+  or horizontal overflow. Existing IMAP/POP3 forms and transports still work.
+- [ ] Configure separate exact development/production origins in the admin vault.
+  Missing/unlisted origin or rotated client ID fails closed without fallback.
+
+- [ ] Gmail read/unread, archive, label create/rename/apply/remove, Trash and restore
+  update both the provider and the correct cached folder copies. A concurrent
+  sync cannot restore stale state after a mutation; account removal cannot revive
+  cached rows. Unsupported permanent deletion and system-label edits refuse.
+- [ ] Compose To/Cc/Bcc, Unicode subject and text; reject header injection and
+  malformed recipients. Autosave survives reload encrypted and owner-scoped.
+  Save/reopen Google drafts and refuse stale Google draft IDs, unsupported rich
+  formatting/attachments and conflicting device edits without losing content.
+- [ ] Review sender and all recipients before explicit Send. Repeated writeIds
+  never resend; changed payloads with a reused key refuse. Simulate a lost response,
+  process interruption and provider failure after dispatch: show uncertainty and
+  require checking Gmail, without automatically creating/sending another copy.
+  Known failures before dispatch leave the composer editable. Use synthetic
+  transport for sending unless the user authorizes specific real recipients.
