@@ -4808,3 +4808,16 @@ Playwright/Chrome paths. No additional service or secret is required. The fixtur
 creates its own private account and Thing, deletes through the UI, recovers from
 History offline, verifies private recreation after reconnect, and removes its
 test Thing. Normal signup limits apply. See [coverage and remaining work](docs/local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).
+
+
+### Account offline History names and notes regression
+
+Run `node --import tsx --test app/local-workspace/accountTimelineNames.browser.test.ts`
+from `remix/`, with `TT_LOCAL_ACCOUNT_NAMES_URL=http://127.0.0.1:<client-port>`,
+optional `TT_LOCAL_ACCOUNT_NAMES_ARTIFACTS=/path/to/ignored-evidence`, and the
+shared Playwright/Chromium variables described above. Use the built production
+client/offline shell and disposable loopback replica API. The fixture registers
+its own account through the normal API, creates a private Thing, queues names
+and notes offline, reconnects normally, and deletes that test Thing in cleanup.
+Normal signup limits apply. It never uses an existing account or service token.
+See [History naming coverage](docs/local-workspaces.md#offline-account-history-names-and-notes--2026-10-17).

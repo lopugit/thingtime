@@ -1,3 +1,4 @@
+import { TimelineNameQueue } from '../timeline/nameQueue';
 import { AccountTimelineVersions } from './accountTimelineVersions';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import { exportAccountTimelineVersion } from './accountTimelineExport';
@@ -62,7 +63,7 @@ function createWorker(scope: AccountScope, dispose: () => void) {
   const timelineScope = accountTimelineScope(scope);
   return exportAccountTimelineVersion(eventId, {
    store: new AccountTimelineStore(timelineScope, historyBackend, new AccountTimeline(db, scope, lease)),
-   notes: new TimelineNoteStore(timelineScope, historyBackend), lease
+   notes: new TimelineNoteStore(timelineScope, historyBackend), names: new TimelineNameQueue(timelineScope, historyBackend), lease
   }, signal);
  };
 	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;

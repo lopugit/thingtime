@@ -80,3 +80,27 @@ test('invalid identity, missing ancestry, oversized content, abort and retired r
   f.retire();await assert.rejects(exportAccountTimelineVersion(event.id,f),/retired/);
  }finally{await f.close();}
 });
+
+test('offline archives retain acknowledged names across reload without exporting pending projections or resurrecting clears',async()=>{
+ const {TimelineNameQueue}=await import('../timeline/nameQueue');
+ const f=setup();try{
+  const event=eventFixture('named-remote',{ownerId:'owner',actorId:'owner',thingId:'named-thing',source:'api',clientId:null,mode:'revision',after:content('Named')});
+  await f.store.accept([entryFixture(event,1)]);
+  const name={formatVersion:1 as const,id:event.id+'/name',ownerId:'owner',eventId:event.id,thingId:event.thingId,name:'Accepted account name',revision:1,createdAt:event.occurredAt,updatedAt:event.occurredAt};
+  const names=new TimelineNameQueue(f.store.scope,f.backend);await names.accept([name],[event.id],Date.now());
+  const effect=eventFixture('retained-name',{ownerId:'owner',actorId:'owner',thingId:event.thingId,source:'api',clientId:null,mode:'effect',operation:'effect',after:{adapter:'timeline-version-name',version:1,value:name},dependencies:[{thingId:event.thingId,eventId:event.id}]});
+  await f.store.accept([entryFixture(effect,2)]);
+  await names.enqueue({command:'name-version',operationId:crypto.randomUUID(),eventId:event.id,thingId:event.thingId,name:'Pending local name',expectedRevision:1},event);
+  await f.backend.close();
+  const reopened=new IndexedDbTimelineBackend(f.factory);try{
+   const retained=new TimelineNameQueue(f.store.scope,reopened);
+   assert.equal((await retained.view([event.id])).get(event.id)?.name,'Pending local name');
+   assert.deepEqual((await exportAccountTimelineVersion(event.id,{...f,names:retained})).export.name,name);
+   await retained.accept([], [event.id],Date.now()+1000);
+   const archive=(await exportAccountTimelineVersion(event.id,{...f,names:retained})).export;
+   assert.equal(archive.name,null);assert.deepEqual(archive.context,{source:'device',complete:false});assert.equal((await retained.queued()).length,1);
+   const foreign=new TimelineNameQueue({...f.store.scope,ownerId:'other'},reopened);
+   await assert.rejects(exportAccountTimelineVersion(event.id,{...f,names:foreign}),/another workspace/);
+  }finally{await reopened.close();}
+ }finally{await f.close();}
+});

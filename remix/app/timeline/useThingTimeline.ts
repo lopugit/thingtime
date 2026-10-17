@@ -45,7 +45,7 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 			const rows = membership ? await store.forThings(membership.thingIds) : await store.forThing(thingId);
 			const [stored, queued] = await Promise.all([noteStore.forEvents(rows.map(row => row.event.id)), noteStore.queued()]);
 			const notes = historyNoteViews(connection.scope.ownerId, rows, stored, queued);
-			const names = nameStore.forEvents(rows.map(row => row.event.id));
+			const names = connection.nameQueue ? await connection.nameQueue.view(rows.map(row=>row.event.id)) : nameStore.forEvents(rows.map(row => row.event.id));
 			if (alive) setView(previous => ({ ...(previous.identity === identity ? previous : emptyView(identity)), identity, rows, notes, names, ready: true, folderId, nextBefore: before, related: membership }));
 		};
 		const refresh = async (force = false) => {

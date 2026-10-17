@@ -2625,3 +2625,45 @@ acceptance. Known attachment recoveries retain the existing verified remote
 adapter; this increment does not silently recover only part of their content.
 This is local acceptance of ordinary recovery, not completion of the full goal
 or permission to merge ahead of its remaining acceptance gates.
+
+
+## Offline account History names and notes — 2026-10-17
+
+Saved account versions can be named, renamed and cleared while disconnected.
+The Versions control persists canonical `name-version` commands in bounded,
+scoped IndexedDB rows (128 pending commands). Accepted name records use a
+separate bounded cache; pending labels are UI projections, never fabricated
+account events or receipts. Database version 7 adds these stores without
+changing existing note queues or canonical Timeline records.
+
+An outgoing command freezes only after its predecessor resolves. Lost replies
+replay the identical command after reload. Later local names wait, then use the
+actual accepted revision from that predecessor. Definitive refusals preserve
+local intent and allow unrelated names to sync; explicit Keep local names reads
+the current account state before retrying, while Discard local names removes
+only a refused local chain. Uncertain writes cannot be discarded. Late reads
+cannot erase newer acknowledgements. Account History exports use retained
+accepted metadata, omit pending name projections and keep the existing explicit
+partial-context marker.
+
+Account note Save, Remove and Retry now finish after durable local queueing;
+the provider drains them separately. Going offline downgrades the connection,
+suppresses discovery/push attempts and checks transport availability between
+commands. Reconnect uses normal account/origin/data-plane discovery. Anonymous
+History retains its local authority and never enters this remote name queue.
+
+Local checks: 423 workspace/offline checks plus 249 Timeline checks pass (672,
+excluding 46 opt-in skips). The enabled native History browser fixture verifies
+name/rename/clear/name and notes across cold offline reloads at 1440/390/320px,
+zero offline write attempts, private guest refusals and actual canonical API
+acknowledgements after reconnect. Removing an acknowledged note also finishes
+locally while offline and reaches the account independently on reconnect. Evidence is in
+`tmp/account-history-names-native-verified/`. TypeScript retains the same 91
+baseline diagnostics; focused lint has zero errors and seven existing warnings.
+Client build verifies 247 offline assets. These are local results, not current
+CI or deployed acceptance.
+
+Remaining: naming client/draft versions, pending-note removal, broader branch
+controls, protected/attachment-bound recovery and the full local-feature matrix.
+This checkpoint preserves existing saved-version eligibility; it does not claim
+that every History feature or the full local-first goal is finished.

@@ -165,7 +165,7 @@ export function useApi() {
         await requireThingtimeCapability('api.timeline', '1.17.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
-      // Online only: there is no offline name queue, so the editor stays disabled without a verified connection.
+      // Remote transport only. The History name queue persists local edits and calls this after verified discovery.
       nameVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineVersionNameCommand, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.timeline', '1.18.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });

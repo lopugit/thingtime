@@ -1,3 +1,5 @@
+import type { TimelineNameQueue } from '../timeline/nameQueue';
+import { timelineScopeKey } from '../timeline/contract';
 import { createVersionExportReader, parseTimelineVersionExport } from '../timeline/exportVersion';
 import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../timeline/snapshotParts';
 import { TimelineNameStore } from '../timeline/nameStore';
@@ -7,7 +9,8 @@ import { WorkspaceError, type WorkspaceLease } from './storage';
 
 /** Export retained immutable History only. The account's live Things, private
  * network credentials, queues and authoritative receipts are never changed. */
-export async function exportAccountTimelineVersion(eventId:string,{store,notes,lease,now=()=>new Date()}:{store:TimelineLocalStore;notes:TimelineNoteStore;lease:WorkspaceLease;now?:()=>Date},signal?:AbortSignal){
+export async function exportAccountTimelineVersion(eventId:string,{store,notes,names:retainedNames,lease,now=()=>new Date()}:{store:TimelineLocalStore;notes:TimelineNoteStore;names?:TimelineNameQueue;lease:WorkspaceLease;now?:()=>Date},signal?:AbortSignal){
+ if(retainedNames&&retainedNames.key!==timelineScopeKey(store.scope))throw new WorkspaceError('HISTORY_EXPORT','Version names belong to another workspace.',409);
  const assertAvailable=()=>{lease.assertCurrent();signal?.throwIfAborted();};
  const checked=async<T>(run:()=>Promise<T>)=>{assertAvailable();const result=await run();assertAvailable();return result;};
  const entries=(ids:string[])=>checked(()=>store.entries(ids));
@@ -21,8 +24,9 @@ export async function exportAccountTimelineVersion(eventId:string,{store,notes,l
   },
   notes:async entry=>(await checked(()=>notes.forEvents([entry.event.id]))).get(entry.event.id)??[],
   names:async entry=>{
+   if(retainedNames){const cached=await checked(()=>retainedNames.accepted([entry.event.id]));if(cached.has(entry.event.id)){const name=cached.get(entry.event.id);return name?[name]:[];}}
    // Accepted naming effects are canonical immutable records. A name supplied
-   // only by a remote page may not be retained after reload; context says so.
+   // only by an older client's remote page may be absent; context says so.
    const names=new TimelineNameStore(store.scope),rows=await checked(()=>store.forThing(entry.event.thingId));
    for(const row of rows.filter(row=>row.receipt).sort((a,b)=>a.receipt!.position-b.receipt!.position))names.applyEffect(row.event);
    return [...names.forEvents([entry.event.id]).values()];

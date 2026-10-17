@@ -68,6 +68,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Saved account History version names queue durably offline; note controls complete after local saving and sync independently. Preserve exact retries, conflict review, accepted export metadata and offline transport gating. Native desktop/mobile checks and remaining scope are in the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#offline-account-history-names-and-notes--2026-10-17).
+
+
 - 2026-10-17 — **Codex (AI)**: Ordinary account Things recover from retained History offline. Reconcile deletion intent without losing recovered content to delayed sync replies; verify native private recovery and reconnect at desktop/mobile widths. Attachment-bound/protected recovery and full-suite acceptance remain open. See the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).
 
 - 2026-10-17 — **Codex (AI)**: Restore and undo retained ordinary account Things

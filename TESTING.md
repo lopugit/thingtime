@@ -11259,3 +11259,28 @@ version/Timeline suites and README-enabled `accountTimelineRestore.browser.test.
 
 Run `accountDelete.test.ts`, `accountTimelineVersions.test.ts`, shared Timeline
 suites and README-enabled `accountTimelineRecovery.browser.test.ts`.
+
+
+### Offline account History names and notes (2026-10-17)
+
+- [x] Name, rename, clear and name a retained saved version offline; cold reload
+  at 1440/390/320px and check the pending label and usable editable input.
+  Save a note without waiting for remote sync. No offline write requests occur.
+- [x] Reconnect via normal discovery. Verify actual API names/notes, canonical
+  receipts, command order and expected revisions; cold reload offline again.
+  Guests still cannot read the private Thing or its History. Remove an accepted
+  note offline, confirm the remote note remains until reconnect, then confirm
+  its independently queued removal completes.
+- [x] Reopen the queue after a lost reply: retry the exact frozen command,
+  then rebase successors only from its actual acknowledgement. Conflicting
+  tabs, definitive refusal/review, wrong scope, bounds and transaction failure
+  preserve pending work. Unrelated names can sync after a definitive refusal.
+- [x] Upgrade a v6 database without dropping pending notes. Export acknowledged
+  cached names after reload; omit pending projections and retain clear tombstones.
+- [ ] Complete naming client/draft versions and removing notes before their add
+  acknowledgement, plus the broader History/local-feature acceptance matrix.
+
+Run `test:timeline`, `test:local-workspace`, and README-enabled
+`accountTimelineNames.browser.test.ts`. An offline browser flag is checked at
+transport boundaries as well as the UI; a previously verified connection must
+not continue starting writes while disconnected.

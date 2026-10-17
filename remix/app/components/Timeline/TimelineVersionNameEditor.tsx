@@ -23,7 +23,9 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 	const live = override ? override.name : current ?? null;
 	const [value, setValue] = React.useState(() => drafts.get(draftKey) ?? live?.name ?? '');
 	const [saving, setSaving] = React.useState(false); const [exporting, setExporting] = React.useState(false);
-	const [notice, setNotice] = React.useState(''); const [error, setError] = React.useState<{ message: string; stale: boolean } | null>(null);
+	const [notice, setNotice] = React.useState('');
+	const [queued, setQueued] = React.useState<{count:number;failure:string|null}>({count:0,failure:null});
+	React.useEffect(()=>{let alive=true;const refresh=()=>{void connection?.nameQueue?.queued().then(rows=>{const own=rows.filter(item=>item.command.eventId===event.id);if(alive)setQueued({count:own.length,failure:own.find(item=>item.failure)?.failure?.message??null});}).catch(()=>{});};refresh();window.addEventListener(TIMELINE_CHANGED_EVENT,refresh);return()=>{alive=false;window.removeEventListener(TIMELINE_CHANGED_EVENT,refresh);};},[connection,event.id]); const [error, setError] = React.useState<{ message: string; stale: boolean } | null>(null);
 	const input = React.useRef<HTMLInputElement>(null);
 	const exportController = React.useRef<AbortController | null>(null);
 	const alive = React.useRef(true); const working = React.useRef(false);
@@ -42,7 +44,7 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		seen.current = stamp;
 		if (!drafts.has(draftKey)) setValue(live?.name ?? '');
 	}, [live?.revision, live?.updatedAt, live?.name, drafts, draftKey]);
-	const state = versionControlState(row, !!connection?.verified, !!connection && api.v1.timeline.canExportLocally?.(connection.scope));
+	const state = versionControlState(row, !!connection?.verified || !!connection?.nameQueue, !!connection && api.v1.timeline.canExportLocally?.(connection.scope));
 	const name = normalizeVersionName(value);
 	const unchanged = name === (live?.name ?? '');
 	const change = (next: string) => { setValue(next); if (next === (live?.name ?? '')) drafts.delete(draftKey); else drafts.set(draftKey, next); };
@@ -57,6 +59,11 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		request.current = command;
 		working.current = true; wantFocus.current = true; setSaving(true); setError(null); setNotice('');
 		try {
+			if (connection.nameQueue) {
+				await connection.nameQueue.enqueue(command,event);
+				const fresh=(await connection.nameQueue.view([event.id])).get(event.id)??null;
+				settle(fresh,'Version name saved on this device. Account sync runs separately.');return;
+			}
 			const result = parseTimelineVersionNameResult(await api.v1.timeline.nameVersion(connection.scope, command), connection.scope.ownerId, command);
 			// The receipt is a real effect event: cache it with the version it names so every open history view repaints together.
 			if (result.entry) await connection.store.accept([result.entry]);
@@ -72,11 +79,21 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		working.current = true; wantFocus.current = true; setSaving(true); setError(null); setNotice('');
 		try {
 			// The entry read carries the current name record (or none); the connection cache is updated by the read itself.
-			await connection.sync.entry(event.id);
-			const fresh = connection.names.forEvents([event.id]).get(event.id) ?? null;
+			if (connection.verified) await connection.sync.entry(event.id);
+			const fresh = (connection.nameQueue ? await connection.nameQueue.view([event.id]) : connection.names.forEvents([event.id])).get(event.id) ?? null;
 			settle(fresh, fresh ? `This version is now named “${fresh.name}”.` : 'This version has no name now.');
 		} catch (failure: any) { if (alive.current) setError({ message: failure?.error || failure?.message || 'Could not refresh this version.', stale: false }); }
 		finally { working.current = false; if (alive.current) setSaving(false); }
+	};
+	const reviewQueued = async (keep:boolean) => {
+		if (!connection?.nameQueue || working.current) return;
+		working.current=true;setSaving(true);setError(null);
+		try {
+			if(keep){if(!connection.verified)throw new Error('Reconnect to review the current account name.');await connection.sync.entry(event.id);await connection.nameQueue.retry(event.id,crypto.randomUUID());}
+			else await connection.nameQueue.dismiss(event.id);
+			settle((await connection.nameQueue.view([event.id])).get(event.id)??null,keep?'Local version names are queued again.':'Discarded the refused local version names.');
+		}catch(failure:any){if(alive.current)setError({message:failure?.message||'Could not review this name.',stale:false});}
+		finally{working.current=false;if(alive.current)setSaving(false);}
 	};
 	const exportVersion = async () => {
 		if (!connection || working.current) return;
@@ -98,6 +115,8 @@ export function TimelineVersionNameEditor({ row, current, drafts, draftKey }: { 
 		{live ? <Button type="button" size="xs" variant="ghost" isDisabled={!state.name || saving || exporting} onClick={() => void send(null)}>Clear</Button> : null}
 		<Button type="button" size="xs" variant="outline" isLoading={exporting} isDisabled={!state.export || saving} title={state.export ? undefined : state.title} onClick={() => void exportVersion()}>Export</Button>
 		{!state.name ? <Text fontSize="xs" color="var(--tt-muted)" flexBasis="100%">{state.title}</Text> : null}
+		{queued.count ? <Text role="status" fontSize="xs" flexBasis="100%" minW={0} overflowWrap="anywhere">{queued.failure ? `Version name needs review: ${queued.failure}` : 'Version name saved on this device · waiting to sync'}</Text> : null}
+		{queued.failure ? <Flex gap={2} wrap="wrap"><Button type="button" size="xs" isDisabled={saving || !connection?.verified} onClick={()=>void reviewQueued(true)}>Keep local names</Button><Button type="button" size="xs" isDisabled={saving} onClick={()=>void reviewQueued(false)}>Discard local names</Button></Flex> : null}
 		{notice ? <Text role="status" fontSize="xs" color="var(--tt-muted)" flexBasis="100%" overflowWrap="anywhere">{notice}</Text> : null}
 		{error ? <Flex role="alert" flexBasis="100%" gap={2} align="center" wrap="wrap" minW={0}>
 			<Text fontSize="xs" overflowWrap="anywhere" minW={0}>{error.message}</Text>

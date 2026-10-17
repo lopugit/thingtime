@@ -683,3 +683,14 @@ keep recovered content pending after a late delete acknowledgement. Regressions:
 `accountDelete.test.ts`, `accountTimelineVersions.test.ts` and opt-in
 `accountTimelineRecovery.browser.test.ts`. Attachment-bound/protected recovery
 and broader acceptance remain open; see [local workspaces](../local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).
+
+
+Account History names use `timeline/nameQueue.ts` with canonical name commands
+and accepted records in the existing scoped IndexedDB backend. `TimelineSync`
+freezes requests, rebases unsent successors and preserves ambiguous retries;
+`TimelineProvider` gates remote work while offline. Account note controls finish
+after local queueing, independently of remote sync. `accountTimelineExport.ts`
+uses accepted retained names only. Tests: `nameQueue.test.ts`,
+`accountTimelineExport.test.ts`, v6 migration in `indexedDb.test.ts`, and the
+README-enabled native `accountTimelineNames.browser.test.ts`. Client/draft
+naming and pending-note removal remain open; see the local workspace matrix.

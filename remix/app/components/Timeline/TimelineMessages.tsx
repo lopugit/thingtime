@@ -71,6 +71,7 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 			if (!alive.current) return;
 			if (command.command === 'add-note') setValue('');
 			window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
+			if (!localOnly) { setNotice(`Saved on this device. This ${noun} will sync separately when your account is connected.`); return; }
 			if (!connection.verified) { setNotice(localOnly ? waiting : `Saved on this device. This ${noun} will sync when you reconnect.`); return; }
 			await connection.sync.pushPending();
 			const remaining = (await connection.notes.queued()).find(row => row.command.operationId === command.operationId);
@@ -111,7 +112,7 @@ export function HistoryMessageComposer({ card }: { card: HistoryCard }) {
 			if (!operationId) throw new Error('This note command is no longer queued.');
 			if (mode === 'retry') await connection.notes.retryRejected(operationId); else await connection.notes.dismissRejected(operationId);
 			window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
-			if (mode === 'retry' && connection.verified) {
+			if (mode === 'retry' && connection.verified && localOnly) {
 				await connection.sync.pushPending();
 				const remaining = (await connection.notes.queued()).find(row => row.command.operationId === operationId);
 				if (alive.current) { setNotice(remaining ? waiting : saved); window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT)); }
