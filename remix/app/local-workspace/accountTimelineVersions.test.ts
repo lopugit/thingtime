@@ -20,7 +20,7 @@ function fixture(injected?:WorkspaceDatabase){
   const request:VersionRequest={command:'preview-version',eventId,mode,componentMode:'recorded',choices:{},componentChoices:{},...extra};
   const result=await versions.request(request);assert.ok('preview' in result);
   const value=parsePublishedVersionPreview(result.preview,eventId,thingId,request);
-  return {value,apply:{...request,command:'apply-version',operationId:randomUUID(),expectedHeadId:value.expectedHeadId,expectedComponents:value.components!.fingerprint} as VersionRequest};
+  return {value,apply:{...request,command:'apply-version',operationId:randomUUID(),expectedHeadId:value.expectedHeadId,expectedComponents:value.components!.fingerprint,...(value.recoveryFingerprint?{expectedRecovery:value.recoveryFingerprint}:{})} as VersionRequest};
  };
  return {db,backend,sync,history,store,versions,preview,retire:()=>{active=false;},close:async()=>{await backend.close();await db.close();}};
 }
@@ -104,5 +104,55 @@ test('failed account History capture rolls back content and sync intent, and con
   db.fail=false;const [one,two]=await Promise.all([f.versions.request(plan.apply),f.versions.request(plan.apply)]);assert.deepEqual(one,two);
   assert.equal((await f.history.rows()).filter(row=>row.event.id===`version-${plan.apply.operationId}`).length,1);
   const cancelled=new AbortController();cancelled.abort();await assert.rejects(f.versions.request(plan.apply,cancelled.signal),/abort/i);
+ }finally{await f.close();}
+});
+
+
+test('a never-sent account deletion can recover offline without a remote receipt',async()=>{
+ const f=fixture();try{
+  const thing=await f.sync.things.create({thingtime:['data'],crystal:{name:'Recover me'}});
+  await f.sync.remove([thing.id]);
+  const deletion=(await f.history.rows({thingId:thing.id})).find(row=>row.event.operation==='delete')!;
+  const p=await f.preview(deletion.event.id,thing.id,'restore',{recover:true});
+  assert.equal(p.value.recovery,true);
+  const result=await f.versions.request(p.apply);assert.ok('entry' in result);
+  assert.equal(result.entry.receipt,null);assert.equal(result.entry.event.operation,'create');
+  assert.equal(result.entry.event.label,'Recovered deleted Thing');
+  assert.equal((await f.sync.things.get(thing.id)).crystal.name,'Recover me');
+  assert.deepEqual((await f.sync.view(thing.id))!.acl,['tt:user']);
+  assert.equal((await f.sync.status())[0].state,'pending');
+  assert.deepEqual(await f.versions.request(p.apply),result);
+ }finally{await f.close();}
+});
+
+
+test('accepted deleted history recovers its original identity privately, but a newer accepted head refuses stale recovery',async()=>{
+ const f=fixture();try{
+  const doc={id:'deleted-account-data',thingtime:['data'],crystal:{name:'Before deletion'},acl:['tt:public'],folderId:'missing-folder'};
+  const source=eventFixture('deleted-source',{ownerId:scope.ownerId,actorId:scope.ownerId,thingId:doc.id,source:'api',mode:'revision',clientId:null,after:thingContentSnapshot(doc)});
+  const deletion=eventFixture('deleted-head',{...source,id:'deleted-head',operation:'delete',before:source.after,after:null,parentIds:[source.id]});
+  await f.store.accept([entryFixture(source,1),entryFixture(deletion,2)]);
+  const p=await f.preview(source.id,doc.id,'restore',{recover:true});assert.equal(p.value.expectedHeadId,deletion.id);
+  await f.versions.request(p.apply);
+  const restored=await f.sync.view(doc.id);assert.equal(restored!.crystal.name,'Before deletion');assert.deepEqual(restored!.acl,['tt:user']);assert.equal(restored!.folderId??null,null);
+  const other={...source,id:'stale-deletion-source',thingId:'recreated-elsewhere'},old={...deletion,id:'stale-deletion',thingId:other.thingId,parentIds:[other.id]},newer={...other,id:'newer-create',parentIds:[old.id]};
+  await f.store.accept([entryFixture(other,3),entryFixture(old,4),entryFixture(newer,5)]);
+  await assert.rejects(f.preview(old.id,other.thingId,'restore',{recover:true}),/recorded deletion/);
+ }finally{await f.close();}
+});
+
+test('recovery quota failure rolls back deletion intent and component copies as one transaction',async()=>{
+ const db=new FailingHistoryDatabase(new IDBFactory()),f=fixture(db);try{
+  const component=await f.sync.things.create({thingtime:['component'],crystal:{name:'Recovery card',componentKey:'recover-card',version:1,render:{tag:'p',children:'Recorded text'}}});
+  const page=await f.sync.things.create({thingtime:['webpage'],crystal:{name:'Deleted page',blocks:[{id:'card',type:'component',component:component.id}]}});
+  await f.sync.remove([page.id]);
+  const deletion=(await f.history.rows({thingId:page.id})).find(row=>row.event.operation==='delete')!;
+  const p=await f.preview(deletion.event.id,page.id,'restore',{recover:true});assert.equal(p.value.components!.copyCount,1);
+  const content=await f.sync.things.snapshot(),status=await f.sync.status(),events=await f.history.rows();
+  db.fail=true;await assert.rejects(f.versions.request(p.apply),/quota failure/);
+  assert.deepEqual(await f.sync.things.snapshot(),content);assert.deepEqual(await f.sync.status(),status);assert.deepEqual(await f.history.rows(),events);
+  db.fail=false;await f.versions.request(p.apply);
+  const copy=((await f.sync.things.get(page.id)).crystal.blocks as any[])[0].component;assert.notEqual(copy,component.id);
+  assert.equal(((await f.sync.things.get(copy)).crystal.render as any).children,'Recorded text');
  }finally{await f.close();}
 });

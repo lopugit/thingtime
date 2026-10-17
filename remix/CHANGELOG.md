@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Ordinary account Things recover from retained History offline. Reconcile deletion intent without losing recovered content to delayed sync replies; verify native private recovery and reconnect at desktop/mobile widths. Attachment-bound/protected recovery and full-suite acceptance remain open. See the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).
+
 - 2026-10-17 — **Codex (AI)**: Restore and undo retained ordinary account Things
   offline through native History using shared comparison and atomic writers.
   Preserve conflict review, independent component copies, retry identity and

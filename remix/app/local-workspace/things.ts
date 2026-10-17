@@ -26,6 +26,7 @@ import { type WorkspaceDatabase, WorkspaceError, WORKSPACE_LIMITS, type Workspac
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
 export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment, previous?: LocalAttachment) => Promise<void>;
+export type LocalThingRecovery = (tx: WorkspaceTransaction, id: string) => Promise<Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'> | undefined>;
 export type LocalThingMutation = (tx: WorkspaceTransaction, row: LocalThing, previous: LocalThing | null, input: ThingWrite) => Promise<void>;
 export type ThingWrite = {
 	id?: string; thingtime?: unknown; crystal?: unknown; extended?: unknown; tags?: unknown;
@@ -70,7 +71,7 @@ export class LocalThings {
 	constructor(private db: WorkspaceDatabase, readonly scope: WorkspaceScope, private lease: WorkspaceLease,
 		private builtins: readonly TransferThing[] = [], private now = () => new Date().toISOString(), private uuid = () => crypto.randomUUID(), private onWrite?: LocalThingMutation,
 		private onFileWrite?: LocalFileMutation, private acceptsExternalTarget?: (tx: WorkspaceTransaction, id: string) => Promise<boolean>,
-		private captureAccountChanges?: ThingTransactionCapture) {}
+		private captureAccountChanges?: ThingTransactionCapture, private onRecover?: LocalThingRecovery) {}
 	private transaction<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>, captures?: Map<string, LocalMutationCapture>, signal?: AbortSignal) {
 		const lease: WorkspaceLease = signal ? { assertCurrent: () => { this.lease.assertCurrent(); signal.throwIfAborted(); }, onInvalidate: cb => { const off = this.lease.onInvalidate(cb); signal.addEventListener('abort', cb, { once: true }); return () => { off(); signal.removeEventListener('abort', cb); }; } } : this.lease;
 		return this.db.transaction(this.scope, mode, lease, async tx => {
@@ -98,10 +99,10 @@ export class LocalThings {
 	async create(input: ThingWrite) {
 		return this.transaction('readwrite', tx => this.createIn(tx, input));
 	}
-	private async createIn(tx: WorkspaceTransaction, input: ThingWrite, identity?: string) {
+	private async createIn(tx: WorkspaceTransaction, input: ThingWrite, identity?: string, recovered?: Pick<LocalThing, 'revision' | 'updatedAt' | 'createdAt'>) {
 		if (identity && await tx.get('things', identity)) fail('WRITE_CONFLICT', 'This Thing is already present. Refresh before restoring.', 409);
 		const checked = validated(input); const stamp = this.now();
-		const row: LocalThing = { ...checked, id: identity ?? (this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()), createdAt: stamp, updatedAt: stamp, revision: 1,
+		const row: LocalThing = { ...checked, id: identity ?? (this.scope.kind === 'anonymous' ? `local-${this.uuid()}` : this.uuid()), createdAt: stamp, updatedAt: stamp, revision: 1, ...recovered,
 			...(input.folderId ? { folderId: input.folderId } : {}), ...(input.targetId ? { targetId: input.targetId } : {}) };
 		await this.placement(tx, row); await tx.put('things', row.id, row); await this.onWrite?.(tx, row, null, input); return row;
 	}
@@ -119,12 +120,18 @@ export class LocalThings {
 	async versionTransaction<T>(run: (writer: {
 		tx: WorkspaceTransaction;
 		create(input: ThingWrite, id: string, capture: LocalMutationCapture): Promise<LocalThing>;
+		recover(input: ThingWrite, id: string, capture: LocalMutationCapture): Promise<LocalThing>;
 		update(input: ThingWrite & { id: string }, capture: LocalMutationCapture): Promise<LocalThing>;
 	}) => Promise<T>, signal?: AbortSignal): Promise<T> {
 		if (this.scope.kind !== 'anonymous' && (!this.captureAccountChanges || !this.onWrite)) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account versions require their sync adapter');
 		const captures = new Map<string, LocalMutationCapture>();
 		return this.transaction('readwrite', tx => run({ tx,
 			create: async (input, id, capture) => { captures.set(id, capture); return this.createIn(tx, input, id); },
+			recover: async (input, id, capture) => {
+				if (this.scope.kind === 'account' && !this.onRecover) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account recovery requires its sync adapter');
+				captures.set(id, capture);
+				return this.createIn(tx, input, id, await this.onRecover?.(tx, id));
+			},
 			update: async (input, capture) => { captures.set(input.id, capture); return this.updateIn(tx, input); }
 		}), captures, signal);
 	}

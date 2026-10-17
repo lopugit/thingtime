@@ -229,7 +229,7 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 					label: 'Copied recorded component for restored page'
 				});
 			const content = copies.content as any;
-			if (recovery) await writer.create({ ...content, thingtime: recovery.thingtime }, source.event.thingId, capture);
+			if (recovery) await writer.recover({ ...content, thingtime: recovery.thingtime }, source.event.thingId, capture);
 			else await writer.update({ ...content, id: source.event.thingId, replaceCrystal: true, expectedUpdatedAt: doc.updatedAt }, capture);
 			checkedLease.assertCurrent();
 		}, signal);

@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
+import { randomUUID } from 'node:crypto';
+import { AccountTimeline, AccountTimelineStore, accountTimelineScope } from './accountTimeline';
+import { AccountTimelineVersions } from './accountTimelineVersions';
+import { IndexedDbTimelineBackend } from '../timeline/indexedDb';
+import type { VersionRequest } from '../timeline/publishedVersion';
 import { AccountThingSync, type AccountSyncTransport, type AccountThing } from './accountSync';
 import { WorkspaceDatabase } from './storage';
 const fixture = () => {
@@ -24,7 +29,7 @@ const fixture = () => {
   }
  };
  const create = (name = 'Delete fixture', kind = 'data', extra = {}) => sync.things.create({ thingtime: [kind], crystal: { name }, ...extra });
- return { factory, db, scope, lease, sync, remote, calls, transport, create, tick: () => { time += 120_000; } };
+ return { factory, db, scope, lease, sync, remote, calls, transport, create, now: () => time, tick: () => { time += 120_000; } };
 };
 test('target-linked deletion waits for a conflicting child before removing its parent', async () => {
  const f = fixture(); try {
@@ -164,4 +169,108 @@ test('large cached deletion keeps one bounded recovery copy and releases it afte
   const retained = await f.db.transaction(f.scope, 'readonly', f.lease, tx => tx.get('thing-deletions', row.id));
   assert.equal(retained, undefined); assert.equal(await f.sync.isDeleted(row.id), true);
  } finally { await f.db.close(); }
+});
+
+
+async function recover(f:ReturnType<typeof fixture>, id:string, sync=f.sync, db=f.db) {
+ const history=new AccountTimeline(db,f.scope,f.lease),backend=new IndexedDbTimelineBackend(f.factory);
+ try {
+  const store=new AccountTimelineStore(accountTimelineScope(f.scope),backend,history);
+  const versions=new AccountTimelineVersions(db,f.scope,f.lease,sync.things,store);
+  const deletion=(await history.rows({thingId:id})).find(row=>row.event.operation==='delete')!;
+  const request:VersionRequest={command:'preview-version',eventId:deletion.event.id,mode:'restore',componentMode:'recorded',recover:true,choices:{},componentChoices:{}};
+  const result=await versions.request(request);assert.ok('preview' in result);
+  const applied=await versions.request({...request,command:'apply-version',operationId:randomUUID(),expectedHeadId:result.preview.expectedHeadId,expectedComponents:result.preview.components!.fingerprint,expectedRecovery:result.preview.recoveryFingerprint});
+  assert.ok('entry' in applied);assert.equal(applied.entry.receipt,null);return applied;
+ } finally { await backend.close(); }
+}
+
+for(const completed of [false,true]) test(`offline recovery of a ${completed?'completed':'not-yet-sent'} deletion syncs privately`,async()=>{
+ const f=fixture();try{
+  const row=await f.create('Recover private');await f.sync.sync(f.transport);
+  const stale=structuredClone(f.remote.get(row.id)!);
+  await f.sync.remove([row.id]);if(completed)await f.sync.sync(f.transport);
+  const oldRevision=stale.revision;await recover(f,row.id);
+  const restored=await f.sync.things.get(row.id);assert.ok(restored.revision>oldRevision);
+  await f.sync.things.update({id:row.id,crystal:{name:'Recovered local edit'}});
+  await f.sync.remember(stale);assert.equal((await f.sync.view(row.id))!.crystal.name,'Recovered local edit');
+  f.calls.length=0;await f.sync.sync(f.transport);
+  assert.deepEqual(f.calls.map(call=>call.method),[completed?'create':'update']);
+  assert.equal(f.remote.get(row.id)!.crystal.name,'Recovered local edit');
+  assert.deepEqual(f.remote.get(row.id)!.acl,['tt:user']);
+  assert.equal((await f.sync.status())[0].state,'synced');
+ }finally{await f.db.close();}
+});
+
+for(const method of ['create','update','delete'] as const) test(`recovery survives a delayed ${method} acknowledgment without overwriting content or losing sync`,async()=>{
+ const f=fixture();let finish!:()=>void;
+ try{
+  const row=await f.create('Original');
+  if(method!=='create')await f.sync.sync(f.transport);
+  if(method==='update')await f.sync.things.update({id:row.id,crystal:{name:'Earlier in-flight edit'}});
+  if(method==='delete')await f.sync.remove([row.id]);
+  let started!:()=>void;const ready=new Promise<void>(resolve=>{started=resolve;}),held=new Promise<void>(resolve=>{finish=resolve;});
+  const transport:AccountSyncTransport={...f.transport,
+   write:async(operation,signal)=>{const result=await f.transport.write(operation,signal);started();await held;return result;},
+   remove:async(operation,signal)=>{await f.transport.remove!(operation,signal);started();await held;}
+  };
+  const run=f.sync.sync(transport,undefined,1);await ready;
+  if(method!=='delete')await f.sync.remove([row.id]);
+  await recover(f,row.id);
+  const restored=await f.sync.things.get(row.id);assert.ok(restored.revision>f.calls.at(-1).version);
+  await f.sync.things.update({id:row.id,crystal:{name:'Latest recovered edit'}});
+  finish();await run;
+  assert.equal((await f.sync.things.get(row.id)).crystal.name,'Latest recovered edit');
+  assert.equal((await f.sync.status())[0].state,'pending');
+  await f.sync.sync(f.transport);
+  assert.equal(f.remote.get(row.id)!.crystal.name,'Latest recovered edit');
+  assert.equal(f.calls.at(-1).method,method==='delete'?'create':'update');
+  assert.equal((await f.sync.status())[0].state,'synced');
+ }finally{finish?.();await f.db.close();}
+});
+
+test('recovery after a lost deletion response survives reopening and replays the exact frozen DELETE',async()=>{
+ const f=fixture();let reopened:WorkspaceDatabase|undefined;
+ try{
+  const row=await f.create('Lost response');await f.sync.sync(f.transport);await f.sync.remove([row.id]);
+  await f.sync.sync({...f.transport,get:async()=>{throw new Error('offline');},remove:async(op,signal)=>{await f.transport.remove!(op,signal);throw new Error('lost');}});
+  const frozen=structuredClone(f.calls.at(-1));await recover(f,row.id);f.tick();await f.db.close();reopened=new WorkspaceDatabase(f.factory);
+  const resumed=new AccountThingSync(reopened,f.scope,f.lease,f.now);await resumed.sync(f.transport);
+  assert.deepEqual(f.calls.at(-2),frozen);assert.equal(f.calls.at(-1).method,'create');
+  assert.equal((await resumed.view(row.id))!.crystal.name,'Lost response');assert.equal(f.remote.get(row.id)!.crystal.name,'Lost response');
+  assert.equal((await resumed.status())[0].state,'synced');
+ }finally{await(reopened||f.db).close();}
+});
+
+
+test('recovered content cannot overwrite a colliding account identity or bypass conditional deletion conflicts',async()=>{
+ const f=fixture();try{
+  const row=await f.create('Private recovery');await f.sync.sync(f.transport);await f.sync.remove([row.id]);await f.sync.sync(f.transport);
+  await recover(f,row.id);
+  const occupied={...row,crystal:{name:'Another owner'},author:{id:'different-owner'},acl:['tt:user'],visibility:'private'};
+  f.remote.set(row.id,occupied);await f.sync.sync(f.transport);
+  assert.equal((await f.sync.status())[0].state,'conflict');assert.equal(f.remote.get(row.id)!.crystal.name,'Another owner');
+  assert.equal((await f.sync.things.get(row.id)).crystal.name,'Private recovery');
+  await assert.rejects(f.sync.inspectConflict(f.transport,row.id),/does not belong/);
+  const second=await f.create('Concurrent account edit');await f.sync.sync(f.transport);await f.sync.remove([second.id]);
+  const remote=f.remote.get(second.id)!;f.remote.set(second.id,{...remote,crystal:{name:'Newer remote edit'},updatedAt:new Date(Date.parse(remote.updatedAt)+1).toISOString()});
+  await f.sync.sync(f.transport);await recover(f,second.id);assert.equal((await f.sync.status()).find(item=>item.id===second.id)!.state,'conflict');
+  await f.sync.sync(f.transport);assert.equal(f.remote.get(second.id)!.crystal.name,'Newer remote edit');
+  const review=await f.sync.inspectConflict(f.transport,second.id);await f.sync.resolveConflict(f.transport,{id:second.id,keep:'local',localRevision:review.localRevision,remoteUpdatedAt:review.remote.updatedAt});
+  await f.sync.sync(f.transport);assert.equal(f.remote.get(second.id)!.crystal.name,'Concurrent account edit');assert.equal(f.calls.at(-1).method,'update');
+ }finally{await f.db.close();}
+});
+
+test('new linked content waits for the recovered parent frozen DELETE before syncing',async()=>{
+ const f=fixture();let finish!:()=>void,run:ReturnType<AccountThingSync['sync']>|undefined;
+ try{
+  const parent=await f.create('Recovered parent');await f.sync.sync(f.transport);await f.sync.remove([parent.id]);
+  let started!:()=>void;const ready=new Promise<void>(resolve=>{started=resolve;}),held=new Promise<void>(resolve=>{finish=resolve;});
+  run=f.sync.sync({...f.transport,remove:async(operation,signal)=>{started();await held;await f.transport.remove!(operation,signal);}},undefined,1);await ready;
+  await recover(f,parent.id);const child=await f.create('New linked child','data',{targetId:parent.id});
+  const count=f.calls.length;assert.equal((await f.sync.sync(f.transport)).completed,0,'a new child cannot race the outstanding parent cascade');assert.equal(f.calls.length,count);
+  finish();await run;await f.sync.sync(f.transport);
+  assert.deepEqual(f.calls.slice(count).map(call=>[call.method,call.id]),[['delete',parent.id],['create',parent.id],['create',child.id]]);
+  assert.ok(f.remote.has(parent.id));assert.ok(f.remote.has(child.id));
+ }finally{finish?.();await run?.catch(()=>{});await f.db.close();}
 });

@@ -2586,3 +2586,42 @@ branch/note/name controls, full component/merge and native identity-transition
 acceptance, plus the broader local-first matrix. Existing remote recovery remains
 available only with verified authority. CI/deployed acceptance is unverified; this
 checkpoint does not close the main merge gate.
+
+
+## Offline recovery of ordinary account Things — 2026-10-17
+
+The normal History recovery control now restores a retained deletion locally,
+using the existing shared version planner, validators, component-copy logic and
+atomic content/Timeline writer. It keeps the original ID, forces a private
+audience and falls back to Things root when the original folder no longer exists.
+A recorded latest deletion is required; a newer accepted revision refuses stale
+recovery. Account events stay client/draft with no fabricated server receipt.
+
+Recovery reconciles the existing account queue in the same transaction. A delete
+that has not been sent becomes a conditional update; a completed delete becomes
+a normal authenticated create. Frozen requests and claims remain immutable until
+their outcomes resolve. The recovered revision exceeds earlier writes, so late
+create/update replies cannot overwrite it. New linked content waits for the
+recovered parent’s frozen delete to resolve before syncing. A late delete acknowledgement leaves
+recovered content pending instead of incorrectly declaring it synced. Conditional
+conflicts and ID collisions still require review and ownership checks.
+
+Local verification: 422 workspace/offline checks and 239 Timeline checks pass
+(661 total, excluding 45 opt-in skips). The enabled
+`accountTimelineRecovery.browser.test.ts` also passes: a disposable private
+loopback account deletes through Things, confirms server removal, cold reloads
+History offline, recovers through the normal control at 320px, reloads the
+editable content and reconnects. The real API recreates the same private ID;
+guest reads return 404. Reviews fit 1440/390/320px with zero offline writes or
+browser errors. Evidence: `tmp/account-history-recovery-native/`. Focused tests
+cover delayed create/update/delete responses, lost-response reload, stale reads,
+private recovery, missing folders, recorded component copies, transactional
+rollback, immutable retry and account identity/collision/conditional-write fences.
+
+Remaining: attachment-bound and protected recovery adapters, full mid-cascade
+child/file concurrency, editor-specific pending History sources, branch/note/name
+controls, the broader local-workspace matrix and exact-head CI/deployed
+acceptance. Known attachment recoveries retain the existing verified remote
+adapter; this increment does not silently recover only part of their content.
+This is local acceptance of ordinary recovery, not completion of the full goal
+or permission to merge ahead of its remaining acceptance gates.

@@ -673,3 +673,13 @@ new device results remain drafts. `TimelineVersionActions` skips upload dependen
 only for the matching local account capability. Regressions:
 `accountTimelineVersions.test.ts`, `accountApi.test.ts`, and opt-in
 `accountTimelineRestore.browser.test.ts`. See [remaining recovery/History gates](../local-workspaces.md#offline-account-history-restore-and-undo--2026-10-17).
+
+
+Ordinary deleted account Things recover offline through `AccountTimelineVersions`
+and the same `LocalTimelineVersions` transaction used by anonymous recovery.
+`LocalThings.versionTransaction.recover` delegates queue reconciliation to
+`AccountThingSync`: preserve frozen requests, advance the local revision, and
+keep recovered content pending after a late delete acknowledgement. Regressions:
+`accountDelete.test.ts`, `accountTimelineVersions.test.ts` and opt-in
+`accountTimelineRecovery.browser.test.ts`. Attachment-bound/protected recovery
+and broader acceptance remain open; see [local workspaces](../local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).

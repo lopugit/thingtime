@@ -32,13 +32,13 @@ export class AccountTimelineVersions {
    head:async(tx,id)=>{
     const head=await tx.get<string>('timeline-meta',`head:${id}`);
     if(head){const row=await entry(tx,head);if(!row||row.event.thingId!==id)fail('The device History head is unavailable.');return row;}
-    const doc=await thing(tx,id);if(!doc)return null;
-    const current=versionContent(thingContentSnapshot(doc)!);
+    const doc=await thing(tx,id);
+    const current=doc?versionContent(thingContentSnapshot(doc)!):null;
     let match:LocalTimelineRow|null=null;
     for(const item of await tx.list<{thingId:string}>('timeline-index')){
      if(item.value.thingId!==id)continue;
      const row=await entry(tx,item.id);
-     if(row?.receipt&&row.event.mode==='revision'&&row.event.after?.adapter==='thing-content'&&versionContentEquals(versionContent(row.event.after),current)&&(!match||row.receipt.position>match.receipt!.position))match=row;
+     if(row?.receipt&&row.event.mode==='revision'&&(current?row.event.after?.adapter==='thing-content'&&versionContentEquals(versionContent(row.event.after),current):true)&&(!match||row.receipt.position>match.receipt!.position))match=row;
     }
     return match;
    },
@@ -66,10 +66,10 @@ export class AccountTimelineVersions {
   const basis=await this.db.transaction(this.scope,'readonly',this.lease,async tx=>{
    const id=await tx.get<string>('timeline-meta',`head:${source.event.thingId}`);
    const doc=await this.authority.thing(tx,source.event.thingId);
-   if(!doc)throw new WorkspaceError('ACCOUNT_HISTORY_REMOTE_REQUIRED','This version needs its account recovery adapter.',409);
-   return {id,content:versionContent(thingContentSnapshot(doc)!)};
+   if(!doc&&!request.recover)fail('This Thing was deleted. Choose recovery in History to restore it.');
+   return {id,content:doc?versionContent(thingContentSnapshot(doc)!):null};
   });check();
-  const head=basis.id ? rows.find(row=>row.event.id===basis.id) : rows.filter(row=>row.receipt&&row.event.mode==='revision'&&row.event.after?.adapter==='thing-content'&&versionContentEquals(versionContent(row.event.after),basis.content)).sort((a,b)=>b.receipt!.position-a.receipt!.position)[0];
+  const head=basis.id ? rows.find(row=>row.event.id===basis.id) : rows.filter(row=>row.receipt&&row.event.mode==='revision'&&(basis.content?row.event.after?.adapter==='thing-content'&&versionContentEquals(versionContent(row.event.after),basis.content):true)).sort((a,b)=>b.receipt!.position-a.receipt!.position)[0];
   const found=new Map<string,LocalTimelineRow>(), expanded=new Set<string>();
   let pending=[{id:source.event.id,ancestry:request.mode==='merge'},...(head?[{id:head.event.id,ancestry:request.mode==='merge'}]:[])];
   while(pending.length){

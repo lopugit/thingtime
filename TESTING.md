@@ -11238,3 +11238,24 @@ are not native acceptance evidence.
 
 Run `accountTimelineVersions.test.ts`, `accountApi.test.ts`, existing shared
 version/Timeline suites and README-enabled `accountTimelineRestore.browser.test.ts`.
+
+
+### Offline account deleted-Thing recovery (2026-10-17)
+
+- [x] Delete a disposable private account Thing through Things and confirm its
+  removal through the real API. Cold reload History offline, choose Recover
+  this Thing, inspect 1440/390/320px review, recover privately and cold reload
+  the editable result. Reconnect through verified identity and confirm the same
+  ID is recreated via normal authenticated create; guests still receive 404.
+- [x] Hold create/update/delete responses across recovery. Late acknowledgements
+  must preserve current content and pending sync. Lose a DELETE response, reopen
+  storage, replay the identical request, then create the recovered content.
+  New linked content must wait until its recovered parent’s frozen delete resolves.
+- [x] Refuse stale heads, colliding identities and conditional-write conflicts;
+  require review without losing local edits. Preserve private audience, folder
+  fallback, recorded component copies and atomic rollback on History failure.
+- [ ] Complete attachment-bound/protected recovery and mid-cascade child/file
+  races, plus the broader account-offline acceptance matrix.
+
+Run `accountDelete.test.ts`, `accountTimelineVersions.test.ts`, shared Timeline
+suites and README-enabled `accountTimelineRecovery.browser.test.ts`.

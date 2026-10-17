@@ -4796,3 +4796,15 @@ Playwright/Chrome paths above. No new secret or service is required. The fixture
 creates a private account and Thing, restores/undoes offline through native
 controls, verifies exact receipts after reconnect and removes its test Thing.
 Normal signup limits apply. See [coverage and remaining recovery work](docs/local-workspaces.md#offline-account-history-restore-and-undo--2026-10-17).
+
+
+### Account offline deleted-Thing recovery regression
+
+Use the same disposable loopback replica and production-client shell above.
+Enable `accountTimelineRecovery.browser.test.ts` with
+`TT_LOCAL_ACCOUNT_RECOVERY_URL=http://127.0.0.1:<client-port>`, optional
+`TT_LOCAL_ACCOUNT_RECOVERY_ARTIFACTS=/path/to/ignored-evidence`, and the shared
+Playwright/Chrome paths. No additional service or secret is required. The fixture
+creates its own private account and Thing, deletes through the UI, recovers from
+History offline, verifies private recreation after reconnect, and removes its
+test Thing. Normal signup limits apply. See [coverage and remaining work](docs/local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).

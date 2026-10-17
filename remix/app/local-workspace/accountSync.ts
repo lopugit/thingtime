@@ -88,7 +88,28 @@ export class AccountThingSync {
 					if (row?.post && (!refusal || row.at > refusal.at)) return true;
 				}
 				return false;
-			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures));
+			}, (tx, run, captures) => captureAccountThingChanges(tx, scope, run, () => new Date(this.now()).toISOString(), this.uuid, captures), (tx, id) => this.prepareRecovery(tx, id));
+	}
+	/** Recovery changes the latest device intent, never an already-sent request.
+	 * Its revision must exceed every earlier write so delayed replies cannot
+	 * overwrite it. All state changes share the History/content transaction. */
+	private async prepareRecovery(tx: WorkspaceTransaction, id: string) {
+		if (await tx.get('things', id)) throw new WorkspaceError('WRITE_CONFLICT', 'This Thing is already present. Refresh before restoring.', 409);
+		const state = await tx.get<SyncRecord>(COLLECTION, id);
+		if (state && !state.deleted) throw new WorkspaceError('SYNC_CONFLICT', 'The account deletion changed. Refresh History before restoring.', 409);
+		if (state?.postAttachmentIds?.length || state?.base?.accountAttachmentIds?.length ||
+			(await tx.list<{parentDeletion?: unknown; deletingLocal?: {targetId?: string}}>('account-files')).some(({value}) => value.parentDeletion && value.deletingLocal?.targetId === id))
+			throw new WorkspaceError('ACCOUNT_HISTORY_REMOTE_REQUIRED', 'This deleted Thing needs its attachment recovery adapter.', 409);
+		const deleted = await tx.get<LocalThing>(DELETED_CONTENT, id);
+		const stamp = new Date(Math.max(this.now(), (Date.parse(state?.deleted?.updatedAt || deleted?.updatedAt || '') || 0) + 1)).toISOString();
+		if (state) await tx.put(COLLECTION, id, { ...state, deleted: undefined,
+			state: state.pending && ['conflict', 'error'].includes(state.state) ? state.state : 'pending',
+			...(state.pending ? {} : { claim: undefined, attempts: 0, retryAt: 0, error: undefined }) });
+		// Keep the deletion body until a frozen DELETE resolves; other late writes
+		// need only the monotonic revision, not the previous content body.
+		if (state?.pending?.method !== 'delete') await tx.delete(DELETED_CONTENT, id);
+		return { createdAt: deleted?.createdAt || stamp, updatedAt: stamp,
+			revision: Math.max(state?.deleted?.revision || 0, state?.pending?.version || 0, deleted?.revision || 0) + 1 };
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) { return this.db.transaction(this.scope, mode, this.lease, run); }
 	private checked(input: AccountThing): AccountThing {
@@ -295,6 +316,7 @@ export class AccountThingSync {
 						await tx.delete(DELETED_CONTENT, candidate.id);
 						await tx.put(COLLECTION, candidate.id, { ...candidate, state: 'synced', claim: undefined, error: undefined }); continue;
 					}
+					const deleting = !!candidate.deleted || candidate.pending?.method === 'delete';
 					const content = await tx.get<LocalThing>(candidate.deleted ? DELETED_CONTENT : 'things', candidate.id);
 					// Aborting the pass here would re-select this same orphan on every
 					// later drain, silently stalling every other pending write behind a
@@ -306,14 +328,14 @@ export class AccountThingSync {
 						continue;
 					}
 					// Skip blocked children so their parents can progress first.
-					if (candidate.deleted && rows.some(other => other.id !== candidate.id && other.state === 'synced' && !other.deleted && other.base?.targetId === candidate.id)) {
+					if (deleting && rows.some(other => other.id !== candidate.id && other.state === 'synced' && !other.deleted && other.base?.targetId === candidate.id)) {
 						await tx.put(COLLECTION, candidate.id, { ...candidate, state: 'error', claim: undefined,
 							error: 'A linked Thing was kept in its account version. Delete that linked Thing explicitly before retrying this parent deletion.' });
 						continue;
 					}
-					if (candidate.deleted && rows.some(other => other.id !== candidate.id && other.state !== 'synced' &&
+					if (deleting && rows.some(other => other.id !== candidate.id && other.state !== 'synced' &&
 						[other.base?.folderId, other.base?.targetId, other.pending?.body.folderId, other.pending?.body.targetId].includes(candidate.id))) continue;
-					if (!candidate.deleted && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null, ...((content.thingtime.includes('post') || content.thingtime.includes('comment')) ? postThingReferences(content.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && !other.base))) continue;
+					if (!deleting && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null, ...((content.thingtime.includes('post') || content.thingtime.includes('comment')) ? postThingReferences(content.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && (!other.base || other.pending?.method === 'delete')))) continue;
 					// Resolve an uncertain parent write and active file claims first.
 					// The version-checked parent DELETE owns remote attachment cascade.
 					if (candidate.deleted && !candidate.pending && this.files?.prepareRemove) {
@@ -368,7 +390,8 @@ export class AccountThingSync {
 						const latest = await tx.get<SyncRecord>(COLLECTION, pending.id);
 						if (latest?.claim?.token === claim.token) {
 							await tx.delete(DELETED_CONTENT, pending.id);
-							await tx.put(COLLECTION, pending.id, { ...latest, base: null, state: 'synced', pending: undefined, claim: undefined, attempts: 0, retryAt: 0, error: undefined });
+							const recovered = !latest.deleted && !!await tx.get('things', pending.id);
+							await tx.put(COLLECTION, pending.id, { ...latest, base: null, state: recovered ? 'pending' : 'synced', pending: undefined, claim: undefined, attempts: 0, retryAt: 0, error: undefined });
 						}
 					});
 					completed++; continue;
