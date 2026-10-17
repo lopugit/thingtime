@@ -64,9 +64,10 @@ export const aiModelFamilyOf = (provider: AiModelProviderId, modelId: string): A
 };
 
 // Context windows (tokens) where the provider catalog states them. Anthropic
-// values are the published table as of 2026-06; OpenAI windows are left
-// unknown rather than guessed — the field is optional on the Thing.
+// values are published limits; unverified windows stay unknown rather than
+// guessed — the field is optional on the Thing. Astra verified 2026-10-17.
 export const AI_MODEL_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
+  'gpt-6-astra': 1_050_000,
   'claude-fable-5-1': 1_000_000,
   'claude-fable-5': 1_000_000,
   'claude-opus-5': 1_000_000,
