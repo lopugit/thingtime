@@ -31,6 +31,7 @@ public final class MainActivity extends Activity {
     private volatile String currentOrigin="";
     private String runningRequest;
     private FolderBridge folders;
+    private FileExportBridge exports;
     private static final String SCRIPT="""
         (() => {
           if (window !== window.top || !window.thingtimeDeviceTransport) return;
@@ -41,7 +42,7 @@ public final class MainActivity extends Activity {
           };
           window.thingtimeDeviceTransport.onmessage = event => { try { receive(JSON.parse(event.data)); } catch {} };
           window.thingtimeNativeBridge = {
-            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.3.0', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0',
+            version:'1.4.0', platform:'android', isNativeWebView:true, devicePairingVersion:'1.0.0', fileAccessVersion:'1.3.0', fileStagingVersion:'__STAGING_VERSION__', filePublicationVersion:'1.1.0', fileExportVersion:'1.0.0',
             postMessage:message => window.thingtimeDeviceTransport.postMessage(JSON.stringify(message)),
             __BINARY_METHOD__
             onMessage:listener => { listeners.add(listener); return () => listeners.delete(listener); },
@@ -60,6 +61,7 @@ public final class MainActivity extends Activity {
         }
         final boolean binary=WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_ARRAY_BUFFER);
         folders=new FolderBridge(this,origin,()->active && origin.equals(currentOrigin));
+        exports=new FileExportBridge(this,origin,()->active && origin.equals(currentOrigin));
         web=new WebView(this); android.widget.FrameLayout frame=new android.widget.FrameLayout(this); frame.addView(web,new android.widget.FrameLayout.LayoutParams(-1,-1)); setContentView(frame);
         if(Build.VERSION.SDK_INT>=30) {
             frame.setOnApplyWindowInsetsListener((view,insets)-> { android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.ime()); view.setPadding(bars.left,bars.top,bars.right,bars.bottom); return insets; });
@@ -71,7 +73,7 @@ public final class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(web,false);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         web.setWebViewClient(new WebViewClient() {
-            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) { cancel(); if(folders!=null) folders.suspend(); currentOrigin=canonical(url); }
+            @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) { cancel(); if(folders!=null) folders.suspend(); if(exports!=null)exports.suspend(); currentOrigin=canonical(url); }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
                 if(!request.isForMainFrame()) return false;
                 if(origin.equals(canonical(request.getUrl().toString()))) return false;
@@ -82,11 +84,19 @@ public final class MainActivity extends Activity {
             }
         });
         if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) WebViewCompat.addWebMessageListener(web,"thingtimeDeviceTransport",Collections.singleton(origin),(view,message,source,isMainFrame,reply)-> {
-            if(!isMainFrame || !origin.equals(canonical(source.toString())) || !origin.equals(canonical(view.getUrl())) || !active) return;
-            if(binary && message.getType()==WebMessageCompat.TYPE_ARRAY_BUFFER) { folders.handleFrame(message.getArrayBuffer());return; }
+            if(!isMainFrame || !origin.equals(canonical(source.toString())) || !origin.equals(canonical(view.getUrl()))) return;
+            if(binary && message.getType()==WebMessageCompat.TYPE_ARRAY_BUFFER) { if(active)folders.handleFrame(message.getArrayBuffer());return; }
             if(message.getType()!=WebMessageCompat.TYPE_STRING)return;
             String data=message.getData(); if(data==null || data.length()>131072) return;
-            try { JSONObject body=new JSONObject(data); if(!"mobile-files".equals(body.optString("type")) && data.length()>4096) return; handle(body,reply); } catch(Exception invalid) { /* Malformed messages have no effects. */ }
+            try {
+                JSONObject body=new JSONObject(data);
+                // The system Save As picker pauses this activity. A web account
+                // change or unmount must still be able to cancel that request.
+                boolean cancelExport="file-export".equals(body.optString("type")) && body.optJSONObject("payload")!=null && "cancel".equals(body.getJSONObject("payload").optString("action"));
+                if(!active && !cancelExport)return;
+                if(!"mobile-files".equals(body.optString("type")) && data.length()>4096)return;
+                handle(body,reply);
+            } catch(Exception invalid) { /* Malformed messages have no effects. */ }
         });
         if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) WebViewCompat.addDocumentStartJavaScript(web,SCRIPT.replace("__STAGING_VERSION__",binary?"1.1.0":"1.0.0")
             .replace("__BINARY_METHOD__",binary?"postFileFrame:frame => window.thingtimeDeviceTransport.postMessage(frame),":""),Collections.singleton(origin));
@@ -96,6 +106,7 @@ public final class MainActivity extends Activity {
     private void unavailable(String message) { TextView text=new TextView(this); text.setText(message); text.setPadding(32,96,32,32); setContentView(text); }
     private void cancel() { generation.incrementAndGet(); runningRequest=null; }
     private void handle(JSONObject message,JavaScriptReplyProxy reply) throws Exception {
+        if("file-export".equals(message.optString("type"))) { exports.handle(message,reply);return; }
         if("mobile-files".equals(message.optString("type"))) { folders.handle(message,reply);return; }
         if(!"mobile-device".equals(message.optString("type"))) return;
         JSONObject payload=message.getJSONObject("payload"); String id=payload.getString("requestId");
@@ -118,9 +129,9 @@ public final class MainActivity extends Activity {
             runOnUiThread(()-> { try { check.run(); if(WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) reply.postMessage(new JSONObject().put("type","mobile-device-result").put("payload",base).toString()); } catch(Exception ignored) { } finally { if(generation.get()==operation) runningRequest=null; } });
         });
     }
-    @Override protected void onResume() { super.onResume(); active=true; if(web!=null) web.onResume(); if(folders!=null) folders.resume(); }
-    @Override protected void onPause() { active=false; cancel(); if(folders!=null) folders.pause(); if(web!=null) web.onPause(); super.onPause(); }
-    @Override protected void onDestroy() { cancel(); if(folders!=null) folders.close(); if(web!=null) web.destroy(); super.onDestroy(); }
-    @Override protected void onActivityResult(int request,int result,Intent data) { super.onActivityResult(request,result,data); if(folders!=null) folders.activityResult(request,result,data); }
+    @Override protected void onResume() { super.onResume(); active=true; if(web!=null) web.onResume(); if(folders!=null) folders.resume(); if(exports!=null)exports.resume(); }
+    @Override protected void onPause() { active=false; cancel(); if(folders!=null) folders.pause(); if(exports!=null)exports.pause(); if(web!=null) web.onPause(); super.onPause(); }
+    @Override protected void onDestroy() { cancel(); if(folders!=null) folders.close(); if(exports!=null)exports.suspend(); if(web!=null) web.destroy(); super.onDestroy(); }
+    @Override protected void onActivityResult(int request,int result,Intent data) { super.onActivityResult(request,result,data); if(folders!=null) folders.activityResult(request,result,data); if(exports!=null)exports.activityResult(request,result,data); }
     @Override public void onBackPressed() { if(web!=null && web.canGoBack()) web.goBack(); else super.onBackPressed(); }
 }

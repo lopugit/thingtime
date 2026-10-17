@@ -10648,8 +10648,9 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Long names and content IDs fit 390px and 1280px browser layouts without overflow.
 - [x] Real API acceptance: serialized restore replay, original/current byte hashes,
   permission failures and canonical Timeline snapshots (`file-versions.integration.mts`).
-- [ ] Installed iOS, Android and Mac History/download/restore acceptance; local
-  device retained-version browsing and content-ID search across folders.
+- [x] Installed Android History/export/restore acceptance (checkpoints below).
+- [ ] Installed iOS and Mac History/download/restore acceptance; local device
+  retained-version browsing and content-ID search across folders.
 
 ### Installed file History and effect replay — 2026-10-17
 
@@ -10663,5 +10664,28 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [x] Run Android `THINGTIME_FILE_HISTORY_TEST=1` with a disposable local
   account: real History filter, two retained versions, cancel without writes,
   restore and both complete byte hashes. Verify the saved review screenshot.
-- [ ] Native History export into Android Files, installed iOS and Mac restore,
-  local retained-version browsing and cross-folder content-ID retrieval.
+- [x] Native History export into Android Files (Save As acceptance below).
+- [ ] Installed iOS and Mac restore, local retained-version browsing and
+  cross-folder content-ID retrieval.
+
+### Android historical Save As — 2026-10-17
+
+- [x] With the installed debug app and disposable History fixture, cancel the
+  first Save As dialog; the UI confirms cancellation and no file is created.
+  Save both versions to Downloads under the same suggested name. Android adds
+  a suffix for the second file; independently check 128 bytes of value 11 and
+  257 bytes of value 22. Both cloud versions and restore remain available.
+- [ ] Cancel or change account while Save As pauses the activity; a late result
+  cannot resume the old export or satisfy a newer request. Backgrounding during
+  transfer stops it. Provider interruption must not show saved success.
+- [x] Native unit checks reject mismatched version/range headers, redirects,
+  truncated/extra/corrupt bytes and cancellation; multipart boundary streaming
+  and complete provider-byte verification pass.
+- [x] Shared bridge checks negotiate the feature, ignore foreign callbacks,
+  reject changed version receipts and abort the native request on cancellation.
+- [ ] Physical devices, API 26, low storage, remote document providers, process
+  termination during provider writes, and iOS/Mac native exports.
+- [x] Refresh/reorder unrelated cookies between export phases without cancelling
+  an unchanged session. Changed, missing or duplicate `tt_auth` credentials still
+  fail closed (`SessionCookieTest`); native save errors retain actionable guidance
+  in the shared History error display (`fileExport.client.test.ts`).

@@ -460,3 +460,30 @@ both retained attachments. The synthetic file is left in private Trash with
 its accounted versions. `files/file-history-qa.png` in the debug app contains
 the restore-review screenshot. This verifies authorized byte reads; saving a
 History download into Android Files is a separate native export acceptance.
+
+### Save historical versions to Android Files
+
+History negotiates native `fileExportVersion` 1.0.0 and shows **Save this version**.
+Android checks the signed-in account and exact attachment identity, streams
+existing authorized 2 MiB ranges into private cache, verifies the multipart
+content ID, and opens the system Save As picker. The user chooses the name and
+location. It reads back the provider document before reporting success. The
+adapter never receives arbitrary URLs, follows redirects, or retains a folder
+permission. Cancellation, navigation, session changes and activity destruction
+stop the request; picker return reauthorizes before writing. Interrupted provider
+writes may leave a partial document, so the UI asks the user to check Files.
+Exports are foreground operations, without background restart/resume.
+
+For installed acceptance, add `THINGTIME_FILE_EXPORT_TEST=1` to the History
+command above. Cancel the first system Save As dialog, then save both versions
+into Downloads. The second name receives Android's collision suffix. Check the
+logged unique fixture filename independently in Downloads: the first file must
+contain 128 bytes of value 11 and the second 257 bytes of value 22. The test
+retains only those synthetic exported files for inspection; cloud cleanup still
+uses private Trash. Never remove unrelated Downloads files.
+
+Export pins the exact `tt_auth` credential, not the whole cookie header. Unrelated
+cookie refreshes do not cancel a save; changed/missing/ambiguous auth still stops
+it. The native adapter rechecks the current owner and exact attachment after the
+picker before copying. API 35 installed acceptance and independent Downloads
+byte checks passed; physical devices and other document providers remain open.

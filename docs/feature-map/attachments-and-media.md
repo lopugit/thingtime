@@ -275,3 +275,16 @@ History/download acceptance and native retained-version browsing remain open.
 uses real private file uploads, History filters, guarded restore and exact byte
 readback. It does not claim a native exported file. `timeline/browserModel.ts`
 uses `timelineFileVersion` for canonical file card names and Files filtering.
+
+Android History exports negotiate `fileExportVersion` 1.0.0 through
+`fileSync/fileExport.client.ts` and the bounded native `FileExportBridge` /
+`AttachmentExport` adapters. Exact authorized attachment ranges are verified
+before Save As; the provider document is read back before success. No general
+WebView download listener or arbitrary-URL fetch is installed. Tests:
+`fileExport.client.test.ts`, `AttachmentExportTest.java`, and the opt-in installed
+`THINGTIME_FILE_EXPORT_TEST=1` History check documented in `android/README.md`.
+
+`SessionCookie` pins the exact native export authentication credential from the
+canonical `tt_auth` cookie; unrelated cookie refreshes do not invalidate it.
+Missing, duplicate or changed credentials remain refused. `SessionCookieTest`
+and `fileExport.client.test.ts` cover the session and native-error regressions.

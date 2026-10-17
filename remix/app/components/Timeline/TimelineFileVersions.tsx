@@ -9,6 +9,7 @@ import { type TimelineEvent, type TimelineScope } from '../../timeline/contract'
 import { rootIdentity } from '../../utils/rootIdentity';
 import { attachmentContentUrl } from '../Attachments/attachmentUiCore';
 import type { CloudFile, CloudFileCommit } from '../../fileSync/cloudFile';
+import { exportFileVersion, supportsFileExport } from '../../fileSync/fileExport.client';
 import {
 	checkFileRestoreReceipt,
 	fileContentId,
@@ -76,6 +77,7 @@ export function TimelineFileVersion({
 	const [error, setError] = React.useState(initial.error);
 	const [message, setMessage] = React.useState('');
 	const [busy, setBusy] = React.useState(false);
+	const [saving, setSaving] = React.useState(false);
 	const [refused, setRefused] = React.useState(false);
 	const active = React.useRef<AbortController | null>(null);
 	const live = React.useRef(enabled);
@@ -96,8 +98,8 @@ export function TimelineFileVersion({
 			live.current = false;
 		};
 	}, [enabled]);
-	const run = async (work: (check: () => void, signal: AbortSignal) => Promise<void>) => {
-		if (!live.current || active.current || initial.error) return;
+	const run = async (work: (check: () => void, signal: AbortSignal) => Promise<void>, restoring = true) => {
+		if (!live.current || active.current || (restoring && initial.error)) return;
 		const controller = new AbortController();
 		active.current = controller;
 		const generation = rootIdentity.read().generation;
@@ -114,8 +116,13 @@ export function TimelineFileVersion({
 			await work(check, controller.signal);
 		} catch (failure) {
 			if (!controller.signal.aborted) {
-				setError(apiErrorMessage(failure, 'Could not finish. Retry checks the same saved restore.'));
-				setRefused((failure as { status?: number })?.status === 409);
+				setError(
+					apiErrorMessage(
+						failure,
+						restoring ? 'Could not finish. Retry checks the same saved restore.' : 'Could not save this version. Check Files before trying again.'
+					)
+				);
+				if (restoring) setRefused((failure as { status?: number })?.status === 409);
 			}
 		} finally {
 			if (active.current === controller) active.current = null;
@@ -171,6 +178,17 @@ export function TimelineFileVersion({
 		}
 	};
 	const contentId = fileContentId(version);
+	const save = () =>
+		run(async (check, signal) => {
+			setSaving(true);
+			try {
+				const saved = await exportFileVersion(scope, version, signal);
+				check();
+				setMessage(saved ? 'File saved and checked. This version remains in History.' : 'Save cancelled. This version remains in History.');
+			} finally {
+				setSaving(false);
+			}
+		}, false);
 	return (
 		<Box borderWidth="1px" borderColor="var(--tt-border)" borderRadius="lg" p={3} mt={3} minW={0}>
 			<Text fontWeight="600" fontSize="sm">
@@ -186,17 +204,23 @@ export function TimelineFileVersion({
 				{contentId}
 			</Text>
 			<Flex gap={2} wrap="wrap" mt={3}>
-				{enabled && (
-					<Button
-						as="a"
-						size="sm"
-						variant="outline"
-						href={attachmentContentUrl(version.content.attachmentId, true)}
-						target="_blank"
-						rel="noopener noreferrer"
-					>
-						Download this version
+				{enabled && supportsFileExport() ? (
+					<Button size="sm" variant="outline" isDisabled={busy} onClick={() => void save()}>
+						Save this version
 					</Button>
+				) : (
+					enabled && (
+						<Button
+							as="a"
+							size="sm"
+							variant="outline"
+							href={attachmentContentUrl(version.content.attachmentId, true)}
+							target="_blank"
+							rel="noopener noreferrer"
+						>
+							Download this version
+						</Button>
+					)
 				)}
 				{!review && !command && (
 					<Button size="sm" variant="outline" isDisabled={!enabled || busy || !!initial.error} onClick={() => void prepare()}>
@@ -234,9 +258,26 @@ export function TimelineFileVersion({
 				</Box>
 			)}
 			{busy && (
-				<Text role="status" fontSize="sm" mt={2}>
-					Checking file version…
-				</Text>
+				<Box mt={2}>
+					<Text role="status" fontSize="sm">
+						{saving ? 'Preparing this version. Choose where to save it in Files…' : 'Checking file version…'}
+					</Text>
+					{saving && (
+						<Button
+							size="sm"
+							variant="ghost"
+							mt={2}
+							onClick={() => {
+								active.current?.abort();
+								setBusy(false);
+								setSaving(false);
+								setMessage('Saving stopped. Check any file already created in Files before trying again.');
+							}}
+						>
+							Cancel saving
+						</Button>
+					)}
+				</Box>
 			)}
 			{error && (
 				<Text role="alert" fontSize="sm" mt={2} overflowWrap="anywhere">

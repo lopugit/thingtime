@@ -68,6 +68,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add Android History Save As with verified exact-version ranges, system destination selection, provider readback and cancellation fences. See [PR #1002 export acceptance](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md#android-historical-file-exports--2026-10-17).
+
+
 - 2026-10-17 — **Codex (AI)**: File History restore controls now survive React
   StrictMode effect replay; retained revisions show their filenames and remain
   visible in Files/search filters. Added opt-in installed Android History

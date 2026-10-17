@@ -71,7 +71,7 @@ final class SyncStaging {
     private static long partSize(long size) {
         long mib=1048576L;return ((Math.max(8*mib,(size+9999)/10000)+mib-1)/mib)*mib;
     }
-    private static JSONObject entry(JSONObject input) throws Exception {
+    static JSONObject entry(JSONObject input) throws Exception {
         String path=text(input,"path",4096),kind=text(input,"kind",6);
         FolderReader.path(path);long size=integer(input,"size",MAX_SAFE);
         JSONObject entry=new JSONObject().put("path",path).put("kind",kind).put("size",size).put("sha256",JSONObject.NULL)

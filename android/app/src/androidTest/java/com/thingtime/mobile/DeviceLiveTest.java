@@ -20,7 +20,7 @@ public class DeviceLiveTest {
     static void awaitTrue(android.webkit.WebView web,String js) throws Exception {
         awaitTrue(web,js,60000);
     }
-    private static void awaitTrue(android.webkit.WebView web,String js,long timeout) throws Exception {
+    static void awaitTrue(android.webkit.WebView web,String js,long timeout) throws Exception {
         long end=System.currentTimeMillis()+timeout;
         while(System.currentTimeMillis()<end) { if("true".equals(evaluate(web,js))) return; Thread.sleep(250); }
         fail("Installed WebView did not satisfy: "+js);

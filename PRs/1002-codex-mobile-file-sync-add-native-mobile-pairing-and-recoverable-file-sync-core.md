@@ -1215,8 +1215,8 @@ TypeScript output matches the same 91 baseline diagnostics.
 Android's opt-in `THINGTIME_FILE_HISTORY_TEST=1` seeds two private file versions
 and exercises the real History screen through the existing installed-app
 runner. It distinguishes full authorized byte reads from native export; the
-WebView has no download handler yet. The stronger native export and universal
-content-ID retrieval promises remain unfinished work.
+WebView has no download handler yet. At that checkpoint, native export and universal
+content-ID retrieval remained unfinished work.
 
 Installed API 35 Android acceptance passed against the real local API: two
 retained versions appeared in Files/filename History filters, Review and Cancel
@@ -1225,4 +1225,50 @@ complete byte hashes still matched. The debug runner finished `OK (50 tests)`
 (48 executed, two opt-in process-restart checks skipped), with build, JVM tests
 and lint passing. Both APKs were reinstalled and the app relaunched. One earlier
 login attempt returned a transient 503; the successful run followed without a
-server restart or weaker authorization. Native export remains unimplemented.
+server restart or weaker authorization. Native export was outside that checkpoint; the subsequent Android export acceptance is below.
+
+## Android historical file exports — 2026-10-17
+
+`fileExportVersion` 1.0.0 connects the shared History **Save this version**
+action to Android's system Save As picker. `AttachmentExport` reuses the native
+sync-entry validator, checks the exact attachment identity and fingerprint, and
+streams authenticated 2 MiB ranges into private cache. HTTP redirects and
+unexpected range framing are rejected. `FileExportBridge` rechecks identity
+before provider writes and verifies the saved document's complete multipart
+fingerprint before replying. No sync connection, broad storage access, raw URL
+or persistent folder grant is introduced. Picker responses have distinct request
+codes; cancellations remain accepted while the picker pauses the activity.
+
+The user chooses the destination and filename. Cancel, navigation, account or
+session changes abort the request. A provider interruption can leave a partial
+new document; the UI says to check Files and never silently retries a save.
+Private staging is removed after completion/cancellation and stale staging is
+cleared on activity recreation. This is foreground export; resumable background
+export, iOS/Mac native export, physical-device/provider coverage, and universal
+content-ID retrieval remain open.
+
+Focused client tests cover support negotiation, account/origin/request matching,
+exact version receipts, cancellation and late callbacks. Native JVM checks cover
+multi-range/multipart streaming, saved-byte readback, truncation, corruption,
+extra bytes, cancellation, unsafe names, changed identity, redirects and headers.
+Installed acceptance uses the existing History fixture with the additional
+`THINGTIME_FILE_EXPORT_TEST=1` flag; instructions are in `android/README.md`.
+
+Installed API 35 acceptance passes Cancel, sequential Save As of both versions
+under the same suggested name, provider readback, reviewed restore, and retained
+cloud-byte verification. Independent ADB pulls confirm 128 bytes of value 11
+(SHA256 `b7b51001618538e6d5f1737784b97e278b90e56bcfae909b92c631d930fb0552`)
+and 257 bytes of value 22 (`48b5c09d2ff719f6df7e93734e1beda6ef2fc119b238a0950bdeb38a9b5b8af1`).
+The system picker preserved the first file and added `(1)` to the second name.
+The installed runner reports `OK (50 tests)` (48 executed; two opt-in restart
+cases skipped). Native JVM coverage is now 35 passing checks; targeted lint
+passes and TypeScript still matches the same 91 pre-existing diagnostics.
+
+The first installed runs exposed an overbroad session fence: comparing the full
+Cookie header could stop export when unrelated browser cookies changed. The
+adapter now pins only the exact `tt_auth` credential used by the server, rejects
+missing/duplicate credentials, and still checks the live owner after the picker.
+Unit coverage distinguishes cookie reordering/preferences from changed auth.
+Native error guidance now reaches the shared History error display. Earlier
+readiness failures during web rebuilds and the failed zero-byte exports were
+not accepted as success; the successful run used a stable managed server.
