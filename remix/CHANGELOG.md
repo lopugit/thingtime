@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
+
 - 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded
   model-not-available recovery and admin manual refresh. Retired models leave
   Lopu/shared selectors; per-provider allow-all and auto-allow-new checkboxes

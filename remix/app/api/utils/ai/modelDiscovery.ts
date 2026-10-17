@@ -1,6 +1,12 @@
 import type { AiModelProviderId } from './modelsCore';
 import { buildAiProviderProbeRequest } from './providerProbe';
 
+export class ModelDiscoveryHttpError extends Error {
+	constructor(readonly status: number) {
+		super(`Model discovery returned HTTP ${status}`);
+	}
+}
+
 export type DiscoveredAiModel = { id: string; label: string };
 export type ModelDiscoveryRequest = { url: string; headers: Record<string, string> };
 export const MODEL_DISCOVERY_TIMEOUT_MS = 20_000;
@@ -27,7 +33,7 @@ export async function discoverProviderModels(
 		const response = await fetchImpl(url, { headers: request.headers, signal, redirect: 'manual' });
 		if (!response.ok) {
 			await response.body?.cancel();
-			throw new Error(`Model discovery returned HTTP ${response.status}`);
+			throw new ModelDiscoveryHttpError(response.status);
 		}
 		const reader = response.body?.getReader();
 		if (!reader) throw new Error('Model discovery returned no body');
@@ -45,7 +51,11 @@ export async function discoverProviderModels(
 			await reader.cancel();
 		}
 		const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-		if (!Array.isArray(body.data) || !body.data.length || ((provider === 'anthropic' || body.has_more !== undefined) && typeof body.has_more !== 'boolean'))
+		if (
+			!Array.isArray(body.data) ||
+			!body.data.length ||
+			((provider === 'anthropic' || body.has_more !== undefined) && typeof body.has_more !== 'boolean')
+		)
 			throw new Error('Model discovery returned an incomplete catalogue');
 		for (const row of body.data) {
 			if (!row || typeof row.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(row.id))
@@ -68,27 +78,49 @@ export async function discoverProviderModels(
 	throw new Error('Model discovery exceeded its page limit');
 }
 
-export async function discoverConfiguredProviderModels(provider: AiModelProviderId): Promise<DiscoveredAiModel[]> {
+export async function discoverConfiguredProviderModels(
+	provider: AiModelProviderId,
+	options: { env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch } = {}
+): Promise<DiscoveredAiModel[]> {
+	const env = options.env ?? process.env;
+	const fetchImpl = options.fetchImpl ?? fetch;
 	if (provider === 'openai') {
-		const request = buildAiProviderProbeRequest(provider, process.env);
+		const request = buildAiProviderProbeRequest(provider, env);
 		if (!request) throw new Error('OpenAI is not configured');
 		// Match the actual SDK project's model visibility.
-		if (process.env.OPENAI_ORG_ID) request.headers['OpenAI-Organization'] = process.env.OPENAI_ORG_ID;
-		if (process.env.OPENAI_PROJECT_ID) request.headers['OpenAI-Project'] = process.env.OPENAI_PROJECT_ID;
-		return discoverProviderModels(provider, request);
+		if (env.OPENAI_ORG_ID) request.headers['OpenAI-Organization'] = env.OPENAI_ORG_ID;
+		if (env.OPENAI_PROJECT_ID) request.headers['OpenAI-Project'] = env.OPENAI_PROJECT_ID;
+		return discoverProviderModels(provider, request, fetchImpl);
 	}
+	// Catalogue reads are independent of inference. Claude subscription OAuth
+	// may not grant Models API access; a dedicated discovery key can do so.
+	// This key is never passed into the Claude Code inference environment.
+	const catalogueKey = env.ANTHROPIC_MODELS_API_KEY?.trim() || env.ANTHROPIC_API_KEY?.trim();
+	if (catalogueKey)
+		return discoverProviderModels(
+			provider,
+			{
+				url: 'https://api.anthropic.com/v1/models',
+				headers: { 'x-api-key': catalogueKey, 'anthropic-version': '2023-06-01' }
+			},
+			fetchImpl
+		);
 	const { resolveClaudeOAuthTokens } = await import('./claudeOAuth');
-	const tokens = await resolveClaudeOAuthTokens();
+	const tokens = await resolveClaudeOAuthTokens(env);
 	if (!tokens.length || tokens.length > 8) throw new Error('Claude catalogue credentials unavailable');
 	// Discovery only; inference remains in the isolated Claude Code runtime.
 	// Every configured credential must finish before absence is authoritative.
-	// A scope/plan denial retains the previous catalogue; never try an API key.
+	// A scope/plan denial retains the previous catalogue.
 	const lists = await Promise.all(
 		tokens.map((token) =>
-			discoverProviderModels(provider, {
-				url: 'https://api.anthropic.com/v1/models',
-				headers: { authorization: `Bearer ${token}`, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'oauth-2025-04-20' }
-			})
+			discoverProviderModels(
+				provider,
+				{
+					url: 'https://api.anthropic.com/v1/models',
+					headers: { authorization: `Bearer ${token}`, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'oauth-2025-04-20' }
+				},
+				fetchImpl
+			)
 		)
 	);
 	return [...new Map(lists.flat().map((model) => [model.id, model])).values()];

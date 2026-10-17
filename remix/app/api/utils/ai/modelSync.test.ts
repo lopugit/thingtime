@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { discoverProviderModels, isModelUnavailableError } from './modelDiscovery';
+import { discoverProviderModels, discoverConfiguredProviderModels, ModelDiscoveryHttpError, isModelUnavailableError } from './modelDiscovery';
 import { createAiModelSync, createMongoModelSyncStore } from './modelSync';
 import { createAiModelSyncLoader } from '../../../routes/api/v1/ai/models/sync/_sync';
 import { getAiModelCatalogEntry, resolveLopuModelChoice, publicAiModel } from './modelsCore';
@@ -189,4 +189,41 @@ test('publication is lease-fenced and atomic, preserves disabled models, and aut
 		writes.at(-1).filter['crystal.modelId'].$nin,
 		list.map((m) => m.id)
 	);
+});
+
+test('Claude catalogue keys are discovery-only, prefer the dedicated key and never leak provider error bodies', async () => {
+	for (const [env, expected] of [
+		[{ ANTHROPIC_MODELS_API_KEY: 'dedicated-fixture', ANTHROPIC_API_KEY: 'legacy-fixture' }, 'dedicated-fixture'],
+		[{ ANTHROPIC_API_KEY: 'legacy-fixture' }, 'legacy-fixture']
+	] as const) {
+		let calls = 0;
+		const models = await discoverConfiguredProviderModels('anthropic', {
+			env,
+			fetchImpl: (async (_url, init) => {
+				calls++;
+				assert.equal((init?.headers as any)['x-api-key'], expected);
+				assert.equal((init?.headers as any).authorization, undefined);
+				return response({ data: [{ id: 'claude-fable-5-1' }], has_more: false });
+			}) as typeof fetch
+		});
+		assert.equal(calls, 1);
+		assert.equal(models[0].id, 'claude-fable-5-1');
+	}
+	const denied = createAiModelSync({
+		configured: () => true,
+		discover: () => discoverProviderModels('anthropic', request, (async () => response({ error: 'secret-provider-body' }, 403)) as typeof fetch),
+		store: {
+			claim: async () => ({ token: 'fixture', startedAt: new Date() }),
+			publish: async () => {
+				throw new Error('must not publish');
+			},
+			fail: async () => {}
+		}
+	});
+	const result = await denied.syncProvider('anthropic', 'admin');
+	assert.equal(result.status, 'failed');
+	assert.match(result.reason!, /HTTP 403/);
+	assert.match(result.reason!, /ANTHROPIC_MODELS_API_KEY/);
+	assert.doesNotMatch(JSON.stringify(result), /secret-provider-body|fixture/);
+	assert.equal(new ModelDiscoveryHttpError(401).status, 401);
 });
