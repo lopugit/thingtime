@@ -274,6 +274,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/get': () => import('../../../app/routes/api/v1/get/_get'),
   'v1/groups': () => import('../../../app/routes/api/v1/groups/_groups'),
   'v1/groups/audience-sources': () => import('../../../app/routes/api/v1/groups/audience-sources/_audience-sources'),
+  'v1/mail': () => import('../../../app/routes/api/v1/mail/_mail'),
   'v1/passwords': () => import('../../../app/routes/api/v1/passwords/_passwords'),
   'v1/drafts': () => import('../../../app/routes/api/v1/drafts/_drafts'),
   'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
@@ -381,6 +382,7 @@ export default defineHandler(async (event) => {
   }
 
   if (shouldProxyApiToFallback(event.req)) {
+    if (path === 'v1/mail') return jsonResponse({ ok: false, error: 'Configure cloud mail on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     // Fresh vault verification must stay on the selected deployment. Never
     // forward passwords/assertions to a fallback origin or reveal its keys.
     if (event.req.headers.has('X-Thingtime-Expected-Actor')) {

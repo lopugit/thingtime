@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Add private incoming-mail accounts, read-only IMAP/POP3 adapters, `/mail` and `/email`, combined and proxy inboxes, independent cloud/local sync, encrypted offline records and a paired loopback connector. Include its exact origin in the shared CSP. Setup, boundaries and verification are documented in README and the mail PR note.
+
 - 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
 
 - 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded

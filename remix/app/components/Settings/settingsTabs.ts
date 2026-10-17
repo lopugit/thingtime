@@ -1,5 +1,6 @@
 export const SETTINGS_TABS = [
 	{ id: 'account', label: 'Account' },
+	{ id: 'email', label: 'Email' },
 	{ id: 'profile', label: 'Profile' },
 	{ id: 'things', label: 'Things' },
 	{ id: 'appearance', label: 'Appearance' },

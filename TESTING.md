@@ -9968,3 +9968,17 @@ model-selection suites cover the consuming surfaces. Live provider calls remain
 separate from deterministic discovery/lease tests.
 
 - Anthropic catalogue discovery: a dedicated ANTHROPIC_MODELS_API_KEY takes precedence over the legacy API key; neither reaches inference. A 401/403 shows a redacted credential hint and preserves prior availability. Raw provider bodies and credentials never enter sync reports.
+
+## Incoming mail
+
+- [ ] Add more than one account in Settings → Email; configure IMAP, POP3 and both, TLS and required STARTTLS. Reload and edit without echoing saved passwords.
+- [ ] Toggle Cloud and Local independently, including both off. Cloud-off sync refuses on the server; local-only credentials never enter a Thingtime API request. Enabling cloud on a previously local account creates the remote revision correctly.
+- [ ] Connect the local connector with the exact origin/token. Refuse an unrelated origin, wrong token, private/reserved DNS answer, invalid certificate and plaintext downgrade. Test slow/disconnected providers without losing the cached inbox.
+- [ ] Discover folders, page older mail, and compare rendered sender, subject and body with the fixture/provider. Verify POP3 UIDL identity and dot unstuffing, IMAP UIDVALIDITY changes, and no DELE/STORE/MOVE/EXPUNGE commands.
+- [ ] `/mail` and `/email` show all accounts, All inboxes and individual folders. Create a proxy from at least two different accounts; editing/removing it leaves all source folders/messages unchanged.
+- [ ] Read previously synced mail offline. Reload with the app shell already available, navigate to a message, search cached text and confirm the offline copy survives. Large messages are visibly partial; HTML/scripts/tracking pixels do not execute or load.
+- [ ] Switch/logout during load, save and sync. No previous user's mail flashes in the next account. A changed remote hostname/username never reuses an old local password. A stale browser tab cannot overwrite newer encrypted device records.
+- [ ] Retry an uncertain save with the same id/writeId and payload; changed payload and stale revision refuse. Remove the account during sync: old completion cannot recreate its children. Verify generic Thing search/read/share and foreign-folder references refuse private mail.
+- [ ] Inspect account form, checkbox groups, proxy selection, long subjects and open message on desktop and 375 px mobile; scroll to the bottom with no horizontal overflow, clipping or hidden controls.
+
+- [ ] Local mail sync passes the real browser CSP in both dev and production policy; only the fixed connector HTTP origin is allowed. Verify after a fresh document navigation, since a cached document can retain its previous CSP.

@@ -100,3 +100,8 @@ refresh without replay. `LopuModelsEditor.tsx` owns per-provider allow-all and
 future auto-admission controls. Public model selectors consume the live catalogue;
 unknown model capabilities and pricing are conservative. See README automatic AI
 model catalogue sync and TESTING daily provider model availability.
+
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
