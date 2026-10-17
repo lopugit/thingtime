@@ -79,6 +79,7 @@ change this pointer; logout/account changes revoke it.
 | Posts, comments and saved items | Native local post create/edit, image attachments, comment/reply reads and writes pass offline browser checks. Saved items, emoji reactions and poll cast/change/removal now pass native offline browser checks; up/down votes and scoped relational storage pass adapter tests. Retained account posts now support offline bookmarks/reactions, Saved/permalink reload and cross-tab membership, with independent conditional sync and known-refusal eviction (checkpoint below). Generic account discussions and canonical comment-only permalinks now retain scoped offline reads with explicit partial coverage and atomic cross-projection refusal cleanup (checkpoint below). Account text/rich-text post and comment/reply authorship now commits locally with independent verified-account sync (checkpoint below). Account post/comment file admission, upload dependency tracking and canonical binding now use the device queue (checkpoint below). Device-authored bound-media removal now has offline/retry coverage (checkpoint below). Existing owned bound-file retention now has fresh-device offline edit/removal and reconnect evidence (checkpoint below). Offline parent/root navigation now has anonymous/account native-browser evidence, including generic Thing discussions (checkpoint below). Bound-file import and reconciliation, remaining linked-Thing surfaces, full edit/privacy/deletion browser coverage and broader cross-account/device acceptance remain. Public posting, remote reactions and recipient delivery remain authenticated operations. |
 | Themes, visual settings and algorithms | Anonymous saved-theme CRUD, active selection, quota and canonical transfer now work through Theme Studio and have offline browser evidence. Anonymous algorithms now support local CRUD/branching, active selection, bounded public-feed training, per-page ranking and canonical JSON round-trip. Account theme/algorithm sync, local Timeline history and cross-tab acceptance remain outstanding. |
 | Passwords | Anonymous encrypted device storage/unlock now reuses the canonical vault envelopes and normal password editor/transfer UI. Offline clean-browser acceptance covers lock/reload, two-tab conflicts, normal CSV export/import and 1440/390/320px layouts with zero account/password API writes. Account encrypted device unlock/edit/export now has offline browser evidence, with separately fenced sync, immutable retries and reviewed conflict copies. The real fixture verifies reconnect and second-account isolation. Provider/environment credentials, wider native identity/plane transitions and signed offline provider integration remain unfinished. See [password-manager.md](password-manager.md). |
+| Incoming mail | Latest-main integration brings the existing encrypted offline mail store and explicit desktop/loopback/relay transports. Audit anonymous local setup, account/origin partitions and offline reader behavior before rollout; remote mailbox access still requires its own credentials and explicit transport selection. No mail acceptance is claimed by the Vault checks below. |
 | Apps, integrations and native/browser tools | Separate locally available adapters from paired remote devices, external services and their consent requirements. Verify each applicable local surface. |
 | Lopu and automation | Local documents, authored definitions and drafts should remain editable. Lopu toast/stream messages now persist locally and have a device-history view; verified account messages sync through the existing recorder. Remote social history caching, retry controls and cross-tab history refresh remain unfinished. Provider inference, external delivery and hosted scheduled execution still need their real services. |
 | Auth, social, remote devices, billing and admin | Remote authority is retained. Do not substitute a local actor for a signed-in account. |
@@ -3619,3 +3620,37 @@ Run from `remix/`. The fixture proves value-free complete metadata, exact select
 versions, generic-edit detection, anonymous/cross-origin/actor/plane refusals,
 wrong-password rejection and empty readback after cleanup. It does not prove
 account Settings integration or the unfinished write synchronization contract.
+
+## Vault environment integrity before account synchronization
+
+The shared ordinary Thing mutation recorder now checks Vault relationships inside
+the same content transaction as the write, accounting and Timeline append. This
+prevents generic edits/deletes from bypassing the dedicated Vault environment
+checks: referenced environments must exist under the same owner, and a nonempty
+environment cannot be removed or converted into another record type. Renames,
+ungrouping, deletion of empty environments and repair/deletion of orphaned entries
+remain available. The existing owner Timeline-folder write serializes competing
+ordinary account mutations; there is no additional collection or index.
+
+Local API verification reproduced a generic deletion leaving an orphan and a 422
+metadata response before the fix. The checked-in `providerIntegrity.api.test.ts`
+now verifies rollback of invalid generic creation, missing/self references,
+nonempty deletion/conversion, unchanged versions after refusal, valid edits, late
+creation after deletion, and four concurrent create/delete trials. All four
+observed trials accepted creation and refused deletion. Synthetic fixture entries
+are cleaned through the API and an empty Vault is verified. This does not establish
+account write synchronization or every native/import/History interaction.
+
+Run against the disposable loopback replica configured above:
+
+```sh
+cd remix
+TT_PROVIDER_INTEGRITY_API_URL=http://127.0.0.1:22470 \
+TT_SHARED_PLAYWRIGHT_PATH=/absolute/path/to/playwright/index.mjs \
+TT_PROVIDER_INTEGRITY_API_ARTIFACTS=/absolute/path/to/fixture-artifacts \
+node --import tsx --test app/local-workspace/providerIntegrity.api.test.ts
+```
+
+`api.things` 1.34.1 and `api.lopu-vault` 1.3.1 describe these compatible integrity
+corrections. Both capability generators still derive from the canonical registry.
+Account Settings integration and conditional write synchronization remain pending.

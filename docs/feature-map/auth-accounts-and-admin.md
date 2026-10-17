@@ -194,3 +194,12 @@ claim and audit stores. `iosReleaseCore.ts` validates the fixed release policy a
 Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
 immutable repository/owner, main workflow, event and source checks; it grants no
 admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).
+
+`userVaultIntegrity.ts` runs from the shared ordinary Thing mutation recorder,
+inside its content transaction, so generic and dedicated account Vault writes
+share environment validation and the owner Timeline-folder concurrency fence.
+`userVaultIntegrity.test.ts` covers the invariant; the opt-in
+`local-workspace/providerIntegrity.api.test.ts` reproduces the former generic
+delete bypass and verifies real API rollback and concurrent membership changes.
+Versions: `api.things` 1.34.1, `api.lopu-vault` 1.3.1. No account sync sender is
+enabled by this correction.

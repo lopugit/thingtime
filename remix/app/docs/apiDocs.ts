@@ -4936,8 +4936,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// (mistral, deepseek, groq, cohere) — compatible additions.
 		// 1.2.1: reject malformed supplied tokens instead of retaining an older value.
 		// 1.3.0: optional complete, versioned device metadata snapshots; no decrypted values.
-		contractVersion: '1.3.0',
-		featureVersion: '1.3.0',
+		// 1.3.1: environment membership is validated inside the shared content transaction.
+		contractVersion: '1.3.1',
+		featureVersion: '1.3.1',
 		group: 'lopu',
 		title: 'Lopu Secure Vault',
 		endpoint: '/api/v1/lopu/vault',
@@ -9252,8 +9253,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
     // 1.34.0: same-origin full-user DELETE may retain durable post/comment upload receipts.
-    featureVersion: '1.34.0',
-    contractVersion: '1.34.0',
+    // 1.34.1: generic Vault edits/deletes preserve owned environment membership transactionally.
+    featureVersion: '1.34.1',
+    contractVersion: '1.34.1',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.

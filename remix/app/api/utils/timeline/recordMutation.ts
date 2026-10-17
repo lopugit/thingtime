@@ -1,3 +1,4 @@
+import { assertUserVaultMutationIntegrity } from '../lopu/userVaultIntegrity';
 import { thingContentSnapshot } from '../../../timeline/thingContent.ts';
 import { recordPageComponentBindings } from './componentBindings';
 import { splitLargeThingSnapshot, storeTimelineSnapshotParts } from './snapshotParts.ts';
@@ -75,6 +76,7 @@ export function thingMutationEvent(before: any, after: any, capture: ThingMutati
 export async function recordThingMutation(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
 	const prepared = prepareThingMutation(before, after, capture);
 	if (!prepared) return null;
+	await assertUserVaultMutationIntegrity(things, before, after, session);
 	const { parts } = prepared;
 	const event = await recordPageComponentBindings(things, session, before, after, prepared.event);
 	// An untrusted legacy byte stamp must not prevent deletion. The old payload

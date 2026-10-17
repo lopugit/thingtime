@@ -11574,3 +11574,21 @@ opt-in `providerMetadata.api.test.ts` through the documented loopback setup in
   to collapsed; collapsing and reopening preserves unsaved edits.
 - Check the connection selector and explanatory text at desktop and narrow mobile
   sizes; credentials are masked and the buttons remain reachable.
+
+## Vault environment mutation integrity (2026-10-17)
+
+- [x] In a disposable loopback account, create an environment and secret. Generic
+  Things deletion and conversion of the nonempty environment must return 409;
+  metadata and versions must remain unchanged after refusal.
+- [x] Generic creation with a missing environment rolls back completely. Missing
+  and self group assignments are refused; valid renames, ungrouping and empty
+  environment deletion still work. Late creation cannot reference a deleted group.
+- [x] Race generic group deletion against dedicated entry creation through the real
+  API; every acknowledged child retains its owned environment and metadata remains
+  complete. Current four trials exercised creation winning; do not claim both race
+  orders were observed. Verify fixture cleanup through the API.
+- [ ] Extend native account-provider synchronization acceptance to History/import
+  restoration, cross-plane transitions and retained receipt retries before rollout.
+
+Use `providerIntegrity.api.test.ts` with the loopback setup in
+[local workspaces](docs/local-workspaces.md#vault-environment-integrity-before-account-synchronization).

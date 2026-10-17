@@ -2969,3 +2969,44 @@ assistant controls still overlap the narrow right edge. The checked-in API
 fixture passes in 12.63s. Evidence: `tmp/provider-account-anonymous-regression/`
 and `tmp/provider-account-api-repro/`. These checks cover anonymous UI and the
 new account API boundary, not account UI synchronization.
+
+## Shared Vault environment integrity and latest-main integration — 2026-10-17
+
+Integrated main through `85af4382f` into the feature branch, preserving both test
+script inventories (including iOS release checks). Incoming-mail local/offline
+behavior is now explicitly included in the remaining acceptance matrix; its
+remote credential/transport boundaries are unchanged. This was a branch update,
+not a merge of this PR into main or a deployment.
+
+A real loopback API fixture reproduced a generic Things deletion bypassing the
+Vault's nonempty-environment check and leaving metadata sync unable to produce a
+complete snapshot. The shared mutation recorder now validates environment
+relationships in the accounted content transaction before the existing owner
+Timeline-folder write. Generic creation/update/deletion and ordinary dedicated
+writers share that invariant. No new ledger, index, collection or account-data
+migration is introduced. Existing orphaned entries can be ungrouped or deleted.
+
+The regression now passes through the real API, including invalid-create rollback,
+nonempty deletion/conversion, stale/missing group references, valid edits, late
+creation after deletion, and four concurrent trials (creation won all four).
+Six focused invariant tests, 258 Timeline tests, Things suites (304 and 18 tests),
+17 storage tests and 101 capability checks pass; these suite counts may overlap.
+The ordinary original Timeline creation receipt also remained unchanged as a canonical entry
+ after generic target deletion in a separate disposable API audit;
+anonymous reads and uploaded API provenance were refused. This is evidence for
+the future retry design, not a completed write-sync service.
+
+Account provider write synchronization, fresh retention UI, the broader local
+workspace matrix, exact-head CI and deployed acceptance remain unfinished.
+
+Final local checks for this increment: production client build passes (248
+verified offline-shell assets); the existing 91 TypeScript diagnostics are
+unchanged, with no additions. Focused lint has no findings. The clean anonymous
+Settings browser fixture passes on that build at 1440/390/320px with encrypted
+storage, cold reload and zero account commands, protected requests, mutations or
+page errors. Screenshots were inspected; no horizontal overflow, while existing
+floating assistant controls still overlap the narrow right edge. This is not
+account-provider sync or deployed acceptance.
+
+The workspace/offline-shell suite also passes; opt-in integration skips are not
+counted as acceptance. The explicit API/browser fixtures above were run separately.
