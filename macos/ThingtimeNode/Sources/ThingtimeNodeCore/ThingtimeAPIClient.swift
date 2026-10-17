@@ -104,14 +104,32 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(credential.refreshToken)", forHTTPHeaderField: "Authorization")
-        let (data, raw) = try await session.data(for: request)
-        try Task.checkCancellation()
-        guard data.count <= 16_384, let response = raw as? HTTPURLResponse,
-              response.url == url else { throw ThingtimeAPIClientError.invalidResponse }
-        guard response.statusCode == 200 else { throw ThingtimeAPIClientError.rejected(status: response.statusCode) }
-        let identity = try decoder.decode(Identity.self, from: data)
-        guard identity.ok, identity.ownerId == ownerID, identity.deviceId == deviceID,
-              try await credentialStore.loadAll().contains(credential) else { throw ThingtimeAPIClientError.notPaired }
+        for attempt in 0...1 {
+            try Task.checkCancellation()
+            if attempt > 0 {
+                let current = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
+                guard current == [credential] else { throw ThingtimeAPIClientError.notPaired }
+            }
+            let (data, raw) = try await session.data(for: request)
+            try Task.checkCancellation()
+            guard data.count <= 16_384, let response = raw as? HTTPURLResponse,
+                  response.url == url else { throw ThingtimeAPIClientError.invalidResponse }
+            // A single server-directed cooldown stays within the folder request
+            // deadline. Never shorten a longer delay, retry auth failures, cache
+            // identity, or use a replacement credential after local unpairing.
+            if response.statusCode == 429, attempt == 0,
+               let text = response.value(forHTTPHeaderField: "Retry-After"),
+               text.range(of: "^[1-9][0-9]?$", options: .regularExpression) != nil,
+               let seconds = UInt64(text), seconds <= 60 {
+                try await fileSyncRetrySleep(seconds)
+                continue
+            }
+            guard response.statusCode == 200 else { throw ThingtimeAPIClientError.rejected(status: response.statusCode) }
+            let identity = try decoder.decode(Identity.self, from: data)
+            guard identity.ok, identity.ownerId == ownerID, identity.deviceId == deviceID,
+                  try await credentialStore.loadAll().contains(credential) else { throw ThingtimeAPIClientError.notPaired }
+            return
+        }
     }
 
     private func requireCapabilities(force: Bool = false) async throws {
@@ -308,6 +326,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
 
     private let baseURL: URL
     private let credentialStore: any DeviceCredentialStore
+    private let fileSyncRetrySleep: @Sendable (UInt64) async throws -> Void
     private let session: URLSession
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
@@ -315,11 +334,15 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
     public init(
         baseURL: URL,
         credentialStore: any DeviceCredentialStore,
-        session: URLSession? = nil
+        session: URLSession? = nil,
+        fileSyncRetrySleep: @escaping @Sendable (UInt64) async throws -> Void = { seconds in
+            try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+        }
     ) throws {
         guard Self.allowed(baseURL) else { throw ThingtimeAPIClientError.invalidBaseURL }
         self.baseURL = baseURL
         self.credentialStore = credentialStore
+        self.fileSyncRetrySleep = fileSyncRetrySleep
         if let session {
             self.session = session
         } else {

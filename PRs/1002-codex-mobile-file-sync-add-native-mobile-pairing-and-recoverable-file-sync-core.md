@@ -886,3 +886,30 @@ Older random-port data remains untouched and is not migrated. Signed installed
 Mac transfer acceptance, native streaming/rate limits, power-loss/reboot and all
 other remaining full-feature goals are still open. This checkpoint closes the
 isolated restart-storage gap, not the complete sync delivery gate.
+
+
+## Mac adapter/cloud acceptance and bounded cooldown — 2026-10-17
+
+A new opt-in pipe fixture connects production MacFolderSync/AppleFileSync and
+ThingtimeAPIClient to the real local APIs and shared foreground sync engine.
+It verifies mixed creates, independent replacements, full hashes, stable IDs and
+convergence, retained cloud versions, lost accepted cloud/native replies, original
+operation recovery across a native process restart and disconnect refusal.
+Picker/consent, conditions and credential storage are explicit test adapters;
+Electron/XPC, installed Keychain/TCC and AppKit remain separate release gates.
+
+Extended acceptance reproduced HTTP 429 from per-request native identity checks.
+The client now waits for one valid integer Retry-After (1–60 seconds), then checks
+cancellation and the original credential before retrying the live endpoint. It
+never caches identity or retries auth failures, malformed/long delays or repeated
+429s. The full rerun passed with 129 native calls, 259 verifier invocations and
+one 47-second cooldown, exactly four PUTs and two native publications. All 23
+focused Mac/API tests, targeted script lint and the production ThingtimeNode
+release build pass. Native streaming and
+sustained throughput remain open; these counts are not a performance pass.
+
+The test signs out/disconnects its fixture, removes its private local directory
+and ordinary config/folder Things, and retains accounted byte versions in private
+Trash and protected device history. It needs no new secrets/admin environment
+changes and never touches the installed app or service. Detailed commands and
+coverage are in README, TESTING and the full sync ledger.

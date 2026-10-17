@@ -5005,3 +5005,40 @@ credentials in their existing cookie session/Keychain. The bundled proxy require
 this mode on an ordinary public web deployment. No additional secret is needed.
 See the [desktop acceptance boundary](docs/mobile-file-sync.md#desktop-folder-host-and-shared-controls--2026-10-17)
 before release; page reload is not yet full desktop restart recovery.
+
+
+### Mac sync acceptance against local APIs
+
+Build the test-only native adapter, then run the shared sync acceptance from
+`remix/` against this checkout's PM2-managed loopback stack:
+
+```sh
+swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
+cd remix
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json
+```
+
+The mode-0600 fixture contains `base` (an `http://127.0.0.1:<web-port>` origin),
+`username`, `password` and `userId` for a disposable account. Use placeholder
+values in examples; never commit a fixture. The account needs private uploads
+enabled through the normal admin API. Use the existing home MongoDB and local
+attachment-storage setup, and the checkout's `web-pms` lifecycle. No additional
+service secret or environment variable is introduced by this test.
+
+The script pairs its own device using the canonical signed claim protocol,
+creates private Folder/file-sync Things, and launches `MacFolderSyncFixture`
+with a private temporary credential record. The executable uses the production
+Swift adapter, file reader, staging/publication and live API identity verifier.
+Its picker, consent, conditions and credential storage are test adapters; no
+installed app, Keychain entry, TCC permission or LaunchAgent is used. The helper
+is a test target and is not copied into packaged Desktop resources. Shared
+TypeScript adapters validate replies and drive actual upload/download bytes.
+
+The test loses accepted cloud/publication replies, restarts the native process,
+verifies original IDs and no reapplication, performs independent replacements,
+checks full byte hashes and retained cloud versions, then disconnects the device.
+Cleanup uses canonical APIs, retaining accounted versions in private Trash and
+protected device history, signs the fixture session out, and removes its private
+temporary directory. It can take over a minute: native identity honors one
+server-directed 1–60-second cooldown on 429, while preserving live checks and
+cancellation. This recovery is not a sustained-throughput or installed-app claim.

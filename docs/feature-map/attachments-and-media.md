@@ -189,3 +189,18 @@ private draft API, editor recovery, account isolation and independent media copi
 `ComponentUpload.tsx` commits selected bytes through `componentUploadCommit.ts`: a valid private text Post and a non-reserved retry ID hold the upload. `copyStoredAttachment.ts` also supports owner-private `file` copies for Lopu's `save_attachment` in `chatTools.ts`. It reads an authorized pinned source version, reserves quota, copies bytes and uses normal moderation/finalization. The returned file ID and content URL can be used as Thing properties; `managedPlacement.ts` files it in an owned folder. Request replay returns the existing file. Rollback only claims unfinished private uploads, so concurrent retries cannot delete a committed file. Shared/public copy revocation still removes its draft.
 
 Run `test:attachments`, `test:components`, `test:lopu` and the isolated real-byte `scripts/verify-schema-files.ts` acceptance flow. See the public-schema/upload/Lopu checklist in `TESTING.md`.
+
+
+## Mac native/cloud acceptance and throttling
+
+`remix/scripts/mac-file-sync.integration.mts` runs the shared foreground engine
+against the real loopback APIs and `MacFolderSync` through the test-only Swift
+`MacFolderSyncFixture` executable. It exercises actual native bytes, explicit
+synthetic picker/consent, live credential verification, both directions, independent
+replacements, lost replies, process restart and revoked-device refusal. It does
+not cover signed Electron/XPC, installed Keychain/TCC or AppKit. See the command
+and fixture prerequisites in README's Mac sync acceptance section.
+`ThingtimeAPIClient.verifyFileSyncIdentity` honors one integer `Retry-After`
+(1–60 seconds) for a 429, then rechecks cancellation and the exact local credential
+before repeating the live request. Identity remains uncached; auth errors,
+invalid/long delays and repeated 429s fail. Streaming/throughput remains open.

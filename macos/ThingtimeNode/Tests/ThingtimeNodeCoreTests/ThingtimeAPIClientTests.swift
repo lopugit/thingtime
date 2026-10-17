@@ -5,6 +5,7 @@ import XCTest
 
 private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     static let lock = NSLock()
+    nonisolated(unsafe) static var retryAfter: String?
     nonisolated(unsafe) static var identityVersion: String?
     nonisolated(unsafe) static var handler: ((URLRequest) throws -> (Int, Data))?
 
@@ -14,6 +15,7 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         do {
             Self.lock.lock()
             let handler = Self.handler
+            let retryAfter = Self.retryAfter
             let identityVersion = Self.identityVersion
             Self.lock.unlock()
             let status: Int, data: Data
@@ -26,7 +28,7 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
                 if let identityVersion { features["api.devices-node-identity"] = ["version": identityVersion] }
                 data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "origin": origin.string!, "features": features])
             } else { (status, data) = try XCTUnwrap(handler)(request) }
-            let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: status, httpVersion: nil, headerFields: nil)!
+            let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: status, httpVersion: nil, headerFields: retryAfter.map { ["Retry-After": $0] })!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
@@ -53,9 +55,79 @@ private actor ChangingCredentialStore: DeviceCredentialStore {
 final class ThingtimeAPIClientTests: XCTestCase {
     override func tearDown() {
         MockURLProtocol.lock.lock()
-        MockURLProtocol.handler = nil; MockURLProtocol.identityVersion = nil
+        MockURLProtocol.handler = nil; MockURLProtocol.identityVersion = nil; MockURLProtocol.retryAfter = nil
         MockURLProtocol.lock.unlock()
         super.tearDown()
+    }
+
+    func testFileSyncIdentityHonorsOneBoundedCooldownAndRevalidatesLive() async throws {
+        MockURLProtocol.identityVersion = "1.0.0"; MockURLProtocol.retryAfter = "60"
+        let credential = DeviceCredential(deviceID: "device", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())
+        var requests = 0
+        MockURLProtocol.handler = { request in
+            requests += 1
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer ttnode_test")
+            return requests == 1 ? (429, Data()) : (200, Data(#"{"ok":true,"ownerId":"owner","deviceId":"device"}"#.utf8))
+        }
+        let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!,
+            credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session(),
+            fileSyncRetrySleep: { seconds in XCTAssertEqual(seconds, 60) })
+        try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device")
+        XCTAssertEqual(requests, 2)
+        try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device")
+        XCTAssertEqual(requests, 3, "Successful identity must not be cached")
+    }
+
+    func testFileSyncIdentityNeverRetriesAuthFailuresInvalidDelaysOrForever() async throws {
+        MockURLProtocol.identityVersion = "1.0.0"
+        let credential = DeviceCredential(deviceID: "device", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())
+        for (status, header, expected) in [(401, "1", 1), (403, "1", 1), (500, "1", 1), (429, "0", 1), (429, "61", 1), (429, "bad", 1), (429, "1.5", 1), (429, "1", 2)] {
+            var requests = 0
+            MockURLProtocol.retryAfter = header
+            MockURLProtocol.handler = { _ in requests += 1; return (status, Data()) }
+            let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!, credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session(),
+                fileSyncRetrySleep: { seconds in XCTAssertEqual(status, 429); XCTAssertEqual(seconds, 1) })
+            do { try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device"); XCTFail("Repeated failure accepted") }
+            catch { XCTAssertEqual(error as? ThingtimeAPIClientError, .rejected(status: status)) }
+            XCTAssertEqual(requests, expected)
+        }
+    }
+
+    func testFileSyncIdentityUnpairAndCancellationDuringCooldownStopBeforeRetry() async throws {
+        MockURLProtocol.identityVersion = "1.0.0"; MockURLProtocol.retryAfter = "1"
+        let credential = DeviceCredential(deviceID: "device", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())
+        for change in ["unpair", "replace", "cancel"] {
+            let store = InMemoryDeviceCredentialStore(credential: credential)
+            var requests = 0
+            MockURLProtocol.handler = { _ in requests += 1; return (429, Data()) }
+            let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!, credentialStore: store, session: session(), fileSyncRetrySleep: { _ in
+                if change == "cancel" { throw CancellationError() }
+                if change == "replace" {
+                    try await store.save(DeviceCredential(deviceID: "device", refreshToken: "ttnode_replacement", signingPrivateKey: Data(), signingPublicKey: Data()))
+                } else { try await store.delete() }
+            })
+            do { try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device"); XCTFail("Changed/cancelled identity retried") }
+            catch { if change == "cancel" { XCTAssertTrue(error is CancellationError) } else { XCTAssertEqual(error as? ThingtimeAPIClientError, .notPaired) } }
+            XCTAssertEqual(requests, 1)
+        }
+    }
+
+    func testFileSyncIdentityTaskCancellationInterruptsActualCooldown() async throws {
+        MockURLProtocol.identityVersion = "1.0.0"; MockURLProtocol.retryAfter = "60"
+        let credential = DeviceCredential(deviceID: "device", refreshToken: "ttnode_test", signingPrivateKey: Data(), signingPublicKey: Data())
+        let waiting = expectation(description: "cooldown started")
+        var requests = 0
+        MockURLProtocol.handler = { _ in requests += 1; return (429, Data()) }
+        let client = try ThingtimeAPIClient(baseURL: URL(string: "https://thingtime.test")!, credentialStore: InMemoryDeviceCredentialStore(credential: credential), session: session(), fileSyncRetrySleep: { seconds in
+            waiting.fulfill()
+            try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+        })
+        let pending = Task { try await client.verifyFileSyncIdentity(ownerID: "owner", deviceID: "device") }
+        await fulfillment(of: [waiting], timeout: 2)
+        pending.cancel()
+        do { try await pending.value; XCTFail("Cancelled cooldown succeeded") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertEqual(requests, 1)
     }
 
     func testFileSyncIdentityRejectsLocalUnpairDuringReadAndAmbiguousCredentials() async throws {

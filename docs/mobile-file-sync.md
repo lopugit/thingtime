@@ -82,7 +82,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | --- | --- | --- |
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
-| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls and synthetic browser foreground acceptance implemented; iOS mixed-direction acceptance, Mac installed transfers, workers and full cross-device transfer acceptance pending |
+| Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction acceptance, Mac installed transfers, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; native streaming transport pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Pending |
@@ -1121,3 +1121,39 @@ bundle failure cleanup and independent profiles. The installed profile is untouc
 This does not migrate older random-port origin storage or establish power-loss,
 signed installed transfer, streaming/rate-limit or background-worker acceptance.
 All other remaining work in the ledger above is still required.
+
+
+## Real Mac adapter/cloud transfers and cooldown recovery — 2026-10-17
+
+The test-only `MacFolderSyncFixture` now connects production Swift folder access,
+verified staging/publication and live native identity to the shared TypeScript
+foreground engine and real loopback cloud APIs. It is excluded from the packaged
+app; its picker/consent, conditions and credential store are fixtures, while file
+bytes, server authorization, pairing proofs and operation receipts are real.
+
+Acceptance passed mixed upload/download creates, independent replacements,
+full native/cloud byte hashes, stable file IDs/revisions on repeated convergence,
+retained cloud versions, lost accepted cloud/native replies, native process
+restart with original IDs and no reapplication, and refusal after owner disconnect.
+The browser journal in this script is fake-indexeddb; separate real Chromium
+restart acceptance above covers the browser storage boundary. Cleanup signed out
+the session, disconnected the fixture device, removed its config/folder Things
+and private temporary directory, and retained accounted versions in private Trash
+plus protected device history. No admin environment change or installed state was
+needed.
+
+The first extended run reproduced HTTP 429 from the 240/minute identity gate.
+`ThingtimeAPIClient` now honors one valid integer Retry-After of 1–60 seconds,
+checks task cancellation and the exact original local credential again, then
+repeats the uncached identity request. It does not retry authentication failures,
+invalid/long delays or repeated throttling. The final real run passed with 129
+native calls, 259 verifier invocations and one server-directed 47-second cooldown;
+there were exactly four upload PUTs and two native publications across create and
+replacement tests. All 23 focused Mac adapter/API tests pass, including actual
+Task cancellation and unpair/replacement during cooldown; targeted script lint
+passes, as does the production ThingtimeNode release build. This fixes a
+demonstrated recovery failure, not the throughput gap.
+
+Signed installed Electron/XPC/AppKit/Keychain/TCC acceptance, native streaming,
+background workers, Photos, peers and the other full-delivery requirements remain
+open. The counts above explicitly prevent treating small-file acceptance as scale.

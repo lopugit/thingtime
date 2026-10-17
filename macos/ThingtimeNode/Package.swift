@@ -59,6 +59,11 @@ let package = Package(
             name: "ThingtimeSpeechCoreTests",
             dependencies: ["ThingtimeSpeechCore"]
         ),
+        .executableTarget(
+            name: "MacFolderSyncFixture",
+            dependencies: ["ThingtimeNodeCore", .product(name: "AppleFileSync", package: "FileSync")],
+            path: "Tests/MacFolderSyncFixture"
+        ),
         .testTarget(
             name: "ThingtimeNodeCoreTests",
             dependencies: ["ThingtimeNodeCore", .product(name: "AppleFileSync", package: "FileSync")]
