@@ -11101,3 +11101,29 @@ transfer, whole-account snapshots or production deployment.
   downloads, physical devices, large libraries and background acceptance open
   until each has direct evidence. Resource bytes do not prove album/database
   restoration or an independent whole-device snapshot.
+
+### iOS file-backed multipart uploads
+
+- Run the shared Apple package and the iOS `FileUploadPartTests`,
+  `PhotoLibraryTests`, `NativeFileSessionTests` and `NativeFileUploadTests`.
+  Confirm canonical part bounds, 33 MiB capture through bounded chunks, actual
+  selected-file mutation refusal, permission loss, incomplete streams,
+  cancellation, foreign/credential-bearing signed URLs, extra headers and
+  oversized/error responses cannot publish a successful part.
+- Run the opt-in installed photo backup acceptance from iOS/README.md with a
+  disposable loopback account and simulator. Verify at least four native parts,
+  two complete multipart originals, zero legacy bulk bridge reads, independent
+  download hashes and retained cloud bytes after local deletion. Clean up only
+  the test's originals/configuration/grant using recoverable product paths.
+- Run shared cloud transport/native upload adapter tests, including native
+  failure/lost-response retry with identical IDs, digest mismatch and aborted
+  completion. Older hosts must retain their existing supported transfer path.
+- Physical hardware, actual OS process death during PUT, disk exhaustion,
+  prolonged network loss and measured 100 GB–100 TB throughput remain required;
+  bounded fixture checks do not prove those properties.
+
+- During an iOS identity check, present an OS Photos dialog or suspend the app.
+  Confirm the pending web identity request settles promptly instead of holding
+  the serialized device queue until its 120-second timeout. Repeated suspension
+  sends one cancellation; switching web destinations sends no old account
+  context to the new page (`MobileDeviceBridgeLifecycleTests`).

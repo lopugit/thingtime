@@ -7,11 +7,12 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
+    static let uploadVersion = "1.0.0"
     static let accessVersion = "1.1.1"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.0.0"
     static let trashVersion = "1.2.0"
-    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)'; window.thingtimeNativeBridge.filePublicationVersion = '\(publicationVersion)'; window.thingtimeNativeBridge.fileTrashVersion = '\(trashVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileUploadVersion = '\(uploadVersion)'; window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)'; window.thingtimeNativeBridge.filePublicationVersion = '\(publicationVersion)'; window.thingtimeNativeBridge.fileTrashVersion = '\(trashVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
     private let photos = PhotoLibraryReader()
     private var photoPermissionPending = false
     private var sourceChoice: CheckedContinuation<Bool?, Error>?
@@ -135,7 +136,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                 reply: @escaping (String, [String: Any]) -> Void) {
         guard let payload = body["payload"] as? [String: Any], let id = payload["requestId"] as? String, UUID(uuidString: id) != nil,
               let owner = payload["ownerId"] as? String, let action = payload["action"] as? String,
-              ["list", "choose", "remove", "scan", "read", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
+              ["list", "choose", "remove", "scan", "read", "upload-part", "conditions", "suspend", "stage-begin", "stage-append", "stage-download", "stage-finish", "write-approve", "publish", "publication-lookup", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-list", "trash-restore-reviewed"].contains(action),
               let scope = try? MobileDevicePairing.Scope(ownerId: owner, url: root) else { return }
         if action == "suspend" { if requestId == id { suspend() }; return }
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
@@ -174,8 +175,53 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     if action == "remove" { try self.store.remove(scope, id: rootId) }
                     else {
                         let grant = try self.store.grant(scope, id: rootId)
-                        guard grant.sourceKind != "photos" || ["scan", "read"].contains(action) else { throw MobileFolderStore.Failure.invalid }
-                        if action == "trash-list" {
+                        guard grant.sourceKind != "photos" || ["scan", "read", "upload-part"].contains(action) else { throw MobileFolderStore.Failure.invalid }
+                        if action == "upload-part" {
+                            guard let cookies else { throw MobileFolderStore.Failure.unavailable }
+                            let request = try self.decode(payload["upload"], as: NativeUploadPartRequest.self)
+                            try request.validate()
+                            let photos = self.photos
+                            let current = {
+                                try check()
+                                let latest = try self.store.grant(scope, id: rootId)
+                                guard latest.bookmark == grant.bookmark, latest.sourceKind == grant.sourceKind,
+                                      grant.sourceKind != "photos" || photos.access() != "unavailable" else { throw MobileFolderStore.Failure.unavailable }
+                            }
+                            let transport = NativeFileSession(scope: scope, cookieStore: webView.configuration.websiteDataStore.httpCookieStore,
+                                cookies: cookies, check: current, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } })
+                            self.transport = transport; try await transport.open()
+                            try await transport.require([("api.auth-me", [1,0,0]), ("api.attachment-uploads", [1,5,0]), ("api.attachment-upload-parts", [1,1,0])])
+                            let worker = Task.detached {
+                                try FileUploadPart.capture(size: request.source.size, partNumber: request.partNumber, offset: request.offset, length: request.length) { offset, length, receive in
+                                    if grant.sourceKind == "photos" {
+                                        return try photos.stream(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: offset, length: length, receive: receive)
+                                    }
+                                    return try MobileFolderReader.stream(bookmark: grant.bookmark, path: request.source.path, version: request.source.version, offset: offset, length: length, receive: receive)
+                                }
+                            }
+                            let part = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                            defer { part.discard() }
+                            try current(); try await transport.verifyOwner()
+                            // Exact idempotent replay binds the reservation to this
+                            // source and operation before obtaining any signed URL.
+                            let started = try await transport.json("/api/v1/attachments/uploads", body: ["requestId": request.requestId,
+                                "filename": String(request.source.path.split(separator: "/").last ?? ""), "contentType": "application/octet-stream",
+                                "sizeBytes": request.source.size, "purpose": "file"])
+                            if try !request.verifyPlan(started) { try await transport.uploadPart(part, uploadId: request.uploadId, partNumber: request.partNumber) }
+                            try current()
+                            let verify = Task.detached {
+                                if grant.sourceKind == "photos" {
+                                    _ = try photos.read(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: 0, length: 1)
+                                } else {
+                                    _ = try MobileFolderReader.read(bookmark: grant.bookmark, path: request.source.path, version: request.source.version, offset: 0, length: 1)
+                                }
+                            }
+                            try await withTaskCancellationHandler(operation: { try await verify.value }, onCancel: { verify.cancel() })
+                            try current(); try await transport.verifyOwner()
+                            result = ["rootId": rootId, "uploadedPart": ["uploadId": request.uploadId, "requestId": request.requestId,
+                                "partNumber": request.partNumber, "offset": request.offset, "length": request.length,
+                                "version": request.source.version, "size": request.source.size, "sha256": part.sha256]]
+                        } else if action == "trash-list" {
                             let trash = self.trash
                             let cursor = payload["cursor"] as? String
                             guard payload["cursor"] == nil || payload["cursor"] is String else { throw MobileFolderStore.Failure.invalid }

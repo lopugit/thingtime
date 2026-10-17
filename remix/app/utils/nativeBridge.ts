@@ -13,6 +13,7 @@ export type ThingtimeNativeBridge = {
   notificationsVersion?: string;
   devicePairingVersion?: string;
   fileAccessVersion?: string;
+  fileUploadVersion?: string;
   fileStagingVersion?: string;
   filePublicationVersion?: string;
   fileTrashVersion?: string;

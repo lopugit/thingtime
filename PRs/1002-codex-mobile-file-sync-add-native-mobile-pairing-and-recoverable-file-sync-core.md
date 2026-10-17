@@ -1937,3 +1937,39 @@ are bounded to 10,000 resources/4 MiB, and temporary space must fit the largest
 original. Mac picker integration, paging/performance, background workers, iCloud
 policy, Photos-library metadata reconstruction, independent snapshots and massive
 exports remain open. Fork-safe setup is in README.md and iOS/README.md.
+
+## iOS native multipart uploads — 2026-10-18
+
+`fileUploadVersion` 1.0.0 routes folder and PhotoKit upload parts through protected
+native temporary files and URLSession. Original bytes stay out of the WebView;
+only verified part hashes return to the existing cloud transport. Native code
+replays the original reservation, checks canonical boundaries and obtains its own
+signed destination from the selected authenticated server. Storage PUTs receive
+no account credentials, follow no redirects and bound response bytes. Cookie,
+foreground, grant/source-version and cancellation checks preserve unfinished runs;
+shared composite/server fingerprint checks still precede final publication.
+
+Final installed iOS 26.5 multipart acceptance passed in 353.120 seconds (first
+run: 336.368 seconds) with four native
+parts, 18,897,576 bytes and zero legacy bulk bridge reads. Independent download
+hashes, discovery of the second original and retention after local deletion pass.
+The completion screen was visually checked and disposable fixtures cleaned up.
+Wall time includes manual dialogs and does not establish throughput. Shared Apple
+57 tests, focused shared transport 27 tests and final installed-host units 17 tests
+pass; the raw TypeScript baseline
+remains 91 errors outside changed files. Native tests cover response/cancellation
+fences and signed-target/header refusal; a 33 MiB captured part demonstrates
+bounded copying beyond the previous browser-part ceiling.
+
+The OS photo dialog exposed silent native identity cancellation holding the web
+queue until its 120-second timeout. iOS now settles that request once and refuses
+to send old account context after a destination change. A lifecycle fixture checks
+those boundaries. Earlier test-only issues were native integer fixture bridging
+(now decoded through the same JSON contract), an async XCTest autoclosure and URL
+slash normalization; all were corrected without bypassing authorization.
+
+Temporary space must fit one canonical part plus the PhotoKit original when used.
+Foreground transfer, server quota limits and existing attachment size contracts
+remain. Physical hardware, actual interrupted PUT process recovery, long-running
+throughput, large-library/background work and full-account snapshots/exports
+remain open. No production promotion or complete large-backup claim is made.

@@ -332,7 +332,7 @@ Current scans allow 10,000 resources and 4 MiB of inventory metadata. A scan
 rechecks the complete accessible resource inventory before returning success.
 One original is exported at a time into private temporary storage and reused for
 bounded reads under the same owner/grant; the temporary copy is cleared on
-suspension or failure. Available device storage must fit the largest original.
+suspension or failure. Available device storage must fit the largest original plus one upload part.
 Originals must currently be downloaded locally in Photos: the adapter refuses
 unavailable originals instead of starting iCloud traffic outside the sync network
 policy. Background jobs, large-library paging and controlled iCloud downloads
@@ -350,8 +350,36 @@ THINGTIME_PHOTO_BACKUP_TEST=1 \
 iOS/scripts/test-mobile-sync-installed.sh /path/to/disposable-account.json
 ```
 
-Use a small disposable Photos library. The test creates its own magenta PNGs,
+Use a small disposable Photos library. The test creates its own deterministic multipart noise PNGs,
 compares downloaded cloud hashes, and moves only those test assets to Recently
 Deleted. Follow the `IOS_PHOTO_*` prompts and confirm the system deletion prompts.
 See [Apple's resource manager](https://developer.apple.com/documentation/photos/phassetresourcemanager)
 for the original-resource API.
+
+### File-backed native uploads
+
+The iOS host advertises `fileUploadVersion` 1.0.0. Folder and PhotoKit sources
+use the existing editable connections and cloud multipart protocol, but original
+upload bytes do not pass through JavaScript. A part is copied to protected native
+temporary storage in at most 64 KiB chunks, hashed, and uploaded with URLSession
+from that file. Only the part digest returns to the shared runner. The runner
+checks the complete canonical fingerprint, server attachment fingerprint and
+original journal identity before publishing the file/Timeline event.
+
+The native host replays the exact upload reservation against the selected server
+and requests a checksum-bound signed URL itself. It never accepts an upload URL
+from the webpage. Account cookies remain on the configured API origin; the signed
+PUT has no ambient credentials and follows no redirects. Cookie changes,
+foreground loss, cancellation, changed source versions, revoked access and
+oversized/error responses cannot produce a successful part receipt. The ordinary
+journal retains unfinished work and reuses its operation/upload identity.
+
+No new environment variables or service credentials are required. Forks need the
+existing authenticated attachment upload/parts capabilities and storage setup.
+Temporary free space must fit one canonical part (8 MiB through 5 GiB under the
+existing attachment contract); Photos also needs its materialized original.
+This remains a foreground upload path. Background scheduling, durable OS upload
+recovery, physical-device throughput, giant-file acceptance and whole-account
+snapshots remain separate requirements. The multipart photo acceptance uses the
+same `THINGTIME_PHOTO_BACKUP_TEST=1` command above and asserts native part counts,
+exact uploaded byte totals and zero legacy bulk bridge reads.

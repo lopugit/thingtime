@@ -439,3 +439,17 @@ access into the shared backup-only editor. `PhotoLibraryTests` covers private
 one-resource caching and authority boundaries; `PhotoBackupInstalledTests` drives
 real original-byte cloud acceptance. See `iOS/README.md` for current local-original,
 foreground and inventory limits. Mac UI integration remains pending.
+
+### iOS file-backed multipart upload path
+
+`mobileFolderSource()` in `remix/app/fileSync/mobileFolders.client.ts` advertises
+the optional native part uploader only for an explicit iOS capability. The shared
+`cloudTransport.ts` keeps reservation, journal, composite-fingerprint and commit
+logic. `iOS/Thingtime/Files/NativeUploadPartRequest.swift` validates source/part
+identity; `MobileFolderBridge.swift` reauthorizes the scoped grant and delegates
+to `apple/FileSync/Sources/AppleFileSync/FileUploadPart.swift`. That shared core
+captures bounded folder/PhotoKit streams into private part files.
+`NativeFileSession.swift` obtains signed parts from the pinned API session;
+`NativeFileUpload.swift` sends a credential-free, redirect-refusing file PUT with
+bounded responses/cancellation. `NativeFileUploadTests`, `FileUploadPartTests`
+and `PhotoBackupInstalledTests` cover the unit and installed paths.

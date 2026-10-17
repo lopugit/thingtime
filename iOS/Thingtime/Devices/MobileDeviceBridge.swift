@@ -13,6 +13,7 @@ final class MobileDeviceBridge {
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private var requestId: String?
+    private var cancellationReply: (() -> Void)?
     private var observer: NSObjectProtocol?
     private let session: URLSession
     init() {
@@ -24,7 +25,11 @@ final class MobileDeviceBridge {
         }
     }
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) }; session.invalidateAndCancel(); task?.cancel() }
-    func suspend() { generation = UUID(); task?.cancel(); task = nil; requestId = nil }
+    func suspend() {
+        let reply = cancellationReply; cancellationReply = nil
+        generation = UUID(); task?.cancel(); task = nil; requestId = nil
+        reply?()
+    }
 
     func handle(_ body: [String: Any], webView: WKWebView, root: URL,
                 currentRoot: @escaping () -> URL?,
@@ -38,6 +43,10 @@ final class MobileDeviceBridge {
         let base: [String: Any] = ["requestId": id, "ownerId": owner, "origin": scope.origin.absoluteString]
         guard task == nil else { reply("mobile-device-result", base.merging(["error": "Another device request is still running. Try again shortly."]) { _, new in new }); return }
         let operation = UUID(); generation = operation; requestId = id
+        cancellationReply = { [weak webView] in
+            guard let current = webView?.url, currentRoot() == root, LopuVoiceContract.sameOrigin(current, root) else { return }
+            reply("mobile-device-result", base.merging(["error": "Device connection paused. Retry when the app is active."]) { _, new in new })
+        }
         let check = { [weak self, weak webView] in
             guard self?.generation == operation, let webView, currentRoot() == root,
                   let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
@@ -45,7 +54,7 @@ final class MobileDeviceBridge {
         }
         let engine = makeEngine(webView: webView, cookies: cookies, check: check)
         task = Task { [weak self] in
-            defer { if self?.generation == operation { self?.task = nil } }
+            defer { if self?.generation == operation { self?.task = nil; self?.requestId = nil; self?.cancellationReply = nil } }
             do {
                 let result: MobileDevicePairing.Status
                 if action == "pair" {
@@ -56,9 +65,18 @@ final class MobileDeviceBridge {
                 try check()
                 var response = base; response["state"] = result.state; response["deviceId"] = result.deviceId
                 reply("mobile-device-result", response)
-            } catch is CancellationError { }
+            } catch is CancellationError {
+                if self?.generation == operation {
+                    let reply = self?.cancellationReply; self?.cancellationReply = nil; reply?()
+                }
+            }
             catch {
-                guard (try? check()) != nil else { return }
+                guard (try? check()) != nil else {
+                    if self?.generation == operation {
+                        let reply = self?.cancellationReply; self?.cancellationReply = nil; reply?()
+                    }
+                    return
+                }
                 let message = (error as? MobileDevicePairing.Failure)?.errorDescription ?? "Device connection could not be checked. Retry to resume saved work."
                 reply("mobile-device-result", base.merging(["error": message]) { _, new in new })
             }

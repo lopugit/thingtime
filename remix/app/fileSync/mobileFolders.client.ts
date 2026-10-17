@@ -16,7 +16,7 @@ import { sameSyncScope, sameSyncContent, type SyncScope } from './reconcile';
 import type { SyncConditions } from './configuredPlan';
 import { getNativeBridge, nativeBridgeMessageEvent, type ThingtimeNativeBridge } from '../utils/nativeBridge';
 import { planFileSync, validSyncEntry, type SyncEntry } from './reconcile';
-import type { FingerprintSource } from './contentFingerprint';
+import { contentPartPlan, type FingerprintSource, type NativePartUpload } from './contentFingerprint';
 
 export type MobileFolder = {
 	id: string;
@@ -29,6 +29,7 @@ export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: 
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
 export type FolderRequest =
+	| { action: 'upload-part'; rootId: string; upload: NativePartUpload & { source: SyncEntry } }
 	| { action: 'list' | 'choose' | 'conditions' }
 	| { action: 'remove' | 'scan'; rootId: string }
 	| { action: 'version-list'; rootId: string; cursor?: string }
@@ -54,6 +55,7 @@ export type FolderRequest =
 			approval: MobileWriteApproval;
 	  };
 export type FolderResult = {
+	uploadedPart?: { sha256: string };
 	writeApproval?: MobileWriteApproval;
 	publication?: SyncReceiptLookup;
 	trash?: SyncReceiptLookup;
@@ -73,8 +75,32 @@ export type FolderResult = {
 };
 export type FolderCapabilities = Pick<
 	ThingtimeNativeBridge,
-	'platform' | 'fileAccessVersion' | 'fileStagingVersion' | 'filePublicationVersion' | 'fileTrashVersion' | 'fileVersionsVersion'
+	| 'platform'
+	| 'fileUploadVersion'
+	| 'fileAccessVersion'
+	| 'fileStagingVersion'
+	| 'filePublicationVersion'
+	| 'fileTrashVersion'
+	| 'fileVersionsVersion'
 >;
+export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
+	bridge?.platform === 'ios' && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
+function validPartUpload(upload: NativePartUpload & { source: SyncEntry }) {
+	try {
+		if (!validSyncEntry(upload.source) || upload.source.kind !== 'file' || upload.source.size <= 0) return false;
+		const plan = contentPartPlan(upload.source.size);
+		return (
+			[upload.uploadId, upload.requestId].every((id) => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(id)) &&
+			Number.isSafeInteger(upload.partNumber) &&
+			upload.partNumber >= 1 &&
+			upload.partNumber <= plan.partCount &&
+			upload.offset === (upload.partNumber - 1) * plan.partSizeBytes &&
+			upload.length === Math.min(plan.partSizeBytes, upload.source.size - upload.offset)
+		);
+	} catch {
+		return false;
+	}
+}
 export const supportsFolderAccess = (bridge: FolderCapabilities | undefined) =>
 	Boolean(bridge && ['ios', 'android', 'macos'].includes(bridge.platform) && /^1\.\d+\.\d+$/.test(bridge.fileAccessVersion ?? ''));
 export const supportsMobileFolders = (bridge: ThingtimeNativeBridge | undefined = getNativeBridge()) =>
@@ -118,6 +144,26 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (request.action === 'upload-part') {
+		const part = payload.uploadedPart,
+			upload = request.upload;
+		if (
+			!validPartUpload(upload) ||
+			payload.rootId !== request.rootId ||
+			!part ||
+			part.uploadId !== upload.uploadId ||
+			part.requestId !== upload.requestId ||
+			part.partNumber !== upload.partNumber ||
+			part.offset !== upload.offset ||
+			part.length !== upload.length ||
+			part.version !== upload.source.version ||
+			part.size !== upload.source.size ||
+			typeof part.sha256 !== 'string' ||
+			!/^[a-f0-9]{64}$/.test(part.sha256)
+		)
+			throw Error('Invalid native upload receipt.');
+		result.uploadedPart = { sha256: part.sha256 };
+	}
 	if (request.action.startsWith('version-')) {
 		if (payload.rootId !== ('rootId' in request && request.rootId)) throw Error('Native version folder changed.');
 		if (request.action === 'version-list') result.versionPage = parseNativeVersionPage(payload.versionPage);
@@ -366,6 +412,8 @@ export const supportsNativeFileVersions = (bridge: FolderCapabilities | undefine
 export function requestMobileFolders(ownerId: string, request: FolderRequest, signal: AbortSignal): Promise<FolderResult> {
 	const bridge = getNativeBridge();
 	if (!supportsMobileFolders(bridge)) return Promise.reject(Error('Folder access requires an updated mobile app.'));
+	if (request.action === 'upload-part' && (!supportsNativePartUploads(bridge) || !validPartUpload(request.upload)))
+		return Promise.reject(Error('Native upload requires a supported app and a canonical source part.'));
 	if (request.action === 'stage-download' && !supportsNativeCloudStaging(bridge))
 		return Promise.reject(Error('Update the iOS app to download cloud ranges natively.'));
 	if (
@@ -490,29 +538,31 @@ export function requestMobileFolders(ownerId: string, request: FolderRequest, si
 				stop();
 				reject(Error('Folder access timed out. Your saved selections are preserved.'));
 			},
-			[
-				'choose',
-				'scan',
-				'read-range',
-				'stage-begin',
-				'stage-range',
-				'stage-download',
-				'stage-finish',
-				'write-approve',
-				'publish',
-				'publication-lookup',
-				'trash',
-				'trash-lookup',
-				'trash-expected',
-				'trash-inspect',
-				'trash-restore-reviewed',
-				'trash-list',
-				'version-list',
-				'version-inspect',
-				'version-restore-reviewed',
-				'version-restore-status',
-				'trash-restore'
-			].includes(input.action)
+			input.action === 'upload-part'
+				? 900_000
+				: [
+						'choose',
+						'scan',
+						'read-range',
+						'stage-begin',
+						'stage-range',
+						'stage-download',
+						'stage-finish',
+						'write-approve',
+						'publish',
+						'publication-lookup',
+						'trash',
+						'trash-lookup',
+						'trash-expected',
+						'trash-inspect',
+						'trash-restore-reviewed',
+						'trash-list',
+						'version-list',
+						'version-inspect',
+						'version-restore-reviewed',
+						'version-restore-status',
+						'trash-restore'
+				  ].includes(input.action)
 				? 300_000
 				: 30_000
 		);
@@ -579,6 +629,18 @@ export function mobileFolderSource(
 		if (result.chunk!.size !== entry.size) throw Error('Native source changed.');
 	};
 	return {
+		...(supportsNativePartUploads(bridge)
+			? {
+					uploadPart: async (upload: NativePartUpload, callerSignal?: AbortSignal) => {
+						const active = callerSignal ? AbortSignal.any([signal, callerSignal]) : signal;
+						active.throwIfAborted();
+						const result = await request(ownerId, { action: 'upload-part', rootId, upload: { ...upload, source: entry } }, active);
+						active.throwIfAborted();
+						if (!result.uploadedPart) throw Error('Native upload receipt is missing.');
+						return result.uploadedPart;
+					}
+			  }
+			: {}),
 		size: entry.size,
 		check: () => verify(),
 		verify: () => verify(true),

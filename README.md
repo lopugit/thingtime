@@ -5372,6 +5372,17 @@ Removing a grant, uninstalling the app and device loss are not recovery paths;
 independent snapshots and large-volume export remain separate acceptance work.
 
 
+#### iOS native multipart uploads
+
+Updated iOS hosts upload selected folder and photo originals from private,
+file-backed parts through the existing attachment protocol. Bytes stay native;
+the shared runner retains operation IDs, verifies part/server fingerprints and
+publishes canonical file/Timeline history. Signed destinations are obtained from
+the configured authenticated server, with no account credentials sent to storage.
+No new secrets or environment variables are needed. Allow temporary disk space
+for one canonical part, plus a PhotoKit original when applicable. These are
+foreground transfers; see the [native upload limits and acceptance](iOS/README.md#file-backed-native-uploads).
+
 #### iOS photo backup setup
 
 In the iOS app, **Choose folder → Photo library (backup)** opens the native
@@ -5380,7 +5391,7 @@ an editable backup connection to a cloud folder. Granting access does not upload
 anything. Photo sources are read-only and keep saved cloud copies after device
 deletion. The shared Apple reader exports original PhotoKit resources, including
 embedded metadata and paired Live Photo resources when available locally. It
-needs temporary free disk space for the largest original and does not silently
+needs temporary free disk space for the largest original plus one upload part and does not silently
 download iCloud-only originals. Album/favorite/caption restoration, large-library
 paging and background completion remain open. No service secret is needed;
 forks retain the usage description in `iOS/project.yml` and ordinary authenticated

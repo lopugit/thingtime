@@ -150,3 +150,42 @@ test('cancellation, scope changes and refused approval stop before sending uploa
   assert.equal(f.counts().puts,0);assert.equal(f.counts().commits,0);
  }
 });
+
+test('native file-backed uploads keep journal IDs and verified fingerprints without reading bytes into the browser', async () => {
+ const f = await fixture(), run = f.make(), write = run.cloudWrites[0];
+ let nativeCalls = 0, reads = 0;
+ const digest = Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+ const native: FingerprintSource = { ...source(), read: async () => { reads++; throw Error('Browser must not read upload bytes'); },
+  uploadPart: async request => {
+   assert.deepEqual(request, {uploadId:'att1',requestId:write.operation.id,partNumber:1,offset:0,length:4});
+   nativeCalls++; return {sha256:digest};
+  } };
+ const receipt = await createCloudFileTransport(f.runtime,write).apply(native);
+ assert.equal(receipt.operationId,write.operation.id); assert.equal(nativeCalls,1); assert.equal(reads,0); assert.equal(f.counts().puts,0);
+ await createCloudFileTransport(f.runtime,write).apply(native);
+ assert.equal(nativeCalls,1,'Accepted cloud receipt avoids repeated native upload');
+});
+test('invalid native upload hashes and cancellation cannot finalize or publish', async () => {
+ for (const sha256 of ['invalid','0'.repeat(64)]) {
+  const f=await fixture(), write=f.make().cloudWrites[0];let completed=0;
+  f.hook(path=>{if(path.endsWith('/complete'))completed++;return null;});
+  await assert.rejects(createCloudFileTransport(f.runtime,write).apply({...source(),uploadPart:async()=>({sha256})}),/digest|fingerprint/);
+  assert.equal(completed,0);assert.equal(f.counts().commits,0);
+ }
+ const f=await fixture(), abort=new AbortController();
+ await assert.rejects(createCloudFileTransport(f.runtime,f.make().cloudWrites[0],abort.signal).apply({...source(),uploadPart:async()=>{
+  abort.abort();return {sha256:'0'.repeat(64)};
+ }}),{name:'AbortError'});
+ assert.equal(f.counts().commits,0);
+});
+test('an uncertain native part retries the same reservation before any completion or file publication',async()=>{
+ const f=await fixture(), write=f.make().cloudWrites[0], requests:unknown[]=[];
+ const digest=Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex');
+ const native:FingerprintSource={...source(),read:async()=>{throw Error('Unexpected browser read');},uploadPart:async request=>{
+  requests.push(structuredClone(request));if(requests.length===1)throw Error('Accepted native part reply lost');return {sha256:digest};
+ }};
+ await assert.rejects(createCloudFileTransport(f.runtime,write).apply(native),/reply lost/);
+ assert.equal(f.counts().commits,0);
+ await createCloudFileTransport(f.runtime,write).apply(native);
+ assert.deepEqual(requests[0],requests[1]);assert.equal(f.counts().commits,1);assert.equal(f.counts().puts,0);
+});

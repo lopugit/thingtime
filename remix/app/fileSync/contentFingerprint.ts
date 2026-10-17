@@ -29,7 +29,12 @@ export function validContentFingerprint(value: unknown, size: number): value is 
 export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFingerprint): boolean =>
 	a.algorithm === b.algorithm && a.partSizeBytes === b.partSizeBytes && a.partCount === b.partCount && a.sha256 === b.sha256;
 
+export type NativePartUpload = { uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
 export type FingerprintSource = {
+	/** Native file-backed multipart upload. Resolves only after authenticated
+	 * signing, bounded storage upload and source checks; returns the part hash. */
+	uploadPart?(request: NativePartUpload, signal?: AbortSignal): Promise<{ sha256: string }>;
+
 	/** Pinned descriptor for native byte transport, reauthorized by the host. */
 	nativeCloud?: { scope: SyncScope; file: CloudFile };
 	size: number;

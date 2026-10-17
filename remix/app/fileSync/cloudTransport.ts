@@ -177,7 +177,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 			if (m.kind === 'trash') return commit(write.before!.content);
 			if (!source || source.size !== m.source.size) throw Error('Pinned source bytes are unavailable.');
 			const plan = contentPartPlan(source.size);
-			if (plan.partSizeBytes > 32 * 1024 * 1024) throw Error('This file requires native streaming upload support.');
+			if (!source.uploadPart && plan.partSizeBytes > 32 * 1024 * 1024) throw Error('This file requires native streaming upload support.');
 			const sourceCheck = async () => {
 				check();
 				await source.check();
@@ -201,45 +201,61 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 					await sourceCheck();
 					const offset = i * plan.partSizeBytes,
 						length = Math.min(plan.partSizeBytes, source.size - offset);
-					const read = await source.read(offset, length, signal);
-					await sourceCheck();
-					if (!(read instanceof Uint8Array) || read.length !== length) throw Error('Source read was incomplete.');
-					const bytes = new Uint8Array(read);
-					const digest = await hash(bytes);
+					let digest: Uint8Array<ArrayBuffer>;
+					if (source.uploadPart) {
+						await runtime.authorizeMutation?.(signal);
+						await sourceCheck();
+						const uploaded = await source.uploadPart(
+							{ uploadId: upload.id, requestId: write.operation.id, partNumber: i + 1, offset, length },
+							signal
+						);
+						await sourceCheck();
+						if (typeof uploaded?.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(uploaded.sha256)) throw Error('Invalid native upload digest.');
+						digest = Uint8Array.from(uploaded.sha256.match(/../g)!, (value) => parseInt(value, 16));
+					} else {
+						const read = await source.read(offset, length, signal);
+						await sourceCheck();
+						if (!(read instanceof Uint8Array) || read.length !== length) throw Error('Source read was incomplete.');
+						const bytes = new Uint8Array(read);
+						digest = await hash(bytes);
+						await sourceCheck();
+						const checksum = base64(digest),
+							partNumber = i + 1;
+						const signed = await json('/api/v1/attachments/uploads/parts', {
+							uploadId: upload.id,
+							parts: [{ partNumber, checksumSha256: checksum }]
+						});
+						const part = signed.parts?.[0];
+						if (
+							!Array.isArray(signed.parts) ||
+							signed.parts.length !== 1 ||
+							part.partNumber !== partNumber ||
+							typeof part.url !== 'string' ||
+							!part.headers ||
+							Object.keys(part.headers).some((key) => key.toLowerCase() !== 'x-amz-checksum-sha256') ||
+							part.headers['x-amz-checksum-sha256'] !== checksum
+						)
+							throw Error('Invalid signed cloud upload part.');
+						const target = new URL(part.url, scope.origin);
+						if (target.username || target.password || (target.protocol !== 'https:' && target.origin !== scope.origin))
+							throw Error('Invalid cloud upload destination.');
+						await sourceCheck();
+						await runtime.authorizeMutation?.(signal);
+						await sourceCheck();
+						const response = await runtime.fetch(target, {
+							method: 'PUT',
+							credentials: 'omit',
+							redirect: 'error',
+							referrerPolicy: 'no-referrer',
+							headers: part.headers,
+							body: bytes,
+							signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000)
+						});
+						await response.body?.cancel();
+						await sourceCheck();
+						if (!response.ok) throw Error(`Cloud upload part failed (${response.status}); retain this run.`);
+					}
 					digests.set(digest, i * 32);
-					await sourceCheck();
-					const checksum = base64(digest),
-						partNumber = i + 1;
-					const signed = await json('/api/v1/attachments/uploads/parts', { uploadId: upload.id, parts: [{ partNumber, checksumSha256: checksum }] });
-					const part = signed.parts?.[0];
-					if (
-						!Array.isArray(signed.parts) ||
-						signed.parts.length !== 1 ||
-						part.partNumber !== partNumber ||
-						typeof part.url !== 'string' ||
-						!part.headers ||
-						Object.keys(part.headers).some((key) => key.toLowerCase() !== 'x-amz-checksum-sha256') ||
-						part.headers['x-amz-checksum-sha256'] !== checksum
-					)
-						throw Error('Invalid signed cloud upload part.');
-					const target = new URL(part.url, scope.origin);
-					if (target.username || target.password || (target.protocol !== 'https:' && target.origin !== scope.origin))
-						throw Error('Invalid cloud upload destination.');
-					await sourceCheck();
-					await runtime.authorizeMutation?.(signal);
-					await sourceCheck();
-					const response = await runtime.fetch(target, {
-						method: 'PUT',
-						credentials: 'omit',
-						redirect: 'error',
-						referrerPolicy: 'no-referrer',
-						headers: part.headers,
-						body: bytes,
-						signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(120_000)]) : AbortSignal.timeout(120_000)
-					});
-					await response.body?.cancel();
-					await sourceCheck();
-					if (!response.ok) throw Error(`Cloud upload part failed (${response.status}); retain this run.`);
 					progress?.(offset + length, source.size);
 				}
 				if (!equalContentFingerprints({ algorithm: 'sha256-parts-v1', ...plan, sha256: hex(await hash(digests)) }, m.source.fingerprint!))

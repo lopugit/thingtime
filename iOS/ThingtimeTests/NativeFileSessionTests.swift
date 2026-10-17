@@ -54,9 +54,16 @@ final class NativeFileSessionTests: XCTestCase {
             if request.url!.path == "/api/v1/auth/me" {
                 return (200, [:], try JSONSerialization.data(withJSONObject: ["user": ["id": owner.ownerId, "accountKind": "user"]]))
             }
+            if request.url!.path == "/post" {
+                XCTAssertEqual(request.httpMethod, "POST")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+                return (200, [:], Data("{\"ok\":true}".utf8))
+            }
             return (206, [:], Data([0, 255, 127, 42]))
         }
         try await transport.open()
+        let posted = try await transport.json("/post", body: ["fixture": true])
+        XCTAssertEqual(posted["ok"] as? Bool, true)
         await store.setCookie(cookie("theme", "dark"))
         let bytes = try await transport.read("/bytes", limit: 4) { XCTAssertEqual($0.statusCode, 206) }
         XCTAssertEqual(bytes, Data([0, 255, 127, 42]))

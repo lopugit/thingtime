@@ -65,7 +65,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
         let scope = try FileSyncOwnerScope(ownerId: owner, url: origin), store = MobileFolderStore()
         let prior = try store.list(scope).first { $0.sourceKind == "photos" }
         guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] else { throw XCTSkip("Preserve an existing photo grant unless its exact disposable-test ID is supplied") }
-        web.configuration.userContentController.addUserScript(WKUserScript(source: "window.__photoScans=0;const photoOriginalPost=window.thingtimeNativeBridge.postMessage;window.thingtimeNativeBridge.postMessage=function(m){if(m.type==='mobile-files'&&m.payload?.action==='scan')window.__photoScans++;return photoOriginalPost.call(this,m)}", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        web.configuration.userContentController.addUserScript(WKUserScript(source: "window.__nativeUploadStats={parts:0,bytes:0,legacy:0};window.__photoScans=0;const photoOriginalPost=window.thingtimeNativeBridge.postMessage;window.thingtimeNativeBridge.postMessage=function(m){if(m.type==='mobile-files'){if(m.payload?.action==='scan')window.__photoScans++;if(m.payload?.action==='upload-part'){window.__nativeUploadStats.parts++;window.__nativeUploadStats.bytes+=m.payload.upload.length;}if(m.payload?.action==='read'&&m.payload.length>1)window.__nativeUploadStats.legacy++;}return photoOriginalPost.call(this,m)}", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web.load(URLRequest(url: origin.appendingPathComponent("things")))
         for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
         try await awaitTrue(web, "Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()==='Add this device'||b.textContent.trim()==='Choose folder')")
@@ -83,8 +83,19 @@ final class PhotoBackupInstalledTests: XCTestCase {
         XCTAssertEqual(provider.access(), "full")
         guard try provider.inventory().count < 20 else { throw XCTSkip("Use a small disposable simulator library") }
         var owned: [String] = [], cloud: String?, connection: String?
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4))
-        let bytes = renderer.pngData { ctx in UIColor.magenta.setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 4)) }
+        // A deterministic, incompressible original spans two canonical parts.
+        let width = 2048, height = 1536
+        var pixels = [UInt8](repeating: 0, count: width * height * 3), seed: UInt32 = 0x12345678
+        for index in pixels.indices {
+            seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5
+            pixels[index] = UInt8(truncatingIfNeeded: seed)
+        }
+        let providerData = try XCTUnwrap(CGDataProvider(data: Data(pixels) as CFData))
+        let image = try XCTUnwrap(CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 24,
+            bytesPerRow: width * 3, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: 0),
+            provider: providerData, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        let bytes = try XCTUnwrap(UIImage(cgImage: image).pngData())
+        XCTAssertGreaterThan(bytes.count, 8 * 1024 * 1024)
         if prior != nil {
             // Explicit interrupted-fixture recovery: match both original name and
             // exact synthetic PNG bytes before claiming an asset for cleanup.
@@ -151,6 +162,12 @@ final class PhotoBackupInstalledTests: XCTestCase {
             for node in nodes { try await verifyBytes(try XCTUnwrap(node["file"] as? [String: Any])) }
             let retained = try XCTUnwrap(nodes.first { $0["path"] as? String == first.path }?["file"] as? [String: Any])
             XCTAssertEqual(retained["revision"] as? String, firstFile["revision"] as? String)
+            let observedStats = try await web.evaluateJavaScript("window.__nativeUploadStats")
+            let stats = try XCTUnwrap(observedStats as? [String: Int])
+            XCTAssertGreaterThanOrEqual(stats["parts"] ?? 0, 4)
+            XCTAssertEqual(stats["bytes"], bytes.count * 2)
+            XCTAssertEqual(stats["legacy"], 0)
+            print("IOS_NATIVE_UPLOAD_PASS: parts=\(stats["parts"] ?? 0) bytes=\(stats["bytes"] ?? 0) legacy=\(stats["legacy"] ?? -1)")
             let shot = UIGraphicsImageRenderer(bounds: web.bounds).image { _ in web.drawHierarchy(in: web.bounds, afterScreenUpdates: true) }
             if let png = shot.pngData() { try png.write(to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("photo-backup-complete.png")) }
             print("IOS_PHOTO_BACKUP_PASS: Original PNG download hashes, new photo discovery and saved cloud copy after device deletion.")

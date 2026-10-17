@@ -67,6 +67,16 @@ final class PhotoLibraryTests: XCTestCase {
         let worker = Task.detached { withUnsafeCurrentTask { $0?.cancel() }; return try reader.scan(scope: "a") }
         do { _ = try await worker.value; XCTFail("Cancelled scan succeeded") } catch is CancellationError { }
     }
+    func testPhotoStreamMatchesOriginalAndRevocationStopsProvisionalBytes() throws {
+        let provider = PhotoFixtures(), bytes = Data(repeating: 7, count: 131_079)
+        let resource = provider.add("stream", bytes: bytes), reader = PhotoLibraryReader(provider: provider)
+        let entry = try XCTUnwrap(reader.scan(scope: "owner/grant").first)
+        var read = Data()
+        let size = try reader.stream(scope: "owner/grant", path: resource.path, version: entry.version, offset: 0, length: bytes.count) { read.append($0) }
+        XCTAssertEqual(size, Int64(bytes.count)); XCTAssertEqual(read, bytes)
+        XCTAssertThrowsError(try reader.stream(scope: "owner/grant", path: resource.path, version: entry.version, offset: 0, length: bytes.count) { _ in provider.permission = "unavailable" })
+        XCTAssertThrowsError(try reader.read(scope: "owner/grant", path: resource.path, version: entry.version, offset: 0, length: 1))
+    }
     @MainActor func testPhotoGrantReloadScopeAndWriteRefusal() throws {
         var data: Data?
         let scope = try FileSyncOwnerScope(ownerId: "photos", url: URL(string: "https://thingtime.test")!)

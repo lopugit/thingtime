@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: iOS uploads now send file-backed native multipart
+  parts with pinned API identity, signed storage requests and final fingerprint
+  verification. Installed photo backup verified 18.9 MB without bulk WebView
+  reads. OS-dialog cancellation now settles pending device checks promptly.
+  Setup, storage limits and evidence are recorded in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: iOS foreground photo backup now reads local
   PhotoKit originals through shared, permission-checked Apple storage and the
   existing backup/Timeline pipeline. Photo sources remain read-only in native

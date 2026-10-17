@@ -81,6 +81,26 @@ public final class PhotoLibraryReader: @unchecked Sendable {
             try require(); guard try provider.inventory() == initial else { throw Failure.changed }; return entries
         } catch { clear(); throw error }
     }
+    public func stream(scope: String, path: String, version: String, offset: Int64, length: Int,
+                       receive: (Data) throws -> Void) throws -> Int64 {
+        lock.lock(); defer { lock.unlock() }
+        do {
+            try require()
+            let resource: PhotoResource
+            if let cached, cached.scope == scope, cached.resource.path == path { resource = cached.resource }
+            else {
+                guard let found = try provider.inventory().first(where: { $0.path == path }) else { throw Failure.unavailable }
+                resource = found
+            }
+            let (entry, native, bookmark) = try materialize(resource, scope: scope)
+            guard entry.version == version else { throw Failure.changed }
+            let size = try MobileFolderReader.stream(bookmark: bookmark, path: native.path, version: native.version, offset: offset, length: length) { bytes in
+                try require(); try receive(bytes)
+            }
+            try require(); try provider.validate(resource)
+            return size
+        } catch { clear(); throw error }
+    }
     public func read(scope: String, path: String, version: String, offset: Int64, length: Int) throws -> MobileFolderReader.Chunk {
         lock.lock(); defer { lock.unlock() }
         do {

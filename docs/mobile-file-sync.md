@@ -88,7 +88,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
 | Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction simulator acceptance verified; iOS external Files edits, Mac installed transfers, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
-| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; mobile upload ranges, iOS streaming and sustained throughput remain pending |
+| Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; iOS file-backed native multipart uploads are implemented and installed multipart photo acceptance verifies byte hashes without bulk WebView reads; background transfer, physical-device acceptance and sustained throughput remain pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Android 11+ MediaStore and iOS PhotoKit read-only sources use the shared backup-only connection. Installed API 35 and iOS 26.5 simulator acceptance verified original PNG bytes, new-photo discovery and cloud retention after device deletion. Shared Apple reader passes 52 tests; real limited-selection changes, Live Photo/video/EXIF formats, physical devices, Mac picker, large-library paging and background completion remain open |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; file conflict review now offers guarded version choices; Android file-conflict review and native recovery acceptance verified; shared native recovery browsing and reviewed restore implemented on Mac/iOS/Android offline folders; broader installed conflict review, folder conflicts, recovery after grant replacement and retention policy remain pending |
@@ -2175,3 +2175,39 @@ hardware, scan/transfer performance, iCloud download policy, album/favorite/capt
 restoration, Mac UI and background workers remain open. It does not complete
 independent whole-account snapshots, native-history inclusion in device-loss
 backups, 100 GB–100 TB acceptance or physical-drive delivery.
+
+### iOS file-backed upload parts — 2026-10-18
+
+The iOS host now advertises a separate native upload capability. Selected-folder
+and PhotoKit sources capture one canonical part into protected temporary storage,
+using at most 64 KiB chunks. The native adapter replays the exact upload reservation
+and obtains a checksum-bound signed URL from the configured authenticated API;
+URLSession uploads from the file with no account credentials or redirects. The
+shared runner retains original journal IDs and checks every part digest, composite
+fingerprint and server attachment fingerprint before publishing file/Timeline
+history. Older hosts retain the existing supported byte path.
+
+The final installed multipart photo acceptance passed in 353.120 seconds (the
+first run passed in 336.368 seconds): four native
+parts, 18,897,576 uploaded bytes, zero legacy bulk bridge reads, independent original
+download hashes and unchanged retained cloud revision after local deletion. This
+wall time includes native/manual dialogs and is not a throughput benchmark.
+Shared Apple tests pass 57/57; focused shared transport tests pass 27/27, and the
+final selected installed-host unit suite passes 17/17. The test
+suite includes 33 MiB file-backed capture, actual selected-file mutation, source
+revocation, interrupted native replies with identical upload IDs, invalid digests,
+response limits and credential/redirect restrictions. TypeScript retains 91
+baseline diagnostics outside changed files; targeted lint passes.
+
+OS dialogs also exposed a pending identity-request cancellation bug: native iOS
+suspension cancelled the task without settling the web promise, holding the
+serialized device queue until a 120-second timeout. Cancellation now settles once
+only for the original destination. A focused installed-host lifecycle test checks
+that no old account context is delivered after changing destinations.
+
+One canonical part needs temporary disk space (8 MiB–5 GiB under the existing
+attachment contract); Photos also retains its materialized original. These remain
+foreground uploads with server quota/capability checks. Physical-device throughput,
+process-kill/background upload recovery, giant-file acceptance and independent
+whole-account/device snapshots remain unfinished. A 33 MiB fixture is not proof
+of a 100 GB–100 TB transfer. Setup is in iOS/README.md.

@@ -14,6 +14,7 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     private let invalidated: () -> Void
     private var pinnedCookie: String?
     private var closed = false
+    private var upload: NativeFileUpload?
     private var identityWatch: Task<Void, Never>?
 
     init(scope: FileSyncOwnerScope, cookieStore: WKHTTPCookieStore,
@@ -30,7 +31,7 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     deinit { identityWatch?.cancel(); session.invalidateAndCancel() }
     func close() {
         guard !closed else { return }
-        closed = true; identityWatch?.cancel(); identityWatch = nil
+        closed = true; upload?.cancel(); upload = nil; identityWatch?.cancel(); identityWatch = nil
         cookieStore.remove(self); pinnedCookie = nil; session.invalidateAndCancel()
     }
     private func checkActive() throws {
@@ -86,14 +87,41 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
             throw MobileDevicePairing.Failure.incompatible
         }
     }
-    func json(_ path: String) async throws -> [String: Any] {
-        let data = try await read(path, limit: 512 * 1024) {
+    func json(_ path: String, body: [String: Any]? = nil) async throws -> [String: Any] {
+        let data = try await read(path, limit: 512 * 1024, body: body) {
             guard $0.statusCode == 200 else { throw MobileFolderStore.Failure.unavailable }
         }
         guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw MobileFolderStore.Failure.invalid }
         return value
     }
-    func read(_ path: String, limit: Int,
+    /// The destination comes only from the authenticated selected server. Never
+    /// attach account cookies, origin headers or bearer credentials to a PUT.
+    func uploadPart(_ part: FileUploadPart, uploadId: String, partNumber: Int) async throws {
+        try await verifyOwner(); try checkActive()
+        let signed = try await json("/api/v1/attachments/uploads/parts", body: ["uploadId": uploadId,
+            "parts": [["partNumber": partNumber, "checksumSha256": part.checksumSha256]]])
+        let request = try Self.signedUploadRequest(signed, origin: scope.origin, checksum: part.checksumSha256, length: part.length, partNumber: partNumber)
+        try await verifyOwner(); try checkActive()
+        let sender = NativeFileUpload(); upload = sender
+        defer { sender.cancel(); upload = nil }
+        try await sender.send(request, file: part.url)
+        try checkActive(); try await verifyOwner()
+    }
+    static func signedUploadRequest(_ signed: [String: Any], origin: URL, checksum: String, length: Int64, partNumber: Int) throws -> URLRequest {
+        guard signed["ok"] as? Bool == true, let parts = signed["parts"] as? [[String: Any]], parts.count == 1,
+              parts[0]["partNumber"] as? Int == partNumber, let raw = parts[0]["url"] as? String,
+              let target = URL(string: raw, relativeTo: origin)?.absoluteURL,
+              target.user == nil, target.password == nil, target.fragment == nil,
+              target.scheme == "https" || (target.scheme == "http" && LopuVoiceContract.sameOrigin(target, origin)),
+              let headers = parts[0]["headers"] as? [String: String], headers.count == 1,
+              headers["x-amz-checksum-sha256"] == checksum else { throw MobileFolderStore.Failure.invalid }
+        var request = URLRequest(url: target, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 120)
+        request.httpMethod = "PUT"; request.httpShouldHandleCookies = false
+        request.setValue(checksum, forHTTPHeaderField: "x-amz-checksum-sha256")
+        request.setValue(String(length), forHTTPHeaderField: "Content-Length")
+        return request
+    }
+    func read(_ path: String, limit: Int, body: [String: Any]? = nil,
                       validate: @escaping @Sendable (HTTPURLResponse) throws -> Void) async throws -> Data {
         try checkActive()
         guard limit > 0, limit <= FileVersionExport.rangeBytes, path.hasPrefix("/"), !path.hasPrefix("//"),
@@ -106,6 +134,12 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
         request.setValue(scope.ownerId, forHTTPHeaderField: "X-Thingtime-Expected-Actor")
         request.setValue("home", forHTTPHeaderField: "X-Thingtime-Expected-Data-Plane")
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        if let body {
+            let bytes = try JSONSerialization.data(withJSONObject: body)
+            guard bytes.count <= 65_536 else { throw MobileFolderStore.Failure.limit }
+            request.httpMethod = "POST"; request.httpBody = bytes
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         let immutableRequest = request
         let reader = Task.detached { [session] in
             let (bytes, response) = try await session.bytes(for: immutableRequest)
