@@ -1,5 +1,6 @@
 import AppleFileSync
 import Network
+import Photos
 import UIKit
 import WebKit
 import UniformTypeIdentifiers
@@ -11,6 +12,9 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     static let publicationVersion = "1.0.0"
     static let trashVersion = "1.2.0"
     static let script = WKUserScript(source: "window.thingtimeNativeBridge.fileAccessVersion = '\(accessVersion)'; window.thingtimeNativeBridge.fileStagingVersion = '\(stagingVersion)'; window.thingtimeNativeBridge.filePublicationVersion = '\(publicationVersion)'; window.thingtimeNativeBridge.fileTrashVersion = '\(trashVersion)';", injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    private let photos = PhotoLibraryReader()
+    private var photoPermissionPending = false
+    private var sourceChoice: CheckedContinuation<Bool?, Error>?
     private let store: MobileFolderStore
     private let staging: MobileSyncStaging
     private let trash: MobileSyncTrash
@@ -36,11 +40,13 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         }
         networkMonitor.start(queue: DispatchQueue(label: "com.thingtime.sync-network"))
         observer = NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.suspend() }
+            Task { @MainActor in if self?.photoPermissionPending != true { self?.suspend() } }
         }
     }
     deinit { networkMonitor.cancel(); if let observer { NotificationCenter.default.removeObserver(observer) }; task?.cancel() }
     func suspend() {
+        sourceChoice?.resume(throwing: CancellationError()); sourceChoice = nil
+        let photos = self.photos; Task.detached { photos.discard() }
         let cancelled = cancellationReply; cancellationReply = nil
         generation = UUID(); task?.cancel(); task = nil; requestId = nil
         transport?.close(); transport = nil
@@ -54,6 +60,31 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
         if picker === controller { finishSelection(urls.count == 1 ? urls[0] : nil) }
     }
     private func finishSelection(_ url: URL?) { selection?.resume(returning: url); selection = nil; picker = nil }
+    private func chooseSource(webView: WKWebView) async throws -> Bool? {
+        guard var presenter = webView.window?.rootViewController else { throw MobileFolderStore.Failure.unavailable }
+        while let next = presenter.presentedViewController { presenter = next }
+        guard !(presenter is UIAlertController) else { throw MobileFolderStore.Failure.unavailable }
+        return try await withCheckedThrowingContinuation { continuation in
+            let dialog = UIAlertController(title: "Choose backup source", message: nil, preferredStyle: .alert)
+            sourceChoice = continuation; approvalDialog = dialog
+            for (label, choice) in [("Existing folder", Optional(false)), ("Photo library (backup)", Optional(true)), ("Cancel", nil)] {
+                dialog.addAction(UIAlertAction(title: label, style: choice == nil ? .cancel : .default) { [weak self, weak dialog] _ in
+                    guard let self, self.approvalDialog === dialog else { return }
+                    self.sourceChoice?.resume(returning: choice); self.sourceChoice = nil; self.approvalDialog = nil
+                })
+            }
+            presenter.present(dialog, animated: true)
+        }
+    }
+    private func authorizePhotos(webView: WKWebView) async throws -> Bool {
+        guard try await presentApproval(title: "Back up photo originals?", message: "Choose which photos and videos Thingtime can read. Original resources include embedded metadata and Live Photo video. Saved cloud copies remain after device deletion. Nothing uploads until you configure and start a backup. Originals must currently be downloaded on this device.", button: "Choose photo access", webView: webView) else { return false }
+        photoPermissionPending = true
+        defer { photoPermissionPending = false }
+        let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        for _ in 0..<50 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
+        guard status == .authorized || status == .limited else { throw PhotoLibraryReader.Failure.unavailable }
+        return true
+    }
     private func choose(webView: WKWebView) async throws -> URL? {
         guard var presenter = webView.window?.rootViewController else { throw MobileFolderStore.Failure.unavailable }
         while let next = presenter.presentedViewController { presenter = next }
@@ -127,15 +158,23 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     let charging: Any = battery == .unknown ? NSNull() : (battery == .charging || battery == .full)
                     result["conditions"] = ["network": self.networkKind, "charging": charging]
                 } else if action == "choose" {
-                    if let url = try await self.choose(webView: webView) {
-                        try check(); try await verifyOwner(scope, check); try check()
-                        _ = try self.store.add(scope, selected: url)
+                    if let photoSource = try await self.chooseSource(webView: webView) {
+                        if photoSource {
+                            if try await self.authorizePhotos(webView: webView) {
+                                try check(); try await verifyOwner(scope, check); try check()
+                                _ = try self.store.addPhotos(scope)
+                            }
+                        } else if let url = try await self.choose(webView: webView) {
+                            try check(); try await verifyOwner(scope, check); try check()
+                            _ = try self.store.add(scope, selected: url)
+                        }
                     }
                 } else if action != "list" {
                     guard let rootId = payload["rootId"] as? String, UUID(uuidString: rootId) != nil else { throw MobileFolderStore.Failure.invalid }
                     if action == "remove" { try self.store.remove(scope, id: rootId) }
                     else {
                         let grant = try self.store.grant(scope, id: rootId)
+                        guard grant.sourceKind != "photos" || ["scan", "read"].contains(action) else { throw MobileFolderStore.Failure.invalid }
                         if action == "trash-list" {
                             let trash = self.trash
                             let cursor = payload["cursor"] as? String
@@ -291,7 +330,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 result = ["rootId": rootId, "staging": try JSONSerialization.jsonObject(with: JSONEncoder().encode(progress))]
                             }
                         } else if action == "scan" {
-                            let worker = Task.detached { try MobileFolderReader.scan(bookmark: grant.bookmark) }
+                            let photos = self.photos
+                            let worker = Task.detached { try grant.sourceKind == "photos" ? photos.scan(scope: scope.key + ":" + grant.id) : MobileFolderReader.scan(bookmark: grant.bookmark) }
                             let entries = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                             var encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entries)) as! [[String: Any]]
                             for i in encoded.indices where encoded[i]["sha256"] == nil { encoded[i]["sha256"] = NSNull() }
@@ -305,19 +345,24 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                   offset.doubleValue.rounded() == offset.doubleValue, length.doubleValue.isFinite,
                                   length.doubleValue.rounded() == length.doubleValue, length.doubleValue > 0,
                                   length.doubleValue <= Double(MobileFolderReader.maximumReadBytes) else { throw MobileFolderStore.Failure.invalid }
-                            let worker = Task.detached { try MobileFolderReader.read(bookmark: grant.bookmark, path: path, version: version, offset: offset.int64Value, length: length.intValue) }
+                            let photos = self.photos
+                            let worker = Task.detached { try grant.sourceKind == "photos" ? photos.read(scope: scope.key + ":" + grant.id, path: path, version: version, offset: offset.int64Value, length: length.intValue) : MobileFolderReader.read(bookmark: grant.bookmark, path: path, version: version, offset: offset.int64Value, length: length.intValue) }
                             let chunk = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                             result = ["rootId": rootId, "path": path, "chunk": try JSONSerialization.jsonObject(with: JSONEncoder().encode(chunk))]
                         }
                     }
                 }
                 try check(); try await verifyOwner(scope, check); try check()
-                result["roots"] = try self.store.list(scope).map { ["id": $0.id, "name": $0.name] }
+                result["roots"] = try self.store.list(scope).map { grant -> [String: Any] in
+                    var row: [String: Any] = ["id": grant.id, "name": grant.name]
+                    if grant.sourceKind == "photos" { row["sourceKind"] = "photos"; row["photoAccess"] = self.photos.access() }
+                    return row
+                }
                 reply("mobile-files-result", base.merging(result) { _, new in new })
             } catch is CancellationError { }
             catch {
                 guard (try? check()) != nil else { return }
-                let error = (error as? MobileFolderStore.Failure)?.errorDescription ?? (error as? MobileDevicePairing.Failure)?.errorDescription ?? "Folder access failed. Your selections were preserved; try again."
+                let error = (error as? PhotoLibraryReader.Failure)?.errorDescription ?? (error as? MobileFolderStore.Failure)?.errorDescription ?? (error as? MobileDevicePairing.Failure)?.errorDescription ?? "Folder access failed. Your selections were preserved; try again."
                 reply("mobile-files-result", base.merging(["error": error]) { _, new in new })
             }
         }

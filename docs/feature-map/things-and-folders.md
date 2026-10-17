@@ -430,3 +430,12 @@ foreground pipeline. `PhotoLibraryTest`, `PhotoBackupAcceptance` and
 `photoSourcePolicy.test.ts` cover original bytes, native permission boundaries,
 read-only access and retained cloud copies. See `android/README.md` for setup and
 `docs/mobile-file-sync.md` for bounded foreground coverage.
+
+Apple photo originals use `apple/FileSync/PhotoLibraryReader` and the PhotoKit
+`SystemPhotoResources` adapter. `MobileFolderStore` stores a read-only source
+intent in the existing account/origin Keychain envelope. iOS `MobileFolderBridge`
+owns native source/permission dialogs, rejects photo mutations and projects live
+access into the shared backup-only editor. `PhotoLibraryTests` covers private
+one-resource caching and authority boundaries; `PhotoBackupInstalledTests` drives
+real original-byte cloud acceptance. See `iOS/README.md` for current local-original,
+foreground and inventory limits. Mac UI integration remains pending.

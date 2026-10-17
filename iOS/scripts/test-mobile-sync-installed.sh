@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Prepare normal authentication for visible CUA/manual installed-app acceptance.
-# Does not choose a folder, pair a device, approve writes or start any transfer.
+# The default mode prepares authentication; opt-in export/photo scenarios exercise
+# their documented disposable fixtures and visible native permission prompts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${DEST:?Set DEST to a concrete iOS simulator destination}"
@@ -17,6 +18,7 @@ PY
 )"
 test_class="MobileSyncInstalledTests"
 if [ "${THINGTIME_FILE_EXPORT_TEST:-0}" = "1" ]; then test_class="FileExportInstalledTests"; fi
+if [ "${THINGTIME_PHOTO_BACKUP_TEST:-0}" = "1" ]; then test_class="PhotoBackupInstalledTests"; fi
 xcodegen generate
 xcodebuild -project Thingtime.xcodeproj -scheme Thingtime -destination "$DEST" -derivedDataPath "$derived" \
   THINGTIME_WEB_URL="$origin" build-for-testing
@@ -28,7 +30,7 @@ fixture=json.load(open(sys.argv[1]));products=pathlib.Path(sys.argv[2])/'Build/P
 source=max(products.glob('Thingtime_iphonesimulator*.xctestrun'),key=lambda p:p.stat().st_mtime)
 data=plistlib.load(source.open('rb'))
 data['ThingtimeTests'].setdefault('EnvironmentVariables',{}).update({
- 'THINGTIME_SYNC_INSTALLED_ACCEPTANCE':'1','THINGTIME_FILE_EXPORT_TEST':os.environ.get('THINGTIME_FILE_EXPORT_TEST','0'),'THINGTIME_DEVICE_TEST_ORIGIN':fixture['base'],
+ 'THINGTIME_PHOTO_RESUME_GRANT':os.environ.get('THINGTIME_PHOTO_RESUME_GRANT',''),'THINGTIME_SYNC_INSTALLED_ACCEPTANCE':'1','THINGTIME_PHOTO_BACKUP_TEST':os.environ.get('THINGTIME_PHOTO_BACKUP_TEST','0'),'THINGTIME_FILE_EXPORT_TEST':os.environ.get('THINGTIME_FILE_EXPORT_TEST','0'),'THINGTIME_DEVICE_TEST_ORIGIN':fixture['base'],
  'THINGTIME_DEVICE_TEST_USERNAME':fixture['username'],'THINGTIME_DEVICE_TEST_PASSWORD':fixture['password']})
 fd=os.open(sys.argv[3],os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600);os.fchmod(fd,0o600)
 with os.fdopen(fd,'wb') as out:plistlib.dump(data,out)

@@ -5372,6 +5372,20 @@ Removing a grant, uninstalling the app and device loss are not recovery paths;
 independent snapshots and large-volume export remain separate acceptance work.
 
 
+#### iOS photo backup setup
+
+In the iOS app, **Choose folder → Photo library (backup)** opens the native
+explanation and Photos access choice. Select full or limited access, then create
+an editable backup connection to a cloud folder. Granting access does not upload
+anything. Photo sources are read-only and keep saved cloud copies after device
+deletion. The shared Apple reader exports original PhotoKit resources, including
+embedded metadata and paired Live Photo resources when available locally. It
+needs temporary free disk space for the largest original and does not silently
+download iCloud-only originals. Album/favorite/caption restoration, large-library
+paging and background completion remain open. No service secret is needed;
+forks retain the usage description in `iOS/project.yml` and ordinary authenticated
+file-sync APIs. See [iOS setup and disposable acceptance](iOS/README.md).
+
 #### Android photo backup setup
 
 On Android 11+, **Choose folder → Photo library (backup)** requests photo/video
@@ -5382,5 +5396,5 @@ mode and retain cloud copies after source deletion. Start transfers explicitly
 while the app is open. No extra credentials or server environment variables are
 required beyond the existing file-sync/Timeline setup. Native photo libraries
 remain bounded to 10,000 entries per selected tree; background workers, large-library
-paging and iOS/Mac Photos adapters remain unfinished. See the
+paging and the Mac Photos picker remain unfinished. See the
 [Android setup and disposable acceptance workflow](android/README.md#photo-library-backup-android-11).

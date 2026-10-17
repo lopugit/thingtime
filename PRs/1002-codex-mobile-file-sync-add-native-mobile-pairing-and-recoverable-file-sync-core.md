@@ -1907,3 +1907,33 @@ app is open; large-library paging, background workers and Apple Photos adapters
 remain open. This does not complete independent whole-account snapshots, native
 history inclusion in device-loss backups, 100 GB–100 TB export acceptance or
 physical-drive delivery. Setup and permission details are in android/README.md.
+
+## iOS foreground original photo backup — 2026-10-18
+
+An explicit iOS Photos source now feeds the existing backup-only connection and
+canonical cloud file/Timeline history. The shared Apple reader exports original
+PhotoKit resources to one private temporary file, with owner/grant isolation,
+stable identity, content-derived versions and bounded range reads. Live access
+and resource checks reject changed, unavailable or cloud-only originals. Native
+and shared UI checks reject photo writes and exclude photo roots from recovery
+destinations, including legacy iOS publication capabilities.
+
+Installed iOS 26.5 simulator acceptance passed (427.359 seconds): original PNG
+SHA-256 after independent download, incremental new-photo discovery and retention
+of the saved cloud revision after device deletion. The initial pass exercised real
+native source/explanation/full-access dialogs; the final repeat resumed the exact
+disposable grant. Owned originals were moved to Recently Deleted, cloud fixtures
+were cleaned up and the grant removed. The successful completion view was visually
+inspected. The shell wrapper reported EOF after XCTest succeeded because its file
+was edited while executing; final shell syntax validation passed. Earlier harness
+attempts were stopped while diagnosing waits, and its polling now uses wall-clock
+deadlines and concise status diagnostics.
+
+Validation: 52 shared Apple tests; 16 selected iOS simulator unit tests; 14 focused
+shared policy tests; targeted lint. Raw TypeScript retains 91 diagnostics outside
+changed files. No physical-device, actual limited-selection-change, Live Photo or
+video-format claim is made. PhotoKit reads local originals only; foreground scans
+are bounded to 10,000 resources/4 MiB, and temporary space must fit the largest
+original. Mac picker integration, paging/performance, background workers, iCloud
+policy, Photos-library metadata reconstruction, independent snapshots and massive
+exports remain open. Fork-safe setup is in README.md and iOS/README.md.

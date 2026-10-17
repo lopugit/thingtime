@@ -11082,3 +11082,22 @@ transfer, whole-account snapshots or production deployment.
   fail. Never treat a permissions flag as a persisted grant.
 - Real limited-selection changes, video/EXIF format coverage, physical devices,
   large libraries and background completion remain additional release checks.
+
+### iOS original-photo backup
+
+- On a disposable simulator, use Things to pair the device and choose Photo
+  library (backup). Verify the explanation, native permission, and full/limited
+  source projection; denying permission must not create an authorized source.
+- A photo connection must stay backup-only with deletion propagation disabled.
+  Native write approval, staging, publication and Trash actions must reject it.
+- Run `THINGTIME_PHOTO_BACKUP_TEST=1 iOS/scripts/test-mobile-sync-installed.sh`
+  with `DEST` and a private disposable account fixture. Verify original PNG
+  cloud download hashes, discovery after another photo is added and retention
+  after the first test original is moved to Recently Deleted.
+- `PhotoLibraryTests` covers distinct same-name resources, multipart fingerprints,
+  bounded reads, owner/grant cache partitioning, changed inventories, revoked
+  permission, missing originals, cancellation and denied write authority.
+- Keep actual limited-selection changes, Live Photo/video/EXIF fixtures, iCloud
+  downloads, physical devices, large libraries and background acceptance open
+  until each has direct evidence. Resource bytes do not prove album/database
+  restoration or an independent whole-device snapshot.

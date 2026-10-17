@@ -308,3 +308,50 @@ Use a dedicated simulator for interactive acceptance when other tasks are
 installing the same bundle ID. A reinstall terminates the test host and can
 remove its test bundle; it is not evidence of a transfer failure. Finish or stop
 this test's runner before rebuilding, and never interrupt another task's runner.
+
+## Photo-library backup
+
+In Things, add this device, then choose **Choose folder → Photo library
+(backup)**. The native explanation precedes the system Photos permission dialog.
+Choose limited or full access; the selected scope is shown in the connection.
+Granting access alone starts no upload. Create an ordinary private file-sync
+connection, select a private cloud folder, unpause it and use Upload now while
+the app remains open. Photo connections are backup-only and keep saved cloud
+copies when device originals disappear. Downloads, deletes and device-Trash
+restoration cannot target a photo-library grant.
+
+The shared Apple PhotoKit reader preserves every resource returned for each
+accessible photo/video (including original and edited resources and Live Photo
+companions when supplied), rather than using display thumbnails. Resources have
+separate opaque asset/index identities and original-filename suffixes. Full
+access includes hidden and burst assets exposed by PhotoKit. Original bytes can
+include embedded location metadata. Albums, captions, favorites and other Photos
+database metadata are not yet a portable library restoration contract.
+
+Current scans allow 10,000 resources and 4 MiB of inventory metadata. A scan
+rechecks the complete accessible resource inventory before returning success.
+One original is exported at a time into private temporary storage and reused for
+bounded reads under the same owner/grant; the temporary copy is cleared on
+suspension or failure. Available device storage must fit the largest original.
+Originals must currently be downloaded locally in Photos: the adapter refuses
+unavailable originals instead of starting iCloud traffic outside the sync network
+policy. Background jobs, large-library paging and controlled iCloud downloads
+remain pending. The shared reader builds on Mac, but the Mac source-selection
+integration is still pending.
+
+Forks need the existing `NSPhotoLibraryUsageDescription` entry in `project.yml`,
+then `xcodegen generate`. No photo-service credentials or private configuration
+are required. Opt-in installed acceptance uses only a disposable loopback account
+and simulator, retaining the ordinary native Photos dialogs:
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>' \
+THINGTIME_PHOTO_BACKUP_TEST=1 \
+iOS/scripts/test-mobile-sync-installed.sh /path/to/disposable-account.json
+```
+
+Use a small disposable Photos library. The test creates its own magenta PNGs,
+compares downloaded cloud hashes, and moves only those test assets to Recently
+Deleted. Follow the `IOS_PHOTO_*` prompts and confirm the system deletion prompts.
+See [Apple's resource manager](https://developer.apple.com/documentation/photos/phassetresourcemanager)
+for the original-resource API.

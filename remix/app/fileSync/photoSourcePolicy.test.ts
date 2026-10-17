@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assertPhotoSourcePolicy } from './photoSourcePolicy';
 import { newFileSyncConfiguration, parseFileSyncConfiguration } from './configuration';
-import { parseMobileFolderResult, type MobileFolder } from './mobileFolders.client';
+import { parseMobileFolderResult, supportsMobileFolderPublication, type MobileFolder } from './mobileFolders.client';
 const root: MobileFolder = { id: '00000000-0000-4000-8000-000000000001', name: 'Photo library', sourceKind: 'photos', photoAccess: 'full' };
 const config = () => newFileSyncConfiguration({ name: 'Photos', deviceId: 'device', localRootId: root.id, remoteFolderId: 'cloud', sourceKind: 'photos' });
 const expected = { requestId: 'request', ownerId: 'owner', origin: 'https://native.test' };
@@ -26,4 +26,12 @@ test('fresh native authority prevents forged intent, deletion policy, missing gr
  // A manually edited Thing cannot relabel an actual photo library to allow destructive sync.
  for (const mode of ['upload', 'download', 'two-way'] as const) assert.throws(() => assertPhotoSourcePolicy({ ...c, sourceKind: 'folder', mode }, [root]));
  assert.throws(() => assertPhotoSourcePolicy({ ...c, sourceKind: undefined, propagateDeletes: true }, [root]));
+});
+
+test('photo sources never inherit legacy iOS folder publication or recovery capabilities', () => {
+ for (const platform of ['ios', 'android'] as const) for (const filePublicationVersion of ['1.0.0', '1.1.0']) {
+  const bridge = { platform, fileAccessVersion: '1.1.1', fileStagingVersion: '1.2.0', filePublicationVersion };
+  assert.equal(supportsMobileFolderPublication(root, bridge), false);
+ }
+ assert.equal(supportsMobileFolderPublication({ id: root.id, name: 'Folder' }, { platform: 'ios', fileAccessVersion: '1.1.1', fileStagingVersion: '1.2.0', filePublicationVersion: '1.0.0' }), true);
 });

@@ -353,7 +353,7 @@ export const supportsMobileTrashTransitions = (bridge: FolderCapabilities | unde
 /** Publication 1.1 adds explicit per-folder capability. Earlier iOS 1.0
  * adapters support their selected roots; Android never falls back to that rule. */
 export function supportsMobileFolderPublication(folder: MobileFolder | undefined, bridge: FolderCapabilities | undefined = getNativeBridge()) {
-	if (!folder || !supportsMobilePublication(bridge)) return false;
+	if (!folder || folder.sourceKind === 'photos' || !supportsMobilePublication(bridge)) return false;
 	if (Number(bridge!.filePublicationVersion!.split('.')[1]) >= 1) return /^1\.\d+\.\d+$/.test(folder.publicationVersion ?? '');
 	return bridge!.platform === 'ios';
 }

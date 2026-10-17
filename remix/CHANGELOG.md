@@ -68,6 +68,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: iOS foreground photo backup now reads local
+  PhotoKit originals through shared, permission-checked Apple storage and the
+  existing backup/Timeline pipeline. Photo sources remain read-only in native
+  and shared recovery controls. Installed simulator acceptance verified original
+  bytes, new-photo discovery and cloud retention after device deletion. Native
+  setup, limits and remaining coverage are documented in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18 — **Codex (AI)**: Add Android original-photo backup through native
   photo permission and folder selection, with editable backup-only connections
   and cloud copies retained after device deletion. Verify 71 installed Android

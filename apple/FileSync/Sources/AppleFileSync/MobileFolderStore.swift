@@ -22,12 +22,13 @@ public final class MobileFolderStore {
         }
     }
     public struct Grant: Codable, Sendable {
-        public init(id: String, scope: FileSyncOwnerScope, name: String, bookmark: Data, writeApprovals: [WriteApproval]? = nil) { self.id = id; self.scope = scope; self.name = name; self.bookmark = bookmark; self.writeApprovals = writeApprovals }
+        public init(id: String, scope: FileSyncOwnerScope, name: String, bookmark: Data, writeApprovals: [WriteApproval]? = nil, sourceKind: String? = nil) { self.sourceKind = sourceKind; self.id = id; self.scope = scope; self.name = name; self.bookmark = bookmark; self.writeApprovals = writeApprovals }
 
         public let id: String
         public let scope: FileSyncOwnerScope
         public let name: String
         public let bookmark: Data
+        public let sourceKind: String?
         public var writeApprovals: [WriteApproval]?
     }
     public enum Failure: Error, LocalizedError {
@@ -54,6 +55,7 @@ public final class MobileFolderStore {
         guard rows.count <= 32, Set(rows.map(\.id)).count == rows.count,
               rows.allSatisfy({ $0.scope == scope && UUID(uuidString: $0.id) != nil && !$0.name.isEmpty && $0.name.utf8.count <= 1024 && $0.bookmark.count <= 32 * 1024 }) else { throw Failure.storage }
         for row in rows {
+            guard row.sourceKind == nil || (row.sourceKind == "photos" && row.bookmark.isEmpty && (row.writeApprovals ?? []).isEmpty) else { throw Failure.storage }
             guard (row.writeApprovals?.count ?? 0) <= 32 else { throw Failure.storage }
             for approval in row.writeApprovals ?? [] { try approval.validate(owner: scope) }
         }
@@ -75,8 +77,9 @@ public final class MobileFolderStore {
     /// cannot create native write authority.
     public func approveWrite(_ scope: FileSyncOwnerScope, grant original: Grant, approval: WriteApproval) throws {
         try approval.validate(owner: scope)
+        guard original.sourceKind == nil else { throw Failure.invalid }
         var rows = try list(scope)
-        guard let index = rows.firstIndex(where: { $0.id == original.id }), rows[index].bookmark == original.bookmark else { throw Failure.changed }
+        guard let index = rows.firstIndex(where: { $0.id == original.id }), rows[index].bookmark == original.bookmark, rows[index].sourceKind == nil else { throw Failure.changed }
         var approvals = (rows[index].writeApprovals ?? []).filter { $0.scope != approval.scope }
         guard approvals.count < 32 else { throw Failure.limit }
         approvals.append(approval); rows[index].writeApprovals = approvals
@@ -104,6 +107,15 @@ public final class MobileFolderStore {
         let name = url.lastPathComponent
         guard !name.isEmpty, name.utf8.count <= 1024 else { throw Failure.invalid }
         let grant = Grant(id: existing.map { rows[$0].id } ?? UUID().uuidString.lowercased(), scope: scope, name: name, bookmark: bookmark)
+        if let existing { rows[existing] = grant } else { rows.append(grant) }
+        try persist(scope, rows); return grant
+    }
+    /// Call only after native photo consent and fresh account authorization.
+    public func addPhotos(_ scope: FileSyncOwnerScope) throws -> Grant {
+        var rows = try list(scope)
+        let existing = rows.firstIndex { $0.sourceKind == "photos" }
+        guard existing != nil || rows.count < 32 else { throw Failure.limit }
+        let grant = Grant(id: existing.map { rows[$0].id } ?? UUID().uuidString.lowercased(), scope: scope, name: "Photo library", bookmark: Data(), sourceKind: "photos")
         if let existing { rows[existing] = grant } else { rows.append(grant) }
         try persist(scope, rows); return grant
     }
