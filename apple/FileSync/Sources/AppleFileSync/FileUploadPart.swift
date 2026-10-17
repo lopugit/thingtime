@@ -3,7 +3,13 @@ import CryptoKit
 
 /// A single canonical multipart part backed by private temporary storage. The
 /// producer emits bounded chunks; only the digest crosses the native bridge.
-public final class FileUploadPart: @unchecked Sendable {
+public protocol FileUploadPartSource: Sendable {
+    var url: URL { get }
+    var checksumSha256: String { get }
+    var sha256: String { get }
+    var length: Int64 { get }
+}
+public final class FileUploadPart: FileUploadPartSource, @unchecked Sendable {
     public let url: URL
     public let checksumSha256: String
     public let sha256: String
@@ -23,17 +29,23 @@ public final class FileUploadPart: @unchecked Sendable {
         guard part <= 5 * 1024 * mib else { throw MobileFolderStore.Failure.limit }
         return (part, Int((size + part - 1) / part))
     }
-    public static func capture(size: Int64, partNumber: Int, offset: Int64, length: Int64,
+    public static func capture(size: Int64, partNumber: Int, offset: Int64, length: Int64, temporaryDirectory: URL = FileManager.default.temporaryDirectory,
         stream: (_ offset: Int64, _ length: Int, _ receive: (Data) throws -> Void) throws -> Int64) throws -> FileUploadPart {
         let plan = try plan(size: size)
         guard partNumber >= 1, partNumber <= plan.count, offset == Int64(partNumber - 1) * plan.partSize,
               length == min(plan.partSize, size - offset) else { throw MobileFolderStore.Failure.invalid }
         try Task.checkCancellation()
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("thingtime-upload-" + UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        let directory = temporaryDirectory.appendingPathComponent("thingtime-upload-" + UUID().uuidString, isDirectory: true)
+        var directoryAttributes: [FileAttributeKey: Any] = [.posixPermissions: 0o700]
+        var fileAttributes: [FileAttributeKey: Any] = [.posixPermissions: 0o600]
+        #if os(iOS)
+        directoryAttributes[.protectionKey] = FileProtectionType.completeUntilFirstUserAuthentication
+        fileAttributes[.protectionKey] = FileProtectionType.completeUntilFirstUserAuthentication
+        #endif
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: directoryAttributes)
         let url = directory.appendingPathComponent("part")
         do {
-            guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600]) else { throw MobileFolderStore.Failure.storage }
+            guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: fileAttributes) else { throw MobileFolderStore.Failure.storage }
             let file = try FileHandle(forWritingTo: url); defer { try? file.close() }
             var hash = SHA256(), copied: Int64 = 0
             while copied < length {

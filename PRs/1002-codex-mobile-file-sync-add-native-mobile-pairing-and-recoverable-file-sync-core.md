@@ -2002,3 +2002,55 @@ Actual Mac source/permission UI, protected library reads, photo/video/metadata
 formats and revocation in the installed signed app remain to be verified in an
 explicit live session. Large-library paging, iCloud policy, background sync,
 independent whole-account/device snapshots and massive exports remain unfinished.
+
+## Durable iOS upload-part recovery — 2026-10-18
+
+The iOS upload capability 1.1.0 keeps interrupted canonical parts in private
+Application Support, bound to the original account/origin, native grant hash,
+source version, upload/request IDs and part bounds. Native journal writes reserve
+identity before capture and commit the digest after payload fsync. A fresh process
+rehashes completed bytes before reuse; an incomplete capture is rebuilt. The host
+checks live source permission/version and replays the API reservation before
+obtaining a fresh signed URL. Successful verification releases the exact part;
+removing a native grant removes only that scope's retained parts. No cookies,
+signed URLs or credentials are stored with payloads.
+
+The cache is capped at 32 reservations and 5 GiB across accounts, with explicit
+capacity feedback instead of evicting unfinished parts. iOS file protection and
+OS-backup exclusion are configured. Photos needs additional disk for its materialized
+original. The current bridge serializes the complete prepare/upload/release
+lifecycle; independently scheduled OS tasks still need durable associations and
+leases. This operational cache does not replace canonical Timeline history.
+
+Fresh-process tests exit the disposable child after payload fsync before digest
+commit and after completed capture. A distinct process respectively recaptures or
+reuses exact bytes without source recapture, checks the digest, rejects a changed
+live source and explicitly releases the part. Cache tests also cover conflicting
+source/grant identities, owner/origin/root isolation, corruption, truncation,
+symlinks/hardlinks, cancellation, orphan reservations and storage limits.
+
+Transfers still require the foreground app. Accepted-upload receipt persistence,
+actual process death during PUT, reboot/power-loss behavior, disk exhaustion,
+physical-device throughput, native background scheduling, whole-account/device
+snapshots and 100 GB–100 TB acceptance remain open. This checkpoint does not
+complete Drive/Photos/Resilio-style sync or physical-drive fulfillment.
+
+Installed iOS 26.5 acceptance passed in 192.846 seconds with four native parts,
+18,897,576 bytes, zero legacy bulk bridge reads, independent original download
+hashes, unchanged retained cloud revision after local deletion and no new cache
+entries after success. The completion screen was inspected; fixture originals
+moved to Recently Deleted and cloud/grant cleanup completed. An earlier interrupted
+run reached all upload assertions but stopped at cleanup; it is not counted as a
+complete suite pass. The repeat used only the exact identified disposable grant.
+All 63 shared Apple tests passed; the six cache tests were rerun after adding the
+explicit storage-capacity error and pass. Both fresh-process scenarios pass.
+
+File protection is configured in iOS capture attributes but is not verified by
+this simulator: it returns no protection attribute. The separate
+`testDeviceFileProtectionAfterCapture` skips Simulator and requires physical iOS
+hardware; device lock/reboot enforcement remains an open acceptance check. Read
+protection values as strings, as specified by
+[Apple's protectionKey API](https://developer.apple.com/documentation/foundation/fileattributekey/protectionkey).
+
+Final iOS simulator checks: 17 tests selected, 16 passed and the one physical-device
+protection test explicitly skipped; no failures. Shell syntax and diff checks pass.

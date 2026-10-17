@@ -87,7 +87,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | Add this iPhone/iPad or Android device in Things | Native discovery, authenticated pairing, refresh/relaunch readback, correct account/origin, revoke and reconnect on actual app | iOS and Android clients implemented; real local API pairing and secure storage verified on both simulators; installed Things pairing verified on both simulators; physical devices pending |
 | Safe native credentials and recovery | Keychain/Keystore storage; restart during prepare/complete; exact recovery without duplicate devices | iOS Keychain and Android Keystore-encrypted pending claims preserve exact completion replay; native recovery tests pass |
 | Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction simulator acceptance verified; iOS external Files edits, Mac installed transfers, workers and full cross-device transfer acceptance pending |
-| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
+| Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; iOS durable upload-part cache and fresh-process capture recovery verified; actual interrupted PUT, native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; iOS file-backed native multipart uploads are implemented and installed multipart photo acceptance verifies byte hashes without bulk WebView reads; background transfer, physical-device acceptance and sustained throughput remain pending |
 | Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Android 11+ MediaStore and iOS PhotoKit read-only sources use the shared backup-only connection. Installed API 35 and iOS 26.5 simulator acceptance verified original PNG bytes, new-photo discovery and cloud retention after device deletion. Mac 1.3.0 adds a native PhotoKit source adapter; real API acceptance uses synthetic photo resources. Shared Apple reader passes 57 tests; actual Mac installed PhotoKit acceptance, real limited-selection changes, Live Photo/video/EXIF formats, physical devices, large-library paging and background completion remain open |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
@@ -2240,3 +2240,55 @@ Actual Mac source/permission UI, protected library reads, photo/video/metadata
 formats and revocation in the installed signed app remain to be verified in an
 explicit live session. Large-library paging, iCloud policy, background sync,
 independent whole-account/device snapshots and massive exports remain unfinished.
+
+## Durable iOS upload-part recovery — 2026-10-18
+
+The iOS upload capability 1.1.0 keeps interrupted canonical parts in private
+Application Support, bound to the original account/origin, native grant hash,
+source version, upload/request IDs and part bounds. Native journal writes reserve
+identity before capture and commit the digest after payload fsync. A fresh process
+rehashes completed bytes before reuse; an incomplete capture is rebuilt. The host
+checks live source permission/version and replays the API reservation before
+obtaining a fresh signed URL. Successful verification releases the exact part;
+removing a native grant removes only that scope's retained parts. No cookies,
+signed URLs or credentials are stored with payloads.
+
+The cache is capped at 32 reservations and 5 GiB across accounts, with explicit
+capacity feedback instead of evicting unfinished parts. iOS file protection and
+OS-backup exclusion are configured. Photos needs additional disk for its materialized
+original. The current bridge serializes the complete prepare/upload/release
+lifecycle; independently scheduled OS tasks still need durable associations and
+leases. This operational cache does not replace canonical Timeline history.
+
+Fresh-process tests exit the disposable child after payload fsync before digest
+commit and after completed capture. A distinct process respectively recaptures or
+reuses exact bytes without source recapture, checks the digest, rejects a changed
+live source and explicitly releases the part. Cache tests also cover conflicting
+source/grant identities, owner/origin/root isolation, corruption, truncation,
+symlinks/hardlinks, cancellation, orphan reservations and storage limits.
+
+Transfers still require the foreground app. Accepted-upload receipt persistence,
+actual process death during PUT, reboot/power-loss behavior, disk exhaustion,
+physical-device throughput, native background scheduling, whole-account/device
+snapshots and 100 GB–100 TB acceptance remain open. This checkpoint does not
+complete Drive/Photos/Resilio-style sync or physical-drive fulfillment.
+
+Installed iOS 26.5 acceptance passed in 192.846 seconds with four native parts,
+18,897,576 bytes, zero legacy bulk bridge reads, independent original download
+hashes, unchanged retained cloud revision after local deletion and no new cache
+entries after success. The completion screen was inspected; fixture originals
+moved to Recently Deleted and cloud/grant cleanup completed. An earlier interrupted
+run reached all upload assertions but stopped at cleanup; it is not counted as a
+complete suite pass. The repeat used only the exact identified disposable grant.
+All 63 shared Apple tests passed; the six cache tests were rerun after adding the
+explicit storage-capacity error and pass. Both fresh-process scenarios pass.
+
+File protection is configured in iOS capture attributes but is not verified by
+this simulator: it returns no protection attribute. The separate
+`testDeviceFileProtectionAfterCapture` skips Simulator and requires physical iOS
+hardware; device lock/reboot enforcement remains an open acceptance check. Read
+protection values as strings, as specified by
+[Apple's protectionKey API](https://developer.apple.com/documentation/foundation/fileattributekey/protectionkey).
+
+Final iOS simulator checks: 17 tests selected, 16 passed and the one physical-device
+protection test explicitly skipped; no failures. Shell syntax and diff checks pass.

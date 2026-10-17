@@ -11146,3 +11146,30 @@ transfer, whole-account snapshots or production deployment.
   metadata and revocation through the actual shared Things controls. Retain
   existing endpoint, account, pairing and grants. Live Mac library acceptance
   remains open until this separate session is completed.
+
+### iOS durable upload-part recovery
+
+- Run `FileUploadPartStoreTests` and the existing capture/transport suites. Verify
+  fresh-instance reuse without source recapture; changed source/grant under the
+  same identity refused; different owners/origins/roots isolated; truncated,
+  corrupt, symlink and hardlink payloads refused; count/byte limits preserve other
+  unfinished parts and explicit successful release frees capacity.
+- Run `apple/FileSync/scripts/test-upload-part-process.sh`. The disposable child
+  must exit 77 both after payload fsync before the digest checkpoint and after
+  complete capture. A distinct process must recapture the incomplete payload,
+  reuse the committed payload without calling its source stream, reject a changed
+  live source version and release only its exact cache entry. Regression class:
+  native upload inputs were temporary and disappeared during process interruption.
+- Run the installed multipart photo test and confirm `IOS_UPLOAD_CACHE_RELEASE_PASS`
+  alongside independent cloud hashes, four native parts and zero bulk bridge
+  reads. Successful uploads must leave no new retained part directories.
+- Keep actual process death during PUT, app/device restart scheduling, power loss,
+  exhausted physical storage, cache-management UX and 100 GB–100 TB acceptance
+  open. Cache-process fixtures do not prove native background completion.
+
+File protection is configured in iOS capture attributes but is not verified by
+this simulator: it returns no protection attribute. The separate
+`testDeviceFileProtectionAfterCapture` skips Simulator and requires physical iOS
+hardware; device lock/reboot enforcement remains an open acceptance check. Read
+protection values as strings, as specified by
+[Apple's protectionKey API](https://developer.apple.com/documentation/foundation/fileattributekey/protectionkey).

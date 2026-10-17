@@ -68,6 +68,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-18 — **Codex (AI)**: iOS upload retries retain verified native parts
+  across app-process exits under the original owner/grant/upload identity.
+  Document cache bounds, source reauthorization, fresh-process tests and the
+  remaining background-worker boundary in
+  [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
 - 2026-10-18: Add Mac photo backup source selection and read-only original-resource
   streaming through the existing sync/Timeline pipeline. Document native permission
   packaging and synthetic-provider versus installed-library acceptance in

@@ -5379,8 +5379,11 @@ file-backed parts through the existing attachment protocol. Bytes stay native;
 the shared runner retains operation IDs, verifies part/server fingerprints and
 publishes canonical file/Timeline history. Signed destinations are obtained from
 the configured authenticated server, with no account credentials sent to storage.
-No new secrets or environment variables are needed. Allow temporary disk space
-for one canonical part, plus a PhotoKit original when applicable. These are
+No new secrets or environment variables are needed. Interrupted iOS parts persist
+privately under their original account, grant and upload identity, capped at
+32 parts / 5 GiB; retries reauthorize and verify bytes before upload. Success or
+removing that grant clears its retained parts. Allow disk space for retained parts
+plus a PhotoKit original when applicable. These are
 foreground transfers; see the [native upload limits and acceptance](iOS/README.md#file-backed-native-uploads).
 
 #### iOS photo backup setup

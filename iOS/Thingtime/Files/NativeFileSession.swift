@@ -96,7 +96,7 @@ final class NativeFileSession: NSObject, WKHTTPCookieStoreObserver {
     }
     /// The destination comes only from the authenticated selected server. Never
     /// attach account cookies, origin headers or bearer credentials to a PUT.
-    func uploadPart(_ part: FileUploadPart, uploadId: String, partNumber: Int) async throws {
+    func uploadPart(_ part: any FileUploadPartSource, uploadId: String, partNumber: Int) async throws {
         try await verifyOwner(); try checkActive()
         let signed = try await json("/api/v1/attachments/uploads/parts", body: ["uploadId": uploadId,
             "parts": [["partNumber": partNumber, "checksumSha256": part.checksumSha256]]])

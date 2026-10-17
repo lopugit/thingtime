@@ -438,7 +438,7 @@ owns native source/permission dialogs, rejects photo mutations and projects live
 access into the shared backup-only editor. `PhotoLibraryTests` covers private
 one-resource caching and authority boundaries; `PhotoBackupInstalledTests` drives
 real original-byte cloud acceptance. See `iOS/README.md` for current local-original,
-foreground and inventory limits. Mac UI integration remains pending.
+foreground and inventory limits. Installed Mac PhotoKit UI acceptance remains pending.
 
 ### iOS file-backed multipart upload path
 
@@ -460,3 +460,12 @@ same `apple/FileSync/PhotoLibraryReader` as iOS. `MacPhotosSyncTests` and
 `mac-file-sync.integration.mts --photos` cover native gates and real API transfers
 with synthetic photo resources. Actual signed installed Mac PhotoKit acceptance
 is separate. Usage strings belong in helper Info.plist and Electron extendInfo.
+
+The iOS upload capability 1.1.0 adds `FileUploadPartStore.swift`, using the shared
+`NativeFileJournal` for bounded durable upload bytes, original request identity,
+rehash-on-reuse and exact grant cleanup. `MobileFolderBridge` revalidates the live
+source and API reservation before reuse and releases only verified completions.
+`FileUploadPartStoreTests`, `UploadPartProcessAcceptance` and
+`test-upload-part-process.sh` exercise corruption, limits and real process exits;
+the installed photo test checks cache cleanup. This remains foreground retry input,
+not native background scheduling or a separate version-history database.

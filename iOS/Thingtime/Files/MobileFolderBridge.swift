@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
-    static let uploadVersion = "1.0.0"
+    static let uploadVersion = "1.1.0"
     static let accessVersion = "1.1.1"
     static let stagingVersion = "1.2.0"
     static let publicationVersion = "1.0.0"
@@ -18,6 +18,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var sourceChoice: CheckedContinuation<Bool?, Error>?
     private let store: MobileFolderStore
     private let staging: MobileSyncStaging
+    private let uploadParts: FileUploadPartStore
     private let trash: MobileSyncTrash
     private let networkMonitor = NWPathMonitor()
     private var networkKind = "unknown"
@@ -31,8 +32,8 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
     private var picker: UIDocumentPickerViewController?
     private var selection: CheckedContinuation<URL?, Error>?
     private var observer: NSObjectProtocol?
-    init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash()) {
-        self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash
+    init(store: MobileFolderStore? = nil, staging: MobileSyncStaging = MobileSyncStaging(), trash: MobileSyncTrash = MobileSyncTrash(), uploadParts: FileUploadPartStore = FileUploadPartStore()) {
+        self.store = store ?? MobileFolderStore(); self.staging = staging; self.trash = trash; self.uploadParts = uploadParts
         super.init()
         UIDevice.current.isBatteryMonitoringEnabled = true
         networkMonitor.pathUpdateHandler = { [weak self] path in
@@ -172,7 +173,12 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                     }
                 } else if action != "list" {
                     guard let rootId = payload["rootId"] as? String, UUID(uuidString: rootId) != nil else { throw MobileFolderStore.Failure.invalid }
-                    if action == "remove" { try self.store.remove(scope, id: rootId) }
+                    if action == "remove" {
+                        try self.store.remove(scope, id: rootId)
+                        let uploadParts = self.uploadParts
+                        let cleanup = Task.detached { try uploadParts.remove(scope: scope, rootId: rootId) }
+                        try await withTaskCancellationHandler(operation: { try await cleanup.value }, onCancel: { cleanup.cancel() })
+                    }
                     else {
                         let grant = try self.store.grant(scope, id: rootId)
                         guard grant.sourceKind != "photos" || ["scan", "read", "upload-part"].contains(action) else { throw MobileFolderStore.Failure.invalid }
@@ -191,8 +197,32 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 cookies: cookies, check: current, invalidated: { [weak self] in if self?.generation == operation { self?.suspend() } })
                             self.transport = transport; try await transport.open()
                             try await transport.require([("api.auth-me", [1,0,0]), ("api.attachment-uploads", [1,5,0]), ("api.attachment-upload-parts", [1,1,0])])
+                            let uploadParts = self.uploadParts
+                            let retained = FileUploadPartStore.Request(scope: scope, rootId: rootId,
+                                grantHash: PhotoLibraryReader.hash(Data((grant.sourceKind ?? "folder").utf8) + grant.bookmark),
+                                uploadId: request.uploadId, requestId: request.requestId, source: request.source,
+                                partNumber: request.partNumber, offset: request.offset, length: request.length)
+                            try retained.validate()
+                            // Revalidate the live source even when its exact part
+                            // was retained by a previous interrupted app process.
+                            let verifySource: @Sendable () throws -> Void = {
+                                if grant.sourceKind == "photos" {
+                                    _ = try photos.read(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: 0, length: 1)
+                                } else {
+                                    _ = try MobileFolderReader.read(bookmark: grant.bookmark, path: request.source.path, version: request.source.version, offset: 0, length: 1)
+                                }
+                            }
+                            let before = Task.detached { try verifySource() }
+                            try await withTaskCancellationHandler(operation: { try await before.value }, onCancel: { before.cancel() })
+                            try current(); try await transport.verifyOwner()
+                            // Replay the original reservation before allocating disk
+                            // or obtaining a fresh signed URL. No credentials persist.
+                            let started = try await transport.json("/api/v1/attachments/uploads", body: ["requestId": request.requestId,
+                                "filename": String(request.source.path.split(separator: "/").last ?? ""), "contentType": "application/octet-stream",
+                                "sizeBytes": request.source.size, "purpose": "file"])
+                            let ready = try request.verifyPlan(started)
                             let worker = Task.detached {
-                                try FileUploadPart.capture(size: request.source.size, partNumber: request.partNumber, offset: request.offset, length: request.length) { offset, length, receive in
+                                try uploadParts.prepare(retained) { offset, length, receive in
                                     if grant.sourceKind == "photos" {
                                         return try photos.stream(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: offset, length: length, receive: receive)
                                     }
@@ -200,24 +230,15 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
                                 }
                             }
                             let part = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
-                            defer { part.discard() }
                             try current(); try await transport.verifyOwner()
-                            // Exact idempotent replay binds the reservation to this
-                            // source and operation before obtaining any signed URL.
-                            let started = try await transport.json("/api/v1/attachments/uploads", body: ["requestId": request.requestId,
-                                "filename": String(request.source.path.split(separator: "/").last ?? ""), "contentType": "application/octet-stream",
-                                "sizeBytes": request.source.size, "purpose": "file"])
-                            if try !request.verifyPlan(started) { try await transport.uploadPart(part, uploadId: request.uploadId, partNumber: request.partNumber) }
+                            if !ready { try await transport.uploadPart(part, uploadId: request.uploadId, partNumber: request.partNumber) }
                             try current()
-                            let verify = Task.detached {
-                                if grant.sourceKind == "photos" {
-                                    _ = try photos.read(scope: scope.key + ":" + grant.id, path: request.source.path, version: request.source.version, offset: 0, length: 1)
-                                } else {
-                                    _ = try MobileFolderReader.read(bookmark: grant.bookmark, path: request.source.path, version: request.source.version, offset: 0, length: 1)
-                                }
-                            }
+                            let verify = Task.detached { try verifySource() }
                             try await withTaskCancellationHandler(operation: { try await verify.value }, onCancel: { verify.cancel() })
                             try current(); try await transport.verifyOwner()
+                            let release = Task.detached { try uploadParts.release(retained) }
+                            try await withTaskCancellationHandler(operation: { try await release.value }, onCancel: { release.cancel() })
+                            try current()
                             result = ["rootId": rootId, "uploadedPart": ["uploadId": request.uploadId, "requestId": request.requestId,
                                 "partNumber": request.partNumber, "offset": request.offset, "length": request.length,
                                 "version": request.source.version, "size": request.source.size, "sha256": part.sha256]]
@@ -408,7 +429,7 @@ final class MobileFolderBridge: NSObject, UIDocumentPickerDelegate {
             } catch is CancellationError { }
             catch {
                 guard (try? check()) != nil else { return }
-                let error = (error as? PhotoLibraryReader.Failure)?.errorDescription ?? (error as? MobileFolderStore.Failure)?.errorDescription ?? (error as? MobileDevicePairing.Failure)?.errorDescription ?? "Folder access failed. Your selections were preserved; try again."
+                let error = (error as? FileUploadPartStore.Failure)?.errorDescription ?? (error as? PhotoLibraryReader.Failure)?.errorDescription ?? (error as? MobileFolderStore.Failure)?.errorDescription ?? (error as? MobileDevicePairing.Failure)?.errorDescription ?? "Folder access failed. Your selections were preserved; try again."
                 reply("mobile-files-result", base.merging(["error": error]) { _, new in new })
             }
         }

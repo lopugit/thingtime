@@ -336,8 +336,8 @@ suspension or failure. Available device storage must fit the largest original pl
 Originals must currently be downloaded locally in Photos: the adapter refuses
 unavailable originals instead of starting iCloud traffic outside the sync network
 policy. Background jobs, large-library paging and controlled iCloud downloads
-remain pending. The shared reader builds on Mac, but the Mac source-selection
-integration is still pending.
+remain pending. The shared reader and source selection also support Mac; installed signed-app
+PhotoKit acceptance remains pending.
 
 Forks need the existing `NSPhotoLibraryUsageDescription` entry in `project.yml`,
 then `xcodegen generate`. No photo-service credentials or private configuration
@@ -358,10 +358,10 @@ for the original-resource API.
 
 ### File-backed native uploads
 
-The iOS host advertises `fileUploadVersion` 1.0.0. Folder and PhotoKit sources
+The iOS host advertises `fileUploadVersion` 1.1.0. Folder and PhotoKit sources
 use the existing editable connections and cloud multipart protocol, but original
 upload bytes do not pass through JavaScript. A part is copied to protected native
-temporary storage in at most 64 KiB chunks, hashed, and uploaded with URLSession
+upload storage in at most 64 KiB chunks, hashed, and uploaded with URLSession
 from that file. Only the part digest returns to the shared runner. The runner
 checks the complete canonical fingerprint, server attachment fingerprint and
 original journal identity before publishing the file/Timeline event.
@@ -383,3 +383,44 @@ recovery, physical-device throughput, giant-file acceptance and whole-account
 snapshots remain separate requirements. The multipart photo acceptance uses the
 same `THINGTIME_PHOTO_BACKUP_TEST=1` command above and asserts native part counts,
 exact uploaded byte totals and zero legacy bulk bridge reads.
+
+### Retained upload parts and interruption recovery
+
+`FileUploadParts-v1` in Application Support retains unfinished parts across app
+process exits. The shared `FileUploadPartStore` uses the native atomic journal,
+private 0700/0600 permissions, iOS protection until first device unlock, and
+exclusion from OS backup. It stores source identity and bytes, never cookies,
+signed URLs or credentials. No new configuration is required for forks.
+
+A retry must use the original account/origin, native grant, source version,
+reservation/request IDs and canonical part bounds. The host revalidates live
+permission/source state and the API reservation before reuse; the store rehashes
+all retained bytes. Incomplete captures are rebuilt, while conflicting requests,
+corruption, symlinks and hardlinks fail closed. Successful verified uploads release
+their exact part. Removing a native grant removes only its scoped retained parts.
+Suspension/logout retain private parts without granting permission to upload them.
+
+Storage is bounded to 32 reservations and 5 GiB of retained/capturing payloads
+across accounts. Allow additional space for a materialized PhotoKit original and
+small journals. Capacity exhaustion stops new captures without evicting another
+unfinished part. There is no automatic age-based eviction or management UI yet;
+retry the original operation or remove its native grant to reclaim storage.
+
+The current native bridge serializes the full prepare/upload/release lifecycle.
+Future background workers need durable task associations and leases before they
+can share these paths independently.
+
+This is durable retry input, not a background URLSession task, native scheduler,
+accepted-upload receipt store, or Timeline history. Transfers still require the
+foreground app. A lost successful reply may recapture/re-PUT the same part safely;
+power loss, disk exhaustion and process death during the actual PUT still need
+acceptance. Run `apple/FileSync/scripts/test-upload-part-process.sh` for disposable
+fresh-process checks at completed capture and before the final digest checkpoint.
+The installed photo acceptance also checks successful part-cache release.
+
+File protection is configured in iOS capture attributes but is not verified by
+this simulator: it returns no protection attribute. The separate
+`testDeviceFileProtectionAfterCapture` skips Simulator and requires physical iOS
+hardware; device lock/reboot enforcement remains an open acceptance check. Read
+protection values as strings, as specified by
+[Apple's protectionKey API](https://developer.apple.com/documentation/foundation/fileattributekey/protectionkey).

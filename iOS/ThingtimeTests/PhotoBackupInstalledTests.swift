@@ -64,7 +64,7 @@ final class PhotoBackupInstalledTests: XCTestCase {
 
         let scope = try FileSyncOwnerScope(ownerId: owner, url: origin), store = MobileFolderStore()
         let prior = try store.list(scope).first { $0.sourceKind == "photos" }
-        guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] else { throw XCTSkip("Preserve an existing photo grant unless its exact disposable-test ID is supplied") }
+        guard prior == nil || prior?.id == env["THINGTIME_PHOTO_RESUME_GRANT"] else { throw XCTSkip("Preserve existing photo grant \(prior?.id ?? "unknown") unless its exact disposable-test ID is supplied") }
         web.configuration.userContentController.addUserScript(WKUserScript(source: "window.__nativeUploadStats={parts:0,bytes:0,legacy:0};window.__photoScans=0;const photoOriginalPost=window.thingtimeNativeBridge.postMessage;window.thingtimeNativeBridge.postMessage=function(m){if(m.type==='mobile-files'){if(m.payload?.action==='scan')window.__photoScans++;if(m.payload?.action==='upload-part'){window.__nativeUploadStats.parts++;window.__nativeUploadStats.bytes+=m.payload.upload.length;}if(m.payload?.action==='read'&&m.payload.length>1)window.__nativeUploadStats.legacy++;}return photoOriginalPost.call(this,m)}", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web.load(URLRequest(url: origin.appendingPathComponent("things")))
         for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
@@ -124,6 +124,13 @@ final class PhotoBackupInstalledTests: XCTestCase {
             let (download, response) = try await session.data(from: origin.appendingPathComponent("api/v1/attachments/content").appending(queryItems: [URLQueryItem(name: "id", value: id), URLQueryItem(name: "cache", value: "bytes")]))
             XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200); XCTAssertEqual(SHA256.hash(data: download), SHA256.hash(data: bytes))
         }
+        let uploadCache = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("FileUploadParts-v1")
+        func retainedParts() throws -> Set<String> {
+            guard FileManager.default.fileExists(atPath: uploadCache.path) else { return [] }
+            return Set(try FileManager.default.contentsOfDirectory(atPath: uploadCache.path).filter { $0 != "lock" })
+        }
+        let retainedBefore = try retainedParts()
         let name = "iOS photo backup " + UUID().uuidString.prefix(8)
         func startAndAwaitUpload() async throws {
             for _ in 0..<100 where UIApplication.shared.applicationState != .active { try await Task.sleep(nanoseconds: 100_000_000) }
@@ -167,6 +174,8 @@ final class PhotoBackupInstalledTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(stats["parts"] ?? 0, 4)
             XCTAssertEqual(stats["bytes"], bytes.count * 2)
             XCTAssertEqual(stats["legacy"], 0)
+            XCTAssertEqual(try retainedParts(), retainedBefore, "Successful native parts must release their private cache")
+            print("IOS_UPLOAD_CACHE_RELEASE_PASS")
             print("IOS_NATIVE_UPLOAD_PASS: parts=\(stats["parts"] ?? 0) bytes=\(stats["bytes"] ?? 0) legacy=\(stats["legacy"] ?? -1)")
             let shot = UIGraphicsImageRenderer(bounds: web.bounds).image { _ in web.drawHierarchy(in: web.bounds, afterScreenUpdates: true) }
             if let png = shot.pngData() { try png.write(to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("photo-backup-complete.png")) }
