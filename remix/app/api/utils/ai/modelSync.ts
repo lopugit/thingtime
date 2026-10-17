@@ -12,14 +12,14 @@ import {
 	getAiModelCatalogEntry,
 	type AiModelProviderId
 } from './modelsCore';
-import { discoverConfiguredProviderModels, isModelUnavailableError, type DiscoveredAiModel } from './modelDiscovery';
+import { discoverConfiguredProviderModels, isModelUnavailableError, ModelDiscoveryHttpError, type DiscoveredAiModel } from './modelDiscovery';
 
 // Leave room for cron invocation jitter so a daily job is never skipped.
 const DAILY_INTERVAL = 23 * 60 * 60_000;
 const COOLDOWN = 5 * 60_000;
 const LEASE = 2 * 60_000;
 export type ModelSyncReason = 'scheduled' | 'unavailable' | 'admin';
-export type ModelSyncResult = { provider: AiModelProviderId; status: 'synced' | 'skipped' | 'failed'; count?: number };
+export type ModelSyncResult = { provider: AiModelProviderId; status: 'synced' | 'skipped' | 'failed'; count?: number; reason?: string };
 export type ModelSyncClaim = { token: string; startedAt: Date };
 export type ModelSyncStore = {
 	claim(provider: AiModelProviderId, reason: ModelSyncReason): Promise<ModelSyncClaim | null>;
@@ -46,9 +46,20 @@ export function createAiModelSync(deps: {
 				if (!models.length) throw new Error('Empty catalogue');
 				const published = await deps.store.publish(provider, claim, models);
 				return published ? { provider, status: 'synced', count: models.length } : { provider, status: 'skipped' };
-			} catch {
+			} catch (error) {
 				if (claim) await deps.store.fail(provider, claim).catch(() => {});
-				return { provider, status: 'failed' };
+				return {
+					provider,
+					status: 'failed',
+					reason:
+						error instanceof ModelDiscoveryHttpError
+							? `Model-list endpoint returned HTTP ${error.status}. ${
+									provider === 'anthropic' && [401, 403].includes(error.status)
+										? 'Check ANTHROPIC_MODELS_API_KEY for catalogue access; Claude replies still use OAuth.'
+										: 'Check provider access and retry.'
+							  }`
+							: 'The complete model catalogue could not be obtained or saved. Previous availability was kept.'
+				};
 			}
 		})().finally(() => pending.delete(provider));
 		pending.set(provider, run);

@@ -2960,8 +2960,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'ai-models-sync', group: 'lopu', title: 'Sync provider model catalogues',
-    endpoint: '/api/v1/ai/models/sync', contractVersion: '1.0.0', featureVersion: '1.0.0',
-    summary: 'Daily authenticated reconciliation of server provider model availability.',
+    endpoint: '/api/v1/ai/models/sync', contractVersion: '1.1.0', featureVersion: '1.1.0',
+    summary: 'Daily authenticated reconciliation of server provider model availability, with redacted failure reasons.',
     detail: 'Requires the deployment CRON_SECRET bearer. Complete paginated provider lists atomically update protected ai-model Things. Preserves admin toggles and the last successful catalogue on any failure. Per-provider durable leases coalesce runs; model-not-found recovery and admin sync have a five-minute cooldown. New compatible chat models use provider-default options and are enabled only by admin policy; non-chat models remain excluded. Pricing remains explicitly unknown until published rates are added.',
     auth: { mode: 'bearer', description: 'CRON_SECRET bearer only; user sessions are not accepted.' },
     methods: ['GET'],
@@ -3089,8 +3089,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/admin/ai/models',
     // 1.1.0: POST { probe: true } re-checks the provider keys (additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     summary: 'Enables or disables one catalog model, re-seeds the ai-model Things from the code catalog, or re-checks the provider keys.',
     detail:
       'POST { sync: true } refreshes provider lists. POST { provider, allowAll?, autoAllowNewModels? } applies current-model toggles and future-discovery admission. Auto-allow defaults off; unsupported non-chat models remain hidden. GET also returns policies. ' +
