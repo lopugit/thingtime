@@ -88,6 +88,7 @@
 				"Thingtime Node\\.app(?:/|$)"
 			],
 			"extendInfo": {
+				"NSPhotoLibraryUsageDescription": "Thingtime reads original photos and videos only after you choose a photo backup source. Uploads start when you configure and run that backup.",
 				"NSMicrophoneUsageDescription": "Thingtime uses your microphone when you start voice input for Lopu.",
 				"NSSpeechRecognitionUsageDescription": "Thingtime transcribes your speech for Lopu. macOS may use Apple servers when on-device recognition is unavailable."
 			}

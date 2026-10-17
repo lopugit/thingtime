@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Thingtime reads original photos and videos only after you choose a photo backup source. Uploads start when you configure and run that backup.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Thingtime uses your microphone when you start voice input for Lopu.</string>
     <key>NSSpeechRecognitionUsageDescription</key>

@@ -1973,3 +1973,32 @@ Foreground transfer, server quota limits and existing attachment size contracts
 remain. Physical hardware, actual interrupted PUT process recovery, long-running
 throughput, large-library/background work and full-account snapshots/exports
 remain open. No production promotion or complete large-backup claim is made.
+
+## Mac photo backup adapter — 2026-10-18
+
+Mac folder access 1.3.0 adds native source selection and a separate photo
+explanation/permission step. Photo grants use the shared Apple reader, remain
+account/origin scoped and read-only, and expose live permission status without
+prompting during status/list/scan. Existing binary XPC ranges carry original
+bytes; shared backup configuration and cloud/Timeline writers retain versions.
+Both helper and outer Electron app declare the Photos usage string.
+
+Focused native tests pass 21/21, including four new photo cases for source
+selection cancellation/identity change, binary originals, mutation/revocation
+and rejected write/Trash operations. Shared photo policy passes 4/4 including
+Mac publication refusal; 17 Electron folder/stream tests pass. Targeted lint passes with the TypeScript parser (the
+default script parser does not understand pre-existing TypeScript syntax).
+The native executable and fixture compile; helper Info.plist validates.
+
+The real loopback API fixture passes six binary ranges / 25,165,877 bytes,
+148 native calls and 297 identity checks. Independently downloaded original and
+replacement hashes match; the previous original remains readable, source deletion
+retains the cloud revision, a new photo is discovered after native-process restart,
+and a repeated run performs no additional upload. No native publication/staging
+occurred. The photo provider, picker and credential store are synthetic; this is
+not real PhotoKit or installed signed-app acceptance. Test data was cleaned up.
+
+Actual Mac source/permission UI, protected library reads, photo/video/metadata
+formats and revocation in the installed signed app remain to be verified in an
+explicit live session. Large-library paging, iCloud policy, background sync,
+independent whole-account/device snapshots and massive exports remain unfinished.

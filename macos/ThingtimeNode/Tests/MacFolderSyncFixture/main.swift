@@ -10,6 +10,28 @@ struct Configuration: Decodable {
     let deviceId: String
     let credential: String
     let directory: URL
+    let photoFixture: Bool?
+}
+/// Deterministic files stand in for PhotoKit only in this non-shipping fixture.
+struct FixturePhotoResources: PhotoResourceProvider {
+    let directory: URL
+    func access() -> String { "full" }
+    func inventory() throws -> [PhotoResource] {
+        let bookmark = try directory.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+        return try MobileFolderReader.scan(bookmark: bookmark).map { entry in
+            guard entry.kind == "file", !entry.path.contains("/") else { throw MobileFolderStore.Failure.invalid }
+            return PhotoResource(asset: entry.path, index: 0, name: entry.path, revision: entry.version)
+        }
+    }
+    func validate(_ resource: PhotoResource) throws {
+        guard try inventory().contains(resource) else { throw PhotoLibraryReader.Failure.changed }
+    }
+    func write(_ resource: PhotoResource, to url: URL) throws {
+        try validate(resource)
+        try FileManager.default.copyItem(at: directory.appendingPathComponent(resource.name), to: url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        try validate(resource)
+    }
 }
 actor Cooldowns {
     private var count = 0
@@ -64,7 +86,9 @@ final class StreamWriter: @unchecked Sendable {
             staging: MobileSyncStaging(directory: config.directory.appendingPathComponent("staging")),
             trash: MobileSyncTrash(directory: config.directory.appendingPathComponent("trash")),
             verify: { owner, device in identityChecks += 1; try await api.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
-            choose: { selected }, approve: { _ in true }, approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
+            choose: { selected }, approve: { _ in true },
+            chooseSource: config.photoFixture == true ? { .photos } : nil,
+            photos: PhotoLibraryReader(provider: FixturePhotoResources(directory: selected)), approveTrash: { _ in true }, approveRestore: { _, _ in true }, conditions: { .init(network: "wifi", charging: true) })
         while let input = try NodeFolderStreamInput.header(.standardInput) {
             let response: JSONValue
             do {

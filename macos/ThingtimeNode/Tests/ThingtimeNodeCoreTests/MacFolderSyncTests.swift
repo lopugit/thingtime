@@ -23,7 +23,7 @@ final class MacFolderSyncTests: XCTestCase {
         let selected = folder.appendingPathComponent("selected")
         return try MacFolderSync(origin: origin, store: MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 }),
             staging: MobileSyncStaging(directory: folder.appendingPathComponent("private")), verify: verify,
-            choose: { selected }, approve: approve)
+            choose: { selected }, approve: approve, chooseSource: { .folder(selected) })
     }
     private func root(_ service: MacFolderSync) async throws -> String {
         let result = try await service.handle(request("choose"))
@@ -41,7 +41,7 @@ final class MacFolderSyncTests: XCTestCase {
         let context = try await service.handle(request("context")).decode([String: JSONValue].self)
         XCTAssertEqual(context["deviceId"], .string("device"))
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.2.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.3.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.1.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

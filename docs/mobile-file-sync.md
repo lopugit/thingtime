@@ -89,7 +89,7 @@ this test environment. The runtime remains fail-closed on secure-storage errors.
 | Folder sync across Mac, iOS, Android and cloud | Create/edit/rename/move/delete real byte fixtures in each direction; independent hash verification and convergence | Reconciler/executor, verified fingerprints and atomic stable-file replacement; cloud upload adapter and complete private cloud inventory verified; iOS and Android folder grants/scans/reads implemented; foreground upload/backup controls and recoverable progress implemented; bounded cloud downloads and executor staging/receipt adapter verified; iOS native staging, approval and same-volume publication implemented and tested; Android private staging, native write approval, durable offline-folder publication, explicit native creation and read-only Android Files access verified; Android foreground offline-root cloud downloads, mixed two-way creates/independent replacements and actual Files acceptance verified; shared Apple publication core and process-exit recovery verified on macOS; Mac local adapter/identity/disconnect implemented; Electron host/shared controls, synthetic browser foreground acceptance and real Mac adapter/cloud mixed-transfer acceptance implemented; iOS mixed-direction simulator acceptance verified; iOS external Files edits, Mac installed transfers, workers and full cross-device transfer acceptance pending |
 | Persistent offline and background sync | Kill/relaunch, reboot, network loss, sleep/wake, quota errors, paused jobs; durable retries with original IDs | Browser journal, Desktop full-process journal/draft restart recovery and real cloud upload recovery verified; iOS publication and Android staging process-exit recovery verified; native schedulers and reboot acceptance pending |
 | Large resumable transfers | Chunk interruption/resume, hash mismatch, cancellation, stale upload/finalization race; streaming memory bounds | Real executor multipart interruption and exact-identity retry verified; Mac upload/download ranges and Android binary download ranges verified; iOS file-backed native multipart uploads are implemented and installed multipart photo acceptance verifies byte hashes without bulk WebView reads; background transfer, physical-device acceptance and sustained throughput remain pending |
-| Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Android 11+ MediaStore and iOS PhotoKit read-only sources use the shared backup-only connection. Installed API 35 and iOS 26.5 simulator acceptance verified original PNG bytes, new-photo discovery and cloud retention after device deletion. Shared Apple reader passes 52 tests; real limited-selection changes, Live Photo/video/EXIF formats, physical devices, Mac picker, large-library paging and background completion remain open |
+| Photos backup | Explicit selection/permission, incremental discovery, original photo/video bytes and metadata, duplicates, limited library changes, background completion | Android 11+ MediaStore and iOS PhotoKit read-only sources use the shared backup-only connection. Installed API 35 and iOS 26.5 simulator acceptance verified original PNG bytes, new-photo discovery and cloud retention after device deletion. Mac 1.3.0 adds a native PhotoKit source adapter; real API acceptance uses synthetic photo resources. Shared Apple reader passes 57 tests; actual Mac installed PhotoKit acceptance, real limited-selection changes, Live Photo/video/EXIF formats, physical devices, large-library paging and background completion remain open |
 | Sync settings | Folder selection, direction, pause/resume, Wi-Fi/cellular and charging policy, exclusions, retention, selective/offline availability | Editable file-sync Things persist device/root/destination, direction, pause, network/power and exclusions; shared configured planner verified. Mobile folder and connection editors exist with durable local drafts and guarded API saves; foreground upload/backup checks live native network/power signals; iOS scoped Keychain and Android native/OS write approvals implemented; Mac native approvals/shared controls implemented with installed acceptance pending; retention/selective settings and background workers remain pending |
 | Conflict and deletion recovery | Concurrent edits and delete/edit preserve both versions; conflict resolution UI, retained versions/trash restore | API preserves versions and supports Trash/restore; iOS preserves displaced versions and uncertain conflicts in the transfer journal; file conflict review now offers guarded version choices; Android file-conflict review and native recovery acceptance verified; shared native recovery browsing and reviewed restore implemented on Mac/iOS/Android offline folders; broader installed conflict review, folder conflicts, recovery after grant replacement and retention policy remain pending |
 | Sharing and device-to-device behavior | Existing ACL/account boundaries, revocation during transfers, offline peers and selected destinations | Existing ACL paths retained; sync adapters and peer behavior pending |
@@ -2211,3 +2211,32 @@ foreground uploads with server quota/capability checks. Physical-device throughp
 process-kill/background upload recovery, giant-file acceptance and independent
 whole-account/device snapshots remain unfinished. A 33 MiB fixture is not proof
 of a 100 GB–100 TB transfer. Setup is in iOS/README.md.
+
+## Mac photo backup adapter — 2026-10-18
+
+Mac folder access 1.3.0 adds native source selection and a separate photo
+explanation/permission step. Photo grants use the shared Apple reader, remain
+account/origin scoped and read-only, and expose live permission status without
+prompting during status/list/scan. Existing binary XPC ranges carry original
+bytes; shared backup configuration and cloud/Timeline writers retain versions.
+Both helper and outer Electron app declare the Photos usage string.
+
+Focused native tests pass 21/21, including four new photo cases for source
+selection cancellation/identity change, binary originals, mutation/revocation
+and rejected write/Trash operations. Shared photo policy passes 4/4 including
+Mac publication refusal; 17 Electron folder/stream tests pass. Targeted lint passes with the TypeScript parser (the
+default script parser does not understand pre-existing TypeScript syntax).
+The native executable and fixture compile; helper Info.plist validates.
+
+The real loopback API fixture passes six binary ranges / 25,165,877 bytes,
+148 native calls and 297 identity checks. Independently downloaded original and
+replacement hashes match; the previous original remains readable, source deletion
+retains the cloud revision, a new photo is discovered after native-process restart,
+and a repeated run performs no additional upload. No native publication/staging
+occurred. The photo provider, picker and credential store are synthetic; this is
+not real PhotoKit or installed signed-app acceptance. Test data was cleaned up.
+
+Actual Mac source/permission UI, protected library reads, photo/video/metadata
+formats and revocation in the installed signed app remain to be verified in an
+explicit live session. Large-library paging, iCloud policy, background sync,
+independent whole-account/device snapshots and massive exports remain unfinished.

@@ -5,7 +5,8 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.2.0"
+    public static let version = "1.3.0"
+    public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
         public let network: String
         public let charging: Bool?
@@ -29,6 +30,8 @@ public final class MacFolderSync {
     private let trash: MobileSyncTrash?
     private let verify: (String, String) async throws -> Void
     private let choose: () async throws -> URL?
+    private let chooseSource: (() async throws -> SourceSelection?)?
+    private let photos: PhotoLibraryReader
     private let approve: (MobileFolderStore.Grant) async throws -> Bool
     private let approveTrash: ((MobileFolderStore.Grant) async throws -> Bool)?
     private let approveRestore: ((MobileFolderStore.Grant, MobileSyncTrash.Restore) async throws -> Bool)?
@@ -39,6 +42,8 @@ public final class MacFolderSync {
     public init(origin: URL, store: MobileFolderStore, staging: MobileSyncStaging, trash: MobileSyncTrash? = nil,
                 verify: @escaping (String, String) async throws -> Void,
                 choose: @escaping () async throws -> URL?, approve: @escaping (MobileFolderStore.Grant) async throws -> Bool,
+                chooseSource: (() async throws -> SourceSelection?)? = nil,
+                photos: PhotoLibraryReader = PhotoLibraryReader(),
                 approveTrash: ((MobileFolderStore.Grant) async throws -> Bool)? = nil,
                 approveRestore: ((MobileFolderStore.Grant, MobileSyncTrash.Restore) async throws -> Bool)? = nil,
                 cancelDialog: @escaping () -> Void = {},
@@ -46,10 +51,14 @@ public final class MacFolderSync {
         self.origin = try FileSyncOwnerScope(ownerId: "origin-validation", url: origin).origin
         self.store = store; self.staging = staging; self.verify = verify
         self.trash = trash; self.approveTrash = approveTrash; self.approveRestore = approveRestore
+        self.chooseSource = chooseSource; self.photos = photos
         self.choose = choose; self.approve = approve; self.cancelDialog = cancelDialog; self.conditions = conditions
     }
 
-    public func suspend() { active?.task.cancel(); cancelDialog() }
+    public func suspend() {
+        active?.task.cancel(); cancelDialog()
+        let photos = photos; Task.detached { photos.discard() }
+    }
 
     public func handle(_ payload: JSONValue, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil) async throws -> JSONValue {
         let encoded = try JSONEncoder().encode(payload)
@@ -99,16 +108,28 @@ public final class MacFolderSync {
         } else if r.action == "conditions" {
             result["conditions"] = try value(conditions())
         } else if r.action == "choose" {
-            if let url = try await choose() {
-                try await authorized(r)
-                _ = try store.add(owner, selected: url)
+            let selection: SourceSelection?
+            if let chooseSource { selection = try await chooseSource() }
+            else { selection = try await choose().map(SourceSelection.folder) }
+            try await authorized(r)
+            switch selection {
+            case .folder(let url): _ = try store.add(owner, selected: url)
+            case .photos:
+                guard photos.access() != "unavailable" else { throw PhotoLibraryReader.Failure.unavailable }
+                _ = try store.addPhotos(owner)
+            case nil: break
             }
         } else if r.action != "list" {
             guard let root = r.rootId, UUID(uuidString: root) != nil else { throw MobileFolderStore.Failure.invalid }
             result["rootId"] = .string(root)
-            if r.action == "remove" { try store.remove(owner, id: root) }
+            if r.action == "remove" {
+                try store.remove(owner, id: root)
+                let photos = photos; try await worker { photos.discard() }
+            }
             else {
-                let grant = try store.grant(owner, id: root), staging = staging
+                let grant = try store.grant(owner, id: root), staging = staging, photos = photos
+                let photoScope = owner.key + ":" + root
+                guard grant.sourceKind != "photos" || ["scan", "read", "read-range"].contains(r.action) else { throw MobileFolderStore.Failure.invalid }
                 if r.action == "trash-list" {
                     guard let trash, approveRestore != nil else { throw MobileFolderStore.Failure.unavailable }
                     result["trashPage"] = try value(await worker { try trash.list(owner: owner, rootId: root, bookmark: grant.bookmark, cursor: r.cursor) })
@@ -165,13 +186,17 @@ public final class MacFolderSync {
                         result["trash"] = try value(lookup)
                     }
                 } else if r.action == "scan" {
-                    result["entries"] = try value(await worker { try MobileFolderReader.scan(bookmark: grant.bookmark) })
+                    result["entries"] = try value(await worker {
+                        if grant.sourceKind == "photos" { return try photos.scan(scope: photoScope) }
+                        return try MobileFolderReader.scan(bookmark: grant.bookmark)
+                    })
                     result["complete"] = .bool(true)
                 } else if r.action == "read-range" {
                     guard let path = r.path, let version = r.version, let offset = r.offset, let length = r.length,
                           let stream else { throw MobileFolderStore.Failure.invalid }
                     let size = try await worker {
-                        try MobileFolderReader.stream(bookmark: grant.bookmark, path: path, version: version,
+                        if grant.sourceKind == "photos" { return try photos.stream(scope: photoScope, path: path, version: version, offset: offset, length: length, receive: stream) }
+                        return try MobileFolderReader.stream(bookmark: grant.bookmark, path: path, version: version,
                             offset: offset, length: length, receive: stream)
                     }
                     result["path"] = .string(path)
@@ -180,7 +205,10 @@ public final class MacFolderSync {
                 } else if r.action == "read" {
                     guard let path = r.path, let version = r.version, let offset = r.offset, let length = r.length else { throw MobileFolderStore.Failure.invalid }
                     result["path"] = .string(path)
-                    result["chunk"] = try value(await worker { try MobileFolderReader.read(bookmark: grant.bookmark, path: path, version: version, offset: offset, length: length) })
+                    result["chunk"] = try value(await worker {
+                        if grant.sourceKind == "photos" { return try photos.read(scope: photoScope, path: path, version: version, offset: offset, length: length) }
+                        return try MobileFolderReader.read(bookmark: grant.bookmark, path: path, version: version, offset: offset, length: length)
+                    })
                 } else {
                     guard let transfer = r.transfer, transfer.rootId == root, transfer.scope.deviceId == r.deviceId else { throw MobileFolderStore.Failure.invalid }
                     try transfer.validate(owner: owner)
@@ -226,7 +254,13 @@ public final class MacFolderSync {
             }
         }
         try await authorized(r)
-        result["roots"] = .array(try store.list(owner).map { .object(["id": .string($0.id), "name": .string($0.name), "publicationVersion": .string("1.0.0")]) })
+        result["roots"] = .array(try store.list(owner).map { grant in
+            var row: [String: JSONValue] = ["id": .string(grant.id), "name": .string(grant.name)]
+            if grant.sourceKind == "photos" {
+                row["sourceKind"] = .string("photos"); row["photoAccess"] = .string(photos.access())
+            } else { row["publicationVersion"] = .string("1.0.0") }
+            return .object(row)
+        })
         let response = JSONValue.object(result)
         // Never send a partial inventory or exceed the existing XPC frame budget.
         guard try JSONEncoder().encode(response).count <= 900_000 else { throw MobileFolderStore.Failure.limit }

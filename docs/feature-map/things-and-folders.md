@@ -453,3 +453,10 @@ captures bounded folder/PhotoKit streams into private part files.
 `NativeFileUpload.swift` sends a credential-free, redirect-refusing file PUT with
 bounded responses/cancellation. `NativeFileUploadTests`, `FileUploadPartTests`
 and `PhotoBackupInstalledTests` cover the unit and installed paths.
+
+Mac Photos uses `MacFolderSyncDialogs` for explicit source selection/permission,
+`MacFolderSync` 1.3.0 for account-bound read-only grants and binary ranges, and the
+same `apple/FileSync/PhotoLibraryReader` as iOS. `MacPhotosSyncTests` and
+`mac-file-sync.integration.mts --photos` cover native gates and real API transfers
+with synthetic photo resources. Actual signed installed Mac PhotoKit acceptance
+is separate. Usage strings belong in helper Info.plist and Electron extendInfo.

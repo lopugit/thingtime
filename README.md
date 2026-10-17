@@ -5407,5 +5407,19 @@ mode and retain cloud copies after source deletion. Start transfers explicitly
 while the app is open. No extra credentials or server environment variables are
 required beyond the existing file-sync/Timeline setup. Native photo libraries
 remain bounded to 10,000 entries per selected tree; background workers, large-library
-paging and the Mac Photos picker remain unfinished. See the
+paging and installed Mac Photos acceptance remain unfinished. See the
 [Android setup and disposable acceptance workflow](android/README.md#photo-library-backup-android-11).
+
+#### Mac photo backup setup
+
+In an updated signed Mac app, **Choose folder → Photo library (backup)** opens
+the native explanation and macOS photo permission request. Configure an editable
+backup connection and start it explicitly; permission alone never uploads data.
+The source uses the shared Apple original-resource reader and existing binary
+XPC ranges. Photos are read-only, saved cloud copies survive source deletion, and
+revoked access is unavailable rather than an empty library. Local originals and
+free temporary space for the largest original are required; iCloud-only downloads,
+large-library paging and background work remain open. Forks must retain
+`NSPhotoLibraryUsageDescription` in both the native helper Info.plist and
+Electron's `build.mac.extendInfo`; no extra secret is required. See
+[Mac setup and acceptance](macos/ThingtimeNode/README.md#photo-library-backup).

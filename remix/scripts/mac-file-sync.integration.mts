@@ -28,6 +28,7 @@ import type { CloudTransportRuntime } from '../app/fileSync/cloudTransport';
 const { FolderStream } = createRequire(import.meta.url)('../../electron/lib/folder-stream.cjs');
 
 const [fixturePath] = process.argv.slice(2);
+const photoFixture = process.argv.includes('--photos');
 const forcePreflightCooldown = process.argv.includes('--cooldown-before-upload');
 assert.ok(fixturePath);
 assert.equal((await stat(fixturePath)).mode & 0o077, 0);
@@ -178,7 +179,7 @@ async function send(payload: any) {
 	});
 }
 const signal = new AbortController().signal;
-const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.2.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0', fileTrashVersion: '1.2.0' };
+const caps: FolderCapabilities = { platform: 'macos', fileAccessVersion: '1.3.0', fileStagingVersion: '1.1.0', filePublicationVersion: '1.1.0', fileTrashVersion: '1.2.0' };
 let deviceId: string | undefined, remoteRoot: string | undefined, configurationId: string | undefined;
 const deviceName = 'Mac sync acceptance ' + randomUUID();
 const factory = new IDBFactory();
@@ -231,7 +232,7 @@ try {
 	).device.id;
 	await writeFile(
 		path.join(directory, 'native.json'),
-		JSON.stringify({ base: base.origin, deviceId, credential, directory: pathToFileURL(directory + '/').href }),
+		JSON.stringify({ base: base.origin, deviceId, credential, photoFixture, directory: pathToFileURL(directory + '/').href }),
 		{ mode: 0o600 }
 	);
 	await startNative();
@@ -265,9 +266,9 @@ try {
 		await api('/api/v1/things', {
 			thingtime: ['file-sync'],
 			crystal: {
-				...newFileSyncConfiguration({ name: deviceName, deviceId: deviceId!, localRootId: nativeRoot, remoteFolderId: remoteRoot! }),
-				mode: 'two-way',
-				propagateDeletes: true,
+				...newFileSyncConfiguration({ name: deviceName, deviceId: deviceId!, localRootId: nativeRoot, remoteFolderId: remoteRoot!, ...(photoFixture ? { sourceKind: 'photos' } : {}) }),
+				mode: photoFixture ? 'backup' : 'two-way',
+				propagateDeletes: !photoFixture,
 				paused: false
 			}
 		})
@@ -306,6 +307,56 @@ try {
 		}
 	};
 	const inventory = async () => parseCloudInventory((await api('/api/v1/files?rootId=' + remoteRoot)).inventory, remoteRoot!);
+
+    if (photoFixture) {
+        const roots = (await request(fixture.userId, { action: 'list' }, signal)).roots;
+        assert.equal(roots[0].sourceKind, 'photos'); assert.equal(roots[0].publicationVersion, undefined);
+        const runPhotos = () => runForegroundCloudSync(saved, scope, {
+            currentScope: () => scope,
+            readConfiguration: async () => (await api('/api/v1/things?id=' + row.id)).thing,
+            authorizeDevice: async () => { await request(fixture.userId, { action: 'list' }, signal); },
+            conditions: async () => (await request(fixture.userId, { action: 'conditions' }, signal)).conditions!,
+            scanLocal: async () => (await request(fixture.userId, { action: 'scan', rootId: nativeRoot }, signal)).entries!,
+            inventory, source: async entry => mobileFolderSource(fixture.userId, nativeRoot, entry, signal, request, caps),
+            journal, runtime, progress: () => {}
+        }, signal);
+        const original = randomBytes(8 * 1024 * 1024 + 17), edited = randomBytes(original.length + 2);
+        await writeFile(path.join(directory, 'selected/original.png'), original);
+        await runPhotos();
+        const first = (await inventory()).nodes;
+        assert.equal(first.length, 1); assert.equal(first[0].kind, 'file');
+        assert.ok(first[0].kind === 'file');
+        const firstFile = first[0].file;
+        const download = async (attachment: string) => {
+            const response = await sessionFetch(new URL('/api/v1/attachments/content?id=' + attachment + '&cache=bytes', base));
+            assert.equal(response.status, 200); return new Uint8Array(await response.arrayBuffer());
+        };
+        assert.equal(hash(await download(firstFile.content.attachmentId)), hash(original));
+        await writeFile(path.join(directory, 'selected/original.png'), edited);
+        await runPhotos();
+        const changedNode = (await inventory()).nodes[0]; assert.ok(changedNode.kind === 'file');
+        const changed = changedNode.file;
+        assert.notEqual(changed.revision, firstFile.revision);
+        assert.equal(hash(await download(changed.content.attachmentId)), hash(edited));
+        assert.equal(hash(await download(firstFile.content.attachmentId)), hash(original));
+        await rm(path.join(directory, 'selected/original.png'));
+        await writeFile(path.join(directory, 'selected/second.png'), original);
+        await stopNative(); journal.close(); journal = await openSyncJournal(factory); await startNative();
+        await runPhotos();
+        const after = (await inventory()).nodes;
+        assert.equal(after.length, 2);
+        const retained = after.find(n => n.kind === 'file' && n.file.id === firstFile.id);
+        assert.ok(retained?.kind === 'file'); assert.equal(retained.file.revision, changed.revision);
+        for (const node of after) {
+            assert.ok(node.kind === 'file');
+            assert.equal(hash(await download(node.file.content.attachmentId)), hash(node.file.id === firstFile.id ? edited : original));
+        }
+        const puts = counts.puts; await runPhotos(); assert.equal(counts.puts, puts);
+        assert.ok(counts.streams >= 6); assert.equal(counts.stageRanges, 0); assert.equal(counts.publishes, 0);
+        console.log(JSON.stringify({ ok: true, scenario: 'Mac photo adapter backup', nativeCalls, verifyCalls, counts,
+            verified: ['binary-original-hashes', 'retained-original-after-replacement', 'retention-after-device-deletion', 'new-photo-discovery', 'native-process-restart', 'no-repeat-upload'],
+            photos: 'synthetic provider; real PhotoKit permission and library not exercised' }));
+    } else {
 	const seed = async (name: string, bytes: Uint8Array<ArrayBuffer>) => {
 		const source = { size: bytes.length, read: async (offset: number, length: number) => bytes.slice(offset, offset + length), check: () => {} };
 		const entry = {
@@ -579,6 +630,7 @@ try {
 			keychain: 'not-used'
 		})
 	);
+    }
 } finally {
 	loseCloud = false;
 	losePublication = false;

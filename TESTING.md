@@ -11127,3 +11127,22 @@ transfer, whole-account snapshots or production deployment.
   the serialized device queue until its 120-second timeout. Repeated suspension
   sends one cancellation; switching web destinations sends no old account
   context to the new page (`MobileDeviceBridgeLifecycleTests`).
+
+### Mac photo library backup
+
+- Run `MacPhotosSyncTests`, `MacFolderSyncTests` and `FolderStreamXPCTests`.
+  Verify original multipart fingerprints/binary bytes, read-only projection,
+  cancellation/stale account during selection, revocation during a stream,
+  changed source refusal and grant removal. Photos must reject every native
+  write/stage/publish/Trash action before prompting or touching recovery storage.
+- Run the opt-in `mac-file-sync.integration.mts --photos` with a mode-0600
+  disposable loopback account fixture and rebuilt `MacFolderSyncFixture`. Check
+  independent download hashes before/after replacement, original retention,
+  new-photo discovery, source-deletion retention, native restart and no duplicate
+  upload on repeat. This uses synthetic PhotoKit/picker adapters.
+- In an updated signed installed Mac app, cancel source selection and the photo
+  explanation; neither may create a grant or request OS access. With explicitly
+  approved library access, verify full/denied access, original photo/video bytes,
+  metadata and revocation through the actual shared Things controls. Retain
+  existing endpoint, account, pairing and grants. Live Mac library acceptance
+  remains open until this separate session is completed.

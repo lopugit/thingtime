@@ -223,3 +223,35 @@ Current 64 KiB bridge chunks and fresh identity reads are correctness scaffoldin
 the `devices.read` rate limit can stop sustained transfers. Native streaming and
 measured throughput, durable restart journals despite Desktop's ephemeral local
 origin, and real installed cloud transfers remain required before release.
+
+## Photo library backup
+
+The local folder adapter advertises `fileAccessVersion` 1.3.0. **Choose folder**
+now offers an existing folder or **Photo library (backup)**. Photos selection
+requires a native explanation and macOS permission; no pairing, startup, status,
+list or scan path prompts for access. Cancelling or changing identity before
+confirmation cannot save a grant. The shared account/origin-scoped grant stores
+an opaque read-only photo source; it cannot authorize staging, publication,
+Trash or restoration into Photos. Folder grants keep their existing behavior.
+
+`PhotoLibraryReader` exports local originals and embedded metadata to one private
+temporary file, then uses bounded reads and binary XPC ranges. The shared backup
+configuration retains saved cloud copies after device deletion. A missing original,
+changed resource or revoked permission refuses completion. The existing scan and
+XPC response bounds remain; large libraries fail explicitly, and background work,
+iCloud download policy and album/database reconstruction remain unfinished.
+
+Forks need `NSPhotoLibraryUsageDescription` in `Resources/Info.plist` and the
+outer Electron app's `build.mac.extendInfo`. Preserve the signed application and
+helper identities. No new server secret or environment variable is required.
+
+Run `swift test --package-path macos/ThingtimeNode --filter
+'MacPhotosSyncTests|MacFolderSyncTests|FolderStreamXPCTests'` from the repository
+root. Build the non-shipping `MacFolderSyncFixture` product, then from `remix/` run
+`corepack pnpm exec tsx scripts/mac-file-sync.integration.mts
+/private/disposable-account.json --photos` against the documented loopback API.
+The fixture replaces picker/Photos/Keychain adapters with synthetic originals;
+it verifies real native streaming, API authentication, cloud hashes, retained
+versions, local-deletion retention, restart and repeat convergence. It does not
+prove actual PhotoKit permission, installed signed-app selection or personal
+library behavior. Those require a separate explicit live acceptance session.

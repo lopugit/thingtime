@@ -29,7 +29,7 @@ test('fresh native authority prevents forged intent, deletion policy, missing gr
 });
 
 test('photo sources never inherit legacy iOS folder publication or recovery capabilities', () => {
- for (const platform of ['ios', 'android'] as const) for (const filePublicationVersion of ['1.0.0', '1.1.0']) {
+ for (const platform of ['ios', 'android', 'macos'] as const) for (const filePublicationVersion of ['1.0.0', '1.1.0']) {
   const bridge = { platform, fileAccessVersion: '1.1.1', fileStagingVersion: '1.2.0', filePublicationVersion };
   assert.equal(supportsMobileFolderPublication(root, bridge), false);
  }
