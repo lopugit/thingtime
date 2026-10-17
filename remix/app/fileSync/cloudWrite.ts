@@ -5,12 +5,13 @@ import { sameSyncScope, sameSyncStamp, validateSyncScope, type SyncScope } from 
 import { validateSyncRun, type SyncOperation, type SyncRun } from './execute';
 
 /** Queue metadata only. File bytes remain attachments; history stays in Timeline. */
-export type CloudWrite = { operation: SyncOperation; scope: SyncScope; folderId: string | null; before: CloudFile | null };
+export type CloudWrite = { operation: SyncOperation; scope: SyncScope; folderId: string | null; before: CloudFile | null; cloudRootId?: string };
 export type CloudSyncRun = SyncRun & { cloudWrites: CloudWrite[] };
 export function parseCloudWrite(value: CloudWrite): CloudWrite {
 	const row = structuredClone(value);
 	validateSyncScope(row.scope);
 	validateSyncRun({ version: 1, id: 'validate-' + row.operation?.id, scope: row.scope, operations: [row.operation] });
+	if (row.cloudRootId !== undefined && (typeof row.cloudRootId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(row.cloudRootId))) throw Error('Invalid pinned cloud root.');
 	if (row.scope.dataPlane !== 'home') throw Error('Cloud file sync requires the home data plane.');
 	const op = row.operation,
 		m = op?.mutation;
@@ -65,7 +66,7 @@ export function parseCloudWrite(value: CloudWrite): CloudWrite {
 	});
 	return row;
 }
-export function prepareCloudSyncRun(run: SyncRun, targets: { folderId: string | null; before: CloudFile | null }[]): CloudSyncRun {
+export function prepareCloudSyncRun(run: SyncRun, targets: Pick<CloudWrite, 'folderId' | 'before' | 'cloudRootId'>[]): CloudSyncRun {
 	validateSyncRun(run);
 	if (targets.length !== run.operations.length) throw Error('Every cloud operation requires a pinned destination.');
 	return parseCloudSyncRun({
@@ -138,5 +139,5 @@ export function prepareCloudInventoryRun(run: SyncRun, value: CloudInventory): C
 		if (before && before.kind !== 'file') throw Error('Cloud file destination changed kind.');
 		return { folderId, before: before?.kind === 'file' ? before.file : null };
 	});
-	return prepareCloudSyncRun(run, targets);
+	return prepareCloudSyncRun(run, targets.map(target => ({ ...target, cloudRootId: inventory.rootId })));
 }

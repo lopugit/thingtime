@@ -1954,3 +1954,28 @@ remain required. Native journals are private local recovery state, excluded from
 OS backup and not yet included by the whole-account snapshot producer. No claim
 of device-loss recovery, continuous background sync or complete account backup
 follows from these checks.
+
+
+### Fresh cloud paths before native publication — 2026-10-17
+
+`api.files` 1.4.0 adds `GET rootId&path`: a fresh, private snapshot observation
+of an exact path, including explicit absence. It shares the inventory reader's
+root authorization, ancestry, case/Unicode checks and bounds. It scans siblings
+along the requested path and skips unrelated subtrees. Across those siblings,
+the limit remains 10,000 entries, 8 MiB, 64 levels and 20 seconds. Very wide
+folders still need a scalable indexed path contract; this is not a 100 TB
+throughput acceptance result.
+
+New download runs retain the selected cloud root in the durable queue and
+check the full path before staging and again before native publication. Moving
+or renaming an ancestor while bytes are staged now stops publication even when
+the old file id still reads successfully. Existing native receipts remain
+recoverable; old uncompleted runs without a pinned root refuse publication and
+need reconciliation. An unavailable root, permission failure, malformed path,
+case/Unicode alias or failed request never means a deleted file.
+
+This closes one prerequisite for deletion propagation. The foreground deletion
+gate remains: parent folder stamps after child removals, end-to-end local Trash
+routing, Android Trash and product recovery controls still require work. No
+cross-device atomicity, automatic background sync, Photos import, independent
+account backup completion or physical-drive delivery is claimed here.

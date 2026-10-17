@@ -19,6 +19,7 @@ import { parseMobileFolderResult, mobileFolderSource, type FolderRequest, type F
 import { approveMobileSyncTarget } from '../app/fileSync/mobileSyncTarget.client';
 import { createSyncRun, executeSyncRun, type SyncRun } from '../app/fileSync/execute';
 import { prepareCloudInventoryRun } from '../app/fileSync/cloudWrite';
+import { readCloudPathEntry } from '../app/fileSync/cloudPath.client';
 import { createCloudSyncPort } from '../app/fileSync/cloudSyncPort.client';
 import { fingerprintSource } from '../app/fileSync/contentFingerprint';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
@@ -436,6 +437,35 @@ try {
 			assert.equal(response.status, 200);
 			assert.equal(hash(new Uint8Array(await response.arrayBuffer())), hash(node.path === 'local.bin' ? localBytes : remoteBytes));
 		}
+
+    // Fresh path observations distinguish a missing name from an old object's
+    // missing id. Recreate the same nested path with two new stable identities.
+    const pathProbe = 'path-check-' + randomUUID(), probeIds: string[] = [];
+    const readProbe = () => readCloudPathEntry(runtime, scope, remoteRoot!, pathProbe + '/child', signal);
+    const createProbeFolder = async (name: string, folderId: string) => {
+        const id = randomUUID();
+        await api('/api/v1/files', { kind: 'folder', id, operationId: id, name, folderId });
+        probeIds.push(id); return id;
+    };
+    const removeProbeFolders = async () => {
+        while (probeIds.length) {
+            await api('/api/v1/things?id=' + probeIds.at(-1), undefined, 'DELETE');
+            probeIds.pop();
+        }
+    };
+    try {
+        assert.equal(await readProbe(), null);
+        const parent = await createProbeFolder(pathProbe, remoteRoot!);
+        const child = await createProbeFolder('child', parent);
+        assert.equal((await readProbe())!.id, child);
+        await assert.rejects(readCloudPathEntry(runtime, scope, remoteRoot!, pathProbe.toUpperCase() + '/child', signal), /409/);
+        await removeProbeFolders();
+        assert.equal(await readProbe(), null);
+        const replacementParent = await createProbeFolder(pathProbe, remoteRoot!);
+        const replacementChild = await createProbeFolder('child', replacementParent);
+        assert.notEqual(replacementChild, child);
+        assert.equal((await readProbe())!.id, replacementChild);
+    } finally { await removeProbeFolders(); }
     // Direct native recovery acceptance: deliberately independent of the sync
     // deletion planner, which remains gated until fresh remote absence is wired.
     const recoverBytes = new Uint8Array(131_079).fill(63);
@@ -488,6 +518,7 @@ try {
 				'stable-convergence',
 				'independent-replacements',
 				'retained-cloud-versions',
+				'fresh-cloud-path-replacement-and-alias-checks',
 				'revocation'
 			],
 			nativeCalls,

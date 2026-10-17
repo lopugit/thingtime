@@ -5266,3 +5266,11 @@ credential-store adapters. Native storage is endpoint-specific on Mac
 this recovery state is not yet included in whole-account snapshots. Cross-volume
 moves refuse. Foreground automatic deletion and recovery browsing remain pending;
 see [the acceptance ledger](docs/mobile-file-sync.md).
+
+
+The Mac/API acceptance fixture also verifies `api.files` 1.4.0 fresh nested
+path observations (absent, created, deleted, recreated with a new id, and alias
+refusal). New downloads require that capability and a pinned cloud root; a
+missing root or old server cannot authorize publication. No additional secrets
+or environment variables are required. The path reader shares the inventory
+bounds described in [the acceptance ledger](docs/mobile-file-sync.md).

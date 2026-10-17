@@ -10947,3 +10947,16 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   revision handling, Android parity, recovery browsing and installed consent QA.
   Verify external volumes/providers and preserve local recovery in whole-account
   backup before promising device-loss recovery.
+
+
+### Cloud path freshness — 2026-10-17
+
+- [x] Exercise Files/sync suites: explicit absence versus 404/401/409/413/503;
+  replace an old path with a new id; refuse case/Unicode aliases, inaccessible
+  siblings, file ancestors, invalid root ancestry and incomplete observations.
+- [x] Rename a cloud ancestor while a file is staged: the unchanged old file id
+  must not allow native publication. Preserve receipt recovery across reload.
+- [x] Exercise the opt-in Mac/API fixture's nested path absent/create/delete/
+  recreate checks with independent ids and an uppercase alias refusal.
+- [ ] Enable local deletion propagation only after parent stamp transitions,
+  native recovery controls and platform-specific Trash support are verified.

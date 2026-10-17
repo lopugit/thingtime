@@ -378,3 +378,12 @@ preload `fileExportVersion` bridge consumed by `fileSync/fileExport.client.ts`.
 It shares retained attachment identity and canonical multipart fingerprints,
 uses session-bound ranges, native destination selection and exclusive verified
 publication. See the Mac acceptance section in `docs/mobile-file-sync.md`.
+
+
+Fresh sync path observations (`api.files` 1.4.0) use
+`api/utils/files/inventory.ts` through the existing Files route. Client parsing
+and identity/capability checks live in `fileSync/cloudPath.ts` and
+`cloudPath.client.ts`; `cloudSyncPort.client.ts` checks the pinned root/path
+before native download publication. Keep path absence distinct from HTTP 404
+or incomplete inventories. Regressions: `inventory.test.ts`, `cloudPath.test.ts`,
+`cloudDownloadPort.test.ts`, and `scripts/mac-file-sync.integration.mts`.

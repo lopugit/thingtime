@@ -270,3 +270,51 @@ test('transaction retries share the original total deadline rather than restarti
 	assert.equal(result.inventory, undefined);
 	assert.equal(reads, 1);
 });
+
+test('fresh path checks traverse matching ancestors, see replacements, and return explicit absence', async () => {
+	const f = fixture([folder('root', null), folder('nested', 'root'), folder('unrelated', 'root'),
+		file('file', 'nested'), file('unreadable', 'unrelated')]);
+	f.docs[4].acl = ['tt:all'];
+	const found = await f.read('owner', 'root', 'nested/file');
+	assert.equal(found.ok, true); assert.equal(found.observation.entry.id, 'file');
+	assert.equal(found.inventory, undefined); assert.deepEqual(f.stats(), { reads: 2, closed: 2 });
+	assert.equal((await f.read('owner', 'root', 'nested/gone')).observation.entry, null);
+	assert.equal((await f.read('owner', 'root', 'gone/child')).observation.entry, null);
+	assert.equal(f.stats().reads, 5);
+	f.docs.push(file('replacement', 'nested', 'gone'));
+	assert.equal((await f.read('owner', 'root', 'nested/gone')).observation.entry.id, 'replacement');
+	f.docs[1].crystal.name = 'moved';
+	assert.equal((await f.read('owner', 'root', 'nested/file')).observation.entry, null);
+	assert.equal((await f.read('owner', 'root', 'moved/file')).observation.entry.id, 'file');
+});
+test('path checks refuse unavailable roots, invalid siblings, aliases and file ancestors', async () => {
+	for (const change of [
+		(f: ReturnType<typeof fixture>) => { f.docs[0].folderId = 'gone'; },
+		(f: ReturnType<typeof fixture>) => { f.docs[1].acl = ['tt:all']; },
+		(f: ReturnType<typeof fixture>) => { f.docs[1].crystal.name = 'NESTED'; },
+		(f: ReturnType<typeof fixture>) => { f.docs.push(folder('alias', 'root', 'NESTED')); },
+		(f: ReturnType<typeof fixture>) => { f.docs[1] = file('nested', 'root'); },
+		(f: ReturnType<typeof fixture>) => { f.docs[2].timelineHeadId = undefined; }
+	]) {
+		const f = fixture(); change(f);
+		const result = await f.read('owner', 'root', 'nested/file');
+		assert.equal(result.ok, false); assert.equal(result.observation, undefined);
+	}
+	const unicode = fixture([folder('root', null), folder('cafe', 'root', 'cafe\u0301')]);
+	assert.equal((await unicode.read('owner', 'root', 'café/missing')).ok, false);
+	const huge = fixture(undefined, 1);
+	assert.equal((await huge.read('owner', 'root', 'nested/missing')).status, 413);
+	for (const path of ['', '../file', 'nested//file', 'a/'.repeat(64) + 'a'])
+		assert.equal((await fixture().read('owner', 'root', path)).status, 400);
+});
+test('path observations share one snapshot and deadline without claiming a complete inventory', async () => {
+	const f = fixture();
+	f.onRead(() => { f.docs[1].crystal.name = 'moved'; });
+	const first = await f.read('owner', 'root', 'nested/file');
+	assert.equal(first.observation.entry.id, 'file'); assert.equal(first.inventory, undefined);
+	assert.equal((await f.read('owner', 'root', 'nested/file')).observation.entry, null);
+	const slow = fixture(); slow.onRead(() => slow.clock(20_001));
+	const result = await slow.read('owner', 'root', 'missing');
+	assert.equal(result.status, 503); assert.equal(result.observation, undefined);
+	assert.equal(slow.stats().reads, slow.stats().closed);
+});

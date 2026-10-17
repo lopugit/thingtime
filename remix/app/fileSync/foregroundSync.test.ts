@@ -44,6 +44,12 @@ async function fixture() {
 				}
 				return Response.json({ ok: true, folder: result, replayed: false });
 			}
+			if (u.searchParams.has('rootId')) {
+				assert.equal(u.searchParams.get('rootId'), 'cloud-root');
+				const path = u.searchParams.get('path')!, row = [...rows.values()].find(row => row.name === path);
+				return Response.json({ ok: true, observation: { version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'r1', path,
+					entry: row ? { path, kind: 'folder', id: row.id, version: row.revision, size: 0, sha256: null } : null } });
+			}
 			const id = u.searchParams.get('folderId')!;
 			if (u.searchParams.has('operationId')) return Response.json({ ok: true, receipt: receipts.get(u.searchParams.get('operationId')!) ?? null });
 			return rows.has(id) ? Response.json({ ok: true, folder: rows.get(id) }) : Response.json({ ok: false }, { status: 404 });
@@ -165,7 +171,9 @@ test('foreground downloads recover native receipts and checkpoint failure withou
 			requireCapability: async () => {},
 			fetch: async (_url: any, init: any) => {
 				assert.equal(init.method, 'GET');
-				return Response.json({ ok: true, folder: { id: remote.id, folderId: remote.folderId, name: remote.path, revision: remote.revision } });
+				assert.equal(new URL(String(_url)).searchParams.get('rootId'), 'cloud-root');
+				return Response.json({ ok: true, observation: { version: 1, complete: true, rootId: 'cloud-root', rootRevision: 'r1', path: remote.path,
+					entry: { kind: 'folder', path: remote.path, id: remote.id, version: remote.revision, size: 0, sha256: null } } });
 			}
 		},
 		localTarget: {

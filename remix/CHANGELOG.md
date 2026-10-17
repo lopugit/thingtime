@@ -68,6 +68,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17 — **Codex (AI)**: Fresh cloud path observations now protect native
+  downloads from moved ancestors and replaced path identities. Files 1.4.0
+  distinguishes explicit absence from unavailable roots and failed reads; new
+  runs retain their cloud root. Local deletion propagation remains gated.
+  Details: [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+
 - 2026-10-17 — **Codex (AI)**: Add Apple native recoverable Trash primitives,
   separate deletion consent, immutable receipt recovery and exclusive restore.
   Verify process interruptions and real Mac/API restart/revocation, plus iOS

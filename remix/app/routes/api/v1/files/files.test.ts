@@ -57,8 +57,8 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 
 test('file capability registers the real read and commit route', () => {
 	const manifest = thingtimeCapabilityManifest('https://example.test');
-	assert.equal(manifest.features['api.files'].version, '1.3.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.3.0');
+	assert.equal(manifest.features['api.files'].version, '1.4.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.4.0');
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/files' && op.methods.includes('GET') && op.methods.includes('POST')));
 });
 
@@ -156,4 +156,21 @@ test('retained receipt selectors are explicit and cannot silently fall back to p
  const posted = await handlers.action({ request: new Request('https://example.test/api/v1/files', { method: 'POST',
   headers: { Origin: 'https://example.test', 'Content-Type': 'application/json' }, body: JSON.stringify({ kind: 'retained-version' }) }) });
  assert.equal(posted.status, 200); assert.equal(calls, 2);
+});
+
+
+test('path observations require explicit selectors and preserve unavailable-path errors', async () => {
+ let calls = 0, allowed = true, user: any = { id: 'owner', accountKind: 'user' };
+ const handlers = createFilesHandlers({ getUser: async () => user, limit: async () => ({ allowed, unavailable: !allowed } as any),
+  service: {} as any, folders: {} as any, inventory: async () => { throw Error('No full tree scan expected'); },
+  path: async (owner, root, path) => { calls++; assert.deepEqual([owner, root, path], ['owner', 'folder', 'nested/file']);
+   return { ok: false, status: 409, error: 'Ambiguous path' }; } });
+ const req = (query = 'rootId=folder&path=nested%2Ffile') => ({ request: new Request('https://example.test/api/v1/files?' + query) });
+ const result = await handlers.loader(req()); assert.equal(result.status, 409);
+ assert.match(result.headers.get('cache-control')!, /private.*no-store/);
+ for (const query of ['rootId=folder&path=a&path=b', 'path=a', 'rootId=folder&path=a&id=file', 'rootId=folder&path=a&operationId=op', 'rootId=folder&rootId=other&path=a'])
+  assert.equal((await handlers.loader(req(query))).status, 400);
+ user.accountKind = 'service'; assert.equal((await handlers.loader(req())).status, 401);
+ user.accountKind = 'user'; allowed = false; assert.equal((await handlers.loader(req())).status, 503);
+ assert.equal(calls, 1);
 });

@@ -1662,3 +1662,32 @@ remain required. Native journals are private local recovery state, excluded from
 OS backup and not yet included by the whole-account snapshot producer. No claim
 of device-loss recovery, continuous background sync or complete account backup
 follows from these checks.
+
+
+## Fresh cloud paths — 2026-10-17
+
+Files 1.4.0 exposes a fresh snapshot path observation through the existing
+private Files route. Explicit absence is distinct from missing roots, failed
+reads, aliases and invalid ancestry. The shared inventory implementation scans
+siblings only along the requested path; all observed siblings share the existing
+10,000-entry / 8 MiB / 64-level / 20-second bounds. It creates no new storage,
+cache, history format or credentials.
+
+New durable download runs pin their cloud root and recheck the full source path
+before staging and before publication. This fixes a moved-ancestor race where
+the previous file-id read could still succeed. Old receipts remain recoverable;
+old uncompleted runs without a cloud root fail safely pending reconciliation.
+The path observation is not an atomic cross-device lock, and wide-folder
+performance still needs further work.
+
+Validation: 174 combined sync/Files tests; canonical sync 141 plus one transport
+mock, Files 33, capabilities 95. The opt-in real Mac/API fixture passed native
+upload/download, receipt recovery, retained bytes, and nested path absent/
+create/delete/recreate and case-alias checks. Its picker and consent are test
+adapters, not installed-app UI acceptance. Typecheck remains at 91 existing
+diagnostics against the 89 ratchet baseline. No native binaries changed.
+
+The full acceptance ledger remains open: automatic local Trash propagation
+(including folder stamps after child removals), recovery UI, Android parity,
+background/Photos sync, independent account backup export at large scale and
+physical-drive delivery are unfinished. No main/production promotion occurred.

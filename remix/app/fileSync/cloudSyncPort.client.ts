@@ -1,8 +1,7 @@
 import { createCloudDownloadSource } from './cloudDownloadSource';
 import { validateLocalStage, type LocalSyncTarget } from './localSyncTarget';
 import { cloudRequests } from './cloudTransport';
-import { cloudFolderSyncEntry, parseCloudFolder } from './cloudFolder';
-import { cloudFileSyncEntry, parseCloudFile } from './cloudFile';
+import { readCloudPathEntry } from './cloudPath.client';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { createCloudFileTransport, createCloudRetentionTransport, createCloudFolderTransport, type CloudTransportRuntime } from './cloudTransport';
 import { parseCloudSyncRun, isCloudFolderWrite } from './cloudWrite';
@@ -46,22 +45,8 @@ export function createCloudSyncPort(
 	const readDownload = async (write: ReturnType<typeof get>) => {
 		const m = write.operation.mutation;
 		if (m.kind !== 'copy' || m.from !== 'remote') throw Error('Expected a download.');
-		const { json, negotiate } = cloudRequests(runtime, run.scope, input.signal);
-		await negotiate({ 'api.files': m.source.kind === 'folder' ? '1.2.0' : '1.0.0' });
-		const result = await json(
-			'/api/v1/files?' + new URLSearchParams({ [m.source.kind === 'folder' ? 'folderId' : 'id']: m.source.id }),
-			undefined,
-			true
-		);
-		if (!result) return null;
-		if (m.source.kind === 'folder') {
-			const folder = parseCloudFolder(result.folder);
-			if (folder.folderId !== write.folderId || folder.name !== m.path.split('/').at(-1)) throw Error('Cloud folder moved or renamed.');
-			return cloudFolderSyncEntry(folder, m.path);
-		}
-		const file = parseCloudFile(result.file);
-		if (file.folderId !== write.folderId || file.name !== m.path.split('/').at(-1)) throw Error('Cloud file moved or renamed.');
-		return file.trashed ? null : cloudFileSyncEntry(file, m.path);
+		if (!write.cloudRootId) throw Error('This saved download has no pinned cloud root; reconcile it before publishing.');
+		return readCloudPathEntry(runtime, run.scope, write.cloudRootId, m.path, input.signal);
 	};
 	const transport = (write: ReturnType<typeof get>) =>
 		isDownload(write)
@@ -106,7 +91,7 @@ export function createCloudSyncPort(
 				check();
 				validateLocalStage(staged, operation, run.scope);
 				if (source) await source.verify!();
-				else if (!sameSyncStamp(m.source, await readDownload(write))) throw Error('Cloud folder changed before local publication.');
+				if (!sameSyncStamp(m.source, await readDownload(write))) throw Error('Cloud path changed before local publication.');
 				check();
 				const result = await input.localTarget!.publish(structuredClone(operation), { ...run.scope }, structuredClone(staged));
 				check();

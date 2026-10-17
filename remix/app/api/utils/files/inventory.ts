@@ -3,8 +3,9 @@ import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/co
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { isFolderThing, folderThingMatch } from '../../../schemas/folderThing';
 import { MAX_FOLDER_DEPTH } from '../things/folderPlacement';
-import { parseCloudInventory, MAX_CLOUD_INVENTORY_BYTES, type CloudInventoryNode } from '../../../fileSync/cloudInventory';
-import { MAX_SYNC_SCAN_ENTRIES, validSyncPath } from '../../../fileSync/reconcile';
+import { parseCloudInventory, inventorySyncEntry, MAX_CLOUD_INVENTORY_BYTES, type CloudInventoryNode } from '../../../fileSync/cloudInventory';
+import { MAX_SYNC_SCAN_ENTRIES, validSyncPath, syncPathKey } from '../../../fileSync/reconcile';
+import { parseCloudPathObservation } from '../../../fileSync/cloudPath';
 import { parseCloudFile } from '../../../fileSync/cloudFile';
 import { StorageMutationError } from '../storage/storageCore';
 
@@ -64,9 +65,12 @@ export function createCloudInventoryService(
 		maxEntries: MAX_SYNC_SCAN_ENTRIES,
 		...overrides
 	};
-	return async (ownerId: string, rootId: unknown) => {
+	return async (ownerId: string, rootId: unknown, requestedPath?: string) => {
 		if (deps.customPlane()) return { ok: false as const, status: 409, error: 'Files currently require the home data plane' };
 		if (!ownerId || !identity(rootId)) return { ok: false as const, status: 400, error: 'Choose a cloud folder root' };
+		if (requestedPath !== undefined && (!validSyncPath(requestedPath) || requestedPath.split('/').length > MAX_FOLDER_DEPTH))
+			return { ok: false as const, status: 400, error: 'Choose a supported relative cloud path' };
+		const prefixes = requestedPath?.split('/').map((_, i, parts) => parts.slice(0, i + 1).join('/'));
 		try {
 			const started = deps.now(),
 				things = await deps.collection();
@@ -133,12 +137,16 @@ export function createCloudInventoryService(
 						if (typeof name !== 'string' || name.includes('/') || !validSyncPath(name)) fail(409, 'A cloud file or folder has an invalid name.');
 						const path = prefix ? prefix + '/' + name : name;
 						if (!validSyncPath(path)) fail(409, 'A cloud path exceeds the supported bounds.');
+						const expectedPrefix = prefixes?.[depth - 1];
+						if (expectedPrefix && syncPathKey(path) === syncPathKey(expectedPrefix) && path !== expectedPrefix)
+							fail(409, 'A cloud path has a case or Unicode alias; review it before syncing.');
 						if (isFolderThing(doc)) {
 							if (doc.thingtime?.includes('file') || doc.crystal?.trashed === true) fail(409, 'A cloud folder has an ambiguous kind.');
 							nodes.push({ kind: 'folder', path, id: doc.shareId, folderId: doc.folderId, revision: folderRevision(doc) });
 							paths.set(doc.shareId, path);
-							frontier.push(doc.shareId);
+							if (!prefixes || (path === expectedPrefix && depth < prefixes.length)) frontier.push(doc.shareId);
 						} else {
+							if (path === expectedPrefix && prefixes && depth < prefixes.length) fail(409, 'A cloud path ancestor is now a file.');
 							if (doc.thingtime?.length !== 1 || doc.thingtime[0] !== 'file') fail(409, 'A cloud file has an ambiguous kind.');
 							let file;
 							try {
@@ -159,10 +167,16 @@ export function createCloudInventoryService(
 				}
 				budget();
 				try {
-					return {
-						ok: true as const,
-						inventory: parseCloudInventory({ version: 1, complete: true, rootId, rootRevision: folderRevision(root), nodes }, rootId)
-					};
+					// Validate every observed sibling and its ancestry/collisions before
+					// accepting absence. A path observation never exposes a partial tree
+					// as a complete inventory. Unrelated subtrees are not traversed.
+					const inventory = parseCloudInventory({ version: 1, complete: true, rootId, rootRevision: folderRevision(root), nodes }, rootId);
+					if (requestedPath !== undefined) {
+						const node = inventory.nodes.find(node => node.path === requestedPath);
+						return { ok: true as const, observation: parseCloudPathObservation({ version: 1, complete: true, rootId,
+							rootRevision: inventory.rootRevision, path: requestedPath, entry: node ? inventorySyncEntry(node) : null }, rootId, requestedPath) };
+					}
+					return { ok: true as const, inventory };
 				} catch {
 					return fail(409, 'Cloud folder paths or identities are ambiguous; review the folder before syncing.');
 				}
@@ -175,3 +189,12 @@ export function createCloudInventoryService(
 	};
 }
 export const readCloudInventory = createCloudInventoryService();
+
+/** A fresh snapshot of one path. Missing roots/root ancestors, authorization failures
+ * and bounded-read failures are errors, never evidence of absence. */
+export function createCloudPathService(overrides: Parameters<typeof createCloudInventoryService>[0] = {}) {
+	const read = createCloudInventoryService(overrides);
+	return (ownerId: string, rootId: unknown, path: unknown) =>
+		typeof path === 'string' ? read(ownerId, rootId, path) : Promise.resolve({ ok: false as const, status: 400, error: 'Choose a relative cloud path' });
+}
+export const readCloudPath = createCloudPathService();

@@ -50,6 +50,7 @@ async function fixture() {
 		changeLocal = false,
 		badStage = false,
 		changeOrigin = false,
+		changeAncestor = false,
 		activeOrigin = scope.origin;
 	const local = new Map<string, any>(),
 		receipts = new Map<string, any>();
@@ -61,6 +62,13 @@ async function fixture() {
 			gets++;
 			const u = new URL(String(url));
 			assert.equal(init.credentials, 'same-origin');
+			if (u.pathname === '/api/v1/files' && u.searchParams.has('rootId')) {
+				assert.equal(u.searchParams.get('rootId'), inventory.rootId);
+				const path = u.searchParams.get('path');
+				const node = inventory.nodes.find(node => node.path === path);
+				return Response.json({ ok: true, observation: { version: 1, complete: true, rootId: inventory.rootId, rootRevision: 'root-v1', path,
+					entry: node && folder.name === 'nested' ? inventorySyncEntry(node) : null } });
+			}
 			if (u.pathname === '/api/v1/files') return Response.json({ ok: true, ...(u.searchParams.has('folderId') ? { folder } : { file }) });
 			const offset = Number(u.searchParams.get('offset')),
 				length = Number(u.searchParams.get('length'));
@@ -83,6 +91,7 @@ async function fixture() {
 				assert.deepEqual(await source.read(0, 3), bytes);
 				assert.deepEqual(await fingerprintSource(source), fingerprint);
 			} else assert.equal(m.source.kind, 'folder');
+			if (changeAncestor && source) folder.name = 'moved';
 			if (changeRemote && source) file.revision = 'remote-edited';
 			if (changeOrigin && source) activeOrigin = 'https://other.test';
 			if (changeLocal && source) local.set(m.path, { ...m.source, id: 'local-new', version: 'local-edit' });
@@ -137,6 +146,7 @@ async function fixture() {
 			if (key === 'local') changeLocal = true;
 			if (key === 'stage') badStage = true;
 			if (key === 'origin') changeOrigin = true;
+			if (key === 'ancestor') changeAncestor = true;
 		},
 		runtime
 	};
@@ -183,4 +193,18 @@ test('a download cannot instantiate an execution port without a native publicati
 		/staged publication/
 	);
 	f.journal().close();
+});
+
+
+test('renaming a cloud ancestor during staging prevents publication even when the old file id and parent remain valid', async () => {
+ const f = await fixture(); f.set('ancestor');
+ await assert.rejects(executeSyncRun(f.run, f.port()), /Cloud path changed/);
+ assert.equal(f.counts().publishes, 1); assert.equal(f.local.has('nested/file.bin'), false);
+ f.journal().close();
+});
+test('legacy runs retain receipt recovery but cannot publish without their original cloud root', async () => {
+ const f = await fixture();
+ for (const write of f.run.cloudWrites) delete write.cloudRootId;
+ await assert.rejects(executeSyncRun(f.run, f.port()), /no pinned cloud root/);
+ assert.equal(f.counts().publishes, 0); f.journal().close();
 });
