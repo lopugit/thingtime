@@ -1,8 +1,6 @@
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const https = require('node:https');
-const http = require('node:http');
-const net = require('node:net');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
@@ -19,6 +17,7 @@ if (parallelDevMode) {
 }
 const { checkEndpointCompatibility, compatibilityError, probeEndpointDevices } = require('./lib/endpoint-compatibility.cjs');
 const { prepareAppLocations } = require('./lib/app-locations.cjs');
+const { startRendererServer } = require('./lib/renderer-server.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const {
 	cacheInstalledBundle,
@@ -42,6 +41,8 @@ const {
 	validateDeviceRequest
 } = require('./lib/thingtime-node-bridge.cjs');
 
+const { DesktopFolderSync } = require('./lib/folder-sync.cjs');
+const { DesktopFileExport } = require('./lib/file-export.cjs');
 const { DesktopSpeechRecognition, requireSpeechSender } = require('./lib/speech-recognition.cjs');
 const desktopSpeech = new DesktopSpeechRecognition({ executable: app.isPackaged
 	? path.join(process.resourcesPath, '..', 'Helpers', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeSpeech')
@@ -79,6 +80,18 @@ const desktopMail = new DesktopMailSync({
 });
 app.on('before-quit', () => desktopMail.stop());
 const thingtimeNode = new ThingtimeNodeIntegration({ app, electronDir: __dirname });
+const desktopFolderSync = new DesktopFolderSync({
+    context: () => ({ enabled: process.platform === 'darwin' && !parallelDevMode, window: mainWindow, appOrigin,
+        apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
+    requestNative: (method, parameters, options) => thingtimeNode.request(method, parameters, undefined, options)
+});
+const desktopFileExport = new DesktopFileExport({
+    context: () => ({ enabled: process.platform === 'darwin', window: mainWindow, appOrigin,
+        apiOrigin: desktopSettings?.snapshot().selectedEndpoint.url }),
+    choose: (window, options) => dialog.showSaveDialog(window, options)
+});
+app.on('before-quit', () => { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
+
 
 function getSessionHash() {
   if (!sessionHash) {
@@ -170,77 +183,6 @@ function getCurrentAppVersion() {
   return normalizeVersionString(releaseVersion) || app.getVersion();
 }
 
-function getFreePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-
-    server.unref();
-    server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : null;
-
-      server.close(() => {
-        if (!port) {
-          reject(new Error('Unable to reserve a local port for Thingtime.'));
-          return;
-        }
-
-        resolve(port);
-      });
-    });
-  });
-}
-
-function waitForHttp(url, attempts = 80) {
-  return new Promise((resolve, reject) => {
-    let remaining = attempts;
-
-    const tryRequest = () => {
-      let finished = false;
-      const retryOnce = () => {
-        if (finished) {
-          return;
-        }
-
-        finished = true;
-        retry();
-      };
-
-      const request = http.get(url, (response) => {
-        response.resume();
-
-        if (response.statusCode && response.statusCode < 500) {
-          finished = true;
-          resolve();
-          return;
-        }
-
-        retryOnce();
-      });
-
-      request.on('error', retryOnce);
-      request.setTimeout(1000, () => {
-        request.destroy();
-        retryOnce();
-      });
-    };
-
-    const retry = () => {
-      remaining -= 1;
-
-      if (remaining <= 0) {
-        reject(new Error(`Thingtime did not start at ${url}`));
-        return;
-      }
-
-      setTimeout(tryRequest, 250);
-    };
-
-    tryRequest();
-  });
-}
-
 async function startNitroServer() {
   const outputDir = getWebOutputDir();
   const serverEntry = path.join(outputDir, 'server', 'index.mjs');
@@ -249,26 +191,24 @@ async function startNitroServer() {
 		throw new Error(`Missing bundled web server at ${serverEntry}. Run "pnpm --dir electron build:web" before starting Electron.`);
   }
 
+  if (readWebBuildMetadata().nitroPreset !== 'node_middleware') {
+    throw new Error('Desktop requires a node_middleware web bundle. Rebuild with "pnpm --dir electron build:web".');
+  }
   loadLocalEnv();
 
-  const port = await getFreePort();
-
   process.env.NODE_ENV = process.env.NODE_ENV || 'production';
-  process.env.HOST = '127.0.0.1';
-  process.env.NITRO_HOST = '127.0.0.1';
-  process.env.PORT = String(port);
-  process.env.NITRO_PORT = String(port);
   process.env.THINGTIME_DESKTOP = '1';
-
-  await import(pathToFileURL(serverEntry).href);
-
-  const origin = `http://127.0.0.1:${port}`;
-
-  await waitForHttp(`${origin}/`);
-
-  appOrigin = origin;
-
-  return origin;
+  const renderer = await startRendererServer({
+    profilePath: app.getPath('userData'),
+    loadApplication: async ({ port }) => {
+      process.env.HOST = process.env.NITRO_HOST = '127.0.0.1';
+      process.env.PORT = process.env.NITRO_PORT = String(port);
+      return import(pathToFileURL(serverEntry).href);
+    }
+  });
+  app.on('before-quit', () => { void renderer.close(); });
+  appOrigin = renderer.origin;
+  return appOrigin;
 }
 
 function normalizeDesktopUrl(rawUrl) {
@@ -294,6 +234,7 @@ function normalizeDesktopUrl(rawUrl) {
 }
 
 function setApiFallbackEndpoint(rawUrl) {
+	desktopFolderSync.invalidate(); desktopFileExport.invalidate();
 	const endpointUrl = normalizeDesktopUrl(rawUrl);
 	process.env.THINGTIME_API_FALLBACK_ORIGIN = new URL(endpointUrl).origin;
 	return endpointUrl;
@@ -1650,10 +1591,17 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) desktopSpeech.stop();
+    if (isMainFrame && !isInPlace) { desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
   });
-  mainWindow.webContents.on('render-process-gone', () => desktopSpeech.stop());
-  mainWindow.on('closed', () => desktopSpeech.stop());
+  mainWindow.webContents.on('render-process-gone', () => { desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); });
+  const folderCookies = mainWindow.webContents.session.cookies;
+  const folderAccountChanged = (_event, cookie) => {
+    if (cookie.name === 'tt_auth' || cookie.name === 'tt_accounts') { desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
+  };
+  folderCookies.on('changed', folderAccountChanged);
+  mainWindow.on('closed', () => {
+    desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); folderCookies.removeListener('changed', folderAccountChanged);
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -1683,6 +1631,9 @@ function createWindow() {
 		showLoadUrlError(error);
 	});
 }
+
+ipcMain.handle('thingtime-desktop:file-export', (event, request) => desktopFileExport.request(event, request));
+ipcMain.handle('thingtime-desktop:folder-sync', (event, request) => desktopFolderSync.request(event, request));
 
 ipcMain.handle('thingtime-desktop:speech-start', (event, request) => {
 	requireSpeechSender(event, mainWindow, appOrigin);
@@ -1799,8 +1750,8 @@ if (!singleInstanceLock) {
 		.whenReady()
 		.then(async () => {
 			// The renderer is packaged locally, but Chromium's HTTP cache is shared
-			// across launches while our loopback port is intentionally ephemeral. A
-			// recycled port must never resurrect an old root-data response (including
+			// across launches at the profile's stable loopback origin. Cached HTTP
+			// responses must never resurrect an old root-data response (including
 			// its account and endpoint identity) from a previous desktop session.
 			// Clearing only HTTP cache preserves cookies, account storage and all
 			// user preferences while forcing the local bundle + selected API target

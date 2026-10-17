@@ -10,7 +10,7 @@ import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/
 import { enforceExpectedDataPlane } from '../../../app/api/utils/mongodb/dataPlane';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
 import { StorageMutationError } from '../../../app/api/utils/storage/storageCore';
-import { proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
+import { desktopSyncProxyAllowed, proxyApiRequestToFallback, shouldProxyApiToFallback } from '../../utils/apiFallback';
 
 type RouteModule = {
   loader?: (args: { request: Request; params?: Record<string, string> }) => Promise<unknown> | unknown;
@@ -19,7 +19,7 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
-  'v1/things/interactions': () => import('../../../app/routes/api/v1/things/interactions/_interactions'),
+  'v1/files': () => import('../../../app/routes/api/v1/files/_files'),
   'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
@@ -165,6 +165,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/devices/events': () => import('../../../app/routes/api/v1/devices/events/_events'),
 	'v1/devices/node/commands': () => import('../../../app/routes/api/v1/devices/node/commands/_commands'),
 	'v1/devices/node/live-sync': () => import('../../../app/routes/api/v1/devices/node/live-sync/_live-sync'),
+	'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
+	'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
 	'v1/devices/node/state': () => import('../../../app/routes/api/v1/devices/node/state/_state'),
 	'v1/devices/node/sync': () => import('../../../app/routes/api/v1/devices/node/sync/_sync'),
 	'v1/devices/pairing': () => import('../../../app/routes/api/v1/devices/pairing/_pairing'),
@@ -393,6 +395,11 @@ export default defineHandler(async (event) => {
     // Fresh vault verification must stay on the selected deployment. Never
     // forward passwords/assertions to a fallback origin or reveal its keys.
     if (event.req.headers.has('X-Thingtime-Expected-Actor')) {
+      if (desktopSyncProxyAllowed(event.req)) {
+        // Nitro/srvx requests are Request-compatible, but cannot be copied with
+        // Node's Request constructor (its private Undici state is a different brand).
+        return proxyApiRequestToFallback(event.req, { omitForwardedOrigin: true });
+      }
       return jsonResponse({ ok: false, error: 'Browser Actions require a configured account environment at this origin' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
     }
     if (path === 'v1/passwords' || path === 'v1/mail' || path === 'v1/mail/sync') {
@@ -408,9 +415,7 @@ export default defineHandler(async (event) => {
         return jsonResponse({ ok: false, error: 'Configure private account services on this deployment.' }, { status: 503, headers: { 'Cache-Control': 'private, no-store' } });
       if (event.req.headers.get('Sec-Fetch-Site') === 'cross-site' || (method !== 'GET' && event.req.headers.get('Origin') !== resolvePublicOrigin(event.req).origin))
         return jsonResponse({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers: { 'Cache-Control': 'private, no-store' } });
-      const headers = new Headers(event.req.headers);
-      headers.delete('x-forwarded-host'); headers.delete('x-forwarded-proto');
-      return proxyApiRequestToFallback(new Request(event.req, { headers }));
+      return proxyApiRequestToFallback(event.req, { omitForwardedOrigin: true });
     }
     // Root data uses this same fallback. Forward its public database
     // precondition and selection unchanged for the upstream to enforce.

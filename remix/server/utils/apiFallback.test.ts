@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getApiFallbackOrigin, shouldProxyApiToFallback } from './apiFallback';
+import { getApiFallbackOrigin, proxyApiRequestToFallback, shouldProxyApiToFallback } from './apiFallback';
 import handleApi from '../routes/api/[...]';
 import handleRootData from '../routes/api/root-data.get';
 import { enforceExpectedDataPlane, mongoDataPlane } from '../../app/api/utils/mongodb/dataPlane';
@@ -135,14 +135,86 @@ test('desktop vault proxy requires the bundled origin and pinned HTTPS endpoint'
  });
 });
 
-
-test('iOS release identities and migration bodies never follow an origin fallback', async () => {
-  await withFallbackEnv('https://thingtime.com', async () => {
-    const request = new Request('http://127.0.0.1:17340/api/v1/integrations/ios-release', { method: 'POST', headers: { Authorization: 'Bearer synthetic-identity', 'Content-Type': 'application/json' }, body: '{"operation":"migrate","credentials":"synthetic"}' });
-    const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/integrations/ios-release' } } });
-    assert.equal(response.status, 503);
-    assert.match(response.headers.get('Cache-Control'), /no-store/);
-    assert.equal(request.bodyUsed, false);
-    assert.ok(!(await response.text()).includes('synthetic'));
+test('desktop sync forwards only the explicit account/home/server-bound route family', async t => {
+ await withFallbackEnv('https://sync.test', async () => {
+  const prior = process.env.THINGTIME_DESKTOP; process.env.THINGTIME_DESKTOP = '1';
+  let calls = 0;
+  const mock = t.mock.method(globalThis, 'fetch', async (url: URL, init: RequestInit) => {
+   calls++; assert.equal(url.origin, 'https://sync.test');
+   const h = new Headers(init.headers);
+   assert.equal(h.get('X-Thingtime-Expected-Actor'), 'owner'); assert.equal(h.get('X-Thingtime-Expected-Data-Plane'), 'home');
+   assert.equal(h.get('X-Thingtime-Expected-Api-Origin'), 'https://sync.test');
+   assert.equal(h.get('Origin'), 'https://sync.test'); assert.equal(h.has('x-forwarded-host'), false);
+   return Response.json({ ok: true });
   });
+  const headers = { Origin: 'http://127.0.0.1:17340', 'X-Thingtime-Expected-Actor': 'owner',
+   'X-Thingtime-Expected-Data-Plane': 'home', 'X-Thingtime-Expected-Api-Origin': 'https://sync.test',
+   'x-forwarded-host': 'untrusted.test' };
+  try {
+   for (const [path, method] of [['auth/me', 'GET'], ['things', 'PATCH'], ['files', 'POST'], ['attachments/uploads', 'POST'], ['attachments/content', 'GET']]) {
+    const request = new Request('http://127.0.0.1:17340/api/v1/' + path, { method, headers, ...(method !== 'GET' ? { body: '{}' } : {}) });
+    const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/' + path } } });
+    assert.equal(response.status, 200); assert.equal(response.headers.get('x-thingtime-api-fallback'), 'https://sync.test');
+   }
+   for (const patch of [{ 'X-Thingtime-Expected-Api-Origin': 'https://old.test' }, { 'X-Thingtime-Expected-Data-Plane': 'foreign' }, { Origin: 'https://foreign.test' }, { 'Sec-Fetch-Site': 'cross-site' }]) {
+    const request = new Request('http://127.0.0.1:17340/api/v1/things', { method: 'POST', headers: { ...headers, ...patch }, body: '{}' });
+    assert.equal((await (handleApi as any)({ req: request, context: { params: { path: 'v1/things' } } })).status, 503);
+    assert.equal(request.bodyUsed, false);
+   }
+   const request = new Request('http://127.0.0.1:17340/api/v1/actions/run', { method: 'POST', headers, body: '{}' });
+   assert.equal((await (handleApi as any)({ req: request, context: { params: { path: 'v1/actions/run' } } })).status, 503);
+   assert.equal(request.bodyUsed, false); assert.equal(calls, 5);
+   delete process.env.THINGTIME_DESKTOP;
+   const web = new Request('http://127.0.0.1:17340/api/v1/things', { method: 'POST', headers, body: '{}' });
+   assert.equal((await (handleApi as any)({ req: web, context: { params: { path: 'v1/things' } } })).status, 503);
+   assert.equal(calls, 5);
+  } finally { mock.mock.restore(); if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
+ });
+});
+
+
+test('a destination switch after admission is rejected before proxy body consumption', async t => {
+ await withFallbackEnv('https://new.test', async () => {
+  const mock = t.mock.method(globalThis, 'fetch', async () => { throw Error('Must not forward'); });
+  try {
+   const request = new Request('http://127.0.0.1:17340/api/v1/files', { method: 'POST', body: '{"private":"fixture"}',
+    headers: { 'X-Thingtime-Expected-Api-Origin': 'https://old.test' } });
+   const response = await proxyApiRequestToFallback(request);
+   assert.equal(response.status, 409); assert.equal((await response.json()).code, 'API_ORIGIN_CHANGED');
+   assert.equal(request.bodyUsed, false); assert.equal(mock.mock.callCount(), 0);
+  } finally { mock.mock.restore(); }
+ });
+});
+
+
+test('desktop proxy accepts framework request wrappers without cloning foreign private state', async t => {
+ await withFallbackEnv('https://sync.test', async () => {
+  const prior = process.env.THINGTIME_DESKTOP; process.env.THINGTIME_DESKTOP = '1';
+  let calls = 0;
+  const mocked = t.mock.method(globalThis, 'fetch', async (_url: URL, init: RequestInit) => {
+   calls++; const headers = new Headers(init.headers);
+   assert.equal(headers.has('x-forwarded-host'), false); assert.equal(headers.has('x-forwarded-proto'), false);
+   assert.equal(headers.get('X-Thingtime-Expected-Actor'), 'owner');
+   if (init.method === 'POST') assert.equal(Buffer.from(init.body as ArrayBuffer).toString(), '{"value":"preserved"}');
+   return Response.json({ ok: true });
+  });
+  try {
+   for (const method of ['GET', 'POST']) {
+    const original = new Request('http://127.0.0.1:17340/api/v1/files', { method, headers: {
+     Origin: 'http://127.0.0.1:17340', 'X-Thingtime-Expected-Actor': 'owner', 'X-Thingtime-Expected-Data-Plane': 'home',
+     'X-Thingtime-Expected-Api-Origin': 'https://sync.test', 'x-forwarded-host': 'untrusted.test', 'x-forwarded-proto': 'https'
+    }, ...(method === 'POST' ? { body: '{"value":"preserved"}' } : {}) });
+    // A framework wrapper exposes standard request fields/methods without the
+    // private slots that Node's Request copy constructor expects on this object.
+    const wrapped = Object.create(Request.prototype);
+    for (const key of ['url', 'method', 'headers', 'body', 'bodyUsed', 'signal'] as const)
+     Object.defineProperty(wrapped, key, { get: () => original[key] });
+    wrapped.arrayBuffer = original.arrayBuffer.bind(original);
+    assert.throws(() => new Request(wrapped));
+    const response = await (handleApi as any)({ req: wrapped, context: { params: { path: 'v1/files' } } });
+    assert.equal(response.status, 200); assert.equal(original.bodyUsed, method === 'POST');
+   }
+   assert.equal(calls, 2);
+  } finally { mocked.mock.restore(); if (prior === undefined) delete process.env.THINGTIME_DESKTOP; else process.env.THINGTIME_DESKTOP = prior; }
+ });
 });

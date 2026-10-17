@@ -1233,8 +1233,18 @@ checked out without dependencies. Flags: `--no-deps`, `--no-env`,
 
 The desktop shell lives in `electron/` and packages the same `remix/` web app
 with Electron. It builds the Vite client and Nitro server with
-`NITRO_PRESET=node_server`, stages the output in `electron/dist/web`, then
-launches the bundled Nitro server on `127.0.0.1` inside the Electron app.
+`NITRO_PRESET=node_middleware`, stages the output in `electron/dist/web`, then
+binds the bundled Nitro middleware on `127.0.0.1` inside the Electron app.
+Desktop keeps the same port per user-data profile in `renderer-origin.json`, so
+IndexedDB sync runs and local editor drafts survive relaunch. The address record
+is private, atomically published and flushed before the renderer starts. If its
+port is occupied, close the application using that port and reopen Desktop;
+Desktop preserves the address and refuses to load the other server. A malformed
+record stops startup for recovery. Keep it with the Chromium profile in backups;
+do not delete it to work around a collision. No environment variable, external
+service or secret is required. Earlier random-port profiles are left untouched;
+this does not migrate storage from their old origins. See
+[Desktop restart verification](electron/README.md#renderer-restart-verification).
 
 Build the unpacked desktop app from the repository root with:
 
@@ -4702,88 +4712,692 @@ PNGs and JSON as inline resources without an account or HTTP access from the
 agent host. No private environment variables are needed. See the
 [fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
 
-### Local workspace development (in progress)
 
-The ordinary Builder now has a browser workspace adapter under
-`remix/app/local-workspace/`. See [coverage and limits](docs/local-workspaces.md)
-before treating the rollout as complete. IndexedDB requires a stable origin and
-available site storage. Clearing site data removes unsynced device content.
-Anonymous work never enters an account queue. Account sync uses the existing
-same-origin API and session; there is no new secret or alternate authentication
-setup. Unsupported dedicated features retain their current adapters.
+### Native mobile device pairing development
 
-For offline shell checks, run `npm --prefix remix run build:client`; this generates
-an integrity-checked static asset manifest. Use the repository PM2 lifecycle for
-development, and an isolated local database/account fixture for mutation tests.
-Do not point a fixture preview at production API fallback URLs. Saved account pages now reopen and remain editable after a fully offline cold
-start; the server must verify the account before sync resumes. The remaining
-feature matrix is not yet complete.
+The iOS and Android apps advertise `devicePairingVersion` 1.0.0. With a full account, open
+Things or Settings → Things and choose **Add this device**. Pairing keys and
+pending claims stay in the iOS device-only Keychain or Android Keystore-encrypted no-backup storage, scoped to account and server
+origin. A destination must advertise the mobile requirements in
+`remix/app/devices/platform.ts`; production or older previews may not support
+them yet. HTTPS is required except for loopback development. Pairing does not
+request file or photo permissions or enable a background sync worker.
+
+For local acceptance, start this checkout with `npm run web-pms`, create a
+disposable account through `POST /api/v1/auth/register`, and put its test login
+outside the web root in a mode-0600 JSON fixture containing `base`, `username`, `password`.
+Use placeholders only in shared docs; never commit the fixture. The test uses
+real API pairing and Keychain storage, and leaves its device record under the
+disposable account for retry inspection; it signs the test browser session out.
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>' \
+  iOS/scripts/test-mobile-devices.sh /absolute/path/to/private-fixture.json
+```
+
+The script generates the Xcode project, builds for testing, injects the fixture
+only into a temporary protected test-run file, removes that file on exit, and
+runs protocol, destination and live API tests. Keep simulator signing enabled
+for Keychain acceptance. A normal native unit run skips the live test without
+its explicit test environment. No developer account or signing secret belongs
+in this fixture. See [the full sync acceptance ledger](docs/mobile-file-sync.md)
+for Photos and transfer work that is still in progress.
+
+The iOS app also advertises `fileAccessVersion` 1.0.0. After pairing, **Folder
+access → Choose folder** uses the system Files picker. **Check folder** computes
+a bounded inventory and **Remove access** forgets the grant without deleting
+files. Selection alone does not start uploads. No new secret, entitlement or
+server environment variable is required: use the existing authenticated origin
+and retain normal app signing for Keychain access. Native security-scoped
+bookmarks stay in device-only Keychain storage, scoped to account and origin;
+web settings receive opaque IDs and display names. Follow Apple's
+[directory access contract](https://developer.apple.com/documentation/uikit/providing-access-to-directories).
+Use synthetic folders for acceptance. Unavailable providers, changed files,
+symlinks and oversized scans fail rather than yielding empty inventories. The
+current bounds are 32 grants, 10,000 entries / 4 MiB metadata per scan, and 64 KiB
+per native read. Android implements the same folder protocol using the system Files picker;
+persistent transfer workers remain pending. The UI fixture at `/scripts/mobile-folders.browser.html` tests controls
+with synthetic native replies; it does not verify the iOS system picker.
+
+The Android shell lives in `android/`. It requires JDK 17, Android SDK 35 and
+an updated System WebView on API 26+. Run `android/gradlew -p android assembleDebug`
+and install the resulting debug APK. A fork can select its HTTPS server with
+`-PthingtimeWebUrl=https://your-thingtime.example`; local debug builds use
+loopback HTTP plus `adb reverse`. The opt-in Android test script also requires
+`userId` in the private fixture. See [Android build and acceptance](android/README.md)
+for exact commands, emulator tests and security boundaries. Android folder
+access starts with scoped read-only Storage Access Framework grants and encrypted
+native references without broad storage permissions or additional secrets;
+see [selected-folder setup and limits](android/README.md#selected-folders).
+Release signing
+and store distribution remain separate setup; never commit signing keys.
+
+### Verifying file-sync content fingerprints locally
+
+The existing content endpoint advertises `api.attachment-content` 1.14.0 and
+accepts `GET /api/v1/attachments/content?id=<attachment-id>&fingerprint=1`.
+Clients must negotiate that feature first. The fingerprint is a canonical
+multipart composite, not a whole-file SHA-256; see the [sync contract and
+remaining acceptance](docs/mobile-file-sync.md). Missing checksum evidence is
+an error and must never become a deletion decision.
+
+For the opt-in byte acceptance test, use a disposable account on a local MongoDB
+and loopback dev server. Enable private uploads through the normal admin API,
+or register the fixture first, then set `ADMIN_USERNAMES=<fixture-username>` in
+the ignored worktree `remix/.env`. Configure the local attachment storage stand-in
+above, including `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN` with this checkout's
+origin, then restart with `npm run web-pms`. Keep a mode-0600 JSON fixture outside
+the web root containing `base`, `username`, `password` and `userId` (from
+`/api/v1/auth/me`). Never commit credentials or grant a real account test access.
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-fingerprint.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This creates one 8 MiB + 17 byte file, checks replay identity, compares local and
+cloud fingerprints, independently hashes the downloaded bytes, checks anonymous
+denial, then deletes its file and signs out its test session. Remove temporary
+`ADMIN_USERNAMES` entries and restart after acceptance. It does not exercise
+production S3, native background scheduling or complete cross-device sync.
+
+### Verifying stable file version commits locally
+
+`api.files` 1.0.0 adds `GET|POST /api/v1/files` on the home data plane. See the
+[stable file contract](docs/mobile-file-sync.md#stable-cloud-files-checkpoint--2026-10-17)
+and `/api/v1/files-docs` for the closed request shape. Clients must negotiate
+`api.files`, persist the complete immutable commit before sending, and reuse
+its UUID file ID, operation ID and expected revision after an uncertain result.
+Use an attachment-content fingerprint receipt for the exact uploaded bytes.
+A missing/failed operation lookup must preserve pending work.
+
+With the same disposable local account, normal upload approval, private fixture
+and local storage setup above, run:
+
+```sh
+cd remix
+node --import tsx scripts/file-versions.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This exercises real Mongo transactions and retained attachment bytes, concurrent
+replacement, exact retries, Timeline, library/folder integration and Trash/restore.
+Files 1.1.0 also verifies complete private folder inventories through
+`GET /api/v1/files?rootId=<folder-id>`: nested folders, exact live-file fingerprints,
+ordinary-note exclusion, anonymous denial and collision refusal. Clients must
+negotiate 1.1.0 for this read and must never treat a failed scan as empty.
+Inventory reads require the existing home Mongo replica-set transaction setup;
+there are no additional credentials, collections or indexes.
+It leaves a tiny synthetic file and its two accounted versions in that account's
+private Trash, and signs out. No hard-delete shortcut is used. Remove temporary
+fixture admin configuration and restart afterwards. No new secrets or indexes
+are required. Production S3, native file workers, retention/purge, sharing and
+native transfer-status UI remain separate acceptance work.
+
+### Verifying cloud sync execution locally
+
+With the disposable local account, upload approval and storage setup above:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-cloud.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This drives the actual sync executor and cloud transport through a lost
+folder-creation reply, nested directory uploads, an interrupted multipart upload,
+disk-journal reload and an accepted file commit with its response lost. Files
+1.2.0 composes ordinary Things folder creation and canonical Timeline receipts;
+no extra secrets, environment variables or indexes are required. It verifies recovery without source access/reupload, replacement, retained
+byte hashes, account/database fences and recoverable Trash. The synthetic file
+and both charged versions remain private in Trash. Created folders are removed
+through the normal Things API, while their original receipts remain readable.
+The temporary mode-0600 run
+file is removed after success and retained after failure for inspection/recovery.
+Remove any temporary fixture admin setting and restart afterwards. This does
+not exercise OS background scheduling, native disk writes or production S3.
 
 
-The offline Web Platform renderer uses the same compiled runtime as the standalone
-sandbox. `build:client` runs `build:platform` first, then includes that static code
-in a sandboxed document and authorizes its exact hash in production CSP. Use the
-normal build command; if running main Vite directly in a clean checkout, first run
-`npm --prefix remix run build:platform`. The managed dev stack already builds and
-watches the platform runtime; the app reloads its virtual document when that output
-changes. No additional environment values or secrets are needed. Embed and inert
-draft bundles retain the standalone runtime URL and their existing policies. Keep
-`patch:vercel-output` and `verify:vercel-output` in deployment builds so runtime
-bytes and CSP remain paired. See [the offline execution checks](docs/local-workspaces.md#offline-web-platform-execution--2026-10-16).
+### Verifying editable sync configurations locally
 
-### Disposable Timeline restore and related-history regressions
+With the same disposable local account fixture (mode 0600) described above:
 
-The `remix/scripts/timeline-versions.integration.mts`,
-`timeline-published-components.integration.mts` and
-`timeline-related.integration.mts` scripts require a loopback
-`TIMELINE_TEST_BASE` and verify the server's database status before registering
-new fixture accounts. Their default replica is `timeline-rs` at
-`127.0.0.1:20337`. For a different explicitly disposable local replica, set
-`TIMELINE_TEST_MONGO_HOST=127.0.0.1:<disposable-mongo-port>` and
-`TIMELINE_TEST_REPLICA_SET=<disposable-replica-name>` as well. Never point the app
-at an existing account database for these checks. All three scripts clean up their own
-created Things, including restored component copies, in `finally`; synthetic
-accounts and immutable audit remain in the disposable database. Run each from
-`remix` with `node --import tsx scripts/<script-name>.integration.mts`.
+```sh
+cd remix
+node --import tsx scripts/file-sync-configuration.integration.mts /absolute/path/to/private-fixture.json
+```
+
+No upload approval, object-store credentials, extra environment variables or
+indexes are needed for this configuration-only check. It creates a synthetic
+cloud folder and private `file-sync` Thing through the existing Things API,
+verifies guarded editing, fixed-ID create/edit recovery after accepted response
+loss and runtime policy boundaries, removes only its own
+fixtures through ordinary deletion, and logs out. The public schema is visible
+at `/docs/schemas#schema-file-sync`. Configurations contain opaque references;
+they do not grant OS access or launch transfers. The paired mobile device card
+now edits connections through this API. For a browser-only regression, open
+`/scripts/mobile-sync-editor.browser.html` on the local dev server; it uses the
+production editor with synthetic API/native responses and never accesses files.
+Native approval persistence and transfer workers remain in the
+[full sync acceptance ledger](docs/mobile-file-sync.md).
 
 
-### Durable account file adapter regression
+### Running a foreground mobile folder upload
 
-From `remix`, run `node --import tsx --test
-app/local-workspace/accountFiles.browser.test.ts` with
-`TT_LOCAL_FILE_SYNC_URL=http://127.0.0.1:<vite-port>`,
-`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, and optional
-`TT_LOCAL_FILE_SYNC_ARTIFACTS=/path/to/local-evidence`. Set
-`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` to installed Playwright and
-its matching Chromium executable. Use the PM2-managed Vite dev origin: this
-adapter-focused test loads actual source modules and does not assert offline
-cold reload. It captures the exact workspace module URLs requested by the app;
-Vite HMR timestamps must be retained to avoid creating a second unbound runtime.
-The fixture also checks offline metadata/folder edits, reviewed conflicts, and
-lost annotation receipts. The account file picker is not switched to this adapter yet.
+Use an iOS/Android build advertising `fileAccessVersion` 1.1.0, pair it in Things,
+choose a folder and save a private connection to an owned cloud folder. Select
+Upload or Backup, unpause it, then choose **Upload now**. Keep the app visible;
+**Stop upload** and **Retry upload** preserve the saved run. Wi-Fi/charging policy
+is checked between requests, not continuously enforced on an in-flight part.
+iOS builds advertising `filePublicationVersion` 1.0.0 also support foreground
+downloads after native approval, with deletion propagation disabled.
+Two-way and background operation remain unavailable. No new secrets,
+collections or environment variables are needed beyond existing pairing,
+Mongo transactions, upload approval and attachment storage setup.
 
-Use only an explicitly disposable local Mongo replica. Register a disposable
-administrator through the normal API, add its username to ignored
-`remix/.env` as `ADMIN_USERNAMES=<fixture-admin>`, then store its username/password
-in the ignored JSON fixture (restrict it to mode 0600). Enable the existing
-filesystem object-store stand-in with
-`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<ignored-directory>`. If setting
-`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, use the **same Vite origin** the
-browser opens; a different Nitro port is a different origin and is correctly
-blocked by the normal CSP. The default root-relative signed URLs also work.
-Restart this checkout using `npm run web-pms` after environment changes.
+With the disposable localhost account, mode-0600 fixture and normal upload
+approval described above, run:
 
-The test creates its own ordinary account, proves private upload refusal, then
-uses the disposable admin's normal API to approve only that new account. It
-cleans up its completed file and sessions; fixture accounts remain only in the
-disposable database. Never substitute an existing account or production database,
-weaken CSP, alter rate limits, or commit credentials/evidence storage.
+```sh
+cd remix
+node --import tsx scripts/file-sync-foreground.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This runs the real configured executor/cloud API with synthetic native source
+and policy adapters. It checks lost commit response recovery without reupload,
+failed checkpoint storage followed by a local edit, stable replacement and
+independent downloaded-byte hashes. It removes its configuration/root through
+normal Things APIs and retains its tiny accounted versions in private Trash.
+Remove any temporary fixture admin setting and restart with `npm run web-pms`
+after testing. Native end-to-end upload, production S3 and OS background behavior
+require separate acceptance; see [the sync ledger](docs/mobile-file-sync.md).
 
 
-The ordinary account Files picker/native-preview acceptance uses the same
-loopback setup: run `node --import tsx --test
-app/local-workspace/accountFileUi.browser.test.ts` from `remix/`, with
-`TT_LOCAL_FILE_SYNC_URL`, `TT_SHARED_PLAYWRIGHT_PATH`, `TT_SHARED_CHROME_PATH`
-and optional `TT_LOCAL_FILE_SYNC_ARTIFACTS` as above. It creates only a disposable
-local account and needs no administrator approval because its saves finish
-offline. The separate lifecycle fixture tests protected upload approval and sync.
+Android builds with file access 1.2.0 support verified native chunk ranges while
+retaining a full pre-publication source check. For the optional installed-app
+picker/upload acceptance and its synthetic-file requirements, see
+[Android foreground upload acceptance](android/README.md#verified-reads-and-foreground-upload-acceptance).
+The optional `THINGTIME_FOLDER_UPLOAD_TEST=1` run uses the same disposable
+localhost account and normal upload-approval/storage setup; it needs no new
+service credentials. It remains separate from the passing provider/bridge tests.
+
+
+### Verifying bounded cloud download ranges
+
+The existing attachment-content API at 1.14.0 accepts
+`range=1&version=<opaque-version>&offset=<byte-offset>&length=<bytes>` for at most
+2 MiB per response. Use the canonical fingerprint receipt's version, require
+HTTP 206 with matching ETag/Content-Range, and verify the complete staged
+fingerprint before native publication. Capability negotiation is required; the
+older byte-cache path keeps its 16 MiB limit. This uses the same private storage,
+authorization and local stand-in setup described above, with no new secret or
+storage namespace.
+
+With the disposable local fixture and normal upload approval configured:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-foreground.integration.mts /absolute/path/to/private-fixture.json --large-download
+```
+
+This uses 17 MiB + 17 bytes, checks full and multipart hashes, anonymous denial,
+wrong-version refusal and source replacement. Normal cleanup retains accounted
+versions in private Trash; remove temporary fixture admin env and restart the
+managed stack afterward. Executor tests use a staged publisher fixture; actual
+the iOS publication path and its remaining native acceptance are described below.
+
+
+### Native iOS download staging checks
+
+The iOS shell advertises `fileStagingVersion` 1.0.0 for private resumable reception.
+It uses the existing account/origin and folder grant checks, keeps bytes and
+immutable operation metadata in protected application support storage excluded
+from backup, and verifies the entire planned fingerprint before returning a
+stage. No new secret, entitlement or server environment variable is required.
+Staging itself does not publish. Updated iOS builds additionally expose
+`filePublicationVersion` 1.0.0: choose Download mode with deletion propagation off,
+then Download now requests native consent for that selected folder and reviewed
+settings. Consent is stored locally in Keychain and cleared by selecting/removing
+the grant. No new secret, entitlement or server environment variable is needed.
+Publication requires same-volume atomic rename/swap support; unsupported providers
+fail without a copying-over fallback. Displaced versions stay in private transfer
+storage; conflict/restore UI and retention cleanup remain pending.
+
+From `iOS/`, run `xcodegen generate`, choose a concrete simulator with
+`xcrun simctl list devices available`, then run:
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>'
+xcodebuild -project Thingtime.xcodeproj -scheme Thingtime -destination "$DEST" \
+  -only-testing:ThingtimeTests/MobileSyncStagingTests \
+  -only-testing:ThingtimeTests/MobileFolderTests \
+  -only-testing:ThingtimeTests/MobileDevicePairingTests test
+```
+
+The byte and WebKit tests use disposable local files and a synthetic owner verifier;
+real account, file-provider, process-kill and physical-device acceptance remain
+separate. See the [full sync ledger](docs/mobile-file-sync.md).
+
+
+
+### Installed iOS file-history export acceptance
+
+The same disposable account fixture and local attachment storage setup support
+History exports. No additional secrets, saved folder grants or server routes are
+required. Run from the repository root:
+
+```sh
+THINGTIME_FILE_EXPORT_TEST=1 DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-sync-installed.sh /private/account.json
+```
+
+This selects `FileExportInstalledTests`, creates two private byte versions through
+the ordinary upload/files APIs, and opens the real History page. Follow the
+printed folder name: open the updated-file row, cancel the first **Save this
+version**, then save the earlier and later versions into that empty folder using
+Files. Next review/cancel restore, then review/restore the earlier version.
+The runner checks native replies, exact destination bytes, collision naming,
+unchanged cancellation revisions and both retained cloud byte versions. It does
+not accept an external completion marker. The cloud fixture is moved to private
+Trash; the exported files are retained for inspection. Keep credentials out of
+logs and repository files. Physical/provider, low-storage and interrupted-save
+acceptance remain separate from this simulator check.
+
+### Installed iOS download and process-exit acceptance
+
+Use a disposable loopback account with normal private-upload approval and the
+existing local attachment storage setup. Keep its `{base, username, password,
+userId}` fixture outside the repository with mode 0600. The `base` must match the
+iOS build exactly, including `localhost` versus `127.0.0.1`. No additional service
+credentials or collection are needed. From the repository root:
+
+```sh
+corepack pnpm --dir remix exec tsx scripts/mobile-sync-installed-fixture.mts /private/account.json /private/cloud-state.json prepare
+DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-sync-installed.sh /private/account.json
+```
+
+The native test signs the disposable account in through the normal login API and
+opens the production Things screen. It refuses to replace another account's
+session. It creates an empty `Download acceptance <id>` folder in app Documents
+and waits for manual/CUA acceptance; it does not fabricate native permissions,
+pairing, transfer replies or successful completion. Pair the device, select that
+folder in Files, save an unpaused Cloud to device connection to `Mobile download
+acceptance`, and leave deletion propagation off. Cancel the native dialog and
+confirm no files were written; retry and approve. Verify both downloaded files
+against the fixture's independent SHA-256 values. Repeat, then run the fixture
+helper with `replace` and download again. Verify the new hash and retained
+original bytes before writing `{"verified":true}` to the test's
+`Application Support/MobileSyncInstalledAcceptance/complete.json`.
+
+Record the created connection ID as `configurationId` in the private cloud
+state, remove its native folder access, then run the fixture helper with
+`cleanup`. It removes only its folders/connection through ordinary APIs and
+retains accounted file versions in private Trash. Sign out the simulator test
+account and remove the empty/test Documents folder. If temporary admin approval
+was enabled in ignored local env, restore that setting and use `npm run web-pms`.
+
+The separate process-exit suite needs no account or server:
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-publication-process.sh
+```
+
+It deliberately exits only the simulator test host after rename and before
+receipt persistence, then verifies create, replace and edit-before-recovery in
+a different process. It stops Xcode diagnostic collection only after durable
+proof and the publishing PID establish that the process really exited. These
+checks do not establish device reboot, iCloud/third-party provider or physical
+device acceptance. See [the full ledger](docs/mobile-file-sync.md).
+
+### Android private download staging checks
+
+Android now exposes the same private `fileStagingVersion` 1.0.0 contract. Native
+chunks and immutable progress records live in app-private no-backup storage;
+completed stages require full content verification. Initial folder grants remain
+read-only. Publication 1.1 enables downloads only into explicitly created
+Thingtime offline folders after native approval. Generic SAF roots cannot publish. No new secret, service or environment variable is needed.
+
+With JDK 17, Android SDK 35, `adb`, Node and installed `remix` dependencies, run
+`ANDROID_SERIAL=<test-emulator-id> THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-staging-process.sh`
+on a disposable emulator. The origin override is optional; the default is the
+public HTTPS origin. No login fixture is used. The script rebuilds/installs the
+debug APKs, deliberately kills the test process after byte flush and after stage
+completion, verifies both recoveries in fresh processes and checks native wire
+responses with the shared TypeScript codec. See the [Android staging runbook](android/README.md#private-download-staging-and-process-recovery)
+for evidence, cleanup and remaining boundaries.
+
+### Android native folder write approval checks
+
+The Android adapter now implements the shared `write-approve` contract behind
+its still-disabled publication capability. It requires a native consent dialog,
+re-selection of the exact folder in Android Files with write access, and fresh
+account verification. The encrypted approval binds the account, site, remote
+root, device and configuration revision/hash to this native selection. Selecting
+the folder again invalidates that binding, including when its URI is unchanged.
+No provider file is written by approval or private staging.
+
+On a disposable emulator, create only the synthetic `ThingtimeSyncQA` fixture
+and the private local-account fixture described in the [Android runbook](android/README.md#native-write-approval-acceptance).
+Run `THINGTIME_FOLDER_APPROVAL_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`.
+Follow the native Cancel / Continue to Files / same-folder Allow / changed-config
+Cancel sequence. No production credentials, broad storage permission or extra
+service is needed. Generic-provider publication and background sync remain open.
+
+### Android offline-folder publication backend checks
+
+The Android app now includes a transactional backend for Thingtime-owned offline
+folders. It uses verified immutable native blobs plus an atomic entry/receipt
+transaction, and retains displaced versions. Native **Choose folder → New offline
+folder** creates an explicitly consented root in Android Files. Files access is
+read-only; foreground Download now uses scoped native consent. Existing selected SAF
+folders are not converted to another storage model or written by this backend.
+
+On a disposable emulator, run
+`THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-managed-process.sh`
+with the normal JDK 17 / Android SDK 35 / adb / Node setup. The optional origin
+uses your checkout's port; no account fixture, new secret or service is needed.
+Three actual process-exit scenarios verify rollback, completed-receipt recovery
+and retained replacements through the production shared mobile codec. See the
+[Android runbook](android/README.md#offline-folder-publication-backend-checks)
+for boundaries, evidence and fixture cleanup.
+
+
+### Android offline folders in Files
+
+Use **Things → Folder access → Choose folder → New offline folder** in the
+Android app. Native consent explains that the folder remains visible in Android
+Files while signed out, other apps can read documents selected there, removing
+account access keeps the files, and uninstalling Thingtime deletes them. Finish
+by selecting the created root in the system picker. **Existing folder** retains
+the ordinary SAF selection flow. No broad storage permission, secret, external
+service or new deployment configuration is needed.
+
+For the disposable local-account fixture and emulator setup above, run
+`THINGTIME_OFFLINE_FILES_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`.
+Follow the [Android Files acceptance steps](android/README.md#offline-folders-in-android-files),
+including visual inspection before confirming the test. This verifies native
+creation, selection, listing and reads of a synthetic published file; it does
+not establish cloud download, external editing or background synchronization.
+
+
+### Android foreground cloud downloads
+
+Android bridge publication 1.1.0 negotiates download support for each selected
+folder. Explicitly created Thingtime offline folders support **Download now**
+with native consent tied to the current account, device, folder grant and exact
+connection settings. Generic SAF folders remain read/upload sources. Keep the
+app open and deletion propagation off. Downloaded files are readable through
+Android Files; removing Thingtime access preserves them. Background scheduling,
+writable Files editing and restore/retention controls remain pending.
+
+Use the existing local attachment backend and a disposable upload-approved
+account for the [installed download runbook](android/README.md#foreground-cloud-downloads-to-offline-folders).
+No new secret, permission or external dashboard setting is needed. Private test
+credentials/state stay outside Git with mode 0600. The media cache bypasses
+version-pinned, fingerprint and actor-scoped sync requests so their API headers
+and authorization checks reach the transfer runner unchanged.
+
+
+### Two-way foreground folder sync
+
+Approved iOS folders and Android Thingtime offline folders can use **Two-way**
+with **Sync now**, while the app stays open and deletion propagation is off.
+A run reconciles both directions using the shared journal and confirmed common
+baseline; conflicting edits preserve both copies and require review. Generic
+Android SAF folders remain upload sources. Mac, background scheduling, native
+trash propagation and conflict-resolution controls remain in progress.
+The [Android two-way acceptance runbook](android/README.md#two-way-foreground-acceptance)
+uses the same disposable loopback account, normal upload approval and local
+attachment backend; no new configuration or credentials are required.
+
+
+### Shared Apple folder receiver
+
+The iOS native folder reader, grants and recoverable publication now live in
+[`apple/FileSync`](apple/FileSync/README.md), a local Swift package that also runs
+on macOS. That runbook documents native consent, platform bookmarks, isolated
+staging and real process-exit checks. The Mac helper now has a local folder
+adapter and native picker/approval dialogs. Its Electron account bridge and shared
+folder controls are implemented; installed Keychain/TCC, real cloud transfer and
+desktop restart persistence remain release acceptance requirements.
+See [Mac host setup](macos/ThingtimeNode/README.md#local-folder-sync-adapter).
+The companion server must advertise `api.devices-node-identity` 1.x; the optional
+feature is negotiated separately so older deployments can still pair. Native
+credentials remain in Keychain; no new secret is required. The full-account
+`POST /api/v1/devices/disconnect` revokes one owned device's credentials and keeps
+its history and files. Reconnect requires a new pairing; a completed old claim
+cannot revive a revoked credential.
+
+
+### Desktop sync host validation
+
+From the repository root, install the locked Electron dependencies with
+`corepack pnpm --dir electron install --frozen-lockfile`, then run
+`corepack pnpm --dir electron run verify:folder-sync-host`. The test launches a
+fresh temporary Electron profile and synthetic loopback servers, exercises real
+Chromium cookies and IPC sender checks, and removes its profile on completion.
+It uses no account secret, installed Node, LaunchAgent or real user folder;
+native XPC replies are explicitly synthetic. A usable graphical macOS session
+and the Electron binary are required.
+
+For rendered shared controls, use the canonical PM2 stack and open
+`/scripts/mobile-sync-editor.browser.html?platform=desktop`. This fixture uses
+synthetic grants/API replies with the production editor and desktop runtime.
+The native host negotiates the selected endpoint's public capabilities and keeps
+credentials in their existing cookie session/Keychain. The bundled proxy requires
+`THINGTIME_DESKTOP=1` (set by Desktop) and its selected API endpoint; do not set
+this mode on an ordinary public web deployment. No additional secret is needed.
+See the [desktop acceptance boundary](docs/mobile-file-sync.md#desktop-folder-host-and-shared-controls--2026-10-17)
+before release; page reload is not yet full desktop restart recovery.
+
+
+### Mac sync acceptance against local APIs
+
+Build the test-only native adapter, then run the shared sync acceptance from
+`remix/` against this checkout's PM2-managed loopback stack:
+
+```sh
+swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
+cd remix
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json
+# Exercise an upload crossing the canonical 8 MiB multipart boundary:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --large-upload
+# Exercise both streams and restart after a lost staging acknowledgement:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --large-upload --large-download
+# Also force a real native cooldown immediately before an upload HTTP request:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --cooldown-before-upload
+```
+
+The mode-0600 fixture contains `base` (an `http://127.0.0.1:<web-port>` origin),
+`username`, `password` and `userId` for a disposable account. Use placeholder
+values in examples; never commit a fixture. The account needs private uploads
+enabled through the normal admin API. Use the existing home MongoDB and local
+attachment-storage setup, and the checkout's `web-pms` lifecycle. No additional
+service secret or environment variable is introduced by this test.
+
+The script pairs its own device using the canonical signed claim protocol,
+creates private Folder/file-sync Things, and launches `MacFolderSyncFixture`
+with a private temporary credential record. The executable uses the production
+Swift adapter, file reader, staging/publication and live API identity verifier.
+Its picker, consent, conditions and credential storage are test adapters; no
+installed app, Keychain entry, TCC permission or LaunchAgent is used. The helper
+is a test target and is not copied into packaged Desktop resources. Shared
+TypeScript adapters validate replies and drive actual upload/download bytes.
+
+The test loses accepted cloud/publication replies, restarts the native process,
+verifies original IDs and no reapplication, performs independent replacements,
+checks full byte hashes and retained cloud versions, then disconnects the device.
+Cleanup uses canonical APIs, retaining accounted versions in private Trash and
+protected device history, signs the fixture session out, and removes its private
+temporary directory. It can take over a minute: native identity honors one
+server-directed 1–60-second cooldown on 429, while preserving live checks and
+cancellation. This recovery is not a sustained-throughput or installed-app claim.
+
+The optional `--cooldown-before-upload` check consumes only its disposable paired
+device's identity budget, then verifies that native authorization can outlast the
+30-second JSON deadline without expiring the unsent request. Authorization and
+source checks finish before the HTTP timer starts; caller cancellation still
+covers the whole operation. Network deadlines remain 30 seconds for API JSON and
+120 seconds for signed upload parts. This option intentionally increases read
+traffic and is an acceptance check, not a throughput measurement.
+
+Mac file access 1.2 uses a bounded native range stream (up to 32 MiB) for the
+existing shared upload source. Descriptor-relative reads retain one coordinated,
+version-checked descriptor and emit at most 64 KiB per acknowledged XPC frame.
+The signed bridge streams framed output with pipe backpressure; Electron checks
+framing/range bounds and returns a binary buffer only after final native and
+browser-account verification. Cancellation, changed source/path, incomplete
+output or late authorization refusal discards the range. The 1 MiB ordinary XPC
+message cap is unchanged. Older Mac and current mobile bridges retain chunked
+reads. Mac staging 1.1 now uses the corresponding bounded download stream. No direct native network upload or
+new device credential scope is added. The `--large-upload` option tests the real
+native/cloud path with an 8 MiB-plus file; installed signing/TCC acceptance and
+sustained throughput remain separate checks.
+
+Mac file staging 1.1 carries each downloaded range as binary Electron IPC and
+length-prefixed binary helper input, then pulls at most 64 KiB per XPC callback.
+The shared runner buffers 2 MiB cloud ranges; the native protocol caps ranges at
+32 MiB and metadata at 128 KiB. Native storage flushes the complete range before
+saving its offset. Incomplete tails are discarded on resume, while accepted
+ranges survive process restart and lost acknowledgements without replay.
+The existing staged-content verification and explicit publication approval stay
+separate. `--large-download` uses a 2 MiB-plus download and the acceptance script
+now always loses one accepted staging reply, restarts its private native fixture,
+and verifies exact offset recovery. Older Mac and current mobile hosts keep the
+64 KiB append path. No new credentials, network authority or environment setup.
+
+## Portable backup vault tooling
+
+The [portable backup format](docs/portable-backups.md) provides independent chunk
+storage, interruption recovery and offline verification/copy/restore for a
+supplied frozen inventory. Account-wide snapshot creation, scheduled cloud jobs
+and the product backup UI are still in development. The explicit cloud-folder
+worker below uses existing authenticated APIs; it adds no server configuration,
+bucket permission or public endpoint.
+
+The internal [account inventory producer](docs/portable-backups.md#account-inventory-producer)
+requires MongoDB 5+ snapshot reads, enough retained database history to finish
+enumeration, and the central modern `{ ownerId: 1, shareId: 1 }` index. Legacy
+database migration must finish before this index can be installed within the
+existing budget. Snapshot expiry or a missing index refuses the operation.
+Do not increase a production history window blindly: measure enumeration time
+and the database storage cost first. No new credentials or app environment
+variables are needed. This producer is internal and refuses unsupported managed
+families; it does not yet supply a whole-account backup API.
+
+For its isolated consistency check, start a disposable local MongoDB 5+ replica
+set and explicitly provide its loopback port and replica name. This script does
+not load app `.env` files; it creates and removes only a randomly named test
+database and a temporary vault. The variable below is test-only:
+
+```sh
+THINGTIME_ACCOUNT_SNAPSHOT_TEST_URI='mongodb://127.0.0.1:20337/?replicaSet=timeline-rs' \
+  corepack pnpm --dir remix exec tsx scripts/account-snapshot.integration.mts
+```
+
+Use a private directory owned by your OS user for each vault. The destination's
+parent must already exist. The current local adapter requires POSIX permissions,
+hard-link publication and directory sync; it is not a raw FAT/USB-media writer.
+The format is not encrypted: future cloud/physical-media adapters must supply
+appropriate storage encryption and key recovery before offering that service.
+Never pass a vault's archived filenames as destination paths.
+
+```sh
+# Verify an existing sealed vault without changing it.
+corepack pnpm --dir remix run backup:vault verify /private/source-vault SNAPSHOT_UUID
+# Resume a verified independent copy into another private destination.
+corepack pnpm --dir remix run backup:vault copy /private/source-vault SNAPSHOT_UUID /private/destination-vault
+# Restore one file to the exact chosen path; an existing file is never replaced.
+corepack pnpm --dir remix run backup:vault restore-file /private/destination-vault SNAPSHOT_UUID /chosen/output.bin THING_ID
+# Synthetic local filesystem and offline CLI acceptance (no account credentials).
+corepack pnpm --dir remix run test:backups
+# Disposable real API fixture; follow the existing foreground-sync fixture setup.
+corepack pnpm --dir remix exec tsx scripts/file-sync-foreground.integration.mts /private/fixture.json --portable-backup
+```
+
+The real API fixture must be mode 0600 and contain only the disposable loopback
+account described in the existing sync acceptance runbook. It moves its generated
+cloud file to private Trash and removes its own temporary local vaults. Offline
+CLI access comes from possession of the private vault; online product adapters
+must continue to enforce the current account, origin and device permissions.
+
+### Capture a selected cloud folder
+
+`backup:cloud` is an explicit worker/operator tool, not the native backup UI.
+It freezes the existing complete Files inventory for one private folder (up to
+10,000 entries / 8 MiB of inventory), including empty folders. Ordinary Things,
+other folders, historical versions and account settings are **not** part of this
+selection. Oversized/incomplete trees fail; a capture interval is recorded rather
+than claiming an account-wide point in time. See [coverage and recovery](docs/portable-backups.md#cloud-folder-capture).
+
+Supply a mode-0600 JSON file owned by your OS user containing an explicitly
+obtained full account session JWT; scoped PAT/app tokens cannot use this API.
+The tool does not discover browser/native credentials or sign in for you. This
+file is sensitive: keep it outside the repo, never commit/share it, and remove it
+when finished. A later native flow must use its existing consent/session bridge.
+Only placeholder values are shown:
+
+```json
+{"origin":"https://your-thingtime.example","ownerId":"YOUR_ACCOUNT_ID","token":"YOUR_SESSION_JWT"}
+```
+
+```sh
+# Choose one UUID and keep it to resume this exact frozen snapshot.
+corepack pnpm --dir remix run backup:cloud create /private/session.json /private/vault SNAPSHOT_UUID FOLDER_ID
+corepack pnpm --dir remix run backup:cloud resume /private/session.json /private/vault SNAPSHOT_UUID
+```
+
+Use HTTPS (HTTP is accepted only for loopback development). The worker pins
+owner/origin/home storage and rechecks the session before capture and final
+sealing. Credentials never enter the vault. Resume reads the saved inventory and
+exact retained attachment versions even after live edits/Trash; unavailable bytes
+or revoked access stop completion. A failure before the metadata plan finishes
+requires a new snapshot UUID; a new live inventory cannot replace a partial plan.
+Offline verify/copy/restore use the commands above. This local vault is still
+unencrypted and does not provision a cloud replica or physical-media service.
+
+### Restore a saved folder tree
+
+The offline vault CLI can restore the complete selected filesystem tree into a
+**new private local recovery directory**. Its `files/` subdirectory contains the
+original root's contents; `state/`, `staging/` and `locks/` retain recovery state.
+It does not restore into an existing user folder or overwrite existing files.
+First inspect the dry-run paths/byte total and copy its `review` hash:
+
+```sh
+corepack pnpm --dir remix run backup:vault plan-tree /private/vault SNAPSHOT_UUID /private/recovery
+corepack pnpm --dir remix run backup:vault restore-tree /private/vault SNAPSHOT_UUID /private/recovery REVIEW_HASH
+# After interruption, resume the same snapshot, directory and reviewed plan.
+corepack pnpm --dir remix run backup:vault resume-tree /private/vault SNAPSHOT_UUID /private/recovery REVIEW_HASH
+```
+
+The destination's parent must already exist. Review binds the snapshot metadata
+and canonical destination; changed scope, paths or destination require review
+again. Empty folders are preserved. Each 8 MiB range is synced/read back before
+its receipt; resumed ranges and complete files are verified locally without
+fetching their source chunks again. Files publish individually after complete
+fingerprint verification, so `files/` can be partial until the command succeeds.
+Existing user edits, extra files, symlinks and corrupted accepted ranges stop
+completion rather than being replaced. Staging uses hard links after publication,
+so it does not keep a second full copy of restored bytes.
+
+Use a private **single-host local POSIX disk**, not a shared/network filesystem.
+The process guard recovers after an exited worker; it conservatively refuses a
+still-live or reused PID. It never removes another worker's lock candidate.
+A destination interrupted before its initial identity record was saved needs a
+new directory; no existing directory is silently adopted. Keep recovery state
+until the operation succeeds. Native/account restore UI, generic Thing restore,
+permissions/timestamps restoration and encrypted media remain separate work.
+
+### Desktop middleware assets
+
+The Electron build uses Nitro's `node_middleware` preset and explicitly enables
+its static-file serving in `remix/nitro.config.ts`. No additional environment
+variable or private service is required. After staging with
+`corepack pnpm@10.12.1 --dir electron build:web`, run
+`corepack pnpm@10.12.1 --dir electron verify:renderer-restart` to verify the
+packaged startup scripts/styles and persistence across app processes. The web
+cloud presets keep their existing static hosting defaults.
+
+The Desktop proxy passes Nitro/srvx request objects directly to its forwarding
+helper. Forwarded-origin headers are stripped in that helper; do not clone these
+objects with Node's `new Request(existingRequest)`, which can fail its private
+Undici-state check. The native export fixture's `--headless` mode exercises
+account checks and retained byte ranges through the actual bundled proxy.

@@ -259,6 +259,7 @@ test('content loader treats service credentials as anonymous and keeps signed re
 				url: 'https://s3.example/private?signature=secret',
 				expiresAt: nowIso,
 				cacheKey: 'a'.repeat(64),
+				version: 'b'.repeat(64),
 				size: 500,
 				contentType: 'image/png',
 				disposition: 'inline',
@@ -442,6 +443,7 @@ test('cache receipts authorize every request without exposing signed URLs, and r
 						url: 'https://private.example/secret',
 						expiresAt: 'later',
 						cacheKey: 'a'.repeat(64),
+				version: 'b'.repeat(64),
 						size: 500,
 						contentType: 'image/png',
 						disposition: 'inline',
@@ -473,6 +475,7 @@ test('conditional byte reuse authorizes before returning a cacheable 304', async
 						url: 'https://private.example/not-fetched',
 						expiresAt: 'later',
 						cacheKey: 'a'.repeat(64),
+				version: 'b'.repeat(64),
 						size: 500,
 						contentType: 'image/png',
 						disposition: 'inline',
@@ -658,16 +661,101 @@ test('the local object-storage route is inert unless the stand-in directory is c
 	}
 });
 
-test('explicit owned-file retention is full-user, same-origin and unscoped while ordinary cache reads keep their gates', async () => {
- let principal:any=user, calls=0;
- const file={ownerId:'user-1',updatedAt:'2026-10-17T00:00:00.000Z',folderId:null,attachment:{id:'file',name:'file.txt',size:3,contentType:'text/plain',mediaKind:'file' as const}};
- const route=createAttachmentContentLoader({getUser:async()=>principal,enforceLimit:allowed as any,enrichViewer:async viewer=>viewer,
-  download:async (_viewer,_id,download,retain)=>{calls++;assert.equal(download,true);assert.equal(retain,true);return {ok:true,url:'https://private.test/secret',expiresAt:'later',cacheKey:'a'.repeat(64),size:3,contentType:'application/octet-stream',disposition:'attachment',image:false,retention:file};}});
- const url='https://thingtime.example/api/v1/attachments/content?id=file&cache=retain&download=1';
- const response=await route({request:new Request(url,{headers:{Origin:'https://thingtime.example'}})});
- assert.equal(response.status,200);assert.deepEqual(await response.json(),{ok:true,cacheKey:'a'.repeat(64)+':original',size:3,file});assert.match(response.headers.get('Cache-Control')!,/private.*no-store/);
- for(const query of ['&key=x','&sharedRoot=root','&width=64'])assert.equal((await route({request:new Request(url+query)})).status,400);
- assert.equal((await route({request:new Request(url,{headers:{Origin:'https://foreign.test'}})})).status,403);
- for(const value of [null,{id:'service',accountKind:'service'}]) {principal=value;assert.equal((await route({request:new Request(url)})).status,401);}
- assert.equal(calls,1);
+test('fingerprint requests retain the content audience, no-store headers and fail-closed rate limit', async () => {
+	let observed: any; let called = 0; let limited = false;
+	const payload = { ok: true as const, id: 'fixture', version: 'a'.repeat(64), size: 1, fingerprint: { algorithm: 'sha256-parts-v1' as const, partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } };
+	const loader = createAttachmentContentLoader({ getUser: async () => user, enrichViewer: async viewer => ({ ...viewer!, groupIds: new Set(['group']) }),
+		enforceLimit: (async () => limited ? { allowed: false, unavailable: true } : allowed()) as any,
+		download: async () => { throw Error('must not issue a download URL'); },
+		fingerprint: async (viewer, id) => { called++; observed = viewer; assert.equal(id, 'fixture'); return payload; } });
+	const request = new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&fingerprint=1&key=link&sharedRoot=page');
+	const result = await loader({ request }); assert.deepEqual(await result.json(), payload);
+	assert.equal(observed.id, user.id); assert.equal(observed.sharedRoot, 'page'); assert.deepEqual([...observed.linkKeys], ['link']); assert.deepEqual([...observed.groupIds], ['group']);
+	assert.match(result.headers.get('Cache-Control')!, /private.*no-store/);
+	for (const variant of ['&width=64', '&cache=bytes']) assert.equal((await loader({ request: new Request(request.url + variant) })).status, 400);
+	assert.equal(called, 1); limited = true; assert.equal((await loader({ request })).status, 503); assert.equal(called, 1);
+});
+
+test('version-pinned ranges bound upstream bytes and reauthorize before returning private content', async () => {
+	const version = 'a'.repeat(64),
+		url = 'https://thingtime.example/api/v1/attachments/content?id=fixture&range=1&version=' + version + '&offset=2&length=3';
+	const metadata = {
+		ok: true as const,
+		url: 'https://storage.example/pinned',
+		expiresAt: 'later',
+		cacheKey: 'opaque',
+		version,
+		size: 20 * 1024 * 1024,
+		contentType: 'application/octet-stream',
+		disposition: 'attachment; filename="fixture"',
+		image: false
+	};
+	let authorizations = 0,
+		revoked = false,
+		changed = false,
+		mode = 'valid',
+		fetched = 0;
+	const route = createAttachmentContentLoader({
+		getUser: async () => user,
+		enforceLimit: allowed as any,
+		enrichViewer: async (v) => v,
+		download: async () => {
+			authorizations++;
+			return authorizations % 2 === 0 && revoked
+				? { ok: false as const, status: 404, error: 'Attachment not found' }
+				: { ...metadata, version: authorizations % 2 === 0 && changed ? 'b'.repeat(64) : version };
+		},
+		rangeFetch: async (_target, init) => {
+			fetched++;
+			assert.equal(init?.redirect, 'error');
+			assert.equal(new Headers(init?.headers).get('Range'), 'bytes=2-4');
+			if (mode === 'redirect') return new Response(null, { status: 302 });
+			const bytes = mode === 'short' ? new Uint8Array([2, 3]) : mode === 'long' ? new Uint8Array([2, 3, 4, 5]) : new Uint8Array([2, 3, 4]);
+			return new Response(bytes, {
+				status: 206,
+				headers: { 'Content-Range': mode === 'wrong' ? 'bytes 3-5/' + metadata.size : 'bytes 2-4/' + metadata.size, 'Content-Length': '3' }
+			});
+		}
+	});
+	let result = await route({ request: new Request(url) });
+	assert.equal(result.status, 206);
+	assert.deepEqual(new Uint8Array(await result.arrayBuffer()), new Uint8Array([2, 3, 4]));
+	assert.match(result.headers.get('Cache-Control')!, /no-store/);
+	assert.equal(result.headers.get('ETag'), '"' + version + '"');
+	assert.equal(authorizations, 2);
+	revoked = true;
+	result = await route({ request: new Request(url) });
+	assert.equal(result.status, 404);
+	revoked = false;
+	changed = true;
+	result = await route({ request: new Request(url) });
+	assert.equal(result.status, 409);
+	changed = false;
+	for (const value of ['short', 'long', 'wrong', 'redirect']) {
+		mode = value;
+		authorizations = 0;
+		result = await route({ request: new Request(url) });
+		assert.equal(result.status, 502);
+		assert.equal(authorizations, 1);
+	}
+	mode = 'valid';
+	authorizations = 0;
+	const before = fetched;
+	result = await route({ request: new Request(url.replace(version, 'c'.repeat(64))) });
+	assert.equal(result.status, 409);
+	assert.equal(fetched, before);
+	result = await route({ request: new Request(url.replace('offset=2', 'offset=' + metadata.size)) });
+	assert.equal(result.status, 416);
+	assert.equal(fetched, before);
+	for (const query of [
+		'range=2',
+		'range=1&version=x&offset=0&length=1',
+		'range=1&version=' + version + '&offset=-1&length=1',
+		'range=1&version=' + version + '&offset=0&length=2097153',
+		'range=1&version=' + version + '&offset=0&length=1&cache=bytes',
+		'range=1&version=' + version + '&offset=0&length=1&offset=1'
+	]) {
+		result = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&' + query) });
+		assert.equal(result.status, 400);
+	}
 });

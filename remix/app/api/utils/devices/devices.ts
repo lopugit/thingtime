@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDevicePlatform } from '../../../devices/platform';
 
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { createSession, type SessionDoc } from '../auth/sessions';
@@ -329,13 +330,10 @@ type ClaimDeviceResult =
 	| { ok: true; op: 'prepare'; proof: { pairingId: string; serverNonce: string; expiresAt: string } }
 	| { ok: true; device: PublicDevice; credentialStored: true };
 
-const minimalPublicDevice = (doc: any): PublicDevice => ({
+export const minimalPublicDevice = (doc: any): PublicDevice => ({
 	id: String(doc.shareId),
 	name: String(doc.crystal?.name || 'Computer'),
-	platform:
-		doc.crystal?.platform === 'windows' || doc.crystal?.platform === 'linux' || doc.crystal?.platform === 'watchos'
-			? doc.crystal.platform
-			: 'macos',
+	platform: isDevicePlatform(doc.crystal?.platform) ? doc.crystal.platform : 'macos',
 	model: typeof doc.crystal?.model === 'string' ? doc.crystal.model : null,
 	osVersion: typeof doc.crystal?.osVersion === 'string' ? doc.crystal.osVersion : null,
 	appVersion: typeof doc.crystal?.appVersion === 'string' ? doc.crystal.appVersion : null,
@@ -620,6 +618,12 @@ export const claimDevicePairing = async (input: ClaimDeviceInput): Promise<Claim
 	if (input.op === 'prepare') return prepareDevicePairingClaim(input);
 	if (input.op === 'complete') return completeDevicePairingClaim(input);
 	return deviceFail(400, 'Pairing claim op must be prepare or complete; legacy unproved claims are rejected');
+};
+
+/** Native clients may bind local grants only to the owner of their current device credential. */
+export const readDeviceIdentity = async (ownerId: string, deviceId: string): Promise<DeviceFail | { ok: true; ownerId: string; deviceId: string }> => {
+	if (!(await deviceOwnedBy(ownerId, deviceId))) return deviceFail(404, 'Device not found');
+	return { ok: true, ownerId, deviceId };
 };
 
 export const listDevices = async (

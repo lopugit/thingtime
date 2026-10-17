@@ -118,51 +118,12 @@ expanded transfer dialog without changing the ordinary library defaults.
 Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
 only intercepts events inside the browser and leaves editable inputs alone.
 
-`app/local-workspace/AccountSyncStatus.tsx` sits in normal page flow with the
-shared nav clearance. It distinguishes device saves, retries, refusals and
-conflicts. Comparison uses bounded scrollable content and explicit keep-device /
-keep-account choices; stale review must fail instead of overwriting new edits.
-Verify at 1440, 390 and 320 CSS pixels, including expanded comparison and long IDs.
 
-## Anonymous theme library
+## Native mobile device setup
 
-`ThemeSettings/ThemeStudio.tsx` uses content identity from `useWorkspaceUser`.
-Anonymous saves show device-only wording and use the dedicated `local-workspace/themes.ts`
-writer; account routes retain their authentication and publication rules.
-`theme/savedTheme.ts` is the shared token sanitizer. Normal Transfer controls
-reuse `utils/thingTransfer/theme.ts` validation and the local import transaction.
-Verify offline save/reload/apply/delete and transfer at desktop/390/320px with
-`test:local-workspace`, `test:things` and `test:theme`. Account theme sync and
-local history remain tracked in [the local coverage matrix](../local-workspaces.md).
-
-
-## Device workspace storage
-
-`Settings/ThingsSettings.tsx` includes `WorkspaceStorageSettings`, shared by the
-Settings page and drawer. `local-workspace/storageStatus.client.ts` binds only
-the active anonymous or account/origin/data-plane lease; identity invalidation
-clears old values before a new workspace renders. `WorkspaceTransaction.usage`
-reads the existing ledger and counts exact-scope keys without file-body reads.
-`storagePersistence.ts` separates passive browser protection checks from an
-explicit, bounded `StorageManager.persist()` request. No origin-wide usage
-estimate, account HTTP request or anonymous synchronization is introduced.
-Run `test:local-workspace`; `storage.browser.test.ts` uses `TT_LOCAL_STORAGE_URL`,
-`TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH` and
-`TT_LOCAL_STORAGE_ARTIFACTS` with the built local client. It verifies offline
-reload, other-tab writes, ledger failure/recovery, protection outcome and
-1440/390/320px layout. See the device-storage checkpoint in
-[local workspaces](../local-workspaces.md).
-
-
-## Local global/site composition
-
-`BuilderPagesList` links global editing and canonical site routes to `BuilderPage`.
-`schemas/sitePages.ts` supplies the same native-section definitions to offline
-Builder and server seeding. `SiteBlocksHost` resolves the workspace's pages with
-`useWebpage` and a bounded identity-owned `siteBlocksCache`; failed refreshes
-retain paint and offer Retry. Each global/route composition uses the existing
-webpage runtime, with native permission and Action trust checks intact.
-`drafts/sitePageDraft.ts` validates recoverable editor snapshots against the saved
-page revision. Cross-tab refresh is a scope-only local-workspace invalidation.
-Run `test:webpages`, `test:drafts`, `test:local-workspace` and the opt-in
-`local-workspace/siteBlocks.browser.test.ts` described in `docs/local-workspaces.md`.
+`components/Devices/MobileDeviceSetupCard.tsx` is shared by Things and Things
+settings. `mobileDeviceBridge.ts` negotiates the explicit native capability and
+fences responses by request, account and origin. iOS implements the bounded
+bridge in `iOS/Thingtime/Devices/`; Android uses `android/app/src/main/java/com/thingtime/mobile/`. Native credentials never reach the renderer.
+Run `test:devices` and the opt-in iOS/Android mobile-device acceptance scripts. See
+[full mobile and sync scope](../mobile-file-sync.md).

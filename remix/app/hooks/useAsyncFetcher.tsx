@@ -19,7 +19,7 @@ export function useAsyncFetcher() {
   const submit = useCallback(
     async (
       data,
-      opts: { action: string; method?: string; encType?: string; signal?: AbortSignal; errorContext?: string; expectedActor?: string; expectedDataPlane?: string | null }
+      opts: { action: string; method?: string; encType?: string; signal?: AbortSignal; errorContext?: string; expectedActor?: string; expectedApiOrigin?: string; expectedDataPlane?: string | null }
     ) => {
       const nextOpts = { ...defaultOpts, ...opts };
       const headers = new Headers();
@@ -30,6 +30,7 @@ export function useAsyncFetcher() {
         await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
         headers.set(EXPECTED_DATA_PLANE_HEADER, expectedPlane);
       }
+      if (nextOpts.expectedApiOrigin) headers.set('X-Thingtime-Expected-Api-Origin', nextOpts.expectedApiOrigin);
       if (nextOpts.expectedActor) headers.set('X-Thingtime-Expected-Actor', nextOpts.expectedActor);
       let body: BodyInit | undefined;
 
@@ -56,10 +57,15 @@ export function useAsyncFetcher() {
         response = await aiTaskFetch(nextOpts.action, {
           method,
           credentials: 'include',
+          ...(nextOpts.expectedApiOrigin ? { redirect: 'error' as const, cache: 'no-store' as const } : {}),
           headers,
           body,
           signal: nextOpts.signal
         });
+        if (nextOpts.expectedApiOrigin && (response.redirected || (nextOpts.expectedApiOrigin !== window.location.origin && response.headers.get('x-thingtime-api-fallback') !== nextOpts.expectedApiOrigin))) {
+          await response.body?.cancel().catch(() => {});
+          throw Error('The selected API server changed.');
+        }
       } catch (error) {
         const aborted = error instanceof Error && error.name === 'AbortError';
         recordApiCall({

@@ -65,14 +65,14 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.9.0',
-		featureVersion: '1.9.0',
+		contractVersion: '1.10.0',
+		featureVersion: '1.10.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
-		summary: 'Lists safe paired-device summaries or one detailed computer mirror.',
+		summary: 'Lists safe paired-device summaries or one detailed device mirror, including iOS and Android.',
 		detail:
-			'Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Generic /things never exposes protected device credentials, hashes, paths, arguments, or screen transport data.',
+			'Returns protected dedicated projections for the caller’s computers, iOS, Android and Apple Watch devices. The platform label never grants capabilities. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Generic /things never exposes protected device credentials, hashes, paths, arguments, or screen transport data.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
 		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
@@ -206,17 +206,20 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-pairing-claim',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'devices',
 		title: 'Claim device pairing',
 		endpoint: '/api/v1/devices/pairing/claim',
 		summary: 'Atomically pairs one node with a locally generated opaque credential.',
 		detail:
-			'The node generates a ttnode_ credential with at least 256 random bits and retains it in Keychain or an equivalent OS vault. Thingtime stores only its hash. Device creation, quota admission, credential session creation and challenge consumption commit together. Exact retries recover; changed retries return 409.',
+			'Accepts macos, windows, linux, watchos, ios and android descriptors. The node generates a ttnode_ credential with at least 256 random bits and retains it in Keychain or an equivalent OS vault. Thingtime stores only its hash. The existing prepare/complete Ed25519 proof binds both nonces, descriptor and capabilities. Device creation, quota admission, credential session creation and challenge consumption commit together. Exact retries recover; changed retries return 409.',
 		auth: { mode: 'none', description: 'One-time pairing secret in the JSON body; fail-closed IP rate limit.' },
 		methods: ['POST'],
 		steps: [
 			'Generate and persist the node credential locally.',
-			'POST the challenge, credential, descriptor and capabilities once.',
+			'POST op=prepare with the pairing secret, Ed25519 public key and client nonce; persist the returned server proof.',
+			'POST op=complete with the challenge, credential, descriptor, capabilities and signed proof; recover uncertain responses with exactly the same body.',
 			'Use the credential only as Bearer auth on node routes.'
 		],
 		requestExamples: [
@@ -225,10 +228,12 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 				description: 'Pair a macOS node.',
 				method: 'POST',
 				body: {
+					op: 'complete',
 					pairingSecret: 'ttpair_…',
 					credential: 'ttnode_…',
 					device: { name: 'MacBook Pro', platform: 'macos', model: 'MacBookPro', osVersion: '15.6', appVersion: '1.0' },
-					capabilities: ['session.read', 'session.send']
+					capabilities: ['session.read', 'session.send'],
+					proof: { pairingId: 'pair-id', publicKey: '<base64url-32-bytes>', nonce: '<base64url-32-bytes>', serverNonce: '<base64url-32-bytes>', signature: '<base64url-64-bytes>' }
 				}
 			}
 		],
@@ -240,6 +245,26 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 				body: { ok: false, error: 'This pairing challenge was already claimed with different device data' }
 			}
 		]
+	}),
+	endpoint({
+        id: 'devices-disconnect', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+        title: 'Disconnect a paired device', endpoint: '/api/v1/devices/disconnect',
+        summary: 'Revoke the device credentials owned by the current account.',
+        detail: 'The exact deviceId must belong to the authenticated full account. All live device sessions for that owner/device are revoked in the home identity plane. Repeated calls are safe; unrelated devices and browser sessions remain active. Device history, sync configurations and local/cloud files are retained. Native hosts must pair again; replaying the old completed claim cannot reactivate a revoked credential. This does not recall work already authorized before revocation.',
+        auth: { mode: 'session-or-bearer', description: 'Full signed-in user session; scoped device, app and PAT credentials are refused.' },
+        methods: ['POST'], steps: ['Choose one of your paired devices.', 'Disconnect its account access.'],
+        requestExamples: [{ name: 'Disconnect', description: 'Revoke one owned connection.', method: 'POST', body: { deviceId: 'device-id' } }],
+        responseExamples: [{ status: 200, description: 'Disconnected; files and history retained.', body: { ok: true, deviceId: 'device-id', disconnected: true } }]
+    }),
+	endpoint({
+		id: 'devices-node-identity', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'devices',
+		title: 'Read paired device identity', endpoint: '/api/v1/devices/node/identity',
+		summary: 'Returns only the owner and device fixed by a live device credential.',
+		detail: 'Native hosts use this private, uncached read before local folder access. The scoped ttnode_ credential must remain valid and its owned device must exist. Query/body IDs cannot select another identity. It grants no file access and exposes no session or credential fields.',
+		auth: { mode: 'bearer', description: 'Scoped ttnode_ Bearer credential only; ordinary browser sessions cannot read it.' },
+		methods: ['GET'], steps: ['Resolve the native credential at the configured origin.', 'Compare both IDs before using a native folder grant.'],
+		requestExamples: [{ name: 'Identity', description: 'Read this paired identity.', method: 'GET', headers: { Authorization: 'Bearer ttnode_…' } }],
+		responseExamples: [{ description: 'Paired identity', status: 200, body: { ok: true, ownerId: 'owner-id', deviceId: 'device-id' } }]
 	}),
 	endpoint({
 		id: 'devices-node-state',
@@ -6044,9 +6069,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Attachment absent.', body: { ok: true } }]
 	}),
 	endpoint({
+    id: 'files', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'attachments', title: 'Inventory folders and recover file versions',
+    endpoint: '/api/v1/files', summary: 'Inventory a private folder, read file revisions or conditionally commit a stable file Thing.',
+    detail: 'Complete private folder inventories use a bounded snapshot read and never return partial success. One file identity points at an immutable attachment version. Commits atomically bind owned durable file uploads, update metadata/accounting and append a private Timeline revision. Prior byte versions remain charged and recoverable. No overwrite occurs on revision mismatch. Home data plane only.',
+    auth: { mode: 'session-or-bearer', description: 'Full owning user sessions only; scoped PAT, app, device and service credentials are rejected.' }, methods: ['GET', 'POST'],
+    steps: [
+      'GET rootId alone returns a complete owned private folder inventory from one snapshot transaction, including live stable files, folders and immutable content fingerprints. Bounds are 10,000 descendants, 64 breadth levels, 8 MiB and 20 seconds. Overflow, invalid paths, ambiguous case/Unicode names, invalid ancestry or unavailable storage fail without returning a partial scan. Ordinary non-filesystem Things and trashed files are outside this inventory. Reauthorize each source/destination before mutation; the inventory grants no write permission.',
+      'POST kind=folder, UUID id and operationId, name and folderId creates an ordinary private folder with an immutable canonical Timeline receipt. The original IDs and metadata must be retained for retries; changed replay input and occupied identities/paths fail. GET folderId reads a folder; adding operationId reads its immutable creation receipt even after later edits or deletion. This is folder creation, not folder overwrite or deletion.',
+      'GET id returns the current file. GET id plus operationId returns the exact committed receipt or null; null is not evidence of file deletion.',
+      'POST id and operationId (UUID v4), expectedRevision (null for create), name, folderId (or null), attachmentId, contentVersion and trashed. Obtain contentVersion from attachment-content fingerprint=1. Retain this entire payload for retries.',
+      'A replay returns the original committed snapshot even after subsequent edits. Reusing an operation with different input, stale revisions, mismatched bytes, foreign/bound uploads or custom data planes fail without changing either file.',
+      'POST kind=retained-version with the same commit fields, a non-null expectedRevision and trashed=false retains alternate bytes without changing the live file. Name and folder must still match the reviewed live file. An owner-private Timeline effect stores both versions; it never advances the Published head. GET id, operationId and kind=retained-version retrieves this separate immutable receipt. Replay the exact original payload after an uncertain response. This retains uploaded bytes; it does not capture device files automatically or create an independent disaster-recovery backup.',
+      'To restore prior bytes, commit a retained attachment under a new operation ID and the current expectedRevision. Trash is a reversible metadata state; this endpoint never refunds or deletes retained bytes.'
+    ],
+    requestExamples: [{ name: 'Inventory folder', description: 'Read one complete private folder tree.', method: 'GET', query: { rootId: '00000000-0000-4000-8000-000000000002' } }, { name: 'Read file', description: 'Read one owned current file.', method: 'GET', query: { id: '00000000-0000-4000-8000-000000000001' } }],
+    responseExamples: [{ status: 409, description: 'A stale write preserves both versions.', body: { ok: false, error: 'File changed; preserve both versions and reconcile' } }]
+  }),
+	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.13.0',
-		featureVersion: '1.13.0',
+		contractVersion: '1.14.0',
+		featureVersion: '1.14.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
@@ -6073,6 +6115,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['GET'],
 		steps: [
+			'range=1 with version (the exact fingerprint version), offset and length returns 206 bytes without redirects. Length is 1 byte–2 MiB, offset is a nonnegative integer, and the complete range must fit the file. No cache/image/download/fingerprint variants may be combined. The server validates exact upstream Content-Range and byte count and reauthorizes before returning bytes; responses are private/no-store. Changed versions return 409, out-of-file ranges 416, truncated/wrong upstream bytes 502. Native staged publication must still verify the full planned fingerprint.',
+			'fingerprint=1 returns a verified sha256-parts-v1 fingerprint, exact-content opaque version and size through the same live authorization gate. The digest hashes canonical multipart part digests, not the whole file; compare algorithm, part size, part count and size as well. No object keys, signed URLs or account data are returned. Unavailable or incompatible checksums return 409; never treat that as a missing file.',
 			'GET with id; optionally add download=1. width=64,320,640,1280,1920 returns a bounded WebP preview for verified raster images up to 20 MiB; unsupported images return 415 so clients can use the original.',
 			'cache=bytes returns at most 16 MiB of authorized original content through the same origin, without S3 CORS. Larger files return 413; omit cache to use native range streaming.',
 			'cache=validate performs the same live authorization and returns {ok,cacheKey,size} without file bytes. Cache keys are opaque, viewer/version scoped and include the requested width. Revalidate before EVERY local cache read; never serve cached private bytes after a failed check or offline. Never persist signed URLs.',
@@ -9251,8 +9295,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.33.2',
-    contractVersion: '1.33.2',
+    featureVersion: '1.35.0',
+    contractVersion: '1.35.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9260,6 +9304,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'File-sync Things store bounded editable device/root/destination preferences with private defaults, explicit pause, direction, deletion, network, charging and exact-path exclusions. Native grants and execution approval remain device-local; these data records alone never authorize transfers. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
       'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
       'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
@@ -9927,7 +9972,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things/bulk',
     summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
     detail:
-      'Standalone file-purpose attachments can be moved between owned folders through the dedicated managed placement writer. Use the portable export/import workflow to copy stored file bytes. ' +
+      'Stable file Things use the same revision-recorded managed placement path. Standalone file-purpose attachments can be moved between owned folders through the dedicated managed placement writer. Use the portable export/import workflow to copy stored file bytes. ' +
       'Owned private chat archives can be moved by their first-party user owner on same-origin requests. Only complete archive roots move: deleting roots, historical children, scoped credentials and service accounts cannot enter this path. A home transaction checks source/destination ownership and source version, advancing the destination fence; only folderId and updatedAt change, never history, identities, ACLs or storage accounting. ' +
       'Owned standalone personal emojis can be moved through the dedicated placement writer; community-bound emojis cannot be filed. ' +
       'Each id runs through its canonical writer (updateThing, createThing, deleteThing, or the dedicated managed-content placement writer); ownership, protected-kind, folder, and validation rules remain enforced. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share things can’t be copied; copying a FOLDER copies its whole subtree (bounded at 500 things), skipping uncopyable kinds with per-item copied/skipped counts. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). share applies an acl (or legacy visibility circle) to each thing; with recursive true, folders also apply it to everything inside (same 500-thing bound) — inherit-locked things are counted as skipped, never silently changed. Results are per-item: one bad id never fails the batch.',

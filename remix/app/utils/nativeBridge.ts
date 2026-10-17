@@ -11,9 +11,15 @@ export type ThingtimeNativeBridge = {
   lopuChatActivityVersion?: string;
   widgetVersion?: string;
   notificationsVersion?: string;
-  platform: 'ios' | 'macos';
+  devicePairingVersion?: string;
+  fileAccessVersion?: string;
+  fileStagingVersion?: string;
+  filePublicationVersion?: string;
+  fileExportVersion?: string;
+  platform: 'ios' | 'macos' | 'android';
   isNativeWebView: true;
   postMessage: (message: ThingtimeBridgeMessage) => void;
+  postFileFrame?: (frame: ArrayBuffer) => void;
   receiveMessageFromNative?: (message: ThingtimeBridgeMessage) => void;
   onMessage?: (listener: (message: ThingtimeBridgeMessage) => void) => () => void;
   offMessage?: (listener: (message: ThingtimeBridgeMessage) => void) => void;

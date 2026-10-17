@@ -58,22 +58,7 @@ isolated temporary `pnpm` shim resolving to the same pin, so an unrelated
 global pnpm cannot silently change the packaged dependency graph. The shim is
 removed after success or failure.
 
-Concurrent worktree builds must use separate native staging/cache roots. For
-example, run the following from the worktree's repository root, replacing
-`my-worktree` with its unique name:
-
-```sh
-THINGTIME_NODE_CACHE_ROOT="$HOME/Library/Caches/com.thingtime.desktop.node/my-worktree" \
-  corepack pnpm@10.12.1 --dir electron build
-```
-
-The cache must remain under `~/Library/Caches/com.thingtime.desktop.node`.
-SwiftPM serializes its own build directory, but the shared default bundle-stage
-directory can still be replaced by another build during signing. Keep each
-worktree's cache override for subsequent native verification/build commands,
-and coordinate replacement of the single installed app before installing.
-
-`build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_server`,
+`build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_middleware`,
 materializes `remix/.output` into `electron/dist/web/.output` without external
 worktree symlinks, and builds both MCP desktop entry points. `build:native`
 builds the SwiftPM helper and one-shot XPC bridge, signs them with the explicit
@@ -369,3 +354,68 @@ while processing/replying, and routes final text through the selected chat/model
 Run `pnpm --dir electron test` plus the `desktopSpeechRecognition.test.ts` and
 `voice*.test.ts` tests in Remix. Verify a spoken turn and stopping capture in
 the installed signed app; mocked callbacks cannot prove macOS recognition.
+
+## Renderer restart verification
+
+Desktop owns the HTTP listening socket and keeps its port in the profile's
+`renderer-origin.json` (schema version 1, mode 0600). First startup binds port 0,
+flushes the new record and publishes it without overwriting another launch's
+record. Later startups bind exactly that port. An occupied port, unreadable or
+malformed record fails before creating a window; no random-port fallback or
+request to the other server is allowed. Stop the conflicting application and
+retry. Preserve the record alongside the Chromium profile for recovery/backups.
+Do not delete it as a routine startup workaround.
+
+Only HTTP cache is cleared on launch. IndexedDB and localStorage retain the
+shared sync records, keyed by canonical API origin/account/home/device/root.
+This requires no new environment variables or credentials. Old random-port
+origins are left intact but are not automatically migrated. Independent temporary
+dev profiles still receive independent origins and are cleaned up by their owner.
+
+After `build:web` and `verify:web`, run:
+
+```sh
+corepack pnpm --dir electron run verify:renderer-restart
+```
+
+The command creates a disposable profile, bundles the production journal,
+executor and configuration draft modules using MCP's installed esbuild dependency,
+and runs four separate Electron processes against the staged Nitro middleware.
+It checks pending IDs/drafts, scope isolation, receipt recovery without replay,
+a completion baseline and collision refusal followed by recovery. Native dispatch
+is absent and receipts are synthetic; this is not signed installed Mac transfer
+acceptance, a power-loss test or background-worker coverage. Installed app state
+and its managed Node are never used or modified.
+
+### Historical file export on Mac
+
+History uses `fileExportVersion` 1.0.0 and the narrow `fileExportRequest` preload
+method. The host opens a native Save panel, reads exact retained attachment
+versions in 2 MiB ranges using the selected account's cookie session, verifies
+the canonical multipart fingerprint from disk, and publishes exclusively.
+Existing files and symlinks are refused, even if the Save panel offers Replace.
+Choose a new filename instead. Paths, credentials and bytes stay in the host.
+Account cookies, navigation, renderer loss, endpoint changes and app exit cancel
+the active operation. There is no persistent folder grant or overwrite consent.
+
+This foreground export requires attachment-content 1.14.0 or compatible 1.x
+and a destination filesystem supporting exclusive hardlinks and directory fsync.
+It is not a resumable backup export; an interrupted process can leave a hidden
+`.thingtime-export-*` partial file in the chosen folder. The operation guards
+parent identity but does not promise protection against an adversarial local
+process continuously renaming the destination's ancestors.
+
+Run `node --test electron/test/file-export.test.cjs` from the repository root.
+After staging a web bundle with `build:web`, for the real native panel run `corepack pnpm@10.12.1 --dir electron exec electron
+test/fixtures/file-export-host.cjs`, click Save this version, then accept the
+suggested temporary destination. It checks 17 MiB against generated source bytes,
+using the production preload/host and real Electron cookie-session requests.
+Add `--headless` to exercise the packaged Nitro proxy with a fixture destination
+instead of a native panel. Close the test window to remove its disposable
+profile/output. This fixture
+does not establish authenticated installed-app Timeline acceptance.
+
+The `node_middleware` build explicitly enables Nitro static assets. Run
+`verify:renderer-restart` against the staged bundle: it now compares every
+startup script/style response to the packaged file, so a valid HTML shell alone
+cannot hide a missing asset server and blank renderer.

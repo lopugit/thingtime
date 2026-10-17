@@ -103,10 +103,38 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
   return headers;
 };
 
-export const proxyApiRequestToFallback = async (request: Request) => {
+// Desktop sync carries its canonical destination through the local cookie proxy.
+// Check before consuming mutation bytes, even if endpoint settings changed while
+// the renderer was preparing a request.
+export const EXPECTED_API_ORIGIN_HEADER = 'X-Thingtime-Expected-Api-Origin';
+export function desktopSyncProxyAllowed(request: Request): boolean {
+  const local = new URL(request.url), expected = request.headers.get(EXPECTED_API_ORIGIN_HEADER);
+  if (process.env.THINGTIME_DESKTOP !== '1' || local.hostname !== '127.0.0.1' ||
+      expected !== getApiFallbackOrigin() || !request.headers.get('X-Thingtime-Expected-Actor') ||
+      request.headers.get('X-Thingtime-Expected-Data-Plane') !== 'home' ||
+      request.headers.get('Sec-Fetch-Site') === 'cross-site' ||
+      (request.method !== 'GET' && request.headers.get('Origin') !== local.origin)) return false;
+  const methods: Record<string, string[]> = {
+    '/api/v1/auth/me': ['GET'], '/api/v1/things': ['GET', 'POST', 'PATCH'],
+    '/api/v1/files': ['GET', 'POST'], '/api/v1/attachments/uploads': ['POST'],
+    '/api/v1/attachments/uploads/parts': ['POST'], '/api/v1/attachments/uploads/complete': ['POST'],
+    '/api/v1/attachments/content': ['GET']
+  };
+  return methods[local.pathname]?.includes(request.method) === true;
+}
+
+export const proxyApiRequestToFallback = async (request: Request, options: { omitForwardedOrigin?: boolean } = {}) => {
   const requestUrl = new URL(request.url);
   const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin());
+  const expectedOrigin = request.headers.get(EXPECTED_API_ORIGIN_HEADER);
+  if (expectedOrigin !== null && expectedOrigin !== fallbackUrl.origin)
+    return Response.json({ ok: false, code: 'API_ORIGIN_CHANGED', error: 'The selected sync server changed.' },
+      { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
+  if (options.omitForwardedOrigin) {
+    headers.delete('x-forwarded-host');
+    headers.delete('x-forwarded-proto');
+  }
   const init: RequestInit & { duplex?: 'half' } = {
     method: request.method,
     headers,

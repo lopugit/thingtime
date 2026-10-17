@@ -29,6 +29,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Portable transfer (export plan, ZIP/JSON bundles, import) | `app/api/utils/things/exportTransfer.ts`, `importTransfer.ts`, `app/utils/thingTransfer/*` (client: `browser.ts`, `archive.ts`) |
 | Kind schemas and protected kinds | `app/schemas/registry.ts` (`PROTECTED_THINGTIME`, `folderSchema`, `isProtectedThingtime`) |
 | Indexes | `app/api/utils/mongodb/collections.ts` `ensureIndexes()` (central registry; new indexes are rare, evidence-backed exceptions) |
+| Internal point-in-time owner inventory (managed-family coverage incomplete) | `app/api/utils/backups/accountInventory.ts`, `withHomeMongoSnapshot` in `collections.ts`; canonical Timeline snapshots, bounded owner/ID paging, modern index plan only. Contract: `docs/portable-backups.md` |
 | Shared event/link records, IndexedDB relational queue/index, bounded cache, draft recorder and account sync | `app/timeline/` (`records.ts` and `branches.ts` are the identical local/remote durable schemas) |
 | Transactional history recording, protected binary event Things and paging | `app/api/utils/timeline/` |
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
@@ -348,257 +349,96 @@ so decrypted fields never enter shared client history/cache. The reusable
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 
-## Browser workspace adapter (in progress)
 
-`app/local-workspace/things.ts` reuses the canonical crystal, extended and tag
-validators, component selector and transfer collector. `accountSync.ts` adds an
-atomic account queue and conditional conflict resolution; `accountApi.client.ts`
-intercepts supported owned creates/updates/reads before the remote adapter.
-`accountTransport.client.ts` pins actor/data-plane headers. Unsupported fields
-must never be silently dropped. Anonymous storage has no account sync transport.
-The completion matrix and exact local verification limits are in
-[local-workspaces.md](../local-workspaces.md). Run `npm run test:local-workspace`
-from `remix/` alongside the existing Things suites.
-
-Anonymous themes use the dedicated `app/local-workspace/themes.ts` writer, with
-shared `app/theme/savedTheme.ts` normalization and portable theme validation.
-The generic local writer still rejects protected kinds. Local transfer imports
-validate and normalize themes, remap IDs and enforce the shared theme quota in
-one transaction; imports never select or publish a theme. Account theme sync and
-local Timeline integration remain outstanding (see `docs/local-workspaces.md`).
+Stable file roots (`api.files` 1.0.0) use `api/utils/files/files.ts` with the
+shared `fileSync/cloudFile.ts` contract and `file-content` Timeline snapshots.
+Their byte versions are canonical bound attachments. `ownerLibraryQuery.ts`
+lists live roots once; existing managed placement/recordFolderPlacement handles
+file moves and folder deletion. `test:files` and `file-versions.integration.mts`
+cover the API; see the full mobile sync ledger for pending product integration.
 
 
-## Anonymous Action execution
-
-`app/actions/runtime.ts` owns the shared bounded data interpreter. The server
-adapter remains in `app/api/utils/actions/execute.ts`; the isolated anonymous
-adapter is `app/local-workspace/actions.ts`. Both retain the canonical saved
-Action grammar and capability envelopes. Browser flows reuse the existing interpreter. `local-workspace/actionRequests.ts`
-adapts supported Things CRUD and data-Action requests without HTTP; unsupported
-services fail explicitly. Remaining endpoint adapters and account execution/sync are still pending.
-Web Platform execution now uses the same compiled runtime in a sandboxed offline document. Protected local `action-run` children are bounded and excluded from
-transfer; they do not substitute for canonical Timeline history.
-`useWorkspaceScope` partitions Action view/cache identity, while the shared
-`ThingDefinitionEditor` uses local drafts for anonymous definitions. See
-[local workspace coverage](../local-workspaces.md) for the remaining merge gate.
+Android offline folders use the bounded native `ManagedFileStore` catalog and
+`OfflineDocumentsProvider`, exposed only after the native `FolderBridge`
+creation consent. Android Files gets read-only document snapshots; editable
+connection Things and Timeline remain shared. `OfflineDocumentsProviderTest`
+and the opt-in `THINGTIME_OFFLINE_FILES_TEST=1` installed-app flow cover root
+visibility, ancestry, read-only handles, migration and real picker/byte reads.
+See [mobile sync](../mobile-file-sync.md) for pending download integration and
+the broader cross-device requirements.
 
 
-Local page source availability and full workspace cache scope live in
-`Builder/webpageRuntime.tsx`; `liveComponent.tsx` and `useCollectionSource.ts`
-execute through the existing API adapter. `sourceWorkspace.browser.test.ts`
-verifies real local Action execution/refresh and inert/identity boundaries;
-`webpageRuntime.test.ts` covers account/origin/data-plane cache separation.
-See [the local source checkpoint](../local-workspaces.md#local-page-sources-checkpoint--2026-10-16).
+Android `ManagedFolderAccess` connects the shared foreground download target to
+Thingtime offline roots. Publication bridge 1.1 requires each selected root's
+capability, current OS read grant and native approval bound to the exact saved
+connection. Generic SAF roots remain upload/read-only. The native catalog serves
+stable scan/read versions and shared publication receipts; provider notifications
+refresh Android Files. `media-cache-core.mjs` excludes pinned ranges, fingerprint
+JSON and expected-actor/data-plane requests from media interception. See the
+[download acceptance ledger](../mobile-file-sync.md).
 
 
-Bundled suite installation shares `schemas/suiteInstallation.ts` between the
-existing server adapter and `local-workspace/suites.ts`. `LocalThings.atomic`
-reuses normal validators/quota checks for one install transaction. The gallery
-and control fallbacks use `Builder/installSuite.ts` to choose the current
-workspace. `suites.test.ts` covers all bundles, concurrent install, normalization,
-edit preservation, rollback and canonical transfer. `actionRequests.test.ts`
-covers the closed no-network request host; `suites.browser.test.ts` is the opt-in
-clean offline gallery/edit/save/reload test. It verifies cold offline native execution, workers, form events and error/Stop
-behavior under production CSP. `scripts/platform-runtime-plugin.mjs` packages the
-compiled renderer as a virtual document; `scripts/platform-runtime.mjs` pins its
-only script by hash. Embed/draft bundles keep the standalone URL. Vite preview
-uses the production app CSP plus the existing isolated-runtime CSP middleware. See the dated checkpoint in
-[local-workspaces.md](../local-workspaces.md).
+`foregroundSync.ts` also executes two-way runs through the existing cloud and
+native adapters. `MobileSyncConnections` obtains scoped native approval and
+exposes Sync now only for publication-capable roots with deletes disabled.
+`foregroundSync.test.ts` covers mixed-direction recovery and pre-effect conflicts;
+Android's optional `THINGTIME_TWO_WAY_SYNC_TEST=1` checks actual mixed bytes and
+independent edits. Mac adapters and native workers remain in the mobile sync ledger.
 
 
-Library text search uses `local-workspace/librarySearch.ts` behind the explicit
-`workspace: true` API option. `accountApi.client.ts` returns local content first,
-then owner-filtered remote results with separate remote/pending continuations in
-`searchCursor.ts`; identity leases and aborts retire stale results. The Things UI
-keeps content on errors, offers Retry and load-more, and labels visible selection
-checkboxes. Structured/public search is a separate unfinished local adapter.
-`librarySearch.test.ts`, `searchCursor.test.ts`, adapter tests and the opt-in
-`search.browser.test.ts` cover this path. See the dated search checkpoint and
-remaining matrix in [local workspaces](../local-workspaces.md).
+Apple native grants, scan/read and publication are now shared in
+`apple/FileSync/Sources/AppleFileSync`; iOS `MobileFolderBridge` imports that
+local package. `FileSyncOwnerScope` preserves the pairing/grant key and JSON.
+`FolderBookmark` owns the iOS/macOS bookmark differences. Common folder and
+publication tests live under the package; iOS retains its host bridge extensions.
+The shared `PublicationProcessAcceptance` fixture runs through iOS's test host
+and Mac's test-only child executable. `ThingtimeNodeCore/MacFolderSync.swift`
+now wraps that package in local XPC dispatch, live paired-identity checks,
+owner-scoped grants and configuration-bound native write consent. The Node app
+owns picker/approval dialogs and endpoint-isolated staging. Generic/leased
+commands cannot call it. `electron/lib/folder-sync.cjs` now verifies the active
+Chromium account and selected origin around native dispatch. `DesktopFolderAccess`
+reuses `MobileFolderAccess`/`MobileSyncConnections` through a `FolderHost`; the
+desktop runtime maps canonical API requests onto the bundled cookie proxy and
+preserves anonymous signed uploads. Native network/power conditions use the shared
+contract. Installed acceptance, restart persistence and native streaming remain
+pending; see the current release boundary in the mobile sync ledger.
+
+Android staging 1.1 uses `FolderRangeSource` and `mobileRangeFrames.ts` for
+nonce-bound, native-pulled binary WebView frames. `SyncStaging.appendRange`
+retains the lock and checkpoints once per bounded range; older WebViews fall
+back to staging 1.0. See the dated [sync ledger](../mobile-file-sync.md).
+
+`fileSync/conflictResolution.ts` binds explicit file choices to reviewed stamps
+and configured direction. `foregroundSync.ts` reauthorizes/rescans before the
+existing durable run is created. `Devices/SyncConflictReview.tsx` supplies the
+paginated review in `MobileSyncConnections`; cancellation/visibility changes
+release the waiting review. `conflictResolution.test.ts`, `foregroundSync.test.ts`
+and `file-sync-foreground.integration.mts` cover stale choices and receipt recovery.
+
+## Retained file history
+
+`components/Timeline/TimelineFileVersions.tsx` renders canonical `file-content`
+Timeline snapshots and uses `fileSync/fileVersions.ts` for content identity and
+restore validation. `useApi().v1.files` reads/commits through the existing files
+API with account/origin/home fences. Downloads use `attachmentContentUrl` and the
+existing `getAttachmentDownload` permission gate. Restore commands persist only
+retry metadata; bytes/history remain in accounted attachments and Timeline.
+`fileVersions.test.ts`, `storageScope.test.ts`, `scripts/file-history.browser.html`
+and `scripts/file-versions.integration.mts` cover this path. Installed native
+History/download acceptance and native retained-version browsing remain open.
 
 
-Anonymous ordinary content mutations now append canonical history through
-`local-workspace/timeline.ts` in the same workspace transaction. It reuses
-`timeline/thingContent.ts`, normalized event/link records, the local page resolver
-and shared component captures. `TimelineProvider` connects the existing history
-UI and draft queue to this isolated authority and captures its connection API
-facade. No account Timeline requests or authority are borrowed. Run
-`test:timeline`, `test:local-workspace`, `test:things` and the opt-in
-`timeline.browser.test.ts`. See the dated Timeline checkpoint and still-open
-restore/merge/export/account-sync matrix in [local workspaces](../local-workspaces.md).
+`NativeFileSession.swift` shares pinned-cookie, same-origin binary reads between
+native History exports and iOS sync. Staging 1.2 accepts only pinned cloud file
+metadata through `NativeCloudFile.swift`; `mobileStaging.client.ts` keeps the shared
+journal/verification flow while the host fetches byte ranges directly. See the
+[iOS native cloud range runbook](../../iOS/README.md#native-cloud-download-ranges)
+and the corresponding `TESTING.md` checklist.
 
 
-Anonymous contextual owner notes use `local-workspace/timelineNotes.ts` with the
-shared note validators and the existing Timeline queue. They are separate scoped
-records, batched with History pages and included in their byte budget. Atomic
-caps and content-free deletion markers prevent cross-tab overfill and delayed
-retry resurrection. `timelineNotes.test.ts` covers those boundaries and
-`timeline.browser.test.ts` covers offline save/reload/remove and actionable
-refusals. Lopu explanations retain their real account/provider requirements.
-
-
-Version name mutation/replay semantics are shared in
-`timeline/versionNameMutation.ts`. The existing server adapter retains its
-transactions and protected writer; `local-workspace/timelineVersionNames.ts`
-commits canonical names/effects and clear-revision metadata atomically in the
-anonymous namespace. `timelineVersionNames.test.ts` covers replay after later
-changes, concurrent CAS, rollback, damaged metadata and scope isolation. The
-ordinary offline History browser test includes name/rename/clear/reload. Run
-`test:timeline:versions` against its disposable replica for server regression;
-the script now binds the response to the exact sent operation ID and cleans up
-only Things it created, including after a test failure.
-
-
-Anonymous variations use `local-workspace/timelineBranches.ts` behind the
-existing Timeline facade and durable working-copy queue. Canonical branch/head
-records and effect receipts are unchanged. Shared `timeline/branchMutation.ts`
-and `timeline/versionGraph.ts` enforce replay, CAS, bounded ancestry and fixed
-historical checkout for both authorities. `BranchWebpage` accepts the exact
-local owner/plane pair via content identity; global account data-plane validation
-is unchanged. Native Builder edits remain isolated from the current Thing, and
-branch Actions/live data stay paused. Run the local branch tests, offline History
-browser test and disposable `scripts/timeline-branches.integration.mts` for
-account writer parity. Account offline sync remains pending.
-
-Branch comparison is shared in `timeline/branchMergePreview.ts`; bounded recorded
-component reads use `timeline/recordedComponentReader.ts`. Anonymous `LocalTimeline`
-binds both to one readonly workspace transaction. `timelineBranchMerge.test.ts`
-covers conflict choices, exact captures, preflight byte limits, stale heads and
-scope refusal; the offline browser and real API branch checks cover canonical
-merge save/reload without changing the current Thing. Current-content
-restore/undo/merge now shares `timeline/versionPlan.ts` and
-`publishedComponentTools.ts` with account Timeline. `timelineVersions.ts` supplies
-anonymous readers and uses `LocalThings.versionTransaction` for normal validation,
-placement, quota and atomic content/copy/capture writes. Hashing stays outside IDB;
-head/timestamp/component preimages are rechecked inside the write transaction.
-`timelineVersions.test.ts` covers replay, recovery, races, copy isolation,
-validation and rollback. The ordinary offline browser test and both guarded
-version/component API integrations cover the native flow and account parity.
-Historical export now uses shared `timeline/exportVersion.ts`; `LocalTimeline`
-binds it to one readonly anonymous transaction. The same version archive retains
-content, notes, name and canonical dependency references. It is distinct from a
-portable Thing transfer: restore recorded content/components, then use normal
-Thing export/import for that workflow. `timelineExport.test.ts`, the offline
-History browser download and real version API integration cover both paths.
-`LocalThings.hasReference` routes restored copies and retained deleted identities
-within the anonymous partition. GenericThingPage uses workspace ownership;
-PostCard comments/replies use matching local author projections. Local Actions
-and interactions resolve targets through scoped storage, never an ID prefix.
-`restoredRouting.test.ts` and the offline History/detail browser tests cover
-public/account isolation and native restored-copy editing.
-Page + related History now uses `local-workspace/timelineRelated.ts` to traverse
-only the active anonymous partition, with canonical composition references and
-component selection. Shared `timeline/relatedHistory.ts` supplies request checks
-and the sorted membership digest to both account and browser readers. Browser
-hashing occurs between readonly transactions; membership is rechecked before
-reading events. Changed cursor membership resets both paging directions, while
-a change between the two reads returns an explicit retry error. The offline
-History browser regression includes filter selection, cold reload, responsive
-bounds and membership replacement after restore. `timelineRelated.test.ts`
-covers args, aliases, caps, cycles, scope isolation and transaction races; the
-guarded `timeline-related.integration.mts` verifies the real account API and
-cleans up its own fixture Things. Protected histories and account sync remain
-pending.
-
-
-Anonymous Timeline library discovery uses `localTimelineFolder` in
-`local-workspace/timeline.ts` and `LocalThings.librarySnapshot` for managed
-read projections. `snapshot` stays authored-content-only; normal mutations and
-transfers cannot alter/copy the History container. `api.client.ts` routes its
-exact reserved identity locally, including an empty workspace's not-found read.
-`ThingsPage` only negotiates remote rename capabilities for account operations.
-Run `test:local-workspace` and `timeline.browser.test.ts` with a production client
-build; it defaults to actual offline emulation and refuses recovered module
-errors. See the managed-folder checkpoint in `docs/local-workspaces.md`.
-
-
-Account bulk moves now enter the existing sync queue through the `LocalThings.move`
-mutation hook, in the same transaction as placement and revision. The account API
-hydrates only missing owned sources/ancestors, guards mixed pending/managed
-batches and overlays local placement on fresh/cached folder listings. Remote
-flush still uses conditional Things PATCH with exact actor/data-plane headers.
-Guarded remote API methods reject promises while unconfirmed; optional archive
-metadata probes can handle that refusal without crashing cold offline folders.
-`accountMove.browser.test.ts` uses `TT_LOCAL_ACCOUNT_MOVE_URL` (disposable local
-server only), `TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH` and
-`TT_LOCAL_ACCOUNT_MOVE_ARTIFACTS`. It creates/cleans its own private fixture and
-checks normal Move UI, cold reload, server-before/after state and responsive
-bounds. See [account move acceptance](../local-workspaces.md#account-folder-moves--2026-10-16).
-
-## Device definition catalogues
-
-`app/local-workspace/definitionCatalog.ts` filters and pages local schema and
-component snapshots. `ComponentsLibrary/bundledComponentCatalog.ts` projects the
-existing bundled suites without persisting or assigning ownership. Catalogue and
-detail editors use `drafts/useComponentVersionDraft.ts`; canonical Thing creation
-is independent of ancillary draft saves. Run `test:components`, `test:drafts`,
-`test:local-workspace` and the opt-in `components.browser.test.ts` flow described
-in [local workspaces](../local-workspaces.md). Remote account authorization and
-component trust/source confirmation remain separate from local ownership.
-
-
-Global/site page definitions share `app/schemas/sitePages.ts` between the server
-seed and local Builder. They remain canonical webpage Things, privately owned
-in the selected workspace. `local-workspace/runtime.client.ts` broadcasts only
-scope invalidation after writes; recipients ignore other account/origin/data-plane
-scopes. `siteBlocks.browser.test.ts` verifies anonymous offline edits, scoped
-account sync, normal import remapping and native source rendering. See the
-[local workspace checkpoint](../local-workspaces.md#global-and-site-blocks--2026-10-16).
-
-
-Account ordinary deletion is handled by `local-workspace/accountSync.ts` and the
-existing `accountTransport.client.ts` conditional DELETE. Intent and content
-removal share a workspace transaction; pending before-images use the existing
-storage quota, and acknowledged tombstones suppress stale cache resurrection.
-Folder drains and target-linked deletions order their dependencies; reviewed
-child restoration blocks an outstanding parent cascade. `AccountSyncStatus.tsx`
-provides explicit review and restore/delete choices. `ThingsPage.tsx` refreshes
-visible folders on scoped local changes. `accountDelete.test.ts` and its browser
-counterpart cover failure/retry, scope and real offline UI behavior. Protected
-kinds retain their dedicated adapters; see the outstanding acceptance matrix.
-
-
-`utils/thingTransfer/importContent.ts` contains the shared account import ordering
-and independent-copy crystal preparation. `importTransfer.ts` reuses it on the
-server; `LocalThings.import` uses it for account copies and calls the existing
-mutation hook in the same transaction. `accountApi.client.ts` routes ordinary
-JSON imports into that queue, with managed/file imports retaining their dedicated
-adapters. `accountImport.test.ts` covers rollback, frozen retries and references;
-`accountImport.browser.test.ts` covers the normal dialog offline and a real server
-export/import round-trip. Offline account export completeness remains a separate gate.
-
-
-Account Download uses `local-workspace/accountExport.ts` and the shared
-`exportLocalThingSnapshot` collector. `AccountThingSync.exportSnapshot` captures
-content and queue/tombstones together. Complete canonical online plans supply
-scoped export-only dependency snapshots; partial library pages never establish
-completeness. The existing account transport now also serves export preparation
-with actor/data-plane headers and capability negotiation. `accountExport.test.ts`
-covers missing coverage, stale copies, pending edits, alias ownership, quota,
-cancellation and identity fencing. `accountImport.browser.test.ts` exercises
-real offline normal-dialog downloads and round-trips the downloaded file.
-Saved standalone account files now participate in this collector (see the file-transfer checkpoint below); linked-gallery and managed-account offline export remain separate work.
-
-
-Account catalogue discovery uses `accountThingTransport.browse` and bounded
-`AccountThingSync.rememberMany` to retain only owned Component/Schema definitions.
-Online projections retain shared entries without giving them local ownership.
-`useWorkspaceRefresh` coalesces scope-only invalidations for device catalogues
-and Component detail; family rosters clear before re-reading. See the
-[account catalogue checkpoint](../local-workspaces.md#account-catalogue-discovery-and-cross-tab-refresh--2026-10-16).
-
-
-Anonymous bundled Component bookmarks/reactions use `LocalInteractions` with an
-exact code-shipped resolver supplied by `anonymousApi`. Only relational children
-are stored; bundled targets remain read-only and outside Mine/ordinary export.
-`browseLocalDefinitions` includes bookmarked bundled entries and sorts Library by
-save time without changing projected definition timestamps. Existing scoped
-refresh handles changes from other tabs. Account interaction sync remains a
-separate gate; see the [bundled Library checkpoint](../local-workspaces.md#anonymous-bundled-bookmarks-and-reactions--2026-10-16).
-
-
-Account ordinary exports now include new or retained standalone device files via
-`AccountFileSync.library/readFile`, with canonical media rewriting and immutable
-scoped readers. `accountFileExport.test.ts` covers repeat export, aliases, bytes,
-deletions and scope; its production-client browser fixture covers normal Download
-and anonymous round-trip Import. See [remaining file-transfer work](../local-workspaces.md#account-file-transfer-exports--2026-10-17).
+`SyncConflictReview` offers explicit Save versions and ignore for two existing
+files. `MobileSyncConnections` shows muted saved confirmation only after the
+foreground retention run completes and links to Timeline's Files view. Capture
+keeps the conflict unresolved and the sync baseline unchanged. See
+`docs/mobile-file-sync.md` for installed acceptance and whole-backup boundaries.

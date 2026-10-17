@@ -232,3 +232,86 @@ when both finish. Repeat across account/destination changes, manual stop, an
 automatic retry, a disabled Live Activities setting, and a user-dismissed activity.
 Verify a concurrent voice session retains its existing behavior. Simulator build
 and unit tests do not prove APNs delivery or physical lock-screen behavior.
+
+
+### Resumable private file staging
+
+`fileStagingVersion` 1.0.0 adds begin/append/finish calls to the existing native
+folder bridge. Requests require the current origin/account and an owned folder
+grant. They write only to private application support storage, excluded from
+backup, and preserve immutable operation identity, acknowledged progress and
+verified content across reopen. `filePublicationVersion` 1.0.0 adds native consent,
+publication and receipt lookup. Selecting a read-only grant does not grant writes.
+Approvals bind reviewed configuration revision/hash, device and connection and
+are cleared by removing/reselecting the folder. Publication uses coordinated,
+same-volume exclusive rename/swap, retains displaced inodes privately and refuses
+unsupported providers. A racing uncoordinated edit is retained as a pending
+conflict, not an automatic rollback. Existing transfer records carry receipts;
+background transfers, conflict/restore controls and retention remain pending.
+
+`MobileSyncStagingTests` verifies multipart bytes, replay, interrupted checkpoint
+recovery, checksum and symlink refusal, plus the real WebKit/native handler with
+synthetic authentication and a local test grant. Run it with `MobileFolderTests`
+and `MobileDevicePairingTests` after `xcodegen generate`. See the root README for
+the concrete simulator command and `docs/mobile-file-sync.md` for remaining
+cloud, provider, permission and physical-device acceptance.
+
+
+### Real installed download and process-exit checks
+
+`./scripts/test-mobile-publication-process.sh` runs opt-in
+`MobilePublicationProcessTests` across separate test-host processes. It exits
+after exclusive create/swap but before receipt persistence and checks original
+operation recovery, retained replacement bytes and edit-before-recovery refusal.
+The script requires a concrete simulator `DEST`; it touches only its private
+fixture directory.
+
+`./scripts/test-mobile-sync-installed.sh /private/account.json` prepares the
+actual installed Things UI with a disposable loopback account and empty Documents
+folder. Use the visible Files picker, connection editor and native consent
+controls, then independently verify the cloud file hashes before recording test
+completion. This is opt-in and never enables itself in ordinary test runs. See
+the root README for fixture preparation, replacement and cleanup. The native
+consent cancellation message is distinct from missing folder access; shared
+pairing requests serialize foreground checks with periodic status refresh.
+
+
+### Shared file-sync core
+
+`project.yml` links the local `../apple/FileSync` package. Regenerate with
+`xcodegen generate` after updating the checkout. Folder grants, reads and staged
+publication use this shared source; existing v1 storage, scope keys and bridge
+contracts are preserved. The test target includes the shared folder/publication
+cases plus iOS-only WebKit bridge cases. See the [package runbook](../apple/FileSync/README.md)
+for Mac filesystem tests and the existing `scripts/test-mobile-publication-process.sh`
+for iOS fresh-process recovery. This extraction does not enable Mac host sync.
+
+### Native cloud download ranges
+
+iOS staging capability `1.2.0` downloads pinned cloud ranges through the native
+`NativeFileSession` on iOS 17+. The shared planner, durable journal, folder consent,
+staging fingerprint verification and publication receipts remain canonical. A
+`stage-download` request carries an exact file descriptor and at most a 2 MiB
+range, never a URL, credential or file bytes. The native host negotiates the
+selected origin, checks the current file before/after reading, pins its WebView
+session and refuses redirects, wrong ETags/ranges, oversized/truncated responses,
+changed accounts, removed grants and inactive/navigation-changed hosts.
+
+Explicit History exports share this transport. Cookie notifications plus a
+250 ms identity check cancel active transport/picker waits when native cookie
+changes do not produce a WebKit observer notification. Older hosts and sources
+without a cloud descriptor retain their existing staged byte path. Uploads still
+use the existing iOS bridge; background transfer workers remain separate work.
+
+For installed acceptance, run `MobileSyncInstalledTests` with the existing
+loopback account fixture and `THINGTIME_NATIVE_CLOUD_STAGING_TEST=1` in addition
+to `THINGTIME_SYNC_INSTALLED_ACCEPTANCE=1`. Use the visible folder picker and
+sync controls, independently compare the resulting files with the cloud fixture,
+then complete the acceptance marker. The test requires native range requests,
+over 8 MiB transferred and zero legacy appends. Keep all fixture credentials and
+`.xctestrun` environment files private and untracked.
+
+Use a dedicated simulator for interactive acceptance when other tasks are
+installing the same bundle ID. A reinstall terminates the test host and can
+remove its test bundle; it is not evidence of a transfer failure. Finish or stop
+this test's runner before rebuilding, and never interrupt another task's runner.

@@ -1545,8 +1545,8 @@ export const createThing = async (
     acl = [ACL_INHERIT];
   } else if (validated.requiresTarget && !validated.thingtime.includes('post')) {
     acl = [ACL_INHERIT];
-  } else if (validated.thingtime.includes('folder')) {
-    // organization structure is personal — folders default private, unlike
+  } else if (validated.thingtime.includes('folder') || validated.thingtime.includes('file-sync')) {
+    // Organization and device-folder configuration default private, unlike
     // the public default for standalone content things
     acl = inputAcl || [ACL_OWNER];
   } else {
@@ -6019,7 +6019,7 @@ export const bulkThings = async (
     }
     if (op === 'move') {
       const owned = await things.findOne({ shareId: id, ownerId: viewer.id } as any) as unknown as ThingDoc | null;
-      if (owned?.thingtime?.length === 1 && ['attachment', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(owned.thingtime[0])) {
+      if (owned?.thingtime?.length === 1 && ['attachment', 'file', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(owned.thingtime[0])) {
         if (owned.thingtime[0] === 'chat-archive' && (context.archiveOwnerId !== viewer.id || viewer.pat)) {
           results.push({ id, ok: false, error: 'Only the first-party archive owner can move this history' });
           continue;

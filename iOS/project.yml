@@ -18,7 +18,7 @@ packages:
 settings:
   base:
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "31"
+    CURRENT_PROJECT_VERSION: "33"
     SWIFT_VERSION: "5.9"
     THINGTIME_PASSWORD_KEYCHAIN_GROUP: $(AppIdentifierPrefix)com.thingtime.passwords
     DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
@@ -33,6 +33,10 @@ settings:
 configFiles:
   Debug: config/Debug.xcconfig
   Release: config/Release.xcconfig
+
+packages:
+  AppleFileSync:
+    path: ../apple/FileSync
 
 targets:
   Thingtime:
@@ -92,8 +96,7 @@ targets:
         com.apple.developer.associated-domains:
           - webcredentials:thingtime.com
     dependencies:
-      - package: ThingtimePasswordCore
-      - target: ThingtimePasswordProvider
+      - package: AppleFileSync
       - target: ThingtimeWatch
         embed: true
         codeSign: true
@@ -210,6 +213,8 @@ targets:
     platform: iOS
     sources:
       - path: ThingtimeTests
+      - path: ../apple/FileSync/Tests/AppleFileSyncTests
+      - path: ../apple/FileSync/Tests/RecoverySupport
     dependencies:
       - target: Thingtime
     settings:

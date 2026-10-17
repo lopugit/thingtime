@@ -177,3 +177,49 @@ publication, and source removal uses Trash. Interrupted chunks expire after
 read data to 512 KiB while keeping command identities and mutation receipts.
 See [the web/native contract](../../docs/remote-files.md) for all limits and
 capability requirements. Deploy the compatible web server before updating nodes.
+
+
+## Local folder sync adapter
+
+`MacFolderSync` wraps the shared `AppleFileSync` package behind the exact local
+XPC method `folder-sync.request`. The generic and remotely leased dispatch paths
+reject it. The signed helper owns folder selection and separate download consent;
+only opaque root IDs/names, bounded entries/chunks and publication receipts cross
+XPC. Configuration revision/hash and owner/origin/device scope bind write approval.
+Bookmarks stay in `com.thingtime.folder-grants.v1` Keychain items. Staging lives in
+an endpoint-specific `FolderSync-v1-<endpoint identifier>` directory beside the
+existing command journal; it must never be shared across endpoints.
+
+Build from the repository root with the local `apple/FileSync` package present:
+
+```sh
+swift test --package-path macos/ThingtimeNode --filter 'MacFolderSyncTests|ThingtimeAPIClientTests|WireCodecTests'
+swift build --package-path macos/ThingtimeNode -c release --product ThingtimeNode
+```
+
+Deploy both registered identity/disconnect routes with the normal server setup.
+The helper negotiates `api.devices-node-identity` 1.x and selects exactly one local
+credential for the requested device. It freshly verifies that credential's owner
+and device before/after every folder request, without browser cookies, and checks
+local unpairing again after the response. Missing support, offline/revoked identity
+or ambiguous credentials fail closed. Full-account disconnect revokes all matching
+device sessions; it retains the protected device history, sync Things and files.
+A mutation already authorized when revocation occurs may finish; revocation does
+not roll it back.
+
+Electron now verifies the active browser account using its own session, derives
+the configured server origin, negotiates public capabilities and exposes only the
+exact folder method to the bundled main frame. The shared web controls use this
+adapter in Things/Settings. The helper returns network class and charging/unknown,
+without SSIDs, interface addresses or raw power-source metadata.
+
+Parallel development still avoids the installed Node; establish an isolated
+native lane before installed picker/consent acceptance. Focused tests use injected
+grant persistence/dialogs and real temporary files; they do not prove signed
+Keychain, sandbox/TCC or actual AppKit interaction. The Electron host verification
+uses a real isolated Chromium session with synthetic native dispatch.
+
+Current 64 KiB bridge chunks and fresh identity reads are correctness scaffolding;
+the `devices.read` rate limit can stop sustained transfers. Native streaming and
+measured throughput, durable restart journals despite Desktop's ephemeral local
+origin, and real installed cloud transfers remain required before release.

@@ -100,7 +100,7 @@ export async function recordThingMutation(things: any, before: any, after: any, 
 export async function recordFolderPlacement(things: any, before: any, after: any, capture: ThingMutationCapture, session: any) {
 	if (!isProtectedThingtime(before.thingtime ?? [])) return recordThingMutation(things, before, after, capture, session);
 	if (before.ownerId !== after.ownerId || before.shareId !== after.shareId ||
-		before.thingtime?.length !== 1 || !['attachment', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(before.thingtime[0]) ||
+		before.thingtime?.length !== 1 || !['attachment', 'file', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(before.thingtime[0]) ||
 		JSON.stringify(before.thingtime) !== JSON.stringify(after.thingtime)) throw new StorageMutationError(409, 'storage_conflict', 'This folder contains a managed item that must be moved through its own editor before deleting the folder');
 	if ((before.folderId ?? null) === (after.folderId ?? null)) return null;
 	const event = parseTimelineEvent({ formatVersion: 1, id: capture.id, ownerId: before.ownerId, thingId: before.shareId,

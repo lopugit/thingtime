@@ -1,8 +1,6 @@
-import { startNotificationHistorySync } from '../local-workspace/notifications.client';
-import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
-import { useOfflineWorkspace } from './useWorkspaceUser';
-import { accountApi, startAccountWorkspaceSync } from '../local-workspace/accountApi.client';
-import { anonymousApi } from '../local-workspace/api.client';
+import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
+import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
+import type { TimelineScope } from '~/timeline/contract';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
@@ -48,13 +46,19 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null }) => {
+export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string };
+const getJson = async (url: string, options?: ThingRequestOptions) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal,
-      ...(options?.expectedDataPlane ? { headers: { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } } : {}) });
+      ...(options?.expectedApiOrigin ? { redirect: 'error' as const, cache: 'no-store' as const } : {}),
+      headers: { ...(options?.expectedApiOrigin ? { 'X-Thingtime-Expected-Api-Origin': options.expectedApiOrigin } : {}), ...(options?.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options?.expectedActor ? { 'X-Thingtime-Expected-Actor': options.expectedActor } : {}) } });
+    if (options?.expectedApiOrigin && (response.redirected || (options.expectedApiOrigin !== window.location.origin && response.headers.get('x-thingtime-api-fallback') !== options.expectedApiOrigin))) {
+      await response.body?.cancel().catch(() => {});
+      throw Error('The selected API server changed.');
+    }
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
     recordApiCall({
@@ -131,6 +135,25 @@ export function useApi() {
   actionActor.current = actionUser?.id;
 
   const v1 = {
+    files: {
+      read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
+        if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
+        await requireThingtimeCapability('api.files', '1.0.0');
+        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+        const file = parseCloudFile(result?.file);
+        if (file.id !== id) throw Error('File identity changed.');
+        return file;
+      }, []),
+      commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
+        if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
+        const command = parseCloudFileCommit(input);
+        await requireThingtimeCapability('api.files', '1.0.0');
+        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+      }, [asyncFetcher])
+    },
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
@@ -1100,8 +1123,9 @@ export function useApi() {
 			// /post pages) — lets anyone holding the link view the unlisted thing.
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
-				async (args, options?: { signal?: AbortSignal }) => {
-          const expectedDataPlane = planeRef.current;
+				async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.31.0' : '1.27.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
@@ -1110,7 +1134,10 @@ export function useApi() {
 				[]
 			),
       list: useCallback(
-        async (args, options?: { signal?: AbortSignal }) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           await requireThingtimeCapability('api.things', args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : '1.14.0');
           return getJson(
             `/api/v1/things${toQuery({
@@ -1123,7 +1150,7 @@ export function useApi() {
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
               appId: args?.appId
-            })}`, options
+            })}`, { ...options, expectedDataPlane }
           );
         },
         []
@@ -1133,7 +1160,10 @@ export function useApi() {
         return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
       }, []),
       update: useCallback(
-        async (args) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
@@ -1142,7 +1172,8 @@ export function useApi() {
           if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things-update', '1.10.0');
           if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
-          if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          options?.signal?.throwIfAborted();
           return asyncFetcher.submit(
             {
               id: args?.id,
@@ -1162,7 +1193,7 @@ export function useApi() {
               // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH', expectedActor: args?.expectedActor }
+            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin, signal: options?.signal }
           );
         },
         [asyncFetcher]
@@ -1208,7 +1239,10 @@ export function useApi() {
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
-        async (args) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
@@ -1217,10 +1251,10 @@ export function useApi() {
           if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things', '1.33.0');
           if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
-          if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
-					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor: args?.expectedActor }));
+					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin }), 30_000, options?.signal);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
 					}
