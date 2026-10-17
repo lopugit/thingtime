@@ -26,11 +26,12 @@ export function ThingFields({ thing, mods, onChange, onModsChange }: {
   return <Flex className="thing thing-mod-fields" flexDirection="column" gap={4} minWidth={0} onKeyDown={event => {
     if ((event.metaKey || event.ctrlKey) && ['z', 'y'].includes(event.key.toLowerCase())) event.stopPropagation();
   }}>
-    {mods.fields.slice(0, 64).map((field, index) => {
-      const secret = field.type === 'password' || field.type === 'totp';
+    {mods.fields.map((field, index) => {
+      const secret = field.concealed || field.type === 'password' || field.type === 'totp' || field.type === 'ssh-key' || field.type === 'credit-card-number';
       const props = { value: thing[field.id] ?? '', onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange?.({ ...thing, [field.id]: event.target.value }),
-        isReadOnly: !onChange, autoComplete: 'off', spellCheck: false, 'aria-label': field.label, maxLength: 16384 };
+        isReadOnly: !onChange, autoComplete: 'off', spellCheck: false, 'aria-label': field.label };
       return <FormControl key={field.id} minWidth={0}>
+        {field.section && field.section !== mods.fields[index - 1]?.section && <Text fontWeight={600} mb={3}>{field.section}</Text>}
         <Flex justifyContent="space-between" alignItems="center" gap={2} mb={1}>
           <FormLabel mb={0} fontSize="sm" overflowWrap="anywhere">{field.label}</FormLabel>
           <Flex gap={1} flexShrink={0}>
@@ -39,7 +40,7 @@ export function ThingFields({ thing, mods, onChange, onModsChange }: {
           </Flex>
         </Flex>
         <Flex gap={2} alignItems="start">
-          <Box flex={1} minWidth={0}>{field.type === 'notes' ? <Textarea {...props} rows={3} /> : <Input {...props} type={secret && !revealed[field.id] ? 'password' : 'text'} inputMode={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'} />}</Box>
+          <Box flex={1} minWidth={0}>{(field.type === 'notes' || field.multiline || ['address', 'structured', 'ssh-key'].includes(field.type)) && (!secret || revealed[field.id]) ? <Textarea {...props} rows={3} /> : <Input {...props} type={secret && !revealed[field.id] ? 'password' : 'text'} inputMode={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'} />}</Box>
           {secret && mods.revealSecrets && <Button size="sm" aria-label={`${revealed[field.id] ? 'Hide' : 'Show'} ${field.label}`} onClick={() => setRevealed(prev => ({ ...prev, [field.id]: !prev[field.id] }))}>{revealed[field.id] ? 'Hide' : 'Show'}</Button>}
         </Flex>
         {field.type === 'totp' && thing[field.id] && <OneTimeCode value={thing[field.id]} />}
