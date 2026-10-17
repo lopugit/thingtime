@@ -68,6 +68,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-17: Add automatic native-main TestFlight publishing, version allocation, pre-upload widget/signature checks and exact-build processing verification. Add production-only GitHub OIDC delivery and create-only Apple credential migration through the shared admin vault; see [setup and rollout](../docs/ios-automatic-testflight.md).
+
 - 2026-10-17 — **Codex (AI)**: Support a separate Anthropic Models API credential for catalogue discovery when Claude OAuth cannot list models. Keep replies on Claude Code OAuth and show redacted HTTP failure reasons in admin sync reports.
 
 - 2026-10-17 — **Codex (AI)**: Daily provider model inventory sync, bounded

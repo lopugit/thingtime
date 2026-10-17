@@ -100,3 +100,11 @@ refresh without replay. `LopuModelsEditor.tsx` owns per-provider allow-all and
 future auto-admission controls. Public model selectors consume the live catalogue;
 unknown model capabilities and pricing are conservative. See README automatic AI
 model catalogue sync and TESTING daily provider model availability.
+
+## iOS release automation
+
+`api/utils/releases/iosRelease.ts` uses the existing admin integration secret,
+claim and audit stores. `iosReleaseCore.ts` validates the fixed release policy and
+Apple bundle. GitHub OIDC grants only `integrations/ios-release` access after
+immutable repository/owner, main workflow, event and source checks; it grants no
+admin session or general vault access. See [setup and acceptance](../ios-automatic-testflight.md).

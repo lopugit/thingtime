@@ -9968,3 +9968,21 @@ model-selection suites cover the consuming surfaces. Live provider calls remain
 separate from deterministic discovery/lease tests.
 
 - Anthropic catalogue discovery: a dedicated ANTHROPIC_MODELS_API_KEY takes precedence over the legacy API key; neither reaches inference. A 401/403 shows a redacted credential hint and preserves prior availability. Raw provider bodies and credentials never enter sync reports.
+
+## Automatic iOS TestFlight and vault delivery
+
+- [ ] Run `test:ios-release`, both capability suites and `server/utils/apiFallback.test.ts`.
+  Reject foreign repo/owner/workflow/source, PR/develop/tag events, stale/replayed
+  tokens, previews, disabled policy, oversized payloads and arbitrary environment
+  keys before disclosure; confirm all responses are private/no-store and audit
+  failures return no secrets. The release request must never follow API fallback.
+- [ ] Migrate a disposable bundle through the real admin/API flow; repeat with a
+  different bundle and verify the existing value is preserved. Ordinary admin
+  lists contain metadata only; revealing a selected item requires fresh verification.
+- [ ] Run the Python package and Ruby version-allocation regressions. A missing
+  widget executable, mismatched App Group or phone/Watch/widget build number must
+  stop publishing before upload. Inspect signed entitlements on both archive and IPA.
+- [ ] After approved rollout, verify a native main push triggers the workflow,
+  web-only pushes do not, and feature-branch manual dispatch cannot publish.
+  Check exact App Store Connect build, internal tester availability and the real
+  iPhone Home/Lock Screen widget pickers before claiming device delivery.
